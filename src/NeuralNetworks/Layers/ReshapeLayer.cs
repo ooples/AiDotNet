@@ -146,17 +146,24 @@ public class ReshapeLayer<T> : LayerBase<T>
     protected override void OnFirstForward(Tensor<T> input)
     {
         var shape = input.Shape.ToArray();
+        // shape[0] is the batch dimension; the reshape applies PER-SAMPLE and the layer's
+        // shapes exclude batch (see the class remarks). The previous code multiplied the
+        // whole input shape — including batch — and compared it to the per-sample output,
+        // so a batched input like [2, 8, 4] (per-sample 32) was rejected against output
+        // [32] because 2*8*4 = 64 != 32. Count per-sample elements (dims 1..) instead.
         int inElems = 1;
-        for (int i = 0; i < shape.Length; i++) inElems *= shape[i];
+        for (int i = 1; i < shape.Length; i++) inElems *= shape[i];
         int outElems = 1;
         for (int i = 0; i < _outputShape.Length; i++) outElems *= _outputShape[i];
         if (inElems != outElems)
             throw new ArgumentException(
-                $"ReshapeLayer input element count ({inElems}) does not match output element count ({outElems}).",
+                $"ReshapeLayer per-sample input element count ({inElems}) does not match output element count ({outElems}).",
                 nameof(input));
 
-        _inputShape = shape;
-        ResolveShapes(shape, _outputShape);
+        var perSample = new int[shape.Length - 1];
+        Array.Copy(shape, 1, perSample, 0, perSample.Length);
+        _inputShape = perSample;
+        ResolveShapes(perSample, _outputShape);
     }
 
     /// <summary>

@@ -814,6 +814,12 @@ public class AdvancedLayersIntegrationTests
         // Arrange
         var layer = new GatedLinearUnitLayer<float>(32, (IActivationFunction<float>?)null);
 
+        // GLU sizes its [output x input] linear + gate weight matrices lazily from the
+        // input dimension on the first forward — the constructor only fixes the output
+        // dimension (32). Run one forward over a 64-feature input so the weights are
+        // allocated before we count them (otherwise only the two biases exist → 64).
+        _ = layer.Forward(Tensor<float>.CreateRandom([2, 64]));
+
         // Act
         int paramCount = (int)layer.ParameterCount;
 
@@ -1572,6 +1578,11 @@ public class AdvancedLayersIntegrationTests
         int sequenceLength = 5;
         int[] inputShape = [sequenceLength, inputSize];
         var layer = new LSTMLayer<float>( hiddenSize, (IActivationFunction<float>?)null);
+
+        // LSTM sizes its input-to-hidden gate weights lazily from the input dimension on
+        // the first forward — the constructor only fixes the hidden size. Resolve via one
+        // forward over a [batch, seqLen, inputSize] sequence before counting parameters.
+        _ = layer.Forward(Tensor<float>.CreateRandom([2, sequenceLength, inputSize]));
 
         // Act
         int paramCount = (int)layer.ParameterCount;

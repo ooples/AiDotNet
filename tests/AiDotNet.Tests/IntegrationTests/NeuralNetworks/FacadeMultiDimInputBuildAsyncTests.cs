@@ -132,4 +132,63 @@ public class FacadeMultiDimInputBuildAsyncTests
         var ex = Record.Exception(() => cnn.SetActiveFeatureIndices(flatIndices));
         Assert.Null(ex);
     }
+
+    // ---- Autoencoder custom-layer shape validation (#1468 second affected model) ----
+
+    [Fact(Timeout = 120000)]
+    public async Task Autoencoder_CustomSymmetricLayers_ConstructsAndPredicts()
+    {
+        await Task.CompletedTask;
+
+        // A symmetric autoencoder built from DenseLayers: 64 -> 32 -> 8 -> 32 -> 64.
+        // DenseLayer(int outputSize) lazy-initializes its input shape to [-1] (resolved on
+        // first forward), so the construction-time symmetry/equality checks compared [-1]
+        // against resolved dims and threw "Input and output layer sizes must be the same"
+        // before training — blocking the autoencoder family through the facade (#1468).
+        const int inputDim = 64, hidden = 32, encoding = 8;
+        var layers = new List<ILayer<double>>
+        {
+            new DenseLayer<double>(hidden, activationFunction: new ReLUActivation<double>()),
+            new DenseLayer<double>(encoding, activationFunction: new ReLUActivation<double>()),
+            new DenseLayer<double>(hidden, activationFunction: new ReLUActivation<double>()),
+            new DenseLayer<double>(inputDim, activationFunction: new ReLUActivation<double>()),
+        };
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Simple,
+            inputSize: inputDim,
+            outputSize: inputDim,
+            layers: layers);
+
+        // Construction runs ValidateCustomLayers — this is where #1468 threw.
+        var autoencoder = new Autoencoder<double>(architecture);
+        Assert.NotNull(autoencoder);
+
+        // And it must reconstruct (forward pass resolves the lazy shapes).
+        var inputData = new double[inputDim];
+        var rng = new Random(1468);
+        for (int i = 0; i < inputDim; i++) inputData[i] = rng.NextDouble();
+        var input = new Tensor<double>(inputData, new[] { inputDim });
+
+        var output = autoencoder.Predict(input);
+        Assert.NotNull(output);
+        Assert.Equal(inputDim, output.Length);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ResidualLayer_WrappingLazyInnerLayer_ConstructsWithoutThrowing()
+    {
+        await Task.CompletedTask;
+
+        // A residual block wrapping a DenseLayer whose input shape is lazily [-1] (resolved
+        // on first forward) must not throw at construction. The validation compared the
+        // inner layer's [-1] input against its resolved output and threw "Inner layer must
+        // have the same input and output shape for residual connections." — the same
+        // lazy-shape validation class as the autoencoder bug (#1468).
+        var inner = new DenseLayer<double>(16, activationFunction: new ReLUActivation<double>());
+
+        var ex = Record.Exception(() => new ResidualLayer<double>(inner));
+        Assert.Null(ex);
+    }
 }
