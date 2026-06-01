@@ -203,6 +203,15 @@ public class TimeLLM<T> : ForecastingModelBase<T>
     /// </summary>
     private int _numPatches;
 
+    /// <summary>
+    /// RevIN (reversible instance normalization, Kim et al. 2022) statistics.
+    /// Time-LLM normalizes each input series before patch embedding and restores
+    /// the level on the output so distinct input scales produce distinct
+    /// forecasts. Keyed per instance (batch row).
+    /// </summary>
+    private Vector<T> _revinMean = new Vector<T>(0);
+    private Vector<T> _revinStd = new Vector<T>(0);
+
     #endregion
 
     #region IForecastingModel Properties
@@ -311,8 +320,9 @@ public class TimeLLM<T> : ForecastingModelBase<T>
         if (_patchLength > _contextLength)
             throw new ArgumentOutOfRangeException(nameof(options.PatchLength), "Patch length cannot exceed context length.");
 
-        // Calculate number of patches
-        _numPatches = (_contextLength - _patchLength) / _patchStride + 1;
+        // Time-LLM tokenizes the context into NON-OVERLAPPING patches, matching
+        // the ReshapeLayer the layer helper builds: contextLength / patchLength.
+        _numPatches = _contextLength / _patchLength;
 
         InitializeLayers();
     }
@@ -370,8 +380,9 @@ public class TimeLLM<T> : ForecastingModelBase<T>
         if (_patchLength > _contextLength)
             throw new ArgumentOutOfRangeException(nameof(options.PatchLength), "Patch length cannot exceed context length.");
 
-        // Calculate number of patches
-        _numPatches = (_contextLength - _patchLength) / _patchStride + 1;
+        // Time-LLM tokenizes the context into NON-OVERLAPPING patches, matching
+        // the ReshapeLayer the layer helper builds: contextLength / patchLength.
+        _numPatches = _contextLength / _patchLength;
 
         InitializeLayers();
     }
@@ -690,8 +701,76 @@ public class TimeLLM<T> : ForecastingModelBase<T>
     /// </remarks>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
-        // Time-LLM handles normalization through the patch embedding
-        return input;
+        // RevIN forward (Kim et al. 2022; Time-LLM §3.1): subtract each
+        // instance's mean and divide by its std so the reprogramming + LLM stack
+        // sees a normalized series. Stats are taken over every non-batch element
+        // of each row, so this works for 1-D [seqLen], 2-D [batch, seqLen] and
+        // 3-D [batch, seqLen, features] inputs alike.
+        int batchSize = input.Shape.Length > 1 ? input.Shape[0] : 1;
+        int instanceSize = batchSize > 0 ? input.Length / batchSize : input.Length;
+        if (instanceSize <= 0)
+            return input;
+
+        var result = new Tensor<T>(input._shape);
+        _revinMean = new Vector<T>(batchSize);
+        _revinStd = new Vector<T>(batchSize);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            int start = b * instanceSize;
+
+            T mean = NumOps.Zero;
+            for (int t = 0; t < instanceSize; t++)
+                mean = NumOps.Add(mean, input[start + t]);
+            mean = NumOps.Divide(mean, NumOps.FromDouble(instanceSize));
+
+            T variance = NumOps.Zero;
+            for (int t = 0; t < instanceSize; t++)
+            {
+                var diff = NumOps.Subtract(input[start + t], mean);
+                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
+            }
+            variance = NumOps.Divide(variance, NumOps.FromDouble(instanceSize));
+            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
+
+            _revinMean[b] = mean;
+            _revinStd[b] = std;
+
+            for (int t = 0; t < instanceSize; t++)
+                result.Data.Span[start + t] = NumOps.Divide(NumOps.Subtract(input[start + t], mean), std);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// RevIN reverse step: restores each instance's mean/std to the forecast so it
+    /// is expressed on the input's original scale (Kim et al. 2022). The forecast
+    /// rows align with the instances normalized in <see cref="ApplyInstanceNormalization"/>.
+    /// </summary>
+    private Tensor<T> DenormalizeForecast(Tensor<T> forecast)
+    {
+        int batch = forecast.Shape.Length > 1 ? forecast.Shape[0] : 1;
+        if (_revinMean.Length != batch || forecast.Length % batch != 0)
+            return forecast;
+
+        // Per-instance scale/shift as [batch, 1] constants that broadcast over the
+        // forecast's trailing dimension. The multiply/add go through the Engine so
+        // the forecast stays on the autodiff tape (a manual element fill would
+        // detach it and starve the head of gradients).
+        var meanT = new Tensor<T>(new[] { batch, 1 });
+        var stdT = new Tensor<T>(new[] { batch, 1 });
+        for (int b = 0; b < batch; b++)
+        {
+            meanT.Data.Span[b] = _revinMean[b];
+            stdT.Data.Span[b] = _revinStd[b];
+        }
+
+        bool reshaped = forecast.Rank != 2;
+        var work = reshaped ? Engine.Reshape(forecast, new[] { batch, forecast.Length / batch }) : forecast;
+        var scaled = Engine.TensorBroadcastMultiply(work, stdT);
+        var shifted = Engine.TensorBroadcastAdd(scaled, meanT);
+        return reshaped ? Engine.Reshape(shifted, forecast._shape) : shifted;
     }
 
     /// <inheritdoc/>
@@ -735,14 +814,79 @@ public class TimeLLM<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> Forward(Tensor<T> input)
     {
-        var current = input;
+        // RevIN forward: normalize the context so the reprogramming + LLM stack
+        // sees a zero-mean unit-std series, then restore the level after the
+        // FlattenHead so distinct input scales produce distinct forecasts.
+        var current = ApplyInstanceNormalization(input);
+
+        // The patch ReshapeLayer needs a leading batch axis; a bare rank-1
+        // context would be misread as a contextLength-row batch.
+        bool addedBatchDim = false;
+        if (current.Rank == 1)
+        {
+            current = current.Reshape(new[] { 1, current.Length });
+            addedBatchDim = true;
+        }
 
         foreach (var layer in Layers)
         {
             current = layer.Forward(current);
         }
 
+        // The FlattenHead emits [B, forecastHorizon]; honor a shorter horizon if
+        // a downstream head ever produces more (tape-aware narrow keeps the
+        // gradient connected).
+        int total = current.Shape.Length >= 2 ? current.Shape[current.Shape.Length - 1] : current.Length;
+        if (total > _forecastHorizon)
+        {
+            int offset = total - _forecastHorizon;
+            current = Engine.TensorNarrow(current, current.Rank - 1, offset, _forecastHorizon);
+        }
+
+        // RevIN reverse: restore the input's per-instance level/scale.
+        current = DenormalizeForecast(current);
+
+        if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
+            current = current.Reshape(new[] { current.Shape[1] });
+
         return current;
+    }
+
+    /// <summary>
+    /// Time-LLM training-mode forward. Routes through <see cref="Forward"/> so the
+    /// tape training flow gets the same RevIN normalization + batch reshape as
+    /// inference (a raw rank-1 context would hit the patch <c>ReshapeLayer</c>,
+    /// which needs a leading batch axis) while keeping training mode (dropout) on.
+    /// </summary>
+    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
+    {
+        return Forward(input);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Mirrors <see cref="Forward"/>'s preprocessing so the captured activations match the
+    /// real forward pass: a bare rank-1 context is RevIN-normalized and given a leading batch
+    /// axis before it reaches the patch <c>ReshapeLayer</c>.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            return base.GetNamedLayerActivations(input);
+
+        var activations = new Dictionary<string, Tensor<T>>();
+
+        var current = ApplyInstanceNormalization(input);
+        if (current.Rank == 1)
+            current = current.Reshape(new[] { 1, current.Length });
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
     }
 
     /// <summary>

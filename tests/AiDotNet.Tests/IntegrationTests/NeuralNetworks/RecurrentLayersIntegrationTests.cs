@@ -1,3 +1,4 @@
+using System;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -69,8 +70,13 @@ public class RecurrentLayersIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GRULayer_GetParameters_ReturnsParameters()
     {
+        int[] inputShape = [1, 5, 10];
         IActivationFunction<double> tanh = new TanhActivation<double>();
         var layer = new GRULayer<double>( 8, false, tanh);
+        // GRULayer is lazy-only (eager ctors removed in #1212): its own ParameterCount
+        // doc says "call ResolveFromShape first". Resolve the input width so weights
+        // allocate and GetParameters returns the real parameter vector before Forward.
+        layer.ResolveFromShape(inputShape);
         var parameters = layer.GetParameters();
         Assert.NotNull(parameters);
         Assert.True(parameters.Length > 0, "Parameters should not be empty");
@@ -123,6 +129,12 @@ public class RecurrentLayersIntegrationTests
         int[] inputShape = [1, 5, 10];
         IActivationFunction<double> tanh = new TanhActivation<double>();
         var layer = new LSTMLayer<double>( 8, tanh);
+        // LSTMLayer is lazy-only (eager ctors removed in #1212): input feature
+        // width is unknown from hiddenSize alone, so weights stay [0,0] until the
+        // shape is resolved. ResolveFromShape is the documented bridge that lets
+        // GetParameters / ParameterCount work on a freshly-constructed layer before
+        // any Forward — exactly what a parent network does during ResolveLazyLayerShapes.
+        layer.ResolveFromShape(inputShape);
         var parameters = layer.GetParameters();
         Assert.NotNull(parameters);
         Assert.True(parameters.Length > 0, "Parameters should not be empty");
@@ -145,6 +157,39 @@ public class RecurrentLayersIntegrationTests
         Assert.NotNull(output);
         AssertNoNaNOrInf(output);
         Assert.True(output.Max().maxVal < 100.0, "Values exploded in long sequence");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task LSTMLayer_FusedInferencePath_MatchesDecomposedTrainingPath()
+    {
+        await Task.Yield();
+        // Coverage for the inference-only fused fast path in LSTMLayer.Forward
+        // (routes the whole sequence through CpuEngine.LstmSequenceForward). It is
+        // gated on typeof(T) == float && !IsTrainingMode && CpuEngine && !GraphMode,
+        // so the double-typed tests above never exercise it. This asserts the fused
+        // path (inference mode) produces the SAME output as the decomposed per-step
+        // loop (training mode) within float epsilon, on whatever AiDotNet.Tensors
+        // version is pinned — guards both the weight-packing wiring and the fused
+        // kernel's contract across Tensors bumps.
+        int batchSize = 4, timeSteps = 8, inputSize = 6, hiddenSize = 5;
+        var layer = new LSTMLayer<float>(hiddenSize);
+        var input = Tensor<float>.CreateRandom(batchSize, timeSteps, inputSize);
+
+        // Materialize weights via a training-mode forward, then capture the
+        // decomposed-path output (training mode keeps the per-step loop).
+        layer.SetTrainingMode(true);
+        var slow = layer.Forward(input);
+
+        // Inference mode engages the fused path.
+        layer.SetTrainingMode(false);
+        var fast = layer.Forward(input);
+
+        Assert.Equal(slow.Length, fast.Length);
+        double maxAbsDiff = 0.0;
+        for (int i = 0; i < slow.Length; i++)
+            maxAbsDiff = Math.Max(maxAbsDiff, Math.Abs((double)slow[i] - fast[i]));
+        Assert.True(maxAbsDiff < 1e-4,
+            $"Fused LSTM inference output diverged from the decomposed path: maxAbsDiff={maxAbsDiff:E3}.");
     }
 
     [Fact(Timeout = 120000)]

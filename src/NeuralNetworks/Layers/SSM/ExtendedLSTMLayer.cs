@@ -267,7 +267,10 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>
 
         _lastInput = input3D;
 
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        // Per-time-step outputs collected for a tape-connected concat (the previous
+        // pre-allocated tensor written with SetSlice detached the output from y_t,
+        // so the output-projection weights never received a gradient).
+        var outputList = new System.Collections.Generic.List<Tensor<T>>(seqLen);
         T scaleK = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
         // Matrix cell state per head: C[batch, head, headDim, headDim]
@@ -396,8 +399,12 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>
             var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
             y_t = Engine.TensorBroadcastAdd(y_t, outBias);
 
-            output.SetSlice(1, t, y_t);
+            outputList.Add(Engine.Reshape(y_t, new[] { batchSize, 1, _modelDimension }));
         }
+
+        // Assemble the [batch, seqLen, modelDim] output on the tape so gradients
+        // reach the output-projection weights (and bias).
+        var output = Engine.TensorConcatenate(outputList.ToArray(), axis: 1);
 
         _lastCellStates = allCellStates;
         _lastNormStates = allNormStates;

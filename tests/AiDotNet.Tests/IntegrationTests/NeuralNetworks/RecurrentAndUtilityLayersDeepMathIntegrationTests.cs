@@ -21,6 +21,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GRU_ParameterCount_Formula_Input4Hidden3()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         // ParameterCount = hiddenSize * inputSize * 3 (Wz, Wr, Wh)
         //                + hiddenSize * hiddenSize * 3 (Uz, Ur, Uh)
         //                + hiddenSize * 3 (bz, br, bh)
@@ -28,24 +29,34 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         // = 3*4*3 + 3*3*3 + 3*3 = 36 + 27 + 9 = 72
         var gru = new GRULayer<double>( hiddenSize: 3,
             activation: (IActivationFunction<double>?)null);
+        // GRULayer is lazy-input (PyTorch-style): weights materialize on the first
+        // forward, which resolves inputSize from the input's last axis. Warm up
+        // with a [seq, 4] input to resolve inputSize = 4 before the formula check.
+        gru.Forward(new Tensor<double>(new[] { 2, 4 }));
         Assert.Equal(72, (int)gru.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
     public async Task GRU_ParameterCount_Formula_Input10Hidden8()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         // = 8*10*3 + 8*8*3 + 8*3 = 240 + 192 + 24 = 456
         var gru = new GRULayer<double>( hiddenSize: 8,
             activation: (IActivationFunction<double>?)null);
+        // Lazy-input: warm up with a [seq, 10] input to resolve inputSize = 10.
+        gru.Forward(new Tensor<double>(new[] { 2, 10 }));
         Assert.Equal(456, (int)gru.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
     public async Task GRU_ParameterCount_Formula_Input1Hidden1()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         // = 1*1*3 + 1*1*3 + 1*3 = 3 + 3 + 3 = 9
         var gru = new GRULayer<double>( hiddenSize: 1,
             activation: (IActivationFunction<double>?)null);
+        // Lazy-input: warm up with a [seq, 1] input to resolve inputSize = 1.
+        gru.Forward(new Tensor<double>(new[] { 2, 1 }));
         Assert.Equal(9, (int)gru.ParameterCount);
     }
 
@@ -56,6 +67,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GRU_OutputShape_2DInput_ReturnsHiddenSize()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         // 2D input [seqLen, inputSize] -> output [hiddenSize]
         var gru = new GRULayer<double>( hiddenSize: 5,
             activation: (IActivationFunction<double>?)null);
@@ -69,6 +81,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GRU_OutputShape_3DInput_ReturnsBatchHiddenSize()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         // 3D input [batch, seqLen, inputSize] -> output [batch, hiddenSize]
         var gru = new GRULayer<double>( hiddenSize: 5,
             activation: (IActivationFunction<double>?)null);
@@ -83,6 +96,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GRU_OutputShape_ReturnSequences_3DOutput()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         // With returnSequences=true: [batch, seqLen, inputSize] -> [batch, seqLen, hiddenSize]
         var gru = new GRULayer<double>( hiddenSize: 5,
             returnSequences: true, activation: (IActivationFunction<double>?)null);
@@ -102,6 +116,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GRU_HiddenStateCarriesOver_SecondCallDiffersFromFirst()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         var gru = new GRULayer<double>( hiddenSize: 3,
             activation: (IActivationFunction<double>?)null);
 
@@ -126,6 +141,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GRU_ResetState_OutputMatchesFirstCall()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         var gru = new GRULayer<double>( hiddenSize: 3,
             activation: (IActivationFunction<double>?)null);
 
@@ -147,6 +163,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GRU_OutputIsBounded_ByTanh()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         var gru = new GRULayer<double>( hiddenSize: 4,
             activation: (IActivationFunction<double>?)null);
 
@@ -167,6 +184,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GRU_AllOutputsFinite()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         var gru = new GRULayer<double>( hiddenSize: 4,
             activation: (IActivationFunction<double>?)null);
 
@@ -189,6 +207,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GRU_GetParameters_LengthMatchesParameterCount()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         var gru = new GRULayer<double>( hiddenSize: 3,
             activation: (IActivationFunction<double>?)null);
         var parameters = gru.GetParameters();
@@ -202,32 +221,46 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task LSTM_ParameterCount_Formula_Input4Hidden3()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         // ParameterCount = 4 * (hiddenSize * inputSize) + 4 * (hiddenSize * hiddenSize) + 4 * hiddenSize
         // For input=4, hidden=3:
         // = 4*3*4 + 4*3*3 + 4*3 = 48 + 36 + 12 = 96
         var lstm = new LSTMLayer<double>( hiddenSize: 3,
             activation: (IActivationFunction<double>?)null);
+        // LSTMLayer is lazy-input (PyTorch nn.LazyLSTM-style): its weights are not
+        // allocated until the first forward resolves the input feature count from
+        // the input's last axis, so ParameterCount is 0 until then. Warm up with a
+        // [seq, 4] input to resolve inputSize = 4, then assert the formula.
+        lstm.Forward(new Tensor<double>(new[] { 2, 4 }));
         Assert.Equal(96, (int)lstm.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
     public async Task LSTM_ParameterCount_Formula_Input10Hidden8()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         // = 4*8*10 + 4*8*8 + 4*8 = 320 + 256 + 32 = 608
         var lstm = new LSTMLayer<double>( hiddenSize: 8,
             activation: (IActivationFunction<double>?)null);
+        // Lazy-input: warm up with a [seq, 10] input to resolve inputSize = 10.
+        lstm.Forward(new Tensor<double>(new[] { 2, 10 }));
         Assert.Equal(608, (int)lstm.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
     public async Task LSTM_ParameterCount_AlwaysMore_ThanGRU()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         int inputSize = 5;
         int hiddenSize = 7;
         var gru = new GRULayer<double>( hiddenSize,
             activation: (IActivationFunction<double>?)null);
         var lstm = new LSTMLayer<double>( hiddenSize,
             activation: (IActivationFunction<double>?)null);
+        // Both layers are lazy-input; materialize their weights with a matching
+        // [seq, inputSize] warm-up forward before comparing parameter counts.
+        gru.Forward(new Tensor<double>(new[] { 2, inputSize }));
+        lstm.Forward(new Tensor<double>(new[] { 2, inputSize }));
         Assert.True(lstm.ParameterCount > gru.ParameterCount,
             $"LSTM params ({lstm.ParameterCount}) should exceed GRU params ({gru.ParameterCount})");
     }
@@ -235,6 +268,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task LSTM_ParameterCount_Ratio_Is4Over3_TimesGRU()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         // Ratio = 4/3 for same input/hidden sizes
         int inputSize = 6;
         int hiddenSize = 4;
@@ -242,6 +276,9 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
             activation: (IActivationFunction<double>?)null);
         var lstm = new LSTMLayer<double>( hiddenSize,
             activation: (IActivationFunction<double>?)null);
+        // Lazy-input: materialize both before reading parameter counts.
+        gru.Forward(new Tensor<double>(new[] { 2, inputSize }));
+        lstm.Forward(new Tensor<double>(new[] { 2, inputSize }));
 
         double ratio = (double)lstm.ParameterCount / gru.ParameterCount;
         Assert.Equal(4.0 / 3.0, ratio, Tol);
@@ -254,6 +291,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task LSTM_OutputShape_MatchesHiddenSize()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         var lstm = new LSTMLayer<double>( hiddenSize: 5,
             activation: (IActivationFunction<double>?)null);
         var input = new Tensor<double>(new[] { 4, 3 });
@@ -265,6 +303,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task LSTM_AllOutputsFinite()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         var lstm = new LSTMLayer<double>( hiddenSize: 4,
             activation: (IActivationFunction<double>?)null);
 
@@ -286,6 +325,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task LSTM_GetParameters_LengthMatchesParameterCount()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         var lstm = new LSTMLayer<double>( hiddenSize: 3,
             activation: (IActivationFunction<double>?)null);
         var parameters = lstm.GetParameters();
@@ -299,6 +339,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task MeanLayer_Axis1_HandComputed()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         // Input [2, 3]: [[1, 2, 3], [4, 5, 6]]
         // Mean along axis 1: [(1+2+3)/3, (4+5+6)/3] = [2, 5]
         var mean = new MeanLayer<double>(1);
@@ -315,6 +356,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task MeanLayer_Axis0_HandComputed()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         // Input [2, 3]: [[1, 2, 3], [7, 8, 9]]
         // Mean along axis 0: [(1+7)/2, (2+8)/2, (3+9)/2] = [4, 5, 6]
         var mean = new MeanLayer<double>(0);
@@ -332,6 +374,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task MeanLayer_UniformInput_MeanEqualsValue()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         var mean = new MeanLayer<double>(1);
 
         var input = new Tensor<double>(new[] { 3, 4 });
@@ -349,6 +392,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task MeanLayer_SingleElement_MeanIsElement()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         var mean = new MeanLayer<double>(0);
 
         var input = new Tensor<double>(new[] { 1, 5 }, new Vector<double>(new double[] { 10.0, 20.0, 30.0, 40.0, 50.0 }));
@@ -363,6 +407,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task MeanLayer_NegativeValues_HandComputed()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         var mean = new MeanLayer<double>(1);
 
         var input = new Tensor<double>(new[] { 1, 4 }, new Vector<double>(new double[] { -2.0, -4.0, 6.0, 8.0 }));
@@ -376,6 +421,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task MeanLayer_LargeValues_StillAccurate()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         var mean = new MeanLayer<double>(1);
 
         var input = new Tensor<double>(new[] { 1, 3 }, new Vector<double>(new double[] { 1e10, 2e10, 3e10 }));
@@ -392,6 +438,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ReshapeLayer_PreservesAllValues()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         var reshape = new ReshapeLayer<double>(new[] { 3, 2 });
 
         var input = new Tensor<double>(new[] { 1, 2, 3 }, new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 }));
@@ -407,6 +454,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ReshapeLayer_OutputShapeIsCorrect()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         var reshape = new ReshapeLayer<double>(new[] { 6, 2 });
 
         var input = new Tensor<double>(new[] { 1, 4, 3 });
@@ -420,6 +468,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ReshapeLayer_NoTrainableParameters()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         var reshape = new ReshapeLayer<double>(new[] { 2, 2 });
         Assert.Equal(0, (int)reshape.ParameterCount);
     }
@@ -436,6 +485,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GRU_And_LSTM_SameInputSize_DifferentParamCounts()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         int inputSize = 8;
         int hiddenSize = 16;
 
@@ -443,6 +493,11 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
             activation: (IActivationFunction<double>?)null);
         var lstm = new LSTMLayer<double>( hiddenSize,
             activation: (IActivationFunction<double>?)null);
+
+        // Lazy-input: materialize both layers' weights with a matching
+        // [seq, inputSize] warm-up forward before reading parameter counts.
+        gru.Forward(new Tensor<double>(new[] { 2, inputSize }));
+        lstm.Forward(new Tensor<double>(new[] { 2, inputSize }));
 
         int expectedGRU = 3 * (hiddenSize * inputSize + hiddenSize * hiddenSize + hiddenSize);
         int expectedLSTM = 4 * (hiddenSize * inputSize + hiddenSize * hiddenSize + hiddenSize);
@@ -458,6 +513,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GRU_ZeroInput_OutputIsFinite()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         var gru = new GRULayer<double>( hiddenSize: 4,
             activation: (IActivationFunction<double>?)null);
 
@@ -474,6 +530,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GRU_LargeInput_StillBounded()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         var gru = new GRULayer<double>( hiddenSize: 3,
             activation: (IActivationFunction<double>?)null);
 
@@ -491,6 +548,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GRU_MultipleTimesteps_OutputChanges()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         var gru = new GRULayer<double>( hiddenSize: 3,
             returnSequences: true, activation: (IActivationFunction<double>?)null);
 

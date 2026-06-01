@@ -721,6 +721,10 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
         for (int i = 0; i < kernelCount; i++)
             _poolingKernelSizes[i] = reader.ReadInt32();
         _dropout = reader.ReadDouble();
+
+        // Re-bind cached layer references so a deserialized/cloned model runs on
+        // the restored layers, not the construction-time random ones.
+        ExtractLayerReferences();
     }
 
     #endregion

@@ -96,6 +96,57 @@ public class FusedOptimizerIntegrationTests
     }
 
     /// <summary>
+    /// Regression guard for the "compiled does nothing" bug (PR #1469): training
+    /// with NO explicitly-supplied optimizer must still engage the fused compiled
+    /// path. When the caller passes <c>optimizer: null</c>, <c>TrainWithTape</c>
+    /// resolves the DEFAULT via <c>GetOrCreateBaseOptimizer()</c>. That default
+    /// previously constructed Adam with <c>UseAMSGrad = true</c>, which
+    /// <c>TryMapToFusedOptimizerConfig</c> rejected — silently demoting EVERY
+    /// default-configured model to the eager tape so "compiled training" never
+    /// actually ran. The default must be a fused-mappable optimizer; this test
+    /// fails loudly if a non-mappable default is ever reintroduced.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task DefaultOptimizer_EngagesFusedPath_NotSilentEagerFallback()
+    {
+        await Task.CompletedTask;
+
+        var network = BuildMlp();
+        var input = CreateRandomTensor(new[] { 16, 4 }, seed: 42);
+        var target = CreateRandomTensor(new[] { 16, 2 }, seed: 43);
+
+        // Warmup forward so layer weight tensors are materialized.
+        network.Predict(CreateRandomTensor(new[] { 1, 4 }, seed: 99));
+
+        var originalOptions = TensorCodecOptions.Current;
+        try
+        {
+            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
+            CompiledTapeTrainingStep<float>.Invalidate();
+            CompiledTapeTrainingStep<float>.ResetFusedStepCount();
+
+            // network.Train(...) calls TrainWithTape(input, target) with the
+            // optimizer defaulted to null → the GetOrCreateBaseOptimizer() path.
+            for (int step = 0; step < 10; step++)
+            {
+                network.Train(input, target);
+                Assert.False(float.IsNaN(network.LastLossPublic),
+                    $"default-optimizer fused step {step} produced NaN loss");
+            }
+
+            Assert.True(CompiledTapeTrainingStep<float>.GetFusedStepCount() > 0,
+                "Default optimizer never engaged the fused path — the 'compiled does " +
+                "nothing' regression is back: GetOrCreateBaseOptimizer() returned an " +
+                "optimizer that TryMapToFusedOptimizerConfig rejects.");
+        }
+        finally
+        {
+            TensorCodecOptions.SetCurrent(originalOptions);
+            CompiledTapeTrainingStep<float>.Invalidate();
+        }
+    }
+
+    /// <summary>
     /// The eager tape fallback path (<see cref="TensorCodecOptions.EnableCompilation"/>=false)
     /// must actually update parameters — this is the reference path that must always work,
     /// independent of whether the fused path engages.

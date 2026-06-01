@@ -31,8 +31,15 @@ namespace AiDotNet.ActivationFunctions;
 [ActivationCategory(ActivationCategory.General)]
 [ActivationTask(ActivationTask.HiddenLayer)]
 [ActivationProperty(IsMonotonic = false, ZeroPreserving = true, IsBounded = false, Cost = ComputeCost.Medium)]
-public class LiSHTActivation<T> : ActivationFunctionBase<T>
+public class LiSHTActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivation
 {
+    /// <inheritdoc/>
+    bool Fused.IFusedActivation.TryGetFusedActivation(out AiDotNet.Tensors.Engines.FusedActivationType type)
+    {
+        type = AiDotNet.Tensors.Engines.FusedActivationType.LiSHT;
+        return true;
+    }
+
     /// <summary>
     /// Determines if the activation function supports operations on individual scalar values.
     /// </summary>

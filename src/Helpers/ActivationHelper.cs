@@ -47,6 +47,39 @@ public static class ActivationHelper
     }
 
     /// <summary>
+    /// Applies a scalar (element-wise) activation function to a tensor, routing known
+    /// activations through tape-connected Engine kernels and falling back to the
+    /// activation's own <see cref="IActivationFunction{T}.Activate(Tensor{T})"/> for
+    /// custom types. This is the single dispatch point for element-wise activations so
+    /// individual layers don't each re-implement the engine mapping.
+    /// </summary>
+    public static Tensor<T> ApplyActivation<T>(IActivationFunction<T>? activation, Tensor<T> input, IEngine engine)
+    {
+        if (activation == null)
+            return input;
+
+        // Use Engine methods for optimized activations (CPU SIMD / GPU kernels);
+        // these are tape-connected so gradients flow through the activation.
+        if (activation is TanhActivation<T>)
+            return engine.Tanh(input);
+        else if (activation is SigmoidActivation<T>)
+            return engine.Sigmoid(input);
+        else if (activation is ReLUActivation<T>)
+            return engine.ReLU(input);
+        else if (activation is GELUActivation<T>)
+            return engine.GELU(input);
+        else if (activation is MishActivation<T>)
+            return engine.Mish(input);
+        else if (activation is SwishActivation<T> || activation is SiLUActivation<T>)
+            return engine.Swish(input);
+        else if (activation is ELUActivation<T>)
+            return engine.ELU(input);
+        else
+            // Fall back to the activation's own tensor application for custom types.
+            return activation.Activate(input);
+    }
+
+    /// <summary>
     /// Applies a vector activation function to a vector using Engine methods when possible.
     /// </summary>
     /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>

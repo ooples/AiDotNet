@@ -264,6 +264,15 @@ public abstract class RiskModelBase<T> : FinancialModelBase<T>, IRiskModel<T>
         // Default forecasting implementation for risk models
         // Uses Forward directly to avoid recursion with CalculateRisk
         // (CalculateRisk calls Predict which calls Forecast which calls ForecastNative)
+        //
+        // Inference mode is REQUIRED: risk-model stacks contain
+        // BatchNormalizationLayers, which in training mode normalize across the
+        // batch axis. A single-instance prediction (batch = 1) then normalizes
+        // each feature to its own value (~0 output) regardless of input, so every
+        // constant input collapses to the same risk estimate. Inference mode uses
+        // the running statistics instead, keeping BatchNorm affine.
+        SetTrainingMode(false);
+
         var current = input;
         foreach (var layer in Layers)
         {

@@ -1279,13 +1279,25 @@ public class RelationalGCN<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ReshapeOutput(Tensor<T> output)
     {
-        var reshaped = new Tensor<T>(new[] { _numNodes, _forecastHorizon });
-        int copySize = Math.Min(output.Data.Length, reshaped.Data.Length);
-        for (int i = 0; i < copySize; i++)
+        // Tape-aware reshape to [numNodes, forecastHorizon]. The previous
+        // implementation copied element-by-element into a fresh Tensor<T>, which
+        // detached the autodiff graph right before the loss and zeroed every
+        // gradient. Reshape / Narrow / Concat keep the output connected to the
+        // layer stack so gradients flow back on backward.
+        int target = _numNodes * _forecastHorizon;
+        var flat = Engine.Reshape(output, new[] { output.Length });
+        if (output.Length > target)
         {
-            reshaped.Data.Span[i] = output.Data.Span[i];
+            flat = Engine.TensorNarrow(flat, 0, 0, target);
         }
-        return reshaped;
+        else if (output.Length < target)
+        {
+            // Pad with zeros to reach the target length, matching the prior
+            // truncation-copy semantics where unfilled entries stayed at zero.
+            var pad = new Tensor<T>(new[] { target - output.Length });
+            flat = Engine.Concat(new[] { flat, pad }, 0);
+        }
+        return Engine.Reshape(flat, new[] { _numNodes, _forecastHorizon });
     }
 
     /// <summary>
