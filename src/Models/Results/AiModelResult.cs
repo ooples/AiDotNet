@@ -1932,19 +1932,34 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         var dataForPrediction = newData;
         if (SafetyFilter != null && newData is Vector<T> vectorInput && typeof(TInput) == typeof(Vector<T>))
         {
-            var validation = SafetyFilter.ValidateInput(vectorInput);
-            if (!validation.IsValid)
+            // Fast path for the default numeric SafetyFilter — single-call analog of the
+            // ValidateAndSanitizeMatrix fast path (#1447 / #1458). SafetyFilter<T>.ValidateInput
+            // builds a ConvertToText string over every element THREE times (directly + inside
+            // DetectJailbreak + IdentifyHarmfulContent) then runs English-phrase jailbreak/
+            // harmful-content regexes that can never match numeric stringifications. The only
+            // verdicts that apply to a numeric input vector are input-length and finiteness;
+            // when the vector is within MaxInputLength and all-finite, ValidateInput returns
+            // IsValid with no sanitization (the default filter never sets SanitizedInput), so
+            // the per-call text scan is pure cost. Skip it for clean data; any violation falls
+            // through to the full ValidateInput so the exact diagnostic/throw is preserved.
+            // Custom ISafetyFilter implementations always take the per-call path below.
+            if (!(SafetyFilter is SafetyFilter<T> defaultInputFilter
+                  && IsCleanForDefaultVectorInputFilter(vectorInput, defaultInputFilter)))
             {
-                var issues = validation.Issues.Count > 0
-                    ? string.Join("; ", validation.Issues.Select(i => $"{i.Type}:{i.Severity}"))
-                    : "Unknown safety validation failure.";
-                throw new InvalidOperationException($"Safety validation failed: {issues}");
-            }
+                var validation = SafetyFilter.ValidateInput(vectorInput);
+                if (!validation.IsValid)
+                {
+                    var issues = validation.Issues.Count > 0
+                        ? string.Join("; ", validation.Issues.Select(i => $"{i.Type}:{i.Severity}"))
+                        : "Unknown safety validation failure.";
+                    throw new InvalidOperationException($"Safety validation failed: {issues}");
+                }
 
-            if (validation.SanitizedInput != null)
-            {
-                var sanitized = validation.SanitizedInput;
-                dataForPrediction = Unsafe.As<Vector<T>, TInput>(ref sanitized);
+                if (validation.SanitizedInput != null)
+                {
+                    var sanitized = validation.SanitizedInput;
+                    dataForPrediction = Unsafe.As<Vector<T>, TInput>(ref sanitized);
+                }
             }
         }
         else if (SafetyFilter != null && newData is Matrix<T> matrixInput && typeof(TInput) == typeof(Matrix<T>))
@@ -2026,11 +2041,22 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         if (SafetyFilter != null && denormalized is Vector<T> vectorOutput && typeof(TOutput) == typeof(Vector<T>))
         {
-            var filtered = SafetyFilter.FilterOutput(vectorOutput);
-            if (filtered.WasModified || !filtered.IsSafe)
+            // Fast path for the default numeric SafetyFilter — single-call analog of the
+            // FilterMatrixOutput fast path (#1447 / #1458). SafetyFilter<T>.FilterOutput's
+            // only check is IdentifyHarmfulContent, which stringifies the vector
+            // (ConvertToText) and regex-matches English harmful-content phrases —
+            // meaningless on a numeric prediction vector, so it never modifies numeric
+            // output (a match would have been a spurious false-positive block). Skip the
+            // ConvertToText + regex for the default filter and return the output unchanged.
+            // Custom ISafetyFilter implementations keep the per-call path.
+            if (SafetyFilter is not SafetyFilter<T>)
             {
-                var filteredOutput = filtered.FilteredOutput;
-                return Unsafe.As<Vector<T>, TOutput>(ref filteredOutput);
+                var filtered = SafetyFilter.FilterOutput(vectorOutput);
+                if (filtered.WasModified || !filtered.IsSafe)
+                {
+                    var filteredOutput = filtered.FilteredOutput;
+                    return Unsafe.As<Vector<T>, TOutput>(ref filteredOutput);
+                }
             }
         }
         else if (SafetyFilter != null && denormalized is Matrix<T> matrixOutput && typeof(TOutput) == typeof(Matrix<T>))
@@ -2162,6 +2188,42 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         }
 
         return Helpers.OptimizerHelper<T, TInput, TOutput>.SelectFeatures(input, featureIndices);
+    }
+
+    /// <summary>
+    /// Returns true when the default numeric <see cref="SafetyFilter{T}"/> would pass
+    /// <paramref name="input"/> through unchanged — i.e. input validation is disabled, or
+    /// the vector is within <see cref="SafetyFilterOptions{T}.MaxInputLength"/> and contains
+    /// no NaN/Infinity. In that case <see cref="SafetyFilter{T}.ValidateInput"/> returns a
+    /// valid result with no sanitization, so its per-call text scan can be skipped. Any
+    /// violation returns false so the caller falls through to the full per-call validation
+    /// for the exact diagnostic. Mirrors the matrix fast path in
+    /// <see cref="ValidateAndSanitizeMatrix"/> (#1447 / #1458).
+    /// </summary>
+    private static bool IsCleanForDefaultVectorInputFilter(Vector<T> input, SafetyFilter<T> filter)
+    {
+        var opts = filter.GetOptions();
+        if (!opts.EnableInputValidation)
+        {
+            return true;
+        }
+
+        if (input.Length > opts.MaxInputLength)
+        {
+            return false;
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        for (int i = 0; i < input.Length; i++)
+        {
+            double d = numOps.ToDouble(input[i]);
+            if (double.IsNaN(d) || double.IsInfinity(d))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private Matrix<T> ValidateAndSanitizeMatrix(Matrix<T> input)
