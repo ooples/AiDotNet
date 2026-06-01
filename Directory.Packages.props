@@ -66,11 +66,18 @@
          (ISparseEngine.SpMM<T> made unconstrained again — #379 had leaked a
          `where T : unmanaged` into the public API, breaking unconstrained-T
          consumers like SparseLinearLayer<T>; 0.90.0/0.90.1 do NOT build against
-         AiDotNet, 0.90.2 is the first 0.90.x that does). -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.90.2" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.90.2" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.90.2" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.90.2" />
+         AiDotNet, 0.90.2 is the first 0.90.x that does).
+
+         Bumped 0.90.2 -> 0.90.3 for two any-rank / fast-path fixes that unblock the
+         CNN + unbatched inference wiring: Tensors#521 (FusedLinear accepts rank-1 [K]
+         input — promotes to [1,K] and squeezes back, so unbatched FeedForward Predict
+         no longer throws "TensorMatMul requires rank >= 2") and Tensors#522 (the
+         int-overload Conv2DInto routes through the im2col-GEMM fast path instead of
+         the ~15x-slower SIMD-direct cascade). -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.90.3" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.90.3" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.90.3" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.90.3" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.8" />
