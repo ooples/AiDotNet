@@ -7987,7 +7987,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Sequence models with EmbeddingLayer don't support feature selection.
         // Their input shape is [1] (single token ID), not a feature vector.
         // Fixes #1113.
-        if (Layers.Count > 0 && Layers[0] is Layers.EmbeddingLayer<T>)
+        //
+        // Models with a non-flat (multi-dimensional) first-layer input shape — CNN
+        // (depth×H×W), RNN/GRU/LSTM (seqLen×features), Vision Transformer, etc. — are the
+        // same case generalized: "select a subset of input features" is a tabular concept
+        // that doesn't apply to spatial/sequence input, and the optimizer feeds flat indices
+        // (0..flatSize) that exceed the first layer's input-shape axis 0. Treat as a no-op
+        // rather than validating those indices against GetInputShape()[0]. Fixes #1468.
+        if (Layers.Count > 0
+            && (Layers[0] is Layers.EmbeddingLayer<T> || Layers[0].GetInputShape() is { Length: > 1 }))
         {
             // Clear any stale feature mask so IsFeatureUsed() doesn't
             // answer from a previous dense-feature configuration.

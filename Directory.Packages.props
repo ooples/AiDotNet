@@ -73,10 +73,29 @@
          input — promotes to [1,K] and squeezes back, so unbatched FeedForward Predict
          no longer throws "TensorMatMul requires rank >= 2") and Tensors#522 (the
          int-overload Conv2DInto routes through the im2col-GEMM fast path instead of
-         the ~15x-slower SIMD-direct cascade). -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.90.3" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.90.3" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.90.3" />
+         the ~15x-slower SIMD-direct cascade).
+
+         Bumped 0.90.3 -> 0.91.0 to pick up the GPU robustness fixes that unblock the
+         prebuilt-CNN/RNN facade path (#1468): Tensors#526 — (1) materialize-before-free
+         in DirectGpuTensorEngine.InvalidateActivationCacheEntry so a deferred GPU
+         download is no longer freed out from under a pending materializer (the #226-class
+         race that crashed AiModelBuilder.BuildAsync on CNN training with
+         "Failed to read OpenCL buffer: -5"), and (2) a GPU auto-detect correctness probe
+         so a present-but-broken backend falls back to CPU instead of being adopted.
+         AiDotNet.Native packages coreleased in lockstep at 0.91.0.
+
+         Bumped 0.91.0 -> 0.91.1 for the GPU MaxPool2D backward fix that actually
+         unblocks prebuilt-CNN training through the facade (#1468): Tensors#527 —
+         (1) pooling indices were uploaded as float[] but every backend's
+         maxpool2d_backward kernel reads them as int* (float bits reinterpreted as
+         ints → out-of-bounds scatter), and (2) the CUDA backend launched the 9-arg
+         kernel with only 8 args (garbage outWidth). Together these caused a hard CUDA
+         access violation / OpenCL "-5" one step into CNN backprop. Verified: the CNN
+         BuildAsync facade test trains + predicts on a real GPU with 0.91.1.
+         AiDotNet.Native packages coreleased in lockstep at 0.91.1. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.91.1" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.91.1" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.91.1" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.90.3" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
