@@ -66,9 +66,11 @@ env:
   # pool mid-run). Left at the compiled default until the underlying
   # handle-leak is fixed properly.
   #
-  # Memory pressure on heavy shards is handled instead by per-shard
-  # `xunit.MaxParallelThreads=1` (see the test step below), which
-  # serializes model loads on the heaviest shards.
+  # Memory pressure on heavy shards is handled instead by rewriting the
+  # built xunit.runner.json to serial for those shards (see the test step
+  # below), which serializes model loads on the heaviest shards. (The
+  # `-- xunit.MaxParallelThreads=1` inline arg is a no-op under the VSTest
+  # adapter; only the JSON is honored.)
 
   # GC tuning for tests: switch to Server GC (multi-threaded, larger heap
   # segments, batched Gen-2 collections) — Workstation GC's per-thread heap
@@ -501,9 +503,12 @@ jobs:
           # model loads in flight on a 16 GB ubuntu-latest runner. Per-iter
           # peak memory ≈ 880 MB weights + 1.76 GB Adam state per slot;
           # 4 slots × 2.6 GB + dotnet/xUnit overhead overruns the envelope.
-          # For these specific shards we pass `xunit.MaxParallelThreads=1`
-          # so heavy models load serially — every other shard stays at
-          # the JSON default (= ProcessorCount = 4) and runs full-speed.
+          # For these specific shards we rewrite the built xunit.runner.json
+          # to serialize collection execution so heavy models load serially —
+          # every other shard stays at the JSON default (= ProcessorCount = 4)
+          # and runs full-speed. (See the rewrite block in the run step below;
+          # the old `xunit.MaxParallelThreads=1` inline arg was silently
+          # ignored by the VSTest adapter.)
           $heavyShards = @(
             'ModelFamily - Diffusion A-I',
             'ModelFamily - Diffusion J-R',
@@ -535,9 +540,28 @@ jobs:
             '--blame-hang-timeout', '5min',
             '--blame-hang-dump-type', 'none'
           )
+          # OOM root cause + fix: the heavy shards exhaust the 16 GB runner
+          # because xUnit runs many test CLASSES in parallel (default
+          # maxParallelThreads = ProcessorCount), and each big-model class
+          # holds a multi-GB model + Adam state for the whole class. The
+          # `-- xunit.MaxParallelThreads=1` VSTest inline arg we used before
+          # is SILENTLY IGNORED by the xunit.runner.visualstudio adapter — only
+          # xunit.runner.json in the build output is honored. So for heavy
+          # shards we rewrite the copied runner config to serialize collection
+          # execution (one model in flight at a time). Every other shard keeps
+          # the parallel JSON default and runs full-speed.
           if ($serializeShard) {
-            $dotnetArgs += '--'
-            $dotnetArgs += 'xunit.MaxParallelThreads=1'
+            $projDir = Split-Path -Parent '${{ matrix.shard.project }}'
+            $runnerJson = Join-Path $projDir 'bin/Release/${{ matrix.shard.framework }}/xunit.runner.json'
+            if (Test-Path $runnerJson) {
+              $cfg = Get-Content $runnerJson -Raw | ConvertFrom-Json
+              $cfg.parallelizeTestCollections = $false
+              $cfg.maxParallelThreads = 1
+              $cfg | ConvertTo-Json -Depth 10 | Set-Content $runnerJson -Encoding utf8
+              Write-Host "Serialized heavy-shard runner config: $runnerJson"
+            } else {
+              Write-Host "WARNING: runner config not found at $runnerJson — shard NOT serialized"
+            }
           }
           & dotnet @dotnetArgs
 
