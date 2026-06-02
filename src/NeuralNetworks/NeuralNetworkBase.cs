@@ -2111,6 +2111,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 kSpan[baseIdx + j] = NumOps.Multiply(kSpan[baseIdx + j], scale);
             bSpan[oc] = NumOps.Add(NumOps.Multiply(NumOps.Subtract(bSpan[oc], mSpan[oc]), scale), beSpan[oc]);
         }
+
+        // In-place span mutation bypasses the engine's persistent-tensor cache (packed /
+        // GPU-resident kernel + bias buffers). Invalidate it so a cached forward path
+        // re-reads the folded values instead of the stale pre-fold weights — same fix as
+        // the Dense fold below; mirrors SetWeights / SetParameters.
+        Engine.InvalidatePersistentTensor(kernels);
+        Engine.InvalidatePersistentTensor(biases);
         return true;
     }
 
@@ -2155,6 +2162,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             }
             bSpan[oc] = NumOps.Add(NumOps.Multiply(NumOps.Subtract(bSpan[oc], mSpan[oc]), scale), beSpan[oc]);
         }
+
+        // The in-place span mutations above bypass the engine's persistent-tensor cache
+        // (the packed / GPU-resident weight + bias buffers keyed by these arrays). Every
+        // other weight-mutation path — SetWeights, SetParameters — invalidates that cache;
+        // the fold must too. Otherwise a forward path that serves weights from the cache
+        // (native-BLAS pre-pack / GPU buffer) reuses the STALE pre-fold weights, so the
+        // BatchNorm fold silently has no effect and the optimized model's output diverges
+        // sharply from the reference (observed as a ~0.18 Dense→BN folded-output divergence
+        // on the Linux native-BLAS CI path; the managed path happened to re-read the arrays).
+        Engine.InvalidatePersistentTensor(weights);
+        Engine.InvalidatePersistentTensor(biases);
         return true;
     }
 
