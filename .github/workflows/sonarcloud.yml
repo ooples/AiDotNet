@@ -557,11 +557,29 @@ jobs:
               $cfg = Get-Content $runnerJson -Raw | ConvertFrom-Json
               $cfg.parallelizeTestCollections = $false
               $cfg.maxParallelThreads = 1
+              # Don't materialize every [Theory]'s data rows at discovery time —
+              # the assembly discovers ~64k cases and pre-enumeration inflates the
+              # retained-case baseline before a single test even runs.
+              $cfg | Add-Member -NotePropertyName preEnumerateTheories -NotePropertyValue $false -Force
               $cfg | ConvertTo-Json -Depth 10 | Set-Content $runnerJson -Encoding utf8
               Write-Host "Serialized heavy-shard runner config: $runnerJson"
             } else {
-              Write-Host "WARNING: runner config not found at $runnerJson — shard NOT serialized"
+              # These shards are flagged heavy precisely because they OOM without
+              # serialization. If the rewrite can't be applied, fail fast rather
+              # than fall through to a parallel run that will OOM and waste the runner.
+              Write-Host "ERROR: runner config not found at $runnerJson — cannot serialize heavy shard"
+              exit 1
             }
+            # The global Server GC (DOTNET_gcServer=1) reserves a heap segment per
+            # core and collects lazily — high steady-state footprint chosen for
+            # throughput under PARALLEL collections. This shard is now serial, so
+            # we don't need that throughput; switch it to Workstation GC, which has
+            # a much smaller footprint and collects eagerly under memory pressure.
+            # (Confirmed necessary: with serialization alone the shard still OOM'd
+            # ~70s into serial execution — the footprint, not parallelism, was the
+            # remaining cause.)
+            $env:DOTNET_gcServer = '0'
+            Write-Host "Heavy shard: Workstation GC (DOTNET_gcServer=0) + serial collections"
           }
           & dotnet @dotnetArgs
 
