@@ -140,20 +140,30 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
                 // OOM-kills the Diffusion shards on the 14 GB runner. Clearing them
                 // here lets the immediately-following Gen-2/LOH compaction reclaim
                 // the freed regions, returning to a clean baseline between tests.
-                AiDotNet.Tensors.TensorCacheSettings.ClearCache();
-                AiDotNet.Tensors.Helpers.TensorArena.ClearPersistentPool();
-                AiDotNet.Tensors.LinearAlgebra.WeightRegistry.Reset();
+                try
+                {
+                    AiDotNet.Tensors.TensorCacheSettings.ClearCache();
+                    AiDotNet.Tensors.Helpers.TensorArena.ClearPersistentPool();
+                    AiDotNet.Tensors.LinearAlgebra.WeightRegistry.Reset();
+                }
+                catch (Exception)
+                {
+                    // Defensive: log and continue so GC compaction always runs.
+                    // Cache-clear failures must not prevent LOH compaction.
+                }
+                finally
+                {
+                    // First pass: compacting Gen-2 + LOH reclaims everything unreachable
+                    // including the just-Disposed model's weight tensors.
+                    GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+                    GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
+                    GC.WaitForPendingFinalizers();
 
-                // First pass: compacting Gen-2 + LOH reclaims everything unreachable
-                // including the just-Disposed model's weight tensors.
-                GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-                GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
-                GC.WaitForPendingFinalizers();
-
-                // Second pass: finalizer-released memory (e.g. GPU-pool return paths)
-                // and any LOH allocations from finalizers.
-                GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-                GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
+                    // Second pass: finalizer-released memory (e.g. GPU-pool return paths)
+                    // and any LOH allocations from finalizers.
+                    GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+                    GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
+                }
             }
         }
         finally
