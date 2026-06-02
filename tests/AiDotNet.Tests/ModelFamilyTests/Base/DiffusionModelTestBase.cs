@@ -132,6 +132,18 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
         {
             lock (_lohCompactionGate)
             {
+                // Drop the process-wide transient tensor caches (keyed by tensor
+                // SHAPE) BEFORE the compacting collect. Over a shard of dozens of
+                // distinct diffusion models these pools retain multiple GB of
+                // weight-sized tensors across all worker threads that the GC cannot
+                // reclaim while the pool holds them — the cumulative leak that
+                // OOM-kills the Diffusion shards on the 14 GB runner. Clearing them
+                // here lets the immediately-following Gen-2/LOH compaction reclaim
+                // the freed regions, returning to a clean baseline between tests.
+                AiDotNet.Tensors.TensorCacheSettings.ClearCache();
+                AiDotNet.Tensors.Helpers.TensorArena.ClearPersistentPool();
+                AiDotNet.Tensors.LinearAlgebra.WeightRegistry.Reset();
+
                 // First pass: compacting Gen-2 + LOH reclaims everything unreachable
                 // including the just-Disposed model's weight tensors.
                 GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;

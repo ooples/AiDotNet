@@ -89,6 +89,16 @@ public abstract class DiffusionUnitTestBase : IAsyncLifetime
     {
         lock (_lohCompactionGate)
         {
+            // Drop the process-wide transient tensor caches (keyed by tensor SHAPE)
+            // before compacting. Over ~200 sequential diffusion unit tests these
+            // pools retain multiple GB of weight-sized tensors across all worker
+            // threads that GC cannot reclaim while pooled — the cumulative
+            // retention that OOM-kills the Unit-03 shard. Clearing here lets the
+            // following compacting Gen-2/LOH pass reclaim the freed regions.
+            AiDotNet.Tensors.TensorCacheSettings.ClearCache();
+            AiDotNet.Tensors.Helpers.TensorArena.ClearPersistentPool();
+            AiDotNet.Tensors.LinearAlgebra.WeightRegistry.Reset();
+
             // Compact the LOH on the next Gen-2 collection. CompactOnce auto-resets
             // to Default after each compacting Gen-2 pass, so this is scoped to
             // the single test-teardown call — no process-wide side-effect beyond

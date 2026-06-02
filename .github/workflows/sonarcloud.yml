@@ -376,21 +376,30 @@ jobs:
           - name: ModelFamily - Diffusion A-I
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
+            # Shard by MODEL CLASS first letter (Diffusion.<Letter>), NOT by test
+            # METHOD first letter (Tests.<Letter>). The method-based filter made
+            # EACH of the three diffusion shards instantiate ALL ~244 diffusion
+            # models (just a different subset of each model's methods), so all
+            # three accumulated the full distinct-model tensor-cache footprint and
+            # OOM-killed the runner. Model-based sharding limits each shard to its
+            # letter range of models (~1/3), cutting per-runner cumulative memory.
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Diffusion&
-              (FullyQualifiedName~Tests.A|FullyQualifiedName~Tests.B|FullyQualifiedName~Tests.C|FullyQualifiedName~Tests.D|FullyQualifiedName~Tests.E|FullyQualifiedName~Tests.F|FullyQualifiedName~Tests.G|FullyQualifiedName~Tests.H|FullyQualifiedName~Tests.I)
+              (FullyQualifiedName~Diffusion.A|FullyQualifiedName~Diffusion.B|FullyQualifiedName~Diffusion.C|FullyQualifiedName~Diffusion.D|FullyQualifiedName~Diffusion.E|FullyQualifiedName~Diffusion.F|FullyQualifiedName~Diffusion.G|FullyQualifiedName~Diffusion.H|FullyQualifiedName~Diffusion.I)
           - name: ModelFamily - Diffusion J-R
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
+            # Model-class sharding (see Diffusion A-I note above).
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Diffusion&
-              (FullyQualifiedName~Tests.J|FullyQualifiedName~Tests.K|FullyQualifiedName~Tests.L|FullyQualifiedName~Tests.M|FullyQualifiedName~Tests.N|FullyQualifiedName~Tests.O|FullyQualifiedName~Tests.P|FullyQualifiedName~Tests.Q|FullyQualifiedName~Tests.R)
+              (FullyQualifiedName~Diffusion.J|FullyQualifiedName~Diffusion.K|FullyQualifiedName~Diffusion.L|FullyQualifiedName~Diffusion.M|FullyQualifiedName~Diffusion.N|FullyQualifiedName~Diffusion.O|FullyQualifiedName~Diffusion.P|FullyQualifiedName~Diffusion.Q|FullyQualifiedName~Diffusion.R)
           - name: ModelFamily - Diffusion S-Z
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
+            # Model-class sharding (see Diffusion A-I note above).
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Diffusion&
-              (FullyQualifiedName~Tests.S|FullyQualifiedName~Tests.T|FullyQualifiedName~Tests.U|FullyQualifiedName~Tests.V|FullyQualifiedName~Tests.W|FullyQualifiedName~Tests.X|FullyQualifiedName~Tests.Y|FullyQualifiedName~Tests.Z)
+              (FullyQualifiedName~Diffusion.S|FullyQualifiedName~Diffusion.T|FullyQualifiedName~Diffusion.U|FullyQualifiedName~Diffusion.V|FullyQualifiedName~Diffusion.W|FullyQualifiedName~Diffusion.X|FullyQualifiedName~Diffusion.Y|FullyQualifiedName~Diffusion.Z)
           # Auto-generated layer tests from TestScaffoldGenerator (~1670 methods)
           - name: ModelFamily - Generated Layers
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
