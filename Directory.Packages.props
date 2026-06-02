@@ -96,7 +96,7 @@
     <PackageVersion Include="AiDotNet.Tensors" Version="0.91.1" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.91.1" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.91.1" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.90.3" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.91.1" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.8" />
