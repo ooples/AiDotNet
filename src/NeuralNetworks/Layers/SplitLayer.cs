@@ -144,8 +144,18 @@ public class SplitLayer<T> : LayerBase<T>
     protected override void OnFirstForward(Tensor<T> input)
     {
         var shape = input.Shape.ToArray();
-        var output = CalculateOutputShape(shape, _numSplits);
-        ResolveShapes(shape, output);
+        // The leading dimension is the batch; the split applies to the per-sample feature
+        // vector (the last dimension), matching Forward which reshapes to
+        // [flatBatch, lastDim] before splitting. The previous code checked shape[0] (the
+        // BATCH size) for divisibility — e.g. input [2, 32] split into 4 threw because
+        // 2 % 4 != 0 — and returned a 1-D output shape inconsistent with Forward's
+        // [batch, numSplits, splitSize] result. Strip the batch dim and split the feature
+        // dimension instead.
+        int featureSize = shape[shape.Length - 1];
+
+        // Per-sample shapes exclude the batch dimension: input is the feature vector,
+        // output adds the split axis → [numSplits, featureSize / numSplits].
+        ResolveShapes(new[] { featureSize }, CalculateOutputShape(shape, _numSplits));
     }
 
     /// <summary>
@@ -172,12 +182,14 @@ public class SplitLayer<T> : LayerBase<T>
     /// </remarks>
     private static int[] CalculateOutputShape(int[] inputShape, int numSplits)
     {
-        if (inputShape[0] % numSplits != 0)
+        // Splits the per-sample feature vector (the last dimension) into numSplits groups.
+        int featureSize = inputShape[inputShape.Length - 1];
+        if (featureSize % numSplits != 0)
         {
             throw new ArgumentException("Input size must be divisible by the number of splits");
         }
 
-        return [inputShape[0] / numSplits];
+        return [numSplits, featureSize / numSplits];
     }
 
     /// <summary>

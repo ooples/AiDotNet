@@ -2111,6 +2111,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 kSpan[baseIdx + j] = NumOps.Multiply(kSpan[baseIdx + j], scale);
             bSpan[oc] = NumOps.Add(NumOps.Multiply(NumOps.Subtract(bSpan[oc], mSpan[oc]), scale), beSpan[oc]);
         }
+
+        // In-place span mutation bypasses the engine's persistent-tensor cache (packed /
+        // GPU-resident kernel + bias buffers). Invalidate it so a cached forward path
+        // re-reads the folded values instead of the stale pre-fold weights — same fix as
+        // the Dense fold below; mirrors SetWeights / SetParameters.
+        Engine.InvalidatePersistentTensor(kernels);
+        Engine.InvalidatePersistentTensor(biases);
         return true;
     }
 
@@ -2155,6 +2162,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             }
             bSpan[oc] = NumOps.Add(NumOps.Multiply(NumOps.Subtract(bSpan[oc], mSpan[oc]), scale), beSpan[oc]);
         }
+
+        // The in-place span mutations above bypass the engine's persistent-tensor cache
+        // (the packed / GPU-resident weight + bias buffers keyed by these arrays). Every
+        // other weight-mutation path — SetWeights, SetParameters — invalidates that cache;
+        // the fold must too. Otherwise a forward path that serves weights from the cache
+        // (native-BLAS pre-pack / GPU buffer) reuses the STALE pre-fold weights, so the
+        // BatchNorm fold silently has no effect and the optimized model's output diverges
+        // sharply from the reference (observed as a ~0.18 Dense→BN folded-output divergence
+        // on the Linux native-BLAS CI path; the managed path happened to re-read the arrays).
+        Engine.InvalidatePersistentTensor(weights);
+        Engine.InvalidatePersistentTensor(biases);
         return true;
     }
 
@@ -7987,7 +8005,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Sequence models with EmbeddingLayer don't support feature selection.
         // Their input shape is [1] (single token ID), not a feature vector.
         // Fixes #1113.
-        if (Layers.Count > 0 && Layers[0] is Layers.EmbeddingLayer<T>)
+        //
+        // Models with a non-flat (multi-dimensional) first-layer input shape — CNN
+        // (depth×H×W), RNN/GRU/LSTM (seqLen×features), Vision Transformer, etc. — are the
+        // same case generalized: "select a subset of input features" is a tabular concept
+        // that doesn't apply to spatial/sequence input, and the optimizer feeds flat indices
+        // (0..flatSize) that exceed the first layer's input-shape axis 0. Treat as a no-op
+        // rather than validating those indices against GetInputShape()[0]. Fixes #1468.
+        if (Layers.Count > 0
+            && (Layers[0] is Layers.EmbeddingLayer<T> || Layers[0].GetInputShape() is { Length: > 1 }))
         {
             // Clear any stale feature mask so IsFeatureUsed() doesn't
             // answer from a previous dense-feature configuration.

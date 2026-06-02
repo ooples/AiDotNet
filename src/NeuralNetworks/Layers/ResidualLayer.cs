@@ -315,7 +315,34 @@ public class ResidualLayer<T> : LayerBase<T>
     /// </remarks>
     private void ValidateInnerLayer()
     {
-        if (_innerLayer != null && !Enumerable.SequenceEqual(_innerLayer.GetInputShape(), _innerLayer.GetOutputShape()))
+        if (_innerLayer == null)
+        {
+            return;
+        }
+
+        // Lazily-constructed inner layers report unresolved dimensions as -1 (e.g.
+        // DenseLayer's input shape is [-1] until the first forward resolves it). Treat
+        // -1 on either side as a wildcard so a valid residual block isn't rejected at
+        // construction time; resolved dimensions are still compared exactly and a genuine
+        // shape mismatch surfaces at the forward-pass add (#1468 — shared lazy-shape
+        // validation fix, mirrors Autoencoder.ShapesCompatibleIgnoringUnresolved).
+        var inShape = _innerLayer.GetInputShape();
+        var outShape = _innerLayer.GetOutputShape();
+        bool incompatible = inShape.Length != outShape.Length;
+        for (int i = 0; !incompatible && i < inShape.Length; i++)
+        {
+            if (inShape[i] < 0 || outShape[i] < 0)
+            {
+                continue;
+            }
+
+            if (inShape[i] != outShape[i])
+            {
+                incompatible = true;
+            }
+        }
+
+        if (incompatible)
         {
             throw new ArgumentException("Inner layer must have the same input and output shape for residual connections.");
         }

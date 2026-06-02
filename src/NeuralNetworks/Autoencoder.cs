@@ -323,6 +323,44 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// This helps ensure your autoencoder is structured correctly before you start training it.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Compares two layer shapes for the autoencoder structural checks, treating an
+    /// unresolved dimension (a negative value such as -1) on either side as a wildcard.
+    /// </summary>
+    /// <remarks>
+    /// Lazily-constructed layers report unresolved dimensions as -1 until the first
+    /// forward pass resolves them — e.g. <see cref="Layers.DenseLayer{T}"/>'s input shape
+    /// is <c>[-1]</c> when built via the output-size-only constructor. The previous
+    /// <c>SequenceEqual</c> checks compared those -1 sentinels against resolved dimensions
+    /// and threw at construction, so a perfectly valid DenseLayer-based symmetric
+    /// autoencoder could not be built before training (#1468). Resolved dimensions are
+    /// still compared exactly, and any genuine shape mismatch surfaces at the first
+    /// forward pass.
+    /// </remarks>
+    private static bool ShapesCompatibleIgnoringUnresolved(int[] a, int[] b)
+    {
+        if (a.Length != b.Length)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < a.Length; i++)
+        {
+            // A negative dimension means "not yet resolved" — treat as a wildcard.
+            if (a[i] < 0 || b[i] < 0)
+            {
+                continue;
+            }
+
+            if (a[i] != b[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     protected override void ValidateCustomLayers(List<ILayer<T>> layers)
     {
         base.ValidateCustomLayers(layers);
@@ -333,7 +371,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Check if input and output layers have the same size
-        if (!Enumerable.SequenceEqual(layers[0].GetInputShape(), layers[layers.Count - 1].GetOutputShape()))
+        if (!ShapesCompatibleIgnoringUnresolved(layers[0].GetInputShape(), layers[layers.Count - 1].GetOutputShape()))
         {
             throw new ArgumentException("Input and output layer sizes must be the same for an autoencoder.");
         }
@@ -341,7 +379,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         // Ensure the architecture is symmetric
         for (int i = 0; i < layers.Count / 2; i++)
         {
-            if (!Enumerable.SequenceEqual(layers[i].GetOutputShape(), layers[layers.Count - 1 - i].GetInputShape()))
+            if (!ShapesCompatibleIgnoringUnresolved(layers[i].GetOutputShape(), layers[layers.Count - 1 - i].GetInputShape()))
             {
                 throw new ArgumentException($"Layer sizes must be symmetric. Mismatch at position {i} and {layers.Count - i - 1}");
             }
