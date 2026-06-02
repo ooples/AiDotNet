@@ -197,21 +197,27 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     {
         lock (_lohCompactionGate)
         {
-            // Drop the process-wide transient tensor caches BEFORE collecting. These
-            // are keyed by tensor SHAPE and grow per distinct model — over a shard of
-            // ~50-250 diverse models they accumulate multiple GB of pooled weight-sized
-            // tensors that GC.Collect alone cannot reclaim (the pools hold live
-            // references across all worker threads). This is the cumulative leak that
-            // OOM-kills the heavy ModelFamily/NN shards on the 14 GB runner even with
-            // MaxParallelThreads=1 + Server GC: each test ran fast and passed, but
-            // retained ~160 MB net, exhausting RAM after ~80 models. Clearing here
-            // (then GC) returns the runner to a clean baseline between tests.
-            AiDotNet.Tensors.TensorCacheSettings.ClearCache();
-            AiDotNet.Tensors.Helpers.TensorArena.ClearPersistentPool();
-            AiDotNet.Tensors.LinearAlgebra.WeightRegistry.Reset();
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            try
+            {
+                // Drop the process-wide transient tensor caches BEFORE collecting. These
+                // are keyed by tensor SHAPE and grow per distinct model — over a shard of
+                // ~50-250 diverse models they accumulate multiple GB of pooled weight-sized
+                // tensors that GC.Collect alone cannot reclaim (the pools hold live
+                // references across all worker threads). This is the cumulative leak that
+                // OOM-kills the heavy ModelFamily/NN shards on the 14 GB runner even with
+                // MaxParallelThreads=1 + Server GC: each test ran fast and passed, but
+                // retained ~160 MB net, exhausting RAM after ~80 models. Clearing here
+                // (then GC) returns the runner to a clean baseline between tests.
+                AiDotNet.Tensors.TensorCacheSettings.ClearCache();
+                AiDotNet.Tensors.Helpers.TensorArena.ClearPersistentPool();
+                AiDotNet.Tensors.LinearAlgebra.WeightRegistry.Reset();
+            }
+            finally
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+            }
         }
         return Task.CompletedTask;
     }

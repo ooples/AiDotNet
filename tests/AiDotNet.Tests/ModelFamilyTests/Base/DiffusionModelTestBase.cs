@@ -146,10 +146,12 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
                     AiDotNet.Tensors.Helpers.TensorArena.ClearPersistentPool();
                     AiDotNet.Tensors.LinearAlgebra.WeightRegistry.Reset();
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
                     // Defensive: log and continue so GC compaction always runs.
                     // Cache-clear failures must not prevent LOH compaction.
+                    System.Diagnostics.Debug.WriteLine(
+                        $"WeightRegistry.Reset failed during test teardown: {ex.Message}\n{ex.StackTrace}");
                 }
                 finally
                 {
