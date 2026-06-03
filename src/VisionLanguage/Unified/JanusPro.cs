@@ -11,6 +11,7 @@ using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
 using AiDotNet.Extensions;
+using System.Diagnostics.CodeAnalysis;
 
 namespace AiDotNet.VisionLanguage.Unified;
 
@@ -85,9 +86,35 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
     // dimensions and a deserialised model has shape mismatches every
     // time GenerateImage tries to look up an embedding.
     private JanusVQCodebook<T> _vqCodebook;
+    // Learned generation-path modules — replace the previous deterministic
+    // placeholders (sinusoidal prompt fabrication, fixed-cosine codebook
+    // projection, fixed sin/cos pixel decode). Rebuilt in
+    // DeserializeNetworkSpecificData alongside _vqCodebook so a round-tripped
+    // model carries the correct dimensions. Used out-of-band like _vqCodebook
+    // (Chen et al. DeepSeek 2025 §3 — generation uses a learned text embedding,
+    // a learned codebook→decoder projection, and a learned VQ-VAE pixel decoder).
+    private EmbeddingLayer<T> _tokenEmbedding;
+    private DenseLayer<T> _codebookProjection;
+    private DenseLayer<T> _pixelDecoderHidden;
+    private DenseLayer<T> _pixelDecoderOut;
     private bool _useNativeMode;
     private bool _disposed;
     private int _encoderLayerEnd;
+
+    [MemberNotNull(nameof(_tokenEmbedding), nameof(_codebookProjection), nameof(_pixelDecoderHidden), nameof(_pixelDecoderOut))]
+    private void BuildGenerationModules()
+    {
+        // Typed locals so DenseLayer's IActivationFunction vs IVectorActivationFunction
+        // overloads resolve unambiguously (IdentityActivation implements both).
+        IActivationFunction<T> identity = new IdentityActivation<T>();
+        IActivationFunction<T> relu = new ReLUActivation<T>();
+        _tokenEmbedding = new EmbeddingLayer<T>(_options.VocabSize, _options.DecoderDim);
+        _codebookProjection = new DenseLayer<T>(_options.DecoderDim, identity);
+        // Learnable VQ-VAE pixel decoder applied per codebook-embedding cell:
+        // embedDim -> hidden (ReLU) -> 3 (identity, tanh-bounded at use site).
+        _pixelDecoderHidden = new DenseLayer<T>(_options.CodebookEmbeddingDim, relu);
+        _pixelDecoderOut = new DenseLayer<T>(3, identity);
+    }
 
     public override ModelOptions GetOptions() => _options;
 
@@ -115,6 +142,7 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         _vqCodebook = new JanusVQCodebook<T>(codebookSize: _options.NumVisualTokens, embeddingDim: _options.CodebookEmbeddingDim);
+        BuildGenerationModules();
         InitializeLayers();
     }
 
@@ -128,6 +156,7 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         base.EmbeddingDim = _options.DecoderDim;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         _vqCodebook = new JanusVQCodebook<T>(codebookSize: _options.NumVisualTokens, embeddingDim: _options.CodebookEmbeddingDim);
+        BuildGenerationModules();
         InitializeLayers();
     }
 
@@ -188,21 +217,20 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
                 "Text description cannot be null, empty, or whitespace. " +
                 "Janus-Pro generation requires a non-empty prompt to condition on.",
                 nameof(textDescription));
-        // Generation path requires real codebook + projection +
-        // detokenizer weights — the current native code path uses
-        // deterministic placeholders for ProjectCodebookEmbeddingToDecoderDim
-        // and DetokenizeVQTokens, and VQCodebook.Lookup throws unless
-        // loaded. Fail fast in native mode until a real Janus-Pro
-        // checkpoint is loaded; ONNX mode below uses the bundled
-        // ONNX graph and is fine.
+        // The codebook→decoder projection and the VQ-VAE pixel decoder are now
+        // genuine learnable modules (_codebookProjection / _pixelDecoderHidden /
+        // _pixelDecoderOut), but meaningful image generation still requires the VQ
+        // codebook entries to be loaded — VQCodebook.Lookup throws until then, and
+        // an untrained decoder produces noise. Fail fast in native mode until a real
+        // Janus-Pro checkpoint (codebook + trained generation weights) is loaded;
+        // ONNX mode below uses the bundled ONNX graph and is fine.
         if (!IsOnnxMode && !_vqCodebook.IsLoaded)
             throw new InvalidOperationException(
-                "Janus-Pro generation weights are not loaded. The current native " +
-                "code path needs a trained checkpoint (VQ codebook + decoder + " +
-                "projection / detokenizer weights) before GenerateImage will " +
-                "produce paper-faithful output. Either load a published " +
-                "DeepSeek-AI/Janus-Pro checkpoint, or use the ONNX-mode " +
-                "constructor to delegate to the bundled ONNX graph.");
+                "Janus-Pro generation weights are not loaded. The native generation " +
+                "modules (codebook projection + VQ-VAE pixel decoder) are learnable but " +
+                "untrained, and the VQ codebook itself must be loaded before GenerateImage " +
+                "produces paper-faithful output. Either load a published DeepSeek-AI/Janus-Pro " +
+                "checkpoint, or use the ONNX-mode constructor to delegate to the bundled ONNX graph.");
         var conditionalTokens = TokenizeText(textDescription);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(conditionalTokens);
 
@@ -272,26 +300,13 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 
     /// <summary>
     /// Projects a VQ codebook embedding (dimension <see cref="JanusVQCodebook{T}.EmbeddingDim"/>) up to the
-    /// LLM decoder dimension via deterministic positional broadcasting. A trained model uses a learned
-    /// projection here; the shape and information flow are identical.
+    /// LLM decoder dimension through the learned <see cref="_codebookProjection"/> dense layer. Replaces the
+    /// previous fixed-cosine broadcasting placeholder with a genuine learnable projection (Chen et al.
+    /// DeepSeek 2025, §3 — generated codebook tokens are projected into the decoder stream by a learned map).
     /// </summary>
     private Tensor<T> ProjectCodebookEmbeddingToDecoderDim(Tensor<T> codebookEmbed)
     {
-        int decoderDim = _options.DecoderDim;
-        int embedDim = codebookEmbed.Length;
-        var projected = new Tensor<T>([decoderDim]);
-        for (int d = 0; d < decoderDim; d++)
-        {
-            double sum = 0.0;
-            for (int e = 0; e < embedDim; e++)
-            {
-                double ev = NumOps.ToDouble(codebookEmbed[e]);
-                double w = Math.Cos((d + 1) * (e + 1) * 0.013) / Math.Sqrt(embedDim);
-                sum += ev * w;
-            }
-            projected[d] = NumOps.FromDouble(sum);
-        }
-        return projected;
+        return _codebookProjection.Forward(codebookEmbed);
     }
 
     /// <summary>
@@ -326,8 +341,10 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         int embedDim = _vqCodebook.EmbeddingDim;
         var embedGrid = _vqCodebook.LookupGrid(gridTokenIds, gridSize, gridSize);
 
-        // 4 × 2× nearest-neighbour upsamples + tanh-bounded 1×1 pixel projection: deterministic
-        // analogue of the trained VQ-VAE-2 deconv decoder (Razavi et al. 2019).
+        // Learnable VQ-VAE pixel decoder (Chen et al. DeepSeek 2025; cf. Razavi et al. 2019 VQ-VAE-2):
+        // each grid cell's codebook embedding is decoded to an RGB value by a learned MLP
+        // (embedDim -> hidden(ReLU) -> 3), then nearest-neighbour upsampled across its output patch.
+        // Replaces the previous fixed sin/cos pixel fabrication with genuine learnable weights.
         int patchSize = outSize / gridSize;
         if (patchSize < 1) patchSize = 1;
 
@@ -341,18 +358,14 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
                 int gridIdx = gy * gridSize + gx;
                 int baseEmbed = gridIdx * embedDim;
 
-                double r = 0.0, g = 0.0, b = 0.0;
-                for (int e = 0; e < embedDim; e++)
-                {
-                    double v = NumOps.ToDouble(embedGrid[baseEmbed + e]);
-                    r += v * Math.Cos((e + 1) * 0.71);
-                    g += v * Math.Sin((e + 1) * 0.71);
-                    b += v * Math.Cos((e + 1) * 1.41);
-                }
-                double inv = 1.0 / Math.Sqrt(embedDim);
-                r = 0.5 + 0.5 * Math.Tanh(r * inv);
-                g = 0.5 + 0.5 * Math.Tanh(g * inv);
-                b = 0.5 + 0.5 * Math.Tanh(b * inv);
+                var cellEmbed = new Tensor<T>([embedDim]);
+                for (int e = 0; e < embedDim; e++) cellEmbed[e] = embedGrid[baseEmbed + e];
+
+                var rgb = _pixelDecoderOut.Forward(_pixelDecoderHidden.Forward(cellEmbed));
+                // Bound each channel to [0, 1] (image pixel range); tanh keeps gradients well-behaved.
+                double r = 0.5 + 0.5 * Math.Tanh(NumOps.ToDouble(rgb[0]));
+                double g = 0.5 + 0.5 * Math.Tanh(NumOps.ToDouble(rgb[1]));
+                double b = 0.5 + 0.5 * Math.Tanh(NumOps.ToDouble(rgb[2]));
 
                 for (int py = 0; py < patchSize; py++)
                 {
@@ -379,28 +392,18 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         return result;
     }
 
+    /// <summary>
+    /// Looks up prompt-token embeddings through the learned <see cref="_tokenEmbedding"/>
+    /// table (Chen et al. DeepSeek 2025, §3). Replaces the previous deterministic
+    /// sinusoidal fabrication that derived sin/cos vectors from token IDs — those
+    /// weren't model-faithful and carried no training signal. Returns an empty-safe
+    /// <c>[DecoderDim]</c> tensor for a zero-length sequence so the conditional/
+    /// unconditional CFG contexts keep valid shapes.
+    /// </summary>
     private Tensor<T> EmbedPromptTokens(Tensor<T> tokenIds)
     {
-        int seqLen = tokenIds.Length;
-        if (seqLen == 0) return new Tensor<T>([_options.DecoderDim]);
-
-        int decoderDim = _options.DecoderDim;
-        int vocab = Math.Max(1, _options.VocabSize);
-        var embedded = new Tensor<T>([seqLen * decoderDim]);
-        for (int s = 0; s < seqLen; s++)
-        {
-            double tokenId = NumOps.ToDouble(tokenIds[s]);
-            double phase = (tokenId % vocab) * 2.0 * Math.PI / vocab;
-            for (int d = 0; d < decoderDim; d++)
-            {
-                double freq = 1.0 / Math.Pow(10000.0, 2.0 * (d / 2) / (double)decoderDim);
-                double val = (d % 2 == 0)
-                    ? Math.Sin(phase * freq + (d * 0.001))
-                    : Math.Cos(phase * freq + (d * 0.001));
-                embedded[s * decoderDim + d] = NumOps.FromDouble(val);
-            }
-        }
-        return embedded;
+        if (tokenIds.Length == 0) return new Tensor<T>([_options.DecoderDim]);
+        return _tokenEmbedding.Forward(tokenIds);
     }
 
     protected override void InitializeLayers()
@@ -550,6 +553,9 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         _vqCodebook = new JanusVQCodebook<T>(
             codebookSize: _options.NumVisualTokens,
             embeddingDim: _options.CodebookEmbeddingDim);
+        // Rebuild the learned generation modules against the just-deserialized
+        // dimensions (same rationale as _vqCodebook above).
+        BuildGenerationModules();
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
