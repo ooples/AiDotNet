@@ -419,17 +419,29 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     public override void SetParameters(Vector<T> parameters)
     {
         int embedCount = (int)_tokenEmbedding.ParameterCount;
-        int baseCount = parameters.Length - embedCount;
-        if (baseCount < 0) baseCount = parameters.Length;
 
-        var baseSlice = new Vector<T>(baseCount);
-        for (int i = 0; i < baseCount; i++) baseSlice[i] = parameters[i];
+        // Derive the layer-side size from the actual Layers walk, NOT from
+        // parameters.Length − embedCount. With the subtraction form a legacy
+        // layers-only vector silently sized baseCount to layerCount − embedCount,
+        // dropping the tail of the regular layer weights before
+        // base.SetParameters ran. Compute the true layer total once and pick
+        // the matching layout explicitly.
+        int layerCount = 0;
+        foreach (var layer in Layers) layerCount += (int)layer.ParameterCount;
+
+        if (parameters.Length != layerCount && parameters.Length != layerCount + embedCount)
+            throw new ArgumentException(
+                $"Expected {layerCount} (layers-only) or {layerCount + embedCount} (layers + embedding) parameters, got {parameters.Length}.",
+                nameof(parameters));
+
+        var baseSlice = new Vector<T>(layerCount);
+        for (int i = 0; i < layerCount; i++) baseSlice[i] = parameters[i];
         base.SetParameters(baseSlice);
 
-        if (embedCount > 0 && baseCount + embedCount == parameters.Length)
+        if (embedCount > 0 && parameters.Length == layerCount + embedCount)
         {
             var embedSlice = new Vector<T>(embedCount);
-            for (int i = 0; i < embedCount; i++) embedSlice[i] = parameters[baseCount + i];
+            for (int i = 0; i < embedCount; i++) embedSlice[i] = parameters[layerCount + i];
             _tokenEmbedding.SetParameters(embedSlice);
         }
     }
