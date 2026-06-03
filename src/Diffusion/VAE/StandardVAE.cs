@@ -613,8 +613,45 @@ public class StandardVAE<T> : VAEModelBase<T>
             latentScaleFactor: _latentScaleFactor,
             lossFunction: LossFunction);
 
+        // Eager-init the clone's layers BEFORE SetParameters runs. The
+        // internal layers (PyTorch-style lazy shape inference) report
+        // ParameterCount=0 until their first forward; SetLayerParameters
+        // walks each layer's GetParameters().Length to size its slice
+        // of the incoming vector, so before init it sizes every slice
+        // to 0 and writes zero parameters into the clone — leaving the
+        // clone with fresh random weights instead of the original's
+        // learned weights. Same fix pattern as UNetNoisePredictor.Clone
+        // for the same root cause; surfaces in
+        // Clone_ShouldProduceIdenticalOutput as a numerical-divergence
+        // failure (original and clone Predict produce different
+        // values from the SAME input).
+        clone.TriggerLazyShapeResolution();
         clone.SetParameters(GetParameters());
         return clone;
+    }
+
+    /// <summary>
+    /// Runs one dummy Encode + Decode pass through the network at a
+    /// small spatial size so every lazy layer resolves its weight
+    /// shapes. Used by <see cref="Clone"/> to make the clone's layer
+    /// parameter counts match the original's before
+    /// <see cref="SetParameters"/> copies weights across.
+    /// </summary>
+    /// <remarks>
+    /// Dummy spatial size = <c>2 ^ (channelMultipliers.Length - 1)</c>
+    /// — just enough for every downsampling level to produce a ≥ 1×1
+    /// feature map without aliasing. Spatial dim only affects activation
+    /// shapes, not weight shapes (Conv kernels are translation-
+    /// invariant), so any size works as long as the conv stack doesn't
+    /// underflow.
+    /// </remarks>
+    private void TriggerLazyShapeResolution()
+    {
+        int downsamples = _channelMultipliers.Length - 1;
+        int dummySpatial = 1 << Math.Max(downsamples, 1);
+        var dummyImage = new Tensor<T>(new[] { 1, _inputChannels, dummySpatial, dummySpatial });
+        var dummyLatent = Encode(dummyImage, sampleMode: false);
+        _ = Decode(dummyLatent);
     }
 
     /// <inheritdoc />
