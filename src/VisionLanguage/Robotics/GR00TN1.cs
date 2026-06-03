@@ -368,6 +368,68 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
             layer.UpdateParameters(parameters.Slice(idx, count));
             idx += count;
         }
+        // _tokenEmbedding lives OUTSIDE Layers: it embeds token IDs on the dedicated
+        // instruction path (EmbedInstructionTokens), so it cannot join the sequential
+        // Layers walk that Predict runs image tensors through. Its parameters ride at
+        // the TAIL of the flat vector — same layout as GetParameters/SetParameters —
+        // so training updates reach the embedding table (same off-Layers contract as
+        // PaLME._patchEmbed).
+        int embedCount = (int)_tokenEmbedding.ParameterCount;
+        if (embedCount > 0 && idx + embedCount <= parameters.Length)
+            _tokenEmbedding.UpdateParameters(parameters.Slice(idx, embedCount));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Includes the off-<see cref="NeuralNetworkBase{T}.Layers"/> instruction-token
+    /// embedding table so the flat parameter APIs (<see cref="GetParameters"/> /
+    /// <see cref="SetParameters"/> / <see cref="UpdateParameters"/>) agree on length.
+    /// </remarks>
+    public override long ParameterCount
+    {
+        get
+        {
+            long total = 0;
+            foreach (var layer in Layers) total += layer.ParameterCount;
+            return total + _tokenEmbedding.ParameterCount;
+        }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Layout: [layer params in Layers order ...] [token-embedding params].</remarks>
+    public override Vector<T> GetParameters()
+    {
+        var baseParams = base.GetParameters();
+        var embedParams = _tokenEmbedding.GetParameters();
+        if (embedParams.Length == 0) return baseParams;
+        var combined = new Vector<T>(baseParams.Length + embedParams.Length);
+        for (int i = 0; i < baseParams.Length; i++) combined[i] = baseParams[i];
+        for (int i = 0; i < embedParams.Length; i++) combined[baseParams.Length + i] = embedParams[i];
+        return combined;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Accepts both the full layout produced by <see cref="GetParameters"/> (layers +
+    /// embedding tail) and a layers-only vector (the embedding is left untouched), so
+    /// older callers that sized their vector from the Layers sum keep working.
+    /// </remarks>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int embedCount = (int)_tokenEmbedding.ParameterCount;
+        int baseCount = parameters.Length - embedCount;
+        if (baseCount < 0) baseCount = parameters.Length;
+
+        var baseSlice = new Vector<T>(baseCount);
+        for (int i = 0; i < baseCount; i++) baseSlice[i] = parameters[i];
+        base.SetParameters(baseSlice);
+
+        if (embedCount > 0 && baseCount + embedCount == parameters.Length)
+        {
+            var embedSlice = new Vector<T>(embedCount);
+            for (int i = 0; i < embedCount; i++) embedSlice[i] = parameters[baseCount + i];
+            _tokenEmbedding.SetParameters(embedSlice);
+        }
     }
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
@@ -412,6 +474,14 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         writer.Write(_options.System1NumHeads);
         writer.Write(_options.System1ToSystem2Ratio);
         writer.Write(_options.FlowMatchingSteps);
+
+        // The instruction-token embedding lives outside Layers, so the base
+        // per-layer serialization never persists it — without this block a trained
+        // model's embedding table silently reverts to random init on load.
+        var embedParams = _tokenEmbedding.GetParameters();
+        writer.Write(embedParams.Length);
+        for (int i = 0; i < embedParams.Length; i++)
+            writer.Write(Convert.ToDouble(embedParams[i]));
     }
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
@@ -433,6 +503,24 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         _options.System1NumHeads = reader.ReadInt32();
         _options.System1ToSystem2Ratio = reader.ReadInt32();
         _options.FlowMatchingSteps = reader.ReadInt32();
+
+        // Restore the trained instruction-token embedding written by
+        // SerializeNetworkSpecificData (it lives outside Layers, so the base
+        // per-layer restore never touches it).
+        int embedCount = reader.ReadInt32();
+        if (embedCount > 0)
+        {
+            if (embedCount != (int)_tokenEmbedding.ParameterCount)
+                throw new InvalidOperationException(
+                    $"Serialized GR00T-N1 token-embedding parameter count ({embedCount:N0}) does not match " +
+                    $"this instance's embedding ({_tokenEmbedding.ParameterCount:N0}). The model was saved with " +
+                    "a different VocabSize/DecoderDim configuration.");
+            var embedParams = new Vector<T>(embedCount);
+            for (int i = 0; i < embedCount; i++)
+                embedParams[i] = NumOps.FromDouble(reader.ReadDouble());
+            _tokenEmbedding.SetParameters(embedParams);
+        }
+
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
