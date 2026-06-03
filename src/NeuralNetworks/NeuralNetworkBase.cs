@@ -3389,6 +3389,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 (pred, tgt) => loss.ComputeTapeLoss(pred, tgt),
                 parameterBuffer: null);
             optimizer.Step(context);
+            // GPU weight-cache coherence after the grad-accum aggregated step.
+            // See InvalidateGpuWeightCachesAfterSuccessfulWeightUpdate.
+            InvalidateGpuWeightCachesAfterSuccessfulWeightUpdate();
             StepSchedulerIfSupported(optimizer);
             LastLoss = avgLoss;
         }
@@ -6055,14 +6058,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 }
             }
 
-            // GPU weight-cache coherence: opt.Step + the extras-update above mutate the weight tensors IN PLACE, but
-            // DirectGpuTensorEngine's persistent weight-buffer cache keys by array REFERENCE and returns the cached
-            // upload without re-checking contents. Without flushing it here the next forward reads STALE weights and
-            // the model NEVER LEARNS on GPU — loss frozen at ln(V) even though the gradient is correct (it is
-            // recomputed each step). Invalidate after all in-place weight updates so they re-upload on the next
-            // forward. No-op on the CPU engine (GpuEngine is null). Mirrors the OnParametersUpdated contract.
+            // GPU weight-cache coherence after the opt.Step + extras-update above.
+            // See InvalidateGpuWeightCachesAfterSuccessfulWeightUpdate for the full
+            // rationale (cache keys by array reference → stale GPU weights → model
+            // never learns).
             if (!mpSkipOptimizerStep)
-                GpuEngine?.InvalidateAllWeightCaches();
+                InvalidateGpuWeightCachesAfterSuccessfulWeightUpdate();
 
             // Advance the optimizer's learning-rate scheduler at the
             // tape-batch boundary via the shared helper. Without this,
@@ -6718,6 +6719,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 input, input, ComputeForward, RecomputeLoss);
 
             opt.Step(context);
+            // GPU weight-cache coherence after the custom-loss step.
+            // See InvalidateGpuWeightCachesAfterSuccessfulWeightUpdate.
+            InvalidateGpuWeightCachesAfterSuccessfulWeightUpdate();
 
             // Mirror the OnBatchEnd advance from TrainWithTape via the
             // shared helper so a custom-loss caller and a regular Train
@@ -6807,6 +6811,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             trainableParams, grads, lossValue);
 
         opt.Step(context);
+        // GPU weight-cache coherence after the precomputed-loss step.
+        // See InvalidateGpuWeightCachesAfterSuccessfulWeightUpdate.
+        InvalidateGpuWeightCachesAfterSuccessfulWeightUpdate();
 
         // Mirror the OnBatchEnd advance from TrainWithCustomLoss / TrainWithTape
         // so a precomputed-loss caller sees identical scheduler behaviour.
@@ -6869,6 +6876,27 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             stepped.OnBatchEnd();
         }
+    }
+
+    /// <summary>
+    /// Invalidates DirectGpuTensorEngine's persistent weight-buffer cache after a
+    /// successful in-place weight update. Single source of truth for the
+    /// "post-opt.Step cache flush" contract — every training entry point
+    /// (<see cref="TrainWithTape"/>, <c>TrainWithGradientAccumulation</c>,
+    /// <c>TrainWithCustomLoss</c>, <c>BackwardAndStepOnPrecomputedLoss</c>) routes
+    /// through this helper so they all keep the same GPU coherency guarantee.
+    /// </summary>
+    /// <remarks>
+    /// opt.Step mutates the weight tensors IN PLACE, but DirectGpuTensorEngine's
+    /// weight-buffer cache keys by array REFERENCE and returns the cached upload
+    /// without re-checking contents. Without flushing here the next forward reads
+    /// STALE weights and the model NEVER LEARNS on GPU — loss frozen at ln(V) even
+    /// though the gradient is correct (it is recomputed each step). No-op on the
+    /// CPU engine (GpuEngine is null). Mirrors the OnParametersUpdated contract.
+    /// </remarks>
+    private void InvalidateGpuWeightCachesAfterSuccessfulWeightUpdate()
+    {
+        GpuEngine?.InvalidateAllWeightCaches();
     }
 
     /// <summary>
