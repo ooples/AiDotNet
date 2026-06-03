@@ -613,20 +613,28 @@ public class StandardVAE<T> : VAEModelBase<T>
             latentScaleFactor: _latentScaleFactor,
             lossFunction: LossFunction);
 
-        // Eager-init the clone's layers BEFORE SetParameters runs. The
-        // internal layers (PyTorch-style lazy shape inference) report
-        // ParameterCount=0 until their first forward; SetLayerParameters
-        // walks each layer's GetParameters().Length to size its slice
-        // of the incoming vector, so before init it sizes every slice
-        // to 0 and writes zero parameters into the clone — leaving the
-        // clone with fresh random weights instead of the original's
-        // learned weights. Same fix pattern as UNetNoisePredictor.Clone
-        // for the same root cause; surfaces in
+        // Eager-init BOTH source and clone before snapshotting/setting
+        // parameters. PyTorch-style lazy shape inference makes every internal
+        // layer's ParameterCount = 0 until its first forward, so:
+        //
+        //   * The source needs resolution BEFORE GetParameters(), otherwise
+        //     a freshly constructed StandardVAE snapshots zero-length slices
+        //     and returns an empty vector (the same bug the destination side
+        //     would hit, just at the read end).
+        //
+        //   * The clone needs resolution BEFORE SetParameters(), otherwise
+        //     SetLayerParameters sizes every slice to 0 and writes nothing,
+        //     leaving the clone with fresh random weights instead of the
+        //     original's learned weights.
+        //
+        // Same fix pattern as UNetNoisePredictor.Clone; surfaces in
         // Clone_ShouldProduceIdenticalOutput as a numerical-divergence
-        // failure (original and clone Predict produce different
-        // values from the SAME input).
+        // failure (original and clone Predict produce different values from
+        // the SAME input).
+        TriggerLazyShapeResolution();
+        var parameters = GetParameters();
         clone.TriggerLazyShapeResolution();
-        clone.SetParameters(GetParameters());
+        clone.SetParameters(parameters);
         return clone;
     }
 
