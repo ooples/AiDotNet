@@ -418,6 +418,20 @@ public static class DeserializationHelper
                 throw new MissingLayerCtorException("Cannot find EmbeddingLayer constructor with (int, int).");
             }
             instance = ctor.Invoke(new object[] { vocabSize, embeddingDim });
+            // Restore config properties set via object-initializer at build time
+            // (the ctor only takes vocab/dim). Without this the transformer embedding
+            // loses its forced Indices mode and the Vaswani §3.4 sqrt(d) scale on
+            // deserialization, so a round-tripped model would behave differently.
+            if (instance is EmbeddingLayer<T> embInstance)
+            {
+                if (additionalParams != null
+                    && additionalParams.TryGetValue("InputMode", out var modeObj)
+                    && Enum.TryParse<EmbeddingInputMode>(modeObj?.ToString(), out var mode))
+                {
+                    embInstance.InputMode = mode;
+                }
+                embInstance.ScaleBySqrtDimension = TryGetBool(additionalParams, "ScaleBySqrtDimension") ?? false;
+            }
         }
         else if (genericDef == typeof(PatchEmbeddingLayer<>))
         {

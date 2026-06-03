@@ -6,28 +6,35 @@ using AiDotNet.Interfaces;
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
-/// Post-Layer-Normalization transformer encoder block — the canonical
-/// "Attention is All You Need" (Vaswani et al. 2017, §3.1) encoder layer:
-/// multi-head self-attention and a position-wise feed-forward network, each
-/// wrapped in a residual (skip) connection followed by layer normalization.
+/// Pre-Layer-Normalization transformer encoder block — multi-head self-attention
+/// and a position-wise feed-forward network, each wrapped in a residual (skip)
+/// connection with layer normalization applied BEFORE the sublayer (Pre-LN).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// Block structure (Vaswani 2017 §3.1, "Add &amp; Norm"):
+/// Block structure (Pre-LN, Xiong et al. 2020 "On Layer Normalization in the
+/// Transformer Architecture"; the residual/FFN design is Vaswani 2017 §3.1):
 /// </para>
 /// <list type="number">
-/// <item>y = LayerNorm(x + Dropout(SelfAttention(x)))</item>
-/// <item>z = LayerNorm(y + Dropout(FFN(y)))</item>
+/// <item>y = x + Dropout(SelfAttention(LayerNorm(x)))</item>
+/// <item>z = y + Dropout(FFN(LayerNorm(y)))</item>
 /// </list>
 /// <para>
-/// The <b>residual connections</b> (the <c>x +</c> terms) are the defining
-/// feature of the transformer: they let the input signal flow unattenuated
-/// through arbitrarily deep stacks. Without them the attention/FFN output
-/// REPLACES the hidden state each layer, the token-identity signal is washed
-/// out (empirically ~60× per layer), and the network mode-collapses to an
-/// input-independent constant output — the root cause of issue #1380. This
-/// block restores the residuals so deep transformer stacks train correctly.
+/// The <b>residual connections</b> (the <c>x +</c> / <c>y +</c> terms) are the
+/// defining feature of the transformer: they let the input signal flow
+/// unattenuated through arbitrarily deep stacks. Without them the attention/FFN
+/// output REPLACES the hidden state each layer, the token-identity signal is
+/// washed out (empirically ~60× per layer), and the network mode-collapses to
+/// an input-independent constant output — the root cause of issue #1380.
+/// </para>
+/// <para>
+/// <b>Pre-LN vs Post-LN:</b> normalizing the sublayer INPUT (Pre-LN) rather than
+/// the residual SUM (Post-LN, the original 2017 ordering) keeps the residual
+/// path un-normalized, so gradients flow cleanly through depth and the model
+/// trains stably WITHOUT learning-rate warmup. Post-LN converges far slower
+/// without warmup; Pre-LN is the ordering used by every modern transformer
+/// (GPT-2 onward, LLaMA, etc.) and trains measurably faster here.
 /// </para>
 /// <para><b>For Beginners:</b> A residual connection means "add the layer's
 /// input back to its output." It's like keeping a copy of the original so
@@ -118,25 +125,30 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>
     /// </summary>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        // Sublayer 1: self-attention + residual + norm.
-        var attnOut = _attention.Forward(input);
+        // Sublayer 1: self-attention with a PRE-norm residual — afterAttn = x + Attn(Norm(x)).
+        // Pre-LN (Xiong et al. 2020) keeps the residual path un-normalized so gradients flow
+        // cleanly through depth and the model trains stably WITHOUT learning-rate warmup. The
+        // original Post-LN ordering — Norm(x + Attn(x)) — converges far slower without warmup,
+        // which is why every modern transformer uses Pre-LN.
+        var attnOut = _attention.Forward(_norm1.Forward(input));
         if (_attnDropout is not null) attnOut = _attnDropout.Forward(attnOut);
-        var afterAttn = _norm1.Forward(Engine.TensorAdd(input, attnOut));
+        var afterAttn = Engine.TensorAdd(input, attnOut);
 
-        // Sublayer 2: position-wise FFN + residual + norm. DenseLayer expects 2D
-        // [N, hiddenSize]; flatten the leading dims, run the FFN, reshape back.
+        // Sublayer 2: position-wise FFN with a PRE-norm residual — out = afterAttn + FFN(Norm(afterAttn)).
+        // DenseLayer expects 2D [N, hiddenSize]; flatten the leading dims, run the FFN, reshape back.
         int rank = afterAttn.Shape.Length;
         int featureDim = afterAttn.Shape[rank - 1];
         int flatN = 1;
         for (int i = 0; i < rank - 1; i++) flatN *= afterAttn.Shape[i];
 
-        var afterAttnFlat = Engine.Reshape(afterAttn, new[] { flatN, featureDim });
-        var ffnUpOut = _ffnUp.Forward(afterAttnFlat);
+        var normed2 = _norm2.Forward(afterAttn);
+        var normed2Flat = Engine.Reshape(normed2, new[] { flatN, featureDim });
+        var ffnUpOut = _ffnUp.Forward(normed2Flat);
         var ffnDownOut = _ffnDown.Forward(ffnUpOut);
         var ffnReshaped = Engine.Reshape(ffnDownOut, afterAttn._shape);
         if (_ffnDropout is not null) ffnReshaped = _ffnDropout.Forward(ffnReshaped);
 
-        var output = _norm2.Forward(Engine.TensorAdd(afterAttn, ffnReshaped));
+        var output = Engine.TensorAdd(afterAttn, ffnReshaped);
         return output;
     }
 

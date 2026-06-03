@@ -1893,6 +1893,10 @@ public static class LayerHelper<T>
             yield return Wire(new EmbeddingLayer<T>(vocabularySize, modelDimension)
             {
                 InputMode = EmbeddingInputMode.Indices,
+                // Vaswani §3.4: scale embeddings by sqrt(d_model) when positional encoding
+                // is added next, so the (small) token embeddings aren't drowned out by the
+                // fixed-magnitude sinusoidal positional signal.
+                ScaleBySqrtDimension = usePositionalEncoding,
             });
         }
         else
@@ -1927,12 +1931,14 @@ public static class LayerHelper<T>
 
         // Add encoder layers. Each is a canonical Post-LN transformer block
         // (Vaswani 2017 §3.1): self-attention and FFN sublayers EACH wrapped in
-        // a residual connection + LayerNorm — y = LayerNorm(x + SelfAttn(x)),
-        // z = LayerNorm(y + FFN(y)). The residuals were missing from the prior
-        // flat MHA→Norm→FFN→Norm sequence, which let each block's output replace
-        // (rather than refine) the hidden state — washing out the input signal
-        // ~60× per layer and mode-collapsing the network to input-independent
-        // output (root cause of issue #1380). TransformerEncoderBlock restores them.
+        // a residual connection, with LayerNorm applied to the sublayer INPUT
+        // (Pre-LN) — y = x + SelfAttn(LayerNorm(x)), z = y + FFN(LayerNorm(y)).
+        // The residuals were missing from the prior flat MHA→Norm→FFN→Norm
+        // sequence, which let each block's output replace (rather than refine)
+        // the hidden state — washing out the input signal ~60× per layer and
+        // mode-collapsing the network to input-independent output (root cause of
+        // issue #1380). TransformerEncoderBlock restores them; Pre-LN ordering
+        // trains stably without LR warmup (the modern GPT-2/LLaMA standard).
         for (int i = 0; i < numEncoderLayers; i++)
         {
             yield return Wire(new TransformerEncoderBlock<T>(

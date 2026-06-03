@@ -237,6 +237,18 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// When <c>true</c>, the token-embedding lookup output is multiplied by
+    /// <c>sqrt(embeddingDimension)</c> (Vaswani et al. 2017 §3.4). This scales the
+    /// (small, Glorot-initialised) embeddings up so they are not drowned out by the
+    /// fixed-magnitude sinusoidal positional encoding that is added immediately after,
+    /// preserving token identity through the encoder. Opt-in (default <c>false</c>) so
+    /// existing models that use the embedding as a plain lookup are unaffected; the
+    /// transformer builder sets it for embeddings paired with positional encoding.
+    /// Only applies in Indices (token-ID) mode; ignored for continuous projection input.
+    /// </summary>
+    public bool ScaleBySqrtDimension { get; set; } = false;
+
+    /// <summary>
     /// Gets a value indicating whether this layer can execute on GPU.
     /// </summary>
     /// <value>
@@ -276,6 +288,8 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         // tensor may be a [0,0] lazy placeholder before first Forward.
         metadata["VocabularySize"] = _vocabularySize.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["EmbeddingDimension"] = _embeddingDimension.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["InputMode"] = _inputMode.ToString();
+        metadata["ScaleBySqrtDimension"] = ScaleBySqrtDimension ? "true" : "false";
         return metadata;
     }
 
@@ -719,7 +733,20 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             outputShape[^1] = embeddingDim;
         }
 
-        return Engine.Reshape(flatOutput, outputShape);
+        var reshaped = Engine.Reshape(flatOutput, outputShape);
+
+        // Vaswani §3.4 embedding scale (opt-in, token-ID mode only). TapeMultiplyScalar
+        // records the op on the autodiff tape, so the embedding-table gradient is scaled
+        // automatically during backprop (this layer is fully tape-based — no custom
+        // Backward override to maintain). In eager inference (NoGradScope) it is a plain
+        // value multiply.
+        if (ScaleBySqrtDimension && !isContinuousInput)
+        {
+            T sqrtDim = NumOps.Sqrt(NumOps.FromDouble(embeddingDim));
+            reshaped = AiDotNet.Helpers.TensorTapeOps.TapeMultiplyScalar(Engine, reshaped, sqrtDim);
+        }
+
+        return reshaped;
     }
 
     /// <summary>
