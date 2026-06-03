@@ -1925,34 +1925,21 @@ public static class LayerHelper<T>
             yield return Wire(new DropoutLayer<T>(dropoutRate));
         }
 
-        // Add encoder layers
+        // Add encoder layers. Each is a canonical Post-LN transformer block
+        // (Vaswani 2017 §3.1): self-attention and FFN sublayers EACH wrapped in
+        // a residual connection + LayerNorm — y = LayerNorm(x + SelfAttn(x)),
+        // z = LayerNorm(y + FFN(y)). The residuals were missing from the prior
+        // flat MHA→Norm→FFN→Norm sequence, which let each block's output replace
+        // (rather than refine) the hidden state — washing out the input signal
+        // ~60× per layer and mode-collapsing the network to input-independent
+        // output (root cause of issue #1380). TransformerEncoderBlock restores them.
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            // Self-attention block
-            yield return Wire(new MultiHeadAttentionLayer<T>(numHeads, (modelDimension) / (numHeads),
-                activationFunction: new IdentityActivation<T>()));
-
-            // Add normalization
-            yield return Wire(new LayerNormalizationLayer<T>());
-
-            // Add dropout if specified (Wire'd — see #1383 comment above).
-            if (dropoutRate > 0)
-            {
-                yield return Wire(new DropoutLayer<T>(dropoutRate));
-            }
-
-            // Feed-forward network
-            yield return Wire(new DenseLayer<T>(feedForwardDimension, new ReLUActivation<T>() as IActivationFunction<T>));
-            yield return Wire(new DenseLayer<T>(modelDimension, new IdentityActivation<T>() as IActivationFunction<T>));
-
-            // Add normalization
-            yield return Wire(new LayerNormalizationLayer<T>());
-
-            // Add dropout if specified (Wire'd — see #1383 comment above).
-            if (dropoutRate > 0)
-            {
-                yield return Wire(new DropoutLayer<T>(dropoutRate));
-            }
+            yield return Wire(new TransformerEncoderBlock<T>(
+                hiddenSize: modelDimension,
+                numHeads: numHeads,
+                ffnDim: feedForwardDimension,
+                dropoutRate: dropoutRate));
         }
 
         // Add decoder layers if needed

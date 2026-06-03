@@ -1701,6 +1701,45 @@ public static class DeserializationHelper
             }
             instance = ctorC.Invoke(argsC);
         }
+        else if (genericDef.Name == "TransformerEncoderBlock`1")
+        {
+            // Post-LN transformer encoder block (ctor: hiddenSize, numHeads, ffnDim, dropoutRate).
+            // TransformerEncoderBlock.GetMetadata persists all four — fail fast if the
+            // dimension metadata is missing rather than fabricating defaults that may
+            // violate hiddenSize % numHeads == 0.
+            int hsTeb = TryGetInt(additionalParams, "HiddenSize")
+                ?? (inputShape.Length > 0 ? inputShape[inputShape.Length - 1] : throw new InvalidOperationException(
+                    $"{genericDef.Name} requires 'HiddenSize' metadata or a rank>=1 inputShape."));
+            int nhTeb = TryGetInt(additionalParams, "NumHeads")
+                ?? throw new InvalidOperationException($"{genericDef.Name} requires 'NumHeads' metadata.");
+            int ffTeb = TryGetInt(additionalParams, "FfnDim")
+                ?? throw new InvalidOperationException($"{genericDef.Name} requires 'FfnDim' metadata.");
+            double drTeb = TryGetDouble(additionalParams, "DropoutRate") ?? 0.0;
+            if (hsTeb % nhTeb != 0)
+            {
+                throw new InvalidOperationException(
+                    $"{genericDef.Name} divisibility violation: hiddenSize ({hsTeb}) must be a " +
+                    $"multiple of numHeads ({nhTeb}). Serialized metadata is corrupt.");
+            }
+            var ctorTeb = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).FirstOrDefault()
+                ?? throw new MissingLayerCtorException($"Cannot find any public constructor for {layerType} during deserialization.");
+            var psTeb = ctorTeb.GetParameters();
+            var argsTeb = new object?[psTeb.Length];
+            for (int i = 0; i < psTeb.Length; i++)
+            {
+                var p = psTeb[i];
+                var n = (p.Name ?? "").ToLowerInvariant();
+                argsTeb[i] = (p.ParameterType, n) switch
+                {
+                    (Type t, _) when t == typeof(int) && n == "hiddensize" => hsTeb,
+                    (Type t, _) when t == typeof(int) && n == "numheads" => nhTeb,
+                    (Type t, _) when t == typeof(int) && n == "ffndim" => ffTeb,
+                    (Type t, _) when t == typeof(double) && n == "dropoutrate" => drTeb,
+                    _ => p.HasDefaultValue ? p.DefaultValue : null,
+                };
+            }
+            instance = ctorTeb.Invoke(argsTeb);
+        }
         else if (genericDef.Name == "GroupedQueryAttentionLayer`1" || genericDef.Name == "CachedGroupedQueryAttention`1")
         {
             // (int sequenceLength, int embeddingDimension, int numHeads, int numKVHeads, ...).
