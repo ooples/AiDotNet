@@ -388,11 +388,20 @@ public class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
         var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
         var clonedVae = (StandardVAE<T>)_vae.Clone();
 
+        // Forward the outer-model config (DiffusionModelOptions, Scheduler,
+        // Architecture) too — the previous version only passed the cloned
+        // sub-modules and let the constructor defaults paper-scale-rebuild
+        // everything else, silently changing schedule/options/architecture
+        // on a customized original.
         return new DreamGaussianModel<T>(
+            architecture: Architecture,
+            options: (DiffusionModelOptions<T>)GetOptions(),
+            scheduler: Scheduler,
             unet: clonedUnet,
             vae: clonedVae,
             conditioner: _conditioner,
-            defaultPointCount: DefaultPointCount);
+            defaultPointCount: DefaultPointCount,
+            seed: _seed);
     }
 
     #endregion

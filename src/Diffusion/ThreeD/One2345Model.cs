@@ -256,8 +256,18 @@ public class One2345Model<T> : ThreeDDiffusionModelBase<T>
         // regardless of how small the original was.
         var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
         var clonedVae = (StandardVAE<T>)_vae.Clone();
-        return new One2345Model<T>(unet: clonedUnet, vae: clonedVae,
-            conditioner: _conditioner, defaultPointCount: DefaultPointCount);
+        // Forward the outer-model config (DiffusionModelOptions, Scheduler,
+        // Architecture) too — otherwise a customized One2345Model resets to
+        // constructor defaults on clone.
+        return new One2345Model<T>(
+            architecture: Architecture,
+            options: (DiffusionModelOptions<T>)GetOptions(),
+            scheduler: Scheduler,
+            unet: clonedUnet,
+            vae: clonedVae,
+            conditioner: _conditioner,
+            defaultPointCount: DefaultPointCount,
+            seed: _seed);
     }
 
     #endregion
