@@ -44,9 +44,18 @@ public sealed class SqliteSqlSyntaxValidator : ISqlSyntaxValidator
 
             return true;
         }
-        catch (SqliteException)
+        catch (SqliteException ex)
         {
-            return false;
+            // Prepare compiles against THIS connection's schema — a fresh, EMPTY
+            // in-memory database — so a syntactically valid statement that references
+            // any table/column/function still fails at prepare time with a
+            // schema-resolution error ("no such table: users", …). Those failures mean
+            // the PARSE succeeded: the statement is valid SQL syntax and only the
+            // referenced objects are absent from the empty scratch database. This is a
+            // SYNTAX validator, so treat them as valid; everything else (e.g.
+            // 'near "FORM": syntax error', 'incomplete input') is a genuine syntax
+            // failure and stays invalid.
+            return IsSchemaResolutionError(ex);
         }
         catch (InvalidOperationException)
         {
@@ -57,4 +66,27 @@ public sealed class SqliteSqlSyntaxValidator : ISqlSyntaxValidator
             return false;
         }
     }
+
+    /// <summary>
+    /// True when the prepare-time failure is the empty scratch schema failing to
+    /// resolve a referenced object rather than the SQL failing to parse. SQLite
+    /// reports both syntax and schema-resolution failures with the same primary
+    /// result code (<c>SQLITE_ERROR</c> = 1), so the message text is the only
+    /// discriminator available at prepare time.
+    /// </summary>
+    private static bool IsSchemaResolutionError(SqliteException ex)
+    {
+        string message = ex.Message ?? string.Empty;
+        return ContainsOrdinalIgnoreCase(message, "no such table")
+            || ContainsOrdinalIgnoreCase(message, "no such column")
+            || ContainsOrdinalIgnoreCase(message, "no such view")
+            || ContainsOrdinalIgnoreCase(message, "no such index")
+            || ContainsOrdinalIgnoreCase(message, "no such function")
+            || ContainsOrdinalIgnoreCase(message, "no such collation sequence")
+            || ContainsOrdinalIgnoreCase(message, "no such module");
+    }
+
+    // string.Contains(string, StringComparison) is unavailable on net471.
+    private static bool ContainsOrdinalIgnoreCase(string haystack, string needle)
+        => haystack.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0;
 }
