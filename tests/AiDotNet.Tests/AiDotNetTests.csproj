@@ -35,9 +35,10 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\AiDotNet.csproj" />
     <!-- Opt-in metapackages extracted in audit-2026-05 phase 2c (#14). The test
-         project references them so the tests for their types (e.g.
-         SealHomomorphicEncryptionProvider, SqliteSqlSyntaxValidator) still
-         compile after the types moved out of the core package. -->
+         project references them so the tests for their types compile after the
+         types moved out of the core package:
+           - Privacy.HE     → FederatedLearning/SealHomomorphicEncryptionProviderTests.cs
+           - Storage.Sqlite → Storage/SqliteSqlSyntaxValidatorTests.cs -->
     <ProjectReference Include="..\..\src\AiDotNet.Privacy.HE\AiDotNet.Privacy.HE.csproj" />
     <ProjectReference Include="..\..\src\AiDotNet.Storage.Sqlite\AiDotNet.Storage.Sqlite.csproj" />
   </ItemGroup>
