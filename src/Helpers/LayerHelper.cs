@@ -1883,7 +1883,17 @@ public static class LayerHelper<T>
         // Add embedding layer for text input
         if (vocabularySize > 0)
         {
-            yield return Wire(new EmbeddingLayer<T>(vocabularySize, modelDimension));
+            // This embedding is created only for token-ID (text) input (vocabularySize > 0),
+            // so its input is always discrete indices. Force Indices mode rather than relying
+            // on the Auto heuristic, which can mis-classify a small-integer token tensor
+            // (e.g. [batch, seq] where seq coincides with a small vocab) as continuous
+            // features and project it down to rank-2 [batch, dim] — collapsing the sequence
+            // axis and breaking the downstream SequenceTokenSliceLayer / pooling that expects
+            // rank-3 [batch, seq, dim].
+            yield return Wire(new EmbeddingLayer<T>(vocabularySize, modelDimension)
+            {
+                InputMode = EmbeddingInputMode.Indices,
+            });
         }
         else
         {
