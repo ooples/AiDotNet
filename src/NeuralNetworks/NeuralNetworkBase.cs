@@ -6055,6 +6055,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 }
             }
 
+            // GPU weight-cache coherence: opt.Step + the extras-update above mutate the weight tensors IN PLACE, but
+            // DirectGpuTensorEngine's persistent weight-buffer cache keys by array REFERENCE and returns the cached
+            // upload without re-checking contents. Without flushing it here the next forward reads STALE weights and
+            // the model NEVER LEARNS on GPU — loss frozen at ln(V) even though the gradient is correct (it is
+            // recomputed each step). Invalidate after all in-place weight updates so they re-upload on the next
+            // forward. No-op on the CPU engine (GpuEngine is null). Mirrors the OnParametersUpdated contract.
+            if (!mpSkipOptimizerStep)
+                GpuEngine?.InvalidateAllWeightCaches();
+
             // Advance the optimizer's learning-rate scheduler at the
             // tape-batch boundary via the shared helper. Without this,
             // any LR scheduler attached to the optimizer (NoamSchedule,
