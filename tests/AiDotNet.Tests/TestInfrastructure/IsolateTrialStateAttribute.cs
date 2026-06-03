@@ -25,6 +25,13 @@ namespace AiDotNet.Tests.TestInfrastructure;
 [AttributeUsage(AttributeTargets.Assembly | AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false)]
 public sealed class IsolateTrialStateAttribute : BeforeAfterTestAttribute
 {
+    // The assembly-level attribute is a single instance shared across all parallel
+    // test invocations, so the IDisposable scope returned by SetTestTrialFilePathOverride
+    // must NOT live on a plain field (that would race across threads). Use AsyncLocal
+    // so each test's execution context carries its own scope — matching the AsyncLocal
+    // backing of the override itself.
+    private static readonly AsyncLocal<IDisposable?> _trialPathScope = new();
+
     public override void Before(MethodInfo methodUnderTest)
     {
         // Unique per test; the file itself is created lazily by TrialStateManager
@@ -33,13 +40,17 @@ public sealed class IsolateTrialStateAttribute : BeforeAfterTestAttribute
             Path.GetTempPath(),
             "aidotnet-trial-tests",
             Guid.NewGuid().ToString("N") + ".json");
-        ModelPersistenceGuard.SetTestTrialFilePathOverride(path);
+        _trialPathScope.Value = ModelPersistenceGuard.SetTestTrialFilePathOverride(path);
     }
 
     public override void After(MethodInfo methodUnderTest)
     {
         string? path = ModelPersistenceGuard.CurrentTestTrialFilePath;
-        ModelPersistenceGuard.SetTestTrialFilePathOverride(null);
+        // Restore the previous override via the scope's Dispose contract instead of
+        // a blunt SetTestTrialFilePathOverride(null), so nested overrides (or future
+        // multi-level usages) correctly unwind one level rather than wiping all.
+        _trialPathScope.Value?.Dispose();
+        _trialPathScope.Value = null;
         TryDelete(path);
         TryDelete(path is null ? null : path + ".tombstone");
     }
