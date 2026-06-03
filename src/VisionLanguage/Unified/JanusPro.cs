@@ -471,6 +471,15 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         SetTrainingMode(false);
     }
 
+    /// <summary>
+    /// The learned generation modules in their FIXED flat-parameter/serialization order.
+    /// They live outside <see cref="NeuralNetworkBase{T}.Layers"/> because they serve the
+    /// dedicated generation path (token-ID embedding, codebook projection, pixel decoding)
+    /// and cannot join the sequential Layers walk that Predict runs image tensors through.
+    /// </summary>
+    private ILayer<T>[] GenerationModules() =>
+        new ILayer<T>[] { _tokenEmbedding, _codebookProjection, _pixelDecoderHidden, _pixelDecoderOut };
+
     public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
@@ -480,6 +489,92 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
             int count = (int)layer.ParameterCount;
             layer.UpdateParameters(parameters.Slice(idx, count));
             idx += count;
+        }
+        // Generation modules ride at the TAIL of the flat vector — same layout as
+        // GetParameters/SetParameters — so training updates reach them (same
+        // off-Layers contract as PaLME._patchEmbed and GR00TN1/Helix._tokenEmbedding).
+        foreach (var module in GenerationModules())
+        {
+            int count = (int)module.ParameterCount;
+            if (count > 0 && idx + count <= parameters.Length)
+            {
+                module.UpdateParameters(parameters.Slice(idx, count));
+                idx += count;
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Includes the four off-<see cref="NeuralNetworkBase{T}.Layers"/> generation modules
+    /// so the flat parameter APIs agree on length.
+    /// </remarks>
+    public override long ParameterCount
+    {
+        get
+        {
+            long total = 0;
+            foreach (var layer in Layers) total += layer.ParameterCount;
+            foreach (var module in GenerationModules()) total += module.ParameterCount;
+            return total;
+        }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Layout: [layer params in Layers order ...] [token-embedding] [codebook-projection]
+    /// [pixel-decoder-hidden] [pixel-decoder-out].
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        var baseParams = base.GetParameters();
+        var moduleParams = new List<Vector<T>>();
+        int moduleTotal = 0;
+        foreach (var module in GenerationModules())
+        {
+            var p = module.GetParameters();
+            moduleParams.Add(p);
+            moduleTotal += p.Length;
+        }
+        if (moduleTotal == 0) return baseParams;
+
+        var combined = new Vector<T>(baseParams.Length + moduleTotal);
+        int idx = 0;
+        for (int i = 0; i < baseParams.Length; i++) combined[idx++] = baseParams[i];
+        foreach (var p in moduleParams)
+            for (int i = 0; i < p.Length; i++) combined[idx++] = p[i];
+        return combined;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Accepts both the full layout produced by <see cref="GetParameters"/> (layers +
+    /// generation-module tail) and a layers-only vector (modules left untouched), so
+    /// older callers that sized their vector from the Layers sum keep working.
+    /// </remarks>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int moduleTotal = 0;
+        foreach (var module in GenerationModules()) moduleTotal += (int)module.ParameterCount;
+        int baseCount = parameters.Length - moduleTotal;
+        if (baseCount < 0) baseCount = parameters.Length;
+
+        var baseSlice = new Vector<T>(baseCount);
+        for (int i = 0; i < baseCount; i++) baseSlice[i] = parameters[i];
+        base.SetParameters(baseSlice);
+
+        if (moduleTotal > 0 && baseCount + moduleTotal == parameters.Length)
+        {
+            int idx = baseCount;
+            foreach (var module in GenerationModules())
+            {
+                int count = (int)module.ParameterCount;
+                if (count == 0) continue;
+                var slice = new Vector<T>(count);
+                for (int i = 0; i < count; i++) slice[i] = parameters[idx + i];
+                module.SetParameters(slice);
+                idx += count;
+            }
         }
     }
 
@@ -523,6 +618,20 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         writer.Write(_options.NumGenerationTokens);
         writer.Write(_options.CodebookEmbeddingDim);
         writer.Write(_options.CfgScale);
+
+        // The learned generation modules live outside Layers, so the base per-layer
+        // serialization never persists them — without this block a trained model's
+        // generation path silently reverts to random init on load (the modules are
+        // rebuilt fresh in DeserializeNetworkSpecificData). Written per-module
+        // (count + values) in GenerationModules() order; lazily-uninitialized dense
+        // modules write count 0 and are restored as still-lazy.
+        foreach (var module in GenerationModules())
+        {
+            var p = module.GetParameters();
+            writer.Write(p.Length);
+            for (int i = 0; i < p.Length; i++)
+                writer.Write(Convert.ToDouble(p[i]));
+        }
     }
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
@@ -554,10 +663,24 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
             codebookSize: _options.NumVisualTokens,
             embeddingDim: _options.CodebookEmbeddingDim);
         // Rebuild the learned generation modules against the just-deserialized
-        // dimensions (same rationale as _vqCodebook above).
+        // dimensions (same rationale as _vqCodebook above), then restore their
+        // TRAINED parameters written by SerializeNetworkSpecificData — without
+        // this the rebuild left them at fresh random init, losing the trained
+        // generation path on every save/load round-trip.
         BuildGenerationModules();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        foreach (var module in GenerationModules())
+        {
+            int count = reader.ReadInt32();
+            if (count <= 0) continue;
+            var p = new Vector<T>(count);
+            for (int i = 0; i < count; i++)
+                p[i] = NumOps.FromDouble(reader.ReadDouble());
+            // DenseLayer.SetParameters resolves lazy shapes from the vector length
+            // (the #1221 save/load contract), so still-lazy modules restore too.
+            module.SetParameters(p);
+        }
+        if (!_useNativeMode && _options.ModelPath is { } p2 && !string.IsNullOrEmpty(p2))
+            OnnxModel = new OnnxModel<T>(p2, _options.OnnxOptions);
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
