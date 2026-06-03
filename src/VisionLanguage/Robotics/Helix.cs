@@ -83,6 +83,15 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     private readonly HelixOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer _tokenizer;
+    // Learned instruction-token embedding table — replaces the previous
+    // deterministic sinusoidal fabrication in EmbedInstructionTokens. Helix's
+    // System-2 VLM consumes ordinary learned text embeddings (Figure AI 2025,
+    // §3.2); synthetic sin/cos vectors derived from token IDs were not
+    // model-faithful and decoupled the S2 context from any training signal.
+    // Embedding dim = decoder dim so the embeddings concatenate with the
+    // visual-feature sequence at the encoder boundary. Mirrors the learned
+    // EmbeddingLayer used by RT2<T>.
+    private readonly EmbeddingLayer<T> _tokenEmbedding;
     private bool _useNativeMode;
     private bool _disposed;
     private int _encoderLayerEnd;
@@ -102,6 +111,7 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         _options.ModelPath = modelPath;
         OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        _tokenEmbedding = new EmbeddingLayer<T>(_options.VocabSize, _options.DecoderDim);
         InitializeLayers();
     }
 
@@ -114,6 +124,7 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        _tokenEmbedding = new EmbeddingLayer<T>(_options.VocabSize, _options.DecoderDim);
         InitializeLayers();
     }
 
@@ -308,27 +319,18 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         _encoderLayerEnd = 1 + _options.NumVisionLayers * layersPerBlock + 2;
     }
 
+    /// <summary>
+    /// Looks up instruction-token embeddings through the learned
+    /// <see cref="_tokenEmbedding"/> table (Figure AI 2025, §3.2). Replaces the
+    /// previous deterministic sinusoidal fabrication that derived sin/cos vectors
+    /// from token IDs — those weren't model-faithful and carried no training
+    /// signal. Returns an empty-safe <c>[DecoderDim]</c> tensor for a zero-length
+    /// token sequence so downstream concatenation shapes stay valid.
+    /// </summary>
     private Tensor<T> EmbedInstructionTokens(Tensor<T> instructionTokens)
     {
-        int decoderDim = _options.DecoderDim;
-        int vocab = Math.Max(1, _options.VocabSize);
-        int seqLen = instructionTokens.Length;
-        if (seqLen == 0) return new Tensor<T>([decoderDim]);
-        var embedded = new Tensor<T>([seqLen * decoderDim]);
-        for (int s = 0; s < seqLen; s++)
-        {
-            double tokenId = NumOps.ToDouble(instructionTokens[s]);
-            double phase = (tokenId % vocab) * 2.0 * Math.PI / vocab;
-            for (int d = 0; d < decoderDim; d++)
-            {
-                double freq = 1.0 / Math.Pow(10000.0, 2.0 * (d / 2) / (double)decoderDim);
-                double val = (d % 2 == 0)
-                    ? Math.Sin(phase * freq + (d * 0.001))
-                    : Math.Cos(phase * freq + (d * 0.001));
-                embedded[s * decoderDim + d] = NumOps.FromDouble(val);
-            }
-        }
-        return embedded;
+        if (instructionTokens.Length == 0) return new Tensor<T>([_options.DecoderDim]);
+        return _tokenEmbedding.Forward(instructionTokens);
     }
 
     private Tensor<T> TokenizeText(string text)
