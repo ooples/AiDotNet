@@ -15,7 +15,6 @@ using AiDotNet.ProgramSynthesis.Interfaces;
 using AiDotNet.ProgramSynthesis.Models;
 using AiDotNet.ProgramSynthesis.Options;
 using AiDotNet.Tensors.LinearAlgebra;
-using Microsoft.Data.Sqlite;
 using TreeSitter;
 
 namespace AiDotNet.ProgramSynthesis.Engines;
@@ -370,20 +369,19 @@ public class NeuralProgramSynthesizer<T> : NeuralNetworkBase<T>, IProgramSynthes
 
     private static bool ValidateSql(string sourceCode)
     {
+        // Precise SQL validation is provided by the opt-in AiDotNet.Storage.Sqlite
+        // package (audit-2026-05 finding #14), which keeps the native SQLite
+        // dependency out of the core package. When no validator is registered,
+        // fall back to generic structural validation.
+        var validator = SqlSyntaxValidation.Validator;
+        if (validator is null)
+        {
+            return ValidateGenericSource(sourceCode);
+        }
+
         try
         {
-            using var connection = new SqliteConnection("Data Source=:memory:");
-            connection.Open();
-
-            using var command = connection.CreateCommand();
-            command.CommandText = sourceCode ?? string.Empty;
-            command.Prepare();
-
-            return true;
-        }
-        catch (SqliteException)
-        {
-            return false;
+            return validator.IsValidSql(sourceCode);
         }
         catch (TypeInitializationException)
         {
@@ -400,14 +398,6 @@ public class NeuralProgramSynthesizer<T> : NeuralNetworkBase<T>, IProgramSynthes
         catch (BadImageFormatException)
         {
             return ValidateGenericSource(sourceCode);
-        }
-        catch (InvalidOperationException)
-        {
-            return false;
-        }
-        catch (ArgumentException)
-        {
-            return false;
         }
     }
 

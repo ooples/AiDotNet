@@ -180,7 +180,22 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         var effectiveHeOptions = useHomomorphicEncryption ? heOptions : null;
         HomomorphicEncryptionScheme heScheme = effectiveHeOptions?.Scheme ?? HomomorphicEncryptionScheme.Ckks;
         HomomorphicEncryptionMode heMode = effectiveHeOptions?.Mode ?? HomomorphicEncryptionMode.HeOnly;
-        var heProvider = useHomomorphicEncryption ? (_homomorphicEncryptionProviderOverride ?? new SealHomomorphicEncryptionProvider<T>()) : null;
+        // The Microsoft SEAL provider was extracted to the opt-in AiDotNet.Privacy.HE
+        // package (audit-2026-05 finding #14) so the homomorphic-encryption native
+        // dependency is no longer in the core package's surface. When HE is requested,
+        // a provider must be supplied explicitly via the constructor; we fail loudly
+        // rather than silently degrade security.
+        IHomomorphicEncryptionProvider<T>? heProvider = null;
+        if (useHomomorphicEncryption)
+        {
+            heProvider = _homomorphicEncryptionProviderOverride
+                ?? throw new InvalidOperationException(
+                    "Homomorphic encryption is enabled (HomomorphicEncryption.Enabled = true) but no " +
+                    "IHomomorphicEncryptionProvider<T> was supplied. The Microsoft SEAL provider now ships in " +
+                    "the opt-in AiDotNet.Privacy.HE package: add a reference to AiDotNet.Privacy.HE and pass " +
+                    "`new SealHomomorphicEncryptionProvider<T>()` (or your own IHomomorphicEncryptionProvider<T>) " +
+                    "to the InMemoryFederatedTrainer constructor.");
+        }
         var encryptedIndices = useHomomorphicEncryption && effectiveHeOptions != null
             ? ResolveEncryptedIndices(effectiveHeOptions, (int)InterfaceGuard.Parameterizable(GetGlobalModel()).ParameterCount, heMode)
             : Array.Empty<int>();
