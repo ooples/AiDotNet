@@ -3408,8 +3408,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 parameterBuffer: null);
             optimizer.Step(context);
             // GPU weight-cache coherence after the grad-accum aggregated step.
-            // See InvalidateGpuWeightCachesAfterSuccessfulWeightUpdate.
-            InvalidateGpuWeightCachesAfterSuccessfulWeightUpdate();
+            // See InvalidateWeightCachesAfterSuccessfulWeightUpdate.
+            InvalidateWeightCachesAfterSuccessfulWeightUpdate();
             StepSchedulerIfSupported(optimizer);
             LastLoss = avgLoss;
         }
@@ -3878,6 +3878,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// around so repeat predictions are fast. If you're done predicting with
     /// this model for a while, call this to give that memory back; the next
     /// prediction just rebuilds it automatically.</para>
+    /// <para>
+    /// Composite models that own compiled state OUTSIDE <see cref="Layers"/>
+    /// (child networks, sub-modules with their own compile hosts) should
+    /// override <see cref="OnReleaseCompiledPlans"/> to release it — the base
+    /// release runs first, then the hook.
+    /// </para>
     /// </remarks>
     public void ReleaseCompiledPlans()
     {
@@ -3893,6 +3899,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Backward against the now-released forward, which is meaningless anyway.
         foreach (var layer in Layers)
             layer.ResetState();
+
+        OnReleaseCompiledPlans();
+    }
+
+    /// <summary>
+    /// Extension hook for <see cref="ReleaseCompiledPlans"/>. The base release
+    /// only covers this network's own compile host and <see cref="Layers"/>;
+    /// composite models that hold compiled state elsewhere (child
+    /// <see cref="NeuralNetworkBase{T}"/> instances, wrapped sub-modules)
+    /// override this to forward the release — typically by calling each
+    /// child's <see cref="ReleaseCompiledPlans"/>. Called AFTER the base
+    /// release completes. Default: no-op.
+    /// </summary>
+    protected virtual void OnReleaseCompiledPlans()
+    {
     }
 
     /// <summary>
@@ -6115,11 +6136,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             }
 
             // GPU weight-cache coherence after the opt.Step + extras-update above.
-            // See InvalidateGpuWeightCachesAfterSuccessfulWeightUpdate for the full
+            // See InvalidateWeightCachesAfterSuccessfulWeightUpdate for the full
             // rationale (cache keys by array reference → stale GPU weights → model
             // never learns).
             if (!mpSkipOptimizerStep)
-                InvalidateGpuWeightCachesAfterSuccessfulWeightUpdate();
+                InvalidateWeightCachesAfterSuccessfulWeightUpdate();
 
             // Advance the optimizer's learning-rate scheduler at the
             // tape-batch boundary via the shared helper. Without this,
@@ -6776,8 +6797,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
             opt.Step(context);
             // GPU weight-cache coherence after the custom-loss step.
-            // See InvalidateGpuWeightCachesAfterSuccessfulWeightUpdate.
-            InvalidateGpuWeightCachesAfterSuccessfulWeightUpdate();
+            // See InvalidateWeightCachesAfterSuccessfulWeightUpdate.
+            InvalidateWeightCachesAfterSuccessfulWeightUpdate();
 
             // Mirror the OnBatchEnd advance from TrainWithTape via the
             // shared helper so a custom-loss caller and a regular Train
@@ -6868,8 +6889,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         opt.Step(context);
         // GPU weight-cache coherence after the precomputed-loss step.
-        // See InvalidateGpuWeightCachesAfterSuccessfulWeightUpdate.
-        InvalidateGpuWeightCachesAfterSuccessfulWeightUpdate();
+        // See InvalidateWeightCachesAfterSuccessfulWeightUpdate.
+        InvalidateWeightCachesAfterSuccessfulWeightUpdate();
 
         // Mirror the OnBatchEnd advance from TrainWithCustomLoss / TrainWithTape
         // so a precomputed-loss caller sees identical scheduler behaviour.
@@ -6935,22 +6956,25 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
-    /// Invalidates DirectGpuTensorEngine's persistent weight-buffer cache after a
-    /// successful in-place weight update. Single source of truth for the
-    /// "post-opt.Step cache flush" contract — every training entry point
-    /// (<see cref="TrainWithTape"/>, <c>TrainWithGradientAccumulation</c>,
-    /// <c>TrainWithCustomLoss</c>, <c>BackwardAndStepOnPrecomputedLoss</c>) routes
-    /// through this helper so they all keep the same GPU coherency guarantee.
+    /// Invalidates EVERY identity-keyed weight cache (GPU weight-buffer uploads
+    /// AND the CPU engine's derived-weight caches) after a successful in-place
+    /// weight update. Single source of truth for the "post-weight-write cache
+    /// flush" contract — every in-place parameter-write path (the training
+    /// entry points <see cref="TrainWithTape"/>, <c>TrainWithGradientAccumulation</c>,
+    /// <c>TrainWithCustomLoss</c>, <c>BackwardAndStepOnPrecomputedLoss</c>, and
+    /// the bulk-load paths <see cref="WithParameters"/> / <see cref="SetParameters"/>)
+    /// routes through this helper so they all keep the same coherency guarantee.
     /// </summary>
     /// <remarks>
-    /// opt.Step mutates the weight tensors IN PLACE, but DirectGpuTensorEngine's
+    /// Weight writes mutate the tensors IN PLACE, but DirectGpuTensorEngine's
     /// weight-buffer cache keys by array REFERENCE and returns the cached upload
     /// without re-checking contents. Without flushing here the next forward reads
     /// STALE weights and the model NEVER LEARNS on GPU — loss frozen at ln(V) even
-    /// though the gradient is correct (it is recomputed each step). No-op on the
-    /// CPU engine (GpuEngine is null). Mirrors the OnParametersUpdated contract.
+    /// though the gradient is correct (it is recomputed each step). The GPU flush
+    /// is a no-op on the CPU engine (GpuEngine is null); the CPU flush below is
+    /// always live. Mirrors the OnParametersUpdated contract.
     /// </remarks>
-    private void InvalidateGpuWeightCachesAfterSuccessfulWeightUpdate()
+    private void InvalidateWeightCachesAfterSuccessfulWeightUpdate()
     {
         GpuEngine?.InvalidateAllWeightCaches();
         // CPU-side mirror of the same contract: the CPU engine's inference
@@ -7768,9 +7792,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Issue1296 grad-accum probe failure: a WithParameters'd model with
         // bit-identical parameters predicted differently because its MHA /
         // FFN GEMMs consumed packs built from the pre-load random init).
-        // Same contract as the GPU-side reference-keyed weight cache.
-        AiDotNet.Tensors.Engines.InferenceWeightCache.InvalidateAll();
-        GpuEngine?.InvalidateAllWeightCaches();
+        InvalidateWeightCachesAfterSuccessfulWeightUpdate();
         return this;
     }
 
@@ -8619,16 +8641,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         _compileHost.Invalidate();
         Training.TapeTrainingStep<T>.InvalidateCache();
         // Layers that mutate their parameter tensors IN PLACE keep the same
-        // weight-array identities — and the CPU engine's inference fast
-        // paths cache derived weight forms (pre-packed GEMM panels,
-        // transposed conv kernels) keyed by exactly that identity, never
-        // re-reading contents. Flush them, or the next Predict computes
-        // with the PRE-SetParameters weights (root cause of the Issue1296
-        // grad-accum probe failure: a WithParameters'd model with
-        // bit-identical parameters predicted differently because its MHA /
-        // FFN GEMMs consumed packs built from the pre-load random init).
-        AiDotNet.Tensors.Engines.InferenceWeightCache.InvalidateAll();
-        GpuEngine?.InvalidateAllWeightCaches();
+        // weight-array identities — and both engines cache derived weight
+        // forms keyed by exactly that identity. Single source of truth:
+        // see InvalidateWeightCachesAfterSuccessfulWeightUpdate.
+        InvalidateWeightCachesAfterSuccessfulWeightUpdate();
     }
 
     /// <summary>

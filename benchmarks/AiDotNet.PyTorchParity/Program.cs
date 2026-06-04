@@ -589,10 +589,14 @@ internal static class AiDotNetProbe
     public static object Describe()
     {
         // Report the loaded AiDotNet assembly metadata so the report identifies
-        // which build ran (working-tree source vs a package).
+        // which build ran (working-tree source vs a package). Only the file
+        // NAME is recorded: the full Assembly.Location is an absolute local
+        // path (user name, machine layout) that leaks environment details
+        // into committed benchmark artifacts and breaks reproducibility
+        // diffs between machines (review #1488).
         var assembly = typeof(NeuralNetworkBase<float>).Assembly;
         var location = string.Empty;
-        try { location = assembly.Location; } catch { /* single-file: no location */ }
+        try { location = Path.GetFileName(assembly.Location); } catch { /* single-file: no location */ }
         return new
         {
             loaded = true,

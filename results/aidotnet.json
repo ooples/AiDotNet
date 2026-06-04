@@ -5,7 +5,7 @@
     "loaded": true,
     "name": "AiDotNet",
     "version": "0.204.0.0",
-    "location": "C:\\Users\\yolan\\source\\repos\\AiDotNet\\benchmarks\\AiDotNet.PyTorchParity\\bin\\Release\\net10.0\\AiDotNet.dll"
+    "location": "AiDotNet.dll"
   },
   "Results": [
     {

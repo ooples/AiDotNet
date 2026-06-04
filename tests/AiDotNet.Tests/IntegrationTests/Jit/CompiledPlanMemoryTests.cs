@@ -16,7 +16,14 @@ namespace AiDotNet.Tests.IntegrationTests.Jit;
 /// <see cref="AiDotNet.NeuralNetworks.NeuralNetworkBase{T}.ReleaseCompiledPlans"/>
 /// valve: releasing must actually return the buffers to the GC, and the model
 /// must keep predicting correctly (recompiling on demand) afterwards.
+///
+/// Runs in the NonParallelIntegration collection: GC.GetTotalMemory measures
+/// the WHOLE managed heap, so concurrent test allocations would shift both
+/// the &gt;5 MB warmup gate and the post-release ceiling arbitrarily — and the
+/// constructor mutates process-global state (ResetToCpu /
+/// TensorCodecOptions.SetCurrent) that parallel classes would race.
 /// </summary>
+[Collection("NonParallelIntegration")]
 public class CompiledPlanMemoryTests : IDisposable
 {
     private readonly ITestOutputHelper _out;

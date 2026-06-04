@@ -1196,33 +1196,51 @@ public class Issue1296LargeXTrainBatchingTests
 
             const int rounds = 5;
             int trialsPerRound = Math.Max(1, trials / rounds);
-            double eagerMsMin = double.MaxValue, compiledMsMin = double.MaxValue;
             var sw = new System.Diagnostics.Stopwatch();
-            for (int r = 0; r < rounds; r++)
+
+            double MeasureSpeedup()
             {
-                // Settle the heap so neither side eats a collection
-                // triggered by the other's (or a prior test's) garbage.
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-                GC.Collect();
+                double eagerMsMin = double.MaxValue, compiledMsMin = double.MaxValue;
+                for (int r = 0; r < rounds; r++)
+                {
+                    // Settle the heap so neither side eats a collection
+                    // triggered by the other's (or a prior test's) garbage.
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+                    GC.Collect();
 
-                AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation = false;
-                sw.Restart();
-                for (int i = 0; i < trialsPerRound; i++) _ = eagerModel.Predict(input);
-                sw.Stop();
-                eagerMsMin = Math.Min(eagerMsMin, sw.Elapsed.TotalMilliseconds / trialsPerRound);
+                    AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation = false;
+                    sw.Restart();
+                    for (int i = 0; i < trialsPerRound; i++) _ = eagerModel.Predict(input);
+                    sw.Stop();
+                    eagerMsMin = Math.Min(eagerMsMin, sw.Elapsed.TotalMilliseconds / trialsPerRound);
 
-                AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation = true;
-                sw.Restart();
-                for (int i = 0; i < trialsPerRound; i++) _ = compiledModel.PredictCompiledPublic(input);
-                sw.Stop();
-                compiledMsMin = Math.Min(compiledMsMin, sw.Elapsed.TotalMilliseconds / trialsPerRound);
+                    AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation = true;
+                    sw.Restart();
+                    for (int i = 0; i < trialsPerRound; i++) _ = compiledModel.PredictCompiledPublic(input);
+                    sw.Stop();
+                    compiledMsMin = Math.Min(compiledMsMin, sw.Elapsed.TotalMilliseconds / trialsPerRound);
+                }
+                _output.WriteLine($"Eager: min {eagerMsMin:F3} ms/call over {rounds} interleaved rounds x {trialsPerRound} trials");
+                _output.WriteLine($"Compiled: min {compiledMsMin:F3} ms/call over {rounds} interleaved rounds x {trialsPerRound} trials");
+                return eagerMsMin / Math.Max(1e-6, compiledMsMin);
             }
 
-            double speedup = eagerMsMin / Math.Max(1e-6, compiledMsMin);
+            double speedup = MeasureSpeedup();
+            // Flake guard for the timing floor (review #1488): a runner being
+            // throttled across an entire measurement window can land an
+            // otherwise-healthy build under the floor. Re-measure up to twice
+            // before failing — a REAL replay-overhead regression (compiled
+            // structurally slower per call) reproduces on every attempt,
+            // while a noisy-neighbor window doesn't survive three separate
+            // multi-second windows. The ratio itself is already throttle-
+            // resistant (interleaved rounds slow both sides together).
+            for (int attempt = 0; attempt < 2 && speedup < 0.55; attempt++)
+            {
+                _output.WriteLine($"Speedup {speedup:F2}x below floor — re-measuring (attempt {attempt + 2}/3)");
+                speedup = MeasureSpeedup();
+            }
             var (hotHits, slowCalls) = compiledModel.GetCompileHostCounters();
-            _output.WriteLine($"Eager: min {eagerMsMin:F3} ms/call over {rounds} interleaved rounds x {trialsPerRound} trials");
-            _output.WriteLine($"Compiled: min {compiledMsMin:F3} ms/call over {rounds} interleaved rounds x {trialsPerRound} trials");
             _output.WriteLine($"Speedup: {speedup:F2}x");
             _output.WriteLine($"CompiledModelHost: hot-path hits={hotHits}, slow-path calls={slowCalls}");
 
@@ -1251,6 +1269,14 @@ public class Issue1296LargeXTrainBatchingTests
             // fixes, well below the pollution band. 0.55 separates the two
             // cleanly: pollution passes, a real replay-overhead regression
             // fails.
+            //
+            // This floor stays a HARD assert (not a logged warning): the
+            // hotHits gate above CANNOT substitute for it. The original
+            // regression — FusedLinear specialization re-packing B on every
+            // replay — ran with the hot path FULLY engaged (hits == trials)
+            // at 0.43-0.46x; demoting the floor would leave that entire
+            // regression class undetected. Runner-throttle flakes are
+            // handled by the bounded re-measure above instead.
             Assert.True(speedup >= 0.55,
                 $"Compiled path is far slower than eager: speedup={speedup:F2}x. " +
                 $"This is below the in-suite pollution band (0.67x+) and matches the " +

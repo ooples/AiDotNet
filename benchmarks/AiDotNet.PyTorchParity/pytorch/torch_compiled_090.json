@@ -20,8 +20,8 @@
         "resources": {
           "cpu_percent_avg": 24.139,
           "rss_mb_peak": 327.492,
-          "gpu_util_percent_avg": 5.0,
-          "gpu_mem_mb_peak": 792.0
+          "gpu_util_percent_avg": null,
+          "gpu_mem_mb_peak": null
         }
       },
       "inference": [
@@ -73,8 +73,8 @@
         "resources": {
           "cpu_percent_avg": 449.0,
           "rss_mb_peak": 339.512,
-          "gpu_util_percent_avg": 5.0,
-          "gpu_mem_mb_peak": 792.0
+          "gpu_util_percent_avg": null,
+          "gpu_mem_mb_peak": null
         }
       },
       "inference": [

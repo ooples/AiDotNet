@@ -28,9 +28,18 @@ namespace AiDotNet.Tests.IntegrationTests.Jit;
 ///     whole process (covered by CompiledPlanMemoryTests once the bound lands).
 ///
 /// Parity tests compare <see cref="NeuralNetworkBase{T}.PredictCompiled"/> (replay)
-/// against <see cref="NeuralNetworkBase{T}.Predict"/> (eager) on the SAME network and
-/// SAME input — any divergence beyond float reduction-order noise is a plan bug.
+/// against a TRUE eager forward (compilation disabled around the oracle call —
+/// with EnableCompilation left on, plain <c>Predict</c> can itself route through
+/// the compiled host, making the "baseline" the very path under test) on the
+/// SAME network and SAME input — any divergence beyond float reduction-order
+/// noise is a plan bug.
+///
+/// Runs in the NonParallelIntegration collection: the constructor/oracle mutate
+/// process-global state (<see cref="AiDotNetEngine.ResetToCpu"/>,
+/// <see cref="TensorCodecOptions.SetCurrent"/>), which concurrent test classes
+/// would otherwise race.
 /// </summary>
+[Collection("NonParallelIntegration")]
 public class CompiledInferenceParityTests : IDisposable
 {
     private readonly TensorCodecOptions _originalOptions;
@@ -54,7 +63,7 @@ public class CompiledInferenceParityTests : IDisposable
         var network = BuildAisEvalCnn();
         var input = MakeInput(new[] { 2, 1, 28, 28 }, seed: 7);
 
-        var eager = network.Predict(input);
+        var eager = PredictEagerOracle(network, input);
         Assert.True(network.CompileForward(input), "CompileForward failed for the CNN — trace did not produce a plan.");
         var compiled = network.PredictCompiled(input);
 
@@ -82,7 +91,7 @@ public class CompiledInferenceParityTests : IDisposable
         Assert.True(network.CompileForward(traceInput), "CompileForward failed for the MLP.");
 
         var input = MakeInput(new[] { batch, 784 }, seed: 23 + batch);
-        var eager = network.Predict(input);
+        var eager = PredictEagerOracle(network, input);
         var compiled = network.PredictCompiled(input);
 
         AssertParity(eager, compiled, $"MLP [{batch},784] (plan traced at bs=1)");
@@ -98,7 +107,7 @@ public class CompiledInferenceParityTests : IDisposable
         Assert.True(network.CompileForward(traceInput), "CompileForward failed for the CNN.");
 
         var input = MakeInput(new[] { batch, 1, 28, 28 }, seed: 41 + batch);
-        var eager = network.Predict(input);
+        var eager = PredictEagerOracle(network, input);
         var compiled = network.PredictCompiled(input);
 
         AssertParity(eager, compiled, $"CNN [{batch},1,28,28] (plan traced at bs=1)");
@@ -119,11 +128,24 @@ public class CompiledInferenceParityTests : IDisposable
         Assert.True(network.CompileForward(input), "CompileForward failed for the MLP at bs=128.");
 
         // Parity first — a fast-but-wrong replay must fail here, not pass on time.
-        var eager = network.Predict(input);
+        var eager = PredictEagerOracle(network, input);
         var compiled = network.PredictCompiled(input);
         AssertParity(eager, compiled, "MLP [128,784]");
 
-        double eagerUs = MinMicros(30, () => network.Predict(input));
+        // Time the eager side with compilation disabled for the whole loop —
+        // with it enabled, Predict can route through the compiled host and the
+        // "eager" baseline becomes the very path under test.
+        var prevOptions = TensorCodecOptions.Current;
+        double eagerUs;
+        TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = false });
+        try
+        {
+            eagerUs = MinMicros(30, () => network.Predict(input));
+        }
+        finally
+        {
+            TensorCodecOptions.SetCurrent(prevOptions);
+        }
         double replayUs = MinMicros(30, () => network.PredictCompiled(input));
 
         Assert.True(
@@ -173,6 +195,26 @@ public class CompiledInferenceParityTests : IDisposable
             outputSize: 10,
             layers: layers);
         return new ConvolutionalNeuralNetwork<float>(arch);
+    }
+
+    /// <summary>
+    /// True eager oracle: runs <c>Predict</c> with compilation globally
+    /// DISABLED so the baseline cannot itself route through the compiled
+    /// host (the class fixture leaves EnableCompilation = true for the
+    /// replay side). Restores the compiled-enabled options afterwards.
+    /// </summary>
+    private static Tensor<float> PredictEagerOracle(NeuralNetworkBase<float> network, Tensor<float> input)
+    {
+        var prev = TensorCodecOptions.Current;
+        TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = false });
+        try
+        {
+            return network.Predict(input);
+        }
+        finally
+        {
+            TensorCodecOptions.SetCurrent(prev);
+        }
     }
 
     private static Tensor<float> MakeInput(int[] shape, int seed)
