@@ -607,6 +607,13 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         T biasCorrection2 = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _tapeStep));
         T weightDecay = NumOps.FromDouble(_options.WeightDecay);
 
+        // GPU-RESIDENT ADAMW (env AIDOTNET_GPU_ADAM=1): see AdamOptimizer.Step for the rationale — run the
+        // update on the GPU (GpuOptimizer.TryAdamWStep -> backend.AdamWUpdate, decoupled weight decay) so grads
+        // never download. Moments are GPU-resident; falls back to the tensor-op path per-param otherwise. Gated off.
+        bool gpuAdam = typeof(T) == typeof(float) && !_options.UseAMSGrad
+            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
+            && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
+
         foreach (var param in context.Parameters)
         {
             if (!context.Gradients.TryGetValue(param, out var grad))
@@ -614,13 +621,26 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
 
             if (!_tapeM.TryGetValue(param, out var m))
             {
-                m = new Tensor<T>(param._shape);
+                m = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape);
+                if (gpuAdam) m.AsWritableSpan().Clear();
                 _tapeM[param] = m;
             }
             if (!_tapeV.TryGetValue(param, out var v))
             {
-                v = new Tensor<T>(param._shape);
+                v = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape);
+                if (gpuAdam) v.AsWritableSpan().Clear();
                 _tapeV[param] = v;
+            }
+
+            // GPU-resident fused AdamW (no host download); falls back if any tensor isn't GPU-resident.
+            if (gpuAdam && param.Length == grad.Length)
+            {
+                if (AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryAdamWStep(
+                        (Tensor<float>)(object)param, (Tensor<float>)(object)grad,
+                        (Tensor<float>)(object)m, (Tensor<float>)(object)v,
+                        (float)NumOps.ToDouble(CurrentLearningRate), (float)_options.Beta1, (float)_options.Beta2,
+                        (float)_options.Epsilon, (float)_options.WeightDecay, _tapeStep))
+                    continue;
             }
 
             // m = beta1 * m + (1 - beta1) * grad
