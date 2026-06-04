@@ -50,7 +50,21 @@ public class CompiledPlanMemoryTests : IDisposable
             .GetMethod("BuildAisEvalCnn", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
             .Invoke(null, null)!;
         var input = MakeInput(new[] { 64, 1, 28, 28 }, 3);
-        var eagerWarm = net.Predict(input); // materialize weights + lazy shapes
+        // Warm through a TRUE eager forward: the class fixture leaves
+        // EnableCompilation = true, so a plain Predict here could compile and
+        // allocate plan buffers BEFORE the baseline snapshot — silently
+        // shrinking the warmed-residency delta this test exists to measure.
+        Tensor<float> eagerWarm;
+        var optsBeforeWarm = TensorCodecOptions.Current;
+        TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = false });
+        try
+        {
+            eagerWarm = net.Predict(input); // materialize weights + lazy shapes
+        }
+        finally
+        {
+            TensorCodecOptions.SetCurrent(optsBeforeWarm);
+        }
         long baseline = Settled();
 
         Assert.True(net.CompileForward(input), "CompileForward failed for the CNN.");

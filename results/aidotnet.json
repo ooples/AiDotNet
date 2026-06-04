@@ -21,7 +21,7 @@
         "DataLoadingSecondsAvg": 0.007801,
         "Resources": {
           "ManagedRssMbPeak": 67.715,
-          "NvidiaSmiSample": "8, 497"
+          "NvidiaSmiSample": null
         }
       },
       "Inference": [

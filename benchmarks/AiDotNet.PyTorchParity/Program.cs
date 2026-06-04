@@ -551,7 +551,14 @@ internal sealed class ResourceMonitor : IDisposable
 
     public static ResourceMonitor Start() => new();
 
-    public ResourceReport Summary() => new(Math.Round(_rssMb.Count == 0 ? 0 : _rssMb.Max(), 3), NvidiaSmi.TryRead());
+    // NvidiaSmiSample is null by design: this benchmark hard-pins the CPU
+    // engine (GpuDisableBootstrap + ResetToCpu), and nvidia-smi reports
+    // SYSTEM-WIDE GPU utilization/memory — sampling it here attributed
+    // whatever the desktop GPU happened to be doing (browser, compositor)
+    // to a CPU-only run. Mirrors the device-gated GPU sampling on the
+    // Python side (benchmark.py ResourceMonitor.track_gpu). If a GPU mode
+    // is ever added, gate the NvidiaSmi.TryRead() call on it.
+    public ResourceReport Summary() => new(Math.Round(_rssMb.Count == 0 ? 0 : _rssMb.Max(), 3), NvidiaSmiSample: null);
 
     public void Dispose()
     {
