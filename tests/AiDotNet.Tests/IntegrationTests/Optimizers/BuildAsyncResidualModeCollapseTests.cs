@@ -252,6 +252,19 @@ public class BuildAsyncResidualModeCollapseTests
     public async Task BuildAsync_ResidualModeCollapse_EightArmDiagnostic()
     {
         await Task.Yield();
+
+        // Pin NON-deterministic (parallel) reductions for this diagnostic. A prior test in the
+        // serialized NonParallelIntegration collection may have left the process-global
+        // AiDotNetEngine.SetDeterministicMode ON (AiModelBuilder.BuildAsync sets it true per-call
+        // and intentionally does not restore it). With it ON, Arm 0's per-sample reference loop
+        // (3840 model.Train calls) plus the Predict-based accuracy and finite-difference passes all
+        // run single-threaded, which on a many-core box inflates this diagnostic from ~15s standalone
+        // to >600s — tripping the per-test timeout and crashing the host (which then poisons the
+        // whole shard with cascade failures). The arm assertions are loose (top-1 margins, gradient
+        // ascent-direction sign), so parallel reductions are correct here; the BuildAsync arms re-pin
+        // deterministic mode internally on every call as needed.
+        AiDotNet.Tensors.Engines.AiDotNetEngine.SetDeterministicMode(false);
+
         var (arch, xTrain, yTrain) = BuildFixture();
 
         // ARM 0: per-sample Train reference (one sample at a time)
