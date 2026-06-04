@@ -3378,6 +3378,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // accum pattern.
             var optimizer = GetOrCreateBaseOptimizer();
             var paramsList = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
+
+            // Mirror TrainWithTape's pre-step global gradient-norm clipping
+            // on the ACCUMULATED gradient (PyTorch grad-accum idiom: clip
+            // once on the summed/averaged gradient right before
+            // optimizer.step()). Without this, every other training entry
+            // point clips at MaxGradNorm (default 1.0) while this path
+            // didn't — so a single full-batch Train step and an equivalent
+            // TrainWithGradientAccumulation step produced visibly different
+            // updates whenever the gradient norm exceeded the clip threshold
+            // (the Issue1296 GradientAccumulation_MatchesFullBatchGradient
+            // probe caught exactly this). Clips over the layer-collected
+            // params only — the same set TrainWithTape clips — using the
+            // deterministic list order for the norm reduction.
+            double maxGradNorm = MaxGradNormValue;
+            if (maxGradNorm > 0.0 && avgGrads.Count > 0)
+            {
+                ApplyGradientClipping(avgGrads, maxGradNorm, paramsList);
+            }
             // Include extra trainable tensors in the optimizer's
             // parameter list too, so its update step (and any per-
             // parameter state it maintains) covers them.
@@ -6935,6 +6953,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     private void InvalidateGpuWeightCachesAfterSuccessfulWeightUpdate()
     {
         GpuEngine?.InvalidateAllWeightCaches();
+        // CPU-side mirror of the same contract: the CPU engine's inference
+        // fast paths cache DERIVED weight forms (SgemmWithCachedB's
+        // pre-packed B panels, Conv2D's transposed kernels) keyed by the
+        // weight ARRAY's object identity, never re-reading its contents.
+        // opt.Step mutates the weight tensors IN PLACE, so without this
+        // flush the next Predict consumes STALE packed weights — the model
+        // appears not to learn on exactly the layers whose GEMMs hit the
+        // cached path (root cause of the Issue1296 grad-accum equivalence
+        // probe failure: two models with bit-identical parameters predicted
+        // differently because one carried packs from its pre-load init).
+        AiDotNet.Tensors.Engines.InferenceWeightCache.InvalidateAll();
     }
 
     /// <summary>
@@ -7731,6 +7760,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // placeholder state where ParameterCount=0, so UpdateParameters
         // skips them.
         UpdateParameters(parameters);
+        // The in-place write keeps every weight ARRAY's identity — and the
+        // CPU engine's inference fast paths cache derived weight forms
+        // (pre-packed GEMM panels, transposed conv kernels) keyed by that
+        // identity without re-reading contents. Flush them, or the next
+        // Predict computes with the PRE-update weights (root cause of the
+        // Issue1296 grad-accum probe failure: a WithParameters'd model with
+        // bit-identical parameters predicted differently because its MHA /
+        // FFN GEMMs consumed packs built from the pre-load random init).
+        // Same contract as the GPU-side reference-keyed weight cache.
+        AiDotNet.Tensors.Engines.InferenceWeightCache.InvalidateAll();
+        GpuEngine?.InvalidateAllWeightCaches();
         return this;
     }
 
@@ -8578,6 +8618,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // would replay against parameters that no longer exist.
         _compileHost.Invalidate();
         Training.TapeTrainingStep<T>.InvalidateCache();
+        // Layers that mutate their parameter tensors IN PLACE keep the same
+        // weight-array identities — and the CPU engine's inference fast
+        // paths cache derived weight forms (pre-packed GEMM panels,
+        // transposed conv kernels) keyed by exactly that identity, never
+        // re-reading contents. Flush them, or the next Predict computes
+        // with the PRE-SetParameters weights (root cause of the Issue1296
+        // grad-accum probe failure: a WithParameters'd model with
+        // bit-identical parameters predicted differently because its MHA /
+        // FFN GEMMs consumed packs built from the pre-load random init).
+        AiDotNet.Tensors.Engines.InferenceWeightCache.InvalidateAll();
+        GpuEngine?.InvalidateAllWeightCaches();
     }
 
     /// <summary>
