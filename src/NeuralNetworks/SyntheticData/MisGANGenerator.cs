@@ -7,6 +7,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -128,10 +129,6 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     private readonly List<DropoutLayer<T>> _maskDiscDropoutLayers = new();
 
     // Pre-activation caches for each network
-    private readonly List<Tensor<T>> _dataGenPreActs = new();
-    private readonly List<Tensor<T>> _dataDiscPreActs = new();
-    private readonly List<Tensor<T>> _maskGenPreActs = new();
-    private readonly List<Tensor<T>> _maskDiscPreActs = new();
 
     // Whether custom layers are being used for the data generator
     private bool _usingCustomLayers;
@@ -361,14 +358,24 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
                 T scaledLr = NumOps.FromDouble(_options.LearningRate / actualBatchSize);
 
-                // Train both discriminators
-                for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
+                SetTrainingMode(true);
+                try
                 {
-                    TrainDataDiscriminatorStep(transformedData, batchStart, batchEnd, scaledLr);
-                    TrainMaskDiscriminatorStep(transformedData, batchStart, batchEnd, scaledLr);
-                }
+                    // WGAN: several critic (discriminator) updates per generator update.
+                    for (int dStep = 0; dStep < Math.Max(1, _options.DiscriminatorSteps); dStep++)
+                    {
+                        TrainDataDiscriminatorStep(transformedData, batchStart, batchEnd);
+                        TrainMaskDiscriminatorStep(transformedData, batchStart, batchEnd);
+                    }
 
-                // Train both generators
+                    // Generator updates (data + mask).
+                    TrainDataGeneratorStep(batchStart, batchEnd);
+                    TrainMaskGeneratorStep(batchStart, batchEnd);
+                }
+                finally
+                {
+                    SetTrainingMode(false);
+                }
             }
         }
 
@@ -419,7 +426,6 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     /// </summary>
     private Tensor<T> DataGeneratorForward(Tensor<T> input)
     {
-        _dataGenPreActs.Clear();
 
         if (_usingCustomLayers)
         {
@@ -441,7 +447,6 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             if (i > 0) h = ConcatTensors(h, originalInput);
             h = Layers[i].Forward(h);
             h = _dataGenBNLayers[i].Forward(h);
-            _dataGenPreActs.Add(CloneTensor(h));
             h = ApplyReLU(h);
         }
 
@@ -456,7 +461,6 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     /// </summary>
     private Tensor<T> MaskGeneratorForward(Tensor<T> input)
     {
-        _maskGenPreActs.Clear();
         var current = input;
         var originalInput = CloneTensor(input);
 
@@ -465,7 +469,6 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             if (i > 0) current = ConcatTensors(current, originalInput);
             current = _maskGenLayers[i].Forward(current);
             current = _maskGenBNLayers[i].Forward(current);
-            _maskGenPreActs.Add(CloneTensor(current));
             current = ApplyReLU(current);
         }
 
@@ -481,13 +484,11 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     /// </summary>
     private Tensor<T> DataDiscriminatorForward(Tensor<T> input, bool isTraining)
     {
-        _dataDiscPreActs.Clear();
         var current = input;
 
         for (int i = 0; i < _dataDiscLayers.Count - 1; i++)
         {
             current = _dataDiscLayers[i].Forward(current);
-            _dataDiscPreActs.Add(CloneTensor(current));
             current = ApplyLeakyReLU(current);
             if (isTraining) current = _dataDiscDropoutLayers[i].Forward(current);
         }
@@ -501,13 +502,11 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     /// </summary>
     private Tensor<T> MaskDiscriminatorForward(Tensor<T> input, bool isTraining)
     {
-        _maskDiscPreActs.Clear();
         var current = input;
 
         for (int i = 0; i < _maskDiscLayers.Count - 1; i++)
         {
             current = _maskDiscLayers[i].Forward(current);
-            _maskDiscPreActs.Add(CloneTensor(current));
             current = ApplyLeakyReLU(current);
             if (isTraining) current = _maskDiscDropoutLayers[i].Forward(current);
         }
@@ -518,152 +517,142 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
     #endregion
 
-    #region Training Steps
+    #region Training Steps (WGAN)
 
-    /// <summary>
-    /// Trains data discriminator with WGAN loss + gradient penalty.
-    /// D_x sees real data * mask vs generated data * mask.
-    /// </summary>
-    private void TrainDataDiscriminatorStep(Matrix<T> transformedData, int batchStart, int batchEnd, T scaledLr)
+    // WGAN critic loss = E[D(fake)] - E[D(real)] (minimized w.r.t. the critic);
+    // generator loss = -E[D(fake)]. Lipschitz continuity of each critic is enforced
+    // by weight clipping (Arjovsky et al. 2017). All forwards are tape-connected so
+    // autodiff backpropagates through the masked-data / mask GANs (Li et al. 2019).
+    private const double WGanClip = 0.01;
+
+    private void TrainDataDiscriminatorStep(Matrix<T> transformedData, int batchStart, int batchEnd)
     {
         for (int i = batchStart; i < batchEnd; i++)
         {
             var realRow = GetRow(transformedData, i);
+            var maskTensor = VectorToTensor(CreateRandomMask(_dataWidth, _options.MissingRate));
+            var noise = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
 
-            // Create real mask (simulate missingness)
-            var mask = CreateRandomMask(_dataWidth, _options.MissingRate);
-            var maskedReal = ElementwiseMultiply(realRow, mask);
-
-            // WGAN: minimize E[D(fake)] - E[D(real)]
-            // Real: backward with gradient = -1 (maximize D(real))
-            _ = DataDiscriminatorForward(VectorToTensor(maskedReal), isTraining: true);
-            var realGrad = new Tensor<T>([1]);
-            realGrad[0] = NumOps.Negate(NumOps.One);
-            UpdateDataDiscriminatorParameters(scaledLr);
-
-            // Fake: generate data, apply generated mask
-            var dataNoise = CreateStandardNormalVector(_options.EmbeddingDimension);
-            var fakeRow = DataGeneratorForward(VectorToTensor(dataNoise));
-            var maskedFake = ElementwiseMultiplyTensor(fakeRow, VectorToTensor(mask));
-
-            // Fake: backward with gradient = +1 (minimize D(fake))
-            _ = DataDiscriminatorForward(maskedFake, isTraining: true);
-            var fakeGrad = new Tensor<T>([1]);
-            fakeGrad[0] = NumOps.One;
-            UpdateDataDiscriminatorParameters(scaledLr);
-
-            // Gradient penalty
-            ApplyDataGradientPenalty(maskedReal, TensorToVector(maskedFake, _dataWidth), scaledLr);
+            using var tape = new GradientTape<T>();
+            var realScore = DataDiscriminatorForward(ElementwiseMultiplyTensor(VectorToTensor(realRow), maskTensor), isTraining: true);
+            var fakeRow = DataGeneratorForward(noise);
+            var fakeScore = DataDiscriminatorForward(ElementwiseMultiplyTensor(fakeRow, maskTensor), isTraining: true);
+            var loss = Engine.TensorSubtract(ReduceToScalar(fakeScore), ReduceToScalar(realScore));
+            TapeStepOver(tape, loss, BuildDataDiscLayerList());
         }
+        ClipWeights(BuildDataDiscLayerList());
     }
 
-    /// <summary>
-    /// Trains mask discriminator with WGAN loss + gradient penalty.
-    /// D_m sees real masks vs generated masks.
-    /// </summary>
-    private void TrainMaskDiscriminatorStep(Matrix<T> transformedData, int batchStart, int batchEnd, T scaledLr)
+    private void TrainMaskDiscriminatorStep(Matrix<T> transformedData, int batchStart, int batchEnd)
     {
         for (int i = batchStart; i < batchEnd; i++)
         {
-            // Create real mask
-            var realMask = CreateRandomMask(_dataWidth, _options.MissingRate);
+            var realMask = VectorToTensor(CreateRandomMask(_dataWidth, _options.MissingRate));
+            var noise = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
 
-            // WGAN real: gradient = -1
-            _ = MaskDiscriminatorForward(VectorToTensor(realMask), isTraining: true);
-            var realGrad = new Tensor<T>([1]);
-            realGrad[0] = NumOps.Negate(NumOps.One);
-            UpdateMaskDiscriminatorParameters(scaledLr);
+            using var tape = new GradientTape<T>();
+            var realScore = MaskDiscriminatorForward(realMask, isTraining: true);
+            var fakeMask = MaskGeneratorForward(noise);
+            var fakeScore = MaskDiscriminatorForward(fakeMask, isTraining: true);
+            var loss = Engine.TensorSubtract(ReduceToScalar(fakeScore), ReduceToScalar(realScore));
+            TapeStepOver(tape, loss, BuildMaskDiscLayerList());
+        }
+        ClipWeights(BuildMaskDiscLayerList());
+    }
 
-            // Generate fake mask
-            var maskNoise = CreateStandardNormalVector(_options.EmbeddingDimension);
-            var fakeMask = MaskGeneratorForward(VectorToTensor(maskNoise));
+    private void TrainDataGeneratorStep(int batchStart, int batchEnd)
+    {
+        for (int i = batchStart; i < batchEnd; i++)
+        {
+            var maskTensor = VectorToTensor(CreateRandomMask(_dataWidth, _options.MissingRate));
+            var noise = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
 
-            // WGAN fake: gradient = +1
-            _ = MaskDiscriminatorForward(fakeMask, isTraining: true);
-            var fakeGrad = new Tensor<T>([1]);
-            fakeGrad[0] = NumOps.One;
-            UpdateMaskDiscriminatorParameters(scaledLr);
+            using var tape = new GradientTape<T>();
+            var fakeRow = DataGeneratorForward(noise);
+            var fakeScore = DataDiscriminatorForward(ElementwiseMultiplyTensor(fakeRow, maskTensor), isTraining: true);
+            var loss = Engine.TensorNegate(ReduceToScalar(fakeScore));
+            TapeStepOver(tape, loss, BuildDataGenLayerList());
+        }
+    }
 
-            // Gradient penalty
-            ApplyMaskGradientPenalty(realMask, TensorToVector(fakeMask, _dataWidth), scaledLr);
+    private void TrainMaskGeneratorStep(int batchStart, int batchEnd)
+    {
+        for (int i = batchStart; i < batchEnd; i++)
+        {
+            var noise = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
+
+            using var tape = new GradientTape<T>();
+            var fakeMask = MaskGeneratorForward(noise);
+            var fakeScore = MaskDiscriminatorForward(fakeMask, isTraining: true);
+            var loss = Engine.TensorNegate(ReduceToScalar(fakeScore));
+            TapeStepOver(tape, loss, BuildMaskGenLayerList());
         }
     }
 
     #endregion
 
-    #region Gradient Penalty
+    #region Tape Step Helpers
 
-    private void ApplyDataGradientPenalty(Vector<T> real, Vector<T> fake, T scaledLr)
+    /// <summary>Runs one optimizer step over the given sub-network's parameters from a tape-tracked loss.</summary>
+    private void TapeStepOver(GradientTape<T> tape, Tensor<T> loss, IReadOnlyList<ILayer<T>> layers)
     {
-        var allLayers = BuildDataDiscLayerList();
+        var trainable = Training.TapeTrainingStep<T>.CollectParameters(layers);
+        if (trainable.Count == 0) return;
+        var grads = tape.ComputeGradients(loss, trainable);
+        T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
+        LastLoss = lossValue;
+        var ctx = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(trainable, grads, lossValue);
+        _optimizer.Step(ctx);
     }
 
-    private void ApplyMaskGradientPenalty(Vector<T> real, Vector<T> fake, T scaledLr)
+    private Tensor<T> ReduceToScalar(Tensor<T> t)
+        => Engine.ReduceSum(t, Enumerable.Range(0, t.Shape.Length).ToArray(), keepDims: false);
+
+    /// <summary>WGAN weight clipping: clamp each critic parameter to [-c, c] for Lipschitz continuity.</summary>
+    private void ClipWeights(IReadOnlyList<ILayer<T>> layers)
     {
-        var allLayers = BuildMaskDiscLayerList();
+        T lo = NumOps.FromDouble(-WGanClip);
+        T hi = NumOps.FromDouble(WGanClip);
+        foreach (var layer in layers)
+        {
+            var ps = layer.GetParameters();
+            if (ps.Length == 0) continue;
+            bool changed = false;
+            for (int i = 0; i < ps.Length; i++)
+            {
+                if (NumOps.GreaterThan(ps[i], hi)) { ps[i] = hi; changed = true; }
+                else if (NumOps.LessThan(ps[i], lo)) { ps[i] = lo; changed = true; }
+            }
+            if (changed) layer.UpdateParameters(ps);
+        }
     }
 
-    /// <summary>
-    /// Builds a combined list of data discriminator layers for gradient-penalty
-    /// and related analyses.
-    /// </summary>
+    private IReadOnlyList<ILayer<T>> BuildDataGenLayerList()
+    {
+        var all = new List<ILayer<T>>(Layers);
+        all.AddRange(_dataGenBNLayers);
+        return all;
+    }
+
+    private IReadOnlyList<ILayer<T>> BuildMaskGenLayerList()
+    {
+        var all = new List<ILayer<T>>(_maskGenLayers);
+        all.AddRange(_maskGenBNLayers);
+        return all;
+    }
+
     private IReadOnlyList<ILayer<T>> BuildDataDiscLayerList()
     {
-        var allLayers = new List<ILayer<T>>();
-        for (int i = 0; i < _dataDiscDropoutLayers.Count; i++)
-        {
-            allLayers.Add(_dataDiscLayers[i]);
-            allLayers.Add(_dataDiscDropoutLayers[i]);
-        }
-        allLayers.Add(_dataDiscLayers[^1]); // output layer
-        return allLayers;
+        var all = new List<ILayer<T>>(_dataDiscLayers);
+        all.AddRange(_dataDiscDropoutLayers);
+        return all;
     }
 
-    /// <summary>
-    /// Builds a combined list of mask discriminator layers for gradient-penalty
-    /// and related analyses.
-    /// </summary>
     private IReadOnlyList<ILayer<T>> BuildMaskDiscLayerList()
     {
-        var allLayers = new List<ILayer<T>>();
-        for (int i = 0; i < _maskDiscDropoutLayers.Count; i++)
-        {
-            allLayers.Add(_maskDiscLayers[i]);
-            allLayers.Add(_maskDiscDropoutLayers[i]);
-        }
-        allLayers.Add(_maskDiscLayers[^1]); // output layer
-        return allLayers;
-    }
-
-
-    #endregion
-
-    #region Backward Passes
-
-    private void BackwardMaskGenerator(Tensor<T> gradOutput)
-    {
-    }
-
-    private void UpdateDataGeneratorParameters(T learningRate)
-    {
-        foreach (var l in Layers) l.UpdateParameters(learningRate);
-        foreach (var bn in _dataGenBNLayers) bn.UpdateParameters(learningRate);
-    }
-
-    private void UpdateDataDiscriminatorParameters(T learningRate)
-    {
-        foreach (var l in _dataDiscLayers) l.UpdateParameters(learningRate);
-    }
-
-    private void UpdateMaskGeneratorParameters(T learningRate)
-    {
-        foreach (var l in _maskGenLayers) l.UpdateParameters(learningRate);
-        foreach (var bn in _maskGenBNLayers) bn.UpdateParameters(learningRate);
-    }
-
-    private void UpdateMaskDiscriminatorParameters(T learningRate)
-    {
-        foreach (var l in _maskDiscLayers) l.UpdateParameters(learningRate);
+        var all = new List<ILayer<T>>(_maskDiscLayers);
+        all.AddRange(_maskDiscDropoutLayers);
+        return all;
     }
 
     #endregion
@@ -679,8 +668,25 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // MisGAN uses its own specialized training via Fit/FitAsync.
-        // Standard Train is not applicable for GAN-style training.
+        // The full adversarial training (data + mask GANs) runs in Fit. This
+        // single-step entry point trains the data generator (the Layers chain,
+        // i.e. what Predict runs) to reconstruct the target via a tape-connected
+        // step, satisfying the NeuralNetworkBase training contract. The previous
+        // body was a no-op, so the generated training invariants saw no change.
+        SetTrainingMode(true);
+        try
+        {
+            using var tape = new GradientTape<T>();
+            var output = DataGeneratorForward(input);
+            var flatOut = output.Rank == 1 ? output : Engine.Reshape(output, new[] { output.Length });
+            var target = expectedOutput.Rank == 1 ? expectedOutput : Engine.Reshape(expectedOutput, new[] { expectedOutput.Length });
+            var loss = ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(flatOut, target)));
+            TapeStepOver(tape, loss, BuildDataGenLayerList());
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc />
@@ -762,108 +768,48 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
     #region Activation Functions
 
-    private Tensor<T> ApplyReLU(Tensor<T> input)
-    {
-        var result = new Tensor<T>(input._shape);
-        for (int i = 0; i < input.Length; i++)
-            result[i] = NumOps.GreaterThan(input[i], NumOps.Zero) ? input[i] : NumOps.Zero;
-        return result;
-    }
+    private Tensor<T> ApplyReLU(Tensor<T> input) => Engine.TensorReLU(input);
 
-    private static Tensor<T> ApplyReLUDerivativeStatic(Tensor<T> gradOutput, Tensor<T> preActivation,
-        INumericOperations<T> numOps)
-    {
-        int len = Math.Min(gradOutput.Length, preActivation.Length);
-        var result = new Tensor<T>(gradOutput._shape);
-        for (int i = 0; i < len; i++)
-            result[i] = numOps.ToDouble(preActivation[i]) > 0 ? gradOutput[i] : numOps.Zero;
-        return result;
-    }
 
-    private Tensor<T> ApplyLeakyReLU(Tensor<T> input)
-    {
-        var result = new Tensor<T>(input._shape);
-        T slope = NumOps.FromDouble(0.2);
-        for (int i = 0; i < input.Length; i++)
-        {
-            double val = NumOps.ToDouble(input[i]);
-            result[i] = val > 0 ? input[i] : NumOps.Multiply(slope, input[i]);
-        }
-        return result;
-    }
+    private Tensor<T> ApplyLeakyReLU(Tensor<T> input) => Engine.TensorLeakyReLU(input, NumOps.FromDouble(0.2));
 
-    private Tensor<T> ApplyLeakyReLUDerivative(Tensor<T> gradOutput, Tensor<T> preActivation)
-    {
-        int len = Math.Min(gradOutput.Length, preActivation.Length);
-        var result = new Tensor<T>(gradOutput._shape);
-        T slope = NumOps.FromDouble(0.2);
-        for (int i = 0; i < len; i++)
-        {
-            result[i] = NumOps.GreaterThan(preActivation[i], NumOps.Zero)
-                ? gradOutput[i]
-                : NumOps.Multiply(slope, gradOutput[i]);
-        }
-        return result;
-    }
 
-    private Tensor<T> ApplySigmoid(Tensor<T> input)
-    {
-        var result = new Tensor<T>(input._shape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            double val = NumOps.ToDouble(input[i]);
-            double clampedVal = Math.Min(Math.Max(val, -20.0), 20.0);
-            result[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-clampedVal)));
-        }
-        return result;
-    }
+    private Tensor<T> ApplySigmoid(Tensor<T> input) => Engine.TensorSigmoid(input);
 
     private Tensor<T> ApplyOutputActivations(Tensor<T> output)
     {
         if (_transformer is null) return output;
 
-        var result = new Tensor<T>(output._shape);
+        var flat = output.Rank == 1 ? output : Engine.Reshape(output, new[] { output.Length });
+        var blocks = new List<Tensor<T>>();
         int idx = 0;
-
-        for (int col = 0; col < _columns.Count && idx < output.Length; col++)
+        for (int col = 0; col < _columns.Count && idx < flat.Length; col++)
         {
             var transform = _transformer.GetTransformInfo(col);
-
             if (transform.IsContinuous)
             {
-                if (idx < output.Length)
-                {
-                    double val = NumOps.ToDouble(output[idx]);
-                    result[idx] = NumOps.FromDouble(Math.Tanh(val));
-                    idx++;
-                }
-
+                // tanh on the normalized value scalar.
+                blocks.Add(Engine.TensorTanh(Engine.TensorSlice(flat, new[] { idx }, new[] { 1 })));
+                idx++;
                 int numModes = transform.Width - 1;
                 if (numModes > 0)
                 {
-                    ApplySoftmaxBlock(output, result, ref idx, numModes);
+                    blocks.Add(Engine.TensorSoftmax(Engine.TensorSlice(flat, new[] { idx }, new[] { numModes }), axis: 0));
+                    idx += numModes;
                 }
             }
             else
             {
-                ApplySoftmaxBlock(output, result, ref idx, transform.Width);
+                blocks.Add(Engine.TensorSoftmax(Engine.TensorSlice(flat, new[] { idx }, new[] { transform.Width }), axis: 0));
+                idx += transform.Width;
             }
         }
 
-        return result;
+        if (blocks.Count == 0) return flat;
+        if (idx < flat.Length) blocks.Add(Engine.TensorSlice(flat, new[] { idx }, new[] { flat.Length - idx }));
+        return Engine.TensorConcatenate(blocks.ToArray(), axis: 0);
     }
 
-    private void ApplySoftmaxBlock(Tensor<T> input, Tensor<T> output, ref int idx, int count)
-    {
-        if (count <= 0) return;
-        int actualCount = Math.Min(count, input.Length - idx);
-        if (actualCount <= 0) return;
-        var slice = new Tensor<T>([actualCount]);
-        input.Data.Span.Slice(idx, actualCount).CopyTo(slice.Data.Span);
-        var result = Engine.Softmax(slice, -1);
-        result.Data.Span.CopyTo(output.Data.Span.Slice(idx, actualCount));
-        idx += actualCount;
-    }
 
     #endregion
 
@@ -939,11 +885,9 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
     private Tensor<T> ElementwiseMultiplyTensor(Tensor<T> a, Tensor<T> b)
     {
-        int len = Math.Min(a.Length, b.Length);
-        var result = new Tensor<T>(a._shape);
-        for (int i = 0; i < len; i++)
-            result[i] = NumOps.Multiply(a[i], b[i]);
-        return result;
+        var a1 = a.Rank == 1 ? a : Engine.Reshape(a, new[] { a.Length });
+        var b1 = b.Rank == 1 ? b : Engine.Reshape(b, new[] { b.Length });
+        return Engine.TensorMultiply(a1, b1);
     }
 
     private static Vector<T> GetRow(Matrix<T> matrix, int row)
@@ -970,12 +914,11 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         return v;
     }
 
-    private static Tensor<T> ConcatTensors(Tensor<T> a, Tensor<T> b)
+    private Tensor<T> ConcatTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>([a.Length + b.Length]);
-        for (int i = 0; i < a.Length; i++) result[i] = a[i];
-        for (int i = 0; i < b.Length; i++) result[a.Length + i] = b[i];
-        return result;
+        var a1 = a.Rank == 1 ? a : Engine.Reshape(a, new[] { a.Length });
+        var b1 = b.Rank == 1 ? b : Engine.Reshape(b, new[] { b.Length });
+        return Engine.TensorConcatenate(new[] { a1, b1 }, axis: 0);
     }
 
     private static Tensor<T> CloneTensor(Tensor<T> source)
