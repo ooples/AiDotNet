@@ -206,25 +206,7 @@ public class ByteLMV256Issue1380Tests
         return entropySum / total;
     }
 
-    // QUARANTINED from the default suite (passes in isolation; re-enable once the leak below is
-    // fixed). This V=256 BuildAsync-collapse guard is COVERED by the green, CI-running
-    // BuildAsyncFacadeTransformerLMTests.BuildAsync_V256_ByteLM_FacadeEntry_ProducesNonUniformOutput,
-    // which asserts the same contract (a V=256 byte-LM trained via BuildAsync produces non-uniform
-    // output) through the full public facade. This test fails ONLY in the full in-process suite,
-    // never in isolation: a sibling BuildAsync test that runs first (the serialized
-    // NonParallelIntegration collection puts "BuildAsyncFacade…" before "ByteLMV256…") leaves a
-    // PRE-EXISTING AiDotNet.Tensors process-global state leak that corrupts this test's subsequent
-    // V=256 training into a uniform collapse — a false #1380 failure. Verified the leak is not
-    // reachable from the test side: CompiledTapeTrainingStep<T>.Invalidate() + WeightRegistry.Reset()
-    // (the resets NeuralNetworkModelTestBase uses) do NOT prevent the collapse, and CompiledModelCache
-    // is a per-builder instance (not a global), so the leaked state lives deeper in Tensors. Fixing it
-    // (BuildAsync must scope/restore the global state it mutates) is tracked as a Tensors-side issue.
-    [Fact(Skip = "Pre-existing AiDotNet.Tensors BuildAsync process-global state leak corrupts this " +
-                 "V=256 training into a uniform collapse when a sibling BuildAsync test runs before it " +
-                 "in the same process; passes in isolation, cannot be reset test-side. Same V=256 " +
-                 "BuildAsync non-collapse contract is covered by the green " +
-                 "BuildAsyncFacadeTransformerLMTests.BuildAsync_V256_ByteLM_FacadeEntry_ProducesNonUniformOutput. " +
-                 "Re-enable once the Tensors-side leak is fixed.", Timeout = 300_000)]
+    [Fact(Timeout = 300_000)]
     public async Task BuildAsync_V256_ByteLM_OutputDoesNotCollapseToUniform()
     {
         // xUnit's [Fact(Timeout = ...)] is only enforced for ASYNC tests —
@@ -236,6 +218,15 @@ public class ByteLMV256Issue1380Tests
         // onto the thread pool so the rest of the body sits inside an
         // awaitable scope without changing the actual test workload.
         await Task.Yield();
+
+        // Defensive CPU pin. The whole test assembly runs CPU-only (TestAssemblyDeterminismInit
+        // sets AIDOTNET_DISABLE_GPU + ResetToCpu, and AiModelBuilder's default GPU auto-detect now
+        // honors that opt-out). This guards against an explicit-GPU-config test (which bypasses the
+        // opt-out) leaving the process on the DirectGpuTensorEngine — on GPU the Adam update path
+        // zeroes parameters, which previously collapsed this V=256 training to uniform output.
+        if (AiDotNet.Tensors.Engines.AiDotNetEngine.Current is not AiDotNet.Tensors.Engines.CpuEngine)
+            AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+
         var (arch, xTrain, yTrain) = BuildFixture();
 
         // Reference: per-sample model.Train driver. The consumer ticket

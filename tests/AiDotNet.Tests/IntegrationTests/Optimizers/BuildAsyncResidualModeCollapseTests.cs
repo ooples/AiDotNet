@@ -248,38 +248,24 @@ public class BuildAsyncResidualModeCollapseTests
     /// </list>
     /// </para>
     /// </summary>
-    // QUARANTINED from the default suite (still runnable on demand / re-enable once the leak
-    // below is fixed). This is a DIAGNOSTIC whose exploratory job is done: the #1380 residual
-    // mode-collapse root cause (missing encoder/decoder residual connections) is found and fixed.
-    // Its two enduring regression GUARDS are already covered by tests that DO run in CI:
-    //   • Arm 0 (per-sample Train reaches above uniform) ⊂ TransformerTrainConvergenceTests
-    //     (memorise-fact: per-sample training drives P(target) > 0.50 — strictly stronger), and
-    //   • Arm 1 (the BuildAsync optimizer path moves output off uniform) =
-    //     BuildAsyncFacadeTransformerLMTests (asserts BuildAsync moves entropy off uniform).
-    //
-    // Why quarantined: this test runs ~13s standalone but >600s — tripping the timeout and
-    // crashing the test host (which then cascade-fails the whole shard) — whenever an
-    // AiModelBuilder.BuildAsync test runs before it in the same process (the serialized
-    // NonParallelIntegration collection guarantees this: "BuildAsyncFacade…" sorts before
-    // "BuildAsyncResidual…"). Reproduced and root-caused to a PRE-EXISTING process-global
-    // state leak in BuildAsync: after it runs, every subsequent in-process training does ~10×
-    // more work per step on a single core. Verified that resetting every reachable global from
-    // the test side does NOT restore the fast path — AiDotNetEngine.SetDeterministicMode(false),
-    // BlasProvider.SetDeterministicMode(false), CompiledTapeTrainingStep<T>.Invalidate(),
-    // WeightRegistry.Reset(), CpuParallelSettings.MaxDegreeOfParallelism, and
-    // TensorCodecOptions.EnableCompilation were all tried with no effect. The leaked state lives
-    // inside AiDotNet.Tensors and cannot be cleared from here; fixing it (BuildAsync must scope/
-    // restore the global engine state it mutates) is tracked as a separate Tensors-side issue.
-    // The lighter memorise-fact convergence test tolerates the same ~10× slowdown (80 train calls
-    // vs this test's 3840), which is why only this heavy diagnostic exceeds the budget.
-    [Fact(Skip = "Pre-existing AiDotNet.Tensors BuildAsync process-global state leak makes this " +
-                 "heavy diagnostic time out (~10x slowdown) when any BuildAsync test runs before it " +
-                 "in the same process; cannot be reset test-side. Guards covered by " +
-                 "TransformerTrainConvergenceTests + BuildAsyncFacadeTransformerLMTests. " +
-                 "Re-enable once the Tensors-side leak is fixed.", Timeout = 600_000)]
+    [Fact(Timeout = 600_000)]
     public async Task BuildAsync_ResidualModeCollapse_EightArmDiagnostic()
     {
         await Task.Yield();
+
+        // Defensive CPU pin. Root cause (confirmed via dotnet-trace): on a GPU-equipped dev box,
+        // AiModelBuilder.BuildAsync's default path auto-detected the OpenCL GPU and left
+        // AiDotNetEngine.Current = DirectGpuTensorEngine for the rest of the process; this
+        // diagnostic's tiny per-sample tensor ops then ran on the GPU with a host<->device copy PER
+        // OP, inflating it from ~13s to >600s (trace dominated by DirectOpenClBuffer.CopyTo/FromHost
+        // + StreamingWorkerPool spin) — NOT a CPU-threading issue, which is why no determinism/
+        // BLAS/MaxDOP reset helped. CI has no GPU so it never reproduced there. The assembly now
+        // runs CPU-only (TestAssemblyDeterminismInit + AiModelBuilder honoring AIDOTNET_DISABLE_GPU);
+        // this reset additionally guards against an explicit-GPU-config test leaving the GPU engine
+        // active before this one (mirrors NeuralNetworkModelTestBase, which integration tests don't
+        // inherit).
+        if (AiDotNet.Tensors.Engines.AiDotNetEngine.Current is not AiDotNet.Tensors.Engines.CpuEngine)
+            AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
 
         var (arch, xTrain, yTrain) = BuildFixture();
 
