@@ -825,6 +825,32 @@ internal class InferenceOptimizer<T>
                     InferenceDiagnostics.RecordException("InferenceOptimizer", "WeightOnlyQuantization", ex, "MHAQuantizationFailed;FallbackToFP");
                 }
             }
+            // Quantize the attention hosted inside a composite encoder block (the
+            // default layout since LayerHelper emits TransformerEncoderBlock) — the
+            // top-level MHA case above never sees it. The block's FFN Dense sublayers
+            // are NOT quantized here: the block plumbs them through concretely-typed
+            // DenseLayer fields (parameters/serialization), so hosting a quantized
+            // wrapper needs a block-API widening like the attention slot received.
+            else if (model.Layers[i] is TransformerEncoderBlock<float> quantEncBlock
+                     && quantEncBlock.AttentionLayer is MultiHeadAttentionLayer<float> blockMha)
+            {
+                try
+                {
+                    if (!blockMha.IsShapeResolved)
+                        blockMha.ResolveFromShape(new[] { 1, quantEncBlock.HiddenSize });
+
+                    var replacement = new QuantizedAttentionLayer(blockMha, mode);
+                    if (replacement is LayerBase<float> typedReplacement)
+                    {
+                        quantEncBlock.ReplaceAttention(typedReplacement);
+                        any = true;
+                    }
+                }
+                catch (InvalidOperationException ex)
+                {
+                    InferenceDiagnostics.RecordException("InferenceOptimizer", "WeightOnlyQuantization", ex, "BlockMHAQuantizationFailed;FallbackToFP");
+                }
+            }
             // Quantize GroupedQueryAttentionLayer (supports INT8, FP8, NF4)
             else if (model.Layers[i] is GroupedQueryAttentionLayer<float> gqa)
             {
