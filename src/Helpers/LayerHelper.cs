@@ -1883,7 +1883,21 @@ public static class LayerHelper<T>
         // Add embedding layer for text input
         if (vocabularySize > 0)
         {
-            yield return Wire(new EmbeddingLayer<T>(vocabularySize, modelDimension));
+            // This embedding is created only for token-ID (text) input (vocabularySize > 0),
+            // so its input is always discrete indices. Force Indices mode rather than relying
+            // on the Auto heuristic, which can mis-classify a small-integer token tensor
+            // (e.g. [batch, seq] where seq coincides with a small vocab) as continuous
+            // features and project it down to rank-2 [batch, dim] — collapsing the sequence
+            // axis and breaking the downstream SequenceTokenSliceLayer / pooling that expects
+            // rank-3 [batch, seq, dim].
+            yield return Wire(new EmbeddingLayer<T>(vocabularySize, modelDimension)
+            {
+                InputMode = EmbeddingInputMode.Indices,
+                // Vaswani §3.4: scale embeddings by sqrt(d_model) when positional encoding
+                // is added next, so the (small) token embeddings aren't drowned out by the
+                // fixed-magnitude sinusoidal positional signal.
+                ScaleBySqrtDimension = usePositionalEncoding,
+            });
         }
         else
         {
@@ -1915,79 +1929,38 @@ public static class LayerHelper<T>
             yield return Wire(new DropoutLayer<T>(dropoutRate));
         }
 
-        // Add encoder layers
+        // Add encoder layers. Each is a canonical Post-LN transformer block
+        // (Vaswani 2017 §3.1): self-attention and FFN sublayers EACH wrapped in
+        // a residual connection, with LayerNorm applied to the sublayer INPUT
+        // (Pre-LN) — y = x + SelfAttn(LayerNorm(x)), z = y + FFN(LayerNorm(y)).
+        // The residuals were missing from the prior flat MHA→Norm→FFN→Norm
+        // sequence, which let each block's output replace (rather than refine)
+        // the hidden state — washing out the input signal ~60× per layer and
+        // mode-collapsing the network to input-independent output (root cause of
+        // issue #1380). TransformerEncoderBlock restores them; Pre-LN ordering
+        // trains stably without LR warmup (the modern GPT-2/LLaMA standard).
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            // Self-attention block
-            yield return Wire(new MultiHeadAttentionLayer<T>(numHeads, (modelDimension) / (numHeads),
-                activationFunction: new IdentityActivation<T>()));
-
-            // Add normalization
-            yield return Wire(new LayerNormalizationLayer<T>());
-
-            // Add dropout if specified (Wire'd — see #1383 comment above).
-            if (dropoutRate > 0)
-            {
-                yield return Wire(new DropoutLayer<T>(dropoutRate));
-            }
-
-            // Feed-forward network
-            yield return Wire(new DenseLayer<T>(feedForwardDimension, new ReLUActivation<T>() as IActivationFunction<T>));
-            yield return Wire(new DenseLayer<T>(modelDimension, new IdentityActivation<T>() as IActivationFunction<T>));
-
-            // Add normalization
-            yield return Wire(new LayerNormalizationLayer<T>());
-
-            // Add dropout if specified (Wire'd — see #1383 comment above).
-            if (dropoutRate > 0)
-            {
-                yield return Wire(new DropoutLayer<T>(dropoutRate));
-            }
+            yield return Wire(new TransformerEncoderBlock<T>(
+                hiddenSize: modelDimension,
+                numHeads: numHeads,
+                ffnDim: feedForwardDimension,
+                dropoutRate: dropoutRate));
         }
 
-        // Add decoder layers if needed
+        // Add decoder layers if needed. Each is a Pre-LN decoder block (self-attention,
+        // cross-attention, FFN — each residual + LayerNorm). Like the encoder, the
+        // residual connections were missing from the prior flat sequence, contributing
+        // to the #1380 signal washout; TransformerDecoderBlock restores them.
         if (numDecoderLayers > 0)
         {
             for (int i = 0; i < numDecoderLayers; i++)
             {
-                // Self-attention block
-                yield return Wire(new MultiHeadAttentionLayer<T>(numHeads, (modelDimension) / (numHeads),
-                    activationFunction: new IdentityActivation<T>()));
-
-                // Add normalization
-                yield return Wire(new LayerNormalizationLayer<T>());
-
-                // Add dropout if specified (Wire'd — see #1383 comment above).
-                if (dropoutRate > 0)
-                {
-                    yield return Wire(new DropoutLayer<T>(dropoutRate));
-                }
-
-                // Cross-attention block
-                yield return Wire(new MultiHeadAttentionLayer<T>(numHeads, (modelDimension) / (numHeads),
-                    activationFunction: new IdentityActivation<T>()));
-
-                // Add normalization
-                yield return Wire(new LayerNormalizationLayer<T>());
-
-                // Add dropout if specified (Wire'd — see #1383 comment above).
-                if (dropoutRate > 0)
-                {
-                    yield return Wire(new DropoutLayer<T>(dropoutRate));
-                }
-
-                // Feed-forward network
-                yield return Wire(new DenseLayer<T>(feedForwardDimension, new ReLUActivation<T>() as IActivationFunction<T>));
-                yield return Wire(new DenseLayer<T>(modelDimension, new IdentityActivation<T>() as IActivationFunction<T>));
-
-                // Add normalization
-                yield return Wire(new LayerNormalizationLayer<T>());
-
-                // Add dropout if specified (Wire'd — see #1383 comment above).
-                if (dropoutRate > 0)
-                {
-                    yield return Wire(new DropoutLayer<T>(dropoutRate));
-                }
+                yield return Wire(new TransformerDecoderBlock<T>(
+                    hiddenSize: modelDimension,
+                    numHeads: numHeads,
+                    ffnDim: feedForwardDimension,
+                    dropoutRate: dropoutRate));
             }
         }
 
