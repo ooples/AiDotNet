@@ -196,8 +196,12 @@ public class TransformerCustomLayerValidationIssue1317IntegrationTests
     {
         var model = new Transformer<float>(CreateDefaultTransformerArchitecture());
 
-        Assert.Contains(model.Layers, layer => layer is MultiHeadAttentionLayer<float>);
-        Assert.Contains(model.Layers, layer => layer is LayerNormalizationLayer<float>);
+        // The default transformer encoder is now assembled as TransformerEncoderBlock
+        // composites (the canonical Pre-LN block: self-attention + FFN, each wrapped in
+        // a residual connection with LayerNorm — #1380). Self-attention and layer
+        // normalization live INSIDE that block rather than as separate top-level layers,
+        // so assert the standard encoder block is present (it encapsulates both).
+        Assert.Contains(model.Layers, layer => layer is TransformerEncoderBlock<float>);
     }
 
     [Fact]
