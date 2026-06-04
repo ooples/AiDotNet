@@ -369,12 +369,23 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var oneMinusBeta1 = NumOps.Subtract(NumOps.One, _currentBeta1);
         var oneMinusBeta2 = NumOps.Subtract(NumOps.One, _currentBeta2);
 
+        // GPU-resident step (AIDOTNET_GPU_ADAM=1): see AdamOptimizer.Step. Gated off; falls back to the CPU
+        // tensor-op path per-parameter when not GPU-resident.
+        bool gpuAdam = typeof(T) == typeof(float)
+            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
+            && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
+
         foreach (var param in context.Parameters)
         {
             if (!context.Gradients.TryGetValue(param, out var grad))
                 continue;
 
-            if (!_tapeMomentum.TryGetValue(param, out var m)) { m = new Tensor<T>(param._shape); _tapeMomentum[param] = m; }
+            if (!_tapeMomentum.TryGetValue(param, out var m)) { m = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) m.AsWritableSpan().Clear(); _tapeMomentum[param] = m; }
+
+            if (gpuAdam && param.Length == grad.Length
+                && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryLionStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)m,
+                    (float)NumOps.ToDouble(CurrentLearningRate), (float)NumOps.ToDouble(_currentBeta1), (float)NumOps.ToDouble(_currentBeta2), (float)_options.WeightDecay))
+                continue;
 
             // Interpolate: c = beta1 * m + (1 - beta1) * grad
             var interpolated = Engine.TensorAdd(Engine.TensorMultiplyScalar(m, _currentBeta1), Engine.TensorMultiplyScalar(grad, oneMinusBeta1));
