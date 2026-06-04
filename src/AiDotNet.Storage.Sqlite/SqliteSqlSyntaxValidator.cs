@@ -31,7 +31,7 @@ public sealed class SqliteSqlSyntaxValidator : ISqlSyntaxValidator
     /// to propagate so the caller can fall back to generic validation rather than treating a
     /// load failure as invalid SQL.
     /// </remarks>
-    public bool IsValidSql(string sql)
+    public bool IsValidSql(string? sql)
     {
         try
         {

@@ -192,9 +192,10 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 ?? throw new InvalidOperationException(
                     "Homomorphic encryption is enabled (HomomorphicEncryption.Enabled = true) but no " +
                     "IHomomorphicEncryptionProvider<T> was supplied. The Microsoft SEAL provider now ships in " +
-                    "the opt-in AiDotNet.Privacy.HE package: add a reference to AiDotNet.Privacy.HE and pass " +
+                    "the opt-in AiDotNet.Privacy.HE package: add a reference to AiDotNet.Privacy.HE and supply " +
                     "`new SealHomomorphicEncryptionProvider<T>()` (or your own IHomomorphicEncryptionProvider<T>) " +
-                    "to the InMemoryFederatedTrainer constructor.");
+                    "— via AiModelBuilder.ConfigureFederatedLearning(...) when using the facade, or directly to " +
+                    "the InMemoryFederatedTrainer constructor.");
         }
         var encryptedIndices = useHomomorphicEncryption && effectiveHeOptions != null
             ? ResolveEncryptedIndices(effectiveHeOptions, (int)InterfaceGuard.Parameterizable(GetGlobalModel()).ParameterCount, heMode)

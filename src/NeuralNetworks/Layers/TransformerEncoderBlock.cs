@@ -62,10 +62,10 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
-    /// Initialises a Post-LN transformer encoder block.
+    /// Initialises a Pre-LN transformer encoder block.
     /// </summary>
     /// <param name="hiddenSize">Model (input/output) feature dimension.</param>
-    /// <param name="numHeads">Number of self-attention heads. Must divide <paramref name="hiddenSize"/>.</param>
+    /// <param name="numHeads">Number of self-attention heads. Must divide <paramref name="hiddenSize"/> exactly.</param>
     /// <param name="ffnDim">Inner dimension of the feed-forward network (typically 4× hiddenSize).</param>
     /// <param name="dropoutRate">Dropout probability applied to each sublayer's output before the
     /// residual add (Vaswani §5.4). 0 disables dropout.</param>
@@ -78,6 +78,14 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>
             throw new ArgumentOutOfRangeException(nameof(numHeads));
         if (ffnDim <= 0)
             throw new ArgumentOutOfRangeException(nameof(ffnDim));
+        // numHeads must divide hiddenSize EXACTLY — the per-head dimension below is hiddenSize /
+        // numHeads, and integer division would otherwise silently truncate (e.g. 32/5 = 6 → the
+        // attention would operate on 30 of the 32 features, producing wrong results rather than an
+        // error). Fail fast with both values so the misconfiguration is obvious.
+        if (hiddenSize % numHeads != 0)
+            throw new ArgumentException(
+                $"hiddenSize ({hiddenSize}) must be divisible by numHeads ({numHeads}); " +
+                $"the per-head dimension is hiddenSize / numHeads.", nameof(numHeads));
 
         _hiddenSize = hiddenSize;
         _numHeads = numHeads;
