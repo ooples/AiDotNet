@@ -701,10 +701,13 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// and weight streaming).
     /// </summary>
     /// <remarks>
-    /// Gradient checkpointing is intentionally bypassed on the decoder-aware path: its
-    /// single-input segment chain cannot express the encoder→decoder fan-in, and correct
-    /// cross-attention outranks the opt-in memory saving. All ops in the walk route
-    /// through registered sublayers/Engine, so the gradient tape records them as usual.
+    /// Gradient checkpointing IS honored on the decoder-aware path, but with a
+    /// decoder-specific segmentation (see <see cref="RunCheckpointedLayerWalk"/>): the
+    /// encoder→decoder fan-in (cross-attention consuming the frozen encoder output) must
+    /// never cross a checkpoint-segment boundary, or the recompute-time vector-Jacobian
+    /// product — which flows only through each segment's single chain input — silently
+    /// drops the cross-attention gradient contribution. All ops in the walk route through
+    /// registered sublayers/Engine, so the gradient tape records them as usual.
     /// </remarks>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
@@ -724,7 +727,146 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         // Mirror the base method's reproducibility contract (dropout masks derive from
         // the wired per-layer seeds) before running the decoder-aware walk.
         EnsureLayerRandomSeedsWired();
+
+        // Mirror the base method's checkpointing opt-in resolution: the builder-set
+        // segment size wins; the memory-manager fallback preserves behavior for users
+        // who configured via EnableMemoryManagement directly (same sqrt(N) heuristic).
+        int segmentSize = GradientCheckpointingSegmentSize;
+        if (segmentSize <= 0 && _memoryManager is not null && _memoryManager.IsCheckpointingEnabled)
+        {
+            segmentSize = Math.Max(1, (int)Math.Sqrt(Math.Max(1, Layers.Count)));
+        }
+        if (segmentSize > 0 && Layers.Count > segmentSize)
+        {
+            return RunCheckpointedLayerWalk(input, segmentSize);
+        }
+
         return RunLayerWalk(input);
+    }
+
+    /// <summary>
+    /// Mutable cell that carries the frozen encoder output into decoder layer-forward
+    /// delegates. A plain captured local can't work here: the checkpoint recompute
+    /// re-executes the decoder segment during backward, and the context the decoders
+    /// read must be REBOUND to the recomputed segment input (reference-equal to the
+    /// inner tape's source tensor) for the cross-attention VJP to be captured.
+    /// </summary>
+    private sealed class EncoderContextHolder
+    {
+        public Tensor<T>? Context;
+    }
+
+    /// <summary>
+    /// Gradient-checkpointed variant of <see cref="RunLayerWalk"/> for encoder-decoder
+    /// (and decoder-only) stacks. Produces the same outputs and the same gradients as the
+    /// un-checkpointed walk while only storing segment-boundary activations.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Why the walk is split into regions.</b>
+    /// <see cref="AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing{T}"/> records each
+    /// segment as a single-input op: during backward it recomputes the segment from its
+    /// stored boundary input and computes the VJP <i>w.r.t. that input only</i>. Decoder
+    /// cross-attention additionally consumes the frozen encoder output — if that tensor
+    /// crossed a segment boundary as a side-channel (a captured closure variable), its
+    /// gradient contribution would be silently dropped. The fix is structural:
+    /// </para>
+    /// <list type="number">
+    /// <item><b>Region A</b> — layers up to and including the encoder-context capture point
+    /// (the LAST MultiHeadAttention/TransformerEncoderBlock before the first decoder, the
+    /// same rule <see cref="RunLayerWalk"/> uses). Checkpointed normally: no fan-in exists
+    /// here. Region A's output IS the encoder context.</item>
+    /// <item><b>Region B</b> — everything from the capture point (exclusive) through the
+    /// LAST decoder, as ONE segment whose input is the encoder context. The first delegate
+    /// rebinds the context holder to its own input, so during backward recompute the
+    /// decoders read a context reference-equal to the inner tape's source tensor and the
+    /// cross-attention VJP flows into the chain gradient correctly. The coarser segment
+    /// trades one extra forward of the decoder stack for gradient correctness.</item>
+    /// <item><b>Region C</b> — layers after the last decoder (e.g. the output projection).
+    /// No fan-in; checkpointed normally.</item>
+    /// </list>
+    /// <para>
+    /// Decoder-only stacks (no capture point) need no special segmentation: each decoder's
+    /// cross context falls back to its own running stream input (<c>holder.Context ?? x</c>
+    /// with a never-set holder), which is always recorded on the recompute tape.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> RunCheckpointedLayerWalk(Tensor<T> input, int segmentSize)
+    {
+        Tensor<T> mask = AttentionMask ?? Tensor<T>.CreateDefault(input._shape, NumOps.One);
+        var holder = new EncoderContextHolder();
+
+        int firstDecoderIdx = -1, lastDecoderIdx = -1;
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            if (Layers[i] is DecoderLayer<T> || Layers[i] is TransformerDecoderBlock<T>)
+            {
+                if (firstDecoderIdx < 0) firstDecoderIdx = i;
+                lastDecoderIdx = i;
+            }
+        }
+
+        // Same capture rule as RunLayerWalk: the last encoder representation before the
+        // first decoder. -1 means decoder-only (no encoder context to freeze).
+        int captureIdx = -1;
+        for (int i = 0; i < firstDecoderIdx; i++)
+        {
+            if (Layers[i] is MultiHeadAttentionLayer<T> || Layers[i] is TransformerEncoderBlock<T>)
+                captureIdx = i;
+        }
+
+        Func<Tensor<T>, Tensor<T>> BuildLayerFunc(int idx)
+        {
+            var layer = Layers[idx];
+            if (layer is DecoderLayer<T> decoderLayer)
+                return x => decoderLayer.Forward(x, holder.Context ?? x, mask);
+            if (layer is TransformerDecoderBlock<T> decoderBlock)
+                return x => decoderBlock.Forward(x, holder.Context ?? x);
+            if (layer is AttentionLayer<T> attentionLayer)
+                return x => attentionLayer.Forward(x, mask);
+            return layer.Forward;
+        }
+
+        Func<Tensor<T>, Tensor<T>>[] BuildFuncs(int startIdx, int endIdxExclusive)
+        {
+            var fns = new Func<Tensor<T>, Tensor<T>>[endIdxExclusive - startIdx];
+            for (int i = startIdx; i < endIdxExclusive; i++)
+                fns[i - startIdx] = BuildLayerFunc(i);
+            return fns;
+        }
+
+        if (captureIdx < 0)
+        {
+            // Decoder-only: every cross context is the decoder's own intra-segment stream
+            // input, so the standard uniform segmentation is already gradient-correct.
+            return AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing<T>.Checkpoint(
+                BuildFuncs(0, Layers.Count), input, segmentSize);
+        }
+
+        // Region A: input → encoder context (checkpointed normally).
+        var encoderContext = AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing<T>.Checkpoint(
+            BuildFuncs(0, captureIdx + 1), input, segmentSize);
+
+        // Region B: (capture, lastDecoder] as ONE segment. Rebind the holder inside the
+        // segment's first delegate so the initial forward AND every backward recompute
+        // bind the context to the segment's (re)input — reference equality with the
+        // recompute tape's source is what makes the cross-attention VJP land in the
+        // chain gradient instead of being dropped.
+        var regionB = BuildFuncs(captureIdx + 1, lastDecoderIdx + 1);
+        var firstB = regionB[0];
+        regionB[0] = x =>
+        {
+            holder.Context = x;
+            return firstB(x);
+        };
+        var decoded = AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing<T>.Checkpoint(
+            regionB, encoderContext, segmentSize: regionB.Length);
+
+        // Region C: layers after the last decoder (checkpointed normally).
+        if (lastDecoderIdx + 1 >= Layers.Count)
+            return decoded;
+        return AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing<T>.Checkpoint(
+            BuildFuncs(lastDecoderIdx + 1, Layers.Count), decoded, segmentSize);
     }
 
     /// <summary>

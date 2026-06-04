@@ -825,31 +825,67 @@ internal class InferenceOptimizer<T>
                     InferenceDiagnostics.RecordException("InferenceOptimizer", "WeightOnlyQuantization", ex, "MHAQuantizationFailed;FallbackToFP");
                 }
             }
-            // Quantize the attention hosted inside a composite encoder block (the
+            // Quantize the sublayers hosted inside a composite encoder block (the
             // default layout since LayerHelper emits TransformerEncoderBlock) — the
-            // top-level MHA case above never sees it. The block's FFN Dense sublayers
-            // are NOT quantized here: the block plumbs them through concretely-typed
-            // DenseLayer fields (parameters/serialization), so hosting a quantized
-            // wrapper needs a block-API widening like the attention slot received.
-            else if (model.Layers[i] is TransformerEncoderBlock<float> quantEncBlock
-                     && quantEncBlock.AttentionLayer is MultiHeadAttentionLayer<float> blockMha)
+            // top-level MHA/Dense cases above never see them.
+            else if (model.Layers[i] is TransformerEncoderBlock<float> quantEncBlock)
             {
-                try
+                if (quantEncBlock.AttentionLayer is MultiHeadAttentionLayer<float> blockMha)
                 {
-                    if (!blockMha.IsShapeResolved)
-                        blockMha.ResolveFromShape(new[] { 1, quantEncBlock.HiddenSize });
-
-                    var replacement = new QuantizedAttentionLayer(blockMha, mode);
-                    if (replacement is LayerBase<float> typedReplacement)
+                    try
                     {
-                        quantEncBlock.ReplaceAttention(typedReplacement);
-                        any = true;
+                        if (!blockMha.IsShapeResolved)
+                            blockMha.ResolveFromShape(new[] { 1, quantEncBlock.HiddenSize });
+
+                        var replacement = new QuantizedAttentionLayer(blockMha, mode);
+                        if (replacement is LayerBase<float> typedReplacement)
+                        {
+                            quantEncBlock.ReplaceAttention(typedReplacement);
+                            any = true;
+                        }
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        InferenceDiagnostics.RecordException("InferenceOptimizer", "WeightOnlyQuantization", ex, "BlockMHAQuantizationFailed;FallbackToFP");
                     }
                 }
-                catch (InvalidOperationException ex)
+
+                any |= TryQuantizeBlockFfn(
+                    quantEncBlock.FfnUpLayer, quantEncBlock.HiddenSize, quantEncBlock.ReplaceFfnUp);
+                any |= TryQuantizeBlockFfn(
+                    quantEncBlock.FfnDownLayer, quantEncBlock.FfnDim, quantEncBlock.ReplaceFfnDown);
+            }
+            // Quantize the sublayers hosted inside a composite decoder block. The
+            // CROSS-attention slot is intentionally left untouched: its two-input
+            // (decoder stream, encoder output) forward contract is satisfied only by
+            // MultiHeadAttentionLayer's params-Forward; QuantizedAttentionLayer is
+            // single-input by design and would silently break true cross-attention.
+            else if (model.Layers[i] is TransformerDecoderBlock<float> quantDecBlock)
+            {
+                if (quantDecBlock.SelfAttentionLayer is MultiHeadAttentionLayer<float> selfMha)
                 {
-                    InferenceDiagnostics.RecordException("InferenceOptimizer", "WeightOnlyQuantization", ex, "BlockMHAQuantizationFailed;FallbackToFP");
+                    try
+                    {
+                        if (!selfMha.IsShapeResolved)
+                            selfMha.ResolveFromShape(new[] { 1, quantDecBlock.HiddenSize });
+
+                        var replacement = new QuantizedAttentionLayer(selfMha, mode);
+                        if (replacement is LayerBase<float> typedReplacement)
+                        {
+                            quantDecBlock.ReplaceSelfAttention(typedReplacement);
+                            any = true;
+                        }
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        InferenceDiagnostics.RecordException("InferenceOptimizer", "WeightOnlyQuantization", ex, "BlockSelfMHAQuantizationFailed;FallbackToFP");
+                    }
                 }
+
+                any |= TryQuantizeBlockFfn(
+                    quantDecBlock.FfnUpLayer, quantDecBlock.HiddenSize, quantDecBlock.ReplaceFfnUp);
+                any |= TryQuantizeBlockFfn(
+                    quantDecBlock.FfnDownLayer, quantDecBlock.FfnDim, quantDecBlock.ReplaceFfnDown);
             }
             // Quantize GroupedQueryAttentionLayer (supports INT8, FP8, NF4)
             else if (model.Layers[i] is GroupedQueryAttentionLayer<float> gqa)
@@ -876,6 +912,47 @@ internal class InferenceOptimizer<T>
     }
 
     /// <summary>
+    /// Quantizes one FFN sublayer hosted inside a composite transformer block
+    /// (<see cref="TransformerEncoderBlock{T}"/> / <see cref="TransformerDecoderBlock{T}"/>).
+    /// The top-level <c>DenseLayer</c> quantization case never sees these because they live
+    /// behind the block, not in <c>model.Layers</c>. Lazy (shape-unresolved) sublayers are
+    /// resolved from the block's own dimensions: the up-projection consumes the hidden size,
+    /// the down-projection consumes the FFN dimension. On success the quantized wrapper is
+    /// installed via the block's replace hook so tape parameter discovery and the cached
+    /// parameter count stay consistent.
+    /// </summary>
+    private static bool TryQuantizeBlockFfn(
+        LayerBase<float> ffn,
+        int inputDim,
+        Action<LayerBase<float>> replace)
+    {
+        if (ffn is not DenseLayer<float> denseFfn)
+            return false; // already quantized (idempotent re-run) or custom sublayer
+
+        try
+        {
+            if (!denseFfn.IsShapeResolved)
+                denseFfn.ResolveFromShape(new[] { 1, inputDim });
+
+            var replacement = denseFfn.VectorActivation != null
+                ? new QuantizedDenseLayer(denseFfn, denseFfn.VectorActivation)
+                : new QuantizedDenseLayer(denseFfn);
+
+            if (replacement is LayerBase<float> typedReplacement)
+            {
+                replace(typedReplacement);
+                return true;
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            InferenceDiagnostics.RecordException("InferenceOptimizer", "WeightOnlyQuantization", ex, "BlockFfnQuantizationFailed;FallbackToFP");
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Enumerates every layer that can carry attention work: each top-level layer, plus
     /// the attention sublayer hosted inside composite <see cref="TransformerEncoderBlock{T}"/>
     /// layers (the default encoder layout emitted by <c>LayerHelper.CreateDefaultTransformerLayers</c>).
@@ -890,6 +967,11 @@ internal class InferenceOptimizer<T>
             yield return layer;
             if (layer is TransformerEncoderBlock<T> block)
                 yield return block.AttentionLayer;
+            else if (layer is TransformerDecoderBlock<T> decoderBlock)
+            {
+                yield return decoderBlock.SelfAttentionLayer;
+                yield return decoderBlock.CrossAttentionLayer;
+            }
         }
     }
 

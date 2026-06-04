@@ -40,12 +40,20 @@ public partial class TransformerDecoderBlock<T> : LayerBase<T>
     private readonly int _ffnDim;
     private readonly double _dropoutRate;
 
-    private readonly MultiHeadAttentionLayer<T> _selfAttention;
+    // Widened from the concrete MultiHeadAttentionLayer/DenseLayer types so the
+    // inference optimizer / LoRA configuration can swap in wrapped implementations
+    // (QuantizedAttentionLayer, QuantizedDenseLayer, StandardLoRAAdapter) via the
+    // Replace* hooks below. All members used in this class are LayerBase<T> surface.
+    // NOTE: _crossAttention intentionally keeps its concrete type and has NO replace
+    // hook — its two-input (decoder stream, encoder output) forward contract is
+    // satisfied only by MultiHeadAttentionLayer's params-Forward; the layer-level
+    // wrappers are single-input by design and would silently break true cross-attention.
+    private LayerBase<T> _selfAttention;
     private readonly LayerNormalizationLayer<T> _norm1;
     private readonly MultiHeadAttentionLayer<T> _crossAttention;
     private readonly LayerNormalizationLayer<T> _norm2;
-    private readonly DenseLayer<T> _ffnUp;
-    private readonly DenseLayer<T> _ffnDown;
+    private LayerBase<T> _ffnUp;
+    private LayerBase<T> _ffnDown;
     private readonly LayerNormalizationLayer<T> _norm3;
     private readonly DropoutLayer<T>? _selfDropout;
     private readonly DropoutLayer<T>? _crossDropout;
@@ -104,6 +112,63 @@ public partial class TransformerDecoderBlock<T> : LayerBase<T>
     public int FfnDim => _ffnDim;
     /// <summary>Dropout probability — persisted for deserialization.</summary>
     public double DropoutRate => _dropoutRate;
+
+    /// <summary>The block's current self-attention sublayer (replaceable via <see cref="ReplaceSelfAttention"/>).</summary>
+    public LayerBase<T> SelfAttentionLayer => _selfAttention;
+
+    /// <summary>
+    /// The block's cross-attention sublayer. Read-only: its two-input
+    /// (decoder stream, encoder output) forward contract is satisfied only by
+    /// <see cref="MultiHeadAttentionLayer{T}"/>, so no replace hook is offered —
+    /// the single-input layer wrappers (quantized/LoRA) would silently break
+    /// true cross-attention.
+    /// </summary>
+    public MultiHeadAttentionLayer<T> CrossAttentionLayer => _crossAttention;
+
+    /// <summary>The block's current FFN up-projection (hiddenSize → ffnDim) sublayer.</summary>
+    public LayerBase<T> FfnUpLayer => _ffnUp;
+
+    /// <summary>The block's current FFN down-projection (ffnDim → hiddenSize) sublayer.</summary>
+    public LayerBase<T> FfnDownLayer => _ffnDown;
+
+    /// <summary>
+    /// Swaps the self-attention sublayer (e.g. for a <c>QuantizedAttentionLayer</c> or a
+    /// LoRA adapter) — the composite counterpart of replacing <c>model.Layers[i]</c> for
+    /// discrete layouts. Keeps the registered-sublayer list (gradient-tape parameter
+    /// discovery) consistent. The replacement must consume and produce the same
+    /// <c>[..., seq, hiddenSize]</c> shapes.
+    /// </summary>
+    public void ReplaceSelfAttention(LayerBase<T> replacement)
+    {
+        if (replacement is null) throw new ArgumentNullException(nameof(replacement));
+        UnregisterSubLayer(_selfAttention);
+        _selfAttention = replacement;
+        RegisterSubLayer(_selfAttention);
+    }
+
+    /// <summary>
+    /// Swaps the FFN up-projection sublayer. Same consistency contract as
+    /// <see cref="ReplaceSelfAttention"/>; must map <c>[N, hiddenSize] → [N, ffnDim]</c>.
+    /// </summary>
+    public void ReplaceFfnUp(LayerBase<T> replacement)
+    {
+        if (replacement is null) throw new ArgumentNullException(nameof(replacement));
+        UnregisterSubLayer(_ffnUp);
+        _ffnUp = replacement;
+        RegisterSubLayer(_ffnUp);
+    }
+
+    /// <summary>
+    /// Swaps the FFN down-projection sublayer. Same consistency contract as
+    /// <see cref="ReplaceSelfAttention"/>; must map <c>[N, ffnDim] → [N, hiddenSize]</c>.
+    /// </summary>
+    public void ReplaceFfnDown(LayerBase<T> replacement)
+    {
+        if (replacement is null) throw new ArgumentNullException(nameof(replacement));
+        UnregisterSubLayer(_ffnDown);
+        _ffnDown = replacement;
+        RegisterSubLayer(_ffnDown);
+    }
 
     /// <summary>
     /// Pre-LN forward pass WITHOUT an encoder context; all ops route through
