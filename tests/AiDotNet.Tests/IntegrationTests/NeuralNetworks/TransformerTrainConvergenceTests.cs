@@ -67,7 +67,16 @@ public class TransformerTrainConvergenceTests
             inputSize: seqLen,
             outputSize: vocabSize,
             maxSequenceLength: seqLen,
-            vocabularySize: vocabSize);
+            vocabularySize: vocabSize,
+            // The default Transformer optimizer uses the Vaswani Noam schedule with a
+            // 4000-step warmup — but this overfit test runs only numFacts*epochs = 80
+            // optimizer steps, so with the default warmup the LR never leaves its ~0
+            // ramp and the model trains at ~1e-4 the whole time (it cannot memorise in
+            // the budget). 4000-step warmup is calibrated for full-scale training runs,
+            // not an 80-step overfit probe. Use a short warmup proportional to this run
+            // so the Noam LR actually reaches a useful value — this exercises the same
+            // default Adam+Noam code path, just sized for the test's step budget.
+            warmupSteps: 8);
 
         var transformer = new Transformer<float>(
             architecture,
