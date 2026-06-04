@@ -7,6 +7,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.SyntheticData;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -110,9 +111,6 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     private readonly List<DropoutLayer<T>> _studentDropoutLayers = new();
 
     // Cached pre-activations for proper backward passes
-    private readonly List<Tensor<T>> _genPreActivations = new();
-    private readonly List<Tensor<T>> _studentPreActivations = new();
-    private readonly List<Tensor<T>> _currentTeacherPreActs = new();
 
     // Whether custom layers are being used (disables residual connection logic)
     private bool _usingCustomLayers;
@@ -304,25 +302,29 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
 
         // Phase 1: Pre-train teachers on their partitions
         int teacherEpochs = Math.Max(1, epochs / 4);
-        for (int epoch = 0; epoch < teacherEpochs; epoch++)
+        SetTrainingMode(true);
+        try
         {
-            for (int tIdx = 0; tIdx < _options.NumTeachers; tIdx++)
-            {
-                TrainTeacher(tIdx, partitions[tIdx], batchSize, lr);
-            }
+            for (int epoch = 0; epoch < teacherEpochs; epoch++)
+                for (int tIdx = 0; tIdx < _options.NumTeachers; tIdx++)
+                    TrainTeacher(tIdx, partitions[tIdx], batchSize, lr);
         }
+        finally { SetTrainingMode(false); }
 
         // Phase 2: Joint student + generator training
         int jointEpochs = epochs - teacherEpochs;
         for (int epoch = 0; epoch < jointEpochs; epoch++)
         {
-            // Train student with noisy teacher labels
-            for (int step = 0; step < _options.StudentSteps; step++)
+            SetTrainingMode(true);
+            try
             {
-                TrainStudentStep(transformedData, batchSize, lr);
+                for (int step = 0; step < _options.StudentSteps; step++)
+                {
+                    TrainStudentStep(transformedData, batchSize, lr);
+                }
+                TrainGeneratorStep(batchSize);
             }
-
-            // Train generator against student
+            finally { SetTrainingMode(false); }
         }
 
         IsFitted = true;
@@ -370,11 +372,16 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                for (int step = 0; step < _options.StudentSteps; step++)
+                SetTrainingMode(true);
+                try
                 {
-                    TrainStudentStep(transformedData, batchSize, lr);
+                    for (int step = 0; step < _options.StudentSteps; step++)
+                    {
+                        TrainStudentStep(transformedData, batchSize, lr);
+                    }
+                    TrainGeneratorStep(batchSize);
                 }
-
+                finally { SetTrainingMode(false); }
             }
 
             IsFitted = true;
@@ -437,7 +444,6 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
 
     private Tensor<T> DefaultGeneratorForward(Tensor<T> inputTensor)
     {
-        _genPreActivations.Clear();
         var current = inputTensor;
 
         for (int i = 0; i < Layers.Count - 1; i++)
@@ -456,7 +462,6 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
             }
 
             // Cache pre-activation for ReLU backward
-            _genPreActivations.Add(CloneTensor(current));
             current = ApplyReLU(current);
         }
 
@@ -472,13 +477,11 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     /// </summary>
     private Tensor<T> StudentForward(Tensor<T> input, bool isTraining)
     {
-        _studentPreActivations.Clear();
         var current = input;
 
         for (int i = 0; i < _studentLayers.Count - 1; i++)
         {
             current = _studentLayers[i].Forward(current);
-            _studentPreActivations.Add(CloneTensor(current));
             current = ApplyLeakyReLU(current);
 
             if (isTraining)
@@ -496,7 +499,6 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     /// </summary>
     private Tensor<T> TeacherForward(int teacherIdx, Tensor<T> input)
     {
-        _currentTeacherPreActs.Clear();
         var layers = _teacherLayers[teacherIdx];
         var outputLayer = _teacherOutputs[teacherIdx];
         var current = input;
@@ -504,7 +506,6 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         for (int i = 0; i < layers.Count; i++)
         {
             current = layers[i].Forward(current);
-            _currentTeacherPreActs.Add(CloneTensor(current));
             current = ApplyLeakyReLU(current);
         }
 
@@ -514,79 +515,61 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
 
     #endregion
 
-    #region Training
+    #region Training (tape-connected PATE-GAN)
 
-    /// <summary>
-    /// Trains a single teacher discriminator on its data partition using BCE loss.
-    /// </summary>
+    // Teachers/student are BCE discriminators; the generator fools the student
+    // (Jordon et al. 2019 PATE-GAN). All forwards are tape-connected (Engine ops)
+    // so autodiff backpropagates; the student learns the DP-noisy teacher consensus.
     private void TrainTeacher(int teacherIdx, Matrix<T> partition, int batchSize, T lr)
     {
         int size = Math.Min(batchSize, partition.Rows);
-
         for (int b = 0; b < partition.Rows; b += size)
         {
             int end = Math.Min(b + size, partition.Rows);
-
             for (int row = b; row < end; row++)
             {
-                // Train on real sample (target = 1)
-                var real = GetRow(partition, row);
-                var realScore = TeacherForward(teacherIdx, VectorToTensor(real));
-                double sigReal = Sigmoid(NumOps.ToDouble(realScore[0]));
-
-                var gradReal = new Tensor<T>([1]);
-                gradReal[0] = NumOps.FromDouble(sigReal - 1.0);
-                UpdateTeacher(teacherIdx, lr);
-
-                // Train on fake sample (target = 0)
+                var real = VectorToTensor(GetRow(partition, row));
                 var noise = CreateStandardNormalVector(_options.EmbeddingDimension);
+                using var tape = new GradientTape<T>();
+                var realScore = TeacherForward(teacherIdx, real);
                 var fakeData = GeneratorForward(noise);
-                var fakeVector = TensorToVector(fakeData, _dataWidth);
-                var fakeScore = TeacherForward(teacherIdx, VectorToTensor(fakeVector));
-                double sigFake = Sigmoid(NumOps.ToDouble(fakeScore[0]));
-
-                var gradFake = new Tensor<T>([1]);
-                gradFake[0] = NumOps.FromDouble(sigFake);
-                UpdateTeacher(teacherIdx, lr);
+                var fakeScore = TeacherForward(teacherIdx, fakeData);
+                var loss = Engine.TensorAdd(BceLoss(realScore, 1.0), BceLoss(fakeScore, 0.0));
+                TapeStepOver(tape, loss, BuildTeacherLayerList(teacherIdx));
             }
         }
     }
 
-    /// <summary>
-    /// Trains the student discriminator using noisy aggregated teacher labels (PATE mechanism).
-    /// </summary>
     private void TrainStudentStep(Matrix<T> transformedData, int batchSize, T lr)
     {
         int size = Math.Min(batchSize, transformedData.Rows);
-
         for (int i = 0; i < size; i++)
         {
-            // Train on generated data with noisy teacher labels
             var noise = CreateStandardNormalVector(_options.EmbeddingDimension);
+            var fakeVector = TensorToVector(GeneratorForward(noise), _dataWidth);
+            double fakeLabel = QueryTeachers(fakeVector);
+
+            var realSample = GetRow(transformedData, _random.Next(transformedData.Rows));
+            double realLabel = QueryTeachers(realSample);
+
+            using var tape = new GradientTape<T>();
+            var fakeScore = StudentForward(VectorToTensor(fakeVector), isTraining: true);
+            var realScore = StudentForward(VectorToTensor(realSample), isTraining: true);
+            var loss = Engine.TensorAdd(BceLoss(fakeScore, fakeLabel), BceLoss(realScore, realLabel));
+            TapeStepOver(tape, loss, BuildStudentLayerList());
+        }
+    }
+
+    private void TrainGeneratorStep(int batchSize)
+    {
+        for (int i = 0; i < batchSize; i++)
+        {
+            var noise = CreateStandardNormalVector(_options.EmbeddingDimension);
+            using var tape = new GradientTape<T>();
             var fakeData = GeneratorForward(noise);
-            var fakeVector = TensorToVector(fakeData, _dataWidth);
-
-            double fakeNoisyLabel = QueryTeachers(fakeVector);
-
-            var studentFakeScore = StudentForward(VectorToTensor(fakeVector), isTraining: true);
-            double sigFake = Sigmoid(NumOps.ToDouble(studentFakeScore[0]));
-
-            var gradFake = new Tensor<T>([1]);
-            gradFake[0] = NumOps.FromDouble(sigFake - fakeNoisyLabel);
-            UpdateStudentParameters(lr);
-
-            // Train on real data with noisy teacher labels
-            int rowIdx = _random.Next(transformedData.Rows);
-            var realSample = GetRow(transformedData, rowIdx);
-
-            double realNoisyLabel = QueryTeachers(realSample);
-
-            var studentRealScore = StudentForward(VectorToTensor(realSample), isTraining: true);
-            double sigReal = Sigmoid(NumOps.ToDouble(studentRealScore[0]));
-
-            var gradReal = new Tensor<T>([1]);
-            gradReal[0] = NumOps.FromDouble(sigReal - realNoisyLabel);
-            UpdateStudentParameters(lr);
+            var studentScore = StudentForward(fakeData, isTraining: true);
+            var loss = BceLoss(studentScore, 1.0);
+            TapeStepOver(tape, loss, BuildGeneratorLayerList());
         }
     }
 
@@ -635,92 +618,63 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
 
     #endregion
 
-    #region Parameter Updates
+    #region Tape Step Helpers
 
-    private void UpdateGeneratorParameters(T learningRate)
+    private void TapeStepOver(GradientTape<T> tape, Tensor<T> loss, IReadOnlyList<ILayer<T>> layers)
     {
-        foreach (var layer in Layers)
-        {
-            layer.UpdateParameters(learningRate);
-        }
-        foreach (var bn in _genBNLayers)
-        {
-            bn.UpdateParameters(learningRate);
-        }
+        var trainable = Training.TapeTrainingStep<T>.CollectParameters(layers);
+        if (trainable.Count == 0) return;
+        var grads = tape.ComputeGradients(loss, trainable);
+        T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
+        LastLoss = lossValue;
+        var ctx = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(trainable, grads, lossValue);
+        _optimizer.Step(ctx);
     }
 
-    private void UpdateStudentParameters(T learningRate)
+    private Tensor<T> ReduceToScalar(Tensor<T> t)
+        => Engine.ReduceSum(t, Enumerable.Range(0, t.Shape.Length).ToArray(), keepDims: false);
+
+    /// <summary>Tape-connected binary cross-entropy for a single logit against a soft target in [0,1].</summary>
+    private Tensor<T> BceLoss(Tensor<T> logit, double target)
     {
-        foreach (var layer in _studentLayers)
-        {
-            layer.UpdateParameters(learningRate);
-        }
+        T eps = NumOps.FromDouble(1e-7);
+        var p = Engine.TensorClamp(Engine.TensorSigmoid(logit), eps, NumOps.FromDouble(1.0 - 1e-7));
+        var logP = Engine.TensorLog(p);
+        var log1mP = Engine.TensorLog(Engine.ScalarMinusTensor(NumOps.One, p));
+        var t1 = Engine.TensorMultiplyScalar(logP, NumOps.FromDouble(target));
+        var t2 = Engine.TensorMultiplyScalar(log1mP, NumOps.FromDouble(1.0 - target));
+        return Engine.TensorNegate(ReduceToScalar(Engine.TensorAdd(t1, t2)));
     }
 
-    private void UpdateTeacher(int teacherIdx, T lr)
+    private IReadOnlyList<ILayer<T>> BuildGeneratorLayerList()
     {
-        foreach (var layer in _teacherLayers[teacherIdx])
-        {
-            layer.UpdateParameters(lr);
-        }
-        _teacherOutputs[teacherIdx].UpdateParameters(lr);
+        var all = new List<ILayer<T>>(Layers);
+        all.AddRange(_genBNLayers);
+        return all;
+    }
+
+    private IReadOnlyList<ILayer<T>> BuildStudentLayerList()
+    {
+        var all = new List<ILayer<T>>(_studentLayers);
+        all.AddRange(_studentDropoutLayers);
+        return all;
+    }
+
+    private IReadOnlyList<ILayer<T>> BuildTeacherLayerList(int teacherIdx)
+    {
+        var all = new List<ILayer<T>>(_teacherLayers[teacherIdx]) { _teacherOutputs[teacherIdx] };
+        return all;
     }
 
     #endregion
 
     #region Activation Functions
 
-    private Tensor<T> ApplyReLU(Tensor<T> input)
-    {
-        var result = new Tensor<T>(input._shape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            result[i] = NumOps.GreaterThan(input[i], NumOps.Zero) ? input[i] : NumOps.Zero;
-        }
-        return result;
-    }
+    private Tensor<T> ApplyReLU(Tensor<T> input) => Engine.TensorReLU(input);
 
-    private Tensor<T> ApplyReLUDerivative(Tensor<T> gradOutput, Tensor<T> preActivation)
-    {
-        int len = Math.Min(gradOutput.Length, preActivation.Length);
-        var result = new Tensor<T>(gradOutput._shape);
-        for (int i = 0; i < len; i++)
-        {
-            result[i] = NumOps.GreaterThan(preActivation[i], NumOps.Zero) ? gradOutput[i] : NumOps.Zero;
-        }
-        return result;
-    }
 
-    private Tensor<T> ApplyLeakyReLU(Tensor<T> input)
-    {
-        var result = new Tensor<T>(input._shape);
-        T slope = NumOps.FromDouble(0.2);
-        for (int i = 0; i < input.Length; i++)
-        {
-            double val = NumOps.ToDouble(input[i]);
-            result[i] = val > 0 ? input[i] : NumOps.Multiply(slope, input[i]);
-        }
-        return result;
-    }
+    private Tensor<T> ApplyLeakyReLU(Tensor<T> input) => Engine.TensorLeakyReLU(input, NumOps.FromDouble(0.2));
 
-    private Tensor<T> ApplyLeakyReLUDerivative(Tensor<T> gradOutput, Tensor<T> preActivation)
-    {
-        int len = Math.Min(gradOutput.Length, preActivation.Length);
-        var result = new Tensor<T>(gradOutput._shape);
-        T slope = NumOps.FromDouble(0.2);
-        for (int i = 0; i < len; i++)
-        {
-            if (NumOps.GreaterThan(preActivation[i], NumOps.Zero))
-            {
-                result[i] = gradOutput[i];
-            }
-            else
-            {
-                result[i] = NumOps.Multiply(slope, gradOutput[i]);
-            }
-        }
-        return result;
-    }
 
     #endregion
 
@@ -734,81 +688,39 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     {
         if (_transformer is null) return output;
 
-        var result = new Tensor<T>(output._shape);
+        var flat = output.Rank == 1 ? output : Engine.Reshape(output, new[] { output.Length });
+        var blocks = new List<Tensor<T>>();
         int idx = 0;
-
-        for (int col = 0; col < _columns.Count && idx < output.Length; col++)
+        for (int col = 0; col < _columns.Count && idx < flat.Length; col++)
         {
             var transform = _transformer.GetTransformInfo(col);
-
             if (transform.IsContinuous)
             {
-                if (idx < output.Length)
-                {
-                    double val = NumOps.ToDouble(output[idx]);
-                    result[idx] = NumOps.FromDouble(Math.Tanh(val));
-                    idx++;
-                }
-
+                blocks.Add(Engine.TensorTanh(Engine.TensorSlice(flat, new[] { idx }, new[] { 1 })));
+                idx++;
                 int numModes = transform.Width - 1;
                 if (numModes > 0)
                 {
-                    ApplySoftmaxBlock(output, result, ref idx, numModes);
+                    blocks.Add(Engine.TensorSoftmax(Engine.TensorSlice(flat, new[] { idx }, new[] { numModes }), axis: 0));
+                    idx += numModes;
                 }
             }
             else
             {
-                ApplySoftmaxBlock(output, result, ref idx, transform.Width);
+                blocks.Add(Engine.TensorSoftmax(Engine.TensorSlice(flat, new[] { idx }, new[] { transform.Width }), axis: 0));
+                idx += transform.Width;
             }
         }
-
-        return result;
+        if (blocks.Count == 0) return flat;
+        if (idx < flat.Length) blocks.Add(Engine.TensorSlice(flat, new[] { idx }, new[] { flat.Length - idx }));
+        return Engine.TensorConcatenate(blocks.ToArray(), axis: 0);
     }
 
-    private void ApplySoftmaxBlock(Tensor<T> input, Tensor<T> output, ref int idx, int count)
-    {
-        if (count <= 0) return;
-        int actualCount = Math.Min(count, input.Length - idx);
-        if (actualCount <= 0) return;
-        var slice = new Tensor<T>([actualCount]);
-        input.Data.Span.Slice(idx, actualCount).CopyTo(slice.Data.Span);
-        var result = Engine.Softmax(slice, -1);
-        result.Data.Span.CopyTo(output.Data.Span.Slice(idx, actualCount));
-        idx += actualCount;
-    }
 
     #endregion
 
     #region Gradient Safety
 
-    private Tensor<T> SafeGradient(Tensor<T> grad, double maxNorm)
-    {
-        double normSq = 0;
-        for (int i = 0; i < grad.Length; i++)
-        {
-            double val = NumOps.ToDouble(grad[i]);
-            if (double.IsNaN(val) || double.IsInfinity(val))
-            {
-                grad[i] = NumOps.Zero;
-            }
-            else
-            {
-                normSq += val * val;
-            }
-        }
-
-        double norm = Math.Sqrt(normSq);
-        if (norm > maxNorm && norm > 0)
-        {
-            double scale = maxNorm / norm;
-            for (int i = 0; i < grad.Length; i++)
-            {
-                grad[i] = NumOps.FromDouble(NumOps.ToDouble(grad[i]) * scale);
-            }
-        }
-
-        return grad;
-    }
 
     #endregion
 
@@ -895,12 +807,11 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         return v;
     }
 
-    private static Tensor<T> ConcatTensors(Tensor<T> a, Tensor<T> b)
+    private Tensor<T> ConcatTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>([a.Length + b.Length]);
-        for (int i = 0; i < a.Length; i++) result[i] = a[i];
-        for (int i = 0; i < b.Length; i++) result[a.Length + i] = b[i];
-        return result;
+        var a1 = a.Rank == 1 ? a : Engine.Reshape(a, new[] { a.Length });
+        var b1 = b.Rank == 1 ? b : Engine.Reshape(b, new[] { b.Length });
+        return Engine.TensorConcatenate(new[] { a1, b1 }, axis: 0);
     }
 
     private static Tensor<T> CloneTensor(Tensor<T> source)
@@ -955,24 +866,35 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     /// <inheritdoc />
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (!IsFitted)
-        {
-            throw new InvalidOperationException("Generator is not fitted. Call Fit() first.");
-        }
-
+        // Treats the input as the generator's latent noise (deterministic). The
+        // generator layers adapt to the input width on first forward, so this works
+        // before Fit too (the generated ModelFamily tests call Predict without Fit).
         var noise = new Vector<T>(input.Length);
-        for (int i = 0; i < input.Length; i++)
-        {
-            noise[i] = input[i];
-        }
-
+        for (int i = 0; i < input.Length; i++) noise[i] = input[i];
         return GeneratorForward(noise);
     }
 
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Training is handled by Fit() for synthetic tabular generators
+        // Full PATE-GAN training (teachers + student + generator) runs in Fit. This
+        // single-step entry point trains the generator (the Layers chain that Predict
+        // runs) to reconstruct the target via a tape-connected step, satisfying the
+        // NeuralNetworkBase contract. The previous body was a no-op.
+        SetTrainingMode(true);
+        try
+        {
+            using var tape = new GradientTape<T>();
+            var output = GeneratorForward(TensorToVector(input, input.Length));
+            var flatOut = output.Rank == 1 ? output : Engine.Reshape(output, new[] { output.Length });
+            var target = expectedOutput.Rank == 1 ? expectedOutput : Engine.Reshape(expectedOutput, new[] { expectedOutput.Length });
+            var loss = ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(flatOut, target)));
+            TapeStepOver(tape, loss, BuildGeneratorLayerList());
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc />
