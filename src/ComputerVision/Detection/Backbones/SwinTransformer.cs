@@ -100,16 +100,42 @@ public class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         // PatchEmbeddingBlock.Forward. Promote rank-3 to a batch of 1 so both ranks work.
         input = EnsureBatchedNchw(input);
 
+        // CodeRabbit-1491.thread1: do NOT recover (H, W) from seqLen — for rectangular grids
+        // seqLen is ambiguous (e.g. 160×88 and 128×110 both have seqLen=14080, but choosing
+        // the wrong one shuffles the token order and corrupts both PatchMerging and the
+        // ReshapeToFeatureMap output). Compute the true (H, W) once from the input shape and
+        // the patch-embed stride, then thread it through every stage explicitly. After each
+        // stage's optional patch-merge step the dimensions halve (with odd-side pad-up to
+        // even, matching PyTorch SwinTransformer's F.pad), and we forward the updated dims
+        // to the next stage's blocks + merge.
+        if (input.Shape[2] % PatchEmbeddingStride != 0 || input.Shape[3] % PatchEmbeddingStride != 0)
+        {
+            throw new ArgumentException(
+                $"Input H={input.Shape[2]} W={input.Shape[3]} must be divisible by the patch-embed " +
+                $"stride ({PatchEmbeddingStride}). Pad or resize the input before passing it to SwinTransformer.",
+                nameof(input));
+        }
+        int height = input.Shape[2] / PatchEmbeddingStride;
+        int width = input.Shape[3] / PatchEmbeddingStride;
+
         var features = new List<Tensor<T>>();
         var x = _patchEmbed.Forward(input);
         for (int i = 0; i < _stages.Count; i++)
         {
-            x = _stages[i].Forward(x);
-            var featureMap = ReshapeToFeatureMap(x, input.Shape[2], input.Shape[3], i);
+            x = _stages[i].Forward(x, height, width, out height, out width);
+            var featureMap = ReshapeToFeatureMap(x, height, width, i);
             features.Add(featureMap);
         }
         return features;
     }
+
+    /// <summary>
+    /// Patch-embedding stride. Mirrors the <c>patchSize: 4</c> argument passed to
+    /// <see cref="PatchEmbeddingBlock{T}"/> below. Kept as a named constant so the
+    /// <see cref="ExtractFeatures"/> dim-threading path stays in sync if the patch
+    /// size ever moves to a config field.
+    /// </summary>
+    private const int PatchEmbeddingStride = 4;
 
     public IReadOnlyList<Tensor<T>> GetFeatureMaps(Tensor<T> input) => ExtractFeatures(input);
 
@@ -130,23 +156,23 @@ public class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
             nameof(input));
     }
 
-    private Tensor<T> ReshapeToFeatureMap(Tensor<T> x, int inputHeight, int inputWidth, int stageIdx)
+    private Tensor<T> ReshapeToFeatureMap(Tensor<T> x, int height, int width, int stageIdx)
     {
         int batch = x.Shape[0];
         int seqLen = x.Shape[1];
         int dim = x.Shape[2];
 
-        // Derive the feature-map grid from the ACTUAL sequence length rather than
-        // inputHeight/stride. Patch merging pads odd grids up to even (PyTorch-faithful), so after
-        // a stage the grid no longer equals inputHeight / Strides[stageIdx]; the sequence itself
-        // carries the true H×W. inputHeight/inputWidth are no longer required to be divisible by
-        // the stride, which is what let non-multiple-of-32 inputs (e.g. 112×112) work. The patch
-        // grid is square for square inputs (the Swin norm), so the most-square factorization
-        // recovers H,W exactly.
-        var (height, width) = SwinFactorizeMostSquare(seqLen);
-        if (height == 0)
-            throw new InvalidOperationException(
-                $"Cannot infer feature-map dimensions from sequence length {seqLen} at stage {stageIdx}.");
+        // (height, width) is threaded explicitly from ExtractFeatures so we avoid the
+        // ambiguous seqLen → (H, W) factorization that would silently mis-tile rectangular
+        // grids (see ExtractFeatures comment). Validate the contract here so a future caller
+        // can't pass mismatched dims unnoticed.
+        if (height * width != seqLen)
+        {
+            throw new ArgumentException(
+                $"Stage {stageIdx} feature map: (height={height} × width={width}) = {height * width} " +
+                $"does not match the stage output's sequence length {seqLen}.",
+                nameof(height));
+        }
 
         var featureMap = new Tensor<T>(new[] { batch, dim, height, width });
         for (int n = 0; n < batch; n++)
@@ -379,9 +405,40 @@ internal class SwinStage<T>
 
     public Tensor<T> Forward(Tensor<T> input)
     {
+        // Legacy no-dims path: SwinTransformerBlock.Forward and PatchMergingBlock.Forward fall
+        // back to a most-square factorization of seqLen, which is correct only for square grids.
+        // Prefer Forward(input, height, width, out _, out _) for rectangular-input correctness.
         var x = input;
         foreach (var block in _blocks) x = block.Forward(x);
         if (_patchMerge is not null) x = _patchMerge.Forward(x);
+        return x;
+    }
+
+    /// <summary>
+    /// Dim-threaded forward: callers pass the current grid (height, width) and receive the
+    /// post-stage dims, so block-internal window-attention and patch-merging both see the
+    /// true rectangular grid instead of factorizing seqLen (which is ambiguous for non-square
+    /// inputs — see SwinTransformer.ExtractFeatures comment).
+    /// </summary>
+    public Tensor<T> Forward(Tensor<T> input, int height, int width, out int outHeight, out int outWidth)
+    {
+        var x = input;
+        foreach (var block in _blocks) x = block.Forward(x, height, width);
+
+        if (_patchMerge is not null)
+        {
+            x = _patchMerge.Forward(x, height, width);
+            // PatchMergingBlock pads odd dims up to even (mirroring PyTorch's F.pad), then halves.
+            int hPad = height + (height & 1);
+            int wPad = width + (width & 1);
+            outHeight = hPad / 2;
+            outWidth = wPad / 2;
+        }
+        else
+        {
+            outHeight = height;
+            outWidth = width;
+        }
         return x;
     }
 
@@ -499,6 +556,10 @@ internal class SwinTransformerBlock<T>
 
     public Tensor<T> Forward(Tensor<T> input)
     {
+        // Legacy no-dims path: factorize seqLen as the closest non-trivial pair. This is
+        // correct ONLY for square grids; rectangular grids are ambiguous (e.g. 160×88 and
+        // 128×110 both have seqLen=14080). Prefer Forward(input, h, w) wherever the caller
+        // knows the true dims — that is the path SwinTransformer.ExtractFeatures uses.
         int seqLen = input.Shape[1];
         int h = (int)Math.Sqrt(seqLen);
         int w = seqLen / h;
@@ -513,6 +574,17 @@ internal class SwinTransformerBlock<T>
                     break;
                 }
             }
+        }
+        return Forward(input, h, w);
+    }
+
+    public Tensor<T> Forward(Tensor<T> input, int h, int w)
+    {
+        if (h * w != input.Shape[1])
+        {
+            throw new ArgumentException(
+                $"SwinTransformerBlock: (h={h} × w={w}) = {h * w} does not match input sequence length {input.Shape[1]}.",
+                nameof(h));
         }
 
         var normed1 = _norm1.Forward(input);
