@@ -51,7 +51,11 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>
     private readonly int _ffnDim;
     private readonly double _dropoutRate;
 
-    private readonly MultiHeadAttentionLayer<T> _attention;
+    // Widened from MultiHeadAttentionLayer<T> so InferenceOptimizer can swap in a
+    // rewritten attention implementation (FlashAttentionLayer, CachedMultiHeadAttention,
+    // PagedCachedMultiHeadAttention) via ReplaceAttention. All members used below
+    // (Forward/ParameterCount/Get-SetParameters/gradients/state) are LayerBase<T> surface.
+    private LayerBase<T> _attention;
     private readonly LayerNormalizationLayer<T> _norm1;
     private readonly DenseLayer<T> _ffnUp;
     private readonly DenseLayer<T> _ffnDown;
@@ -107,6 +111,32 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>
         RegisterSubLayer(_norm2);
         if (_attnDropout is not null) RegisterSubLayer(_attnDropout);
         if (_ffnDropout is not null) RegisterSubLayer(_ffnDropout);
+    }
+
+    /// <summary>
+    /// The block's current self-attention sublayer. A freshly constructed block hosts a
+    /// <see cref="MultiHeadAttentionLayer{T}"/>; <see cref="ReplaceAttention"/> (used by
+    /// the inference optimizer's attention rewrites) may swap in a
+    /// <c>FlashAttentionLayer</c> / <c>CachedMultiHeadAttention</c> /
+    /// <c>PagedCachedMultiHeadAttention</c>.
+    /// </summary>
+    public LayerBase<T> AttentionLayer => _attention;
+
+    /// <summary>
+    /// Swaps the block's self-attention sublayer for <paramref name="replacement"/> —
+    /// the composite-layer counterpart of the inference optimizer assigning a rewritten
+    /// attention layer into <c>model.Layers[i]</c> for discrete layouts. Keeps the
+    /// registered-sublayer list (the gradient tape's recursive parameter discovery) and
+    /// the cached parameter count consistent.
+    /// </summary>
+    /// <param name="replacement">The attention layer to host. Must consume and produce
+    /// the same <c>[..., seq, hiddenSize]</c> shapes as the layer it replaces.</param>
+    public void ReplaceAttention(LayerBase<T> replacement)
+    {
+        if (replacement is null) throw new ArgumentNullException(nameof(replacement));
+        UnregisterSubLayer(_attention);
+        _attention = replacement;
+        RegisterSubLayer(_attention);
     }
 
     /// <summary>Model (feature) dimension — persisted for deserialization.</summary>

@@ -1,10 +1,12 @@
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.Inference;
+using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Inference;
@@ -43,11 +45,28 @@ public class InferenceOptimizerTests
         }
     }
 
+    /// <summary>
+    /// Enumerates each top-level layer plus the attention sublayer hosted inside
+    /// <see cref="TransformerEncoderBlock{T}"/> composites — the default encoder layout
+    /// since LayerHelper emits fused encoder blocks. Mirrors the optimizer's own
+    /// block-aware enumeration so these structural assertions track where the
+    /// attention layer actually lives.
+    /// </summary>
+    private static IEnumerable<ILayer<float>> AttentionHosts(NeuralNetworkBase<float> model)
+    {
+        foreach (var layer in model.Layers)
+        {
+            yield return layer;
+            if (layer is TransformerEncoderBlock<float> block)
+                yield return block.AttentionLayer;
+        }
+    }
+
     [Fact(Timeout = 60000)]
     public async Task InferenceOptimizer_RewritesMultiHeadAttention_ToFlashAttention_WhenEnabled()
     {
         var model = CreateTinyTransformer(taskType: NeuralNetworkTaskType.Regression);
-        Assert.Contains(model.Layers, l => l is MultiHeadAttentionLayer<float>);
+        Assert.Contains(AttentionHosts(model), l => l is MultiHeadAttentionLayer<float>);
 
         var config = new InferenceOptimizationConfig
         {
@@ -61,15 +80,15 @@ public class InferenceOptimizerTests
         var (optimized, anyApplied) = optimizer.OptimizeForInference(model, cloneModel: false);
 
         Assert.True(anyApplied);
-        Assert.Contains(optimized.Layers, l => l is FlashAttentionLayer<float>);
-        Assert.DoesNotContain(optimized.Layers, l => l is MultiHeadAttentionLayer<float>);
+        Assert.Contains(AttentionHosts(optimized), l => l is FlashAttentionLayer<float>);
+        Assert.DoesNotContain(AttentionHosts(optimized), l => l is MultiHeadAttentionLayer<float>);
     }
 
     [Fact(Timeout = 60000)]
     public async Task InferenceOptimizer_RewritesMultiHeadAttention_ToCachedAttention_ForTextGeneration_WhenKVCacheEnabled()
     {
         var model = CreateTinyTransformer(taskType: NeuralNetworkTaskType.TextGeneration);
-        Assert.Contains(model.Layers, l => l is MultiHeadAttentionLayer<float>);
+        Assert.Contains(AttentionHosts(model), l => l is MultiHeadAttentionLayer<float>);
 
         var config = new InferenceOptimizationConfig
         {
@@ -83,10 +102,10 @@ public class InferenceOptimizerTests
         var (optimized, anyApplied) = optimizer.OptimizeForInference(model, cloneModel: true);
 
         Assert.True(anyApplied);
-        Assert.Contains(optimized.Layers, l => l is PagedCachedMultiHeadAttention<float>);
-        Assert.DoesNotContain(optimized.Layers, l => l is MultiHeadAttentionLayer<float>);
+        Assert.Contains(AttentionHosts(optimized), l => l is PagedCachedMultiHeadAttention<float>);
+        Assert.DoesNotContain(AttentionHosts(optimized), l => l is MultiHeadAttentionLayer<float>);
 
-        foreach (var layer in optimized.Layers)
+        foreach (var layer in AttentionHosts(optimized))
         {
             if (layer is PagedCachedMultiHeadAttention<float> cached)
             {
