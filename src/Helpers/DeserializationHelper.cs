@@ -1754,6 +1754,42 @@ public static class DeserializationHelper
             }
             instance = ctorTeb.Invoke(argsTeb);
         }
+        else if (genericDef.Name == "TransformerDecoderBlock`1")
+        {
+            // Post-/Pre-LN decoder block (ctor: hiddenSize, numHeads, ffnDim, dropoutRate).
+            int hsTdb = TryGetInt(additionalParams, "HiddenSize")
+                ?? (inputShape.Length > 0 ? inputShape[inputShape.Length - 1] : throw new InvalidOperationException(
+                    $"{genericDef.Name} requires 'HiddenSize' metadata or a rank>=1 inputShape."));
+            int nhTdb = TryGetInt(additionalParams, "NumHeads")
+                ?? throw new InvalidOperationException($"{genericDef.Name} requires 'NumHeads' metadata.");
+            int ffTdb = TryGetInt(additionalParams, "FfnDim")
+                ?? throw new InvalidOperationException($"{genericDef.Name} requires 'FfnDim' metadata.");
+            double drTdb = TryGetDouble(additionalParams, "DropoutRate") ?? 0.0;
+            if (hsTdb % nhTdb != 0)
+            {
+                throw new InvalidOperationException(
+                    $"{genericDef.Name} divisibility violation: hiddenSize ({hsTdb}) must be a " +
+                    $"multiple of numHeads ({nhTdb}). Serialized metadata is corrupt.");
+            }
+            var ctorTdb = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).FirstOrDefault()
+                ?? throw new MissingLayerCtorException($"Cannot find any public constructor for {layerType} during deserialization.");
+            var psTdb = ctorTdb.GetParameters();
+            var argsTdb = new object?[psTdb.Length];
+            for (int i = 0; i < psTdb.Length; i++)
+            {
+                var p = psTdb[i];
+                var n = (p.Name ?? "").ToLowerInvariant();
+                argsTdb[i] = (p.ParameterType, n) switch
+                {
+                    (Type t, _) when t == typeof(int) && n == "hiddensize" => hsTdb,
+                    (Type t, _) when t == typeof(int) && n == "numheads" => nhTdb,
+                    (Type t, _) when t == typeof(int) && n == "ffndim" => ffTdb,
+                    (Type t, _) when t == typeof(double) && n == "dropoutrate" => drTdb,
+                    _ => p.HasDefaultValue ? p.DefaultValue : null,
+                };
+            }
+            instance = ctorTdb.Invoke(argsTdb);
+        }
         else if (genericDef.Name == "GroupedQueryAttentionLayer`1" || genericDef.Name == "CachedGroupedQueryAttention`1")
         {
             // (int sequenceLength, int embeddingDimension, int numHeads, int numKVHeads, ...).

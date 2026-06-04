@@ -1948,49 +1948,19 @@ public static class LayerHelper<T>
                 dropoutRate: dropoutRate));
         }
 
-        // Add decoder layers if needed
+        // Add decoder layers if needed. Each is a Pre-LN decoder block (self-attention,
+        // cross-attention, FFN — each residual + LayerNorm). Like the encoder, the
+        // residual connections were missing from the prior flat sequence, contributing
+        // to the #1380 signal washout; TransformerDecoderBlock restores them.
         if (numDecoderLayers > 0)
         {
             for (int i = 0; i < numDecoderLayers; i++)
             {
-                // Self-attention block
-                yield return Wire(new MultiHeadAttentionLayer<T>(numHeads, (modelDimension) / (numHeads),
-                    activationFunction: new IdentityActivation<T>()));
-
-                // Add normalization
-                yield return Wire(new LayerNormalizationLayer<T>());
-
-                // Add dropout if specified (Wire'd — see #1383 comment above).
-                if (dropoutRate > 0)
-                {
-                    yield return Wire(new DropoutLayer<T>(dropoutRate));
-                }
-
-                // Cross-attention block
-                yield return Wire(new MultiHeadAttentionLayer<T>(numHeads, (modelDimension) / (numHeads),
-                    activationFunction: new IdentityActivation<T>()));
-
-                // Add normalization
-                yield return Wire(new LayerNormalizationLayer<T>());
-
-                // Add dropout if specified (Wire'd — see #1383 comment above).
-                if (dropoutRate > 0)
-                {
-                    yield return Wire(new DropoutLayer<T>(dropoutRate));
-                }
-
-                // Feed-forward network
-                yield return Wire(new DenseLayer<T>(feedForwardDimension, new ReLUActivation<T>() as IActivationFunction<T>));
-                yield return Wire(new DenseLayer<T>(modelDimension, new IdentityActivation<T>() as IActivationFunction<T>));
-
-                // Add normalization
-                yield return Wire(new LayerNormalizationLayer<T>());
-
-                // Add dropout if specified (Wire'd — see #1383 comment above).
-                if (dropoutRate > 0)
-                {
-                    yield return Wire(new DropoutLayer<T>(dropoutRate));
-                }
+                yield return Wire(new TransformerDecoderBlock<T>(
+                    hiddenSize: modelDimension,
+                    numHeads: numHeads,
+                    ffnDim: feedForwardDimension,
+                    dropoutRate: dropoutRate));
             }
         }
 
