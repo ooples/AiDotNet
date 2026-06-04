@@ -105,16 +105,55 @@ public partial class TransformerDecoderBlock<T> : LayerBase<T>
     /// <summary>Dropout probability — persisted for deserialization.</summary>
     public double DropoutRate => _dropoutRate;
 
-    /// <summary>Pre-LN forward pass; all ops route through Engine/sublayers so the tape records them.</summary>
-    public override Tensor<T> Forward(Tensor<T> input)
+    /// <summary>
+    /// Pre-LN forward pass WITHOUT an encoder context; all ops route through
+    /// Engine/sublayers so the tape records them.
+    /// </summary>
+    /// <remarks>
+    /// With no encoder output supplied, the cross-attention sublayer degenerates to a
+    /// second self-attention over the decoder stream (Q = K = V). That is only correct
+    /// for decoder-only usage; an encoder-decoder transformer must call
+    /// <see cref="Forward(Tensor{T}, Tensor{T})"/> so the cross-attention actually
+    /// attends over the encoder output (Vaswani 2017 §3.2.3) — feeding the decoder's own
+    /// stream as the cross context silently discards the encoder entirely.
+    /// </remarks>
+    public override Tensor<T> Forward(Tensor<T> input) => ForwardCore(input, encoderOutput: null);
+
+    /// <summary>
+    /// Pre-LN forward pass with a true encoder-decoder cross-attention sublayer:
+    /// the cross-attention queries come from the decoder stream and the keys/values
+    /// from <paramref name="encoderOutput"/> (Vaswani 2017 §3.2.3).
+    /// </summary>
+    /// <param name="input">The decoder stream <c>[..., seq, hiddenSize]</c>.</param>
+    /// <param name="encoderOutput">The encoder stack's output <c>[..., srcSeq, hiddenSize]</c>.</param>
+    public Tensor<T> Forward(Tensor<T> input, Tensor<T> encoderOutput) => ForwardCore(input, encoderOutput);
+
+    /// <summary>
+    /// Multi-input dispatch: 1 input = decoder-only (degenerate cross-attention),
+    /// 2 inputs = (decoderStream, encoderOutput) true cross-attention.
+    /// </summary>
+    public override Tensor<T> Forward(params Tensor<T>[] inputs)
+    {
+        if (inputs.Length == 1) return ForwardCore(inputs[0], encoderOutput: null);
+        if (inputs.Length == 2) return ForwardCore(inputs[0], inputs[1]);
+        throw new ArgumentException(
+            $"TransformerDecoderBlock supports 1 input (decoder-only) or 2 inputs (decoder stream + encoder output); got {inputs.Length}.");
+    }
+
+    private Tensor<T> ForwardCore(Tensor<T> input, Tensor<T>? encoderOutput)
     {
         // Sublayer 1: self-attention + Pre-norm residual.
         var s = _selfAttention.Forward(_norm1.Forward(input));
         if (_selfDropout is not null) s = _selfDropout.Forward(s);
         var afterSelf = Engine.TensorAdd(input, s);
 
-        // Sublayer 2: cross-attention + Pre-norm residual.
-        var c = _crossAttention.Forward(_norm2.Forward(afterSelf));
+        // Sublayer 2: cross-attention + Pre-norm residual. With an encoder context the
+        // queries come from the (normed) decoder stream and keys/values from the encoder
+        // output — MultiHeadAttentionLayer's 2-input Forward is exactly (Q, K=V).
+        var normedForCross = _norm2.Forward(afterSelf);
+        var c = encoderOutput is null
+            ? _crossAttention.Forward(normedForCross)
+            : _crossAttention.Forward(normedForCross, encoderOutput);
         if (_crossDropout is not null) c = _crossDropout.Forward(c);
         var afterCross = Engine.TensorAdd(afterSelf, c);
 
