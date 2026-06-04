@@ -107,7 +107,7 @@
          the Tensors-side lever #1463 called for; the memory/OOM half is handled by
          the cache-clearing + diffusion re-shard in this PR (#1485).
          AiDotNet.Native packages coreleased in lockstep at 0.91.2. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.91.2" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.91.43-localfix" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.91.2" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.91.2" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.91.2" />
