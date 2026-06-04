@@ -153,7 +153,14 @@ public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
         // average) across classes. Averaging over the class axis here would
         // silently divide the loss and the back-propagated gradient by V,
         // which is the 1/V scaling reported in issue #1191.
-        var safePredicted = Engine.TensorAddScalar(predicted, NumOps.FromDouble(1e-7));
+        // Clamp predicted into [eps, 1] before the log (mirrors BinaryCrossEntropyLoss).
+        // Adding eps (the previous `predicted + 1e-7`) prevented log(0) but pushed an
+        // already-confident prediction ABOVE 1 — e.g. a perfectly-memorised p=1.0 became
+        // 1.0000001, so log(1.0000001)=+1e-7 and the negated per-class term made the loss
+        // a tiny NEGATIVE value (-1e-7). Categorical cross-entropy is mathematically ≥ 0;
+        // a model that learns perfectly (p[target]→1) must not produce a negative loss.
+        // Clamping (not adding) fixes both ends: log(0) is bounded below, log(>1) above.
+        var safePredicted = Engine.TensorClamp(predicted, NumOps.FromDouble(1e-7), NumOps.One);
         var logP = Engine.TensorLog(safePredicted);
         var product = Engine.TensorMultiply(target, logP);
 

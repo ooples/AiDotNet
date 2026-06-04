@@ -1303,8 +1303,16 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         // without a fitness comparison whenever the score is 0.
         // Captured as a local and tested inline (not via an intermediate bool) so the
         // compiler narrows it to non-null past this guard for the bestResult build below.
+        // Accept the first real evaluation unconditionally when the best slot is either
+        // unset (Solution null) OR still the throwaway placeholder from the parameterless
+        // OptimizationStepData ctor (default model + FitnessScore 0). Without the placeholder
+        // check, a real evaluation whose score can't beat the placeholder's 0 — an
+        // error-minimizing fitness, or a NaN/zero score produced under heavy parallel
+        // contention — would never replace it, leaking the throwaway default model out as the
+        // optimization result (observed as a Transformer build returning a 3-layer default
+        // NeuralNetwork only under parallel test execution).
         var bestSolution = bestStepData.Solution;
-        if (bestSolution is null)
+        if (bestSolution is null || bestStepData.IsUninitializedPlaceholder)
         {
             bestStepData.Solution = currentStepData.Solution;
             bestStepData.FitnessScore = currentStepData.FitnessScore;
@@ -1312,6 +1320,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             bestStepData.EvaluationData = currentStepData.EvaluationData;
             bestStepData.SelectedFeatures = currentStepData.SelectedFeatures;
             bestStepData.SelectedFeatureIndices = currentStepData.SelectedFeatureIndices;
+            bestStepData.IsUninitializedPlaceholder = false;
             return;
         }
 
