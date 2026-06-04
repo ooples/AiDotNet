@@ -3840,6 +3840,44 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Releases every compiled inference plan this network holds, returning their
+    /// pre-allocated intermediate buffers to the GC. The next compiled call (or
+    /// <see cref="CompileForward"/>) re-traces and re-compiles from scratch.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A compiled plan pre-allocates one output buffer per step so replay is
+    /// allocation-free — for activation-heavy models (conv nets at large batch)
+    /// that is tens of MB per plan, held for the network's lifetime. A process
+    /// that warms plans across many models/shapes accumulates enough resident
+    /// buffer memory to degrade everything else running beside it (GC pressure,
+    /// no-GC-region reservation failures — the AIsEval compiled-mode benchmark
+    /// measured even non-compiled models slowing ~2x once ~16 plans were warm).
+    /// Call this when a model goes cold (request lull, model rotation in a
+    /// serving pool, after a batch-size sweep) to bound that residency.
+    /// </para>
+    /// <para><b>For Beginners:</b> Compiled prediction keeps scratch memory
+    /// around so repeat predictions are fast. If you're done predicting with
+    /// this model for a while, call this to give that memory back; the next
+    /// prediction just rebuilds it automatically.</para>
+    /// </remarks>
+    public void ReleaseCompiledPlans()
+    {
+        _compileHost.Invalidate();
+
+        // Disposing the plans is not enough: during the trace each layer stashed
+        // its inputs/outputs in per-layer state fields (_lastInput / cached
+        // activations, kept for a potential Backward), and those references are
+        // the PLAN's pre-allocated buffers. As long as the layers hold them, the
+        // released plan's tens-of-MB of step buffers stay GC-reachable through
+        // the network itself. ResetState() clears that per-layer cache; it is
+        // inference-safe (the next Forward repopulates it) and only forfeits a
+        // Backward against the now-released forward, which is meaningless anyway.
+        foreach (var layer in Layers)
+            layer.ResetState();
+    }
+
+    /// <summary>
     /// Eager forward pass through all layers. Used as fallback when compilation fails.
     /// </summary>
     protected virtual Tensor<T> PredictEager(Tensor<T> input)
