@@ -95,19 +95,26 @@ public class TabTransformerGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTab
     private readonly List<int> _colWidths = new();
     private Random _random;
 
-    // Column embeddings: one projection per column to embed into shared space (auxiliary)
+    // Column embeddings: one projection per column to embed each column's value(s)
+    // into the shared embedding space [colWidth -> embDim].
     private readonly List<FullyConnectedLayer<T>> _colEmbeddings = new();
 
-    // Transformer layers: Q, K, V projections per layer (auxiliary)
+    // Per-transformer-layer attention projections (Q, K, V): [embDim -> embDim].
     private readonly List<FullyConnectedLayer<T>> _queryLayers = new();
     private readonly List<FullyConnectedLayer<T>> _keyLayers = new();
     private readonly List<FullyConnectedLayer<T>> _valueLayers = new();
 
-    // Column decoders: one decoder head per column (auxiliary)
-    private readonly List<FullyConnectedLayer<T>> _colDecoders = new();
+    // Per-transformer-layer feed-forward blocks: FFN1 [embDim -> ffnDim] (GELU),
+    // FFN2 [ffnDim -> embDim] (identity).
+    private readonly List<FullyConnectedLayer<T>> _ffn1 = new();
+    private readonly List<FullyConnectedLayer<T>> _ffn2 = new();
 
-    // Whether custom layers are being used
-    private bool _usingCustomLayers;
+    // Per-transformer-layer pre-residual LayerNorms (one after attention, one after FFN).
+    private readonly List<LayerNormalizationLayer<T>> _attnNorms = new();
+    private readonly List<LayerNormalizationLayer<T>> _ffnNorms = new();
+
+    // Column decoders: one decoder head per column [embDim -> colWidth].
+    private readonly List<FullyConnectedLayer<T>> _colDecoders = new();
 
     /// <summary>
     /// Gets the TabTransformerGen-specific options.
@@ -184,76 +191,87 @@ public class TabTransformerGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTab
     /// </remarks>
     protected override void InitializeLayers()
     {
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            _usingCustomLayers = true;
-        }
-        else
-        {
-            // Create default FFN blocks: two layers per transformer block
-            int embDim = _options.EmbeddingDimension;
-            int ffnDim = _options.FeedForwardDimension;
-            var gelu = new GELUActivation<T>() as IActivationFunction<T>;
-            var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        // Before Fit() supplies real column metadata, derive a self-consistent
+        // default column layout from the architecture so the model is a valid,
+        // trainable network on its own (the generated ModelFamily tests call
+        // Train()/Predict() directly without ever calling Fit()). Each of the
+        // InputSize features is treated as a width-1 column "token"; Fit() later
+        // rebuilds the layout with the real per-column widths from the
+        // TabularDataTransformer.
+        _numColumns = Math.Max(1, Architecture.InputSize);
+        _colWidths.Clear();
+        for (int c = 0; c < _numColumns; c++) _colWidths.Add(1);
+        _dataWidth = _numColumns;
 
-            for (int layer = 0; layer < _options.NumLayers; layer++)
-            {
-                Layers.Add(new FullyConnectedLayer<T>(ffnDim, gelu));
-                Layers.Add(new FullyConnectedLayer<T>(embDim, identity));
-            }
-            _usingCustomLayers = false;
-        }
+        BuildLayers();
     }
 
     /// <summary>
-    /// Rebuilds auxiliary layers with actual data dimensions discovered during Fit().
+    /// (Re)builds every trainable layer (column embeddings, per-layer Q/K/V
+    /// projections, feed-forward blocks, LayerNorms, and column decoders) from
+    /// the current <see cref="_numColumns"/> / <see cref="_colWidths"/> layout
+    /// and registers them all in <see cref="NeuralNetworkBase{T}.Layers"/> so the
+    /// tape-based training path collects their parameters. Called once from
+    /// <see cref="InitializeLayers"/> (default layout) and again from
+    /// <see cref="Fit"/> once the real column widths are known.
     /// </summary>
-    private void RebuildAuxiliaryLayers()
+    private void BuildLayers()
     {
         int embDim = _options.EmbeddingDimension;
+        int ffnDim = _options.FeedForwardDimension;
+        var gelu = new GELUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        // Column embeddings
         _colEmbeddings.Clear();
-        for (int c = 0; c < _numColumns; c++)
-        {
-            int colWidth = _colWidths[c];
-            _colEmbeddings.Add(new FullyConnectedLayer<T>(embDim, identity));
-        }
-
-        // Q/K/V projections per transformer layer
         _queryLayers.Clear();
         _keyLayers.Clear();
         _valueLayers.Clear();
+        _ffn1.Clear();
+        _ffn2.Clear();
+        _attnNorms.Clear();
+        _ffnNorms.Clear();
+        _colDecoders.Clear();
+        Layers.Clear();
+
+        // Column embeddings: [colWidth -> embDim] (input width resolved lazily).
+        for (int c = 0; c < _numColumns; c++)
+        {
+            _colEmbeddings.Add(new FullyConnectedLayer<T>(embDim, identity));
+        }
+
+        // Transformer blocks.
         for (int layer = 0; layer < _options.NumLayers; layer++)
         {
             _queryLayers.Add(new FullyConnectedLayer<T>(embDim, identity));
             _keyLayers.Add(new FullyConnectedLayer<T>(embDim, identity));
             _valueLayers.Add(new FullyConnectedLayer<T>(embDim, identity));
+            _ffn1.Add(new FullyConnectedLayer<T>(ffnDim, gelu));
+            _ffn2.Add(new FullyConnectedLayer<T>(embDim, identity));
+            _attnNorms.Add(new LayerNormalizationLayer<T>());
+            _ffnNorms.Add(new LayerNormalizationLayer<T>());
         }
 
-        // Column decoders
-        _colDecoders.Clear();
+        // Column decoders: [embDim -> colWidth].
         for (int c = 0; c < _numColumns; c++)
         {
-            int colWidth = _colWidths[c];
-            _colDecoders.Add(new FullyConnectedLayer<T>(colWidth, identity));
+            _colDecoders.Add(new FullyConnectedLayer<T>(_colWidths[c], identity));
         }
 
-        // Rebuild Layers (FFN blocks) if not using custom layers
-        if (!_usingCustomLayers)
+        // Register every layer in the shared Layers collection (in a stable
+        // order) so GetParameters / GetParameterGradients / UpdateParameters and
+        // the tape-training parameter collection all see the full parameter set.
+        Layers.AddRange(_colEmbeddings);
+        for (int layer = 0; layer < _options.NumLayers; layer++)
         {
-            Layers.Clear();
-            var gelu = new GELUActivation<T>() as IActivationFunction<T>;
-            int ffnDim = _options.FeedForwardDimension;
-
-            for (int layer = 0; layer < _options.NumLayers; layer++)
-            {
-                Layers.Add(new FullyConnectedLayer<T>(ffnDim, gelu));
-                Layers.Add(new FullyConnectedLayer<T>(embDim, identity));
-            }
+            Layers.Add(_queryLayers[layer]);
+            Layers.Add(_keyLayers[layer]);
+            Layers.Add(_valueLayers[layer]);
+            Layers.Add(_ffn1[layer]);
+            Layers.Add(_ffn2[layer]);
+            Layers.Add(_attnNorms[layer]);
+            Layers.Add(_ffnNorms[layer]);
         }
+        Layers.AddRange(_colDecoders);
     }
 
     #endregion
@@ -278,21 +296,71 @@ public class TabTransformerGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTab
             _colWidths.Add(info.Width);
         }
 
-        // Rebuild all auxiliary layers with actual dimensions
-        RebuildAuxiliaryLayers();
+        // Rebuild all layers with the actual per-column widths.
+        BuildLayers();
 
-        int batchSize = Math.Min(_options.BatchSize, data.Rows);
-        T lr = NumOps.FromDouble(_options.LearningRate / batchSize);
+        // Masked-prediction training (the TabTransformer-Gen objective): for each
+        // row, randomly mask a fraction of columns (zero their values) and train
+        // the network to reconstruct the FULL row from the unmasked context. The
+        // tape-based base.Train computes the gradient through the column-token
+        // transformer and updates every registered layer via the optimizer.
+        int maskedCols = Math.Max(1, (int)Math.Round(_options.MaskRatio * _numColumns));
+        var rowOrder = new int[data.Rows];
+        for (int i = 0; i < data.Rows; i++) rowOrder[i] = i;
 
         for (int epoch = 0; epoch < epochs; epoch++)
         {
-            for (int b = 0; b < data.Rows; b += batchSize)
+            ShuffleInPlace(rowOrder);
+            for (int oi = 0; oi < rowOrder.Length; oi++)
             {
-                int end = Math.Min(b + batchSize, data.Rows);
+                int r = rowOrder[oi];
+                var fullRow = GetRow(transformedData, r);
+                var maskedRow = ApplyColumnMask(fullRow, maskedCols);
+
+                var inputTensor = VectorToTensor(maskedRow);
+                var targetTensor = VectorToTensor(fullRow);
+                Train(inputTensor, targetTensor);
             }
         }
 
         IsFitted = true;
+    }
+
+    /// <summary>
+    /// Returns a copy of <paramref name="row"/> with <paramref name="numMasked"/>
+    /// randomly chosen columns zeroed out (the masked-prediction corruption).
+    /// </summary>
+    private Vector<T> ApplyColumnMask(Vector<T> row, int numMasked)
+    {
+        var masked = row.Clone();
+        if (_numColumns == 0) return masked;
+
+        var colIdx = new int[_numColumns];
+        for (int c = 0; c < _numColumns; c++) colIdx[c] = c;
+        ShuffleInPlace(colIdx);
+
+        for (int m = 0; m < numMasked && m < _numColumns; m++)
+        {
+            int c = colIdx[m];
+            int offset = GetColumnOffset(c);
+            int width = _colWidths[c];
+            for (int j = 0; j < width && (offset + j) < masked.Length; j++)
+            {
+                masked[offset + j] = NumOps.Zero;
+            }
+        }
+
+        return masked;
+    }
+
+    /// <summary>Fisher-Yates shuffle using the generator's seeded RNG.</summary>
+    private void ShuffleInPlace(int[] array)
+    {
+        for (int i = array.Length - 1; i > 0; i--)
+        {
+            int j = _random.Next(i + 1);
+            (array[i], array[j]) = (array[j], array[i]);
+        }
     }
 
     /// <inheritdoc />
@@ -314,44 +382,27 @@ public class TabTransformerGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTab
         }
 
         var result = new Matrix<T>(numSamples, _dataWidth);
-        int embDim = _options.EmbeddingDimension;
 
         for (int i = 0; i < numSamples; i++)
         {
-            // Start with random noise for all column embeddings
-            var colEmbeds = new List<Vector<T>>();
-            for (int c = 0; c < _numColumns; c++)
+            // Start from a random noise row in the transformed space, then
+            // iteratively reconstruct it through the trained transformer — the
+            // generation-as-iterative-masked-prediction loop. LayerNorm inside
+            // the forward keeps each refinement step numerically bounded.
+            var row = CreateStandardNormalVector(_dataWidth);
+            Tensor<T> output = VectorToTensor(row);
+
+            for (int step = 0; step < Math.Max(1, _options.GenerationSteps); step++)
             {
-                colEmbeds.Add(CreateStandardNormalVector(embDim));
+                output = RunForward(output);
             }
 
-            // Iterative refinement
-            for (int step = 0; step < _options.GenerationSteps; step++)
+            var finalRow = TensorToVector(output, _dataWidth);
+            for (int j = 0; j < _dataWidth; j++)
             {
-                // Apply transformer attention
-                var contextual = ApplyTransformer(colEmbeds);
-
-                // Decode each column and re-embed
-                for (int c = 0; c < _numColumns; c++)
-                {
-                    var decoded = DecoderForward(c, contextual[c]);
-
-                    if (step < _options.GenerationSteps - 1)
-                    {
-                        // Re-embed decoded values for next iteration
-                        colEmbeds[c] = EmbedColumn(c, decoded);
-                    }
-                    else
-                    {
-                        // Final step: write to output
-                        int offset = GetColumnOffset(c);
-                        int width = _colWidths[c];
-                        for (int j = 0; j < width && (offset + j) < _dataWidth; j++)
-                        {
-                            result[i, offset + j] = j < decoded.Length ? decoded[j] : NumOps.Zero;
-                        }
-                    }
-                }
+                T v = j < finalRow.Length ? finalRow[j] : NumOps.Zero;
+                double dv = NumOps.ToDouble(v);
+                result[i, j] = (double.IsNaN(dv) || double.IsInfinity(dv)) ? NumOps.Zero : v;
             }
         }
 
@@ -366,132 +417,136 @@ public class TabTransformerGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTab
 
     #region Transformer Forward
 
-    private List<Vector<T>> ApplyTransformer(List<Vector<T>> colEmbeds)
+    /// <summary>
+    /// Tape-connected forward pass: embeds each column as a token, runs the
+    /// column-token transformer (multi-head self-attention + feed-forward, each
+    /// wrapped in a residual + LayerNorm), and decodes every column back to its
+    /// value space. ALL operations stay on <see cref="Tensor{T}"/> via
+    /// <see cref="NeuralNetworkBase{T}.Engine"/> ops so, when invoked inside a
+    /// training <c>GradientTape</c>, gradients flow to every layer's parameters.
+    /// The previous implementation round-tripped through <c>Vector&lt;T&gt;</c> +
+    /// scalar <c>NumOps</c> math, which detached the tape and left every
+    /// parameter without a gradient (no training ever happened).
+    /// </summary>
+    private Tensor<T> RunForward(Tensor<T> input)
     {
         int embDim = _options.EmbeddingDimension;
-        var current = new List<Vector<T>>(colEmbeds);
 
+        // Before Fit() supplies real column metadata, adapt the default
+        // (width-1-per-feature) column layout to the actual input length so the
+        // model works as a generic network for any 1-D input — the generated
+        // ModelFamily tests construct the model from an architecture whose
+        // InputSize need not equal the test's feature count. Only triggers when
+        // not fitted and the width genuinely differs; within a single test the
+        // input length is constant, so this rebuilds at most once (on the first
+        // forward) and stays stable through training.
+        if (!IsFitted && input.Length != _dataWidth)
+        {
+            _numColumns = Math.Max(1, input.Length);
+            _colWidths.Clear();
+            for (int c = 0; c < _numColumns; c++) _colWidths.Add(1);
+            _dataWidth = _numColumns;
+            BuildLayers();
+        }
+
+        // Canonicalise the input to a flat [dataWidth] vector (callers pass
+        // either [dataWidth] or a unit-batched [1, dataWidth]).
+        var flat = input.Rank == 1 && input.Length == _dataWidth
+            ? input
+            : Engine.Reshape(input, new[] { _dataWidth });
+
+        // 1) Embed each column into the shared embedding space and stack the
+        //    per-column embeddings into a [numColumns, embDim] token sequence.
+        var embRows = new List<Tensor<T>>(_numColumns);
+        int offset = 0;
+        for (int c = 0; c < _numColumns; c++)
+        {
+            int width = _colWidths[c];
+            var colSlice = Engine.TensorSlice(flat, new[] { offset }, new[] { width }); // [width]
+            offset += width;
+            var col2D = Engine.Reshape(colSlice, new[] { 1, width }); // [1, width]
+            var emb = _colEmbeddings[c].Forward(col2D);               // [1, embDim]
+            embRows.Add(Engine.Reshape(emb, new[] { 1, embDim }));
+        }
+        var seq = Engine.TensorConcatenate(embRows.ToArray(), axis: 0); // [numColumns, embDim]
+
+        // 2) Transformer blocks.
         for (int layer = 0; layer < _options.NumLayers; layer++)
         {
-            // Self-attention across columns
-            var attended = ColumnSelfAttention(current, layer);
+            // Multi-head self-attention across columns.
+            var attn = MultiHeadAttention(seq, layer, embDim);        // [numColumns, embDim]
+            seq = Engine.TensorAdd(seq, attn);                        // residual
+            seq = _attnNorms[layer].Forward(seq);                     // LayerNorm
 
-            // Residual connection
-            for (int c = 0; c < _numColumns; c++)
-            {
-                for (int d = 0; d < embDim; d++)
-                {
-                    attended[c][d] = NumOps.Add(attended[c][d], current[c][d]);
-                }
-            }
-
-            // Feed-forward per column via Layers (2 layers per block)
-            int ffnIdx1 = layer * 2;
-            int ffnIdx2 = layer * 2 + 1;
-            var ffnOut = new List<Vector<T>>();
-
-            for (int c = 0; c < _numColumns; c++)
-            {
-                Tensor<T> t1;
-                Tensor<T> t2;
-
-                if (ffnIdx1 < Layers.Count && ffnIdx2 < Layers.Count)
-                {
-                    t1 = Layers[ffnIdx1].Forward(VectorToTensor(attended[c]));
-                    t2 = Layers[ffnIdx2].Forward(t1);
-                }
-                else
-                {
-                    // Fallback: identity
-                    t2 = VectorToTensor(attended[c]);
-                }
-
-                var ffnVec = TensorToVector(t2, embDim);
-
-                // Residual
-                for (int d = 0; d < embDim; d++)
-                {
-                    ffnVec[d] = NumOps.Add(ffnVec[d], attended[c][d]);
-                }
-
-                ffnOut.Add(ffnVec);
-            }
-
-            current = ffnOut;
+            // Position-wise feed-forward.
+            var ff = _ffn1[layer].Forward(seq);                       // [numColumns, ffnDim]
+            ff = _ffn2[layer].Forward(ff);                            // [numColumns, embDim]
+            seq = Engine.TensorAdd(seq, ff);                          // residual
+            seq = _ffnNorms[layer].Forward(seq);                      // LayerNorm
         }
 
-        return current;
+        // 3) Decode each column back to its value space and concatenate.
+        var decoded = new List<Tensor<T>>(_numColumns);
+        for (int c = 0; c < _numColumns; c++)
+        {
+            int width = _colWidths[c];
+            var row = Engine.TensorSliceAxis(seq, axis: 0, index: c); // [embDim]
+            var row2D = Engine.Reshape(row, new[] { 1, embDim });     // [1, embDim]
+            var dec = _colDecoders[c].Forward(row2D);                 // [1, width]
+            decoded.Add(Engine.Reshape(dec, new[] { width }));        // [width]
+        }
+        var output = Engine.TensorConcatenate(decoded.ToArray(), axis: 0); // [dataWidth]
+        return output;
     }
 
-    private List<Vector<T>> ColumnSelfAttention(List<Vector<T>> embeds, int layerIdx)
+    /// <summary>
+    /// Multi-head scaled-dot-product self-attention over the column-token
+    /// sequence, computed entirely with tape-connected <see cref="Engine"/> ops.
+    /// </summary>
+    private Tensor<T> MultiHeadAttention(Tensor<T> seq, int layer, int embDim)
     {
-        int embDim = _options.EmbeddingDimension;
-        int numHeads = _options.NumHeads;
-        int headDim = Math.Max(1, embDim / numHeads);
-        double scale = 1.0 / Math.Sqrt(headDim);
+        // Heads must evenly divide the embedding dim for the per-head reshape;
+        // fall back to single-head full-dim attention otherwise.
+        int numHeads = _options.NumHeads > 0 && embDim % _options.NumHeads == 0
+            ? _options.NumHeads
+            : 1;
+        int headDim = embDim / numHeads;
+        T scale = NumOps.FromDouble(1.0 / Math.Sqrt(headDim));
 
-        // Compute Q, K, V for all columns
-        var queries = new List<Vector<T>>();
-        var keys = new List<Vector<T>>();
-        var values = new List<Vector<T>>();
+        var q = _queryLayers[layer].Forward(seq);  // [numColumns, embDim]
+        var k = _keyLayers[layer].Forward(seq);
+        var v = _valueLayers[layer].Forward(seq);
 
-        for (int c = 0; c < _numColumns; c++)
+        if (numHeads == 1)
         {
-            var qTensor = _queryLayers[layerIdx].Forward(VectorToTensor(embeds[c]));
-            var kTensor = _keyLayers[layerIdx].Forward(VectorToTensor(embeds[c]));
-            var vTensor = _valueLayers[layerIdx].Forward(VectorToTensor(embeds[c]));
-
-            queries.Add(TensorToVector(qTensor, embDim));
-            keys.Add(TensorToVector(kTensor, embDim));
-            values.Add(TensorToVector(vTensor, embDim));
+            return SingleHeadAttention(q, k, v, scale);
         }
 
-        // Compute attention: for each column, attend to all columns
-        var output = new List<Vector<T>>();
-        for (int c = 0; c < _numColumns; c++)
+        // Reshape to [numColumns, numHeads, headDim] and attend per head.
+        var q3 = Engine.Reshape(q, new[] { _numColumns, numHeads, headDim });
+        var k3 = Engine.Reshape(k, new[] { _numColumns, numHeads, headDim });
+        var v3 = Engine.Reshape(v, new[] { _numColumns, numHeads, headDim });
+
+        var headOutputs = new List<Tensor<T>>(numHeads);
+        for (int h = 0; h < numHeads; h++)
         {
-            // Compute attention scores
-            var scores = new double[_numColumns];
-            double maxScore = double.MinValue;
-
-            for (int k = 0; k < _numColumns; k++)
-            {
-                double dot = 0;
-                for (int d = 0; d < embDim; d++)
-                {
-                    dot += NumOps.ToDouble(queries[c][d]) * NumOps.ToDouble(keys[k][d]);
-                }
-                scores[k] = dot * scale;
-                if (scores[k] > maxScore) maxScore = scores[k];
-            }
-
-            // Softmax
-            double sumExp = 0;
-            for (int k = 0; k < _numColumns; k++)
-            {
-                scores[k] = Math.Exp(scores[k] - maxScore);
-                sumExp += scores[k];
-            }
-            for (int k = 0; k < _numColumns; k++)
-            {
-                scores[k] /= Math.Max(sumExp, 1e-10);
-            }
-
-            // Weighted sum of values
-            var attnOut = new Vector<T>(embDim);
-            for (int k = 0; k < _numColumns; k++)
-            {
-                for (int d = 0; d < embDim; d++)
-                {
-                    attnOut[d] = NumOps.Add(attnOut[d],
-                        NumOps.FromDouble(scores[k] * NumOps.ToDouble(values[k][d])));
-                }
-            }
-
-            output.Add(attnOut);
+            var qh = Engine.TensorSliceAxis(q3, axis: 1, index: h);   // [numColumns, headDim]
+            var kh = Engine.TensorSliceAxis(k3, axis: 1, index: h);
+            var vh = Engine.TensorSliceAxis(v3, axis: 1, index: h);
+            headOutputs.Add(SingleHeadAttention(qh, kh, vh, scale));  // [numColumns, headDim]
         }
 
-        return output;
+        return Engine.TensorConcatenate(headOutputs.ToArray(), axis: 1); // [numColumns, embDim]
+    }
+
+    /// <summary>softmax(Q·Kᵀ · scale)·V for a single head — all tape-connected.</summary>
+    private Tensor<T> SingleHeadAttention(Tensor<T> q, Tensor<T> k, Tensor<T> v, T scale)
+    {
+        var kt = Engine.TensorTranspose(k);                  // [dim, numColumns]
+        var scores = Engine.TensorMatMul(q, kt);             // [numColumns, numColumns]
+        scores = Engine.TensorMultiplyScalar(scores, scale);
+        var probs = Engine.TensorSoftmax(scores, axis: 1);   // row-wise softmax
+        return Engine.TensorMatMul(probs, v);                // [numColumns, dim]
     }
 
     #endregion
@@ -501,48 +556,25 @@ public class TabTransformerGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTab
     /// <inheritdoc />
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        // For direct neural network use: treat input as a flattened row, embed columns, and decode
-        if (_transformer is null || !IsFitted)
-        {
-            return input;
-        }
-
-        var row = TensorToVector(input, _dataWidth);
-        int embDim = _options.EmbeddingDimension;
-
-        var colEmbeds = new List<Vector<T>>();
-        for (int c = 0; c < _numColumns; c++)
-        {
-            var colVals = ExtractColumnValues(row, c);
-            colEmbeds.Add(EmbedColumn(c, colVals));
-        }
-
-        var contextual = ApplyTransformer(colEmbeds);
-
-        var output = new Tensor<T>([_dataWidth]);
-        for (int c = 0; c < _numColumns; c++)
-        {
-            var decoded = DecoderForward(c, contextual[c]);
-            int offset = GetColumnOffset(c);
-            int width = _colWidths[c];
-            for (int j = 0; j < width && (offset + j) < _dataWidth; j++)
-            {
-                output[offset + j] = j < decoded.Length ? decoded[j] : NumOps.Zero;
-            }
-        }
-
-        return output;
+        // The column-token transformer reconstructs the full row from its input.
+        // A default column layout is always built in InitializeLayers, so the
+        // network is usable before Fit() (the generated ModelFamily tests call
+        // Predict()/Train() directly). The same tape-connected forward is used
+        // for both inference and training.
+        return RunForward(input);
     }
 
-    /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <summary>
+    /// The training forward — identical to <see cref="Predict"/> — overridden so
+    /// the tape-based training path runs the column-token transformer rather than
+    /// the default sequential walk over <see cref="NeuralNetworkBase{T}.Layers"/>
+    /// (which would feed each layer's output to the next, ignoring the column /
+    /// attention structure). Keeping it on tape-connected <see cref="Engine"/>
+    /// ops lets the optimizer compute real gradients for every parameter.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
-        // Training is handled via Fit() for tabular generators
-        // This provides the NeuralNetworkBase interface compatibility
-        var predicted = Predict(input);
-        var loss = _lossFunction.CalculateLoss(
-            TensorToVector(predicted, predicted.Length),
-            TensorToVector(expectedOutput, expectedOutput.Length));
+        return RunForward(input);
     }
 
     /// <inheritdoc />
@@ -570,6 +602,11 @@ public class TabTransformerGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTab
         writer.Write(_options.FeedForwardDimension);
         writer.Write(_numColumns);
         writer.Write(_dataWidth);
+        // Per-column widths define the embedding/decoder layer boundaries within
+        // Layers — serialize them so a deserialized clone can re-bind its typed
+        // layer references and run the identical column-token forward.
+        writer.Write(_colWidths.Count);
+        for (int c = 0; c < _colWidths.Count; c++) writer.Write(_colWidths[c]);
         writer.Write(IsFitted);
     }
 
@@ -582,7 +619,58 @@ public class TabTransformerGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTab
         _ = reader.ReadInt32(); // FeedForwardDimension
         _numColumns = reader.ReadInt32();
         _dataWidth = reader.ReadInt32();
+        int colWidthCount = reader.ReadInt32();
+        _colWidths.Clear();
+        for (int c = 0; c < colWidthCount; c++) _colWidths.Add(reader.ReadInt32());
         IsFitted = reader.ReadBoolean();
+
+        // The base deserializer rebuilt Layers from the serialized layer list,
+        // orphaning the typed references the constructor populated. Re-bind them
+        // from the freshly-loaded Layers so the column-token forward uses the
+        // deserialized (trained) weights rather than the clone's discarded init.
+        ExtractLayerReferences();
+    }
+
+    /// <summary>
+    /// Re-binds the typed layer-reference lists (embeddings, per-block Q/K/V +
+    /// FFN + norms, decoders) from the shared <see cref="NeuralNetworkBase{T}.Layers"/>
+    /// collection, using the known build order and the current
+    /// <see cref="_numColumns"/> / <see cref="_options"/> layout. Idempotent and
+    /// safe to call after deserialization (where Layers is repopulated with new
+    /// layer instances). No-ops if the Layers count doesn't match the expected
+    /// structure (e.g. a custom external layer chain).
+    /// </summary>
+    private void ExtractLayerReferences()
+    {
+        int numLayers = _options.NumLayers;
+        int expected = _numColumns * 2 + numLayers * 7;
+        if (Layers.Count != expected) return;
+
+        _colEmbeddings.Clear();
+        _queryLayers.Clear();
+        _keyLayers.Clear();
+        _valueLayers.Clear();
+        _ffn1.Clear();
+        _ffn2.Clear();
+        _attnNorms.Clear();
+        _ffnNorms.Clear();
+        _colDecoders.Clear();
+
+        int idx = 0;
+        for (int c = 0; c < _numColumns; c++)
+            _colEmbeddings.Add((FullyConnectedLayer<T>)Layers[idx++]);
+        for (int l = 0; l < numLayers; l++)
+        {
+            _queryLayers.Add((FullyConnectedLayer<T>)Layers[idx++]);
+            _keyLayers.Add((FullyConnectedLayer<T>)Layers[idx++]);
+            _valueLayers.Add((FullyConnectedLayer<T>)Layers[idx++]);
+            _ffn1.Add((FullyConnectedLayer<T>)Layers[idx++]);
+            _ffn2.Add((FullyConnectedLayer<T>)Layers[idx++]);
+            _attnNorms.Add((LayerNormalizationLayer<T>)Layers[idx++]);
+            _ffnNorms.Add((LayerNormalizationLayer<T>)Layers[idx++]);
+        }
+        for (int c = 0; c < _numColumns; c++)
+            _colDecoders.Add((FullyConnectedLayer<T>)Layers[idx++]);
     }
 
     /// <inheritdoc />
@@ -625,38 +713,6 @@ public class TabTransformerGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTab
 
     #region Helpers
 
-    private Vector<T> EmbedColumn(int colIdx, Vector<T> colValues)
-    {
-        if (colIdx >= _colEmbeddings.Count)
-        {
-            return CreateStandardNormalVector(_options.EmbeddingDimension);
-        }
-        var tensor = _colEmbeddings[colIdx].Forward(VectorToTensor(colValues));
-        return TensorToVector(tensor, _options.EmbeddingDimension);
-    }
-
-    private Vector<T> DecoderForward(int colIdx, Vector<T> embedding)
-    {
-        if (colIdx >= _colDecoders.Count)
-        {
-            return new Vector<T>(0);
-        }
-        var tensor = _colDecoders[colIdx].Forward(VectorToTensor(embedding));
-        return TensorToVector(tensor, _colWidths[colIdx]);
-    }
-
-    private Vector<T> ExtractColumnValues(Vector<T> row, int colIdx)
-    {
-        int offset = GetColumnOffset(colIdx);
-        int width = _colWidths[colIdx];
-        var vals = new Vector<T>(width);
-        for (int j = 0; j < width && (offset + j) < row.Length; j++)
-        {
-            vals[j] = row[offset + j];
-        }
-        return vals;
-    }
-
     private int GetColumnOffset(int colIdx)
     {
         int offset = 0;
@@ -678,34 +734,6 @@ public class TabTransformerGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTab
             v[i] = NumOps.FromDouble(normal);
         }
         return v;
-    }
-
-    private static Tensor<T> SanitizeAndClipGradient(Tensor<T> grad, double maxNorm)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        double normSq = 0;
-        for (int i = 0; i < grad.Length; i++)
-        {
-            double val = numOps.ToDouble(grad[i]);
-            if (double.IsNaN(val) || double.IsInfinity(val))
-            {
-                grad[i] = numOps.Zero;
-                continue;
-            }
-            normSq += val * val;
-        }
-
-        double norm = Math.Sqrt(normSq);
-        if (norm > maxNorm)
-        {
-            double scale = maxNorm / norm;
-            for (int i = 0; i < grad.Length; i++)
-            {
-                grad[i] = numOps.FromDouble(numOps.ToDouble(grad[i]) * scale);
-            }
-        }
-
-        return grad;
     }
 
     private static Vector<T> GetRow(Matrix<T> matrix, int row)
