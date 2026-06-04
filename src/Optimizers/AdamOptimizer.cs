@@ -690,6 +690,16 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // That single gate respects AnomalyGuardMode and runs BEFORE
         // _tapeStep++ so a skipped step is a true no-op.
 
+        // GPU-RESIDENT ADAM (Phase 1, env AIDOTNET_GPU_ADAM=1): when on a GPU engine + float, run the Adam
+        // update on the GPU (GpuOptimizer.TryAdamStep -> backend.AdamUpdate) so gradients never download to
+        // host and weights/moments update in place — eliminating the per-step grad-download + weight-reupload
+        // that makes the step host-bound (and uncapturable as a CUDA graph). Moments are allocated GPU-resident
+        // (RentPinnedOnGpu) so TryGetGpuBuffer resolves them. Gated OFF by default; falls back to the CPU SIMD
+        // path per-parameter whenever any tensor isn't GPU-resident. AMSGrad uses the CPU path (no GPU vMax yet).
+        bool gpuAdam = isFloat && !_options.UseAMSGrad
+            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
+            && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
+
         foreach (var param in context.Parameters)
         {
             if (!context.Gradients.TryGetValue(param, out var grad))
@@ -706,12 +716,14 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             // TensorCopy throws "Destination array was not long enough".
             if (!_tapeM.TryGetValue(param, out var m) || !m._shape.SequenceEqual(param._shape))
             {
-                m = new Tensor<T>(param._shape);
+                m = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape);
+                if (gpuAdam) m.AsWritableSpan().Clear();   // Adam moments start at 0
                 _tapeM[param] = m;
             }
             if (!_tapeV.TryGetValue(param, out var v) || !v._shape.SequenceEqual(param._shape))
             {
-                v = new Tensor<T>(param._shape);
+                v = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape);
+                if (gpuAdam) v.AsWritableSpan().Clear();
                 _tapeV[param] = v;
             }
             // AMSGrad running max of v̂. Initialised to a fresh zero tensor on
@@ -735,6 +747,20 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             if (!param._shape.SequenceEqual(grad._shape) && param.Length == grad.Length)
             {
                 grad = Engine.Reshape(grad, param._shape);
+            }
+
+            // GPU-resident Adam update (Phase 1): when param/grad/m/v all resolve to GPU buffers, the kernel
+            // updates weights + moments in place on the GPU with no host download. Returns false (-> CPU path)
+            // if any tensor isn't GPU-resident this step. weightDecay=0 (plain Adam; AdamW handles its own).
+            if (gpuAdam)
+            {
+                var pf = (Tensor<float>)(object)param;
+                var gf = (Tensor<float>)(object)grad;
+                var mf = (Tensor<float>)(object)m;
+                var vf = (Tensor<float>)(object)v;
+                if (AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryAdamStep(
+                        pf, gf, mf, vf, (float)lr, (float)b1, (float)b2, (float)eps, 0f, _tapeStep))
+                    continue;   // weights/moments updated in place on GPU; skip the CPU SIMD path for this param
             }
 
             int n = param.Length;
