@@ -6620,10 +6620,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             LastLoss = lossValue;
             // First successful fused step commits this model to the fused
-            // path for the rest of the training session — Adam m/v are now
+            // path for the rest of the session — Adam m/v are now
             // inside the compiled plan and transferring them to the eager
             // optimizer isn't possible without API we don't have.
             _fusedTrainingCommitted = true;
+
+            // Weight-cache coherence (CodeRabbit, PR #1488): the fused optimizer
+            // kernel mutates the weight tensors IN PLACE exactly like the eager
+            // path's opt.Step, so the GPU weight uploads AND the CPU engine's
+            // identity-keyed derived caches (pre-packed B panels, transposed conv
+            // kernels) are equally stale here. Every other in-place update path
+            // flushes via this helper; without it, fused-compatible training reuses
+            // frozen pre-step weights on the next forward and never learns.
+            InvalidateWeightCachesAfterSuccessfulWeightUpdate();
 
             // Emit diagnostic events for the fused-path hit. This is the
             // ONLY place we can observe that the fused path ran without
