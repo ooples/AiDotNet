@@ -644,7 +644,21 @@ public class TabTransformerGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTab
     {
         int numLayers = _options.NumLayers;
         int expected = _numColumns * 2 + numLayers * 7;
-        if (Layers.Count != expected) return;
+        if (Layers.Count != expected)
+        {
+            // Fail fast rather than silently leaving the typed-layer lists empty — RunForward
+            // indexes into _colEmbeddings / _queryLayers / etc. and would otherwise throw a
+            // confusing ArgumentOutOfRangeException at the first lookup with no hint as to
+            // why. Hitting this means either deserialization saw a layer chain that doesn't
+            // match the current TabTransformerGenOptions (NumLayers / numColumns drift between
+            // save and load) or someone replaced Layers with an external chain — neither of
+            // which the default forward path can handle.
+            throw new InvalidOperationException(
+                $"TabTransformerGenGenerator: Layers.Count = {Layers.Count} does not match the " +
+                $"expected structure {expected} (= {_numColumns} columns × 2 + {numLayers} layers × 7). " +
+                $"Confirm the model was serialized with the same TabTransformerGenOptions, or " +
+                $"override the forward path if you intend to plug in a custom layer chain.");
+        }
 
         _colEmbeddings.Clear();
         _queryLayers.Clear();
