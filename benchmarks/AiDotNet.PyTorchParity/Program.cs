@@ -551,7 +551,14 @@ internal sealed class ResourceMonitor : IDisposable
 
     public static ResourceMonitor Start() => new();
 
-    public ResourceReport Summary() => new(Math.Round(_rssMb.Count == 0 ? 0 : _rssMb.Max(), 3), NvidiaSmi.TryRead());
+    // NvidiaSmiSample is null by design: this benchmark hard-pins the CPU
+    // engine (GpuDisableBootstrap + ResetToCpu), and nvidia-smi reports
+    // SYSTEM-WIDE GPU utilization/memory — sampling it here attributed
+    // whatever the desktop GPU happened to be doing (browser, compositor)
+    // to a CPU-only run. Mirrors the device-gated GPU sampling on the
+    // Python side (benchmark.py ResourceMonitor.track_gpu). If a GPU mode
+    // is ever added, gate the NvidiaSmi.TryRead() call on it.
+    public ResourceReport Summary() => new(Math.Round(_rssMb.Count == 0 ? 0 : _rssMb.Max(), 3), NvidiaSmiSample: null);
 
     public void Dispose()
     {
@@ -589,10 +596,14 @@ internal static class AiDotNetProbe
     public static object Describe()
     {
         // Report the loaded AiDotNet assembly metadata so the report identifies
-        // which build ran (working-tree source vs a package).
+        // which build ran (working-tree source vs a package). Only the file
+        // NAME is recorded: the full Assembly.Location is an absolute local
+        // path (user name, machine layout) that leaks environment details
+        // into committed benchmark artifacts and breaks reproducibility
+        // diffs between machines (review #1488).
         var assembly = typeof(NeuralNetworkBase<float>).Assembly;
         var location = string.Empty;
-        try { location = assembly.Location; } catch { /* single-file: no location */ }
+        try { location = Path.GetFileName(assembly.Location); } catch { /* single-file: no location */ }
         return new
         {
             loaded = true,

@@ -3378,6 +3378,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // accum pattern.
             var optimizer = GetOrCreateBaseOptimizer();
             var paramsList = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
+
+            // Mirror TrainWithTape's pre-step global gradient-norm clipping
+            // on the ACCUMULATED gradient (PyTorch grad-accum idiom: clip
+            // once on the summed/averaged gradient right before
+            // optimizer.step()). Without this, every other training entry
+            // point clips at MaxGradNorm (default 1.0) while this path
+            // didn't — so a single full-batch Train step and an equivalent
+            // TrainWithGradientAccumulation step produced visibly different
+            // updates whenever the gradient norm exceeded the clip threshold
+            // (the Issue1296 GradientAccumulation_MatchesFullBatchGradient
+            // probe caught exactly this). Clips over the layer-collected
+            // params only — the same set TrainWithTape clips — using the
+            // deterministic list order for the norm reduction.
+            double maxGradNorm = MaxGradNormValue;
+            if (maxGradNorm > 0.0 && avgGrads.Count > 0)
+            {
+                ApplyGradientClipping(avgGrads, maxGradNorm, paramsList);
+            }
             // Include extra trainable tensors in the optimizer's
             // parameter list too, so its update step (and any per-
             // parameter state it maintains) covers them.
@@ -3389,6 +3407,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 (pred, tgt) => loss.ComputeTapeLoss(pred, tgt),
                 parameterBuffer: null);
             optimizer.Step(context);
+            // GPU weight-cache coherence after the grad-accum aggregated step.
+            // See InvalidateWeightCachesAfterSuccessfulWeightUpdate.
+            InvalidateWeightCachesAfterSuccessfulWeightUpdate();
             StepSchedulerIfSupported(optimizer);
             LastLoss = avgLoss;
         }
@@ -3834,6 +3855,65 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 $"{ex.GetType().Name}: {ex.Message}");
             return false;
         }
+    }
+
+    /// <summary>
+    /// Releases every compiled inference plan this network holds, returning their
+    /// pre-allocated intermediate buffers to the GC. The next compiled call (or
+    /// <see cref="CompileForward"/>) re-traces and re-compiles from scratch.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A compiled plan pre-allocates one output buffer per step so replay is
+    /// allocation-free — for activation-heavy models (conv nets at large batch)
+    /// that is tens of MB per plan, held for the network's lifetime. A process
+    /// that warms plans across many models/shapes accumulates enough resident
+    /// buffer memory to degrade everything else running beside it (GC pressure,
+    /// no-GC-region reservation failures — the AIsEval compiled-mode benchmark
+    /// measured even non-compiled models slowing ~2x once ~16 plans were warm).
+    /// Call this when a model goes cold (request lull, model rotation in a
+    /// serving pool, after a batch-size sweep) to bound that residency.
+    /// </para>
+    /// <para><b>For Beginners:</b> Compiled prediction keeps scratch memory
+    /// around so repeat predictions are fast. If you're done predicting with
+    /// this model for a while, call this to give that memory back; the next
+    /// prediction just rebuilds it automatically.</para>
+    /// <para>
+    /// Composite models that own compiled state OUTSIDE <see cref="Layers"/>
+    /// (child networks, sub-modules with their own compile hosts) should
+    /// override <see cref="OnReleaseCompiledPlans"/> to release it — the base
+    /// release runs first, then the hook.
+    /// </para>
+    /// </remarks>
+    public void ReleaseCompiledPlans()
+    {
+        _compileHost.Invalidate();
+
+        // Disposing the plans is not enough: during the trace each layer stashed
+        // its inputs/outputs in per-layer state fields (_lastInput / cached
+        // activations, kept for a potential Backward), and those references are
+        // the PLAN's pre-allocated buffers. As long as the layers hold them, the
+        // released plan's tens-of-MB of step buffers stay GC-reachable through
+        // the network itself. ResetState() clears that per-layer cache; it is
+        // inference-safe (the next Forward repopulates it) and only forfeits a
+        // Backward against the now-released forward, which is meaningless anyway.
+        foreach (var layer in Layers)
+            layer.ResetState();
+
+        OnReleaseCompiledPlans();
+    }
+
+    /// <summary>
+    /// Extension hook for <see cref="ReleaseCompiledPlans"/>. The base release
+    /// only covers this network's own compile host and <see cref="Layers"/>;
+    /// composite models that hold compiled state elsewhere (child
+    /// <see cref="NeuralNetworkBase{T}"/> instances, wrapped sub-modules)
+    /// override this to forward the release — typically by calling each
+    /// child's <see cref="ReleaseCompiledPlans"/>. Called AFTER the base
+    /// release completes. Default: no-op.
+    /// </summary>
+    protected virtual void OnReleaseCompiledPlans()
+    {
     }
 
     /// <summary>
@@ -6055,6 +6135,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 }
             }
 
+            // GPU weight-cache coherence after the opt.Step + extras-update above.
+            // See InvalidateWeightCachesAfterSuccessfulWeightUpdate for the full
+            // rationale (cache keys by array reference → stale GPU weights → model
+            // never learns).
+            if (!mpSkipOptimizerStep)
+                InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+
             // Advance the optimizer's learning-rate scheduler at the
             // tape-batch boundary via the shared helper. Without this,
             // any LR scheduler attached to the optimizer (NoamSchedule,
@@ -6533,10 +6620,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             LastLoss = lossValue;
             // First successful fused step commits this model to the fused
-            // path for the rest of the training session — Adam m/v are now
+            // path for the rest of the session — Adam m/v are now
             // inside the compiled plan and transferring them to the eager
             // optimizer isn't possible without API we don't have.
             _fusedTrainingCommitted = true;
+
+            // Weight-cache coherence (CodeRabbit, PR #1488): the fused optimizer
+            // kernel mutates the weight tensors IN PLACE exactly like the eager
+            // path's opt.Step, so the GPU weight uploads AND the CPU engine's
+            // identity-keyed derived caches (pre-packed B panels, transposed conv
+            // kernels) are equally stale here. Every other in-place update path
+            // flushes via this helper; without it, fused-compatible training reuses
+            // frozen pre-step weights on the next forward and never learns.
+            InvalidateWeightCachesAfterSuccessfulWeightUpdate();
 
             // Emit diagnostic events for the fused-path hit. This is the
             // ONLY place we can observe that the fused path ran without
@@ -6709,6 +6805,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 input, input, ComputeForward, RecomputeLoss);
 
             opt.Step(context);
+            // GPU weight-cache coherence after the custom-loss step.
+            // See InvalidateWeightCachesAfterSuccessfulWeightUpdate.
+            InvalidateWeightCachesAfterSuccessfulWeightUpdate();
 
             // Mirror the OnBatchEnd advance from TrainWithTape via the
             // shared helper so a custom-loss caller and a regular Train
@@ -6798,6 +6897,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             trainableParams, grads, lossValue);
 
         opt.Step(context);
+        // GPU weight-cache coherence after the precomputed-loss step.
+        // See InvalidateWeightCachesAfterSuccessfulWeightUpdate.
+        InvalidateWeightCachesAfterSuccessfulWeightUpdate();
 
         // Mirror the OnBatchEnd advance from TrainWithCustomLoss / TrainWithTape
         // so a precomputed-loss caller sees identical scheduler behaviour.
@@ -6860,6 +6962,41 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             stepped.OnBatchEnd();
         }
+    }
+
+    /// <summary>
+    /// Invalidates EVERY identity-keyed weight cache (GPU weight-buffer uploads
+    /// AND the CPU engine's derived-weight caches) after a successful in-place
+    /// weight update. Single source of truth for the "post-weight-write cache
+    /// flush" contract — every in-place parameter-write path (the training
+    /// entry points <see cref="TrainWithTape"/>, <c>TrainWithGradientAccumulation</c>,
+    /// <c>TrainWithCustomLoss</c>, <c>BackwardAndStepOnPrecomputedLoss</c>, and
+    /// the bulk-load paths <see cref="WithParameters"/> / <see cref="SetParameters"/>)
+    /// routes through this helper so they all keep the same coherency guarantee.
+    /// </summary>
+    /// <remarks>
+    /// Weight writes mutate the tensors IN PLACE, but DirectGpuTensorEngine's
+    /// weight-buffer cache keys by array REFERENCE and returns the cached upload
+    /// without re-checking contents. Without flushing here the next forward reads
+    /// STALE weights and the model NEVER LEARNS on GPU — loss frozen at ln(V) even
+    /// though the gradient is correct (it is recomputed each step). The GPU flush
+    /// is a no-op on the CPU engine (GpuEngine is null); the CPU flush below is
+    /// always live. Mirrors the OnParametersUpdated contract.
+    /// </remarks>
+    private void InvalidateWeightCachesAfterSuccessfulWeightUpdate()
+    {
+        GpuEngine?.InvalidateAllWeightCaches();
+        // CPU-side mirror of the same contract: the CPU engine's inference
+        // fast paths cache DERIVED weight forms (SgemmWithCachedB's
+        // pre-packed B panels, Conv2D's transposed kernels) keyed by the
+        // weight ARRAY's object identity, never re-reading its contents.
+        // opt.Step mutates the weight tensors IN PLACE, so without this
+        // flush the next Predict consumes STALE packed weights — the model
+        // appears not to learn on exactly the layers whose GEMMs hit the
+        // cached path (root cause of the Issue1296 grad-accum equivalence
+        // probe failure: two models with bit-identical parameters predicted
+        // differently because one carried packs from its pre-load init).
+        AiDotNet.Tensors.Engines.InferenceWeightCache.InvalidateAll();
     }
 
     /// <summary>
@@ -7656,6 +7793,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // placeholder state where ParameterCount=0, so UpdateParameters
         // skips them.
         UpdateParameters(parameters);
+        // The in-place write keeps every weight ARRAY's identity — and the
+        // CPU engine's inference fast paths cache derived weight forms
+        // (pre-packed GEMM panels, transposed conv kernels) keyed by that
+        // identity without re-reading contents. Flush them, or the next
+        // Predict computes with the PRE-update weights (root cause of the
+        // Issue1296 grad-accum probe failure: a WithParameters'd model with
+        // bit-identical parameters predicted differently because its MHA /
+        // FFN GEMMs consumed packs built from the pre-load random init).
+        InvalidateWeightCachesAfterSuccessfulWeightUpdate();
         return this;
     }
 
@@ -8503,6 +8649,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // would replay against parameters that no longer exist.
         _compileHost.Invalidate();
         Training.TapeTrainingStep<T>.InvalidateCache();
+        // Layers that mutate their parameter tensors IN PLACE keep the same
+        // weight-array identities — and both engines cache derived weight
+        // forms keyed by exactly that identity. Single source of truth:
+        // see InvalidateWeightCachesAfterSuccessfulWeightUpdate.
+        InvalidateWeightCachesAfterSuccessfulWeightUpdate();
     }
 
     /// <summary>

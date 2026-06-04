@@ -236,7 +236,8 @@ internal class InferenceOptimizer<T>
         var gqaLayers = new List<CachedGroupedQueryAttention<T>>();
         int layerIndex = 0;
 
-        foreach (var layer in model.Layers)
+        // Block-aware: rewritten attention may live inside TransformerEncoderBlock.
+        foreach (var layer in EnumerateAttentionHosts(model))
         {
             if (layer is CachedGroupedQueryAttention<T> cachedGqa)
             {
@@ -392,7 +393,8 @@ internal class InferenceOptimizer<T>
         var attentionLayers = new List<PagedCachedMultiHeadAttention<T>>();
         int layerIndex = 0;
 
-        foreach (var layer in model.Layers)
+        // Block-aware: rewritten attention may live inside TransformerEncoderBlock.
+        foreach (var layer in EnumerateAttentionHosts(model))
         {
             if (layer is PagedCachedMultiHeadAttention<T> pagedAttention)
             {
@@ -537,7 +539,8 @@ internal class InferenceOptimizer<T>
 
     private bool HasOptimizableAttentionLayers(NeuralNetworkBase<T> model)
     {
-        foreach (var layer in model.Layers)
+        // Block-aware: the default encoder layout hosts its MHA inside TransformerEncoderBlock.
+        foreach (var layer in EnumerateAttentionHosts(model))
         {
             if (layer is MultiHeadAttentionLayer<T> || layer is FlashAttentionLayer<T> ||
                 layer is SelfAttentionLayer<T> || layer is GroupedQueryAttentionLayer<T>)
@@ -595,133 +598,50 @@ internal class InferenceOptimizer<T>
                 continue;
             }
 
+            // Composite encoder blocks (the DEFAULT encoder layout since LayerHelper.
+            // CreateDefaultTransformerLayers emits TransformerEncoderBlock) host their
+            // attention internally — without this case the rewrite pass sees no
+            // MultiHeadAttentionLayer at the top level and silently skips the model
+            // (the shard-05 "NoApplicableLayersOrDisabled" regression). Rewrite the
+            // inner attention in place via ReplaceAttention, the composite counterpart
+            // of the model.Layers[i] assignment below. The synthetic [1, HiddenSize]
+            // shape candidate mirrors the lazy-MHA fallback (weight allocation depends
+            // only on embDim, not seqLen).
+            if (layer is TransformerEncoderBlock<T> encoderBlock)
+            {
+                if (encoderBlock.AttentionLayer is MultiHeadAttentionLayer<T> innerMha)
+                {
+                    var blockReplacement = BuildAttentionReplacement(
+                        innerMha, new[] { 1, encoderBlock.HiddenSize },
+                        enableKVCache, enablePagedKVCache, enableFlashAttention, useCausalMask);
+                    if (blockReplacement is not null)
+                    {
+                        encoderBlock.ReplaceAttention(blockReplacement);
+                        anyRewritten = true;
+                    }
+                }
+                continue;
+            }
+
             if (layer is MultiHeadAttentionLayer<T> mha)
             {
-                var inputShape = mha.GetInputShape();
-                if (inputShape.Length < 2)
+                // Prefer the previous layer's concrete output shape as the lazy-MHA
+                // resolution candidate; BuildAttentionReplacement falls back to the
+                // synthetic [1, embDim] shape when it is unavailable.
+                int[]? prevOutCandidate = null;
+                if (i > 0)
                 {
-                    continue;
+                    var prevOut = model.Layers[i - 1].GetOutputShape();
+                    if (prevOut.Length >= 2 && prevOut.All(d => d > 0))
+                        prevOutCandidate = prevOut;
                 }
 
-                // Resolve lazy MHA before reading seqLen/embDim. Prefer the previous
-                // layer's concrete output shape; fall back to a synthetic [1, embDim]
-                // shape derived from the layer's known head config (weight allocation
-                // depends only on embDim, not seqLen).
-                if (!mha.IsShapeResolved)
+                var replacement = BuildAttentionReplacement(
+                    mha, prevOutCandidate,
+                    enableKVCache, enablePagedKVCache, enableFlashAttention, useCausalMask);
+                if (replacement is not null)
                 {
-                    int[]? candidate = null;
-                    if (i > 0)
-                    {
-                        var prevOut = model.Layers[i - 1].GetOutputShape();
-                        if (prevOut.Length >= 2 && prevOut.All(d => d > 0))
-                            candidate = prevOut;
-                    }
-
-                    if (candidate is null && inputShape.Length >= 2 && inputShape[^1] > 0)
-                    {
-                        candidate = new[] { 1, inputShape[^1] };
-                    }
-
-                    if (candidate is not null)
-                    {
-                        try
-                        {
-                            mha.ResolveFromShape(candidate);
-                            inputShape = mha.GetInputShape();
-                        }
-                        catch (ArgumentException) { /* fall through */ }
-                    }
-                }
-                if (inputShape.Length < 2 || inputShape.Any(d => d <= 0))
-                {
-                    continue;
-                }
-
-                int seqLen = inputShape[0];
-                int embDim = inputShape[1];
-                int headCount = mha.HeadCount;
-                var activation = mha.ScalarActivation;
-
-                if (enableKVCache)
-                {
-                    if (enablePagedKVCache)
-                    {
-                        var paged = new PagedCachedMultiHeadAttention<T>(
-                            sequenceLength: seqLen,
-                            embeddingDimension: embDim,
-                            headCount: headCount,
-                            useCausalMask: useCausalMask,
-                            activationFunction: activation);
-                        paged.EnableWeightOnlyQuantization = _config.EnableWeightOnlyQuantization;
-                        paged.SetParameters(mha.GetParameters());
-
-                        // Preserve positional encoding configuration from source MHA layer
-                        if (mha.PositionalEncoding != PositionalEncodingType.None)
-                        {
-                            paged.ConfigurePositionalEncoding(
-                                mha.PositionalEncoding,
-                                ropeTheta: mha.RoPETheta,
-                                maxSequenceLength: seqLen);
-                        }
-                        else if (_config.PositionalEncoding == PositionalEncodingType.Rotary ||
-                                 _config.PositionalEncoding == PositionalEncodingType.ALiBi)
-                        {
-                            paged.ConfigurePositionalEncoding(
-                                _config.PositionalEncoding,
-                                ropeTheta: _config.RoPETheta,
-                                maxSequenceLength: seqLen);
-                        }
-
-                        model.Layers[i] = paged;
-                    }
-                    else
-                    {
-                        var cached = new CachedMultiHeadAttention<T>(
-                            sequenceLength: seqLen,
-                            embeddingDimension: embDim,
-                            headCount: headCount,
-                            useFlashAttention: enableFlashAttention,
-                            layerIndex: 0,
-                            useCausalMask: useCausalMask,
-                            activationFunction: activation);
-                        cached.SetParameters(mha.GetParameters());
-
-                        // Preserve positional encoding configuration from source MHA layer
-                        if (mha.PositionalEncoding != PositionalEncodingType.None)
-                        {
-                            cached.ConfigurePositionalEncoding(
-                                mha.PositionalEncoding,
-                                ropeTheta: mha.RoPETheta,
-                                maxSequenceLength: seqLen);
-                        }
-                        else if (_config.PositionalEncoding == PositionalEncodingType.Rotary ||
-                                 _config.PositionalEncoding == PositionalEncodingType.ALiBi)
-                        {
-                            cached.ConfigurePositionalEncoding(
-                                _config.PositionalEncoding,
-                                ropeTheta: _config.RoPETheta,
-                                maxSequenceLength: seqLen);
-                        }
-
-                        model.Layers[i] = cached;
-                    }
-                    anyRewritten = true;
-                    continue;
-                }
-
-                if (enableFlashAttention)
-                {
-                    var flashConfig = FlashAttentionConfig.Default;
-                    flashConfig.UseCausalMask = useCausalMask;
-
-                    var flashLayer = new FlashAttentionLayer<T>(
-                        sequenceLength: seqLen,
-                        embeddingDimension: embDim,
-                        headCount: headCount,
-                        config: flashConfig,
-                        activationFunction: activation);
-                    flashLayer.SetParameters(mha.GetParameters());
-                    model.Layers[i] = flashLayer;
+                    model.Layers[i] = replacement;
                     anyRewritten = true;
                 }
 
@@ -905,6 +825,32 @@ internal class InferenceOptimizer<T>
                     InferenceDiagnostics.RecordException("InferenceOptimizer", "WeightOnlyQuantization", ex, "MHAQuantizationFailed;FallbackToFP");
                 }
             }
+            // Quantize the attention hosted inside a composite encoder block (the
+            // default layout since LayerHelper emits TransformerEncoderBlock) — the
+            // top-level MHA case above never sees it. The block's FFN Dense sublayers
+            // are NOT quantized here: the block plumbs them through concretely-typed
+            // DenseLayer fields (parameters/serialization), so hosting a quantized
+            // wrapper needs a block-API widening like the attention slot received.
+            else if (model.Layers[i] is TransformerEncoderBlock<float> quantEncBlock
+                     && quantEncBlock.AttentionLayer is MultiHeadAttentionLayer<float> blockMha)
+            {
+                try
+                {
+                    if (!blockMha.IsShapeResolved)
+                        blockMha.ResolveFromShape(new[] { 1, quantEncBlock.HiddenSize });
+
+                    var replacement = new QuantizedAttentionLayer(blockMha, mode);
+                    if (replacement is LayerBase<float> typedReplacement)
+                    {
+                        quantEncBlock.ReplaceAttention(typedReplacement);
+                        any = true;
+                    }
+                }
+                catch (InvalidOperationException ex)
+                {
+                    InferenceDiagnostics.RecordException("InferenceOptimizer", "WeightOnlyQuantization", ex, "BlockMHAQuantizationFailed;FallbackToFP");
+                }
+            }
             // Quantize GroupedQueryAttentionLayer (supports INT8, FP8, NF4)
             else if (model.Layers[i] is GroupedQueryAttentionLayer<float> gqa)
             {
@@ -927,6 +873,161 @@ internal class InferenceOptimizer<T>
         string appliedTypes = any ? $"Applied({mode})" : "NoApplicableLayers";
         InferenceDiagnostics.RecordDecision("InferenceOptimizer", "WeightOnlyQuantization", enabled: any, reason: appliedTypes);
         return any;
+    }
+
+    /// <summary>
+    /// Enumerates every layer that can carry attention work: each top-level layer, plus
+    /// the attention sublayer hosted inside composite <see cref="TransformerEncoderBlock{T}"/>
+    /// layers (the default encoder layout emitted by <c>LayerHelper.CreateDefaultTransformerLayers</c>).
+    /// Read-side counterpart of the block-aware attention rewrite: KV-cache initialization,
+    /// inference-mode toggles, and capability checks must see the SAME attention layers the
+    /// rewrite produces, whether they sit in <c>Layers</c> directly or inside a block.
+    /// </summary>
+    private static IEnumerable<ILayer<T>> EnumerateAttentionHosts(NeuralNetworkBase<T> model)
+    {
+        foreach (var layer in model.Layers)
+        {
+            yield return layer;
+            if (layer is TransformerEncoderBlock<T> block)
+                yield return block.AttentionLayer;
+        }
+    }
+
+    /// <summary>
+    /// Builds the inference-optimized replacement for <paramref name="mha"/> under the
+    /// active rewrite configuration: <c>PagedCachedMultiHeadAttention</c> /
+    /// <c>CachedMultiHeadAttention</c> when the KV cache is enabled, else
+    /// <c>FlashAttentionLayer</c> when flash attention is enabled, else <see langword="null"/>
+    /// (no rewrite). Shared by the top-level <c>model.Layers[i]</c> rewrite and the
+    /// <see cref="TransformerEncoderBlock{T}"/> inner-attention rewrite so the two layouts
+    /// cannot drift. Returns <see langword="null"/> when the layer's shape cannot be
+    /// resolved (the caller then leaves the original layer in place).
+    /// </summary>
+    private LayerBase<T>? BuildAttentionReplacement(
+        MultiHeadAttentionLayer<T> mha,
+        int[]? shapeCandidate,
+        bool enableKVCache,
+        bool enablePagedKVCache,
+        bool enableFlashAttention,
+        bool useCausalMask)
+    {
+        var inputShape = mha.GetInputShape();
+        if (inputShape.Length < 2)
+        {
+            return null;
+        }
+
+        // Resolve lazy MHA before reading seqLen/embDim. Prefer the caller-supplied
+        // candidate (previous layer's output shape, or the hosting block's hidden size);
+        // fall back to a synthetic [1, embDim] shape derived from the layer's known head
+        // config (weight allocation depends only on embDim, not seqLen).
+        if (!mha.IsShapeResolved)
+        {
+            int[]? candidate = shapeCandidate;
+            if (candidate is null && inputShape.Length >= 2 && inputShape[^1] > 0)
+            {
+                candidate = new[] { 1, inputShape[^1] };
+            }
+
+            if (candidate is not null)
+            {
+                try
+                {
+                    mha.ResolveFromShape(candidate);
+                    inputShape = mha.GetInputShape();
+                }
+                catch (ArgumentException) { /* fall through */ }
+            }
+        }
+        if (inputShape.Length < 2 || inputShape.Any(d => d <= 0))
+        {
+            return null;
+        }
+
+        int seqLen = inputShape[0];
+        int embDim = inputShape[1];
+        int headCount = mha.HeadCount;
+        var activation = mha.ScalarActivation;
+
+        if (enableKVCache)
+        {
+            if (enablePagedKVCache)
+            {
+                var paged = new PagedCachedMultiHeadAttention<T>(
+                    sequenceLength: seqLen,
+                    embeddingDimension: embDim,
+                    headCount: headCount,
+                    useCausalMask: useCausalMask,
+                    activationFunction: activation);
+                paged.EnableWeightOnlyQuantization = _config.EnableWeightOnlyQuantization;
+                paged.SetParameters(mha.GetParameters());
+
+                // Preserve positional encoding configuration from source MHA layer
+                if (mha.PositionalEncoding != PositionalEncodingType.None)
+                {
+                    paged.ConfigurePositionalEncoding(
+                        mha.PositionalEncoding,
+                        ropeTheta: mha.RoPETheta,
+                        maxSequenceLength: seqLen);
+                }
+                else if (_config.PositionalEncoding == PositionalEncodingType.Rotary ||
+                         _config.PositionalEncoding == PositionalEncodingType.ALiBi)
+                {
+                    paged.ConfigurePositionalEncoding(
+                        _config.PositionalEncoding,
+                        ropeTheta: _config.RoPETheta,
+                        maxSequenceLength: seqLen);
+                }
+
+                return paged;
+            }
+
+            var cached = new CachedMultiHeadAttention<T>(
+                sequenceLength: seqLen,
+                embeddingDimension: embDim,
+                headCount: headCount,
+                useFlashAttention: enableFlashAttention,
+                layerIndex: 0,
+                useCausalMask: useCausalMask,
+                activationFunction: activation);
+            cached.SetParameters(mha.GetParameters());
+
+            // Preserve positional encoding configuration from source MHA layer
+            if (mha.PositionalEncoding != PositionalEncodingType.None)
+            {
+                cached.ConfigurePositionalEncoding(
+                    mha.PositionalEncoding,
+                    ropeTheta: mha.RoPETheta,
+                    maxSequenceLength: seqLen);
+            }
+            else if (_config.PositionalEncoding == PositionalEncodingType.Rotary ||
+                     _config.PositionalEncoding == PositionalEncodingType.ALiBi)
+            {
+                cached.ConfigurePositionalEncoding(
+                    _config.PositionalEncoding,
+                    ropeTheta: _config.RoPETheta,
+                    maxSequenceLength: seqLen);
+            }
+
+            return cached;
+        }
+
+        if (enableFlashAttention)
+        {
+            var flashConfig = FlashAttentionConfig.Default;
+            flashConfig.UseCausalMask = useCausalMask;
+
+            var flashLayer = new FlashAttentionLayer<T>(
+                sequenceLength: seqLen,
+                embeddingDimension: embDim,
+                headCount: headCount,
+                config: flashConfig,
+                activationFunction: activation);
+            flashLayer.SetParameters(mha.GetParameters());
+            return flashLayer;
+        }
+
+        return null;
     }
 
     private MultiHeadAttentionLayer<T>? TryConvertSelfAttentionToMultiHead(SelfAttentionLayer<T> layer)
@@ -1169,8 +1270,9 @@ internal class InferenceOptimizer<T>
         if (model == null)
             throw new ArgumentNullException(nameof(model));
 
-        // Enable inference mode on all applicable layers
-        foreach (var layer in model.Layers)
+        // Enable inference mode on all applicable layers (block-aware: rewritten
+        // attention may live inside TransformerEncoderBlock).
+        foreach (var layer in EnumerateAttentionHosts(model))
         {
             if (layer is CachedMultiHeadAttention<T> cachedAttention)
             {
