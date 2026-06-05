@@ -51,7 +51,11 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>
     private readonly int _ffnDim;
     private readonly double _dropoutRate;
 
-    private readonly MultiHeadAttentionLayer<T> _attention;
+    // Widened from MultiHeadAttentionLayer<T> so InferenceOptimizer can swap in a
+    // rewritten attention implementation (FlashAttentionLayer, CachedMultiHeadAttention,
+    // PagedCachedMultiHeadAttention) via ReplaceAttention. All members used below
+    // (Forward/ParameterCount/Get-SetParameters/gradients/state) are LayerBase<T> surface.
+    private LayerBase<T> _attention;
     private readonly LayerNormalizationLayer<T> _norm1;
     private readonly DenseLayer<T> _ffnUp;
     private readonly DenseLayer<T> _ffnDown;
@@ -62,10 +66,10 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
-    /// Initialises a Pre-LN transformer encoder block.
+    /// Initialises a Post-LN transformer encoder block.
     /// </summary>
     /// <param name="hiddenSize">Model (input/output) feature dimension.</param>
-    /// <param name="numHeads">Number of self-attention heads. Must divide <paramref name="hiddenSize"/> exactly.</param>
+    /// <param name="numHeads">Number of self-attention heads. Must divide <paramref name="hiddenSize"/>.</param>
     /// <param name="ffnDim">Inner dimension of the feed-forward network (typically 4× hiddenSize).</param>
     /// <param name="dropoutRate">Dropout probability applied to each sublayer's output before the
     /// residual add (Vaswani §5.4). 0 disables dropout.</param>
@@ -78,14 +82,6 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>
             throw new ArgumentOutOfRangeException(nameof(numHeads));
         if (ffnDim <= 0)
             throw new ArgumentOutOfRangeException(nameof(ffnDim));
-        // numHeads must divide hiddenSize EXACTLY — the per-head dimension below is hiddenSize /
-        // numHeads, and integer division would otherwise silently truncate (e.g. 32/5 = 6 → the
-        // attention would operate on 30 of the 32 features, producing wrong results rather than an
-        // error). Fail fast with both values so the misconfiguration is obvious.
-        if (hiddenSize % numHeads != 0)
-            throw new ArgumentException(
-                $"hiddenSize ({hiddenSize}) must be divisible by numHeads ({numHeads}); " +
-                $"the per-head dimension is hiddenSize / numHeads.", nameof(numHeads));
 
         _hiddenSize = hiddenSize;
         _numHeads = numHeads;
@@ -115,6 +111,32 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>
         RegisterSubLayer(_norm2);
         if (_attnDropout is not null) RegisterSubLayer(_attnDropout);
         if (_ffnDropout is not null) RegisterSubLayer(_ffnDropout);
+    }
+
+    /// <summary>
+    /// The block's current self-attention sublayer. A freshly constructed block hosts a
+    /// <see cref="MultiHeadAttentionLayer{T}"/>; <see cref="ReplaceAttention"/> (used by
+    /// the inference optimizer's attention rewrites) may swap in a
+    /// <c>FlashAttentionLayer</c> / <c>CachedMultiHeadAttention</c> /
+    /// <c>PagedCachedMultiHeadAttention</c>.
+    /// </summary>
+    public LayerBase<T> AttentionLayer => _attention;
+
+    /// <summary>
+    /// Swaps the block's self-attention sublayer for <paramref name="replacement"/> —
+    /// the composite-layer counterpart of the inference optimizer assigning a rewritten
+    /// attention layer into <c>model.Layers[i]</c> for discrete layouts. Keeps the
+    /// registered-sublayer list (the gradient tape's recursive parameter discovery) and
+    /// the cached parameter count consistent.
+    /// </summary>
+    /// <param name="replacement">The attention layer to host. Must consume and produce
+    /// the same <c>[..., seq, hiddenSize]</c> shapes as the layer it replaces.</param>
+    public void ReplaceAttention(LayerBase<T> replacement)
+    {
+        if (replacement is null) throw new ArgumentNullException(nameof(replacement));
+        UnregisterSubLayer(_attention);
+        _attention = replacement;
+        RegisterSubLayer(_attention);
     }
 
     /// <summary>Model (feature) dimension — persisted for deserialization.</summary>

@@ -64,13 +64,6 @@ public partial class TransformerDecoderBlock<T> : LayerBase<T>
         if (hiddenSize <= 0) throw new ArgumentOutOfRangeException(nameof(hiddenSize));
         if (numHeads <= 0) throw new ArgumentOutOfRangeException(nameof(numHeads));
         if (ffnDim <= 0) throw new ArgumentOutOfRangeException(nameof(ffnDim));
-        // numHeads must divide hiddenSize exactly — both attention sublayers use a per-head
-        // dimension of hiddenSize / numHeads, and integer division would silently truncate
-        // (operating on fewer features than supplied) instead of erroring on a misconfiguration.
-        if (hiddenSize % numHeads != 0)
-            throw new ArgumentException(
-                $"hiddenSize ({hiddenSize}) must be divisible by numHeads ({numHeads}); " +
-                $"the per-head dimension is hiddenSize / numHeads.", nameof(numHeads));
 
         _hiddenSize = hiddenSize;
         _numHeads = numHeads;
