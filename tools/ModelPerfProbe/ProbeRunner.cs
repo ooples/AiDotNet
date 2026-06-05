@@ -20,16 +20,21 @@ internal static class ProbeRunner
     /// <summary>
     /// Constructs the model with a default <c>NeuralNetworkArchitecture&lt;float&gt;</c>
     /// (mirroring what the model-family test scaffold emits), then runs the workload
-    /// and captures metrics.
+    /// and captures metrics. A per-model wall-clock cap stops a single paper-scale
+    /// model from monopolizing a registry-wide sweep — the probe just records that
+    /// the budget was exceeded and moves on.
     /// </summary>
     public static ProbeResult Run(
         Type closedModelType,
         int steps,
         int seqLen,
         double slowStepMs,
-        double slowAllocMb)
+        double slowAllocMb,
+        TimeSpan? perModelBudget = null)
     {
         var result = new ProbeResult { Model = closedModelType.Name, StepCount = steps };
+        var budget = perModelBudget ?? TimeSpan.FromSeconds(60);
+        var swBudget = Stopwatch.StartNew();
 
         IFullModel<float, Tensor<float>, Tensor<float>>? model = null;
         try
@@ -70,10 +75,24 @@ internal static class ProbeRunner
             swWarmFwd.Stop();
             result.WarmupForwardMs = swWarmFwd.Elapsed.TotalMilliseconds;
 
+            if (swBudget.Elapsed > budget)
+            {
+                result.Status = "budget-exceeded-warmup";
+                result.Error = $"Per-model budget {budget.TotalSeconds:F0} s exceeded during warm-up forward.";
+                return result;
+            }
+
             var swWarmTrain = Stopwatch.StartNew();
             model.Train(input, target);
             swWarmTrain.Stop();
             result.WarmupTrainMs = swWarmTrain.Elapsed.TotalMilliseconds;
+
+            if (swBudget.Elapsed > budget)
+            {
+                result.Status = "budget-exceeded-warmup";
+                result.Error = $"Per-model budget {budget.TotalSeconds:F0} s exceeded during warm-up train.";
+                return result;
+            }
 
             long gen0Before = GC.CollectionCount(0);
             long gen1Before = GC.CollectionCount(1);
@@ -81,14 +100,30 @@ internal static class ProbeRunner
             long allocBefore = GC.GetTotalAllocatedBytes(precise: false);
 
             var swAll = Stopwatch.StartNew();
+            int actualSteps = 0;
             for (int i = 0; i < steps; i++)
+            {
                 model.Train(input, target);
+                actualSteps++;
+                if (swBudget.Elapsed > budget)
+                {
+                    // Partial-measurement record so the registry sweep still produces
+                    // useful avgStepMs / allocMbPerStep for the steps that did fit
+                    // inside the budget, instead of dropping the model entirely.
+                    result.Status = "budget-truncated";
+                    result.Error = $"Stopped at step {actualSteps}/{steps}; per-model budget {budget.TotalSeconds:F0} s exceeded.";
+                    break;
+                }
+            }
             swAll.Stop();
 
+            result.StepCount = actualSteps;
             result.TotalMs = swAll.Elapsed.TotalMilliseconds;
-            result.AvgStepMs = result.TotalMs / Math.Max(1, steps);
+            result.AvgStepMs = actualSteps > 0 ? result.TotalMs / actualSteps : 0;
             result.AllocBytes = GC.GetTotalAllocatedBytes(precise: false) - allocBefore;
-            result.AllocMbPerStep = result.AllocBytes / (1024.0 * 1024.0) / Math.Max(1, steps);
+            result.AllocMbPerStep = actualSteps > 0
+                ? result.AllocBytes / (1024.0 * 1024.0) / actualSteps
+                : 0;
             result.Gen0 = (int)(GC.CollectionCount(0) - gen0Before);
             result.Gen1 = (int)(GC.CollectionCount(1) - gen1Before);
             result.Gen2 = (int)(GC.CollectionCount(2) - gen2Before);
