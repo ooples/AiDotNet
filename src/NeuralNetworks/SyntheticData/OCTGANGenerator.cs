@@ -426,6 +426,18 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
     #endregion
 
+    /// <summary>
+    /// Propagates the training/inference mode to the auxiliary sub-networks (generator batch-norm
+    /// and discriminator dropout) that live outside the base <c>Layers</c> collection, so generation
+    /// runs the generator batch-norm in inference mode with the learned running statistics.
+    /// </summary>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        foreach (var bn in _genBNLayers) bn.SetTrainingMode(isTraining);
+        foreach (var drop in _discDropoutLayers) drop.SetTrainingMode(isTraining);
+    }
+
     #region Forward Passes
 
     private Tensor<T> GeneratorForward(Tensor<T> input)
@@ -765,6 +777,22 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         writer.Write(_dataWidth);
         writer.Write(_usingCustomLayers);
         writer.Write(IsFitted);
+
+        // The generator batch-norm layers (running mean/variance included) live outside the base
+        // Layers collection, and the fitted VGM transformer drives inverse-transform + per-column
+        // output activations. Both must be persisted or a loaded model generates garbage. (The SVDD
+        // center is a discriminator-training anchor only, never used by Generate, and is rebuilt by
+        // Fit, so it is intentionally not persisted.)
+        AuxLayerSerialization.WriteLayerList(writer, _genBNLayers);
+        if (_transformer is not null)
+        {
+            writer.Write(true);
+            _transformer.Serialize(writer);
+        }
+        else
+        {
+            writer.Write(false);
+        }
     }
 
     /// <inheritdoc />
@@ -773,6 +801,17 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         _dataWidth = reader.ReadInt32();
         _usingCustomLayers = reader.ReadBoolean();
         IsFitted = reader.ReadBoolean();
+
+        AuxLayerSerialization.ReadLayerList<T, BatchNormalizationLayer<T>>(
+            reader, _genBNLayers, (inShape, outShape) => new BatchNormalizationLayer<T>());
+
+        bool hasTransformer = reader.ReadBoolean();
+        if (hasTransformer)
+        {
+            _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
+            _transformer.Deserialize(reader);
+            _columns = new List<ColumnMetadata>(_transformer.Columns);
+        }
     }
 
     /// <inheritdoc />

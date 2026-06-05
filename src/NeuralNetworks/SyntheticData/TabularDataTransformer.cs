@@ -211,6 +211,146 @@ public class TabularDataTransformer<T>
         return _columnTransforms[colIndex];
     }
 
+    /// <summary>
+    /// Serializes the fitted transformer state (column metadata, per-column transform layout, and
+    /// the fitted VGM / categorical parameters) so a saved or cloned generator can inverse-transform
+    /// generated samples back to the original column space without re-fitting.
+    /// </summary>
+    /// <remarks>
+    /// The VGM mode count and RNG are intentionally not persisted: they only influence
+    /// <see cref="Fit"/>, never <see cref="Transform"/> / <see cref="InverseTransform"/>, and the
+    /// owning generator reconstructs the transformer with the configured mode count before loading.
+    /// </remarks>
+    public void Serialize(System.IO.BinaryWriter writer)
+    {
+        writer.Write(IsFitted);
+        if (!IsFitted)
+        {
+            return;
+        }
+
+        writer.Write(_transformedWidth);
+
+        writer.Write(_columns.Count);
+        foreach (var column in _columns)
+        {
+            column.Serialize(writer);
+        }
+
+        // Column-transform layout. Keys are the contiguous original-column indices 0..count-1.
+        writer.Write(_columnTransforms.Count);
+        for (int col = 0; col < _columns.Count; col++)
+        {
+            var transform = _columnTransforms[col];
+            writer.Write(col);
+            writer.Write(transform.IsContinuous);
+            writer.Write(transform.Index);
+            writer.Write(transform.StartOffset);
+            writer.Write(transform.Width);
+        }
+
+        writer.Write(_continuousColumnInfos.Count);
+        foreach (var info in _continuousColumnInfos)
+        {
+            WriteDoubleArray(writer, info.Means);
+            WriteDoubleArray(writer, info.Stds);
+            WriteDoubleArray(writer, info.Weights);
+        }
+
+        writer.Write(_categoricalColumnInfos.Count);
+        foreach (var info in _categoricalColumnInfos)
+        {
+            writer.Write(info.Categories.Count);
+            foreach (var category in info.Categories)
+            {
+                writer.Write(category);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Restores transformer state previously written by <see cref="Serialize"/>.
+    /// </summary>
+    public void Deserialize(System.IO.BinaryReader reader)
+    {
+        _continuousColumnInfos.Clear();
+        _categoricalColumnInfos.Clear();
+        _columnTransforms.Clear();
+
+        IsFitted = reader.ReadBoolean();
+        if (!IsFitted)
+        {
+            _transformedWidth = 0;
+            _columns = Array.Empty<ColumnMetadata>();
+            return;
+        }
+
+        _transformedWidth = reader.ReadInt32();
+
+        int columnCount = reader.ReadInt32();
+        var columns = new List<ColumnMetadata>(columnCount);
+        for (int i = 0; i < columnCount; i++)
+        {
+            columns.Add(ColumnMetadata.Deserialize(reader));
+        }
+        _columns = columns;
+
+        int transformCount = reader.ReadInt32();
+        for (int i = 0; i < transformCount; i++)
+        {
+            int key = reader.ReadInt32();
+            bool isContinuous = reader.ReadBoolean();
+            int index = reader.ReadInt32();
+            int startOffset = reader.ReadInt32();
+            int width = reader.ReadInt32();
+            _columnTransforms[key] = new ColumnTransformInfo(isContinuous, index, startOffset, width);
+        }
+
+        int continuousCount = reader.ReadInt32();
+        for (int i = 0; i < continuousCount; i++)
+        {
+            double[] means = ReadDoubleArray(reader);
+            double[] stds = ReadDoubleArray(reader);
+            double[] weights = ReadDoubleArray(reader);
+            _continuousColumnInfos.Add(new VGMColumnInfo(means, stds, weights));
+        }
+
+        int categoricalCount = reader.ReadInt32();
+        for (int i = 0; i < categoricalCount; i++)
+        {
+            int numCategories = reader.ReadInt32();
+            var categories = new string[numCategories];
+            var categoryToIndex = new Dictionary<string, int>();
+            for (int c = 0; c < numCategories; c++)
+            {
+                categories[c] = reader.ReadString();
+                categoryToIndex[categories[c]] = c;
+            }
+            _categoricalColumnInfos.Add(new CategoricalColumnInfo(categories, categoryToIndex));
+        }
+    }
+
+    private static void WriteDoubleArray(System.IO.BinaryWriter writer, double[] values)
+    {
+        writer.Write(values.Length);
+        foreach (double value in values)
+        {
+            writer.Write(value);
+        }
+    }
+
+    private static double[] ReadDoubleArray(System.IO.BinaryReader reader)
+    {
+        int length = reader.ReadInt32();
+        var values = new double[length];
+        for (int i = 0; i < length; i++)
+        {
+            values[i] = reader.ReadDouble();
+        }
+
+        return values;
+    }
+
     #region VGM Fitting
 
     private VGMColumnInfo FitContinuousColumn(Matrix<T> data, int colIndex)
