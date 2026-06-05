@@ -266,6 +266,21 @@ public class RIFE<T> : FrameInterpolationBase<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// RIFE's real computation graph is <see cref="ProcessInterpolation"/>
+    /// (encode → flow decode → warp → fuse → refine), not a sequential pass
+    /// over the flat <c>Layers</c> list. The base
+    /// <see cref="NeuralNetworkBase{T}.ForwardForTraining"/> runs the layers
+    /// in order, which produces channel-count mismatches because the warp /
+    /// fusion stages interleave non-layer tensor ops. Route the training
+    /// forward through the same graph Predict uses.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        return ProcessInterpolation(input, 0.5);
+    }
+
+    /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);

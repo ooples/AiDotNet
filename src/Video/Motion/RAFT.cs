@@ -252,6 +252,24 @@ public class RAFT<T> : OpticalFlowBase<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// RAFT's computation graph is the iterative correlation/GRU update in
+    /// <see cref="ForwardIterative"/>, NOT a sequential pass over the flat
+    /// <c>Layers</c> list. The base <see cref="NeuralNetworkBase{T}.ForwardForTraining"/>
+    /// runs the layers sequentially, which feeds the 2-frame channel-concat
+    /// into the single-frame feature encoder ("Expected input depth 3, got 6").
+    /// Route the training forward through the same graph Predict uses so the
+    /// tape records the real operations.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        var frame1 = SliceChannels(input, 0, _channels);
+        var frame2 = SliceChannels(input, _channels, _channels * 2);
+        var flowIterations = ForwardIterative(frame1, frame2);
+        return flowIterations[^1];
+    }
+
+    /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
