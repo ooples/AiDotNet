@@ -2099,6 +2099,52 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] InputShape => new[] { 36, 2048 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
+        else if (isVisionModel &&
+                 (model.ClassName == "GPT4Point"
+                  || model.ClassName == "Helix"
+                  || model.ClassName == "Octo"
+                  || model.ClassName == "SigLIP2"
+                  || model.ClassName == "ViLT"))
+        {
+            // These VisionLanguage models (GPT4Point — Qi et al. 2024;
+            // Helix — Figure AI 2025; Octo — Octo Model Team 2024;
+            // SigLIP2 — Tschannen et al. 2025; ViLT — Kim et al. 2021)
+            // begin their native layer chain with a LayerNormalization +
+            // vision MultiHeadAttention(vision_dim) and therefore expect
+            // POST-PATCH-EMBEDDING token tensors [batch, num_tokens,
+            // vision_dim], NOT raw image pixels — exactly like the
+            // VisionLanguage.Grounding family handled above. The generic
+            // vision branch below emits [3, spatial, spatial], which these
+            // hard-reject inside the first attention with `Input embedding
+            // dimension (X) does not match weight dimension (Y)`. vision_dim
+            // per each model's *Options.cs default:
+            //   GPT4Point.VisionDim = 512, Helix.VisionDim = 1024,
+            //   Octo.VisionDim = 384, SigLIP2.VisionEmbeddingDim = 768,
+            //   ViLT.FusionDim = 768 (vision/text/fusion dims all 768, so
+            //   the helper's projection layers collapse to identity and the
+            //   first joint-encoder attention sees the 768-d fusion tokens).
+            // num_tokens kept small (4) so attention intermediates stay
+            // bounded; batch=1 since these are per-sample models.
+            int vlVisionDim;
+            switch (model.ClassName)
+            {
+                case "GPT4Point":
+                    vlVisionDim = 512;
+                    break;
+                case "Helix":
+                    vlVisionDim = 1024;
+                    break;
+                case "Octo":
+                    vlVisionDim = 384;
+                    break;
+                default:
+                    // SigLIP2, ViLT
+                    vlVisionDim = 768;
+                    break;
+            }
+            sb.AppendLine($"    protected override int[] InputShape => new[] {{ 1, 4, {vlVisionDim} }};");
+            sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 1, 4, {vlVisionDim} }};");
+        }
         else if (isVisionModel)
         {
             // Must match the architecture's inputHeight/inputWidth emitted above. Use
@@ -2157,7 +2203,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // The IsTextToMelTTS class-list keeps the vocoder default
             // working while routing the text-input models to a paper-
             // faithful token-ID input shape.
-            if (IsTextToMelTTS(model.ClassName))
+            if (IsVoiceCloningTTS(model.ClassName))
+            {
+                // Voice-cloning models (MetaVoice1B, OpenVoiceV2) build their
+                // layer chain via CreateDefaultVoiceCloningLayers, whose first
+                // real layer is MultiHeadAttention(speakerEmbeddingDim = 256).
+                // They consume speaker/text embedding sequences [seq, 256], not
+                // mel-spectrograms, so the vocoder default [8, 80] trips
+                // `Input embedding dimension (80) does not match weight
+                // dimension (256)`. Emit the embedding-sequence shape so the
+                // encoder→speaker-projection→decoder chain actually runs.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 8, 256 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 8, 256 };");
+            }
+            else if (IsTextToMelTTS(model.ClassName))
             {
                 sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 8, 80 };");
@@ -4431,6 +4490,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "GoogleCloudTTS" => true,
             "Murf" => true,
             "NVIDIARivaTTS" => true,
+            _ => false,
+        };
+    }
+
+    /// <summary>
+    /// Returns true for voice-cloning TTS models whose layer chain is built by
+    /// <c>LayerHelper.CreateDefaultVoiceCloningLayers</c>. That helper's first
+    /// trainable layer is <c>MultiHeadAttention(speakerEmbeddingDim = 256)</c>,
+    /// so the model consumes speaker/text embedding sequences <c>[seq, 256]</c>
+    /// rather than the vocoder mel default <c>[T, 80]</c>; feeding mel trips
+    /// "Input embedding dimension (80) does not match weight dimension (256)".
+    /// </summary>
+    private static bool IsVoiceCloningTTS(string className)
+    {
+        int tickIdx = className.IndexOf('`');
+        if (tickIdx > 0) className = className.Substring(0, tickIdx);
+        return className switch
+        {
+            "MetaVoice1B" => true,
+            "OpenVoiceV2" => true,
             _ => false,
         };
     }
