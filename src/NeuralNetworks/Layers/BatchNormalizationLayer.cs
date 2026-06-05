@@ -961,6 +961,24 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         _inferenceScaleDirty = true;
     }
 
+    /// <summary>
+    /// Switches the layer between training and inference behavior. Switching modes invalidates the
+    /// cached inference scale/shift so the next inference forward recomputes them from the
+    /// <i>current</i> running statistics.
+    /// </summary>
+    /// <remarks>
+    /// Without this invalidation, a cache computed from an intermediate running mean/variance during
+    /// training could be reused after switching to eval — producing inference output that lags the
+    /// final running statistics. That stale cache also made a freshly deserialized clone (which
+    /// always recomputes from the restored running stats) diverge from the original on the very same
+    /// weights. Recomputing on every mode switch keeps inference deterministic and round-trip stable.
+    /// </remarks>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        _inferenceScaleDirty = true;
+    }
+
     private Tensor<T>? _gammaVelocity;
     private Tensor<T>? _betaVelocity;
 
