@@ -552,4 +552,27 @@ public class DropoutLayer<T> : LayerBase<T>
     {
         return unchecked(((ulong)(uint)randomSeed * 2654435761ul) ^ counter);
     }
+
+    #region ONNX Export
+
+    /// <summary>
+    /// Dropout in inference mode is a no-op. We emit an ONNX <c>Identity</c>
+    /// op so the graph structure is preserved (downstream tools still see the
+    /// dropout layer's presence) without changing the numeric output.
+    /// </summary>
+    public override AiDotNet.Onnx.OnnxLayerOutputs ConvertToOnnx(
+        AiDotNet.Onnx.OnnxGraphBuilder builder,
+        AiDotNet.Onnx.OnnxLayerInputs inputs)
+    {
+        if (builder is null) throw new ArgumentNullException(nameof(builder));
+        if (inputs is null) throw new ArgumentNullException(nameof(inputs));
+
+        var outputName = builder.NextTensorName("dropout_identity");
+        builder.AddOp("Identity",
+            inputs: new[] { inputs.Primary },
+            outputs: new[] { outputName });
+        return new AiDotNet.Onnx.OnnxLayerOutputs(outputName);
+    }
+
+    #endregion
 }
