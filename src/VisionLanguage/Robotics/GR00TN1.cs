@@ -83,7 +83,9 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly GR00TN1Options _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer _tokenizer;
+    // Not readonly: DeserializeNetworkSpecificData rebuilds the tokenizer from the
+    // serialized VocabSize so a model saved with a different vocab restores correctly.
+    private ITokenizer _tokenizer;
     private readonly GR00TFlowMatchingActionHead<T> _actionHead;
     // Learned instruction-token embedding table — replaces the previous
     // deterministic sinusoidal fabrication in EmbedInstructionTokens. GR00T N1's
@@ -93,7 +95,9 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     // timestep embedding, which is legitimately sinusoidal.) Embedding dim = decoder
     // dim so the embeddings concatenate with the visual-feature sequence. Mirrors the
     // learned EmbeddingLayer used by RT2<T>.
-    private readonly EmbeddingLayer<T> _tokenEmbedding;
+    // Not readonly: DeserializeNetworkSpecificData rebuilds it from the serialized
+    // VocabSize/DecoderDim so a model saved with different geometry restores correctly.
+    private EmbeddingLayer<T> _tokenEmbedding;
     private bool _useNativeMode;
     private bool _disposed;
     private int _encoderLayerEnd;
@@ -487,6 +491,13 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         writer.Write(_options.System1ToSystem2Ratio);
         writer.Write(_options.FlowMatchingSteps);
 
+        // Persist the embedding CONFIGURATION (vocab size; DecoderDim is already written
+        // above) so deserialize can REBUILD _tokenizer + _tokenEmbedding to match the saved
+        // model's geometry before restoring weights — rather than failing to load whenever the
+        // reconstructing instance was created with a different VocabSize. DecoderDim drives the
+        // embedding width; VocabSize drives its row count.
+        writer.Write(_options.VocabSize);
+
         // The instruction-token embedding lives outside Layers, so the base
         // per-layer serialization never persists it — without this block a trained
         // model's embedding table silently reverts to random init on load.
@@ -516,6 +527,15 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         _options.System1ToSystem2Ratio = reader.ReadInt32();
         _options.FlowMatchingSteps = reader.ReadInt32();
 
+        // Rebuild the tokenizer + token embedding from the just-deserialized configuration
+        // (VocabSize here, DecoderDim read above) BEFORE restoring weights. These are built in
+        // the constructor from the pre-deserialization options, so a model saved with a
+        // different VocabSize/DecoderDim would otherwise mismatch the restored weights. Rebuilding
+        // makes save/load robust to a reconstructing instance created with different options.
+        _options.VocabSize = reader.ReadInt32();
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        _tokenEmbedding = new EmbeddingLayer<T>(_options.VocabSize, _options.DecoderDim);
+
         // Restore the trained instruction-token embedding written by
         // SerializeNetworkSpecificData (it lives outside Layers, so the base
         // per-layer restore never touches it).
@@ -525,8 +545,8 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
             if (embedCount != (int)_tokenEmbedding.ParameterCount)
                 throw new InvalidOperationException(
                     $"Serialized GR00T-N1 token-embedding parameter count ({embedCount:N0}) does not match " +
-                    $"this instance's embedding ({_tokenEmbedding.ParameterCount:N0}). The model was saved with " +
-                    "a different VocabSize/DecoderDim configuration.");
+                    $"the embedding rebuilt from the deserialized VocabSize={_options.VocabSize}/" +
+                    $"DecoderDim={_options.DecoderDim} ({_tokenEmbedding.ParameterCount:N0}). The stream is corrupt.");
             var embedParams = new Vector<T>(embedCount);
             for (int i = 0; i < embedCount; i++)
                 embedParams[i] = NumOps.FromDouble(reader.ReadDouble());

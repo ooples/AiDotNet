@@ -257,6 +257,41 @@ public class DefaultLoRAConfiguration<T> : ILoRAConfiguration<T>
             throw new ArgumentNullException(nameof(layer));
         }
 
+        // Composite transformer blocks (the default encoder/decoder layout since
+        // LayerHelper emits TransformerEncoderBlock / TransformerDecoderBlock,
+        // AiDotNet#1487): the block hosts its attention and FFN sublayers behind
+        // private fields, so the per-layer ApplyLoRA loop in AiModelBuilder never
+        // sees them — without this recursion a default transformer gets ZERO LoRA
+        // adapters. Recurse into each adaptable sublayer and install the adapter
+        // via the block's replace hook (which re-registers the sublayer so tape
+        // parameter discovery and the cached parameter count stay consistent),
+        // then return the block itself (it was adapted in place). This case runs
+        // BEFORE the IsShapeResolved guard below: the block's own input shape may
+        // still carry a lazy seq-length placeholder while its sublayers were
+        // constructed with ctor-known dims — each recursive call re-applies the
+        // guard per-sublayer, which is the granularity that actually matters.
+        if (layer is TransformerEncoderBlock<T> encoderBlock)
+        {
+            AdaptBlockSublayer(encoderBlock.AttentionLayer, encoderBlock.ReplaceAttention);
+            AdaptBlockSublayer(encoderBlock.FfnUpLayer, encoderBlock.ReplaceFfnUp);
+            AdaptBlockSublayer(encoderBlock.FfnDownLayer, encoderBlock.ReplaceFfnDown);
+            return encoderBlock;
+        }
+
+        if (layer is TransformerDecoderBlock<T> decoderBlock)
+        {
+            AdaptBlockSublayer(decoderBlock.SelfAttentionLayer, decoderBlock.ReplaceSelfAttention);
+            // Cross-attention is intentionally NOT adapted: its two-input
+            // (decoder stream, encoder output) forward contract is satisfied only
+            // by MultiHeadAttentionLayer's params-Forward dispatch; LoRA adapters
+            // are single-input wrappers and would silently degrade true
+            // cross-attention to self-attention. The block keeps that slot
+            // concretely typed (no replace hook) for the same reason.
+            AdaptBlockSublayer(decoderBlock.FfnUpLayer, decoderBlock.ReplaceFfnUp);
+            AdaptBlockSublayer(decoderBlock.FfnDownLayer, decoderBlock.ReplaceFfnDown);
+            return decoderBlock;
+        }
+
         // Skip lazy-init layers whose shape hasn't been resolved yet —
         // LoRAAdapterBase.CreateLoRALayer needs the layer's input/output
         // dimensions at adapter-construction time, and layers like
@@ -271,7 +306,18 @@ public class DefaultLoRAConfiguration<T> : ILoRAConfiguration<T>
         // the rest of the LoRA application loop succeeds on layers whose
         // shape is known. Discovered by AiDotNet#1345 Bucket10
         // ConfigureLoRA test.
-        if (layer is LayerBase<T> shapeAwareLayer && !shapeAwareLayer.IsShapeResolved)
+        //
+        // Gate on the TryDeclareShape() shape oracle, NOT IsShapeResolved
+        // (AiDotNet#1370): layers like MultiHeadAttentionLayer keep a -1
+        // sequence placeholder in InputShape FOREVER (only the seq dim is
+        // genuinely dynamic), so IsShapeResolved never flips true for them
+        // — but their weight matrices are fully determined from ctor args,
+        // which is all LoRAAdapterBase needs (it sizes the adapter from
+        // the weight-matrix probe first). TryDeclareShape defaults to
+        // IsShapeResolved for ordinary layers, so this is a strict
+        // widening: it only additionally admits layers that explicitly
+        // declare "my parameters are materialised".
+        if (layer is LayerBase<T> shapeAwareLayer && !TryDeclareShapeSafely(shapeAwareLayer))
         {
             return layer;
         }
@@ -295,6 +341,46 @@ public class DefaultLoRAConfiguration<T> : ILoRAConfiguration<T>
         // Return layers without trainable weights unchanged
         // (Activation, Pooling, Dropout, Flatten, Reshape, Normalization, etc.)
         return layer;
+    }
+
+    /// <summary>
+    /// Exception-safe wrapper over the <see cref="LayerBase{T}.TryDeclareShape"/> shape
+    /// oracle (same policy as AiModelBuilder's pre-scan): a throwing oracle means
+    /// "needs warmup" — treat the layer as not wrappable rather than failing the
+    /// whole LoRA pass. Critical exceptions (cancellation, OOM) still propagate.
+    /// </summary>
+    private static bool TryDeclareShapeSafely(LayerBase<T> layer)
+    {
+        try
+        {
+            return layer.TryDeclareShape();
+        }
+        catch (Exception ex) when (
+            ex is not OperationCanceledException
+            && ex is not OutOfMemoryException
+            && ex is not StackOverflowException)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"TryDeclareShape failed for {layer.GetType().FullName} — " +
+                $"skipping LoRA wrap for this layer: {ex}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Recursively applies LoRA to one sublayer hosted inside a composite
+    /// transformer block and, when the sublayer was actually wrapped, installs
+    /// the adapter through the block's replace hook so the block's sublayer
+    /// registration (tape parameter discovery, cached parameter count) stays
+    /// consistent with the swap.
+    /// </summary>
+    private void AdaptBlockSublayer(LayerBase<T> sublayer, Action<LayerBase<T>> replace)
+    {
+        var adapted = ApplyLoRA(sublayer);
+        if (!ReferenceEquals(adapted, sublayer) && adapted is LayerBase<T> typedAdapted)
+        {
+            replace(typedAdapted);
+        }
     }
 
     /// <summary>
@@ -325,6 +411,13 @@ public class DefaultLoRAConfiguration<T> : ILoRAConfiguration<T>
     public bool IsLoRATarget(ILayer<T> layer)
     {
         if (layer is null) return false;
+        // Composite transformer blocks count as targets: ApplyLoRA recurses into
+        // their attention/FFN sublayers, so the warmup-skip pre-scan must treat
+        // the block as "participates in the LoRA pass" — otherwise a lazy block
+        // would never gate the warmup forward and its sublayers would silently
+        // miss adaptation via the per-sublayer IsShapeResolved guard.
+        if (layer is TransformerEncoderBlock<T> || layer is TransformerDecoderBlock<T>)
+            return true;
         return layer is IGraphConvolutionLayer<T> || IsLoRATargetType(layer);
     }
 

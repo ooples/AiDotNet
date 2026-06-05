@@ -613,8 +613,53 @@ public class StandardVAE<T> : VAEModelBase<T>
             latentScaleFactor: _latentScaleFactor,
             lossFunction: LossFunction);
 
-        clone.SetParameters(GetParameters());
+        // Eager-init BOTH source and clone before snapshotting/setting
+        // parameters. PyTorch-style lazy shape inference makes every internal
+        // layer's ParameterCount = 0 until its first forward, so:
+        //
+        //   * The source needs resolution BEFORE GetParameters(), otherwise
+        //     a freshly constructed StandardVAE snapshots zero-length slices
+        //     and returns an empty vector (the same bug the destination side
+        //     would hit, just at the read end).
+        //
+        //   * The clone needs resolution BEFORE SetParameters(), otherwise
+        //     SetLayerParameters sizes every slice to 0 and writes nothing,
+        //     leaving the clone with fresh random weights instead of the
+        //     original's learned weights.
+        //
+        // Same fix pattern as UNetNoisePredictor.Clone; surfaces in
+        // Clone_ShouldProduceIdenticalOutput as a numerical-divergence
+        // failure (original and clone Predict produce different values from
+        // the SAME input).
+        TriggerLazyShapeResolution();
+        var parameters = GetParameters();
+        clone.TriggerLazyShapeResolution();
+        clone.SetParameters(parameters);
         return clone;
+    }
+
+    /// <summary>
+    /// Runs one dummy Encode + Decode pass through the network at a
+    /// small spatial size so every lazy layer resolves its weight
+    /// shapes. Used by <see cref="Clone"/> to make the clone's layer
+    /// parameter counts match the original's before
+    /// <see cref="SetParameters"/> copies weights across.
+    /// </summary>
+    /// <remarks>
+    /// Dummy spatial size = <c>2 ^ (channelMultipliers.Length - 1)</c>
+    /// — just enough for every downsampling level to produce a ≥ 1×1
+    /// feature map without aliasing. Spatial dim only affects activation
+    /// shapes, not weight shapes (Conv kernels are translation-
+    /// invariant), so any size works as long as the conv stack doesn't
+    /// underflow.
+    /// </remarks>
+    private void TriggerLazyShapeResolution()
+    {
+        int downsamples = _channelMultipliers.Length - 1;
+        int dummySpatial = 1 << Math.Max(downsamples, 1);
+        var dummyImage = new Tensor<T>(new[] { 1, _inputChannels, dummySpatial, dummySpatial });
+        var dummyLatent = Encode(dummyImage, sampleMode: false);
+        _ = Decode(dummyLatent);
     }
 
     /// <inheritdoc />

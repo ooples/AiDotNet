@@ -721,6 +721,17 @@ internal sealed class CompiledModelHost<T> : IDisposable
                 _cache = null;
             }
             _lastCompiledVersion = -1;
+            // Drop the hot-path replay reference too. The hot path would recover
+            // anyway (the disposed plan's Execute throws ObjectDisposedException
+            // and the slow path recompiles), but keeping the reference pins the
+            // plan's pre-allocated step buffers — tens of MB for conv plans —
+            // until the next Predict happens to clear it. Invalidate's contract
+            // (ReleaseCompiledPlans) is "give the memory back NOW".
+            _hotPlan = null;
+            // Preloaded disk plans hold the same class of buffers; drop them so
+            // a release actually releases (they re-load from disk on demand).
+            _preloadedPlans = null;
+            _diskCheckedShapes = null;
         }
         // Dispose outside the lock.
         if (detached is not null)

@@ -562,7 +562,7 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
         // input scale; that path doesn't depend on the GPU SVD kernel and
         // delivers the right-magnitude bias term needed to track a shifted Y.
         Vector<T>? weights = TrySvdSolve(x, y);
-        if (weights == null || !ModelTestHelpers_AllFinite(weights) || PredictionsCollapseToZero(x, y, weights))
+        if (weights == null || !ModelTestHelpers_AllFinite(weights) || SvdWeightsAreBad(x, y, weights))
         {
             weights = NormalEquationsRidgeSolve(x, y);
         }
@@ -578,19 +578,64 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
         return weights;
     }
 
-    private bool PredictionsCollapseToZero(Matrix<T> x, Vector<T> y, Vector<T> weights)
+    private bool SvdWeightsAreBad(Matrix<T> x, Vector<T> y, Vector<T> weights)
     {
-        // Compute training predictions and compare magnitude to response.
-        // If predictions are <1% of y's magnitude, the SVD solve produced
-        // a degenerate weight vector and we should fall back.
+        // Decide whether the SVD-produced weights are bad enough that the
+        // CPU-deterministic NormalEquationsRidgeSolve fallback should take over.
+        // We check two distinct failure modes a parallel/GPU SVD can land in:
+        //
+        //   (A) Collapsed-to-zero predictions: max |pred| < 1% of max |y|.
+        //       Originally surfaced on TranslationEquivariance_ShiftingTargets
+        //       (a second model in a parallel run silently produced near-zero
+        //       singular values and weights that mapped everything to ~0).
+        //
+        //   (B) Systematically wrong predictions: training R² < 0. This catches
+        //       the case where the SVD path returns finite weights of plausible
+        //       magnitude but the predictions are anti-correlated with y (the
+        //       symptom on PR #1488 CI was Builder R²=-0.95 on linear data
+        //       while the same model on a single-threaded local run produced
+        //       R²=1.0). R²<0 on the training set means the solve underfits
+        //       worse than predicting the mean — a clear "use the CPU
+        //       fallback" signal regardless of solver internals.
+        //
+        // Both checks operate on the supplied (x, y) pair, so they cost a
+        // single x · w mat-vec and one pass over y — negligible vs SVD itself.
         var preds = x.Multiply(weights);
         double maxPred = 0;
         for (int i = 0; i < preds.Length; i++)
             maxPred = Math.Max(maxPred, Math.Abs(NumOps.ToDouble(preds[i])));
+
         double maxY = 0;
+        double meanY = 0;
         for (int i = 0; i < y.Length; i++)
-            maxY = Math.Max(maxY, Math.Abs(NumOps.ToDouble(y[i])));
-        return maxY > 1e-10 && maxPred < maxY * 0.01;
+        {
+            double yi = NumOps.ToDouble(y[i]);
+            maxY = Math.Max(maxY, Math.Abs(yi));
+            meanY += yi;
+        }
+        meanY /= Math.Max(1, y.Length);
+
+        if (maxY > 1e-10 && maxPred < maxY * 0.01)
+            return true;
+
+        double ssRes = 0, ssTot = 0;
+        for (int i = 0; i < y.Length; i++)
+        {
+            double yi = NumOps.ToDouble(y[i]);
+            double pi = NumOps.ToDouble(preds[i]);
+            double r = yi - pi;
+            ssRes += r * r;
+            double t = yi - meanY;
+            ssTot += t * t;
+        }
+        if (ssTot > 1e-12)
+        {
+            double trainR2 = 1.0 - ssRes / ssTot;
+            if (trainR2 < 0)
+                return true;
+        }
+
+        return false;
     }
 
     private Vector<T>? TrySvdSolve(Matrix<T> x, Vector<T> y)

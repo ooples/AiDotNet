@@ -18,11 +18,13 @@ namespace AiDotNet.Tests.IntegrationTests.Regression;
 /// users save models and silently get wrong predictions when loading them later.
 /// </summary>
 /// <remarks>
-/// Joined to the <c>LicensingTests</c> collection so it never runs in parallel with the
-/// licensing tests: Serialize/Deserialize each consume one operation from the process-global
-/// free-trial counter (<see cref="TrialStateManager"/>, ~/.aidotnet/trial.json), and parallel
-/// execution across collections races on that shared file. Each test also resets the trial in
-/// its constructor so it starts with a full operation budget regardless of test ordering.
+/// The assembly-level <c>[IsolateTrialState]</c> attribute gives every test its OWN isolated
+/// trial-state path, so the free-trial counter (<see cref="TrialStateManager"/>) is no longer a
+/// process-global file shared across tests — the cross-collection race on ~/.aidotnet/trial.json
+/// that originally motivated this no longer exists. The <c>LicensingTests</c> collection
+/// membership and the constructor <c>Reset()</c> are retained as belt-and-suspenders so the
+/// round-trip tests (which legitimately perform several Serialize/Deserialize ops each) always
+/// start with a full operation budget regardless of ordering.
 /// </remarks>
 [Collection("LicensingTests")]
 public class AiModelBuilderSerializeRoundTripTests
