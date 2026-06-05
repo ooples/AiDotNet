@@ -966,6 +966,102 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     private int[] _originalKeyShape = [];
     private int[] _originalValueShape = [];
 
+    /// <summary>
+    /// Attempts the single fused multi-head-attention inference kernel
+    /// (<c>IEngine.MultiHeadAttentionForward</c>) for a pure self-attention block.
+    /// Returns false (and the caller uses the decomposed <see cref="ForwardInternal"/>
+    /// walk) whenever the block isn't representable by the fused kernel.
+    /// </summary>
+    /// <remarks>
+    /// Eligibility — all required:
+    /// <list type="bullet">
+    /// <item><description>Inference mode (the fused kernel is forward-only; gating on
+    /// <see cref="LayerBase{T}.IsTrainingMode"/> also avoids a per-train-step throw/catch).</description></item>
+    /// <item><description>Self-attention: Q, K, V are the same tensor reference (the kernel
+    /// projects one input for all three).</description></item>
+    /// <item><description>No RoPE / ALiBi / causal masking (the kernel applies no positional bias;
+    /// the non-ALiBi decomposed path already passes <c>mask: null</c>, so a fused call with
+    /// <c>mask: null</c> is behaviour-equivalent for self-attention).</description></item>
+    /// <item><description>Weights materialized (lazy-init networks start at <c>[0,0]</c>).</description></item>
+    /// </list>
+    /// The fused kernel omits the output-projection bias and the layer activation, so the
+    /// fused output adds <c>_outputBias</c> (broadcast) and runs <see cref="LayerBase{T}.ApplyActivation(Tensor{T})"/>,
+    /// matching the decomposed path's <c>FusedLinear(context, _outputWeights, _outputBias, None)</c> +
+    /// <c>ApplyActivation</c> tail. The output is restored to the caller's rank.
+    /// </remarks>
+    private bool TryFusedAttentionInference(Tensor<T> query, Tensor<T> key, Tensor<T> value, out Tensor<T> output)
+    {
+        output = Tensor<T>.Empty();
+
+        if (IsTrainingMode) return false;
+        if (_ropeLayer != null || _alibiLayer != null || UseCausalMask) return false;
+        if (!ReferenceEquals(query, key) || !ReferenceEquals(key, value)) return false;
+
+        // Weights must be materialized (lazy-init Q/K/V start at [0,0]).
+        if (_queryWeights.Rank != 2 || _queryWeights.Shape[0] == 0 || _queryWeights.Shape[1] == 0)
+            return false;
+
+        int rank = query.Rank;
+        if (rank < 1) return false;
+        int dModel = query.Shape[^1];
+        // dModel mismatch is a real error the decomposed path reports with full context.
+        if (dModel != _embeddingDimension) return false;
+        // numHeads must divide dModel (always true by construction, but the kernel asserts it).
+        if (_headCount <= 0 || dModel % _headCount != 0) return false;
+
+        int[] originalShape = query._shape;
+        int seqLen;
+        int batch = 1;
+        if (rank == 1)
+        {
+            seqLen = 1;
+        }
+        else
+        {
+            seqLen = query.Shape[^2];
+            for (int i = 0; i < rank - 2; i++) batch *= query.Shape[i];
+        }
+
+        // The kernel requires a contiguous rank-3 [batch, seq, dModel] input.
+        Tensor<T> input3D = Engine.Reshape(query, [batch, seqLen, dModel]);
+
+        try
+        {
+            var fused = Engine.MultiHeadAttentionForward(
+                input3D, _queryWeights, _keyWeights, _valueWeights, _outputWeights, _headCount, mask: null);
+
+            // Output-projection bias + layer activation (the fused kernel applies neither).
+            Engine.TensorBroadcastAddInPlace(fused, _outputBias);
+            var activated = ApplyActivation(fused);
+
+            // Restore the caller's rank: [dModel] for 1D, [seq, dModel] for 2D,
+            // [origBatch..., seq, dModel] otherwise.
+            if (rank == 1)
+            {
+                output = Engine.Reshape(activated, [dModel]);
+            }
+            else if (rank == 2)
+            {
+                output = Engine.Reshape(activated, [seqLen, dModel]);
+            }
+            else
+            {
+                int[] outShape = new int[rank];
+                for (int i = 0; i < rank - 2; i++) outShape[i] = originalShape[i];
+                outShape[^2] = seqLen;
+                outShape[^1] = dModel;
+                output = Engine.Reshape(activated, outShape);
+            }
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            // Forward-only kernel hit an active GradientTape; use the decomposed path.
+            output = Tensor<T>.Empty();
+            return false;
+        }
+    }
+
     private Tensor<T> ForwardInternal(Tensor<T> query, Tensor<T> key, Tensor<T> value)
     {
         // If the layer was constructed with a lazy init strategy, the Q/K/V/O
@@ -975,6 +1071,16 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // happens (the ROPE/ALiBi fields this layer owns).
         EnsureWeightsAllocated();
         EnsureInitialized();
+
+        // Fused inference fast path: pure self-attention with no positional bias
+        // collapses Q/K/V projection + multi-head SDPA + output projection into ONE
+        // engine call (5+ engine dispatches / 6 transpose materializations -> 1),
+        // the path the AIsEval Transformer-inference benchmark needs (the bs128
+        // 50x scaling cliff is the decomposed per-op walk, not SDPA itself).
+        // Inference-only (the forward kernel throws under a GradientTape); falls
+        // back to the decomposed walk for anything it can't represent.
+        if (TryFusedAttentionInference(query, key, value, out var fusedResult))
+            return fusedResult;
 
         // Industry standard: Support any-rank tensors (like PyTorch's MultiheadAttention)
         // Last two dimensions are [sequence, embedding_dim]

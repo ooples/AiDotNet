@@ -93,42 +93,86 @@ public class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 
     public List<Tensor<T>> ExtractFeatures(Tensor<T> input)
     {
+        // Accept both batched [N, C, H, W] and unbatched [C, H, W] image input. The patch
+        // embedding (a Conv2D) and the input.Shape[2]/[3] reads below require 4D NCHW; an
+        // unbatched [C, H, W] tensor (e.g. a single image, which is what the model-family test
+        // harness feeds) otherwise indexes past the end of the shape inside
+        // PatchEmbeddingBlock.Forward. Promote rank-3 to a batch of 1 so both ranks work.
+        input = EnsureBatchedNchw(input);
+
+        // CodeRabbit-1491.thread1: do NOT recover (H, W) from seqLen — for rectangular grids
+        // seqLen is ambiguous (e.g. 160×88 and 128×110 both have seqLen=14080, but choosing
+        // the wrong one shuffles the token order and corrupts both PatchMerging and the
+        // ReshapeToFeatureMap output). Compute the true (H, W) once from the input shape and
+        // the patch-embed stride, then thread it through every stage explicitly. After each
+        // stage's optional patch-merge step the dimensions halve (with odd-side pad-up to
+        // even, matching PyTorch SwinTransformer's F.pad), and we forward the updated dims
+        // to the next stage's blocks + merge.
+        if (input.Shape[2] % PatchEmbeddingStride != 0 || input.Shape[3] % PatchEmbeddingStride != 0)
+        {
+            throw new ArgumentException(
+                $"Input H={input.Shape[2]} W={input.Shape[3]} must be divisible by the patch-embed " +
+                $"stride ({PatchEmbeddingStride}). Pad or resize the input before passing it to SwinTransformer.",
+                nameof(input));
+        }
+        int height = input.Shape[2] / PatchEmbeddingStride;
+        int width = input.Shape[3] / PatchEmbeddingStride;
+
         var features = new List<Tensor<T>>();
         var x = _patchEmbed.Forward(input);
         for (int i = 0; i < _stages.Count; i++)
         {
-            x = _stages[i].Forward(x);
-            var featureMap = ReshapeToFeatureMap(x, input.Shape[2], input.Shape[3], i);
+            x = _stages[i].Forward(x, height, width, out height, out width);
+            var featureMap = ReshapeToFeatureMap(x, height, width, i);
             features.Add(featureMap);
         }
         return features;
     }
 
+    /// <summary>
+    /// Patch-embedding stride. Mirrors the <c>patchSize: 4</c> argument passed to
+    /// <see cref="PatchEmbeddingBlock{T}"/> below. Kept as a named constant so the
+    /// <see cref="ExtractFeatures"/> dim-threading path stays in sync if the patch
+    /// size ever moves to a config field.
+    /// </summary>
+    private const int PatchEmbeddingStride = 4;
+
     public IReadOnlyList<Tensor<T>> GetFeatureMaps(Tensor<T> input) => ExtractFeatures(input);
 
-    private Tensor<T> ReshapeToFeatureMap(Tensor<T> x, int inputHeight, int inputWidth, int stageIdx)
+    /// <summary>
+    /// Normalizes an image tensor to batched NCHW. A rank-4 <c>[N, C, H, W]</c> tensor is
+    /// returned unchanged; a rank-3 <c>[C, H, W]</c> tensor is promoted to <c>[1, C, H, W]</c>
+    /// so single-image callers (and the model-family test harness) work without a batch axis.
+    /// Any other rank is rejected with a clear message rather than failing deep in the conv.
+    /// </summary>
+    private static Tensor<T> EnsureBatchedNchw(Tensor<T> input)
+    {
+        if (input.Shape.Length == 4) return input;
+        if (input.Shape.Length == 3)
+            return input.Reshape(new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
+        throw new ArgumentException(
+            $"SwinTransformer expects a [C, H, W] or [N, C, H, W] image tensor, but got a rank-" +
+            $"{input.Shape.Length} tensor with shape [{string.Join(", ", input.Shape.ToArray())}].",
+            nameof(input));
+    }
+
+    private Tensor<T> ReshapeToFeatureMap(Tensor<T> x, int height, int width, int stageIdx)
     {
         int batch = x.Shape[0];
         int seqLen = x.Shape[1];
         int dim = x.Shape[2];
-        int stride = Strides[stageIdx];
 
-        if (inputHeight % stride != 0)
+        // (height, width) is threaded explicitly from ExtractFeatures so we avoid the
+        // ambiguous seqLen → (H, W) factorization that would silently mis-tile rectangular
+        // grids (see ExtractFeatures comment). Validate the contract here so a future caller
+        // can't pass mismatched dims unnoticed.
+        if (height * width != seqLen)
+        {
             throw new ArgumentException(
-                $"Input height ({inputHeight}) must be divisible by stride ({stride}) at stage {stageIdx}.",
-                nameof(inputHeight));
-        if (inputWidth % stride != 0)
-            throw new ArgumentException(
-                $"Input width ({inputWidth}) must be divisible by stride ({stride}) at stage {stageIdx}.",
-                nameof(inputWidth));
-
-        int height = inputHeight / stride;
-        int width = inputWidth / stride;
-        int expectedSeqLen = height * width;
-        if (seqLen != expectedSeqLen)
-            throw new InvalidOperationException(
-                $"Sequence length mismatch at stage {stageIdx}: expected {expectedSeqLen} (height={height}, width={width}), got {seqLen}. " +
-                "Ensure input dimensions are divisible by patch size and all stride factors.");
+                $"Stage {stageIdx} feature map: (height={height} × width={width}) = {height * width} " +
+                $"does not match the stage output's sequence length {seqLen}.",
+                nameof(height));
+        }
 
         var featureMap = new Tensor<T>(new[] { batch, dim, height, width });
         for (int n = 0; n < batch; n++)
@@ -140,6 +184,14 @@ public class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
                         featureMap[n, c, h, w] = x[n, seqIdx, c];
                 }
         return featureMap;
+    }
+
+    // Most-square factor pair (H >= W) of seqLen, or (0, 0) if seqLen <= 0.
+    private static (int H, int W) SwinFactorizeMostSquare(int seqLen)
+    {
+        for (int candidate = (int)Math.Sqrt(seqLen); candidate >= 1; candidate--)
+            if (seqLen % candidate == 0) return (seqLen / candidate, candidate);
+        return (0, 0);
     }
 
     /// <summary>
@@ -353,9 +405,40 @@ internal class SwinStage<T>
 
     public Tensor<T> Forward(Tensor<T> input)
     {
+        // Legacy no-dims path: SwinTransformerBlock.Forward and PatchMergingBlock.Forward fall
+        // back to a most-square factorization of seqLen, which is correct only for square grids.
+        // Prefer Forward(input, height, width, out _, out _) for rectangular-input correctness.
         var x = input;
         foreach (var block in _blocks) x = block.Forward(x);
         if (_patchMerge is not null) x = _patchMerge.Forward(x);
+        return x;
+    }
+
+    /// <summary>
+    /// Dim-threaded forward: callers pass the current grid (height, width) and receive the
+    /// post-stage dims, so block-internal window-attention and patch-merging both see the
+    /// true rectangular grid instead of factorizing seqLen (which is ambiguous for non-square
+    /// inputs — see SwinTransformer.ExtractFeatures comment).
+    /// </summary>
+    public Tensor<T> Forward(Tensor<T> input, int height, int width, out int outHeight, out int outWidth)
+    {
+        var x = input;
+        foreach (var block in _blocks) x = block.Forward(x, height, width);
+
+        if (_patchMerge is not null)
+        {
+            x = _patchMerge.Forward(x, height, width);
+            // PatchMergingBlock pads odd dims up to even (mirroring PyTorch's F.pad), then halves.
+            int hPad = height + (height & 1);
+            int wPad = width + (width & 1);
+            outHeight = hPad / 2;
+            outWidth = wPad / 2;
+        }
+        else
+        {
+            outHeight = height;
+            outWidth = width;
+        }
         return x;
     }
 
@@ -473,6 +556,10 @@ internal class SwinTransformerBlock<T>
 
     public Tensor<T> Forward(Tensor<T> input)
     {
+        // Legacy no-dims path: factorize seqLen as the closest non-trivial pair. This is
+        // correct ONLY for square grids; rectangular grids are ambiguous (e.g. 160×88 and
+        // 128×110 both have seqLen=14080). Prefer Forward(input, h, w) wherever the caller
+        // knows the true dims — that is the path SwinTransformer.ExtractFeatures uses.
         int seqLen = input.Shape[1];
         int h = (int)Math.Sqrt(seqLen);
         int w = seqLen / h;
@@ -487,6 +574,17 @@ internal class SwinTransformerBlock<T>
                     break;
                 }
             }
+        }
+        return Forward(input, h, w);
+    }
+
+    public Tensor<T> Forward(Tensor<T> input, int h, int w)
+    {
+        if (h * w != input.Shape[1])
+        {
+            throw new ArgumentException(
+                $"SwinTransformerBlock: (h={h} × w={w}) = {h * w} does not match input sequence length {input.Shape[1]}.",
+                nameof(h));
         }
 
         var normed1 = _norm1.Forward(input);
@@ -915,34 +1013,43 @@ internal class PatchMergingBlock<T>
             w = inputWidth.Value;
             if (h * w != seqLen)
                 throw new ArgumentException($"Provided dimensions ({h} x {w} = {h * w}) do not match sequence length {seqLen}.");
-            if (h % 2 != 0 || w % 2 != 0)
-                throw new ArgumentException($"Both dimensions must be even for 2x2 patch merging. Got h={h}, w={w}.");
         }
         else
         {
-            int sqrtSeq = (int)Math.Sqrt(seqLen);
-            h = 0; w = 0;
-            for (int candidate = sqrtSeq; candidate >= 1; candidate--)
-            {
-                if (seqLen % candidate == 0)
-                {
-                    int other = seqLen / candidate;
-                    if (candidate % 2 == 0 && other % 2 == 0)
-                    {
-                        h = other;
-                        w = candidate;
-                        break;
-                    }
-                }
-            }
-            if (h == 0 || w == 0)
+            // Prefer an exact even × even factorization (the common case for real images whose
+            // patch grid stays even through the stages). If none exists — e.g. an odd-sided grid
+            // such as 7 × 7 = 49 from a small 28 × 28 input — fall back to the MOST-SQUARE
+            // factorization (allowing odd sides) and pad the odd dimension(s) to even below,
+            // mirroring PyTorch's SwinTransformer which F.pads odd H/W before patch merging
+            // instead of rejecting the input.
+            (h, w) = FactorizeEvenEven(seqLen);
+            if (h == 0) (h, w) = FactorizeMostSquare(seqLen);
+            if (h == 0)
                 throw new ArgumentException(
-                    $"Cannot infer spatial dimensions from sequence length {seqLen}. " +
-                    "Sequence length must be factorizable into two even integers for patch merging.");
+                    $"Cannot infer spatial dimensions from sequence length {seqLen} for patch merging.");
         }
 
-        int newH = h / 2;
-        int newW = w / 2;
+        // Pad odd H/W up to the next even size (zeros), so the 2×2 merge always has full quads.
+        int hPad = h + (h & 1);
+        int wPad = w + (w & 1);
+        Tensor<T> src = input;
+        if (hPad != h || wPad != w)
+        {
+            var padded = new Tensor<T>(new[] { batch, hPad * wPad, dim });
+            for (int n = 0; n < batch; n++)
+                for (int i = 0; i < h; i++)
+                    for (int j = 0; j < w; j++)
+                    {
+                        int srcIdx = i * w + j;
+                        int dstIdx = i * wPad + j;
+                        for (int d = 0; d < dim; d++)
+                            padded[n, dstIdx, d] = input[n, srcIdx, d];
+                    }
+            src = padded;
+        }
+
+        int newH = hPad / 2;
+        int newW = wPad / 2;
         int newSeqLen = newH * newW;
         var merged = new Tensor<T>(new[] { batch, newSeqLen, dim * 4 });
 
@@ -952,21 +1059,41 @@ internal class PatchMergingBlock<T>
                 for (int j = 0; j < newW; j++)
                 {
                     int newIdx = i * newW + j;
-                    int idx0 = (2 * i) * w + (2 * j);
-                    int idx1 = (2 * i) * w + (2 * j + 1);
-                    int idx2 = (2 * i + 1) * w + (2 * j);
-                    int idx3 = (2 * i + 1) * w + (2 * j + 1);
+                    int idx0 = (2 * i) * wPad + (2 * j);
+                    int idx1 = (2 * i) * wPad + (2 * j + 1);
+                    int idx2 = (2 * i + 1) * wPad + (2 * j);
+                    int idx3 = (2 * i + 1) * wPad + (2 * j + 1);
                     for (int d = 0; d < dim; d++)
                     {
-                        merged[n, newIdx, d] = input[n, idx0, d];
-                        merged[n, newIdx, dim + d] = input[n, idx1, d];
-                        merged[n, newIdx, 2 * dim + d] = input[n, idx2, d];
-                        merged[n, newIdx, 3 * dim + d] = input[n, idx3, d];
+                        merged[n, newIdx, d] = src[n, idx0, d];
+                        merged[n, newIdx, dim + d] = src[n, idx1, d];
+                        merged[n, newIdx, 2 * dim + d] = src[n, idx2, d];
+                        merged[n, newIdx, 3 * dim + d] = src[n, idx3, d];
                     }
                 }
         }
 
         return _reduction.Forward(merged);
+    }
+
+    // Returns the even × even factor pair of seqLen closest to square, or (0, 0) if none.
+    private static (int H, int W) FactorizeEvenEven(int seqLen)
+    {
+        for (int candidate = (int)Math.Sqrt(seqLen); candidate >= 1; candidate--)
+            if (seqLen % candidate == 0)
+            {
+                int other = seqLen / candidate;
+                if ((candidate & 1) == 0 && (other & 1) == 0) return (other, candidate);
+            }
+        return (0, 0);
+    }
+
+    // Returns the factor pair of seqLen closest to square (sides may be odd), or (0, 0).
+    private static (int H, int W) FactorizeMostSquare(int seqLen)
+    {
+        for (int candidate = (int)Math.Sqrt(seqLen); candidate >= 1; candidate--)
+            if (seqLen % candidate == 0) return (seqLen / candidate, candidate);
+        return (0, 0);
     }
 
     public long GetParameterCount() => _reduction.ParameterCount;

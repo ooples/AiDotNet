@@ -224,9 +224,19 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
         // only; allocating real weights against it would burn RNG state and
         // potentially produce wrong-shape kernels that throw later on actual
         // forward.
+        //
+        // ALSO skip the eager resolve when the layer's TryDeclareShape()
+        // oracle reports its parameters are already materialised
+        // (AiDotNet#1370): the whole point of this block is weight
+        // materialisation, and layers like MultiHeadAttentionLayer both
+        // (a) don't need it (Q/K/V/O are allocated from ctor dims) and
+        // (b) reject the rank-1 [features] shape the weight probe yields
+        // (their OnFirstForward requires rank >= 2 input), so forcing
+        // ResolveFromShape on them throws instead of helping.
         if (resolvedInput.IsAuthoritative
             && _baseLayer is LayerBase<T> baseLb
-            && !baseLb.IsShapeResolved)
+            && !baseLb.IsShapeResolved
+            && !DeclaresShapeWithoutInput(baseLb))
         {
             var resolvedIn = GetInputShape();
             if (resolvedIn.Length > 0 && resolvedIn.All(d => d > 0))
@@ -464,6 +474,27 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
 
     private static int[] ResolveBaseInputShape(ILayer<T> baseLayer)
         => ResolveBaseInputShapeWithProvenance(baseLayer).Shape;
+
+    /// <summary>
+    /// Exception-safe probe of the <see cref="LayerBase{T}.TryDeclareShape"/> oracle:
+    /// <c>true</c> means the layer's parameters are materialised without needing a
+    /// synthetic input shape forced on it. A throwing oracle is treated as
+    /// <c>false</c> so the ctor falls back to the pre-existing eager-resolve path.
+    /// </summary>
+    private static bool DeclaresShapeWithoutInput(LayerBase<T> layer)
+    {
+        try
+        {
+            return layer.TryDeclareShape();
+        }
+        catch (Exception ex) when (
+            ex is not OperationCanceledException
+            && ex is not OutOfMemoryException
+            && ex is not StackOverflowException)
+        {
+            return false;
+        }
+    }
 
     protected virtual LoRALayer<T> CreateLoRALayer(int rank, double alpha)
     {

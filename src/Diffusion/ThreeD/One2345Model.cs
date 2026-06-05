@@ -247,17 +247,27 @@ public class One2345Model<T> : ThreeDDiffusionModelBase<T>
     public override IDiffusionModel<T> Clone()
     {
         EnsureInitialized();
-        var clonedUnet = new UNetNoisePredictor<T>(
-            inputChannels: INPUT_CHANNELS, outputChannels: LATENT_CHANNELS,
-            baseChannels: BASE_CHANNELS, channelMultipliers: new[] { 1, 2, 4, 4 },
-            numResBlocks: 2, attentionResolutions: new[] { 4, 2, 1 },
-            contextDim: CROSS_ATTENTION_DIM);
-        clonedUnet.SetParameters(_unet.GetParameters());
-        return new One2345Model<T>(unet: clonedUnet,
-            vae: new StandardVAE<T>(inputChannels: 3, latentChannels: LATENT_CHANNELS,
-                baseChannels: 128, channelMultipliers: new[] { 1, 2, 4, 4 },
-                numResBlocksPerLevel: 2, latentScaleFactor: 0.18215),
-            conditioner: _conditioner, defaultPointCount: DefaultPointCount);
+        // Clone the existing UNet + VAE via their own Clone() methods —
+        // see DreamGaussianModel.Clone for the full rationale. The
+        // previous "rebuild with paper-scale defaults + push original's
+        // params" pattern made Clone_ShouldProduceIdenticalOutput
+        // exceed the 120 s xUnit timeout on the test scaffold because
+        // the clone always ran a full-paper-scale UNet Predict
+        // regardless of how small the original was.
+        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
+        var clonedVae = (StandardVAE<T>)_vae.Clone();
+        // Forward the outer-model config (DiffusionModelOptions, Scheduler,
+        // Architecture) too — otherwise a customized One2345Model resets to
+        // constructor defaults on clone.
+        return new One2345Model<T>(
+            architecture: Architecture,
+            options: (DiffusionModelOptions<T>)GetOptions(),
+            scheduler: Scheduler,
+            unet: clonedUnet,
+            vae: clonedVae,
+            conditioner: _conditioner,
+            defaultPointCount: DefaultPointCount,
+            seed: _seed);
     }
 
     #endregion

@@ -424,13 +424,30 @@ public static class DeserializationHelper
             // deserialization, so a round-tripped model would behave differently.
             if (instance is EmbeddingLayer<T> embInstance)
             {
-                if (additionalParams != null
-                    && additionalParams.TryGetValue("InputMode", out var modeObj)
-                    && Enum.TryParse<EmbeddingInputMode>(modeObj?.ToString(), out var mode))
+                // Restore InputMode / ScaleBySqrtDimension from metadata. A key that is ABSENT
+                // keeps the ctor default (older models serialized before these knobs existed). A
+                // key that is PRESENT but unparseable is a corrupt/incompatible stream — reject it
+                // loudly rather than silently falling back to a default, which would round-trip the
+                // model into DIFFERENT behavior (e.g. losing the Vaswani §3.4 sqrt(d) embedding
+                // scale) with no error.
+                if (additionalParams != null && additionalParams.TryGetValue("InputMode", out var modeObj))
                 {
+                    var modeStr = modeObj?.ToString();
+                    if (!Enum.TryParse<EmbeddingInputMode>(modeStr, out var mode))
+                        throw new InvalidOperationException(
+                            $"EmbeddingLayer metadata 'InputMode' has an unparseable value '{modeStr}'. " +
+                            $"Expected one of: {string.Join(", ", Enum.GetNames(typeof(EmbeddingInputMode)))}.");
                     embInstance.InputMode = mode;
                 }
-                embInstance.ScaleBySqrtDimension = TryGetBool(additionalParams, "ScaleBySqrtDimension") ?? false;
+                if (additionalParams != null && additionalParams.TryGetValue("ScaleBySqrtDimension", out var scaleObj))
+                {
+                    var scaleStr = scaleObj?.ToString();
+                    if (!bool.TryParse(scaleStr, out var scaleVal))
+                        throw new InvalidOperationException(
+                            $"EmbeddingLayer metadata 'ScaleBySqrtDimension' has an unparseable value " +
+                            $"'{scaleStr}'. Expected 'true' or 'false'.");
+                    embInstance.ScaleBySqrtDimension = scaleVal;
+                }
             }
         }
         else if (genericDef == typeof(PatchEmbeddingLayer<>))
@@ -1717,7 +1734,7 @@ public static class DeserializationHelper
         }
         else if (genericDef.Name == "TransformerEncoderBlock`1")
         {
-            // Post-LN transformer encoder block (ctor: hiddenSize, numHeads, ffnDim, dropoutRate).
+            // Pre-LN transformer encoder block (ctor: hiddenSize, numHeads, ffnDim, dropoutRate).
             // TransformerEncoderBlock.GetMetadata persists all four — fail fast if the
             // dimension metadata is missing rather than fabricating defaults that may
             // violate hiddenSize % numHeads == 0.
@@ -1729,6 +1746,13 @@ public static class DeserializationHelper
             int ffTeb = TryGetInt(additionalParams, "FfnDim")
                 ?? throw new InvalidOperationException($"{genericDef.Name} requires 'FfnDim' metadata.");
             double drTeb = TryGetDouble(additionalParams, "DropoutRate") ?? 0.0;
+            // Validate positivity BEFORE the modulo: a corrupt numHeads of 0 would make
+            // (hsTeb % nhTeb) throw DivideByZeroException, and a negative value would pass the
+            // modulo (C# % takes the dividend's sign) yet yield a negative per-head dimension.
+            if (hsTeb <= 0 || nhTeb <= 0 || ffTeb <= 0)
+                throw new InvalidOperationException(
+                    $"{genericDef.Name} metadata is corrupt: hiddenSize ({hsTeb}), numHeads ({nhTeb}), " +
+                    $"and ffnDim ({ffTeb}) must all be positive.");
             if (hsTeb % nhTeb != 0)
             {
                 throw new InvalidOperationException(
@@ -1756,7 +1780,7 @@ public static class DeserializationHelper
         }
         else if (genericDef.Name == "TransformerDecoderBlock`1")
         {
-            // Post-/Pre-LN decoder block (ctor: hiddenSize, numHeads, ffnDim, dropoutRate).
+            // Pre-LN decoder block (ctor: hiddenSize, numHeads, ffnDim, dropoutRate).
             int hsTdb = TryGetInt(additionalParams, "HiddenSize")
                 ?? (inputShape.Length > 0 ? inputShape[inputShape.Length - 1] : throw new InvalidOperationException(
                     $"{genericDef.Name} requires 'HiddenSize' metadata or a rank>=1 inputShape."));
@@ -1765,6 +1789,12 @@ public static class DeserializationHelper
             int ffTdb = TryGetInt(additionalParams, "FfnDim")
                 ?? throw new InvalidOperationException($"{genericDef.Name} requires 'FfnDim' metadata.");
             double drTdb = TryGetDouble(additionalParams, "DropoutRate") ?? 0.0;
+            // Validate positivity before the modulo (numHeads==0 would throw DivideByZeroException;
+            // a negative value would slip past % and yield a negative per-head dimension).
+            if (hsTdb <= 0 || nhTdb <= 0 || ffTdb <= 0)
+                throw new InvalidOperationException(
+                    $"{genericDef.Name} metadata is corrupt: hiddenSize ({hsTdb}), numHeads ({nhTdb}), " +
+                    $"and ffnDim ({ffTdb}) must all be positive.");
             if (hsTdb % nhTdb != 0)
             {
                 throw new InvalidOperationException(
