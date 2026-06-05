@@ -1,0 +1,129 @@
+name: Model Perf Probe
+
+# Runs the generic ModelPerfProbe sweep across the entire model registry
+# (~1320 IFullModel<float, Tensor, Tensor> implementations). On every push to
+# master we refresh the baseline manifest and commit it back; on PRs we diff
+# against the committed baseline and fail the run when any model's avg-train-
+# step time regresses past --regression-step-ratio.
+#
+# Manual triggers (workflow_dispatch) let a maintainer rerun the sweep — useful
+# when a Tensors release lands and the baseline has shifted.
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - 'src/**'
+      - 'tools/ModelPerfProbe/**'
+      - '.github/workflows/perf-probe.yml'
+  pull_request:
+    branches: [ master ]
+    paths:
+      - 'src/**'
+      - 'tools/ModelPerfProbe/**'
+      - '.github/workflows/perf-probe.yml'
+  schedule:
+    # 03:30 UTC nightly — well clear of the test-suite shards which queue at midnight.
+    - cron: '30 3 * * *'
+  workflow_dispatch:
+    inputs:
+      steps:
+        description: 'Steps per model'
+        default: '3'
+      per_model_budget_s:
+        description: 'Per-model wall-clock budget (seconds)'
+        default: '30'
+      slow_step_ms:
+        description: 'Avg-step-ms threshold for SLOW tag'
+        default: '1000'
+      slow_alloc_mb:
+        description: 'Alloc-MB/step threshold for SLOW tag'
+        default: '50'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  probe:
+    name: Sweep + diff
+    # 6 h hard cap — a worst-case 1320 × 30 s sweep tops out at ~11 h; we don't
+    # want a stuck model to burn a whole runner-day's allotment.
+    timeout-minutes: 360
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build probe
+        run: |
+          dotnet build tools/ModelPerfProbe/ModelPerfProbe.csproj -c Release -p:TreatWarningsAsErrors=false
+
+      - name: Run profile-all sweep
+        id: sweep
+        # On push-to-master / schedule / workflow_dispatch we write a fresh manifest;
+        # on PRs we read the master baseline and diff against it, failing on regression.
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          STEPS="${{ github.event.inputs.steps || '3' }}"
+          BUDGET="${{ github.event.inputs.per_model_budget_s || '30' }}"
+          SLOW_MS="${{ github.event.inputs.slow_step_ms || '1000' }}"
+          SLOW_MB="${{ github.event.inputs.slow_alloc_mb || '50' }}"
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            # Regression mode: write to a side path, diff against committed baseline.
+            dotnet tools/ModelPerfProbe/bin/Release/net10.0/ModelPerfProbe.dll \
+              --profile-all \
+              --steps "$STEPS" \
+              --per-model-budget-s "$BUDGET" \
+              --slow-step-ms "$SLOW_MS" \
+              --slow-alloc-mb "$SLOW_MB" \
+              --output artifacts/perf-current.json \
+              --diff-baseline artifacts/perf-baseline.json \
+              --regression-step-ratio 1.5 \
+              | tee artifacts/perf-sweep.log
+          else
+            # Refresh mode: write to the committed location.
+            dotnet tools/ModelPerfProbe/bin/Release/net10.0/ModelPerfProbe.dll \
+              --profile-all \
+              --steps "$STEPS" \
+              --per-model-budget-s "$BUDGET" \
+              --slow-step-ms "$SLOW_MS" \
+              --slow-alloc-mb "$SLOW_MB" \
+              --output artifacts/perf-baseline.json \
+              | tee artifacts/perf-sweep.log
+          fi
+
+      - name: Upload sweep artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-probe-${{ github.run_id }}
+          path: |
+            artifacts/perf-baseline.json
+            artifacts/perf-current.json
+            artifacts/perf-sweep.log
+          if-no-files-found: warn
+
+      - name: Commit refreshed baseline
+        # Only refresh-mode runs (master push / nightly / manual) commit back.
+        if: github.event_name != 'pull_request' && (success() || failure())
+        run: |
+          if [[ -n "$(git status --porcelain artifacts/perf-baseline.json)" ]]; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add artifacts/perf-baseline.json
+            git commit -m "chore(perf): refresh perf-baseline.json [skip ci]"
+            git push
+          else
+            echo "perf-baseline.json unchanged; nothing to commit"
+          fi
