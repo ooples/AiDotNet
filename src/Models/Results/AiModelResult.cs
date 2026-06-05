@@ -1929,8 +1929,19 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // Re-assert the builder's determinism policy on this thread.
         AiDotNet.Tensors.Engines.AiDotNetEngine.SetDeterministicMode(!AllowNondeterminism);
 
-        var dataForPrediction = newData;
-        if (SafetyFilter != null && newData is Vector<T> vectorInput && typeof(TInput) == typeof(Vector<T>))
+        // Apply input preprocessing FIRST (when configured) so transformers such as
+        // SimpleImputer can replace NaN / missing values before the safety finiteness
+        // check runs. Otherwise a configured imputer never sees the NaN it exists to fix,
+        // and Predict throws "Safety validation failed: InvalidValue:Critical" on exactly
+        // the input the pipeline was meant to repair. Safety then validates the data the
+        // model actually receives. With no preprocessing configured this is a no-op
+        // (preprocessedInput == newData), so non-pipeline behaviour is unchanged.
+        var preprocessedInput = PreprocessingInfo?.IsFitted == true
+            ? PreprocessingInfo.TransformFeatures(newData)
+            : newData;
+
+        var dataForPrediction = preprocessedInput;
+        if (SafetyFilter != null && preprocessedInput is Vector<T> vectorInput && typeof(TInput) == typeof(Vector<T>))
         {
             // Fast path for the default numeric SafetyFilter — single-call analog of the
             // ValidateAndSanitizeMatrix fast path (#1447 / #1458). SafetyFilter<T>.ValidateInput
@@ -1962,16 +1973,16 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 }
             }
         }
-        else if (SafetyFilter != null && newData is Matrix<T> matrixInput && typeof(TInput) == typeof(Matrix<T>))
+        else if (SafetyFilter != null && preprocessedInput is Matrix<T> matrixInput && typeof(TInput) == typeof(Matrix<T>))
         {
             var sanitizedMatrix = ValidateAndSanitizeMatrix(matrixInput);
             dataForPrediction = Unsafe.As<Matrix<T>, TInput>(ref sanitizedMatrix);
         }
 
-        // Transform input using preprocessing pipeline if configured
-        var normalizedNewData = PreprocessingInfo?.IsFitted == true
-            ? PreprocessingInfo.TransformFeatures(dataForPrediction)
-            : dataForPrediction;
+        // Input preprocessing was already applied above (before the safety check) so a
+        // configured imputer can repair NaN/missing values; feed the (possibly safety-
+        // sanitized) preprocessed data straight to feature selection + inference.
+        var normalizedNewData = dataForPrediction;
 
         // Apply feature selection if the optimizer selected a subset of features during training.
         // Without this, the model receives all columns but was trained on a subset, causing
@@ -3121,8 +3132,18 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     }
 
     /// <summary>
-    /// Gets the number of parameters in the underlying model.
+    /// Gets the number of parameters in the underlying model, or 0 when the model
+    /// has no trainable parameter vector (e.g. tree-based models).
     /// </summary>
+    /// <remarks>
+    /// Derived/query property — returns 0 for non-parameterizable models instead of
+    /// throwing, mirroring <see cref="SanitizeParameters"/>'s <c>TryParameterizable</c>
+    /// pattern. This prevents <see cref="Serialize"/> (which JSON-serializes this facade)
+    /// from failing on models without a parameter vector; the model's own state is
+    /// persisted separately via <c>SerializedModelData</c>. Marked <c>[JsonIgnore]</c>
+    /// because it is derived from <c>Model</c>, not independent serializable state.
+    /// </remarks>
+    [JsonIgnore]
     public long ParameterCount
     {
         get
@@ -3132,11 +3153,12 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 return 0;
             }
 
-            return InterfaceGuard.Parameterizable(Model).ParameterCount;
+            return InterfaceGuard.TryParameterizable(Model)?.ParameterCount ?? 0;
         }
     }
 
     /// <inheritdoc/>
+    [JsonIgnore]
     public bool SupportsParameterInitialization => ParameterCount > 0;
 
     /// <inheritdoc/>

@@ -1,0 +1,63 @@
+{
+  "Framework": "AiDotNet",
+  "DotNetRuntime": "10.0.8",
+  "AiDotNet": {
+    "loaded": true,
+    "name": "AiDotNet",
+    "version": "0.204.0.0",
+    "location": "AiDotNet.dll"
+  },
+  "Results": [
+    {
+      "Model": "mlp",
+      "Backend": "AiDotNetNeuralNetwork",
+      "Parameters": 468874,
+      "Training": {
+        "EpochSeconds": [
+          0.417899
+        ],
+        "TotalSeconds": 0.419356,
+        "GradientSecondsAvg": 0.29754,
+        "DataLoadingSecondsAvg": 0.007801,
+        "Resources": {
+          "ManagedRssMbPeak": 67.715,
+          "NvidiaSmiSample": null
+        }
+      },
+      "Inference": [
+        {
+          "BatchSize": 1,
+          "WarmupSecondsAvg": 0.000244,
+          "SteadyStateLatencyMsAvg": 0.187,
+          "SteadyStateLatencyMsP95": 0.237,
+          "ThroughputSamplesPerSecond": 5360.493,
+          "MemoryMbPeak": 78.746
+        },
+        {
+          "BatchSize": 8,
+          "WarmupSecondsAvg": 0.017372,
+          "SteadyStateLatencyMsAvg": 0.351,
+          "SteadyStateLatencyMsP95": 0.414,
+          "ThroughputSamplesPerSecond": 22821.281,
+          "MemoryMbPeak": 78.941
+        },
+        {
+          "BatchSize": 32,
+          "WarmupSecondsAvg": 0.029914,
+          "SteadyStateLatencyMsAvg": 0.496,
+          "SteadyStateLatencyMsP95": 0.538,
+          "ThroughputSamplesPerSecond": 64464.142,
+          "MemoryMbPeak": 79.02
+        },
+        {
+          "BatchSize": 128,
+          "WarmupSecondsAvg": 0.060456,
+          "SteadyStateLatencyMsAvg": 2.037,
+          "SteadyStateLatencyMsP95": 2.843,
+          "ThroughputSamplesPerSecond": 62846.762,
+          "MemoryMbPeak": 79.469
+        }
+      ]
+    }
+  ]
+}

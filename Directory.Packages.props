@@ -92,11 +92,28 @@
          kernel with only 8 args (garbage outWidth). Together these caused a hard CUDA
          access violation / OpenCL "-5" one step into CNN backprop. Verified: the CNN
          BuildAsync facade test trains + predicts on a real GPU with 0.91.1.
-         AiDotNet.Native packages coreleased in lockstep at 0.91.1. -->
+         AiDotNet.Native packages coreleased in lockstep at 0.91.1.
+
+         Bumped 0.91.1 -> 0.91.2 for the CPU train-step perf fix behind the
+         paper-scale CNN/diffusion CI-shard timeouts (#1463 compute half):
+         Tensors#528 — (1) allocation-free axis reductions: Tensor.Sum(int[]) and
+         the CpuEngine ReduceMean/Max/Variance(+backward)/Concat kernels replaced a
+         per-ELEMENT new int[]/List<int>+Contains+strided-indexer (3.2M heap allocs
+         per [1,64,224,224] reduction, ~40% of a ResNet50 fp64 train step) with a
+         single allocation-free odometer over the flat backing — ResNet50 double
+         train step 2553ms -> ~1150ms (~2.2x), bit-identical; and (2) small-batch
+         channel-parallel conv-backward (Conv2DBackwardInput/KernelInto parallelize
+         over input channels at batch=1 instead of collapsing to serial). This is
+         the Tensors-side lever #1463 called for; the memory/OOM half is handled by
+         the cache-clearing + diffusion re-shard in this PR (#1485).
+
+         Bumped Tensors 0.91.2 -> 0.91.14 for the GPU-resident optimizer step
+         (host-read-free Adam for cudaGraph capture) that this PR (#1501) depends on;
+         the AiDotNet.Native packages stay at 0.91.2 (no native change needed). -->
     <PackageVersion Include="AiDotNet.Tensors" Version="0.91.14" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.91.1" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.91.1" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.91.1" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.91.2" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.91.2" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.91.2" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.8" />

@@ -67,7 +67,22 @@ public class TransformerTrainConvergenceTests
             inputSize: seqLen,
             outputSize: vocabSize,
             maxSequenceLength: seqLen,
-            vocabularySize: vocabSize);
+            vocabularySize: vocabSize,
+            // Seed weight init deterministically. A tiny 2-layer transformer overfitting
+            // 4 arbitrary facts is init-sensitive (post-#1380 the model is properly
+            // regularized by residuals rather than degenerate, so it no longer overfits
+            // ANY init trivially the way the old broken block did). Pin a reproducible
+            // init so this convergence guard is stable across machines/runs.
+            randomSeed: 42,
+            // The default Transformer optimizer uses the Vaswani Noam schedule with a
+            // 4000-step warmup — but this overfit test runs only numFacts*epochs = 80
+            // optimizer steps, so with the default warmup the LR never leaves its ~0
+            // ramp and the model trains at ~1e-4 the whole time (it cannot memorise in
+            // the budget). 4000-step warmup is calibrated for full-scale training runs,
+            // not an 80-step overfit probe. Use a short warmup proportional to this run
+            // so the Noam LR actually reaches a useful value — this exercises the same
+            // default Adam+Noam code path, just sized for the test's step budget.
+            warmupSteps: 8);
 
         var transformer = new Transformer<float>(
             architecture,
