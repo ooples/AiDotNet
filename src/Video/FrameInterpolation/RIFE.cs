@@ -313,7 +313,26 @@ public class RIFE<T> : FrameInterpolationBase<T>
             Layers.AddRange(layers);
         }
 
-        // Distribute layers to sub-lists for forward pass
+        ExtractLayerReferences();
+    }
+
+    /// <summary>
+    /// (Re)builds the sub-list references (<see cref="_encoder"/>,
+    /// <see cref="_flowDecoder"/>, etc.) that <see cref="ProcessInterpolation"/>
+    /// uses, from the canonical <see cref="NeuralNetworks.NeuralNetworkBase{T}.Layers"/>
+    /// list. Must be called both after the layers are built and after
+    /// deserialization replaces <c>Layers</c> with the loaded weights — otherwise
+    /// a clone would keep running the constructor's random-init layers while the
+    /// loaded weights sit unused in <c>Layers</c>
+    /// (Clone_ShouldProduceIdenticalOutput / Clone_AfterTraining). Idempotent.
+    /// </summary>
+    private void ExtractLayerReferences()
+    {
+        _encoder.Clear();
+        _flowDecoder.Clear();
+        _contextEncoder.Clear();
+        _flowBlocks.Clear();
+
         int idx = 0;
         // Encoder (3 layers)
         for (int i = 0; i < 3; i++)
@@ -1020,6 +1039,15 @@ public class RIFE<T> : FrameInterpolationBase<T>
         _channels = reader.ReadInt32();
         _numFeatures = reader.ReadInt32();
         _numFlowBlocks = reader.ReadInt32();
+
+        // Deserialization rebuilt the canonical Layers list with the loaded
+        // weights; re-point the sub-list references at those layers (otherwise
+        // Forward keeps running the constructor's random-init layers).
+        int expectedCount = 3 + 3 + 2 + _numFlowBlocks + 2; // encoder+flowDec+ctx+blocks+fusion+output
+        if (Layers.Count >= expectedCount)
+        {
+            ExtractLayerReferences();
+        }
     }
 
     /// <inheritdoc/>
