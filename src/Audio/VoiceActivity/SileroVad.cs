@@ -584,9 +584,12 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         // sequence [batch, time, features]. Transpose the channel and time axes
         // so each timestep's convFilters-dim feature vector becomes the LSTM
         // input (Silero Team, 2021 — conv frontend feeding a recurrent core).
+        // Use the engine's tape-aware permute so the gradient flows back into
+        // the conv frontend during training (a plain Tensor.Transpose would
+        // detach the tape and leave the convs/LSTM untrained).
         if (output.Rank == 3)
         {
-            output = output.Transpose([0, 2, 1]);
+            output = Engine.TensorPermute(output, [0, 2, 1]);
         }
 
         // Pass through LSTM layers
@@ -595,11 +598,14 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
             output = layer.Forward(output);
         }
 
-        // Take the last timestep output and pass through dense layer
+        // Take the last timestep and pass through the dense layer. Use the
+        // tape-aware axis slice ([batch, seq, hidden] -> [batch, hidden]) so the
+        // gradient propagates back through the LSTM and conv frontend.
         if (_outputLayer is not null)
         {
-            // Get last timestep: shape [batch, hidden] from [batch, seq, hidden]
-            var lastTimestep = ExtractLastTimestep(output);
+            var lastTimestep = output.Rank == 3
+                ? Engine.TensorSliceAxis(output, axis: 1, index: output.Shape[1] - 1)
+                : output;
             output = _outputLayer.Forward(lastTimestep);
         }
 
