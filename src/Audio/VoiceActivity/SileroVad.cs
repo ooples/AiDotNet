@@ -522,36 +522,20 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
     /// <inheritdoc/>
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
-        // Normalize audio to [-1, 1] range
+        // Silero VAD (Silero Team, 2021) consumes float PCM already scaled to
+        // [-1, 1]; it does NOT re-normalize each chunk by its own peak amplitude.
+        // A per-chunk max-abs normalization would make the model amplitude-blind
+        // (a loud and a quiet copy of the same clip would map to identical
+        // features) and collapse a constant signal to all-ones, which is neither
+        // paper-faithful nor desirable. Reshape the waveform to the
+        // [batch, channels, samples] layout the 1-D conv frontend expects and
+        // leave the sample values intact.
         var samples = rawAudio.ToVector().ToArray();
-        double maxAbs = 0;
-
-        for (int i = 0; i < samples.Length; i++)
-        {
-            double absVal = Math.Abs(NumOps.ToDouble(samples[i]));
-            if (absVal > maxAbs) maxAbs = absVal;
-        }
-
-        var normalizedSamples = new T[samples.Length];
-        if (maxAbs > 0)
-        {
-            for (int i = 0; i < samples.Length; i++)
-            {
-                double normalized = NumOps.ToDouble(samples[i]) / maxAbs;
-                normalizedSamples[i] = NumOps.FromDouble(normalized);
-            }
-        }
-        else
-        {
-            Array.Copy(samples, normalizedSamples, samples.Length);
-        }
-
-        // Reshape to [batch, channels, samples] for Conv
         var result = new Tensor<T>([1, 1, samples.Length]);
         var resultVector = result.ToVector();
-        for (int i = 0; i < normalizedSamples.Length; i++)
+        for (int i = 0; i < samples.Length; i++)
         {
-            resultVector[i] = normalizedSamples[i];
+            resultVector[i] = samples[i];
         }
 
         return result;
@@ -590,10 +574,19 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
 
         var output = input;
 
-        // Pass through conv layers
+        // Pass through 1-D conv layers: [batch, 1, samples] -> [batch, convFilters, T].
         foreach (var layer in _convLayers)
         {
             output = layer.Forward(output);
+        }
+
+        // The conv stack emits [batch, channels, time]; the LSTM consumes a
+        // sequence [batch, time, features]. Transpose the channel and time axes
+        // so each timestep's convFilters-dim feature vector becomes the LSTM
+        // input (Silero Team, 2021 — conv frontend feeding a recurrent core).
+        if (output.Rank == 3)
+        {
+            output = output.Transpose([0, 2, 1]);
         }
 
         // Pass through LSTM layers
@@ -611,6 +604,24 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         }
 
         return output;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// SileroVad's forward is the conv frontend → axis transpose → LSTM →
+    /// last-timestep → dense pipeline in <see cref="Forward"/>, not a sequential
+    /// pass over the flat <c>Layers</c> list (which would feed the conv output
+    /// straight into the LSTM with the wrong axis order and skip the
+    /// last-timestep reduction). Route the training forward through the real
+    /// pipeline so the gradient tape records the actual operations.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        // Mirror Predict: normalize + reshape the raw waveform to [1, 1, samples]
+        // before running the conv frontend. Without this the training forward
+        // would feed the un-preprocessed input straight into the first 1-D conv
+        // (channel-count mismatch).
+        return Forward(PreprocessAudio(input));
     }
 
     /// <summary>

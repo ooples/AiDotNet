@@ -29870,26 +29870,26 @@ public static class LayerHelper<T>
         int conv2Stride = 2,
         int conv2Padding = 1)
     {
-        int seqLen1 = (frameSize + 2 * conv1Padding - conv1KernelSize) / conv1Stride + 1;
-        int seqLen2 = (seqLen1 + 2 * conv2Padding - conv2KernelSize) / conv2Stride + 1;
-        int seqLen3 = (seqLen2 + 2 * conv2Padding - conv2KernelSize) / conv2Stride + 1;
-
-        // First conv
-        yield return new ConvolutionalLayer<T>(
-            outputDepth: convFilters, kernelSize: conv1KernelSize,
-            stride: conv1Stride, padding: conv1Padding,
+        // Silero VAD's frontend is a stack of 1-D convolutions over the raw
+        // waveform [batch, 1, frameSize] (Silero Team, 2021). A 2-D conv with a
+        // square kernel can't process a length-only signal (the height axis is
+        // 1, smaller than the kernel), so use the dedicated 1-D conv layer.
+        // First conv: 1 input channel (waveform) -> convFilters.
+        yield return new Conv1DLayer<T>(
+            inputChannels: 1, outputChannels: convFilters,
+            kernelSize: conv1KernelSize, stride: conv1Stride, padding: conv1Padding,
             activationFunction: new LeakyReLUActivation<T>());
 
-        // Second conv
-        yield return new ConvolutionalLayer<T>(
-            outputDepth: convFilters, kernelSize: conv2KernelSize,
-            stride: conv2Stride, padding: conv2Padding,
+        // Second conv: convFilters -> convFilters.
+        yield return new Conv1DLayer<T>(
+            inputChannels: convFilters, outputChannels: convFilters,
+            kernelSize: conv2KernelSize, stride: conv2Stride, padding: conv2Padding,
             activationFunction: new LeakyReLUActivation<T>());
 
-        // Third conv
-        yield return new ConvolutionalLayer<T>(
-            outputDepth: convFilters, kernelSize: conv2KernelSize,
-            stride: conv2Stride, padding: conv2Padding,
+        // Third conv: convFilters -> convFilters.
+        yield return new Conv1DLayer<T>(
+            inputChannels: convFilters, outputChannels: convFilters,
+            kernelSize: conv2KernelSize, stride: conv2Stride, padding: conv2Padding,
             activationFunction: new LeakyReLUActivation<T>());
 
         // LSTM layers

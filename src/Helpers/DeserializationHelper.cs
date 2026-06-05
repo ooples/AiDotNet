@@ -1165,6 +1165,27 @@ public static class DeserializationHelper
                 conv3d.ResolveShapesOnly(new[] { inC, inD, inH, inW });
             }
         }
+        else if (genericDef == typeof(NeuralNetworks.Layers.Conv1DLayer<>))
+        {
+            // Conv1DLayer(int inputChannels, int outputChannels, int kernelSize, int stride,
+            //             int padding, IActivationFunction<T>?)
+            // All five ints are persisted by Conv1DLayer.GetMetadata, so read them
+            // directly rather than inferring channels from the (ambiguous) shape arrays.
+            int inputChannels = TryGetInt(additionalParams, "InputChannels")
+                ?? (inputShape != null && inputShape.Length >= 2 ? Math.Max(1, inputShape[^2]) : 1);
+            int outputChannels = TryGetInt(additionalParams, "OutputChannels")
+                ?? (outputShape.Length >= 2 ? Math.Max(1, outputShape[^2]) : (outputShape.Length > 0 ? outputShape[0] : 1));
+            int kernelSize = TryGetInt(additionalParams, "KernelSize") ?? 3;
+            int stride = TryGetInt(additionalParams, "Stride") ?? 1;
+            int padding = TryGetInt(additionalParams, "Padding") ?? 0;
+
+            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType });
+            if (ctor is null)
+                throw new MissingLayerCtorException("Cannot find Conv1DLayer constructor with expected signature.");
+            var activation = TryRestoreActivation<T>(additionalParams);
+            instance = ctor.Invoke(new object?[] { inputChannels, outputChannels, kernelSize, stride, padding, activation });
+        }
         else if (genericDef == typeof(NeuralNetworks.Layers.DeconvolutionalLayer<>))
         {
             // DeconvolutionalLayer(int outputDepth, int kernelSize, int stride, int padding, IActivationFunction<T>?)
