@@ -373,27 +373,35 @@ public class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
     public override IDiffusionModel<T> Clone()
     {
         EnsureInitialized();
-        var clonedUnet = new UNetNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS,
-            outputChannels: LATENT_CHANNELS,
-            baseChannels: BASE_CHANNELS,
-            channelMultipliers: new[] { 1, 2, 4, 4 },
-            numResBlocks: 2,
-            attentionResolutions: new[] { 4, 2, 1 },
-            contextDim: CROSS_ATTENTION_DIM);
-        clonedUnet.SetParameters(_unet.GetParameters());
+        // Clone the existing UNet + VAE via their own Clone() methods so
+        // the cloned DreamGaussian preserves whatever config the original
+        // was constructed with — NOT the paper-scale defaults. The
+        // previous Clone() rebuilt both sub-modules with hardcoded
+        // {baseChannels=320, channelMultipliers={1,2,4,4}, 2 res blocks,
+        // 3 attention resolutions} and pushed the small test
+        // scaffold's parameters into them, which (a) reshaped the
+        // parameter vector silently when test sizes ≠ paper sizes and
+        // (b) made the Clone_ShouldProduceIdenticalOutput test
+        // unconditionally Predict at paper scale, blowing the 120 s
+        // xUnit timeout regardless of whether the original used a
+        // smaller test-friendly UNet.
+        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
+        var clonedVae = (StandardVAE<T>)_vae.Clone();
 
+        // Forward the outer-model config (DiffusionModelOptions, Scheduler,
+        // Architecture) too — the previous version only passed the cloned
+        // sub-modules and let the constructor defaults paper-scale-rebuild
+        // everything else, silently changing schedule/options/architecture
+        // on a customized original.
         return new DreamGaussianModel<T>(
+            architecture: Architecture,
+            options: (DiffusionModelOptions<T>)GetOptions(),
+            scheduler: Scheduler,
             unet: clonedUnet,
-            vae: new StandardVAE<T>(
-                inputChannels: 3,
-                latentChannels: LATENT_CHANNELS,
-                baseChannels: 128,
-                channelMultipliers: new[] { 1, 2, 4, 4 },
-                numResBlocksPerLevel: 2,
-                latentScaleFactor: 0.18215),
+            vae: clonedVae,
             conditioner: _conditioner,
-            defaultPointCount: DefaultPointCount);
+            defaultPointCount: DefaultPointCount,
+            seed: _seed);
     }
 
     #endregion

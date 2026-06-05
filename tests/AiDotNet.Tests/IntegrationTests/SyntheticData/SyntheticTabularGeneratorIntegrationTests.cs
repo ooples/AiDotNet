@@ -367,8 +367,13 @@ public class SyntheticTabularGeneratorIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public void TableGANGenerator_ClassificationTargets_UseTransformedLabelSlice()
+    public async Task TableGANGenerator_ClassificationTargets_UseTransformedLabelSlice()
     {
+        // xUnit only honours [Fact(Timeout=...)] on async tests; yield once so
+        // this (otherwise synchronous) test is a valid awaitable and actually runs
+        // instead of erroring with "Tests marked with Timeout are only supported
+        // for async tests".
+        await Task.Yield();
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
         var options = new TableGANOptions<double>
