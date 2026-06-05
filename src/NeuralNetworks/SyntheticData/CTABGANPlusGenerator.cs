@@ -338,18 +338,18 @@ public class CTABGANPlusGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // CTAB-GAN+ is trained adversarially through Fit()/FitAsync (alternating
+        // critic and generator updates with the auxiliary classifier and
+        // information loss). The NeuralNetworkBase supervised Train(input,
+        // expected) contract does not map onto a GAN's minimax objective, and
+        // the generator graph is updated via the GAN loop's manual
+        // critic-driven gradients rather than the tape optimizer. Record the
+        // reconstruction loss for monitoring but do not attempt a supervised
+        // optimizer step here — the previous implementation called
+        // _optimizer.UpdateParameters(Layers) with no backward pass, which
+        // threw "Backward pass must be called before updating parameters".
         Tensor<T> prediction = Predict(input);
         LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        Tensor<T> error = prediction.Subtract(expectedOutput);
-        UpdateNetworkParameters();
-    }
-
-    /// <summary>
-    /// Updates the parameters of all layers in the network based on computed gradients.
-    /// </summary>
-    private void UpdateNetworkParameters()
-    {
-        _optimizer.UpdateParameters(Layers);
     }
 
     /// <inheritdoc />

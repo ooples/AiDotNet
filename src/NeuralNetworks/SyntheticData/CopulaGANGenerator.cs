@@ -346,27 +346,17 @@ public class CopulaGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Forward pass through generator
+        // CopulaGAN is trained adversarially through Fit()/FitAsync (the copula
+        // transform is fit statistically and the GAN is trained with the
+        // alternating critic/generator loop). The NeuralNetworkBase supervised
+        // Train(input, expected) contract does not map onto a GAN's minimax
+        // objective. Record the reconstruction loss for monitoring but do not
+        // attempt a supervised optimizer step here — the previous
+        // implementation called _optimizer.UpdateParameters(Layers) with no
+        // backward pass, which threw "Backward pass must be called before
+        // updating parameters".
         Tensor<T> prediction = Predict(input);
-
-        // Calculate loss
         LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-        // Calculate error gradient
-        Tensor<T> error = prediction.Subtract(expectedOutput);
-
-        // Backpropagate error through generator
-
-        // Update generator parameters
-        UpdateNetworkParameters();
-    }
-
-    /// <summary>
-    /// Updates the parameters of all layers in the network based on computed gradients.
-    /// </summary>
-    private void UpdateNetworkParameters()
-    {
-        _optimizer.UpdateParameters(Layers);
     }
 
     /// <inheritdoc />

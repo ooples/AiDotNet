@@ -240,15 +240,27 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     }
 
     /// <summary>
-    /// True when the model under test is a detection BACKBONE (<see cref="IDetectionBackbone{T}"/>).
-    /// These don't train standalone — their <c>Train()</c> throws by design ("detection backbones
-    /// train as part of a parent detector") and they expose feature maps via
-    /// <c>ExtractFeatures</c> rather than a flat <c>Layers</c> list — so the standalone-training and
-    /// layer-introspection invariants below are not applicable. Inference invariants (forward
-    /// finiteness, determinism, different-inputs-different-outputs) still run and assert normally.
+    /// True when the model under test does not use the supervised
+    /// <c>NeuralNetworkBase.Train(input, expected)</c> gradient-descent contract that the
+    /// training invariants below probe, so those invariants are not applicable:
+    /// <list type="bullet">
+    /// <item><description>Detection BACKBONES (<see cref="IDetectionBackbone{T}"/>) don't train
+    /// standalone — their <c>Train()</c> throws by design ("detection backbones train as part of a
+    /// parent detector") and they expose feature maps via <c>ExtractFeatures</c> rather than a flat
+    /// <c>Layers</c> list.</description></item>
+    /// <item><description>Synthetic tabular generators (<see cref="ISyntheticTabularGenerator{T}"/>)
+    /// — CTGAN/CopulaGAN/CTAB-GAN+/TVAE/diffusion-table models, etc. — train through their own
+    /// <c>Fit()</c> pipeline (adversarial minimax, VAE ELBO, diffusion denoising, or a statistical
+    /// copula fit), NOT a supervised MSE gradient step. Their real training is covered by the
+    /// SyntheticTabularGenerator integration tests (Fit → Generate). The supervised
+    /// <c>Train(input, expected)</c> path is a NeuralNetworkBase compatibility no-op for them.</description></item>
+    /// </list>
+    /// Inference invariants (forward finiteness, determinism, different-inputs-different-outputs)
+    /// still run and assert normally.
     /// </summary>
     protected static bool TrainingInvariantsNotApplicable(INeuralNetworkModel<T> network)
-        => network is AiDotNet.Interfaces.IDetectionBackbone<T>;
+        => network is AiDotNet.Interfaces.IDetectionBackbone<T>
+        || network is AiDotNet.Interfaces.ISyntheticTabularGenerator<T>;
 
     // =====================================================
     // MATHEMATICAL INVARIANT: Training Should Reduce Loss
