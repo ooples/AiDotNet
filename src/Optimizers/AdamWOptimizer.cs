@@ -762,6 +762,12 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         _v = Vector<T>.Empty();
         _vMax = null;
         _t = 0;
+        // Clear the tape-side fast-path state so a reused optimizer instance does
+        // not carry stale moments / bias-correction step into the next run.
+        _tapeM.Clear();
+        _tapeV.Clear();
+        _tapeVMax.Clear();
+        _tapeStep = 0;
     }
 
     /// <summary>

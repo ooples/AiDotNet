@@ -563,6 +563,8 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         base.Reset();
         _m = Vector<T>.Empty();
         _t = 0;
+        // Clear the tape-side fast-path momentum so a reused instance starts fresh.
+        _tapeMomentum.Clear();
     }
 
     /// <summary>

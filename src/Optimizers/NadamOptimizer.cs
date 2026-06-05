@@ -166,6 +166,11 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
         _m = new Vector<T>(parameters.Length);
         _v = new Vector<T>(parameters.Length);
+        // Clear the tape-side moments / step so a reused optimizer instance starts a
+        // new run with fresh Nadam state instead of resuming the previous run's.
+        _tapeM.Clear();
+        _tapeV2.Clear();
+        _tapeStep = 0;
 
         InitializeAdaptiveParameters();
 
