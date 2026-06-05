@@ -48,6 +48,15 @@
     <ProjectReference Include="..\..\src\AiDotNet.Generators\AiDotNet.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
+  <!-- ModelPerfProbe baseline manifest. The TestScaffoldGenerator reads this AdditionalFile to
+       emit [Trait("Speed", "Slow")] on auto-generated scaffolds for models whose probe-measured
+       train-step latency or alloc per step exceed the slow thresholds, so the test runner can
+       filter slow models out of fast CI lanes via a Speed!=Slow trait filter. The nightly
+       perf-probe workflow refreshes this manifest. -->
+  <ItemGroup>
+    <AdditionalFiles Include="..\..\artifacts\perf-baseline.json" Condition="Exists('..\..\artifacts\perf-baseline.json')" Visible="false" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
     <ProjectReference Include="..\..\tools\AiDotNet.ProgramSynthesis.Tooling\AiDotNet.ProgramSynthesis.Tooling.csproj" />
     <ProjectReference Include="..\..\src\AiDotNet.Serving\AiDotNet.Serving.csproj" />
