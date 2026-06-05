@@ -5,6 +5,7 @@ using AiDotNet.Models.Results;
 using AiDotNet.Preprocessing.Scalers;
 using AiDotNet.Regression;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Helpers;
 using Xunit;
 using System.Threading.Tasks;
 
@@ -16,8 +17,24 @@ namespace AiDotNet.Tests.IntegrationTests.Regression;
 /// If serialization drops model weights, preprocessing state, or feature selection indices,
 /// users save models and silently get wrong predictions when loading them later.
 /// </summary>
+/// <remarks>
+/// Joined to the <c>LicensingTests</c> collection so it never runs in parallel with the
+/// licensing tests: Serialize/Deserialize each consume one operation from the process-global
+/// free-trial counter (<see cref="TrialStateManager"/>, ~/.aidotnet/trial.json), and parallel
+/// execution across collections races on that shared file. Each test also resets the trial in
+/// its constructor so it starts with a full operation budget regardless of test ordering.
+/// </remarks>
+[Collection("LicensingTests")]
 public class AiModelBuilderSerializeRoundTripTests
 {
+    public AiModelBuilderSerializeRoundTripTests()
+    {
+        // Fresh trial budget per test — the round-trip tests legitimately perform a
+        // handful of save/load ops each; without a reset they accumulate across the
+        // class and trip the 10-op trial limit. Reset() clears trial.json + tombstone.
+        new TrialStateManager().Reset();
+    }
+
     [Fact(Timeout = 120000)]
     public async Task RidgeRegression_SerializeDeserialize_PredictMatchesOriginal()
     {

@@ -184,31 +184,18 @@ public class ByteLMV256Issue1380Tests
             int v = pred.Shape[pred.Shape.Length - 1];
             int strideOffset = pred.Length - v;
 
-            // Numerically-stable softmax: subtract max logit then exp.
-            float maxLogit = float.NegativeInfinity;
-            for (int c = 0; c < v; c++)
-            {
-                float val = pred[strideOffset + c];
-                if (val > maxLogit) maxLogit = val;
-            }
-            double expSum = 0.0;
-            var exps = new double[v];
-            for (int c = 0; c < v; c++)
-            {
-                double e = Math.Exp(pred[strideOffset + c] - maxLogit);
-                exps[c] = e;
-                expSum += e;
-            }
-
-            // H = -Σ p_c · log(p_c) where p_c = exps[c] / expSum. The
-            // maxLogit subtraction above gives the numerical stability;
-            // the entropy sum itself is well-conditioned because every
-            // p_c lies in (0, 1] and log(p_c) is finite for p_c > 0
-            // (which we explicitly check).
+            // The SequenceClassification Transformer ends in a SoftmaxActivation layer,
+            // so Predict ALREADY returns a probability distribution (the last V values
+            // sum to 1). Compute the entropy of that distribution DIRECTLY — do NOT
+            // apply softmax again. Re-softmaxing double-applies softmax: at V=256 that
+            // compresses a genuinely-learned peak (e.g. p[target]=0.075, ~19× above the
+            // 1/V uniform) back toward uniform, making the gap read ~0 and falsely
+            // tripping the "fixture not learnable" precondition even though the model
+            // trained correctly (#1380 entropy-measurement bug).
             double H = 0.0;
             for (int c = 0; c < v; c++)
             {
-                double p = exps[c] / expSum;
+                double p = pred[strideOffset + c];
                 if (p > 0)
                 {
                     H -= p * Math.Log(p);

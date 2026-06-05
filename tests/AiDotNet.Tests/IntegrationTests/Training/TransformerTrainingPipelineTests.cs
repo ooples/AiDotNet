@@ -129,9 +129,18 @@ public class TransformerTrainingPipelineTests
             architecture,
             lossFunction: new CategoricalCrossEntropyLoss<float>());
 
-        // Verify GlobalPoolingLayer IS present for SequenceClassification
+        // Verify the encoder output is reduced to one vector per sequence
+        // before the classification head — that is the SequenceClassification
+        // contract (a [B, S, D] encoder stack must collapse the sequence axis
+        // to [B, D] so a [B] label can be predicted). Which layer does the
+        // reduction depends on architecture.SequencePooling: the #1232 fix made
+        // the vocabularySize>0 default last-token slicing (SequenceTokenSliceLayer)
+        // instead of mean-pooling (GlobalPoolingLayer), because mean-pool over
+        // positions collapses the position-conditioned signal and drives softmax
+        // toward uniform. Assert the contract (some sequence-reduction layer is
+        // present), not the specific implementation that #1232 intentionally changed.
         Assert.Contains(transformer.Layers,
-            l => l is GlobalPoolingLayer<float>);
+            l => l is GlobalPoolingLayer<float> || l is SequenceTokenSliceLayer<float>);
 
         // Synthetic data: per-sequence labels (1D targets)
         var rng = RandomHelper.CreateSeededRandom(42);

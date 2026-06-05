@@ -1077,7 +1077,12 @@ public class NeuralNetworkArchitecture<T>
             // Lazy layers carry -1 placeholders until first Forward; skip the strict
             // size check and let runtime shape resolution validate the dimensions.
             bool firstIsLazy = firstShape.Length == 0 || firstShape.Any(d => d <= 0);
-            if (!firstIsLazy)
+            // Embedding-category first layers (EmbeddingLayer, positional encodings, custom
+            // subclasses) consume a SEQUENCE OF TOKEN INDICES and declare a per-token broadcast
+            // input shape of [1] — their flattened "input size" (1) intentionally differs from the
+            // architecture InputSize (the sequence length). Recognise them and skip the strict
+            // size check (#1321); runtime shape resolution validates the real dimensions.
+            if (!firstIsLazy && !IsEmbeddingCategoryLayer(firstLayer))
             {
                 int firstLayerInputSize = firstShape.Aggregate(1, (a, b) => a * b);
                 if (firstLayerInputSize != InputSize)
@@ -1086,6 +1091,28 @@ public class NeuralNetworkArchitecture<T>
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// True when <paramref name="layer"/> is an embedding-category layer (EmbeddingLayer,
+    /// positional encoding, or a custom subclass). Such layers consume token INDICES and declare a
+    /// per-token broadcast input shape, so the architecture-level and inter-layer input-size checks
+    /// must not be applied to them (#1321/#1323). Recognised via <c>LayerBase.GetLayerCategory()</c>
+    /// (which name-matches "Embedding"/"Positional") with a type-name fallback for layers that do
+    /// not derive from <c>LayerBase</c>.
+    /// </summary>
+    internal static bool IsEmbeddingCategoryLayer(ILayer<T> layer)
+    {
+        if (layer is null) return false;
+        // Category path: a LayerBase subclass that reports LayerCategory.Embedding.
+        if (layer is Layers.LayerBase<T> lb && lb.GetLayerCategory() == Interfaces.LayerCategory.Embedding)
+            return true;
+        // Name-based fallback (always checked, even for LayerBase subclasses): recognises custom
+        // embedding/positional layers whose GetLayerCategory() does NOT report Embedding, and true
+        // ILayer implementations that don't derive from LayerBase and can't report a category.
+        var name = layer.GetType().Name;
+        return name.IndexOf("Embedding", StringComparison.OrdinalIgnoreCase) >= 0
+            || name.IndexOf("Positional", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     /// <summary>

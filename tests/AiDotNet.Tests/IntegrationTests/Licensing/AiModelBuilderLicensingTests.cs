@@ -53,9 +53,19 @@ public class AiModelBuilderLicensingTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// The trial-file path the guard is currently using for this test. The assembly-wide
+    /// IsolateTrialState attribute sets a per-test isolated path; these tests manipulate that
+    /// same file so their setup matches what the save/load guard reads. Falls back to the
+    /// default path if no override is active (e.g. when run outside the attribute).
+    /// </summary>
+    private static string CurrentTrialPath()
+        => ModelPersistenceGuard.CurrentTestTrialFilePath
+           ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".aidotnet", "trial.json");
+
     private void ResetDefaultTrial()
     {
-        var manager = new TrialStateManager();
+        var manager = new TrialStateManager(CurrentTrialPath());
         manager.Reset();
     }
 
@@ -113,7 +123,7 @@ public class AiModelBuilderLicensingTests : IDisposable
         // Clear license so trial kicks in
         ClearAllLicenseSources();
 
-        var manager = new TrialStateManager();
+        var manager = new TrialStateManager(CurrentTrialPath());
         int before = manager.GetStatus().OperationsUsed;
 
         var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
@@ -138,7 +148,7 @@ public class AiModelBuilderLicensingTests : IDisposable
         ClearAllLicenseSources();
         ResetDefaultTrial();
 
-        var manager = new TrialStateManager();
+        var manager = new TrialStateManager(CurrentTrialPath());
         int before = manager.GetStatus().OperationsUsed;
 
         builder.DeserializeModel(data);
@@ -157,7 +167,7 @@ public class AiModelBuilderLicensingTests : IDisposable
         ClearAllLicenseSources();
 
         // Exhaust the trial
-        var manager = new TrialStateManager();
+        var manager = new TrialStateManager(CurrentTrialPath());
         for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
         {
             manager.RecordOperationOrThrow();
@@ -180,7 +190,7 @@ public class AiModelBuilderLicensingTests : IDisposable
         ClearAllLicenseSources();
         ResetDefaultTrial();
 
-        var manager = new TrialStateManager();
+        var manager = new TrialStateManager(CurrentTrialPath());
         for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
         {
             manager.RecordOperationOrThrow();
@@ -198,7 +208,7 @@ public class AiModelBuilderLicensingTests : IDisposable
         var result = TrainSimpleModel();
         ClearAllLicenseSources();
 
-        var manager = new TrialStateManager();
+        var manager = new TrialStateManager(CurrentTrialPath());
         int before = manager.GetStatus().OperationsUsed;
 
         // Call Serialize directly on the result (not via builder)
@@ -233,7 +243,7 @@ public class AiModelBuilderLicensingTests : IDisposable
         // (the license key bypasses the guard entirely, so ops aren't counted)
         Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", null);
 
-        var manager = new TrialStateManager();
+        var manager = new TrialStateManager(CurrentTrialPath());
         var status = manager.GetStatus();
         Assert.Equal(0, status.OperationsUsed);
     }

@@ -280,6 +280,35 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
         return totalLoss;
     }
 
+    /// <summary>
+    /// Supervised (online) training entry from <see cref="IFullModel{T,TInput,TOutput}"/>: trains
+    /// the transformer to predict <paramref name="target"/> (the desired action) from
+    /// <paramref name="state"/>. Decision Transformer is return-conditioned behavior cloning, so a
+    /// single supervised step on (return-to-go, state, prev-action) → action IS the training
+    /// objective. The base <see cref="ReinforcementLearningAgentBase{T}.Train(Vector{T},Vector{T})"/>
+    /// stores a Q-learning transition then calls the parameterless <see cref="Train()"/>, but DT's
+    /// <see cref="StoreExperience"/> is a deliberate no-op (DT consumes OFFLINE data via
+    /// LoadOfflineData), so that path would leave the trajectory buffer empty and never update a
+    /// single weight. Route the supervised pair straight into a transformer step instead.
+    /// </summary>
+    public override void Train(Vector<T> state, Vector<T> target)
+    {
+        if (state is null) throw new ArgumentNullException(nameof(state));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+
+        // Build the DT input [returnToGo=0, state, zero-prev-action] (start-of-sequence convention).
+        var previousAction = new Vector<T>(_options.ActionSize);
+        var input = ConcatenateInputs(NumOps.Zero, state, previousAction);
+
+        // Target is the desired action vector, sized to the transformer's action output.
+        var targetAction = new Vector<T>(_options.ActionSize);
+        int copyLen = Math.Min(target.Length, _options.ActionSize);
+        for (int i = 0; i < copyLen; i++) targetAction[i] = target[i];
+
+        _transformerNetwork.Train(Tensor<T>.FromVector(input), Tensor<T>.FromVector(targetAction));
+        _updateCount++;
+    }
+
     private List<(Vector<T> state, Vector<T> action, T reward, T returnToGo, Vector<T> previousAction)> SampleBatch(int batchSize)
     {
         var batch = new List<(Vector<T>, Vector<T>, T, T, Vector<T>)>();
@@ -309,7 +338,17 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override Vector<T> Predict(Vector<T> input)
     {
-        return SelectAction(input, training: false);
+        // Pure, stateless single-step inference (the IFullModel.Predict contract): two Predict(state)
+        // calls must return the same action. SelectAction is the EPISODIC entry — it appends to the
+        // rolling _currentContext, so calling it from Predict made repeated Predict(state) calls
+        // diverge (each saw the previous call's action as prev-action) and broke determinism + clone
+        // parity. Build a fresh single-step DT input [returnToGo=0, state, zero-prev-action] and run
+        // the transformer without touching _currentContext.
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        var previousAction = new Vector<T>(_options.ActionSize);
+        var dtInput = ConcatenateInputs(NumOps.Zero, input, previousAction);
+        var outputTensor = _transformerNetwork.Predict(Tensor<T>.FromVector(dtInput));
+        return outputTensor.ToVector();
     }
 
     public Task<Vector<T>> PredictAsync(Vector<T> input)
@@ -393,7 +432,19 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
-        return new DecisionTransformerAgent<T>(_options, _optimizer);
+        // Copy the TRAINED transformer weights into the clone — a bare
+        // new DecisionTransformerAgent re-initializes its network randomly, so the clone would
+        // produce a different policy than the original (the Clone_ShouldProduceSamePolicy contract).
+        // Materialize lazily-built layers on BOTH networks first (a single pure forward; no context
+        // mutation): the transformer resolves some layer shapes on first forward, so without this
+        // GetParameters/SetParameters would round-trip only the already-materialized subset and the
+        // clone's still-lazy layers would keep their fresh random init.
+        var probe = new Vector<T>(_options.StateSize);
+        _ = Predict(probe);
+        var clone = new DecisionTransformerAgent<T>(_options, _optimizer);
+        _ = clone.Predict(probe);
+        clone.SetParameters(GetParameters());
+        return clone;
     }
 
     public override Vector<T> ComputeGradients(
