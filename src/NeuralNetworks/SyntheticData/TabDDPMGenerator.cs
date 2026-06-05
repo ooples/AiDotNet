@@ -936,12 +936,48 @@ public class TabDDPMGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         writer.Write(_options.DropoutRate);
         writer.Write(_options.BetaStart);
         writer.Write(_options.BetaEnd);
+
+        // Persist the auxiliary sub-networks that live outside the base Layers collection.
+        // Without this, a saved/cloned model would fall back to freshly-initialized output
+        // heads and timestep projection and generate garbage.
+        writer.Write(IsFitted);
+        writer.Write(_numNumericalFeatures);
+        writer.Write(_totalCategoricalWidth);
+        AuxLayerSerialization.Write(writer, _numericalOutputHead);
+        AuxLayerSerialization.Write(writer, _categoricalOutputHead);
+        AuxLayerSerialization.Write(writer, _timestepProjection);
     }
 
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        // Options are reconstructed from serialized data
+        // Advance past the option fields (the options themselves are reconstructed in
+        // CreateNewInstance); they must still be read to reach the auxiliary-network data.
+        _ = reader.ReadInt32();              // NumTimesteps
+        int mlpDimCount = reader.ReadInt32();
+        for (int i = 0; i < mlpDimCount; i++) _ = reader.ReadInt32();
+        _ = reader.ReadInt32();              // TimestepEmbeddingDimension
+        _ = reader.ReadInt32();              // BatchSize
+        _ = reader.ReadDouble();             // LearningRate
+        _ = reader.ReadDouble();             // DropoutRate
+        _ = reader.ReadDouble();             // BetaStart
+        _ = reader.ReadDouble();             // BetaEnd
+
+        IsFitted = reader.ReadBoolean();
+        _numNumericalFeatures = reader.ReadInt32();
+        _totalCategoricalWidth = reader.ReadInt32();
+
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        var silu = new SiLUActivation<T>() as IActivationFunction<T>;
+        _numericalOutputHead = AuxLayerSerialization.Read<T>(reader,
+            (inShape, outShape) => new FullyConnectedLayer<T>(outShape[outShape.Length - 1], identity))
+            as FullyConnectedLayer<T>;
+        _categoricalOutputHead = AuxLayerSerialization.Read<T>(reader,
+            (inShape, outShape) => new FullyConnectedLayer<T>(outShape[outShape.Length - 1], identity))
+            as FullyConnectedLayer<T>;
+        _timestepProjection = AuxLayerSerialization.Read<T>(reader,
+            (inShape, outShape) => new FullyConnectedLayer<T>(outShape[outShape.Length - 1], silu))
+            as FullyConnectedLayer<T>;
     }
 
     /// <inheritdoc/>
