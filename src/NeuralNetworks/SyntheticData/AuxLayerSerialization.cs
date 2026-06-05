@@ -26,13 +26,15 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 /// so the round-trip is bit-for-bit faithful.
 /// </para>
 /// <para>
-/// Two flavours are provided:
+/// Three flavours are provided:
 /// <list type="bullet">
-/// <item><see cref="Write{T}"/> / <see cref="Read{T}"/> for a single optional layer whose size is
-/// not known ahead of time (the shape is embedded so it can be rebuilt from scratch).</item>
-/// <item><see cref="WriteParameters{T}"/> / <see cref="ReadParametersInto{T}"/> for a list of
-/// layers whose <i>structure</i> is rebuilt deterministically by the caller (only the learned
-/// parameters and extras need to round-trip).</item>
+/// <item><see cref="Write{T}"/> / <see cref="Read{T}"/> — a single optional layer whose size is
+/// embedded so it can be rebuilt from scratch.</item>
+/// <item><see cref="WriteParameters{T}"/> / <see cref="ReadParametersInto{T}"/> — a list of layers
+/// whose <i>structure</i> is rebuilt deterministically by the caller (only the learned parameters
+/// and extras round-trip).</item>
+/// <item><see cref="WriteLayerList{T}"/> / <see cref="ReadLayerList{T, TLayer}"/> — a homogeneous
+/// list rebuilt entirely from the serialized data (shape + state) via a simple factory.</item>
 /// </list>
 /// </para>
 /// <para><b>For Beginners:</b> some of these generators have small helper networks that live in
@@ -127,6 +129,49 @@ internal static class AuxLayerSerialization
         {
             ILayer<T>? target = i < layers.Count ? layers[i] : null;
             ReadLayerState(reader, target);
+        }
+    }
+
+    /// <summary>
+    /// Writes a homogeneous list of layers (count + each layer's shape and state) so it can be
+    /// rebuilt entirely by <see cref="ReadLayerList{T, TLayer}"/> without any external structure.
+    /// </summary>
+    public static void WriteLayerList<T>(BinaryWriter writer, IReadOnlyList<ILayer<T>> layers)
+    {
+        if (writer is null) throw new ArgumentNullException(nameof(writer));
+        if (layers is null) throw new ArgumentNullException(nameof(layers));
+
+        writer.Write(layers.Count);
+        for (int i = 0; i < layers.Count; i++)
+        {
+            Write(writer, layers[i]);
+        }
+    }
+
+    /// <summary>
+    /// Rebuilds a homogeneous list of layers previously written by <see cref="WriteLayerList{T}"/>,
+    /// replacing the contents of <paramref name="target"/>.
+    /// </summary>
+    /// <typeparam name="TLayer">The concrete layer type held in the list.</typeparam>
+    /// <param name="reader">The reader positioned at the serialized list.</param>
+    /// <param name="target">The list to clear and repopulate.</param>
+    /// <param name="factory">Builds a fresh layer instance sized for the deserialized shapes.</param>
+    public static void ReadLayerList<T, TLayer>(BinaryReader reader, List<TLayer> target, Func<int[], int[], TLayer> factory)
+        where TLayer : class, ILayer<T>
+    {
+        if (reader is null) throw new ArgumentNullException(nameof(reader));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        if (factory is null) throw new ArgumentNullException(nameof(factory));
+
+        target.Clear();
+        int count = reader.ReadInt32();
+        for (int i = 0; i < count; i++)
+        {
+            var layer = Read<T>(reader, (inShape, outShape) => factory(inShape, outShape)) as TLayer;
+            if (layer is not null)
+            {
+                target.Add(layer);
+            }
         }
     }
 

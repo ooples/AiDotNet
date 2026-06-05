@@ -155,6 +155,17 @@ public class SyntheticTabularGeneratorIntegrationTests
             var rp = restList[l].GetParameters();
             Assert.Equal(op.Length, rp.Length);
             for (int i = 0; i < op.Length; i++) Assert.Equal(op[i], rp[i], 10);
+
+            // For layers with non-trainable buffers (e.g. batch-norm running mean/variance), verify
+            // the serialization extras round-trip too — those drive inference/generation.
+            if (origList[l] is ILayerSerializationExtras<double> origExtras
+                && restList[l] is ILayerSerializationExtras<double> restExtras)
+            {
+                var oe = origExtras.GetExtraParameters();
+                var re = restExtras.GetExtraParameters();
+                Assert.Equal(oe.Length, re.Length);
+                for (int i = 0; i < oe.Length; i++) Assert.Equal(oe[i], re[i], 10);
+            }
         }
     }
 
@@ -612,6 +623,12 @@ public class SyntheticTabularGeneratorIntegrationTests
         AssertAuxLayerPreserved(generator, restored, "_timestepProjection");
         AssertAuxLayerListPreserved<ILayer<double>>(generator, restored, "_decoderLayers");
         AssertAuxLayerListPreserved<ILayer<double>>(generator, restored, "_diffMLPLayers");
+
+        // End-to-end: the restored model must be able to generate valid data, which requires the
+        // VGM transformer and latent diffusion to have been restored (a null transformer would
+        // yield an empty/garbage result).
+        var regenerated = restored.Generate(GenSamples);
+        ValidateGeneratedData(regenerated, GenSamples, TotalCols, "TabSyn (restored)");
     }
 
     [Fact(Timeout = 120000)]

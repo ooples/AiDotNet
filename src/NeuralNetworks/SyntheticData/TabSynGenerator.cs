@@ -1021,6 +1021,19 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         AuxLayerSerialization.Write(writer, _timestepProjection);
         AuxLayerSerialization.WriteParameters(writer, _decoderLayers);
         AuxLayerSerialization.WriteParameters(writer, _diffMLPLayers);
+
+        // The fitted VGM transformer (column layout + GMM parameters) is required to decode and
+        // inverse-transform generated latents. The latent diffusion process is fully determined by
+        // the options, so it is reconstructed on load rather than serialized.
+        if (_transformer is not null)
+        {
+            writer.Write(true);
+            _transformer.Serialize(writer);
+        }
+        else
+        {
+            writer.Write(false);
+        }
     }
 
     /// <inheritdoc/>
@@ -1068,6 +1081,19 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             as FullyConnectedLayer<T>;
         AuxLayerSerialization.ReadParametersInto(reader, _decoderLayers);
         AuxLayerSerialization.ReadParametersInto(reader, _diffMLPLayers);
+
+        bool hasTransformer = reader.ReadBoolean();
+        if (hasTransformer)
+        {
+            _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
+            _transformer.Deserialize(reader);
+            _columns = new List<ColumnMetadata>(_transformer.Columns);
+
+            // The latent diffusion process holds no learned parameters — it is fully determined by
+            // the configured schedule, so reconstruct it for the generation path.
+            _latentDiffusion = new GaussianDiffusion<T>(
+                _options.DiffusionSteps, _options.BetaStart, _options.BetaEnd, "linear", _random);
+        }
     }
 
     /// <inheritdoc/>
