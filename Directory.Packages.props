@@ -93,7 +93,7 @@
          access violation / OpenCL "-5" one step into CNN backprop. Verified: the CNN
          BuildAsync facade test trains + predicts on a real GPU with 0.91.1.
          AiDotNet.Native packages coreleased in lockstep at 0.91.1. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.91.13" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.91.14" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.91.1" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.91.1" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.91.1" />
