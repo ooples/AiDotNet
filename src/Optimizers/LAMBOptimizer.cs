@@ -551,23 +551,18 @@ public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             ? NumOps.FromDouble(1.0 - Math.Pow(_options.Beta2, _tapeStep))
             : NumOps.One;
 
-        // GPU-resident step (AIDOTNET_GPU_ADAM=1); gated off, CPU fallback per-param when not GPU-resident.
-        bool gpuAdam = typeof(T) == typeof(float)
-            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
-            && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
-
+        // NOTE: the CUDA lamb_update kernel computes the layer-wise trust ratio
+        // (||w|| / ||update||) with a different convention than this CPU
+        // implementation (parity harness ~6e-4 at step 1), so the GPU-resident
+        // path is NOT wired for LAMB — it would silently change training dynamics.
+        // Reconcile the kernel's trust-ratio with this formula before enabling.
         foreach (var param in context.Parameters)
         {
             if (!context.Gradients.TryGetValue(param, out var grad))
                 continue;
 
-            if (!_tapeM.TryGetValue(param, out var m)) { m = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) m.AsWritableSpan().Clear(); _tapeM[param] = m; }
-            if (!_tapeV.TryGetValue(param, out var v)) { v = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) v.AsWritableSpan().Clear(); _tapeV[param] = v; }
-
-            if (gpuAdam && param.Length == grad.Length
-                && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryLambStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)m, (Tensor<float>)(object)v,
-                    (float)NumOps.ToDouble(CurrentLearningRate), (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon, (float)_options.WeightDecay, _tapeStep))
-                continue;
+            if (!_tapeM.TryGetValue(param, out var m)) { m = new Tensor<T>(param._shape); _tapeM[param] = m; }
+            if (!_tapeV.TryGetValue(param, out var v)) { v = new Tensor<T>(param._shape); _tapeV[param] = v; }
 
             // Update moments
             Engine.TensorCopy(Engine.TensorAdd(Engine.TensorMultiplyScalar(m, beta1), Engine.TensorMultiplyScalar(grad, oneMinusBeta1)), m);

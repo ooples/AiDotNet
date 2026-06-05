@@ -174,10 +174,19 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
     {
+        bool gpuAdam = typeof(T) == typeof(float)
+            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
+            && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
+
         foreach (var param in context.Parameters)
         {
             if (context.Gradients.TryGetValue(param, out var grad))
             {
+                if (gpuAdam && param.Length == grad.Length
+                    && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TrySgdStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad,
+                        (float)NumOps.ToDouble(CurrentLearningRate)))
+                    continue;
+
                 var update = Engine.TensorMultiplyScalar(grad, CurrentLearningRate);
                 Engine.TensorSubtractInPlace(param, update);
             }
