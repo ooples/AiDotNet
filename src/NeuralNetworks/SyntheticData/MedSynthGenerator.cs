@@ -186,9 +186,9 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
         }
         else
         {
-            int dataWidth = Math.Max(1, Architecture.OutputSize);
+            _dataWidth = Math.Max(1, Architecture.OutputSize);
             var allLayers = LayerHelper<T>.CreateDefaultMedSynthLayers(
-                dataWidth, _options.LatentDimension,
+                _dataWidth, _options.LatentDimension,
                 _options.EncoderDimensions, _options.DiscriminatorDimensions,
                 _options.DiscriminatorDropout).ToList();
             Layers.AddRange(allLayers);
@@ -196,6 +196,35 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
         }
 
         ExtractMedSynthLayerReferences();
+    }
+
+    /// <summary>
+    /// Before Fit() supplies the real transformed width, adapt the encoder/decoder/
+    /// discriminator layout to the actual input width so the model is a valid network
+    /// for any 1-D input — the generated ModelFamily tests call Train()/Predict()
+    /// directly without Fit(). Once fitted, the width is fixed by the transformer.
+    /// </summary>
+    private void EnsureSizedForInput(Tensor<T> input)
+    {
+        if (!IsFitted && !_usingCustomLayers && input.Length != _dataWidth && input.Length > 0)
+        {
+            _dataWidth = input.Length;
+            RebuildLayersWithActualDimensions();
+        }
+    }
+
+    /// <summary>
+    /// Deterministic VAE reconstruction (encode → latent mean → decode), tape-connected
+    /// and shared by <see cref="Predict"/> and <see cref="ForwardForTraining"/>. Uses the
+    /// latent MEAN (no sampling) so inference is deterministic; the full sampled VAE+GAN
+    /// objective runs in Fit.
+    /// </summary>
+    private Tensor<T> ReconstructForward(Tensor<T> input)
+    {
+        EnsureSizedForInput(input);
+        var hidden = EncoderForwardBatched(input);
+        var z = _meanHead is not null ? _meanHead.Forward(hidden) : hidden;
+        return DecoderForwardBatched(z, isTraining: IsTrainingMode);
     }
 
     /// <summary>
@@ -375,27 +404,19 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     /// <inheritdoc />
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        // Forward through decoder-only slice (NOT the full Layers list —
-        // Layers also contains the encoder, VAE heads, and discriminator
-        // sub-graph and walking all of it on latent input would feed
-        // noise through encoder/disc weights).
-        var current = input;
-        for (int i = 0; i < _decoderLayers.Count; i++)
-        {
-            current = _decoderLayers[i].Forward(current);
-            if (i < _decoderBN.Count)
-            {
-                _decoderBN[i].SetTrainingMode(false);
-                current = _decoderBN[i].Forward(current);
-            }
-            current = ApplyReLU(current);
-        }
-        if (_decoderOutput is not null)
-        {
-            current = _decoderOutput.Forward(current);
-        }
-        return current;
+        // Deterministic VAE reconstruction of the input row (encode → latent mean →
+        // decode). Adapts to the input width when unfitted so the model is a valid
+        // network for the generated ModelFamily tests (which Predict without Fit).
+        return ReconstructForward(input);
     }
+
+    /// <summary>
+    /// Training forward — the same deterministic VAE reconstruction as <see cref="Predict"/>,
+    /// overridden so the tape-based <see cref="NeuralNetworkBase{T}.Train"/> path trains the
+    /// encoder + latent-mean head + decoder rather than walking the full Layers list (which
+    /// also holds the discriminator and would mis-chain encoder→heads→decoder→discriminator).
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => ReconstructForward(input);
 
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
@@ -439,6 +460,12 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     {
         _dataWidth = reader.ReadInt32();
         IsFitted = reader.ReadBoolean();
+
+        // The base deserializer rebuilt Layers with fresh instances; re-bind the
+        // typed encoder/head/decoder/discriminator references from it so the
+        // VAE reconstruction forward uses the deserialized (trained) weights
+        // rather than the clone's discarded constructor init.
+        if (!_usingCustomLayers) ExtractMedSynthLayerReferences();
     }
 
     /// <inheritdoc />
@@ -826,18 +853,21 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
         if (_colMin is not null && _colMax is not null && _options.ConstraintWeight > 0.0)
         {
             int cols = Math.Min(_dataWidth, _colMin.Length);
-            var lowerBoundArr = new T[cols];
-            var upperBoundArr = new T[cols];
-            for (int j = 0; j < cols; j++)
+            // Tile the per-column bounds across the batch to a full [batch, cols]
+            // tensor — TensorSubtract requires matching shapes (it does not
+            // broadcast a [1, cols] row against [batch, cols]).
+            var lowerBoundArr = new T[batchSize * cols];
+            var upperBoundArr = new T[batchSize * cols];
+            for (int b = 0; b < batchSize; b++)
             {
-                lowerBoundArr[j] = NumOps.FromDouble(_colMin[j]);
-                upperBoundArr[j] = NumOps.FromDouble(_colMax[j]);
+                for (int j = 0; j < cols; j++)
+                {
+                    lowerBoundArr[b * cols + j] = NumOps.FromDouble(_colMin[j]);
+                    upperBoundArr[b * cols + j] = NumOps.FromDouble(_colMax[j]);
+                }
             }
-            // Broadcast bound vectors as [1, _dataWidth] against the recon
-            // [batch, _dataWidth] — the engine's TensorSubtract handles
-            // numpy-style broadcasting on the leading axis.
-            var lower = new Tensor<T>(lowerBoundArr, [1, cols]);
-            var upper = new Tensor<T>(upperBoundArr, [1, cols]);
+            var lower = new Tensor<T>(lowerBoundArr, [batchSize, cols]);
+            var upper = new Tensor<T>(upperBoundArr, [batchSize, cols]);
             var upperViol = Engine.ReLU(Engine.TensorSubtract(recon, upper));
             var lowerViol = Engine.ReLU(Engine.TensorSubtract(lower, recon));
             var viol = Engine.TensorAdd(
