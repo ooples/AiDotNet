@@ -37,6 +37,20 @@ namespace AiDotNet.Tests.TestInfrastructure
         internal static void Init()
         {
             AiDotNet.Tensors.Engines.AiDotNetEngine.SetDeterministicMode(true);
+
+            // Force CPU-only for the whole test assembly. On a GPU-equipped dev box,
+            // AiModelBuilder.BuildAsync's default path auto-detects the GPU and flips the process
+            // engine to DirectGpuTensorEngine; for the tiny models these integration tests build,
+            // GPU is ORDERS OF MAGNITUDE slower (a host<->device copy per op) and the GPU engine
+            // leaks to later in-process tests — which made BuildAsyncResidualModeCollapse time out
+            // and ByteLMV256 collapse (the GPU Adam path zeroes params) on dev boxes. CI has no GPU
+            // so it never reproduced there. Tests want deterministic CPU execution; pin it here.
+            // Explicit-GPU tests (ConfigureGpuAcceleration / DirectGpu*) use their own config path
+            // and are unaffected by this opt-out. ResetToCpu undoes any engine the Tensors
+            // GpuAutoDetect module-init may have set before this initializer ran.
+            System.Environment.SetEnvironmentVariable("AIDOTNET_DISABLE_GPU", "1");
+            if (AiDotNet.Tensors.Engines.AiDotNetEngine.Current is not AiDotNet.Tensors.Engines.CpuEngine)
+                AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
         }
     }
 }

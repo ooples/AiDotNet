@@ -556,16 +556,30 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
     {
         int moduleTotal = 0;
         foreach (var module in GenerationModules()) moduleTotal += (int)module.ParameterCount;
-        int baseCount = parameters.Length - moduleTotal;
-        if (baseCount < 0) baseCount = parameters.Length;
 
-        var baseSlice = new Vector<T>(baseCount);
-        for (int i = 0; i < baseCount; i++) baseSlice[i] = parameters[i];
+        // Derive the layer-side size from the actual Layers walk, NOT from
+        // parameters.Length − moduleTotal. The subtraction form silently corrupts a
+        // layers-only vector (length == layerCount, no module params): it sized baseCount to
+        // layerCount − moduleTotal, dropping the TAIL of the regular layer weights, and then —
+        // because baseCount + moduleTotal == parameters.Length held — read the modules' params
+        // out of the layer region. Compute the true layer total and pick the matching layout
+        // explicitly (mirrors Helix.SetParameters).
+        int layerCount = 0;
+        foreach (var layer in Layers) layerCount += (int)layer.ParameterCount;
+
+        if (parameters.Length != layerCount && parameters.Length != layerCount + moduleTotal)
+            throw new ArgumentException(
+                $"Expected {layerCount} (layers-only) or {layerCount + moduleTotal} " +
+                $"(layers + generation modules) parameters, got {parameters.Length}.",
+                nameof(parameters));
+
+        var baseSlice = new Vector<T>(layerCount);
+        for (int i = 0; i < layerCount; i++) baseSlice[i] = parameters[i];
         base.SetParameters(baseSlice);
 
-        if (moduleTotal > 0 && baseCount + moduleTotal == parameters.Length)
+        if (moduleTotal > 0 && parameters.Length == layerCount + moduleTotal)
         {
-            int idx = baseCount;
+            int idx = layerCount;
             foreach (var module in GenerationModules())
             {
                 int count = (int)module.ParameterCount;
@@ -672,6 +686,20 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         {
             int count = reader.ReadInt32();
             if (count <= 0) continue;
+            // Validate the serialized count against the freshly-rebuilt module before reading
+            // `count` doubles off the stream. A non-lazy module (ParameterCount already > 0 after
+            // BuildGenerationModules) whose stored count differs means the saved model's
+            // generation-module geometry no longer matches this build's — restoring it would
+            // either throw deep inside SetParameters or silently mis-shape the module. Fail fast
+            // with both counts (mirrors Helix's embedCount validation). Lazy modules
+            // (ParameterCount == 0 until first forward) legitimately resolve their shape from the
+            // vector length per the #1221 save/load contract, so they skip this check.
+            long expected = module.ParameterCount;
+            if (expected > 0 && count != expected)
+                throw new InvalidOperationException(
+                    $"JanusPro generation-module parameter count mismatch on deserialize: stream has " +
+                    $"{count} but the rebuilt {module.GetType().Name} expects {expected}. The saved " +
+                    $"model's generation-module configuration is incompatible with this build.");
             var p = new Vector<T>(count);
             for (int i = 0; i < count; i++)
                 p[i] = NumOps.FromDouble(reader.ReadDouble());

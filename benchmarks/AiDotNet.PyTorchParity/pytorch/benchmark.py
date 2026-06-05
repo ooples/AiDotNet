@@ -76,8 +76,15 @@ class ModelResult:
 
 
 class ResourceMonitor:
-    def __init__(self, sample_seconds: float = 0.1) -> None:
+    def __init__(self, sample_seconds: float = 0.1, track_gpu: bool = True) -> None:
         self.sample_seconds = sample_seconds
+        # nvidia-smi reports SYSTEM-WIDE GPU utilization/memory, not this
+        # process's. On a CPU-only benchmark run that attributes whatever the
+        # desktop GPU happens to be doing (browser, compositor, other apps)
+        # to the benchmark — a committed CPU artifact once carried
+        # gpu_util=5% / gpu_mem=792MB despite device=cpu. Only sample the GPU
+        # when the benchmark actually targets it.
+        self.track_gpu = track_gpu
         self.process = psutil.Process(os.getpid())
         self.cpu: list[float] = []
         self.rss_mb: list[float] = []
@@ -99,11 +106,12 @@ class ResourceMonitor:
         while not self._stop.is_set():
             self.cpu.append(self.process.cpu_percent(interval=None))
             self.rss_mb.append(self.process.memory_info().rss / 1024 / 1024)
-            gpu = query_nvidia_smi()
-            if gpu is not None:
-                util, mem = gpu
-                self.gpu_util.append(util)
-                self.gpu_mem.append(mem)
+            if self.track_gpu:
+                gpu = query_nvidia_smi()
+                if gpu is not None:
+                    util, mem = gpu
+                    self.gpu_util.append(util)
+                    self.gpu_mem.append(mem)
             time.sleep(self.sample_seconds)
 
     def summary(self) -> ResourceSummary:
@@ -215,7 +223,7 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
     data_seconds: list[float] = []
 
     start_total = time.perf_counter()
-    with ResourceMonitor() as monitor:
+    with ResourceMonitor(track_gpu=device.type == "cuda") as monitor:
         for _ in range(epochs):
             start_epoch = time.perf_counter()
             for _ in range(batches):

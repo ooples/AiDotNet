@@ -1160,6 +1160,24 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // Skip if no GPU configuration was provided (null = default = auto-detect with CPU fallback)
         if (_gpuAccelerationConfig == null)
         {
+            // Honor the documented AIDOTNET_DISABLE_GPU opt-out on the auto-detect default path.
+            // AiDotNet.Tensors' GpuAutoDetectModuleInit already respects this env var, but the
+            // EXPLICIT AutoDetectAndConfigureGpu() call below did not — so a default BuildAsync()
+            // would re-enable the GPU even when the consumer opted out. That gap makes every
+            // BuildAsync run flip the process to the GPU engine; on a tiny model the per-op
+            // host<->device copy cost makes training orders of magnitude SLOWER than CPU, and it
+            // leaks the GPU engine to subsequent in-process work (the cause of the
+            // BuildAsyncResidualModeCollapse / ByteLMV256 integration tests timing out / collapsing
+            // on GPU-equipped dev boxes; CI has no GPU so it never reproduced there). Callers who
+            // want GPU explicitly still get it via ConfigureGpuAcceleration(...) (the branch below),
+            // which is unaffected by this opt-out.
+            var disableGpu = Environment.GetEnvironmentVariable("AIDOTNET_DISABLE_GPU");
+            if (!string.IsNullOrEmpty(disableGpu))
+            {
+                AiDotNetEngine.ResetToCpu();
+                return;
+            }
+
             // Industry standard default: Try to auto-detect GPU, use CPU fallback if not available
             // This is silent and non-intrusive - if GPU exists, use it; if not, use CPU
             try

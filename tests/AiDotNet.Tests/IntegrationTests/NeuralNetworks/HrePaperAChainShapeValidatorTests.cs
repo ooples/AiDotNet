@@ -138,7 +138,8 @@ public class HrePaperAChainShapeValidatorTests
         var arch = new TransformerArchitecture<float>(
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.SequenceClassification,
-            numEncoderLayers: 1,
+            // Custom layers: REPLACE the auto-built encoder, so numEncoderLayers must be 0 (#1382).
+            numEncoderLayers: 0,
             numDecoderLayers: 0,
             numHeads: 1,
             modelDimension: 32,
@@ -208,7 +209,8 @@ public class HrePaperAChainShapeValidatorTests
         return new TransformerArchitecture<float>(
             inputType: InputType.TwoDimensional,
             taskType: NeuralNetworkTaskType.SequenceClassification,
-            numEncoderLayers: 2,
+            // Custom layers: REPLACE the auto-built encoder, so numEncoderLayers must be 0 (#1382).
+            numEncoderLayers: 0,
             numDecoderLayers: 0,
             numHeads: Heads,
             modelDimension: EmbDim,

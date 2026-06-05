@@ -886,6 +886,18 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         // Perform GPU embedding lookup - keeps result on GPU
         var gpuOutput = gpuEngine.EmbeddingLookupGpu(_embeddingTensor, flatIndices);
 
+        // Vaswani §3.4 embedding scale — apply on the GPU path too so behavior is
+        // backend-independent (the CPU Forward above applies the identical scale). Routed
+        // through TapeMultiplyScalar, which dispatches to the active engine (GPU here) and
+        // records the op on the autodiff tape, so the embedding-table gradient is scaled the
+        // same way regardless of device. Without this the token-index GPU path returned
+        // UNSCALED embeddings, making a model trained/served on GPU diverge from CPU.
+        if (ScaleBySqrtDimension && !isContinuousInput)
+        {
+            T sqrtDim = NumOps.Sqrt(NumOps.FromDouble(embeddingDim));
+            gpuOutput = AiDotNet.Helpers.TensorTapeOps.TapeMultiplyScalar(Engine, gpuOutput, sqrtDim);
+        }
+
         return gpuOutput;
     }
 

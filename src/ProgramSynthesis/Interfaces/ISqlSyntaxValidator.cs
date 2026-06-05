@@ -22,10 +22,12 @@ public interface ISqlSyntaxValidator
     /// Returns <see langword="true"/> if <paramref name="sql"/> is syntactically valid SQL.
     /// </summary>
     /// <remarks>
-    /// Implementations should return <see langword="false"/> for genuinely invalid SQL.
-    /// If the underlying engine cannot be loaded (e.g. a missing native library), the
-    /// implementation should let that exception propagate so the caller can fall back to
-    /// generic validation rather than mis-reporting a load failure as invalid SQL.
+    /// <paramref name="sql"/> is nullable: <see langword="null"/>, empty, or whitespace is treated
+    /// as vacuously valid (there is no malformed program to reject), matching the validators'
+    /// behavior and tests. Implementations should return <see langword="false"/> for genuinely
+    /// invalid SQL. If the underlying engine cannot be loaded (e.g. a missing native library), the
+    /// implementation should let that exception propagate so the caller can fall back to generic
+    /// validation rather than mis-reporting a load failure as invalid SQL.
     /// </remarks>
-    bool IsValidSql(string sql);
+    bool IsValidSql(string? sql);
 }

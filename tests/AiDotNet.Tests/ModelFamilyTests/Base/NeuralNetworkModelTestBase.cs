@@ -239,6 +239,17 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         return tensor;
     }
 
+    /// <summary>
+    /// True when the model under test is a detection BACKBONE (<see cref="IDetectionBackbone{T}"/>).
+    /// These don't train standalone — their <c>Train()</c> throws by design ("detection backbones
+    /// train as part of a parent detector") and they expose feature maps via
+    /// <c>ExtractFeatures</c> rather than a flat <c>Layers</c> list — so the standalone-training and
+    /// layer-introspection invariants below are not applicable. Inference invariants (forward
+    /// finiteness, determinism, different-inputs-different-outputs) still run and assert normally.
+    /// </summary>
+    protected static bool TrainingInvariantsNotApplicable(INeuralNetworkModel<T> network)
+        => network is AiDotNet.Interfaces.IDetectionBackbone<T>;
+
     // =====================================================
     // MATHEMATICAL INVARIANT: Training Should Reduce Loss
     // After multiple training iterations on a fixed (input, target) pair,
@@ -253,6 +264,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
+        if (TrainingInvariantsNotApplicable(network)) return;
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 
@@ -301,6 +313,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
+        if (TrainingInvariantsNotApplicable(network)) return;
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 
@@ -480,6 +493,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
+        if (TrainingInvariantsNotApplicable(network)) return;
 
         // Train on a fixed (input, target) for enough iterations that any
         // gradient signal has had time to drive a uniform-output basin
@@ -573,6 +587,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
+        if (TrainingInvariantsNotApplicable(network)) return;
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 
@@ -721,6 +736,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
+        if (TrainingInvariantsNotApplicable(network)) return;
 
         // Train so weights have non-default values.
         var trainInput = CreateRandomTensor(InputShape, rng);
@@ -792,6 +808,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
+        if (TrainingInvariantsNotApplicable(network)) return;
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
         network.Train(input, target);
@@ -814,6 +831,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
+        if (TrainingInvariantsNotApplicable(network)) return;
         var input = CreateRandomTensor(InputShape, rng);
 
         var activations = network.GetNamedLayerActivations(input);
@@ -848,6 +866,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // shared-baseline bug. Clone after build so network2 starts
         // from the same weights as network1.
         var network1 = CreateNetwork();
+        if (TrainingInvariantsNotApplicable(network1)) return;
 
         var input = CreateRandomTensor(InputShape, rng1);
         var target = CreateRandomTargetTensor(EffectiveOutputShape, rng1);
@@ -943,6 +962,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
+        if (TrainingInvariantsNotApplicable(network)) return;
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 
@@ -979,6 +999,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
+        if (TrainingInvariantsNotApplicable(network)) return;
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 
@@ -1071,6 +1092,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
+        if (TrainingInvariantsNotApplicable(network)) return;
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 
@@ -1201,6 +1223,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
+        if (TrainingInvariantsNotApplicable(network)) return;
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 
