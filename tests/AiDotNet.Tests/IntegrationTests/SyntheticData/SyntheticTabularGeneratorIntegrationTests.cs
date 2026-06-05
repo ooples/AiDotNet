@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.SyntheticData;
 using AiDotNet.Tensors;
 using Xunit;
@@ -106,6 +107,66 @@ public class SyntheticTabularGeneratorIntegrationTests
         var field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new MissingFieldException(instance.GetType().Name, fieldName);
         return (TField)field.GetValue(instance)!;
+    }
+
+    /// <summary>
+    /// Asserts that an auxiliary sub-network stored in a private field (one that lives outside the
+    /// base Layers collection) was preserved across serialize/deserialize: same parameter count,
+    /// element-wise equal, and not all-zero (i.e. it actually carried trained weights).
+    /// </summary>
+    private static void AssertAuxLayerPreserved(object original, object restored, string fieldName)
+    {
+        var orig = GetPrivateField<ILayer<double>>(original, fieldName);
+        var rest = GetPrivateField<ILayer<double>>(restored, fieldName);
+        Assert.NotNull(orig);
+        Assert.NotNull(rest);
+
+        var origParams = orig.GetParameters();
+        var restParams = rest.GetParameters();
+        Assert.Equal(origParams.Length, restParams.Length);
+        Assert.True(origParams.Length > 0, $"{fieldName} exposed no parameters to compare");
+
+        bool anyNonZero = false;
+        for (int i = 0; i < origParams.Length; i++)
+        {
+            Assert.Equal(origParams[i], restParams[i], 10);
+            if (origParams[i] != 0.0) anyNonZero = true;
+        }
+        Assert.True(anyNonZero, $"{fieldName} parameters were all zero — not actually trained");
+    }
+
+    /// <summary>
+    /// Asserts that every auxiliary layer in a private <c>List&lt;TLayer&gt;</c> field was preserved
+    /// (parameters and, for batch-norm, running-statistic extras) across serialize/deserialize.
+    /// </summary>
+    private static void AssertAuxLayerListPreserved<TLayer>(object original, object restored, string fieldName)
+        where TLayer : ILayer<double>
+    {
+        var origList = GetPrivateField<System.Collections.Generic.List<TLayer>>(original, fieldName);
+        var restList = GetPrivateField<System.Collections.Generic.List<TLayer>>(restored, fieldName);
+        Assert.NotNull(origList);
+        Assert.NotNull(restList);
+        Assert.Equal(origList.Count, restList.Count);
+        Assert.True(origList.Count > 0, $"{fieldName} was empty");
+
+        for (int l = 0; l < origList.Count; l++)
+        {
+            var op = origList[l].GetParameters();
+            var rp = restList[l].GetParameters();
+            Assert.Equal(op.Length, rp.Length);
+            for (int i = 0; i < op.Length; i++) Assert.Equal(op[i], rp[i], 10);
+
+            // For layers with non-trainable buffers (e.g. batch-norm running mean/variance), verify
+            // the serialization extras round-trip too — those drive inference/generation.
+            if (origList[l] is ILayerSerializationExtras<double> origExtras
+                && restList[l] is ILayerSerializationExtras<double> restExtras)
+            {
+                var oe = origExtras.GetExtraParameters();
+                var re = restExtras.GetExtraParameters();
+                Assert.Equal(oe.Length, re.Length);
+                for (int i = 0; i < oe.Length; i++) Assert.Equal(oe[i], re[i], 10);
+            }
+        }
     }
 
     /// <summary>
@@ -423,6 +484,44 @@ public class SyntheticTabularGeneratorIntegrationTests
 
         var generated = generator.Generate(GenSamples);
         ValidateGeneratedData(generated, GenSamples, TotalCols, "MisGAN");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MisGANGenerator_SaveLoad_PreservesAuxiliaryNetworks()
+    {
+        await Task.CompletedTask;
+        var (data, columns) = CreateTestData();
+        var arch = CreateArchitecture(TotalCols, TotalCols);
+        var options = new MisGANOptions<double>
+        {
+            Seed = Seed,
+            EmbeddingDimension = 32,
+            HiddenDimensions = [64, 64],
+            BatchSize = 50,
+            MissingRate = 0.1
+        };
+
+        var generator = new MisGANGenerator<double>(arch, options);
+        generator.Fit(data, columns, FewEpochs);
+
+        byte[] bytes = generator.Serialize();
+        var restored = new MisGANGenerator<double>(arch, options);
+        restored.Deserialize(bytes);
+
+        // The data-generator batch-norm layers (running mean/variance included) live outside the
+        // base Layers collection; verify they survive serialization, including their extras.
+        AssertAuxLayerListPreserved<BatchNormalizationLayer<double>>(generator, restored, "_dataGenBNLayers");
+
+        // And the eval-mode forward (used by Generate) must match exactly after restore — this also
+        // exercises the restored VGM transformer via ApplyOutputActivations.
+        generator.SetTrainingMode(false);
+        restored.SetTrainingMode(false);
+        var probe = new Tensor<double>([options.EmbeddingDimension]);
+        for (int i = 0; i < probe.Length; i++) probe[i] = 0.1 * i;
+        var expected = generator.Predict(probe);
+        var actual = restored.Predict(probe);
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++) Assert.Equal(expected[i], actual[i], 8);
     }
 
     [Fact(Timeout = 120000)]

@@ -746,6 +746,24 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         writer.Write(_options.MissingRate);
         writer.Write(_dataWidth);
         writer.Write(IsFitted);
+
+        // The data-generator batch-norm layers (running mean/variance included) live outside the
+        // base Layers collection. Generation runs the data generator through them, so without
+        // persisting them a saved/cloned model would generate from un-normalized activations.
+        AuxLayerSerialization.WriteLayerList(writer, _dataGenBNLayers);
+
+        // The fitted VGM transformer (column layout + GMM parameters) is required to inverse-transform
+        // generated samples and to apply the correct per-column output activations. Without it a
+        // loaded model cannot reconstruct original-scale data.
+        if (_transformer is not null)
+        {
+            writer.Write(true);
+            _transformer.Serialize(writer);
+        }
+        else
+        {
+            writer.Write(false);
+        }
     }
 
     /// <inheritdoc />
@@ -755,6 +773,17 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         _ = reader.ReadDouble(); // MissingRate
         _dataWidth = reader.ReadInt32();
         IsFitted = reader.ReadBoolean();
+
+        AuxLayerSerialization.ReadLayerList<T, BatchNormalizationLayer<T>>(
+            reader, _dataGenBNLayers, (inShape, outShape) => new BatchNormalizationLayer<T>());
+
+        bool hasTransformer = reader.ReadBoolean();
+        if (hasTransformer)
+        {
+            _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
+            _transformer.Deserialize(reader);
+            _columns = new List<ColumnMetadata>(_transformer.Columns);
+        }
     }
 
     /// <inheritdoc />
