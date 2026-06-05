@@ -527,24 +527,32 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
     private void TrainDataDiscriminatorStep(Matrix<T> transformedData, int batchStart, int batchEnd)
     {
+        // D_x discriminates real data under an OBSERVED mask versus generated data
+        // under a mask sampled from the mask generator G_m (Li et al. 2019) — this
+        // couples G_m to the data GAN instead of using a fixed Bernoulli mask for
+        // both sides. Weight clipping runs after EVERY critic step (WGAN).
+        var criticLayers = BuildDataDiscLayerList();
         for (int i = batchStart; i < batchEnd; i++)
         {
             var realRow = GetRow(transformedData, i);
-            var maskTensor = VectorToTensor(CreateRandomMask(_dataWidth, _options.MissingRate));
-            var noise = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
+            var realMask = VectorToTensor(CreateRandomMask(_dataWidth, _options.MissingRate));
+            var dataNoise = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
+            var maskNoise = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
 
             using var tape = new GradientTape<T>();
-            var realScore = DataDiscriminatorForward(ElementwiseMultiplyTensor(VectorToTensor(realRow), maskTensor), isTraining: true);
-            var fakeRow = DataGeneratorForward(noise);
-            var fakeScore = DataDiscriminatorForward(ElementwiseMultiplyTensor(fakeRow, maskTensor), isTraining: true);
+            var realScore = DataDiscriminatorForward(ElementwiseMultiplyTensor(VectorToTensor(realRow), realMask), isTraining: true);
+            var fakeRow = DataGeneratorForward(dataNoise);
+            var fakeMask = MaskGeneratorForward(maskNoise);
+            var fakeScore = DataDiscriminatorForward(ElementwiseMultiplyTensor(fakeRow, fakeMask), isTraining: true);
             var loss = Engine.TensorSubtract(ReduceToScalar(fakeScore), ReduceToScalar(realScore));
-            TapeStepOver(tape, loss, BuildDataDiscLayerList());
+            TapeStepOver(tape, loss, criticLayers);
+            ClipWeights(criticLayers);
         }
-        ClipWeights(BuildDataDiscLayerList());
     }
 
     private void TrainMaskDiscriminatorStep(Matrix<T> transformedData, int batchStart, int batchEnd)
     {
+        var criticLayers = BuildMaskDiscLayerList();
         for (int i = batchStart; i < batchEnd; i++)
         {
             var realMask = VectorToTensor(CreateRandomMask(_dataWidth, _options.MissingRate));
@@ -555,21 +563,24 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             var fakeMask = MaskGeneratorForward(noise);
             var fakeScore = MaskDiscriminatorForward(fakeMask, isTraining: true);
             var loss = Engine.TensorSubtract(ReduceToScalar(fakeScore), ReduceToScalar(realScore));
-            TapeStepOver(tape, loss, BuildMaskDiscLayerList());
+            TapeStepOver(tape, loss, criticLayers);
+            ClipWeights(criticLayers);
         }
-        ClipWeights(BuildMaskDiscLayerList());
     }
 
     private void TrainDataGeneratorStep(int batchStart, int batchEnd)
     {
+        // G_x is optimized against D_x using a mask drawn from G_m, so the data and
+        // mask generators are trained jointly against the masked-data critic.
         for (int i = batchStart; i < batchEnd; i++)
         {
-            var maskTensor = VectorToTensor(CreateRandomMask(_dataWidth, _options.MissingRate));
-            var noise = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
+            var dataNoise = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
+            var maskNoise = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
 
             using var tape = new GradientTape<T>();
-            var fakeRow = DataGeneratorForward(noise);
-            var fakeScore = DataDiscriminatorForward(ElementwiseMultiplyTensor(fakeRow, maskTensor), isTraining: true);
+            var fakeRow = DataGeneratorForward(dataNoise);
+            var fakeMask = MaskGeneratorForward(maskNoise);
+            var fakeScore = DataDiscriminatorForward(ElementwiseMultiplyTensor(fakeRow, fakeMask), isTraining: true);
             var loss = Engine.TensorNegate(ReduceToScalar(fakeScore));
             TapeStepOver(tape, loss, BuildDataGenLayerList());
         }
@@ -680,13 +691,31 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             var output = DataGeneratorForward(input);
             var flatOut = output.Rank == 1 ? output : Engine.Reshape(output, new[] { output.Length });
             var target = expectedOutput.Rank == 1 ? expectedOutput : Engine.Reshape(expectedOutput, new[] { expectedOutput.Length });
-            var loss = ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(flatOut, target)));
+            // Honor the ctor-supplied / task-default loss function (tape-connected)
+            // rather than hardcoding squared error; fall back to MSE only if the
+            // configured loss does not expose a tape implementation.
+            Tensor<T> loss = LossFunction is LossFunctions.LossFunctionBase<T> tapeLoss
+                ? tapeLoss.ComputeTapeLoss(flatOut, target)
+                : ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(flatOut, target)));
             TapeStepOver(tape, loss, BuildDataGenLayerList());
         }
         finally
         {
             SetTrainingMode(false);
         }
+    }
+
+    /// <inheritdoc />
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        // The auxiliary BatchNorm/Dropout sub-networks live outside Layers, so the
+        // base walk does not reach them; propagate the mode explicitly so BatchNorm
+        // uses running stats and Dropout is disabled at inference (Predict/Generate).
+        foreach (var bn in _dataGenBNLayers) bn.SetTrainingMode(isTraining);
+        foreach (var bn in _maskGenBNLayers) bn.SetTrainingMode(isTraining);
+        foreach (var drop in _dataDiscDropoutLayers) drop.SetTrainingMode(isTraining);
+        foreach (var drop in _maskDiscDropoutLayers) drop.SetTrainingMode(isTraining);
     }
 
     /// <inheritdoc />
