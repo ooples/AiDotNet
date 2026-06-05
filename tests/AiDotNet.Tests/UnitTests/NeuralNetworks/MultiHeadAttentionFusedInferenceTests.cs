@@ -64,8 +64,10 @@ public class MultiHeadAttentionFusedInferenceTests
         layer.SetTrainingMode(true);
         var decomposed = layer.Forward(input);
 
-        Assert.Equal(decomposed.Shape, fused.Shape);
-        Assert.Equal(new[] { batch, SeqLen, DModel }, fused.Shape);
+        // .ToArray() + NaN/Infinity checks: net471-portable forms (TensorShape has
+        // no IEnumerable<int> Assert.Equal overload there; float.IsFinite is net5+).
+        Assert.Equal(decomposed.Shape.ToArray(), fused.Shape.ToArray());
+        Assert.Equal(new[] { batch, SeqLen, DModel }, fused.Shape.ToArray());
 
         var f = fused.GetDataArray();
         var d = decomposed.GetDataArray();
@@ -73,7 +75,7 @@ public class MultiHeadAttentionFusedInferenceTests
         float maxAbsDiff = 0f;
         for (int i = 0; i < f.Length; i++)
         {
-            Assert.True(float.IsFinite(f[i]), $"fused output element {i} is not finite");
+            Assert.True(!float.IsNaN(f[i]) && !float.IsInfinity(f[i]), $"fused output element {i} is not finite");
             maxAbsDiff = Math.Max(maxAbsDiff, Math.Abs(f[i] - d[i]));
         }
         // Float GEMM + softmax reassociation between the two kernels; 1e-3 is tight.
@@ -102,7 +104,7 @@ public class MultiHeadAttentionFusedInferenceTests
         layer.SetTrainingMode(true);
         var decomposed = layer.Forward(input);
 
-        Assert.Equal(new[] { SeqLen, DModel }, fused.Shape);
+        Assert.Equal(new[] { SeqLen, DModel }, fused.Shape.ToArray());
         var f = fused.GetDataArray();
         var d = decomposed.GetDataArray();
         float maxAbsDiff = 0f;
@@ -148,12 +150,12 @@ public class MultiHeadAttentionFusedInferenceTests
         var first = model.Predict(input);
         var second = model.Predict(input);
 
-        Assert.Equal(new[] { batch, 10 }, first.Shape);
+        Assert.Equal(new[] { batch, 10 }, first.Shape.ToArray());
         var a = first.GetDataArray();
         var b = second.GetDataArray();
         for (int i = 0; i < a.Length; i++)
         {
-            Assert.True(float.IsFinite(a[i]), $"prediction element {i} is not finite");
+            Assert.True(!float.IsNaN(a[i]) && !float.IsInfinity(a[i]), $"prediction element {i} is not finite");
             Assert.Equal(a[i], b[i]);   // deterministic
         }
     }
