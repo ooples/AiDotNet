@@ -2057,6 +2057,25 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 folded++;
             }
         }
+
+        if (folded > 0)
+        {
+            // The folds above mutate the weight/bias arrays IN PLACE, which leaves
+            // the engine's identity-keyed inference weight caches stale — chiefly
+            // SimdGemm.SgemmWithCachedB's pre-packed B panels, which are keyed by
+            // the weight ARRAY OBJECT and never re-read its contents
+            // (InferenceWeightCache's documented contract: "callers that mutate
+            // weights in place must call InvalidateAll afterwards"). The per-tensor
+            // Engine.InvalidatePersistentTensor calls inside the fold helpers cover
+            // the GPU-resident persistent buffers but are a NO-OP on CpuEngine, so
+            // the CPU packed-GEMM path kept serving the PRE-fold weights while the
+            // BatchNorm layer was already removed — observed as a deterministic
+            // ~0.17 Dense→BN folded-output divergence on AVX2-only hosts (CI),
+            // invisible on AVX-512 hosts where SgemmWithCachedB bypasses the pack
+            // cache entirely (the `Avx512Sgemm.CanUse` gate).
+            InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+        }
+
         return folded;
     }
 
@@ -2112,10 +2131,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             bSpan[oc] = NumOps.Add(NumOps.Multiply(NumOps.Subtract(bSpan[oc], mSpan[oc]), scale), beSpan[oc]);
         }
 
-        // In-place span mutation bypasses the engine's persistent-tensor cache (packed /
-        // GPU-resident kernel + bias buffers). Invalidate it so a cached forward path
-        // re-reads the folded values instead of the stale pre-fold weights — same fix as
-        // the Dense fold below; mirrors SetWeights / SetParameters.
+        // Per-tensor invalidation of the GPU-resident persistent buffers keyed by
+        // these arrays. NO-OP on CpuEngine — the CPU-side identity-keyed caches
+        // (pre-packed GEMM panels, transposed conv kernels) are flushed by the
+        // InvalidateWeightCachesAfterSuccessfulWeightUpdate() call in
+        // FoldBatchNormForInference after all folds complete (see the Dense fold
+        // below for the full staleness story).
         Engine.InvalidatePersistentTensor(kernels);
         Engine.InvalidatePersistentTensor(biases);
         return true;
@@ -2163,14 +2184,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             bSpan[oc] = NumOps.Add(NumOps.Multiply(NumOps.Subtract(bSpan[oc], mSpan[oc]), scale), beSpan[oc]);
         }
 
-        // The in-place span mutations above bypass the engine's persistent-tensor cache
-        // (the packed / GPU-resident weight + bias buffers keyed by these arrays). Every
-        // other weight-mutation path — SetWeights, SetParameters — invalidates that cache;
-        // the fold must too. Otherwise a forward path that serves weights from the cache
-        // (native-BLAS pre-pack / GPU buffer) reuses the STALE pre-fold weights, so the
-        // BatchNorm fold silently has no effect and the optimized model's output diverges
-        // sharply from the reference (observed as a ~0.18 Dense→BN folded-output divergence
-        // on the Linux native-BLAS CI path; the managed path happened to re-read the arrays).
+        // Per-tensor invalidation of the GPU-resident persistent buffers keyed by
+        // these arrays. NOTE: this is a NO-OP on CpuEngine — the CPU-side
+        // identity-keyed caches (SgemmWithCachedB pre-packed panels, int8 packs,
+        // transposed conv kernels) are flushed by the single
+        // InvalidateWeightCachesAfterSuccessfulWeightUpdate() call in
+        // FoldBatchNormForInference after all folds complete. Relying on this call
+        // alone left the CPU pack cache stale (the ~0.17 Dense→BN divergence on
+        // AVX2-only CI hosts).
         Engine.InvalidatePersistentTensor(weights);
         Engine.InvalidatePersistentTensor(biases);
         return true;

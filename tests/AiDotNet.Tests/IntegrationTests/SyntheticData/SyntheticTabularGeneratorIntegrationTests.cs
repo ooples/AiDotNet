@@ -341,6 +341,46 @@ public class SyntheticTabularGeneratorIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task PATEGANGenerator_SaveLoad_PreservesAuxiliaryNetworks()
+    {
+        await Task.CompletedTask;
+        var (data, columns) = CreateTestData();
+        var arch = CreateArchitecture(TotalCols, TotalCols);
+        var options = new PATEGANOptions<double>
+        {
+            Seed = Seed,
+            EmbeddingDimension = 32,
+            GeneratorDimensions = [64, 64],
+            TeacherDimensions = [64, 64],
+            StudentDimensions = [64, 64],
+            BatchSize = 50,
+            VGMModes = 3,
+            NumTeachers = 3,
+            LaplaceScale = 0.5
+        };
+
+        var generator = new PATEGANGenerator<double>(arch, options);
+        generator.Fit(data, columns, FewEpochs);
+
+        byte[] bytes = generator.Serialize();
+        var restored = new PATEGANGenerator<double>(arch, options);
+        restored.Deserialize(bytes);
+
+        // The generator batch-norm layers live outside the base Layers collection; verify they
+        // (and the VGM transformer driving output activations) survive serialization.
+        AssertAuxLayerListPreserved<BatchNormalizationLayer<double>>(generator, restored, "_genBNLayers");
+
+        generator.SetTrainingMode(false);
+        restored.SetTrainingMode(false);
+        var probe = new Tensor<double>([options.EmbeddingDimension]);
+        for (int i = 0; i < probe.Length; i++) probe[i] = 0.1 * i;
+        var expected = generator.Predict(probe);
+        var actual = restored.Predict(probe);
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++) Assert.Equal(expected[i], actual[i], 8);
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task TableGANGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
