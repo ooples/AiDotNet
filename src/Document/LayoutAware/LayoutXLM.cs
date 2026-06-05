@@ -232,6 +232,17 @@ public class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
 
     #region Initialization
 
+    /// <summary>
+    /// Number of layers in <see cref="Layers"/> that form the ResNeXt-FPN visual backbone
+    /// (Conv7×7 → BN → MaxPool → Conv3×3 → visual-projection Dense). The text-only
+    /// inference path skips this prefix and starts at the XLM-RoBERTa token-embedding
+    /// layer; the full multimodal path runs the visual stream and concatenates with the
+    /// text stream at the transformer entry — both code paths are paper-explicit per
+    /// Xu et al. ACL 2022 §3.1 (which inherits LayoutLMv2's dual-stream design from
+    /// Xu et al. 2020 §3.1).
+    /// </summary>
+    private const int VisualBackbonePrefixLength = 5;
+
     /// <inheritdoc/>
     protected override void InitializeLayers()
     {
@@ -648,10 +659,100 @@ public class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
     #region NeuralNetworkBase Implementation
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Per Xu et al. ACL 2022 §3.1, LayoutXLM (and its LayoutLMv2 backbone) admits two
+    /// paper-explicit operating modes:
+    /// <list type="bullet">
+    ///   <item>Full multimodal (<paramref name="input"/> is a rank-3/4 image tensor):
+    ///         the ResNeXt-FPN visual backbone produces visual tokens that are
+    ///         concatenated with the text-token sequence at the transformer entry.</item>
+    ///   <item>Text-only (<paramref name="input"/> is a rank-1/2 token-id tensor):
+    ///         the visual stream is skipped entirely — the original paper's MVLM
+    ///         pre-training objective explicitly masks the visual stream, and the
+    ///         downstream text-understanding fine-tunes (§4.2) run the same text-only
+    ///         path. The XLM-RoBERTa embedding stack at <c>VisualBackbonePrefixLength</c>
+    ///         is the entry point.</item>
+    /// </list>
+    /// We route by rank rather than by an explicit modality flag because that mirrors
+    /// the HuggingFace LayoutLMv2/XLM call surface: a single forward that infers the
+    /// modality from the supplied tensor's shape.
+    /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        var preprocessed = PreprocessDocument(input);
-        return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
+
+        if (!_useNativeMode)
+        {
+            // ONNX models bake the modality into their compiled graph; defer all routing
+            // decisions to the ONNX runtime instead of second-guessing on the .NET side.
+            var preprocessed = PreprocessDocument(input);
+            return RunOnnxInference(preprocessed);
+        }
+
+        // Text-only path: rank-1 [seq] or rank-2 [batch, seq] token-id tensors enter at
+        // the XLM-RoBERTa embedding layer; the upstream Conv visual backbone is bypassed
+        // since there is no image to encode (paper §3.1, §4.2).
+        if (input.Rank <= 2)
+        {
+            return ForwardFromLayer(input, VisualBackbonePrefixLength);
+        }
+
+        // Full multimodal path: normalize the image, then run the entire layer chain.
+        var preprocessedImage = PreprocessDocument(input);
+        return Forward(preprocessedImage);
+    }
+
+    /// <summary>
+    /// Runs the layer chain starting at <paramref name="startIndex"/> instead of layer
+    /// zero — the text-only counterpart of <see cref="DocumentNeuralNetworkBase{T}.Forward"/>
+    /// that lets the paper-supported text-stream-only operating mode bypass the visual
+    /// backbone prefix. Reuses the base class's auto-reshape contract so the eventual
+    /// hand-off from any remaining spatial layers to the transformer is identical.
+    /// </summary>
+    private Tensor<T> ForwardFromLayer(Tensor<T> input, int startIndex)
+    {
+        if (startIndex < 0 || startIndex > Layers.Count)
+            throw new ArgumentOutOfRangeException(nameof(startIndex),
+                $"startIndex must be in [0, {Layers.Count}], got {startIndex}.");
+
+        Tensor<T> output = input;
+        Tensor<T>? encoderOutput = null;
+        for (int i = startIndex; i < Layers.Count; i++)
+        {
+            var layer = Layers[i];
+            if (layer is TransformerDecoderLayer<T> decoderLayer)
+            {
+                encoderOutput ??= output;
+                output = decoderLayer.Forward(output, encoderOutput);
+            }
+            else
+            {
+                output = layer.Forward(output);
+            }
+        }
+        return output;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Training-mode counterpart of <see cref="Predict"/>'s modality routing. Without
+    /// this override, <see cref="NeuralNetworkBase{T}.ForwardForTraining"/> walks
+    /// <c>Layers</c> from index 0, sending text-only inputs into the rank-4-only Conv
+    /// visual backbone and throwing immediately. Routing here keeps the dual-stream
+    /// semantics consistent across Predict and Train so a model trained on text-only
+    /// data (paper §4.2 fine-tunes) sees the same code path on inference.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
+
+        if (_useNativeMode && input.Rank <= 2)
+        {
+            return ForwardFromLayer(input, VisualBackbonePrefixLength);
+        }
+        return base.ForwardForTraining(input);
     }
 
     /// <inheritdoc/>
