@@ -323,25 +323,69 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
                 numLstmLayers: _numLstmLayers, lstmHiddenDim: _lstmHiddenDim).ToList();
 
         Layers.Clear();
-        _convLayers.Clear();
-        _lstmLayers.Clear();
         Layers.AddRange(layers);
 
-        // Assign internal references for forward pass (3 conv + numLstm LSTM + 1 output)
+        ExtractLayerReferences();
+    }
+
+    /// <summary>
+    /// (Re)populates the conv / LSTM / output sub-layer references from the
+    /// canonical <see cref="NeuralNetworkBase{T}.Layers"/> list and materializes
+    /// any lazy weights.
+    /// </summary>
+    /// <remarks>
+    /// Called both after <see cref="InitializeLayers"/> builds the layers and
+    /// after deserialization rebuilds <c>Layers</c>. Deserialization replaces the
+    /// <c>Layers</c> list with freshly reconstructed layers but does not know
+    /// about SileroVad's cached <c>_convLayers</c>/<c>_lstmLayers</c>/<c>_outputLayer</c>
+    /// references — without re-extracting them, a deserialized/cloned model would
+    /// keep running the constructor's randomly-initialized layers in Forward while
+    /// the loaded weights sit unused in <c>Layers</c> (the cause of
+    /// Clone_ShouldProduceIdenticalOutput diverging). Idempotent.
+    /// </remarks>
+    private void ExtractLayerReferences()
+    {
+        _convLayers.Clear();
+        _lstmLayers.Clear();
+
         int expectedCount = 3 + _numLstmLayers + 1;
-        if (layers.Count < expectedCount)
+        if (Layers.Count < expectedCount)
         {
             throw new ArgumentException(
                 $"Layer list must have at least {expectedCount} layers " +
-                $"(3 conv + {_numLstmLayers} LSTM + 1 output), but got {layers.Count}.",
-                "Architecture.Layers");
+                $"(3 conv + {_numLstmLayers} LSTM + 1 output), but got {Layers.Count}.",
+                nameof(Layers));
         }
 
         for (int i = 0; i < 3; i++)
-            _convLayers.Add(layers[i]);
+            _convLayers.Add(Layers[i]);
         for (int i = 0; i < _numLstmLayers; i++)
-            _lstmLayers.Add(layers[3 + i]);
-        _outputLayer = layers[3 + _numLstmLayers];
+            _lstmLayers.Add(Layers[3 + i]);
+        _outputLayer = Layers[3 + _numLstmLayers];
+
+        // Materialize the lazy LSTM weights now (their feature dim is known:
+        // convFilters into the first LSTM, lstmHiddenDim thereafter). Without
+        // this the LSTM weights stay at zero size until the first forward, so a
+        // clone/serialize of a never-yet-run model would capture no weights and
+        // the clone would resolve fresh random weights — diverging from the
+        // original (Clone_ShouldProduceIdenticalOutput).
+        int lstmInputDim = _convFilters;
+        foreach (var lstm in _lstmLayers)
+        {
+            if (lstm is LayerBase<T> lb && !lb.IsShapeResolved)
+            {
+                lb.ResolveFromShape(new[] { 1, 1, lstmInputDim });
+            }
+            lstmInputDim = _lstmHiddenDim;
+        }
+
+        // The output dense layer is also lazy (input size = lstmHiddenDim, the
+        // last-timestep feature width). Resolve it now for the same reason as
+        // the LSTMs.
+        if (_outputLayer is LayerBase<T> outLb && !outLb.IsShapeResolved)
+        {
+            outLb.ResolveFromShape(new[] { 1, _lstmHiddenDim });
+        }
     }
 
     #endregion
@@ -532,10 +576,14 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         // leave the sample values intact.
         var samples = rawAudio.ToVector().ToArray();
         var result = new Tensor<T>([1, 1, samples.Length]);
-        var resultVector = result.ToVector();
+        // Write directly into the tensor's backing storage. Tensor.ToVector()
+        // returns a COPY, so assigning into that copy would leave `result` all
+        // zeros (the bug that made the conv frontend see a zero signal and emit
+        // a constant 0.5 for every input).
+        var resultSpan = result.Data.Span;
         for (int i = 0; i < samples.Length; i++)
         {
-            resultVector[i] = samples[i];
+            resultSpan[i] = samples[i];
         }
 
         return result;
@@ -788,6 +836,15 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         _ = reader.ReadInt32(); // _convFilters
         _ = reader.ReadInt32(); // _lstmHiddenDim
         _ = reader.ReadInt32(); // _numLstmLayers
+
+        // Deserialization has already rebuilt the canonical Layers list with the
+        // loaded weights. Re-point the cached conv/LSTM/output references at those
+        // layers; otherwise Forward would keep running the constructor's
+        // randomly-initialized layers and ignore the loaded weights.
+        if (_useNativeMode && Layers.Count >= 3 + _numLstmLayers + 1)
+        {
+            ExtractLayerReferences();
+        }
     }
 
     /// <inheritdoc/>
