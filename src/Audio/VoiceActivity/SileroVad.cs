@@ -656,6 +656,55 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// The base implementation runs the flat <c>Layers</c> list sequentially on
+    /// the raw input, which neither preprocesses the waveform nor applies the
+    /// conv→LSTM axis transpose, so it fails on SileroVad's custom pipeline.
+    /// Capture activations along the model's actual forward path instead.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>();
+        if (!_useNativeMode)
+        {
+            return activations;
+        }
+
+        var current = PreprocessAudio(input);
+        int idx = 0;
+
+        foreach (var layer in _convLayers)
+        {
+            current = layer.Forward(current);
+            activations[$"Layer_{idx}_{layer.GetType().Name}"] = current.Clone();
+            idx++;
+        }
+
+        if (current.Rank == 3)
+        {
+            current = Engine.TensorPermute(current, [0, 2, 1]);
+        }
+
+        foreach (var layer in _lstmLayers)
+        {
+            current = layer.Forward(current);
+            activations[$"Layer_{idx}_{layer.GetType().Name}"] = current.Clone();
+            idx++;
+        }
+
+        if (_outputLayer is not null)
+        {
+            var lastTimestep = current.Rank == 3
+                ? Engine.TensorSliceAxis(current, axis: 1, index: current.Shape[1] - 1)
+                : current;
+            current = _outputLayer.Forward(lastTimestep);
+            activations[$"Layer_{idx}_{_outputLayer.GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
+    }
+
+    /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!SupportsTraining)
