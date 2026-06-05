@@ -1929,10 +1929,10 @@ public static class LayerHelper<T>
             yield return Wire(new DropoutLayer<T>(dropoutRate));
         }
 
-        // Add encoder layers. Each is a canonical Post-LN transformer block
-        // (Vaswani 2017 §3.1): self-attention and FFN sublayers EACH wrapped in
-        // a residual connection, with LayerNorm applied to the sublayer INPUT
-        // (Pre-LN) — y = x + SelfAttn(LayerNorm(x)), z = y + FFN(LayerNorm(y)).
+        // Add encoder layers. Each is a canonical Pre-LN transformer block
+        // (residual/FFN design Vaswani 2017 §3.1): self-attention and FFN sublayers
+        // EACH wrapped in a residual connection, with LayerNorm applied to the sublayer
+        // INPUT (Pre-LN) — y = x + SelfAttn(LayerNorm(x)), z = y + FFN(LayerNorm(y)).
         // The residuals were missing from the prior flat MHA→Norm→FFN→Norm
         // sequence, which let each block's output replace (rather than refine)
         // the hidden state — washing out the input signal ~60× per layer and

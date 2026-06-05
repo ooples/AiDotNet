@@ -218,6 +218,15 @@ public class ByteLMV256Issue1380Tests
         // onto the thread pool so the rest of the body sits inside an
         // awaitable scope without changing the actual test workload.
         await Task.Yield();
+
+        // Defensive CPU pin. The whole test assembly runs CPU-only (TestAssemblyDeterminismInit
+        // sets AIDOTNET_DISABLE_GPU + ResetToCpu, and AiModelBuilder's default GPU auto-detect now
+        // honors that opt-out). This guards against an explicit-GPU-config test (which bypasses the
+        // opt-out) leaving the process on the DirectGpuTensorEngine — on GPU the Adam update path
+        // zeroes parameters, which previously collapsed this V=256 training to uniform output.
+        if (AiDotNet.Tensors.Engines.AiDotNetEngine.Current is not AiDotNet.Tensors.Engines.CpuEngine)
+            AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+
         var (arch, xTrain, yTrain) = BuildFixture();
 
         // Reference: per-sample model.Train driver. The consumer ticket

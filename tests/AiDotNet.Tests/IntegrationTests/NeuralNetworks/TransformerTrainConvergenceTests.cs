@@ -19,6 +19,13 @@ namespace AiDotNetTests.IntegrationTests.NeuralNetworks;
 /// fail loudly. If training works, loss falls monotonically on this
 /// trivial task well within 50 epochs.
 /// </summary>
+// Serialize with the other determinism-sensitive integration tests. AiModelBuilder.BuildAsync
+// writes the PROCESS-GLOBAL AiDotNetEngine.SetDeterministicMode on every call, so a BuildAsync
+// in a parallel collection can flip deterministic reductions OFF mid-training here and make this
+// convergence guard flake (verified: with this collection the test passes in the full suite,
+// without it it flakes). The proper root fix is per-flow determinism in the engine/builder; until
+// then, sharing the NonParallelIntegration collection keeps those builds from racing this test.
+[Collection("NonParallelIntegration")]
 public class TransformerTrainConvergenceTests
 {
     private readonly ITestOutputHelper _output;
@@ -36,6 +43,11 @@ public class TransformerTrainConvergenceTests
     [Fact]
     public void Train_SequenceClassification_LossDecreasesAcrossEpochs()
     {
+        // Re-assert deterministic reductions: a prior test may have left the process-global
+        // flag OFF (AiModelBuilder.BuildAsync sets it per-call). This convergence guard relies
+        // on a reproducible training trajectory, so pin determinism on at the start.
+        AiDotNet.Tensors.Engines.AiDotNetEngine.SetDeterministicMode(true);
+
         // Tiny vocab + short sequence + small d_model so the test runs
         // in well under a second per epoch, yet still exercises the
         // same encoder → pool → dense → softmax → CE stack the issue
