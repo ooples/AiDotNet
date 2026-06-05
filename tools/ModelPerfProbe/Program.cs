@@ -72,6 +72,9 @@ internal static class Program
         Console.WriteLine($"# Probing {models.Count} models (steps={opts.Steps}, seq={opts.Seq}, per-model budget {opts.PerModelBudgetS:F0}s)");
         var results = new List<ProbeResult>(models.Count);
         int idx = 0;
+        // Sweep peak managed-heap watermark (best-effort) so the run logs whether GC
+        // pressure compounded across models even after the per-model GC cycle below.
+        long peakHeapBytes = 0;
         foreach (var t in models)
         {
             idx++;
@@ -80,7 +83,24 @@ internal static class Program
                 TimeSpan.FromSeconds(opts.PerModelBudgetS));
             results.Add(r);
             PrintHumanCompact(r);
+
+            // Aggressive reclaim between models. Without this, each probed model's
+            // ~hundreds-of-MB transient working set stays gen2 until ambient pressure
+            // forces a collection; over a 1320-model sweep the cumulative gen2 retain
+            // chain pushed the process past 4 GB and OOM'd on a 16 GB Windows host
+            // (cygwin fork() can't grow the WSL-style memory map past the runtime's
+            // GC heap, so the test rebuild started failing with errno 11 mid-sweep).
+            // Cycle GC twice with a finalizer pass between so Tensor<T> + GpuBuffer
+            // finalizers run and their unmanaged-backed arrays return to the pool
+            // before the next model constructs.
+            GC.Collect(generation: GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+            GC.WaitForPendingFinalizers();
+            GC.Collect(generation: GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+
+            long heap = GC.GetTotalMemory(forceFullCollection: false);
+            if (heap > peakHeapBytes) peakHeapBytes = heap;
         }
+        Console.WriteLine($"# Sweep peak managed heap (post-GC): {peakHeapBytes / (1024.0 * 1024.0):F1} MB");
 
         var flagged = results.Where(r => r.Flagged).OrderByDescending(r => r.AvgStepMs).ToList();
         Console.WriteLine();

@@ -10,6 +10,13 @@
     <AssemblyName>ModelPerfProbe</AssemblyName>
     <ServerGarbageCollection>true</ServerGarbageCollection>
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <!-- Force GC to release LOH back to the OS instead of holding it for reuse.
+         Default GCLargeObjectHeapCompactionMode is Default (never compact); for a sweep
+         that walks 1320 models with hundreds-of-MB transient working sets, the LOH
+         fragments quickly and the working set grows monotonically. Aggressive compaction
+         (we cycle it in Program.cs via GC.Collect with compacting:true) plus this hint
+         lets the runtime hand pages back to the OS between models. -->
+    <RetainVMGarbageCollection>false</RetainVMGarbageCollection>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
