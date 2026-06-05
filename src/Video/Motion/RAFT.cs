@@ -329,12 +329,22 @@ public class RAFT<T> : OpticalFlowBase<T>
         var deltaFlowHead = _deltaFlowHead ?? throw new InvalidOperationException("Delta flow head not initialized.");
 
         int batchSize = frame1.Shape[0];
-        int featHeight = _height / 8;
-        int featWidth = _width / 8;
 
         var fmap1 = ExtractFeatures(frame1);
         var fmap2 = ExtractFeatures(frame2);
         var context = ExtractContext(frame1);
+
+        // Derive the flow-field resolution from the ACTUAL feature-map spatial
+        // dims rather than architecture._height/8. The feature encoder
+        // downsamples whatever input it is given by 8×, so when the real input
+        // size differs from the architecture's configured size (e.g. a 64×64
+        // test frame against the parameterless ctor's 256×256 default), a
+        // _height/8 flow grid (32×32) no longer matches the encoder output
+        // (8×8) and the GRU-input ConcatenateChannels fails with
+        // "Mismatch at axis 2". Sourcing the grid from fmap1 keeps flow,
+        // correlation, and context spatially aligned at any input size.
+        int featHeight = fmap1.Shape[2];
+        int featWidth = fmap1.Shape[3];
 
         var flow = new Tensor<T>([batchSize, 2, featHeight, featWidth]);
         var hiddenState = context;

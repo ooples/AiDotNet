@@ -151,7 +151,14 @@ public class RIFE<T> : FrameInterpolationBase<T>
         : this(new NeuralNetworkArchitecture<T>(
             inputType: Enums.InputType.ThreeDimensional,
             taskType: Enums.NeuralNetworkTaskType.Regression,
-            inputHeight: 256, inputWidth: 256, inputDepth: 6,
+            // inputDepth is the PER-FRAME channel count (RGB = 3). RIFE
+            // consumes a channel-wise concatenated frame pair, so the actual
+            // Predict input has 2 * inputDepth = 6 channels and the model
+            // slices it back into two 3-channel frames (ProcessInterpolation
+            // -> SliceChannels(0, _channels) and (_channels, 2*_channels)).
+            // Setting this to 6 made _channels = 6, so the second slice read
+            // channels [6,12) off a 6-channel input -> "Index 1 out of range".
+            inputHeight: 256, inputWidth: 256, inputDepth: 3,
             outputSize: 3))
     {
     }
