@@ -216,13 +216,22 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var lambda1 = NumOps.FromDouble(_options.Lambda1);
         var lambda2 = NumOps.FromDouble(_options.Lambda2);
 
+        bool gpuAdam = typeof(T) == typeof(float)
+            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
+            && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
+
         foreach (var param in context.Parameters)
         {
             if (!context.Gradients.TryGetValue(param, out var grad))
                 continue;
 
-            if (!_tapeZ.TryGetValue(param, out var z)) { z = new Tensor<T>(param._shape); _tapeZ[param] = z; }
-            if (!_tapeN.TryGetValue(param, out var n)) { n = new Tensor<T>(param._shape); _tapeN[param] = n; }
+            if (!_tapeZ.TryGetValue(param, out var z)) { z = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) z.AsWritableSpan().Clear(); _tapeZ[param] = z; }
+            if (!_tapeN.TryGetValue(param, out var n)) { n = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) n.AsWritableSpan().Clear(); _tapeN[param] = n; }
+
+            if (gpuAdam && param.Length == grad.Length
+                && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryFtrlStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)z, (Tensor<float>)(object)n,
+                    (float)_options.Alpha, (float)_options.Lambda1, (float)_options.Lambda2, (float)_options.Beta))
+                continue;
 
             // n_new = n + grad^2
             var gradSq = Engine.TensorMultiply(grad, grad);
