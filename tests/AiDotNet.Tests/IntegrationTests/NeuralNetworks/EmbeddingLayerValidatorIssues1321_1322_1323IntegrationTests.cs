@@ -61,7 +61,8 @@ public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
         var arch = new TransformerArchitecture<float>(
             inputType: InputType.TwoDimensional,
             taskType: NeuralNetworkTaskType.SequenceClassification,
-            numEncoderLayers: 2,
+            // Custom layers: REPLACE the auto-built encoder, so numEncoderLayers must be 0 (#1382).
+            numEncoderLayers: 0,
             numDecoderLayers: 0,
             numHeads: Heads,
             modelDimension: DModel,
