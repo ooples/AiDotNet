@@ -2,10 +2,16 @@
 
 | | |
 |---|---|
-| **Status** | Draft — awaiting review |
+| **Status** | Implemented in v0.1. See `ONNX_SUPPORT_MATRIX.md` for current per-layer coverage. |
 | **Scope** | Add `ExportToOnnx` to AiDotNet so trained models can be consumed outside .NET (Python, JVM, Databricks, browser). |
 | **Branch** | `feature/onnx-export` |
 | **Driver** | Demo for the Databricks intro session (train in AiDotNet → export to ONNX → batch inference on a Spark DataFrame in a Databricks Community Edition notebook). |
+
+> **Implementation notes (amendment, post-implementation):** During implementation two assumptions in the original spec turned out to be wrong:
+> 1. `Microsoft.ML.OnnxRuntime.Managed` is inference-only — it doesn't expose model-authoring APIs. **Replaced with vendored ONNX protobuf C# classes** generated from `onnx.proto3` v1.17.0 (Apache-2.0) using `protoc 28.3`. The vendored code lives at `src/Onnx/Protobuf/`; regeneration instructions in `src/Onnx/Protobuf/REGEN.md`. Only runtime dep is `Google.Protobuf` (already pinned at 3.35.0 in the project's central package management).
+> 2. A standalone `OnnxExporter` already existed in `src/Onnx/OnnxExporter.cs` (946 LOC, hand-rolls protobuf bytes, self-described as proof-of-concept). The new path is built *alongside* it — the legacy exporter stays untouched until parity tests confirm the new path matches its behavior, at which point the legacy code will be removed in a follow-up PR.
+>
+> All other architecture decisions (per-layer `ConvertToOnnx` override, `OnnxGraphBuilder` facade, output schema, test strategy) stand as designed.
 
 ---
 
