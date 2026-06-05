@@ -239,6 +239,19 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
                 dataWidth, latentDim, _options.EncoderDimensions));
         }
 
+        BuildAuxiliaryNetworks(dataWidth);
+    }
+
+    /// <summary>
+    /// Builds the auxiliary sub-networks (mean/logvar heads, decoder, diffusion MLP, timestep
+    /// projection) that live outside the base <c>Layers</c> collection. Kept separate from the
+    /// encoder rebuild so deserialization can recreate these structures without clobbering the
+    /// encoder layers already restored by the base class.
+    /// </summary>
+    private void BuildAuxiliaryNetworks(int dataWidth)
+    {
+        int latentDim = _options.LatentDimension;
+
         // Build mean and logvar projection heads from the last encoder hidden dim
         int lastEncHidden = _options.EncoderDimensions.Length > 0
             ? _options.EncoderDimensions[^1]
@@ -996,13 +1009,65 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         writer.Write(_options.DiffusionLearningRate);
         writer.Write(_options.VGMModes);
         writer.Write(_options.TimestepEmbeddingDimension);
+
+        // Persist the auxiliary sub-networks that live outside the base Layers collection. Without
+        // this, a saved/cloned model would fall back to freshly-initialized decoder / diffusion-MLP
+        // / projection weights and generate garbage.
+        writer.Write(IsFitted);
+        writer.Write(_dataWidth);
+        writer.Write(_usingCustomLayers);
+        AuxLayerSerialization.Write(writer, _meanLayer);
+        AuxLayerSerialization.Write(writer, _logVarLayer);
+        AuxLayerSerialization.Write(writer, _timestepProjection);
+        AuxLayerSerialization.WriteParameters(writer, _decoderLayers);
+        AuxLayerSerialization.WriteParameters(writer, _diffMLPLayers);
     }
 
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        // Options are reconstructed from serialized data
-        // Layers are handled by base class
+        // Advance past the option fields (the options themselves are reconstructed in
+        // CreateNewInstance); they must still be read to reach the auxiliary-network data.
+        _ = reader.ReadInt32();                                  // LatentDimension
+        int encDimCount = reader.ReadInt32();
+        for (int i = 0; i < encDimCount; i++) _ = reader.ReadInt32();
+        int decDimCount = reader.ReadInt32();
+        for (int i = 0; i < decDimCount; i++) _ = reader.ReadInt32();
+        int diffDimCount = reader.ReadInt32();
+        for (int i = 0; i < diffDimCount; i++) _ = reader.ReadInt32();
+        _ = reader.ReadInt32();                                  // DiffusionSteps
+        _ = reader.ReadDouble();                                 // BetaStart
+        _ = reader.ReadDouble();                                 // BetaEnd
+        _ = reader.ReadInt32();                                  // BatchSize
+        _ = reader.ReadDouble();                                 // VAELearningRate
+        _ = reader.ReadDouble();                                 // DiffusionLearningRate
+        _ = reader.ReadInt32();                                  // VGMModes
+        _ = reader.ReadInt32();                                  // TimestepEmbeddingDimension
+
+        IsFitted = reader.ReadBoolean();
+        _dataWidth = reader.ReadInt32();
+        _usingCustomLayers = reader.ReadBoolean();
+
+        // Rebuild the auxiliary structures deterministically (the encoder in Layers was already
+        // restored by the base class) so the persisted parameters can be loaded back into them.
+        if (IsFitted)
+        {
+            BuildAuxiliaryNetworks(_dataWidth);
+        }
+
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        var silu = new SiLUActivation<T>() as IActivationFunction<T>;
+        _meanLayer = AuxLayerSerialization.Read<T>(reader,
+            (inShape, outShape) => new FullyConnectedLayer<T>(outShape[outShape.Length - 1], identity))
+            as FullyConnectedLayer<T>;
+        _logVarLayer = AuxLayerSerialization.Read<T>(reader,
+            (inShape, outShape) => new FullyConnectedLayer<T>(outShape[outShape.Length - 1], identity))
+            as FullyConnectedLayer<T>;
+        _timestepProjection = AuxLayerSerialization.Read<T>(reader,
+            (inShape, outShape) => new FullyConnectedLayer<T>(outShape[outShape.Length - 1], silu))
+            as FullyConnectedLayer<T>;
+        AuxLayerSerialization.ReadParametersInto(reader, _decoderLayers);
+        AuxLayerSerialization.ReadParametersInto(reader, _diffMLPLayers);
     }
 
     /// <inheritdoc/>
