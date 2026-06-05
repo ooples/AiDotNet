@@ -2262,6 +2262,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     private bool IsFirstLayerShapeCompatible(ILayer<T> layer)
     {
+        // Embedding-category first layers (EmbeddingLayer, positional encodings, custom subclasses)
+        // consume token INDICES through a per-token broadcast contract and declare a [1]-style input
+        // shape that intentionally does not match the architecture input shape (the sequence length).
+        // Accept them outright (#1321/#1323); runtime shape resolution validates the real dimensions.
+        if (NeuralNetworkArchitecture<T>.IsEmbeddingCategoryLayer(layer))
+            return true;
+
         int[]? layerInputShape = TryGetLayerShape(layer, shapeSelector: static l => l.GetInputShape());
         if (IsDeferredOrAgnosticShape(layerInputShape))
             return true;
@@ -2283,7 +2290,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // expects the same 64 elements arriving as rank-1). Without this
         // path the validator rejects a legitimate flatten contract that
         // the layer would have happily accepted at first forward.
-        if (TotalElementsMatch(architectureInputShape!, layerInputShape!))
+        //
+        // This acceptance is directional: it only covers a rank-1 (flat) first
+        // layer CONSUMING a (possibly structured) architecture input — the
+        // natural flatten boundary. A higher-rank first layer demanding a
+        // specific structured RESHAPE of a flat architecture input (e.g. a
+        // layer declaring [2, 8] fed by a flat [16]) must use an explicit
+        // ReshapeLayer, mirroring the layer-to-layer "no implicit flatten"
+        // contract — so it is NOT accepted here.
+        if (layerInputShape!.Length == 1 && TotalElementsMatch(architectureInputShape!, layerInputShape!))
             return true;
 
         return false;
@@ -2626,6 +2641,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     protected virtual bool AreLayersCompatible(ILayer<T> prevLayer, ILayer<T> currentLayer)
     {
+        // Embedding-category layers (EmbeddingLayer, positional encodings, custom subclasses)
+        // participate in a per-token broadcast contract whose static shapes intentionally omit the
+        // sequence dimension. On the INPUT side they declare a [1]-style input that does not match a
+        // preceding layer's output (e.g. an InputLayer or DenseLayer feeding token ids). On the
+        // OUTPUT side they declare a per-token [dModel] shape that omits the sequence length (which
+        // is data-dependent), so a downstream sequence layer's [seqLen, dModel] input does not match
+        // statically. Treat any transition INTO or OUT OF such a layer as compatible (#1323);
+        // runtime shape resolution validates the real dimensions on first forward.
+        if (NeuralNetworkArchitecture<T>.IsEmbeddingCategoryLayer(currentLayer)
+            || NeuralNetworkArchitecture<T>.IsEmbeddingCategoryLayer(prevLayer))
+            return true;
+
         // Lazy layers report InputShape = [-1] (or empty) until first Forward —
         // skip the strict shape-equality check; resolution happens at first
         // forward. Empty-shape layers are shape-agnostic by design (e.g.
