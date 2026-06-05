@@ -1953,6 +1953,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] InputShape => new[] { 4, 3, 32, 32 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
+        else if (model.ClassName == "VFIT")
+        {
+            // VFIT (Shi et al. 2022) uses the shared FrameInterpolationBase.Predict,
+            // whose disambiguation treats ANY rank-4 input as a frame *sequence*
+            // [N, C, H, W] and explicitly rejects a batched pair-concat
+            // [1, 2C, H, W] (leading dim 1). The two-frame branch below emits
+            // exactly that rejected shape. A rank-3 [2C, H, W] is the
+            // base's pair-concat contract (even leading channel dim → split
+            // into two frames), so emit [6, 64, 64] = two RGB frames stacked.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 6, 64, 64 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 3, 64, 64 };");
+        }
         else if (isTwoFrameModel)
         {
             // Two-frame models (frame-interpolation + optical-flow) take a
@@ -2097,6 +2109,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // the expected 2048. Emit the paper-correct shape so the
             // transformer actually runs.
             sb.AppendLine("    protected override int[] InputShape => new[] { 36, 2048 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+        }
+        else if (model.ClassName == "PointNetPlusPlus")
+        {
+            // PointNet++ (Qi et al. 2017) consumes a raw point cloud of shape
+            // [N, 3] — N points each with (x, y, z). ForwardWithMemory hard-
+            // rejects anything else with "Input must have shape [N, 3]". The
+            // generic vision branch emits [3, spatial, spatial], which trips
+            // that guard. N must be ≥ the first set-abstraction sampling rate
+            // (PointNetPlusPlusOptions.SamplingRates default {512, 128, 32})
+            // so farthest-point sampling has enough points to draw from.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 512, 3 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
         else if (isVisionModel &&
