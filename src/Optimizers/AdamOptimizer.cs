@@ -696,7 +696,17 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // that makes the step host-bound (and uncapturable as a CUDA graph). Moments are allocated GPU-resident
         // (RentPinnedOnGpu) so TryGetGpuBuffer resolves them. Gated OFF by default; falls back to the CPU SIMD
         // path per-parameter whenever any tensor isn't GPU-resident. AMSGrad uses the CPU path (no GPU vMax yet).
+        // cudaGraph-safety: the GPU-resident step is only host-read-free when NO
+        // host-side gradient scan runs first. The anomaly guard
+        // (ShouldRunAnomalyGuard -> AnyGradientIsAnomalous) and global-norm gradient
+        // clipping both walk grad.Data.Span on the host, so disable the GPU fast path
+        // whenever either is active — otherwise the step is still host-bound and not
+        // graph-capturable as advertised. (Those host scans run above this point.)
+        bool hostGradientScanActive = ShouldRunAnomalyGuard()
+            || (GradientOptions.EnableGradientClipping
+                && GradientOptions.GradientClippingMethod == GradientClippingMethod.ByNorm);
         bool gpuAdam = isFloat && !_options.UseAMSGrad
+            && !hostGradientScanActive
             && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 

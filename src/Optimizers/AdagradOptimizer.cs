@@ -177,6 +177,9 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         _accumulatedSquaredGradients = new Vector<T>(InterfaceGuard.Parameterizable(currentSolution).GetParameters().Length);
+        // Clear the tape-side accumulator so a reused optimizer instance starts a
+        // new run with fresh Adagrad state instead of bleeding the previous run's.
+        _tapeAccSqGrad.Clear();
         InitializeAdaptiveParameters();
 
         for (int epoch = 0; epoch < _options.MaxIterations; epoch++)

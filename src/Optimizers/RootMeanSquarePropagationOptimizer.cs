@@ -473,6 +473,9 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
         base.Reset();
         _t = 0;
         _squaredGradient = Vector<T>.Empty();
+        // Clear the tape-side per-parameter squared averages so a reused instance
+        // does not carry RMSProp history into the next run.
+        _tapeSqGrad.Clear();
     }
 
     /// <summary>

@@ -138,6 +138,9 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         var previousStepData = PrepareAndEvaluateSolution(currentSolution, inputData);
 
         _velocity = new Vector<T>(InterfaceGuard.Parameterizable(currentSolution).GetParameters().Length);
+        // Clear the tape-side velocity so a reused optimizer instance starts a new
+        // run with fresh momentum instead of bleeding the previous run's.
+        _tapeVelocity.Clear();
         InitializeAdaptiveParameters();
 
         for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
