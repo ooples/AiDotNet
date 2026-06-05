@@ -946,6 +946,48 @@ public class TabDDPMGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         AuxLayerSerialization.Write(writer, _numericalOutputHead);
         AuxLayerSerialization.Write(writer, _categoricalOutputHead);
         AuxLayerSerialization.Write(writer, _timestepProjection);
+
+        // Persist the preprocessing / column layout needed to reconstruct generated samples back
+        // into the original column space. The diffusion processes hold no learned parameters and
+        // are reconstructed from the options on load.
+        writer.Write(_numCategoricalFeatures);
+        WriteIntList(writer, _numericalColumnIndices);
+        WriteIntList(writer, _categoricalColumnIndices);
+        WriteIntList(writer, _categoricalColumnWidths);
+        WriteDoubleArray(writer, _quantileMeans);
+        WriteDoubleArray(writer, _quantileStds);
+        writer.Write(_columns.Count);
+        foreach (var column in _columns)
+        {
+            column.Serialize(writer);
+        }
+    }
+
+    private static void WriteIntList(BinaryWriter writer, List<int> values)
+    {
+        writer.Write(values.Count);
+        foreach (int value in values) writer.Write(value);
+    }
+
+    private static void ReadIntListInto(BinaryReader reader, List<int> target)
+    {
+        target.Clear();
+        int count = reader.ReadInt32();
+        for (int i = 0; i < count; i++) target.Add(reader.ReadInt32());
+    }
+
+    private static void WriteDoubleArray(BinaryWriter writer, double[] values)
+    {
+        writer.Write(values.Length);
+        foreach (double value in values) writer.Write(value);
+    }
+
+    private static double[] ReadDoubleArray(BinaryReader reader)
+    {
+        int count = reader.ReadInt32();
+        var values = new double[count];
+        for (int i = 0; i < count; i++) values[i] = reader.ReadDouble();
+        return values;
     }
 
     /// <inheritdoc/>
@@ -978,6 +1020,30 @@ public class TabDDPMGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         _timestepProjection = AuxLayerSerialization.Read<T>(reader,
             (inShape, outShape) => new FullyConnectedLayer<T>(outShape[outShape.Length - 1], silu))
             as FullyConnectedLayer<T>;
+
+        _numCategoricalFeatures = reader.ReadInt32();
+        ReadIntListInto(reader, _numericalColumnIndices);
+        ReadIntListInto(reader, _categoricalColumnIndices);
+        ReadIntListInto(reader, _categoricalColumnWidths);
+        _quantileMeans = ReadDoubleArray(reader);
+        _quantileStds = ReadDoubleArray(reader);
+        int columnCount = reader.ReadInt32();
+        _columns = new List<ColumnMetadata>(columnCount);
+        for (int i = 0; i < columnCount; i++)
+        {
+            _columns.Add(ColumnMetadata.Deserialize(reader));
+        }
+
+        // The diffusion processes carry no learned parameters; rebuild them from the options so the
+        // restored model can run the generation denoising loop.
+        if (IsFitted)
+        {
+            _gaussianDiffusion = new GaussianDiffusion<T>(
+                _options.NumTimesteps, _options.BetaStart, _options.BetaEnd,
+                _options.BetaSchedule, _random);
+            _multinomialDiffusion = new MultinomialDiffusion<T>(
+                _options.NumCategoricalDiffusionSteps, _options.BetaStart, _options.BetaEnd, _random);
+        }
     }
 
     /// <inheritdoc/>
