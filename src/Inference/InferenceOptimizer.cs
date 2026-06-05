@@ -827,7 +827,10 @@ internal class InferenceOptimizer<T>
             }
             // Quantize the sublayers hosted inside a composite encoder block (the
             // default layout since LayerHelper emits TransformerEncoderBlock) — the
-            // top-level MHA/Dense cases above never see them.
+            // top-level MHA/Dense cases above never see them. HEAD's version covers
+            // the attention slot AND the FFN sublayers (the block exposes
+            // ReplaceFfnUp / ReplaceFfnDown so the quantized wrapper takes their
+            // place without breaking the registered-sublayer/parameter contract).
             else if (model.Layers[i] is TransformerEncoderBlock<float> quantEncBlock)
             {
                 if (quantEncBlock.AttentionLayer is MultiHeadAttentionLayer<float> blockMha)
