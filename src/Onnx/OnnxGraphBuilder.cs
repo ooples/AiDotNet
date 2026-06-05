@@ -120,4 +120,103 @@ public sealed class OnnxGraphBuilder
 
     // Suppress unused-field warning until layer converters use this directly.
     internal GraphProto GraphForTesting => _graph;
+
+    // ── Convenience helpers (float32 — v0.1 supports float only) ─────────────
+
+    /// <summary>
+    /// Adds a float32 constant initializer with the given shape. Used by layer
+    /// converters to ship weights/biases into the graph.
+    /// </summary>
+    public string AddFloatInitializer(string namePrefix, float[] data, int[] shape)
+    {
+        if (data is null) throw new ArgumentNullException(nameof(data));
+        if (shape is null) throw new ArgumentNullException(nameof(shape));
+        long expected = 1;
+        foreach (var d in shape) expected *= d;
+        if (data.Length != expected)
+        {
+            throw new ArgumentException(
+                $"Initializer '{namePrefix}' data length {data.Length} does not match shape product {expected}.",
+                nameof(data));
+        }
+
+        var name = NextTensorName(namePrefix);
+        var tensor = new TensorProto
+        {
+            Name = name,
+            DataType = (int)TensorProto.Types.DataType.Float,
+        };
+        foreach (var d in shape) tensor.Dims.Add(d);
+        tensor.FloatData.AddRange(data);
+        _graph.Initializer.Add(tensor);
+        return name;
+    }
+
+    /// <summary>
+    /// Declares a float32 graph input with the given (fixed or symbolic) shape.
+    /// Use -1 in <paramref name="shape"/> for a dimension that is dynamic at
+    /// runtime (e.g., batch size); -1 becomes a symbolic dim named "batch_N".
+    /// </summary>
+    public void AddFloatInput(string name, int[] shape)
+    {
+        _graph.Input.Add(MakeFloatValueInfo(name, shape));
+    }
+
+    /// <summary>Declares a float32 graph output. See <see cref="AddFloatInput"/> for shape semantics.</summary>
+    public void AddFloatOutput(string name, int[] shape)
+    {
+        _graph.Output.Add(MakeFloatValueInfo(name, shape));
+    }
+
+    private static ValueInfoProto MakeFloatValueInfo(string name, int[] shape)
+    {
+        if (string.IsNullOrWhiteSpace(name)) throw new ArgumentNullException(nameof(name));
+        if (shape is null) throw new ArgumentNullException(nameof(shape));
+
+        var tensorType = new TypeProto.Types.Tensor
+        {
+            ElemType = (int)TensorProto.Types.DataType.Float,
+            Shape = new TensorShapeProto(),
+        };
+        for (int i = 0; i < shape.Length; i++)
+        {
+            var dim = new TensorShapeProto.Types.Dimension();
+            if (shape[i] >= 0)
+            {
+                dim.DimValue = shape[i];
+            }
+            else
+            {
+                dim.DimParam = $"batch_{i}";
+            }
+            tensorType.Shape.Dim.Add(dim);
+        }
+        return new ValueInfoProto
+        {
+            Name = name,
+            Type = new TypeProto { TensorType = tensorType },
+        };
+    }
+
+    /// <summary>
+    /// Adds an ONNX op node with named inputs and outputs and optional attributes.
+    /// Returns the node so callers (rare) can attach extra attributes; most layer
+    /// converters can ignore the return value.
+    /// </summary>
+    public NodeProto AddOp(string opType, string[] inputs, string[] outputs, string? name = null)
+    {
+        if (string.IsNullOrWhiteSpace(opType)) throw new ArgumentNullException(nameof(opType));
+        if (inputs is null) throw new ArgumentNullException(nameof(inputs));
+        if (outputs is null) throw new ArgumentNullException(nameof(outputs));
+
+        var node = new NodeProto
+        {
+            OpType = opType,
+            Name = name ?? NextTensorName(opType.ToLowerInvariant() + "_node"),
+        };
+        foreach (var i in inputs) node.Input.Add(i);
+        foreach (var o in outputs) node.Output.Add(o);
+        _graph.Node.Add(node);
+        return node;
+    }
 }
