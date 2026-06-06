@@ -110,7 +110,16 @@ internal static class Program
                     taskType: NeuralNetworkTaskType.Regression,
                     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 4);
                 Console.WriteLine($"[mode={mode}] Constructing Helix (paper-scale 7B VLA)...");
-                network = new Helix<double>(arch);
+                var helixOpts = new AiDotNet.VisionLanguage.Robotics.HelixOptions();
+                if (Environment.GetEnvironmentVariable("WEIGHT_STREAM") == "1")
+                {
+                    helixOpts.WeightOffloadOptions = new AiDotNet.Tensors.LinearAlgebra.GpuOffloadOptions
+                    {
+                        StreamingPoolMaxResidentBytes = 20L * 1024 * 1024 * 1024,
+                    };
+                    Console.WriteLine("[stream] WeightOffloadOptions: disk streaming, 20GB resident cap");
+                }
+                network = new Helix<double>(arch, helixOpts);
                 input = new Tensor<double>(new[] { 1, 4, 1024 });
                 for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble();
                 break;
@@ -211,6 +220,7 @@ internal static class Program
             Console.WriteLine($"  ctor:    {swCtor.ElapsedMilliseconds} ms");
             Console.WriteLine($"  warm:    {swWarm.ElapsedMilliseconds} ms");
             Console.WriteLine($"  train:   {swTrainTotal} ms ({trainReps} step)");
+            Console.WriteLine($"  peakWS:  {Environment.WorkingSet / (1024 * 1024)} MB (process working set)");
             return 0;
         }
 

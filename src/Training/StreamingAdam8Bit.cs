@@ -124,79 +124,148 @@ internal sealed class StreamingAdam8Bit<T>
         if (biasCorr1 <= 0) biasCorr1 = 1.0;
         if (biasCorr2 <= 0) biasCorr2 = 1.0;
 
+        // Fast path: raw double spans (no per-element Tensor indexer / NumOps
+        // virtual dispatch). This is the dominant cost at foundation scale —
+        // billions of elements — so the spanned path is ~10× the generic one and
+        // the JIT auto-vectorizes the FMA-heavy moment math. Only valid for
+        // non-view, full-storage parameter tensors (layer weights are exactly
+        // that); anything else falls through to the generic path.
+        if (typeof(T) == typeof(double)
+            && (object)param is Tensor<double> pTen
+            && (object)grad is Tensor<double> gTen)
+        {
+            var pSpan = pTen.Data.Span;
+            var gSpan = gTen.Data.Span;
+            if (pSpan.Length >= length && gSpan.Length >= length)
+            {
+                ApplyDouble(pSpan, gSpan, st, numBlocks, length, biasCorr1, biasCorr2);
+                return;
+            }
+        }
+
+        ApplyGeneric(param, grad, st, numBlocks, length, biasCorr1, biasCorr2);
+    }
+
+    private void ApplyDouble(
+        Span<double> p, ReadOnlySpan<double> g, MomentState st,
+        int numBlocks, int length, double biasCorr1, double biasCorr2)
+    {
+        double beta1 = _beta1, beta2 = _beta2, oneMinusB1 = 1.0 - _beta1, oneMinusB2 = 1.0 - _beta2;
+        double lr = _lr, eps = _epsilon, wd = _weightDecay, maxStep = _lr * _maxUpdateRatio;
+        double invBc1 = 1.0 / biasCorr1, invBc2 = 1.0 / biasCorr2;
+        double[] mNew = _mScratch, vNew = _vScratch;
+        byte[] mQ = st.MQuant, vQ = st.VQuant;
+
         for (int b = 0; b < numBlocks; b++)
         {
             int start = b * _blockSize;
             int end = Math.Min(start + _blockSize, length);
-            int blockLen = end - start;
-
             double mScale = st.MScale[b];
             double vScale = st.VScale[b];
-
-            // Updated full-precision moments for this block, in reusable scratch.
-            double newMMaxAbs = 0.0;
-            double newVMax = 0.0;
-            double[] mNew = _mScratch;
-            double[] vNew = _vScratch;
+            double newMMaxAbs = 0.0, newVMax = 0.0;
 
             for (int i = start; i < end; i++)
             {
-                double g = _ops.ToDouble(grad[i]);
-                // Skip non-finite gradients (PyTorch GradScaler semantics): do
-                // not poison the moment state with NaN/Inf — leave this element's
-                // moments and weight unchanged this step.
-                if (double.IsNaN(g) || double.IsInfinity(g))
+                int li = i - start;
+                double gi = g[i];
+                double mPrev = (mQ[i] - 128) * mScale;   // signed dequant
+                double vPrev = vQ[i] * vScale;            // unsigned dequant
+
+                if (double.IsNaN(gi) || double.IsInfinity(gi))
                 {
-                    int liSkip = i - start;
-                    mNew[liSkip] = (st.MQuant[i] - 128) * mScale;
-                    vNew[liSkip] = st.VQuant[i] * vScale;
-                    double amSkip = Math.Abs(mNew[liSkip]);
-                    if (amSkip > newMMaxAbs) newMMaxAbs = amSkip;
-                    if (vNew[liSkip] > newVMax) newVMax = vNew[liSkip];
-                    continue;
+                    // Skip non-finite gradient: keep prior moments + weight.
+                    mNew[li] = mPrev; vNew[li] = vPrev;
+                }
+                else
+                {
+                    double m = beta1 * mPrev + oneMinusB1 * gi;
+                    double v = beta2 * vPrev + oneMinusB2 * gi * gi;
+                    double mHat = m * invBc1;
+                    double vHat = v * invBc2;
+
+                    double pv = p[i];
+                    if (wd != 0.0) pv -= lr * wd * pv;
+                    double update = lr * mHat / (Math.Sqrt(vHat) + eps);
+                    // Trust bound: 8-bit quantization can round vHat→0, which
+                    // would blow up the step; clamp to a small multiple of lr
+                    // (real Adam steps are ~lr) and catch any residual NaN.
+                    if (!(update >= -maxStep)) update = update > 0 ? maxStep : -maxStep;
+                    else if (update > maxStep) update = maxStep;
+                    p[i] = pv - update;
+                    mNew[li] = m; vNew[li] = v;
                 }
 
-                // Dequantize prior moments.
-                double mPrev = (st.MQuant[i] - 128) * mScale;   // signed
-                double vPrev = st.VQuant[i] * vScale;            // unsigned
-
-                double m = _beta1 * mPrev + (1.0 - _beta1) * g;
-                double v = _beta2 * vPrev + (1.0 - _beta2) * g * g;
-
-                double mHat = m / biasCorr1;
-                double vHat = v / biasCorr2;
-
-                double p = _ops.ToDouble(param[i]);
-                // Decoupled weight decay (AdamW) when weightDecay > 0.
-                if (_weightDecay != 0.0) p -= _lr * _weightDecay * p;
-                double update = _lr * mHat / (Math.Sqrt(vHat) + _epsilon);
-                // Trust bound on the per-parameter step. 8-bit quantization can
-                // round a small second moment to zero, which would make
-                // mHat/(sqrt(vHat)+eps) explode; clamping the update to a small
-                // multiple of the learning rate (real Adam steps are ~lr) keeps
-                // the optimizer stable under quantization noise without changing
-                // the update direction. Also defends against any residual NaN.
-                double maxStep = _lr * _maxUpdateRatio;
-                if (!(update >= -maxStep)) update = update > 0 ? maxStep : -maxStep; // catches NaN too
-                else if (update > maxStep) update = maxStep;
-                p -= update;
-                param[i] = _ops.FromDouble(p);
-
-                int li = i - start;
-                mNew[li] = m;
-                vNew[li] = v;
-                double am = Math.Abs(m);
+                double am = Math.Abs(mNew[li]);
                 if (am > newMMaxAbs) newMMaxAbs = am;
-                if (v > newVMax) newVMax = v;
+                if (vNew[li] > newVMax) newVMax = vNew[li];
             }
 
-            // Requantize this block's moments with refreshed scales.
-            double newMScale = newMMaxAbs / 127.0;
-            if (newMScale < 1e-10) newMScale = 1e-10;
-            double newVScale = newVMax / 255.0;
-            if (newVScale < 1e-10) newVScale = 1e-10;
-            st.MScale[b] = newMScale;
-            st.VScale[b] = newVScale;
+            double newMScale = newMMaxAbs / 127.0; if (newMScale < 1e-10) newMScale = 1e-10;
+            double newVScale = newVMax / 255.0;     if (newVScale < 1e-10) newVScale = 1e-10;
+            st.MScale[b] = newMScale; st.VScale[b] = newVScale;
+            double invM = 1.0 / newMScale, invV = 1.0 / newVScale;
+
+            for (int i = start; i < end; i++)
+            {
+                int li = i - start;
+                int mq = (int)Math.Round(mNew[li] * invM);
+                if (mq < -127) mq = -127; else if (mq > 127) mq = 127;
+                mQ[i] = (byte)(mq + 128);
+                int vq = (int)Math.Round(vNew[li] * invV);
+                if (vq < 0) vq = 0; else if (vq > 255) vq = 255;
+                vQ[i] = (byte)vq;
+            }
+        }
+    }
+
+    private void ApplyGeneric(
+        Tensor<T> param, Tensor<T> grad, MomentState st,
+        int numBlocks, int length, double biasCorr1, double biasCorr2)
+    {
+        double[] mNew = _mScratch, vNew = _vScratch;
+        double maxStep = _lr * _maxUpdateRatio;
+
+        for (int b = 0; b < numBlocks; b++)
+        {
+            int start = b * _blockSize;
+            int end = Math.Min(start + _blockSize, length);
+            double mScale = st.MScale[b];
+            double vScale = st.VScale[b];
+            double newMMaxAbs = 0.0, newVMax = 0.0;
+
+            for (int i = start; i < end; i++)
+            {
+                int li = i - start;
+                double g = _ops.ToDouble(grad[i]);
+                double mPrev = (st.MQuant[i] - 128) * mScale;
+                double vPrev = st.VQuant[i] * vScale;
+
+                if (double.IsNaN(g) || double.IsInfinity(g))
+                {
+                    mNew[li] = mPrev; vNew[li] = vPrev;
+                }
+                else
+                {
+                    double m = _beta1 * mPrev + (1.0 - _beta1) * g;
+                    double v = _beta2 * vPrev + (1.0 - _beta2) * g * g;
+                    double mHat = m / biasCorr1;
+                    double vHat = v / biasCorr2;
+                    double p = _ops.ToDouble(param[i]);
+                    if (_weightDecay != 0.0) p -= _lr * _weightDecay * p;
+                    double update = _lr * mHat / (Math.Sqrt(vHat) + _epsilon);
+                    if (!(update >= -maxStep)) update = update > 0 ? maxStep : -maxStep;
+                    else if (update > maxStep) update = maxStep;
+                    param[i] = _ops.FromDouble(p - update);
+                    mNew[li] = m; vNew[li] = v;
+                }
+                double am = Math.Abs(mNew[li]);
+                if (am > newMMaxAbs) newMMaxAbs = am;
+                if (vNew[li] > newVMax) newVMax = vNew[li];
+            }
+
+            double newMScale = newMMaxAbs / 127.0; if (newMScale < 1e-10) newMScale = 1e-10;
+            double newVScale = newVMax / 255.0;     if (newVScale < 1e-10) newVScale = 1e-10;
+            st.MScale[b] = newMScale; st.VScale[b] = newVScale;
 
             for (int i = start; i < end; i++)
             {
@@ -204,7 +273,6 @@ internal sealed class StreamingAdam8Bit<T>
                 int mq = (int)Math.Round(mNew[li] / newMScale);
                 if (mq < -127) mq = -127; else if (mq > 127) mq = 127;
                 st.MQuant[i] = (byte)(mq + 128);
-
                 int vq = (int)Math.Round(vNew[li] / newVScale);
                 if (vq < 0) vq = 0; else if (vq > 255) vq = 255;
                 st.VQuant[i] = (byte)vq;
