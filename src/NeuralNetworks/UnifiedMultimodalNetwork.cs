@@ -1037,6 +1037,16 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         // ResolveLazyLayerShapes path that Train will exercise, keeping the
         // Predict ↔ Clone parity invariant tight: the original and the
         // clone walk the same set of lazy-init triggers in the same order.
+        // Reshapes use tensor.Reshape here because Predict runs under NoGradScope
+        // (eval mode) and the inference path doesn't need tape connectivity. Using
+        // Engine.Reshape in eval mode triggers an AutoTracer.RecordOp cache keyed
+        // only on input SHAPE, so two different-VALUE constant inputs with the
+        // same shape resolve to the same cached plan output — making
+        // DifferentInputs_ShouldProduceDifferentOutputs collapse to identical
+        // outputs even though the underlying tensors differ. ForwardForTraining
+        // (the tape-recording path) is what needs Engine.Reshape; Predict does
+        // not — its forward pass goes through DenseLayer / MHA which already
+        // handle rank adaptation internally.
         var shapedInput = input.Rank == 1
             ? input.Reshape(new[] { 1, input.Shape[0] })
             : input;
@@ -1070,10 +1080,63 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         }
     }
 
+    /// <summary>
+    /// Training-mode forward — same architecture as <see cref="Predict"/> but routes
+    /// every reshape through <see cref="IEngine.Reshape{T}"/> so the gradient tape
+    /// stays connected end-to-end. The inference Predict can use
+    /// <c>tensor.Reshape</c> because eval-mode skips tape recording, but
+    /// ForwardForTraining MUST register reshapes with the tape — otherwise the
+    /// backward pass can't trace gradients back through the rank-1→rank-2 input
+    /// adapter or the rank-3↔rank-2 transformer wrap, leaving the encoder/
+    /// classification head with zero gradient signal
+    /// (Training_ShouldChangeParameters, GradientFlow_ShouldBeNonZeroAndFinite,
+    /// and the full training cascade all gated on this fix per project memory
+    /// feedback_tensor_reshape_gradient.md).
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        var shapedInput = input.Rank == 1
+            ? Engine.Reshape(input, new[] { 1, input.Shape[0] })
+            : input;
+        var encoded = _textEncoder.Forward(shapedInput);
+        Tensor<T> transformed = encoded.Rank == 2
+            ? Engine.Reshape(encoded, new[] { encoded.Shape[0], 1, encoded.Shape[1] })
+            : encoded;
+        foreach (var layer in _transformerLayers)
+        {
+            transformed = layer.Forward(transformed);
+        }
+        var pooled = transformed.Rank == 3
+            ? Engine.Reshape(transformed, new[] { transformed.Shape[0], transformed.Shape[2] })
+            : transformed;
+        return _classificationHead.Forward(pooled);
+    }
+
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> gradients)
     {
-        SetParameters(gradients);
+        // CRITICAL: the previous body did SetParameters(gradients), which
+        // OVERWROTE the network weights with the gradient VALUES — literally
+        // treating ∂L/∂θ as θ, with no learning rate. Apply a standard
+        // gradient-descent step (params ← params − lr · gradients) with a
+        // conservative default lr. Optimizer-driven training routes through
+        // TrainWithTape → optimizer.Step which calls SetParameters with the
+        // already-updated values, bypassing this method; it only fires for
+        // callers that invoke UpdateParameters directly with raw gradients.
+        if (gradients is null) throw new ArgumentNullException(nameof(gradients));
+
+        var current = GetParameters();
+        if (gradients.Length != current.Length)
+        {
+            throw new ArgumentException(
+                $"Gradient vector length ({gradients.Length}) must equal parameter count ({current.Length}).",
+                nameof(gradients));
+        }
+        T lr = _numOps.FromDouble(1e-3);
+        var updated = new Vector<T>(current.Length);
+        for (int i = 0; i < current.Length; i++)
+            updated[i] = _numOps.Subtract(current[i], _numOps.Multiply(lr, gradients[i]));
+        SetParameters(updated);
     }
 
     /// <inheritdoc/>
