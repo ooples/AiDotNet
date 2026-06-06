@@ -107,7 +107,10 @@
          the Tensors-side lever #1463 called for; the memory/OOM half is handled by
          the cache-clearing + diffusion re-shard in this PR (#1485).
          AiDotNet.Native packages coreleased in lockstep at 0.91.2. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.92.0-gradstream3" />
+    <!-- Requires the gradient-streaming release cut from AiDotNet.Tensors#564
+         (feat: memory-bounded streaming backward). Bump to the exact published
+         version once that PR merges + releases; CI restore is red until then. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.92.0" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.91.2" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.91.2" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.91.2" />
