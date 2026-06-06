@@ -156,7 +156,17 @@ public class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
     {
         _options = options ?? new SigLIP2Options();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // SigLIP2 is a paper-scale ViT (Tschannen et al. 2025): VisionEmbeddingDim
+        // 768 with many transformer blocks. The framework AdamW default LR (1e-3)
+        // is too aggressive for a from-scratch ViT of this width — gradients
+        // accumulate over a handful of steps and the weights blow up to NaN
+        // (Training_ShouldReduceLoss / ForwardPass_ShouldBeFinite_AfterTraining).
+        // SigLIP/ViT fine-tuning uses 1e-4..1e-5; without LR warmup a deep ViT
+        // overshoots a far target in the first few un-warmed steps (loss rises),
+        // so pin the conservative end (1e-5) as the paper-faithful stable default.
+        // Gradient clipping (norm 1.0) is on by AdamW default.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this, new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-5 });
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.VisionEmbeddingDim;
@@ -472,13 +482,35 @@ public class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Predict returns the VISION-ENCODER output (the first <c>_visionEncoderEnd</c>
+    /// layers), not a sequential pass over the whole Layers list (which also
+    /// contains the text encoder, captioning decoder, and MIM decoder). The base
+    /// <see cref="NeuralNetworks.NeuralNetworkBase{T}.ForwardForTraining"/> runs
+    /// every layer in order, so training would optimize the full-stack output
+    /// while the test measures the vision-encoder output — the loss being
+    /// minimized would not be the loss being measured, and the measured loss could
+    /// rise. Mirror Predict here so training optimizes the same output.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        var current = input;
+        for (int i = 0; i < _visionEncoderEnd && i < Layers.Count; i++)
+            current = Layers[i].Forward(current);
+        return current;
+    }
+
+    /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // Use the model's configured AdamW (paper-faithful LR) rather than the
+            // base default optimizer, so the stable LR set in the constructor
+            // actually drives the update.
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

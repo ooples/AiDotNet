@@ -2168,6 +2168,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             sb.AppendLine($"    protected override int[] InputShape => new[] {{ 1, 4, {vlVisionDim} }};");
             sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 1, 4, {vlVisionDim} }};");
+
+            // Paper-scale VL encoders (e.g. SigLIP2 — ViT with VisionEmbeddingDim
+            // 768 and many transformer blocks) take ≳ 1 s per Adam step, so the
+            // default 10/30/50-iteration training invariants are both too slow and
+            // numerically fragile (gradients accumulate to NaN over dozens of
+            // steps). Apply the same iteration-count override the generic
+            // paper-scale vision branch uses so the train path is exercised as a
+            // smoke test without watering down the paper-faithful weight defaults.
+            if (IsPaperScaleVisionLanguageModel(model.ClassName))
+            {
+                sb.AppendLine("    protected override int TrainingIterations => 1;");
+                sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
+                sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
+                sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
+                sb.AppendLine("    protected override int MemorizationTaskIterations => 2;");
+                sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
+            }
         }
         else if (isVisionModel)
         {
@@ -4570,6 +4587,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         {
             "BiomedCLIP" => true,
             "DFNCLIP" => true,
+            // SigLIP2 (Tschannen et al. 2025): ViT VisionEmbeddingDim=768 with a
+            // deep vision+text encoder — ≳ 1 s per Adam step on CPU, so the
+            // default training-iteration counts overflow the timeout and let
+            // gradients accumulate to NaN. Routed through the VL token-feature
+            // InputShape branch, which applies this override.
+            "SigLIP2" => true,
             // Gemma3 (Google 2025): VisionDim=1152, DecoderDim=3584, 27 vision
             // layers, 36 decoder layers, ImageSize=896 SigLIP-SO. Default Adam
             // step OOMs the test runner before even completing the warm-up
