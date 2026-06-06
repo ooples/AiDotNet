@@ -1113,30 +1113,18 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
     }
 
     /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
+    public override void UpdateParameters(Vector<T> parameters)
     {
-        // CRITICAL: the previous body did SetParameters(gradients), which
-        // OVERWROTE the network weights with the gradient VALUES — literally
-        // treating ∂L/∂θ as θ, with no learning rate. Apply a standard
-        // gradient-descent step (params ← params − lr · gradients) with a
-        // conservative default lr. Optimizer-driven training routes through
-        // TrainWithTape → optimizer.Step which calls SetParameters with the
-        // already-updated values, bypassing this method; it only fires for
-        // callers that invoke UpdateParameters directly with raw gradients.
-        if (gradients is null) throw new ArgumentNullException(nameof(gradients));
-
-        var current = GetParameters();
-        if (gradients.Length != current.Length)
-        {
-            throw new ArgumentException(
-                $"Gradient vector length ({gradients.Length}) must equal parameter count ({current.Length}).",
-                nameof(gradients));
-        }
-        T lr = _numOps.FromDouble(1e-3);
-        var updated = new Vector<T>(current.Length);
-        for (int i = 0; i < current.Length; i++)
-            updated[i] = _numOps.Subtract(current[i], _numOps.Multiply(lr, gradients[i]));
-        SetParameters(updated);
+        // NeuralNetworkBase.UpdateParameters contract: the caller passes the
+        // NEW parameter values (post-optimizer-step), NOT raw gradients. The
+        // parameter name is `parameters` on the base abstract — the prior
+        // override here used `gradients` and treated them as the new params
+        // too (which happens to be correct), but I temporarily mis-read the
+        // contract as "raw gradients" and added an lr·gradients subtract that
+        // produced double-application when the optimizer ALSO did Adam math
+        // upstream. Forward unchanged to SetParameters, which is the
+        // documented contract.
+        SetParameters(parameters);
     }
 
     /// <inheritdoc/>
