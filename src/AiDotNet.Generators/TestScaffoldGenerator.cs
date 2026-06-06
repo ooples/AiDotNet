@@ -2111,6 +2111,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] InputShape => new[] { 36, 2048 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
+        else if (model.ClassName == "SegMamba")
+        {
+            // SegMamba (Xing et al. 2024) is a 3D volumetric segmentation model: it
+            // consumes a [C, D, H, W] volume (channels = imaging modalities) and its
+            // encoder downsamples by 2x five times (stem + 4 stages), so the spatial
+            // dims must be divisible by 16. Emit a small cubic single-channel volume;
+            // the lazy stem conv infers the channel count. The generic vision branch
+            // would emit a rank-3 [3, spatial, spatial], which the 3D model rejects.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 16, 16, 16 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 14, 16, 16, 16 };");
+        }
         else if (model.ClassName == "PointNetPlusPlus")
         {
             // PointNet++ (Qi et al. 2017) consumes a raw point cloud of shape

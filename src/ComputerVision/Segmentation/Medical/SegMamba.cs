@@ -1,4 +1,5 @@
-﻿using System.IO;
+using System.IO;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -6,6 +7,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Layers.SSM;
 using AiDotNet.Optimizers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
@@ -13,47 +15,45 @@ using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 namespace AiDotNet.ComputerVision.Segmentation.Medical;
 
 /// <summary>
-/// SegMamba: Long-range sequential modeling for 3D medical segmentation.
+/// SegMamba: long-range sequential modeling Mamba for 3D medical image segmentation
+/// (Xing et al., 2024, arXiv:2401.13560).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// <b>For Beginners:</b> 3D medical volume segmentation. Whole-body CT segmentation.
-///
-/// Common use cases:
-/// - 3D medical volume segmentation
-/// - Whole-body CT segmentation
-/// - Large volume medical data processing
-/// - Long-range dependency modeling in 3D
+/// <b>Architecture (paper-faithful).</b> SegMamba is a 3D U-Net whose encoder replaces the usual
+/// self-attention / convolution stack with a Mamba state-space backbone:
+/// </para>
+/// <list type="number">
+///   <item><b>Stem</b>: a single 7×7×7 stride-2 3D convolution that embeds the input volume into
+///         the first feature scale.</item>
+///   <item><b>Encoder</b>: four hierarchical stages. Stage <c>i</c> applies (for <c>i&gt;0</c>) an
+///         InstanceNorm + 2×2×2 stride-2 downsampling convolution, then a <b>Gated Spatial
+///         Convolution (GSC)</b> module for local feature enhancement, then <c>depths[i]</c>
+///         <b>TSMamba</b> blocks. Each TSMamba block normalizes the feature volume and runs a
+///         <b>Tri-orientated Mamba (ToM)</b>: the 3-D feature is flattened to a token sequence and
+///         scanned by a Mamba SSM in three orientations — forward, reverse, and inter-slice — whose
+///         outputs are summed (§3.2 of the paper).</item>
+///   <item><b>Decoder</b>: a CNN decoder that trilinearly upsamples and fuses the four encoder
+///         feature scales through skip connections, ending in a 1×1×1 convolution to the class
+///         logits at full input resolution.</item>
+/// </list>
+/// <para>
+/// The Mamba scan gives linear complexity in the number of voxels, which is what makes whole-volume
+/// 3D segmentation tractable where attention would be quadratic.
 /// </para>
 /// <para>
-/// <b>Technical Details:</b>
-/// - Tri-orientated Mamba (ToM) module for 3D spatial modeling
-/// - Scans volumes along three orthogonal orientations
-/// - Linear complexity for 3D volume processing
-/// - Gated Spatial Convolution for local feature enhancement
+/// <b>For Beginners:</b> This model labels every voxel of a 3-D medical scan (e.g. a CT volume) with
+/// the organ/structure it belongs to. It "reads" the whole volume as a long sequence in several
+/// directions so it can relate far-apart regions cheaply.
 /// </para>
-/// <para>
-/// <b>Reference:</b> Xing et al., "SegMamba: Long-range Sequential Modeling Mamba For 3D Medical Image Segmentation", arXiv 2024.
-/// </para>
+/// <para><b>Reference:</b> Xing et al., "SegMamba: Long-range Sequential Modeling Mamba For 3D
+/// Medical Image Segmentation", arXiv:2401.13560, 2024.</para>
 /// </remarks>
-/// <example>
-/// <code>
-/// // Create a SegMamba model for 3D medical volume segmentation
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.ThreeDimensional,
-///     taskType: NeuralNetworkTaskType.MultiClassClassification,
-///     inputHeight: 256, inputWidth: 256, inputDepth: 1, outputSize: 14);
-/// var model = new SegMamba&lt;double&gt;(architecture, numClasses: 14);
-///
-/// // Or load a pre-trained ONNX model for whole-body CT segmentation
-/// var onnxModel = new SegMamba&lt;double&gt;(architecture, "segmamba.onnx", numClasses: 14);
-/// </code>
-/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Segmentation)]
-[ModelComplexity(ModelComplexity.Medium)]
+[ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SegMamba: Long-range Sequential Modeling Mamba For 3D Medical Image Segmentation", "https://arxiv.org/abs/2401.13560", Year = 2024, Authors = "Xing et al.")]
 public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
@@ -62,48 +62,71 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
-    private readonly int _height, _width, _channels, _numClasses;
+    private readonly int _inChannels, _numClasses;
     private readonly int[] _channelDims;
-    private readonly int _decoderDim;
     private readonly int[] _depths;
+    private readonly int _stateDim;
     private readonly double _dropRate;
     private readonly bool _useNativeMode;
     private readonly string? _onnxModelPath;
     private InferenceSession? _onnxSession;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _disposed;
-    private int _encoderLayerEnd;
+
+    // --- Typed layer references for the custom (skip-connected) forward pass.
+    // All of these are ALSO held in the base Layers list (parameter management);
+    // they are re-derived from Layers after deserialization via ExtractLayerReferences.
+    private Conv3DLayer<T>? _stem;
+    private readonly List<InstanceNormalizationLayer<T>> _downNorms = new();
+    private readonly List<Conv3DLayer<T>> _downConvs = new();
+    private readonly List<GscModule> _gsc = new();
+    private readonly List<List<TomModule>> _tom = new();
+    private readonly List<InstanceNormalizationLayer<T>> _encNorms = new();
+    private readonly List<Upsample3DLayer<T>> _decUps = new();
+    private readonly List<Conv3DLayer<T>> _decConvs = new();
+    private readonly List<InstanceNormalizationLayer<T>> _decNorms = new();
+    private Conv3DLayer<T>? _outConv;
     #endregion
 
+    private sealed class GscModule
+    {
+        public readonly Conv3DLayer<T> Proj;
+        public readonly InstanceNormalizationLayer<T> NormA;
+        public readonly Conv3DLayer<T> Proj2;
+        public readonly InstanceNormalizationLayer<T> NormB;
+        public readonly Conv3DLayer<T> Proj3;
+        public readonly InstanceNormalizationLayer<T> NormC;
+
+        public GscModule(Conv3DLayer<T> proj, InstanceNormalizationLayer<T> normA,
+            Conv3DLayer<T> proj2, InstanceNormalizationLayer<T> normB,
+            Conv3DLayer<T> proj3, InstanceNormalizationLayer<T> normC)
+        {
+            Proj = proj; NormA = normA; Proj2 = proj2; NormB = normB; Proj3 = proj3; NormC = normC;
+        }
+    }
+
+    private sealed class TomModule
+    {
+        public readonly InstanceNormalizationLayer<T> Norm;
+        public readonly MambaBlock<T> Forward;
+        public readonly MambaBlock<T> Reverse;
+        public readonly MambaBlock<T> InterSlice;
+
+        public TomModule(InstanceNormalizationLayer<T> norm, MambaBlock<T> forward,
+            MambaBlock<T> reverse, MambaBlock<T> interSlice)
+        {
+            Norm = norm; Forward = forward; Reverse = reverse; InterSlice = interSlice;
+        }
+    }
+
     #region Properties
-    /// <summary>
-    /// Gets whether this SegMamba instance supports training.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Returns <c>true</c> in native mode, <c>false</c> in ONNX mode.
-    /// </para>
-    /// </remarks>
     public override bool SupportsTraining => _useNativeMode;
     internal bool UseNativeMode => _useNativeMode;
     internal int NumClasses => _numClasses;
     #endregion
 
     #region Constructors
-    /// <summary>
-    /// Initializes SegMamba in native (trainable) mode.
-    /// </summary>
-    /// <param name="architecture">Neural network architecture defining input dimensions.</param>
-    /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
-    /// <param name="lossFunction">Loss function (default: CrossEntropyWithLogitsLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 14).</param>
-    /// <param name="dropRate">Dropout rate (default: 0).</param>
-    /// <param name="options">Optional model options.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a trainable SegMamba model.
-    /// </para>
-    /// </remarks>
+    /// <summary>Initializes SegMamba in native (trainable) mode.</summary>
     public SegMamba(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null, int numClasses = 14,
@@ -112,38 +135,23 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SegMambaOptions(); Options = _options;
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 128;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 128;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _inChannels = architecture.InputDepth > 0 ? architecture.InputDepth : 1;
         _numClasses = numClasses; _dropRate = dropRate;
         _useNativeMode = true; _onnxModelPath = null;
-        // Paper-faithful LR: SegMamba (Xing et al. 2024 MICCAI) uses LR=5e-5
-        // with cosine warmup for 3D medical segmentation fine-tuning. The
-        // framework AdamW default (LR=1e-3) is too aggressive for the
-        // hybrid Mamba-Conv encoder and causes Training_ShouldReduceLoss
-        // to diverge before 30 iterations finish.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 5e-5 });
+        // Paper-faithful encoder widths/depths (Xing et al. 2024, §4): feature dims
+        // [48, 96, 192, 384] with two TSMamba blocks per stage.
         _channelDims = [48, 96, 192, 384];
         _depths = [2, 2, 2, 2];
-        _decoderDim = 256;
+        _stateDim = 16;
+        // SegMamba trains with AdamW at a small LR (paper §4.2 uses 1e-4 with
+        // warmup/poly decay); the framework default 1e-3 is too aggressive for the
+        // hybrid conv-Mamba encoder.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this, new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4 });
         InitializeLayers();
     }
 
-    /// <summary>
-    /// Initializes SegMamba in ONNX (inference-only) mode.
-    /// </summary>
-    /// <param name="architecture">Neural network architecture defining input dimensions.</param>
-    /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 14).</param>
-    /// <param name="options">Optional model options.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Loads a pre-trained SegMamba from ONNX for inference.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
-    /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
-    /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
+    /// <summary>Initializes SegMamba in ONNX (inference-only) mode.</summary>
     public SegMamba(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 14,
         SegMambaOptions? options = null)
@@ -154,14 +162,12 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
             throw new FileNotFoundException($"SegMamba ONNX model not found: {onnxModelPath}");
-        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 128;
-        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 128;
-        _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        _inChannels = architecture.InputDepth > 0 ? architecture.InputDepth : 1;
         _numClasses = numClasses; _dropRate = 0;
         _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
         _channelDims = [48, 96, 192, 384];
         _depths = [2, 2, 2, 2];
-        _decoderDim = 256;
+        _stateDim = 16;
         try { _onnxSession = new InferenceSession(onnxModelPath); }
         catch (Exception ex) { throw new InvalidOperationException($"Failed to load SegMamba ONNX model: {ex.Message}", ex); }
         InitializeLayers();
@@ -169,38 +175,21 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     #endregion
 
     #region Public Methods
-    /// <summary>
-    /// Runs a forward pass to produce segmentation logits.
-    /// </summary>
-    /// <param name="input">The input tensor [C, H, W] or [B, C, H, W].</param>
-    /// <returns>Segmentation logits tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Pass an image to get a per-pixel class prediction map.
-    /// </para>
-    /// </remarks>
+    /// <summary>Runs a forward pass to produce segmentation logits.</summary>
+    /// <param name="input">Input volume [C, D, H, W] or [B, C, D, H, W].</param>
     public override Tensor<T> Predict(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
 
-    /// <summary>
-    /// Performs one training step.
-    /// </summary>
-    /// <param name="input">The input tensor.</param>
-    /// <param name="expectedOutput">Ground-truth segmentation tensor.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Trains the model. Only available in native mode.
-    /// </para>
-    /// </remarks>
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
+
+    /// <summary>Performs one training step.</summary>
     /// <exception cref="InvalidOperationException">Thrown when called on an ONNX-mode model.</exception>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
-        if (input.Shape.Length == 4) { input = AddBatchDimension(input); expectedOutput = AddBatchDimension(expectedOutput); } else if (input.Shape.Length != 5) throw new ArgumentException($"SegMamba is a 3D model. Training requires rank 4 [C,D,H,W] or 5 [B,C,D,H,W], got rank {input.Shape.Length}.", nameof(input));
         SetTrainingMode(true);
         try
         {
-            // Pass model's non-AMSGrad optimizer so fused-Adam fast path
-            // engages.
             TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
@@ -210,14 +199,127 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     }
     #endregion
 
-    #region Private Methods
+    #region Forward
     private Tensor<T> Forward(Tensor<T> input)
     {
-        bool hasBatch = input.Rank == 5; if (!hasBatch) input = AddBatchDimension(input);
-        var features = input;
-        for (int i = 0; i < _encoderLayerEnd; i++) features = Layers[i].Forward(features);
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++) features = Layers[i].Forward(features);
-        if (!hasBatch) features = RemoveBatchDimension(features); return features;
+        bool hasBatch = input.Rank == 5;
+        if (!hasBatch)
+        {
+            if (input.Rank != 4)
+                throw new ArgumentException(
+                    $"SegMamba is a 3D model: input must be rank-4 [C, D, H, W] or rank-5 [B, C, D, H, W], got rank {input.Rank}.",
+                    nameof(input));
+            input = Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2], input.Shape[3]]);
+        }
+
+        // ---- Encoder: stem -> 4 stages, collecting one skip per stage. ----
+        var skips = new Tensor<T>[_channelDims.Length];
+        var cur = _stem!.Forward(input);
+        for (int stage = 0; stage < _channelDims.Length; stage++)
+        {
+            if (stage > 0)
+            {
+                cur = _downNorms[stage - 1].Forward(cur);
+                cur = _downConvs[stage - 1].Forward(cur);
+            }
+
+            cur = ApplyGsc(_gsc[stage], cur);
+
+            for (int block = 0; block < _depths[stage]; block++)
+                cur = ApplyTsMamba(_tom[stage][block], cur);
+
+            skips[stage] = _encNorms[stage].Forward(cur);
+            // The next downsample consumes the pre-norm stage output `cur`.
+        }
+
+        // ---- Decoder: upsample + skip-concat + conv, from the coarsest scale up. ----
+        var d = skips[^1];
+        int convIdx = 0;
+        for (int stage = _channelDims.Length - 2; stage >= 0; stage--)
+        {
+            d = _decUps[convIdx].Forward(d);
+            d = Engine.TensorConcatenate([d, skips[stage]], axis: 1);
+            d = ApplyConvBlock(_decConvs[convIdx], _decNorms[convIdx], d);
+            convIdx++;
+        }
+
+        // Final upsample back to full input resolution + conv block.
+        d = _decUps[convIdx].Forward(d);
+        d = ApplyConvBlock(_decConvs[convIdx], _decNorms[convIdx], d);
+
+        // 1x1x1 projection to class logits.
+        var logits = _outConv!.Forward(d);
+
+        if (!hasBatch)
+        {
+            var s = logits._shape;
+            logits = Engine.Reshape(logits, [s[1], s[2], s[3], s[4]]);
+        }
+        return logits;
+    }
+
+    /// <summary>Gated Spatial Convolution (paper §3.3): two stacked 3×3×3 conv-norm-ReLU
+    /// branches summed with a 1×1×1 conv-norm-ReLU branch, plus a residual connection.</summary>
+    private Tensor<T> ApplyGsc(GscModule g, Tensor<T> x)
+    {
+        var residual = x;
+        var x1 = Engine.ReLU(g.NormA.Forward(g.Proj.Forward(x)));
+        x1 = Engine.ReLU(g.NormB.Forward(g.Proj2.Forward(x1)));
+        var x2 = Engine.ReLU(g.NormC.Forward(g.Proj3.Forward(x)));
+        return Engine.TensorAdd(Engine.TensorAdd(x1, x2), residual);
+    }
+
+    /// <summary>One TSMamba block: residual + Tri-orientated Mamba over the normalized volume.</summary>
+    private Tensor<T> ApplyTsMamba(TomModule m, Tensor<T> x)
+    {
+        var normed = m.Norm.Forward(x);
+        var tom = ApplyTriOrientatedMamba(m, normed);
+        return Engine.TensorAdd(x, tom);
+    }
+
+    /// <summary>Conv → InstanceNorm → ReLU block (decoder).</summary>
+    private Tensor<T> ApplyConvBlock(Conv3DLayer<T> conv, InstanceNormalizationLayer<T> norm, Tensor<T> x)
+        => Engine.ReLU(norm.Forward(conv.Forward(x)));
+
+    /// <summary>
+    /// Tri-orientated Mamba (ToM, paper §3.2): flatten the 3-D feature volume into a token
+    /// sequence and scan it with a Mamba SSM in three orientations — forward, reverse, and
+    /// inter-slice — summing the three results. Every op is tape-aware so gradients reach all
+    /// three SSM scans.
+    /// </summary>
+    private Tensor<T> ApplyTriOrientatedMamba(TomModule m, Tensor<T> x)
+    {
+        int b = x.Shape[0], c = x.Shape[1], dD = x.Shape[2], dH = x.Shape[3], dW = x.Shape[4];
+        int len = dD * dH * dW;
+
+        // Forward scan: [B, C, D, H, W] -> [B, L, C] in (D,H,W) row-major order.
+        var seqF = Engine.TensorPermute(Engine.Reshape(x, [b, c, len]), [0, 2, 1]); // [B, L, C]
+        var outF = m.Forward.Forward(seqF);
+
+        // Reverse scan: gather the sequence backwards, scan, gather back to forward order.
+        var revIdx = BuildReverseIndices(len);
+        var seqR = Engine.TensorGather(seqF, revIdx, axis: 1);
+        var outR = Engine.TensorGather(m.Reverse.Forward(seqR), revIdx, axis: 1);
+
+        var frSeq = Engine.TensorAdd(outF, outR);                                  // [B, L, C]
+        var fr = Engine.Reshape(Engine.TensorPermute(frSeq, [0, 2, 1]), [b, c, dD, dH, dW]);
+
+        // Inter-slice scan: permute the volume so the scan crosses slices first
+        // ([B,C,D,H,W] -> [B,C,W,H,D]), flatten, scan, then map back to [B,C,D,H,W].
+        var xp = Engine.TensorPermute(x, [0, 1, 4, 3, 2]);                          // [B, C, W, H, D]
+        var seqI = Engine.TensorPermute(Engine.Reshape(xp, [b, c, len]), [0, 2, 1]);
+        var outI = m.InterSlice.Forward(seqI);
+        var iVol = Engine.Reshape(Engine.TensorPermute(outI, [0, 2, 1]), [b, c, dW, dH, dD]);
+        iVol = Engine.TensorPermute(iVol, [0, 1, 4, 3, 2]);                         // back to [B, C, D, H, W]
+
+        return Engine.TensorAdd(fr, iVol);
+    }
+
+    private static Tensor<int> BuildReverseIndices(int len)
+    {
+        var idx = new int[len];
+        for (int i = 0; i < len; i++) idx[i] = len - 1 - i;
+        return new Tensor<int>(idx, [len]);
     }
 
     private Tensor<T> PredictOnnx(Tensor<T> input)
@@ -244,174 +346,222 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
     #endregion
 
-    #region Abstract Implementation
-    /// <summary>
-    /// Initializes the encoder and decoder layers.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In native mode, builds the neural network layers.
-    /// In ONNX mode, no layers are created.
-    /// </para>
-    /// </remarks>
+    #region Layer construction
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) { ClearLayers(); return; }
-        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
-        { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Architecture.Layers.Count / 2; }
-        else
+        ClearLayers();
+        _downNorms.Clear(); _downConvs.Clear(); _gsc.Clear(); _tom.Clear();
+        _encNorms.Clear(); _decUps.Clear(); _decConvs.Clear(); _decNorms.Clear();
+
+        IActivationFunction<T> identity = new IdentityActivation<T>();
+
+        // Stem: 7x7x7 stride-2 conv (channel count inferred from input on first forward).
+        _stem = new Conv3DLayer<T>(_channelDims[0], kernelSize: 7, stride: 2, padding: 3, identity);
+        Layers.Add(_stem);
+
+        for (int stage = 0; stage < _channelDims.Length; stage++)
         {
-            var encoderLayers = LayerHelper<T>.CreateSegMambaEncoderLayers(_channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
-            _encoderLayerEnd = encoderLayers.Count; Layers.AddRange(encoderLayers);
-            int fH = _height / 32, fW = _width / 32;
-            var decoderLayers = LayerHelper<T>.CreateSegMambaDecoderLayers(_channelDims[^1], _decoderDim, _numClasses, fH, fW);
-            Layers.AddRange(decoderLayers);
+            int dim = _channelDims[stage];
+
+            if (stage > 0)
+            {
+                var dn = new InstanceNormalizationLayer<T>(_channelDims[stage - 1]);
+                var dc = new Conv3DLayer<T>(dim, kernelSize: 2, stride: 2, padding: 0, identity);
+                _downNorms.Add(dn); _downConvs.Add(dc);
+                Layers.Add(dn); Layers.Add(dc);
+            }
+
+            var gsc = new GscModule(
+                new Conv3DLayer<T>(dim, 3, 1, 1, identity),
+                new InstanceNormalizationLayer<T>(dim),
+                new Conv3DLayer<T>(dim, 3, 1, 1, identity),
+                new InstanceNormalizationLayer<T>(dim),
+                new Conv3DLayer<T>(dim, 1, 1, 0, identity),
+                new InstanceNormalizationLayer<T>(dim));
+            _gsc.Add(gsc);
+            Layers.Add(gsc.Proj); Layers.Add(gsc.NormA); Layers.Add(gsc.Proj2);
+            Layers.Add(gsc.NormB); Layers.Add(gsc.Proj3); Layers.Add(gsc.NormC);
+
+            var stageToms = new List<TomModule>();
+            for (int block = 0; block < _depths[stage]; block++)
+            {
+                var tom = new TomModule(
+                    new InstanceNormalizationLayer<T>(dim),
+                    new MambaBlock<T>(sequenceLength: 1, modelDimension: dim, stateDimension: _stateDim),
+                    new MambaBlock<T>(sequenceLength: 1, modelDimension: dim, stateDimension: _stateDim),
+                    new MambaBlock<T>(sequenceLength: 1, modelDimension: dim, stateDimension: _stateDim));
+                stageToms.Add(tom);
+                Layers.Add(tom.Norm); Layers.Add(tom.Forward); Layers.Add(tom.Reverse); Layers.Add(tom.InterSlice);
+            }
+            _tom.Add(stageToms);
+
+            var en = new InstanceNormalizationLayer<T>(dim);
+            _encNorms.Add(en); Layers.Add(en);
         }
+
+        // Decoder: one (upsample, conv-block) per coarse->fine transition + a final full-res block.
+        int decBlocks = _channelDims.Length; // 3 skip-fusions + 1 final full-res
+        for (int i = 0; i < decBlocks; i++)
+        {
+            int outDim = i < _channelDims.Length - 1 ? _channelDims[_channelDims.Length - 2 - i] : _channelDims[0];
+            var up = new Upsample3DLayer<T>(2);
+            var conv = new Conv3DLayer<T>(outDim, 3, 1, 1, identity);
+            var norm = new InstanceNormalizationLayer<T>(outDim);
+            _decUps.Add(up); _decConvs.Add(conv); _decNorms.Add(norm);
+            Layers.Add(up); Layers.Add(conv); Layers.Add(norm);
+        }
+
+        _outConv = new Conv3DLayer<T>(_numClasses, 1, 1, 0, identity);
+        Layers.Add(_outConv);
     }
 
     /// <summary>
-    /// Updates all trainable parameters from a flat parameter vector.
+    /// Re-derives the typed sub-layer references from the canonical <see cref="NeuralNetworkBase{T}.Layers"/>
+    /// list after deserialization rebuilds it. Without this a cloned/loaded model would run the
+    /// constructor's randomly-initialized layers in Forward while the loaded weights sit unused.
+    /// Walks <c>Layers</c> in exactly the order <see cref="InitializeLayers"/> appended them.
     /// </summary>
-    /// <param name="parameters">Flat vector of all model parameters.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Replaces all model weights with new values.
-    /// </para>
-    /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
-    { int o = 0; foreach (var l in Layers) { var p = l.GetParameters(); int c = p.Length; if (o + c <= parameters.Length) { var n = new Vector<T>(c); for (int i = 0; i < c; i++) n[i] = parameters[o + i]; l.UpdateParameters(n); o += c; } } }
+    private void ExtractLayerReferences()
+    {
+        _downNorms.Clear(); _downConvs.Clear(); _gsc.Clear(); _tom.Clear();
+        _encNorms.Clear(); _decUps.Clear(); _decConvs.Clear(); _decNorms.Clear();
 
-    /// <summary>
-    /// Collects metadata describing this model's configuration.
-    /// </summary>
-    /// <returns>Model metadata.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Returns a summary for saving or display.
-    /// </para>
-    /// </remarks>
+        int idx = 0;
+        _stem = (Conv3DLayer<T>)Layers[idx++];
+
+        for (int stage = 0; stage < _channelDims.Length; stage++)
+        {
+            if (stage > 0)
+            {
+                _downNorms.Add((InstanceNormalizationLayer<T>)Layers[idx++]);
+                _downConvs.Add((Conv3DLayer<T>)Layers[idx++]);
+            }
+
+            var gsc = new GscModule(
+                (Conv3DLayer<T>)Layers[idx++],
+                (InstanceNormalizationLayer<T>)Layers[idx++],
+                (Conv3DLayer<T>)Layers[idx++],
+                (InstanceNormalizationLayer<T>)Layers[idx++],
+                (Conv3DLayer<T>)Layers[idx++],
+                (InstanceNormalizationLayer<T>)Layers[idx++]);
+            _gsc.Add(gsc);
+
+            var stageToms = new List<TomModule>();
+            for (int block = 0; block < _depths[stage]; block++)
+            {
+                stageToms.Add(new TomModule(
+                    (InstanceNormalizationLayer<T>)Layers[idx++],
+                    (MambaBlock<T>)Layers[idx++],
+                    (MambaBlock<T>)Layers[idx++],
+                    (MambaBlock<T>)Layers[idx++]));
+            }
+            _tom.Add(stageToms);
+
+            _encNorms.Add((InstanceNormalizationLayer<T>)Layers[idx++]);
+        }
+
+        int decBlocks = _channelDims.Length;
+        for (int i = 0; i < decBlocks; i++)
+        {
+            _decUps.Add((Upsample3DLayer<T>)Layers[idx++]);
+            _decConvs.Add((Conv3DLayer<T>)Layers[idx++]);
+            _decNorms.Add((InstanceNormalizationLayer<T>)Layers[idx++]);
+        }
+
+        _outConv = (Conv3DLayer<T>)Layers[idx++];
+    }
+    #endregion
+
+    #region Abstract Implementation
+    public override void UpdateParameters(Vector<T> parameters)
+    { int o = 0; foreach (var l in Layers) { var p = l.GetParameters(); int c = p.Length; if (c == 0) continue; if (o + c <= parameters.Length) { var n = new Vector<T>(c); for (int i = 0; i < c; i++) n[i] = parameters[o + i]; l.UpdateParameters(n); o += c; } } }
+
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        AdditionalInfo = new Dictionary<string, object> { { "ModelName", "SegMamba" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
+        AdditionalInfo = new Dictionary<string, object> { { "ModelName", "SegMamba" }, { "InChannels", _inChannels }, { "NumClasses", _numClasses }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = this.Serialize()
     };
 
-    /// <summary>
-    /// Writes configuration to a binary stream.
-    /// </summary>
-    /// <param name="writer">The binary writer.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Saves model configuration for later reconstruction.
-    /// </para>
-    /// </remarks>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    { writer.Write(_height); writer.Write(_width); writer.Write(_channels); writer.Write(_numClasses); writer.Write(_decoderDim); writer.Write(_dropRate); writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty); writer.Write(_encoderLayerEnd); writer.Write(_channelDims.Length); foreach (int d in _channelDims) writer.Write(d); writer.Write(_depths.Length); foreach (int d in _depths) writer.Write(d); }
+    {
+        writer.Write(_inChannels); writer.Write(_numClasses); writer.Write(_stateDim);
+        writer.Write(_dropRate); writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty);
+        writer.Write(_channelDims.Length); foreach (int d in _channelDims) writer.Write(d);
+        writer.Write(_depths.Length); foreach (int d in _depths) writer.Write(d);
+    }
 
-    /// <summary>
-    /// Reads configuration from a binary stream.
-    /// </summary>
-    /// <param name="reader">The binary reader.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Loads model configuration when restoring a saved model.
-    /// </para>
-    /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    { _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadDouble(); _ = reader.ReadBoolean(); _ = reader.ReadString(); _ = reader.ReadInt32(); int dc = reader.ReadInt32(); for (int i = 0; i < dc; i++) _ = reader.ReadInt32(); int dd = reader.ReadInt32(); for (int i = 0; i < dd; i++) _ = reader.ReadInt32(); }
+    {
+        _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32();
+        _ = reader.ReadDouble(); _ = reader.ReadBoolean(); _ = reader.ReadString();
+        int dc = reader.ReadInt32(); for (int i = 0; i < dc; i++) _ = reader.ReadInt32();
+        int dd = reader.ReadInt32(); for (int i = 0; i < dd; i++) _ = reader.ReadInt32();
 
-    /// <summary>
-    /// Creates a new instance with the same configuration but fresh weights.
-    /// </summary>
-    /// <returns>A new model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a copy for cross-validation or ensemble training.
-    /// </para>
-    /// </remarks>
+        // Layers has already been rebuilt with the loaded weights; re-point the typed
+        // references at them so Forward uses the loaded layers, not the ctor's fresh ones.
+        if (_useNativeMode && Layers.Count > 0)
+            ExtractLayerReferences();
+    }
+
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
         ? new SegMamba<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
         : new SegMamba<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
 
-    /// <summary>
-    /// Releases managed resources including the ONNX inference session.
-    /// </summary>
-    /// <param name="disposing">True when called from Dispose().</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Frees memory used by the ONNX runtime.
-    /// </para>
-    /// </remarks>
     protected override void Dispose(bool disposing)
     { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
     #endregion
 
     #region IMedicalSegmentation Implementation
     int ISegmentationModel<T>.NumClasses => _numClasses;
-    int ISegmentationModel<T>.InputHeight => _height;
-    int ISegmentationModel<T>.InputWidth => _width;
+    int ISegmentationModel<T>.InputHeight => Architecture.InputHeight;
+    int ISegmentationModel<T>.InputWidth => Architecture.InputWidth;
     bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
     Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
-    IReadOnlyList<string> IMedicalSegmentation<T>.SupportedModalities => ["CT"];
+    IReadOnlyList<string> IMedicalSegmentation<T>.SupportedModalities => ["CT", "MRI"];
     bool IMedicalSegmentation<T>.Supports3D => true;
     bool IMedicalSegmentation<T>.Supports2D => false;
     bool IMedicalSegmentation<T>.SupportsFewShot => false;
+
     MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentSlice(Tensor<T> slice)
-    {
-        var output = Predict(slice);
-        var labels = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output);
-        var probs = Common.SegmentationTensorOps.SoftmaxAlongClassDim(output);
-        int h = labels.Shape[0], w = labels.Shape[1];
-        int numC = probs.Shape[0];
-        var structures = new List<SegmentedStructure>();
-        for (int c = 0; c < numC; c++)
-        {
-            int area = 0; double confSum = 0;
-            for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                    if ((int)NumOps.ToDouble(labels[y, x]) == c) { area++; confSum += NumOps.ToDouble(probs[c, y, x]); }
-            if (area > 0)
-                structures.Add(new SegmentedStructure { ClassId = c, Name = $"Class_{c}", VolumeOrArea = area, MeanConfidence = confSum / area });
-        }
-        return new MedicalSegmentationResult<T> { Labels = labels, Probabilities = probs, Structures = structures };
-    }
+        => throw new NotSupportedException("SegMamba is a 3D model. Use SegmentVolume with a [C, D, H, W] volume.");
+
     MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentVolume(Tensor<T> volume)
     {
-        if (volume.Rank <= 3)
-            return ((IMedicalSegmentation<T>)this).SegmentSlice(volume);
-        int numC = volume.Shape[0], depth = volume.Shape[1], h = volume.Shape[2], w = volume.Shape[3];
-        var volLabels = new Tensor<T>([depth, h, w]);
-        var volProbs = new Tensor<T>([numC, depth, h, w]);
+        var output = Predict(volume); // [numClasses, D, H, W] (batch stripped) or [B, numClasses, D, H, W]
+        var logits = output.Rank == 5 ? RemoveBatchDimension(output) : output;
+        int numC = logits.Shape[0], depth = logits.Shape[1], h = logits.Shape[2], w = logits.Shape[3];
+
+        var labels = new Tensor<T>([depth, h, w]);
+        var probs = Common.SegmentationTensorOps.SoftmaxAlongClassDim(logits);
         var structAccum = new Dictionary<int, (double area, double confSum)>();
-        for (int d = 0; d < depth; d++)
-        {
-            var slice = new Tensor<T>([numC, h, w]);
-            for (int c = 0; c < numC; c++)
-                for (int y = 0; y < h; y++)
-                    for (int x = 0; x < w; x++)
-                        slice[c, y, x] = volume[c, d, y, x];
-            var result = ((IMedicalSegmentation<T>)this).SegmentSlice(slice);
+        for (int z = 0; z < depth; z++)
             for (int y = 0; y < h; y++)
                 for (int x = 0; x < w; x++)
-                    volLabels[d, y, x] = result.Labels[y, x];
-            for (int c = 0; c < numC; c++)
-                for (int y = 0; y < h; y++)
-                    for (int x = 0; x < w; x++)
-                        volProbs[c, d, y, x] = result.Probabilities[c, y, x];
-            foreach (var s in result.Structures)
-            {
-                if (structAccum.TryGetValue(s.ClassId, out var existing))
-                    structAccum[s.ClassId] = (existing.area + s.VolumeOrArea, existing.confSum + s.MeanConfidence * s.VolumeOrArea);
-                else
-                    structAccum[s.ClassId] = (s.VolumeOrArea, s.MeanConfidence * s.VolumeOrArea);
-            }
-        }
+                {
+                    int best = 0; double bestVal = double.NegativeInfinity;
+                    for (int c = 0; c < numC; c++)
+                    {
+                        double v = NumOps.ToDouble(logits[c, z, y, x]);
+                        if (v > bestVal) { bestVal = v; best = c; }
+                    }
+                    labels[z, y, x] = NumOps.FromDouble(best);
+                    double conf = NumOps.ToDouble(probs[best, z, y, x]);
+                    if (structAccum.TryGetValue(best, out var ex))
+                        structAccum[best] = (ex.area + 1, ex.confSum + conf);
+                    else
+                        structAccum[best] = (1, conf);
+                }
+
         var structures = new List<SegmentedStructure>();
         foreach (var kvp in structAccum)
-            structures.Add(new SegmentedStructure { ClassId = kvp.Key, Name = $"Class_{kvp.Key}", VolumeOrArea = kvp.Value.area, MeanConfidence = kvp.Value.confSum / kvp.Value.area });
-        return new MedicalSegmentationResult<T> { Labels = volLabels, Probabilities = volProbs, Structures = structures };
+            if (kvp.Key != 0)
+                structures.Add(new SegmentedStructure { ClassId = kvp.Key, Name = $"Class_{kvp.Key}", VolumeOrArea = kvp.Value.area, MeanConfidence = kvp.Value.confSum / kvp.Value.area });
+
+        return new MedicalSegmentationResult<T> { Labels = labels, Probabilities = probs, Structures = structures };
     }
+
     MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentFewShot(Tensor<T> queryImage, Tensor<T> supportImages, Tensor<T> supportMasks)
-        => throw new NotSupportedException("SegMamba does not support few-shot segmentation. Use SegmentVolume for 3D or SegmentSlice for 2D.");
+        => throw new NotSupportedException("SegMamba does not support few-shot segmentation. Use SegmentVolume for 3D volumes.");
     #endregion
 }
