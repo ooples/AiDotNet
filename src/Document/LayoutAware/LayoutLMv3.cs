@@ -1176,7 +1176,7 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
     }
 
     /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
+    public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode)
         {
@@ -1184,20 +1184,17 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         }
 
         int expectedCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        if (gradients.Length != expectedCount)
+        if (parameters.Length != expectedCount)
         {
             throw new ArgumentException(
-                $"Expected {expectedCount} gradients, but got {gradients.Length}",
-                nameof(gradients));
+                $"Expected {expectedCount} parameters, but got {parameters.Length}",
+                nameof(parameters));
         }
 
-        // Get current parameters and apply gradient descent update
-        var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.001);
-
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-
-        SetParameters(currentParams);
+        // NeuralNetworkBase.UpdateParameters contract: caller passes the NEW
+        // parameter values (post-optimizer-step), NOT raw gradients. The previous
+        // body double-stepped on top of Adam by treating input as gradients.
+        SetParameters(parameters);
     }
 
     private void UpdateEmbeddingGradients(Tensor<T> gradient)

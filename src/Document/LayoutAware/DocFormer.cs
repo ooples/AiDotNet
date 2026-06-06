@@ -589,16 +589,15 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
     }
 
     /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
+    public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode)
             throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
 
-        var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(0.00005);
-        
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
-        SetParameters(currentParams);
+        // NeuralNetworkBase.UpdateParameters contract: caller passes the NEW
+        // parameter values (post-optimizer-step), NOT raw gradients. The previous
+        // body double-stepped on top of Adam by treating input as gradients.
+        SetParameters(parameters);
     }
 
     private Vector<T> CollectGradients()
