@@ -516,8 +516,8 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
                 "Training is only supported in native mode.");
 
         // Tape-safe layer-stack forward. Mirrors ForwardDecoderOnly /
-        // Forward but uses Engine.Reshape for any rank-1 adaptation so the
-        // tape stays connected across the reshape (per
+        // Forward but uses Engine.Reshape for rank adaptation so the
+        // tape stays connected across each reshape (per
         // feedback_tensor_reshape_gradient memory: tensor.Reshape detaches,
         // Engine.Reshape preserves the gradient chain).
         Tensor<T> current = input;
@@ -533,9 +533,35 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
             current = layer.Forward(current);
         }
 
-        if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
+        // After the layer stack, `current` shape is [B, distributionParams]
+        // — a SINGLE mixture-distribution output per batch element. The
+        // training target (and Predict via ExtractMedianFromQuantiles) has
+        // shape [B, forecastHorizon, 1] — one point prediction per horizon
+        // step. Project to that shape tape-aware:
+        //   1. Slice the first feature of the distribution (treat as the
+        //      mean of the dominant mixture, the same value
+        //      ExtractMedianFromQuantiles picks at inference).
+        //   2. Reshape to [B, 1, 1] and TensorTile across the horizon axis
+        //      so loss can compare against a [B, H, 1] target without a
+        //      shape mismatch.
+        // Per Woo et al. 2024, MOIRAI emits per-position mixture parameters
+        // and the loss is NLL of the target under that distribution. The
+        // existing layer chain doesn't actually patch the input — every
+        // position collapses to one token — so the "per-horizon"
+        // distinction is degenerate. Tiling the single-token output across
+        // horizon makes training shape-compatible and lets gradients flow,
+        // which is the prerequisite for the deeper patching refactor to
+        // even start producing meaningfully-different per-horizon
+        // predictions.
+        if (current.Rank == 2)
         {
-            current = Engine.Reshape(current, new[] { current.Shape[1] });
+            // Take first column [B, 1] (selected as the point-prediction proxy).
+            var firstFeature = Engine.TensorSliceAxis(current, 1, 0);
+            // Reshape [B] or [B, 1] → [B, 1, 1] for tiling.
+            int batchDim = firstFeature.Rank == 2 ? firstFeature.Shape[0] : firstFeature.Shape[0];
+            var batchShaped = Engine.Reshape(firstFeature, new[] { batchDim, 1, 1 });
+            // Tile across horizon: [B, 1, 1] → [B, H, 1].
+            current = Engine.TensorTile(batchShaped, new[] { 1, _forecastHorizon, 1 });
         }
 
         return current;
@@ -590,9 +616,17 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
     /// <b>For Beginners:</b> In the MOIRAI model, UpdateParameters updates internal parameters or state. This keeps the MOIRAI architecture aligned with the latest values.
     /// </para>
     /// </remarks>
-    public override void UpdateParameters(Vector<T> gradients)
+    public override void UpdateParameters(Vector<T> parameters)
     {
-        // Parameters are updated through the optimizer in Train()
+        // NeuralNetworkBase.UpdateParameters contract: the caller passes the
+        // NEW parameter values (post-optimizer-step), NOT raw gradients. The
+        // previous body was an empty no-op with a comment claiming the optimizer
+        // updates parameters in Train() — but for optimizers that route through
+        // model.UpdateParameters(newParams) as part of their step, this
+        // discarded every update and Adam saw zero parameter motion. Forward
+        // to SetParameters so the layer-side weight tensors actually receive
+        // the new values.
+        SetParameters(parameters);
     }
 
     /// <inheritdoc/>
