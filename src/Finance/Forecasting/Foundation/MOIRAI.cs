@@ -487,6 +487,60 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override bool SupportsTraining => _useNativeMode;
 
+    /// <summary>
+    /// Training-mode forward pass. Bypasses <see cref="Forecast"/>, which routes
+    /// through <c>ExtractMedianFromQuantiles</c> / <c>ExpandToQuantiles</c> /
+    /// <c>ExtractPointPredictions</c> — all of which build a fresh
+    /// <c>new Tensor&lt;T&gt;</c> and write via <c>Data.Span[i]</c>, detaching
+    /// the result from the gradient tape. The default
+    /// <see cref="FinancialModelBase{T}.ForwardNativeForTraining"/> delegates to
+    /// <c>Forecast</c>, which is correct for models whose Forecast IS a plain
+    /// forward pass but wrong for MOIRAI: gradients couldn't flow back to any
+    /// trainable parameter, so Adam saw all-zero grads, parameters stayed put,
+    /// and every Training/Gradient/Memorization invariant failed
+    /// (Training_ShouldChangeParameters, GradientFlow_ShouldBeNonZeroAndFinite,
+    /// LossStrictlyDecreasesOnMemorizationTask — same root cause).
+    /// </summary>
+    /// <remarks>
+    /// Per Woo et al. 2024 ("MOIRAI: A Time Series Foundation Model for
+    /// Universal Forecasting"), the training objective is the loss on the raw
+    /// quantile / mixture-distribution head output — NOT the extracted point
+    /// median. The quantile-aware extraction is an inference-time projection
+    /// for downstream consumers, not a training-loss target. So bypassing it
+    /// for training is paper-correct too.
+    /// </remarks>
+    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            throw new InvalidOperationException(
+                "Training is only supported in native mode.");
+
+        // Tape-safe layer-stack forward. Mirrors ForwardDecoderOnly /
+        // Forward but uses Engine.Reshape for any rank-1 adaptation so the
+        // tape stays connected across the reshape (per
+        // feedback_tensor_reshape_gradient memory: tensor.Reshape detaches,
+        // Engine.Reshape preserves the gradient chain).
+        Tensor<T> current = input;
+        bool addedBatchDim = false;
+        if (current.Rank == 1)
+        {
+            current = Engine.Reshape(current, new[] { 1, current.Length });
+            addedBatchDim = true;
+        }
+
+        foreach (var layer in Layers)
+        {
+            current = layer.Forward(current);
+        }
+
+        if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
+        {
+            current = Engine.Reshape(current, new[] { current.Shape[1] });
+        }
+
+        return current;
+    }
+
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
