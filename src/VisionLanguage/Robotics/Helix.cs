@@ -126,6 +126,16 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         _tokenEmbedding = new EmbeddingLayer<T>(_options.VocabSize, _options.DecoderDim);
         InitializeLayers();
+
+        // Stream / offload Helix's ~6.7B paper-scale weights when the caller opts
+        // in. At double precision the full chain otherwise holds ~54 GB of weights
+        // resident; a training step then needs grad + Adam moments on top, which
+        // exceeds a typical box. Per HelixOptions.WeightOffloadOptions contract:
+        // non-null is honoured as-is; null keeps weights resident.
+        if (_options.WeightOffloadOptions is { } callerOffload)
+        {
+            ConfigureWeightLifetime(callerOffload);
+        }
     }
 
     public int EmbeddingDimension => _options.DecoderDim;
