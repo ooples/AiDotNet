@@ -157,6 +157,15 @@ public static class CompiledTapeTrainingStep<T>
     /// </summary>
     public static System.Exception? GetLastFallbackException() => _lastFallbackException;
 
+    // TEMP DIAGNOSTIC (AIDOTNET_FUSED_DEBUG=1): surface exactly which gate turns the
+    // fused compiled path off, so "(unspecified gate)" is no longer a black box.
+    private static readonly bool s_fusedDebug =
+        System.Environment.GetEnvironmentVariable("AIDOTNET_FUSED_DEBUG") == "1";
+    private static void Fd(string why)
+    {
+        if (s_fusedDebug) System.Console.Error.WriteLine($"[FUSED-MISS] {why}");
+    }
+
     // Reflection-cached lookup of ICompiledTrainingPlan<T>.SetMaxGradNorm(double).
     // Populated lazily on first call per process and reused on every subsequent
     // step. Returns null when the underlying Tensors assembly pre-dates the
@@ -211,6 +220,7 @@ public static class CompiledTapeTrainingStep<T>
             if (InvalidateIfLayerSetChanged(layers))
             {
                 // Caches cleared; cache field rebound below.
+                _mpPlan = null; // also drop the mixed-precision plan (#558)
             }
             var cache = _cache ??= new CompiledModelCache<T>();
 
@@ -248,6 +258,24 @@ public static class CompiledTapeTrainingStep<T>
             Array.Copy(inputShape, 0, compositeKey, 0, inputShape.Length);
             compositeKey[inputShape.Length] = -1; // separator sentinel (no real dim is negative)
             Array.Copy(targetShape, 0, compositeKey, inputShape.Length + 1, targetShape.Length);
+
+            // FP16 activation storage (Tensors #558): when opted in (AIDOTNET_FP16_ACTIVATIONS=1, float
+            // only), route to the mixed-dtype compiled plan — matmul activations are stored as FP16
+            // (~1/2 resident) with grads bridged FP16<->FP32. SGD on FP32 master weights, same as this
+            // path's UpdateParametersSGD. Default off => the single-type fused/eager paths are unchanged.
+            if (typeof(T) == typeof(float)
+                && Environment.GetEnvironmentVariable("AIDOTNET_FP16_ACTIVATIONS") == "1")
+            {
+                float lossMp = StepMixedPrecision(
+                    (System.Collections.Generic.IReadOnlyList<Tensor<float>>)(object)parameters,
+                    (Tensor<float>)(object)input,
+                    (Tensor<float>)(object)target,
+                    Convert.ToSingle(numOps.ToDouble(learningRate)),
+                    f => (Tensor<float>)(object)forward((Tensor<T>)(object)f),
+                    (p, tg) => (Tensor<float>)(object)computeLoss((Tensor<T>)(object)p, (Tensor<T>)(object)tg),
+                    compositeKey);
+                return (T)(object)lossMp;
+            }
 
             var plan = cache.GetOrCompileTraining(
                 compositeKey,
@@ -403,12 +431,12 @@ public static class CompiledTapeTrainingStep<T>
         // leak a stale exception from earlier.)
         _lastFallbackException = null;
 
-        if (!TensorCodecOptions.Current.EnableCompilation) return false;
+        if (!TensorCodecOptions.Current.EnableCompilation) { Fd("EnableCompilation=false"); return false; }
         // Fused optimizer kernels support float and double on the Tensors
         // side (PR #319 / FusedOptimizer.{SGD,Adam,AdamW}UpdateSimd double
         // overloads + CompiledTrainingPlan.ConfigureOptimizerDouble). Other
         // numeric types still fall through to the eager autograd path.
-        if (typeof(T) != typeof(float) && typeof(T) != typeof(double)) return false;
+        if (typeof(T) != typeof(float) && typeof(T) != typeof(double)) { Fd($"type {typeof(T).Name} unsupported"); return false; }
         // Allowlist of optimizer kernels wired through ConfigureOptimizer in the
         // linked AiDotNet.Tensors build (0.88.0: ConfigureOptimizerFloat handles
         // all of these on CPU). Only OptimizerTypes an IFusedOptimizerSpec
@@ -436,14 +464,14 @@ public static class CompiledTapeTrainingStep<T>
             or AiDotNet.Tensors.Engines.Compilation.OptimizerType.HypergradientSGD
             or AiDotNet.Tensors.Engines.Compilation.OptimizerType.ScheduleFreeSGD
             or AiDotNet.Tensors.Engines.Compilation.OptimizerType.DAdaptationSGD))
-            return false;
+            { Fd($"optimizerType {optimizerType} not in allowlist"); return false; }
 
         // If a prior fused step already proved this thread's Tensors build can't
         // run THIS optimizer kernel, don't retry the fused path — go straight to
         // the eager tape. Otherwise every step would reconfigure, throw, catch and
         // warn, turning a one-time capability gap into per-step exception/log churn.
         if (_fusedUnavailableTypes is not null && _fusedUnavailableTypes.Contains(optimizerType))
-            return false;
+            { Fd($"optimizerType {optimizerType} latched-unavailable"); return false; }
 
         try
         {
@@ -639,6 +667,7 @@ public static class CompiledTapeTrainingStep<T>
                 // compiled plan. Using a fresh plan would fork optimizer
                 // state, so refuse and let the caller handle it (the
                 // NeuralNetworkBase caller throws once fused has committed).
+                Fd("plan switched (different shape/structure than _configuredPlan)");
                 return false;
             }
             else if (_configuredOptimizerConfig is null
@@ -647,6 +676,7 @@ public static class CompiledTapeTrainingStep<T>
                 // Same plan, drifted hyperparameters between steps. Refuse
                 // to re-configure (would reset m/v) and let the caller
                 // handle the drift.
+                Fd("optimizer config drift between steps");
                 return false;
             }
 
@@ -674,6 +704,7 @@ public static class CompiledTapeTrainingStep<T>
             // layout, shape mismatch, NaN guard, etc.). Trace alone wasn't
             // enough — failing tests don't surface Trace output by default.
             _lastFallbackException = ex;
+            Fd($"EXCEPTION {ex.GetType().Name}: {ex.Message}\n--- STACK ---\n{ex.StackTrace}\n--- INNER ---\n{ex.InnerException}");
             System.Diagnostics.Trace.TraceWarning(
                 $"CompiledTapeTrainingStep.TryStepWithFusedOptimizer failed, falling back to eager: " +
                 $"{ex}");
@@ -715,6 +746,43 @@ public static class CompiledTapeTrainingStep<T>
             }
         }
         return result.ToArray();
+    }
+
+    // FP16 activation-storage plan cache (Tensors #558). Persistent input/target are reused across steps
+    // (the compiled trace captures them as leaves); each step copies the current batch in, then replays.
+    private static MixedPrecisionCompiledPlan? _mpPlan;
+    private static int[]? _mpKey;
+    private static Tensor<float>? _mpInput;
+    private static Tensor<float>? _mpTarget;
+
+    /// <summary>
+    /// One mixed-precision (FP16 activation storage) compiled training step. Compiles once per
+    /// input/target shape via <see cref="MixedPrecisionCompiledPlan.Trace"/>, then replays with the
+    /// current batch copied into persistent leaf tensors. SGD on the FP32 master parameters.
+    /// </summary>
+    private static float StepMixedPrecision(
+        System.Collections.Generic.IReadOnlyList<Tensor<float>> parameters,
+        Tensor<float> input,
+        Tensor<float> target,
+        float learningRate,
+        Func<Tensor<float>, Tensor<float>> forwardF,
+        Func<Tensor<float>, Tensor<float>, Tensor<float>> lossF,
+        int[] key)
+    {
+        if (_mpPlan is null || _mpKey is null || !ShapesEqual(_mpKey, key))
+        {
+            _mpInput = new Tensor<float>((float[])input.ToArray().Clone(), input.Shape.ToArray());
+            _mpTarget = new Tensor<float>((float[])target.ToArray().Clone(), target.Shape.ToArray());
+            _mpPlan = MixedPrecisionCompiledPlan.Trace(() => lossF(forwardF(_mpInput!), _mpTarget!));
+            _mpKey = (int[])key.Clone();
+        }
+        else
+        {
+            // Refresh the persistent leaves with this step's batch; replay reads the current data.
+            _mpInput!.CopyFromArray(input.ToArray());
+            _mpTarget!.CopyFromArray(target.ToArray());
+        }
+        return _mpPlan!.Step(parameters, learningRate).Loss;
     }
 
     /// <summary>
