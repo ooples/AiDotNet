@@ -142,6 +142,18 @@ internal sealed class StreamingAdam8Bit<T>
                 return;
             }
         }
+        else if (typeof(T) == typeof(float)
+            && (object)param is Tensor<float> pTenF
+            && (object)grad is Tensor<float> gTenF)
+        {
+            var pSpan = pTenF.Data.Span;
+            var gSpan = gTenF.Data.Span;
+            if (pSpan.Length >= length && gSpan.Length >= length)
+            {
+                ApplyFloat(pSpan, gSpan, st, numBlocks, length, biasCorr1, biasCorr2);
+                return;
+            }
+        }
 
         ApplyGeneric(param, grad, st, numBlocks, length, biasCorr1, biasCorr2);
     }
@@ -195,6 +207,72 @@ internal sealed class StreamingAdam8Bit<T>
                     mNew[li] = m; vNew[li] = v;
                 }
 
+                double am = Math.Abs(mNew[li]);
+                if (am > newMMaxAbs) newMMaxAbs = am;
+                if (vNew[li] > newVMax) newVMax = vNew[li];
+            }
+
+            double newMScale = newMMaxAbs / 127.0; if (newMScale < 1e-10) newMScale = 1e-10;
+            double newVScale = newVMax / 255.0;     if (newVScale < 1e-10) newVScale = 1e-10;
+            st.MScale[b] = newMScale; st.VScale[b] = newVScale;
+            double invM = 1.0 / newMScale, invV = 1.0 / newVScale;
+
+            for (int i = start; i < end; i++)
+            {
+                int li = i - start;
+                int mq = (int)Math.Round(mNew[li] * invM);
+                if (mq < -127) mq = -127; else if (mq > 127) mq = 127;
+                mQ[i] = (byte)(mq + 128);
+                int vq = (int)Math.Round(vNew[li] * invV);
+                if (vq < 0) vq = 0; else if (vq > 255) vq = 255;
+                vQ[i] = (byte)vq;
+            }
+        }
+    }
+
+    private void ApplyFloat(
+        Span<float> p, ReadOnlySpan<float> g, MomentState st,
+        int numBlocks, int length, double biasCorr1, double biasCorr2)
+    {
+        double beta1 = _beta1, beta2 = _beta2, oneMinusB1 = 1.0 - _beta1, oneMinusB2 = 1.0 - _beta2;
+        double lr = _lr, eps = _epsilon, wd = _weightDecay, maxStep = _lr * _maxUpdateRatio;
+        double invBc1 = 1.0 / biasCorr1, invBc2 = 1.0 / biasCorr2;
+        double[] mNew = _mScratch, vNew = _vScratch;
+        byte[] mQ = st.MQuant, vQ = st.VQuant;
+
+        for (int b = 0; b < numBlocks; b++)
+        {
+            int start = b * _blockSize;
+            int end = Math.Min(start + _blockSize, length);
+            double mScale = st.MScale[b];
+            double vScale = st.VScale[b];
+            double newMMaxAbs = 0.0, newVMax = 0.0;
+
+            for (int i = start; i < end; i++)
+            {
+                int li = i - start;
+                double gi = g[i];
+                double mPrev = (mQ[i] - 128) * mScale;
+                double vPrev = vQ[i] * vScale;
+
+                if (double.IsNaN(gi) || double.IsInfinity(gi))
+                {
+                    mNew[li] = mPrev; vNew[li] = vPrev;
+                }
+                else
+                {
+                    double m = beta1 * mPrev + oneMinusB1 * gi;
+                    double v = beta2 * vPrev + oneMinusB2 * gi * gi;
+                    double mHat = m * invBc1;
+                    double vHat = v * invBc2;
+                    double pv = p[i];
+                    if (wd != 0.0) pv -= lr * wd * pv;
+                    double update = lr * mHat / (Math.Sqrt(vHat) + eps);
+                    if (!(update >= -maxStep)) update = update > 0 ? maxStep : -maxStep;
+                    else if (update > maxStep) update = maxStep;
+                    p[i] = (float)(pv - update);
+                    mNew[li] = m; vNew[li] = v;
+                }
                 double am = Math.Abs(mNew[li]);
                 if (am > newMMaxAbs) newMMaxAbs = am;
                 if (vNew[li] > newVMax) newVMax = vNew[li];

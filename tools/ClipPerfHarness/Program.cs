@@ -113,11 +113,12 @@ internal static class Program
                 var helixOpts = new AiDotNet.VisionLanguage.Robotics.HelixOptions();
                 if (Environment.GetEnvironmentVariable("WEIGHT_STREAM") == "1")
                 {
+                    long capGb = long.TryParse(Environment.GetEnvironmentVariable("WEIGHT_STREAM_GB"), out var gb) && gb > 0 ? gb : 20;
                     helixOpts.WeightOffloadOptions = new AiDotNet.Tensors.LinearAlgebra.GpuOffloadOptions
                     {
-                        StreamingPoolMaxResidentBytes = 20L * 1024 * 1024 * 1024,
+                        StreamingPoolMaxResidentBytes = capGb * 1024 * 1024 * 1024,
                     };
-                    Console.WriteLine("[stream] WeightOffloadOptions: disk streaming, 20GB resident cap");
+                    Console.WriteLine($"[stream] WeightOffloadOptions: disk streaming, {capGb}GB resident cap");
                 }
                 network = new Helix<double>(arch, helixOpts);
                 input = new Tensor<double>(new[] { 1, 4, 1024 });

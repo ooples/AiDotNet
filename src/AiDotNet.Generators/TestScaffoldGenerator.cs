@@ -125,6 +125,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // JanusProTests) run a reduced-scale config — same architecture shape,
         // ~8x smaller dims — that exercises every code path in seconds on CPU.
         "Janus", "JanusPro",
+        // Helix (Figure AI 2025) / GPT4Point (Qi et al. 2024): ~6.7B dual-system
+        // VLAs (DecoderDim=4096 × 32 layers). A single full-model Adam step at
+        // paper scale cannot complete in the 120s CI budget on CPU at any
+        // precision (profiled >580s/step fp64, still >120s float) — the
+        // memory-bounded streaming training path makes such a step possible where
+        // it would OOM, but not unit-test-fast. The manual HelixTests /
+        // GPT4PointTests run the same dual-system architecture at reduced float
+        // scale (Janus precedent), exercising every code path in seconds. See
+        // ModelFamilyTests/NeuralNetworks/{HelixTests,GPT4PointTests}.
+        "Helix", "GPT4Point",
 
         // Donut (Kim et al. 2022, VisionLanguage.Document): paper-scale Swin+BART defaults
         // (VisionDim=1024, DecoderDim=1024, 12+4 layers, NumHeads=16, ImageSize=2560) make
