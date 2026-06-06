@@ -2194,7 +2194,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     break;
             }
             sb.AppendLine($"    protected override int[] InputShape => new[] {{ 1, 4, {vlVisionDim} }};");
-            sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 1, 4, {vlVisionDim} }};");
+            if (model.ClassName == "Helix")
+            {
+                // Helix's differentiable layer chain runs the full dual-system
+                // pipeline: vision encoder + System-2 VLM decoder + System-1
+                // visuomotor transformer, terminating in the action head
+                // (DenseLayer to HelixOptions.ActionDimension = 35). So the flat
+                // Predict output is [1, 4, 35] — continuous joint commands per
+                // token — not the [1, 4, vision_dim] representation the other VL
+                // encoders return.
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 4, 35 };");
+            }
+            else
+            {
+                sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 1, 4, {vlVisionDim} }};");
+            }
 
             // Paper-scale VL encoders (e.g. SigLIP2 — ViT with VisionEmbeddingDim
             // 768 and many transformer blocks) take ≳ 1 s per Adam step, so the
