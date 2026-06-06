@@ -117,7 +117,7 @@
          (DirectGpuTensorEngine: eviction was GPU-byte-only, so stale cross-step
          activation float[] keys grew the managed heap to 36GB+ and crashed cortex
          training; added an AIDOTNET_ACT_CACHE_MANAGED_MB-bounded managed cap). -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.91.34" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.91.36" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.91.2" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.91.2" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.91.2" />

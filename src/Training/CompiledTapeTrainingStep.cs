@@ -220,7 +220,7 @@ public static class CompiledTapeTrainingStep<T>
             if (InvalidateIfLayerSetChanged(layers))
             {
                 // Caches cleared; cache field rebound below.
-                _mpPlan = null; // also drop the mixed-precision plan (#558)
+                _mpPlan = null; _mpAdamPlan = null; // also drop the mixed-precision plans (#558)
             }
             var cache = _cache ??= new CompiledModelCache<T>();
 
@@ -363,6 +363,7 @@ public static class CompiledTapeTrainingStep<T>
         // and throw, masking what is really a model-structure change.
         _persistentInput = null;
         _persistentTarget = null;
+        _mpAdamPlan = null; // FP16 mixed-precision fused-Adam plan (#558)
         // Reset the fused-engagement counter — from this point on, any
         // assertion about "fused ran at least N times" should reflect the
         // new lifecycle.
@@ -586,6 +587,36 @@ public static class CompiledTapeTrainingStep<T>
             compositeKey[inputShape.Length] = -1; // separator sentinel (no real dim is negative)
             Array.Copy(targetShape, 0, compositeKey, inputShape.Length + 1, targetShape.Length);
 
+            // FP16 activation storage on the FUSED-ADAM path (Tensors #558): when opted in
+            // (AIDOTNET_FP16_ACTIVATIONS=1, float, Adam/AdamW) route to the mixed-dtype compiled plan's
+            // StepAdam — matmul activations stored as FP16 (~1/2 resident), grads bridged FP16<->FP32,
+            // Adam on FP32 master weights+moments with a GradScaler. This is the path Adam-configured
+            // models (the cortex) take, so it is what makes them eligible for the memory win. Default off
+            // => the single-type fused plan below is byte-identical.
+            if (typeof(T) == typeof(float)
+                && Environment.GetEnvironmentVariable("AIDOTNET_FP16_ACTIVATIONS") == "1"
+                && (optimizerType == AiDotNet.Tensors.Engines.Compilation.OptimizerType.Adam
+                    || optimizerType == AiDotNet.Tensors.Engines.Compilation.OptimizerType.AdamW))
+            {
+                if (_mpAdamPlan is null || _mpAdamKey is null || !ShapesEqual(_mpAdamKey, compositeKey))
+                {
+                    var fwdF = forward; var lossF = computeLoss;
+                    var pin = _persistentInput!; var ptg = _persistentTarget!;
+                    _mpAdamPlan = MixedPrecisionCompiledPlan.Trace(
+                        () => (Tensor<float>)(object)lossF(fwdF((Tensor<T>)(object)pin), (Tensor<T>)(object)ptg));
+                    _mpAdamKey = (int[])compositeKey.Clone();
+                }
+                // _persistentInput/_persistentTarget already hold this step's batch (copied above).
+                _mpScaler ??= new AiDotNet.Tensors.Engines.Autodiff.GradScaler(
+                    new AiDotNet.Tensors.Engines.Autodiff.MixedPrecisionConfig { LossScale = 1024f });
+                var mr = _mpAdamPlan.StepAdam(
+                    (System.Collections.Generic.IReadOnlyList<Tensor<float>>)(object)parameters,
+                    learningRate, beta1, beta2, epsilon, weightDecay, _mpScaler);
+                lossValue = (T)(object)mr.Loss;
+                _fusedStepCount++;
+                return true;
+            }
+
             var plan = cache.GetOrCompileTraining(
                 compositeKey,
                 () =>
@@ -754,6 +785,10 @@ public static class CompiledTapeTrainingStep<T>
     private static int[]? _mpKey;
     private static Tensor<float>? _mpInput;
     private static Tensor<float>? _mpTarget;
+    // Fused-Adam mixed-precision plan (traces against the fused path's persistent input/target).
+    private static MixedPrecisionCompiledPlan? _mpAdamPlan;
+    private static int[]? _mpAdamKey;
+    private static AiDotNet.Tensors.Engines.Autodiff.GradScaler? _mpScaler;
 
     /// <summary>
     /// One mixed-precision (FP16 activation storage) compiled training step. Compiles once per
