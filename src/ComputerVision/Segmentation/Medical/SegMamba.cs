@@ -258,6 +258,38 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         return logits;
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The base implementation runs the flat <c>Layers</c> list sequentially on the raw input,
+    /// which does not match SegMamba's skip-connected encoder/decoder graph (it would feed the
+    /// wrong channel counts between stages). Capture activations along the real encoder path.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>();
+        if (!_useNativeMode) return activations;
+
+        var x = input.Rank == 5
+            ? input
+            : Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2], input.Shape[3]]);
+
+        var cur = _stem!.Forward(x);
+        activations["stem"] = cur.Clone();
+        for (int stage = 0; stage < _channelDims.Length; stage++)
+        {
+            if (stage > 0)
+            {
+                cur = _downNorms[stage - 1].Forward(cur);
+                cur = _downConvs[stage - 1].Forward(cur);
+            }
+            cur = ApplyGsc(_gsc[stage], cur);
+            for (int block = 0; block < _depths[stage]; block++)
+                cur = ApplyTsMamba(_tom[stage][block], cur);
+            activations[$"stage{stage}"] = _encNorms[stage].Forward(cur).Clone();
+        }
+        return activations;
+    }
+
     /// <summary>Gated Spatial Convolution (paper §3.3): two stacked 3×3×3 conv-norm-ReLU
     /// branches summed with a 1×1×1 conv-norm-ReLU branch, plus a residual connection.</summary>
     private Tensor<T> ApplyGsc(GscModule g, Tensor<T> x)

@@ -411,12 +411,32 @@ internal partial class MambaBlock<T> : LayerBase<T>
         _lastB = bParam;
         _lastC = cParam;
 
-        // Step 6: Selective scan (core SSM computation) - delegated to S6Scan
-        var (scanOutput, hiddenStatesResult) = S6Scan<T>.SequentialScanForward(
-            siluOutput, delta, _aLog, bParam, cParam, _dParam,
-            batchSize, seqLen, _innerDimension, _stateDimension,
-            _initialHiddenState);
-        _lastHiddenStates = hiddenStatesResult;
+        // Step 6: Selective scan (core SSM computation).
+        // Fast path (no carried initial state): use the engine's fused
+        // MambaSelectiveScanForward — a single tape op with an exact BPTT
+        // backward (AiDotNet.Tensors#523/#1464). It replaces S6Scan's
+        // per-timestep micro-op loop, which records O(seqLen) tape nodes and is
+        // the dominant Mamba cost — catastrophically so in double precision and
+        // at the long sequences 3D/vision Mamba models produce (e.g. SegMamba's
+        // 8^3 = 512 tokens). The decomposed S6Scan path is retained only for
+        // stateful/chunked inference, where a non-zero initial hidden state must
+        // be threaded across calls.
+        Tensor<T> scanOutput;
+        if (_initialHiddenState is null)
+        {
+            scanOutput = Engine.MambaSelectiveScanForward(
+                siluOutput, delta, _aLog, bParam, cParam, _dParam);
+            _lastHiddenStates = null;
+        }
+        else
+        {
+            var (so, hiddenStatesResult) = S6Scan<T>.SequentialScanForward(
+                siluOutput, delta, _aLog, bParam, cParam, _dParam,
+                batchSize, seqLen, _innerDimension, _stateDimension,
+                _initialHiddenState);
+            scanOutput = so;
+            _lastHiddenStates = hiddenStatesResult;
+        }
         _initialHiddenState = null; // consumed
         _lastScanOutput = scanOutput;
 
