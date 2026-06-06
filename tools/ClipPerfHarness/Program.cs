@@ -137,6 +137,15 @@ internal static class Program
         swCtor.Stop();
         Console.WriteLine($"  ctor: {swCtor.ElapsedMilliseconds} ms");
 
+        // Force the memory-bounded streaming training path (optimizer-in-backward
+        // + 8-bit Adam) regardless of model size — lets us validate the streaming
+        // path on a small model that trains in seconds.
+        if (Environment.GetEnvironmentVariable("STREAM_FORCE") == "1")
+        {
+            network.StreamingTraining = AiDotNet.Enums.StreamingTrainingMode.ForceOn;
+            Console.WriteLine("[stream] StreamingTraining = ForceOn");
+        }
+
         // Warm-up forward (matches the EffectiveOutputShape warm-up the
         // test base does). Pays first-touch lazy-init costs we don't want
         // to attribute to the training step.
