@@ -734,28 +734,15 @@ public class RIFE<T> : FrameInterpolationBase<T>
 
     private Tensor<T> SliceChannels(Tensor<T> input, int startChannel, int endChannel)
     {
-        int batchSize = input.Shape[0];
-        int numChannels = endChannel - startChannel;
-        int height = input.Shape[2];
-        int width = input.Shape[3];
-
-        var result = new Tensor<T>([batchSize, numChannels, height, width]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < numChannels; c++)
-            {
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        result[b, c, h, w] = input[b, startChannel + c, h, w];
-                    }
-                }
-            }
-        }
-
-        return result;
+        // Tape-aware channel slice so gradients propagate back through the flow
+        // (and frame) tensors during training. A manual element copy would
+        // detach the gradient path to the flow decoder / encoder.
+        int rank = input.Shape.Length;
+        var start = new int[rank];
+        var length = (int[])input._shape.Clone();
+        start[1] = startChannel;
+        length[1] = endChannel - startChannel;
+        return Engine.TensorSlice(input, start, length);
     }
 
     private Tensor<T> ScaleFlow(Tensor<T> flow, T scale)
@@ -765,97 +752,50 @@ public class RIFE<T> : FrameInterpolationBase<T>
 
     private Tensor<T> WarpImage(Tensor<T> image, Tensor<T> flow)
     {
+        // Backward-warp `image` by `flow` using a tape-aware bilinear grid sample
+        // (the differentiable warp RIFE relies on — Huang et al. 2022). A manual
+        // per-pixel bilinear copy would detach the autodiff tape, so gradients
+        // would never reach the flow decoder / feature encoder and training would
+        // diverge. image: [B, C, H, W]; flow: [B, 2, H, W] with channel 0 = dx,
+        // channel 1 = dy in pixel units.
         int batchSize = image.Shape[0];
-        int channels = image.Shape[1];
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var result = new Tensor<T>(image._shape);
-
+        // Identity affine grid → per-pixel base sampling positions in normalized
+        // [-1, 1] coordinates ([B, H, W, 2], last dim = (x, y)).
+        var identityTheta = new Tensor<T>([batchSize, 2, 3]);
         for (int b = 0; b < batchSize; b++)
         {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    double dx = Convert.ToDouble(flow[b, 0, h, w]);
-                    double dy = Convert.ToDouble(flow[b, 1, h, w]);
-
-                    double srcH = h + dy;
-                    double srcW = w + dx;
-
-                    for (int c = 0; c < channels; c++)
-                    {
-                        result[b, c, h, w] = BilinearSample(image, b, c, srcH, srcW, height, width);
-                    }
-                }
-            }
+            identityTheta[b, 0, 0] = NumOps.One; // x scale
+            identityTheta[b, 1, 1] = NumOps.One; // y scale
         }
+        var baseGrid = Engine.AffineGrid(identityTheta, height, width);
 
-        return result;
-    }
+        // Convert the pixel-unit flow [B, 2, H, W] to a normalized grid offset
+        // [B, H, W, 2]: a dx-pixel shift is 2*dx/(W-1) in normalized coords.
+        var flowNHWC = Engine.TensorPermute(flow, [0, 2, 3, 1]); // [B, H, W, 2] (x=dx, y=dy)
+        double sx = width > 1 ? 2.0 / (width - 1) : 0.0;
+        double sy = height > 1 ? 2.0 / (height - 1) : 0.0;
+        var scale = new Tensor<T>([batchSize, height, width, 2]);
+        var scaleSpan = scale.Data.Span;
+        for (int idx = 0; idx + 1 < scaleSpan.Length; idx += 2)
+        {
+            scaleSpan[idx] = NumOps.FromDouble(sx);
+            scaleSpan[idx + 1] = NumOps.FromDouble(sy);
+        }
+        var flowOffset = Engine.TensorMultiply(flowNHWC, scale);
+        var grid = Engine.TensorAdd(baseGrid, flowOffset);
 
-    private T BilinearSample(Tensor<T> tensor, int b, int c, double h, double w, int height, int width)
-    {
-        int h0 = (int)Math.Floor(h);
-        int w0 = (int)Math.Floor(w);
-        int h1 = h0 + 1;
-        int w1 = w0 + 1;
-
-        h0 = Math.Max(0, Math.Min(h0, height - 1));
-        h1 = Math.Max(0, Math.Min(h1, height - 1));
-        w0 = Math.Max(0, Math.Min(w0, width - 1));
-        w1 = Math.Max(0, Math.Min(w1, width - 1));
-
-        double hWeight = h - Math.Floor(h);
-        double wWeight = w - Math.Floor(w);
-
-        T v00 = tensor[b, c, h0, w0];
-        T v01 = tensor[b, c, h0, w1];
-        T v10 = tensor[b, c, h1, w0];
-        T v11 = tensor[b, c, h1, w1];
-
-        T top = NumOps.Add(
-            NumOps.Multiply(v00, NumOps.FromDouble(1 - wWeight)),
-            NumOps.Multiply(v01, NumOps.FromDouble(wWeight)));
-        T bottom = NumOps.Add(
-            NumOps.Multiply(v10, NumOps.FromDouble(1 - wWeight)),
-            NumOps.Multiply(v11, NumOps.FromDouble(wWeight)));
-
-        return NumOps.Add(
-            NumOps.Multiply(top, NumOps.FromDouble(1 - hWeight)),
-            NumOps.Multiply(bottom, NumOps.FromDouble(hWeight)));
+        var imageNHWC = Engine.TensorPermute(image, [0, 2, 3, 1]);   // [B, H, W, C]
+        var warpedNHWC = Engine.GridSample(imageNHWC, grid);         // [B, H, W, C]
+        return Engine.TensorPermute(warpedNHWC, [0, 3, 1, 2]);       // [B, C, H, W]
     }
 
     private Tensor<T> BilinearUpsample(Tensor<T> input, int factor)
     {
-        int batchSize = input.Shape[0];
-        int channels = input.Shape[1];
-        int inHeight = input.Shape[2];
-        int inWidth = input.Shape[3];
-
-        int outHeight = inHeight * factor;
-        int outWidth = inWidth * factor;
-
-        var output = new Tensor<T>([batchSize, channels, outHeight, outWidth]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < outHeight; h++)
-                {
-                    for (int w = 0; w < outWidth; w++)
-                    {
-                        double srcH = (h + 0.5) / factor - 0.5;
-                        double srcW = (w + 0.5) / factor - 0.5;
-                        output[b, c, h, w] = BilinearSample(input, b, c, srcH, srcW, inHeight, inWidth);
-                    }
-                }
-            }
-        }
-
-        return output;
+        // Tape-aware upsample so the flow-decoder gradient path stays connected.
+        return Engine.Upsample(input, factor, factor);
     }
 
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
