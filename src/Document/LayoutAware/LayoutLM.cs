@@ -561,15 +561,18 @@ public class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
     }
 
     /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
+    public override void UpdateParameters(Vector<T> gradients)
     {
         if (!_useNativeMode)
             throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
 
-        // NeuralNetworkBase.UpdateParameters contract: caller passes the NEW
-        // parameter values (post-optimizer-step), NOT raw gradients. The previous
-        // body double-stepped on top of Adam by treating input as gradients.
-        SetParameters(parameters);
+        var currentParams = GetParameters();
+        T lr = NumOps.FromDouble(0.00005);
+
+        
+        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
+
+        SetParameters(currentParams);
     }
 
     private Vector<T> CollectGradients()

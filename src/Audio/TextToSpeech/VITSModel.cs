@@ -765,18 +765,29 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// <summary>
     /// Updates model parameters using the configured optimizer.
     /// </summary>
-    public override void UpdateParameters(Vector<T> parameters)
+    public override void UpdateParameters(Vector<T> gradients)
     {
         if (!_useNativeMode)
         {
             throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
         }
 
-        // NeuralNetworkBase.UpdateParameters contract: caller passes the NEW
-        // parameter values (post-optimizer-step), NOT raw gradients. The previous
-        // body treated input as gradients and ran them through the optimizer or
-        // a manual SGD subtract — double-applying on top of Adam's own step.
-        SetParameters(parameters);
+        // Use the configured optimizer for parameter updates
+        var currentParams = GetParameters();
+
+        // Cast to gradient-based optimizer to access UpdateParameters
+        if (_optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> gradientOptimizer)
+        {
+            var updatedParams = gradientOptimizer.UpdateParameters(currentParams, gradients);
+            SetParameters(updatedParams);
+        }
+        else
+        {
+            // Fallback: manual SGD with VITS's smaller learning rate
+            T learningRate = NumOps.FromDouble(0.0002);
+            currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
+            SetParameters(currentParams);
+        }
     }
 
     /// <summary>

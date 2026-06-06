@@ -830,15 +830,17 @@ public class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
     /// vanilla SGD step at the same base lr — callers who want the full schedule should
     /// drive <see cref="Train"/> instead and let the AdamW state machine handle it.
     /// </remarks>
-    public override void UpdateParameters(Vector<T> parameters)
+    public override void UpdateParameters(Vector<T> gradients)
     {
         if (!_useNativeMode)
             throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
 
-        // NeuralNetworkBase.UpdateParameters contract: caller passes the NEW
-        // parameter values (post-optimizer-step), NOT raw gradients. The previous
-        // body double-stepped on top of AdamW by treating input as gradients.
-        SetParameters(parameters);
+        var currentParams = GetParameters();
+        // Paper §3.3 base lr 2e-5.
+        T lr = NumOps.FromDouble(2e-5);
+
+        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
+        SetParameters(currentParams);
     }
 
     #endregion
