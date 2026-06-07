@@ -714,37 +714,48 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         int featuresToConsider = (int)Math.Min(x.Columns, Math.Max(1, _options.MaxFeatures * x.Columns));
         var featureIndices = Enumerable.Range(0, x.Columns).OrderBy(_ => _random.Next()).Take(featuresToConsider).ToList();
 
-        foreach (int featureIndex in featureIndices)
+        if (_options.SplitCriterion == SplitCriterion.VarianceReduction)
         {
-            var featureValues = x.GetColumn(featureIndex);
-            var uniqueValues = featureValues.Distinct().OrderBy(v => v).ToList();
-
-            foreach (var splitValue in uniqueValues.Skip(1))
+            // Fast O(features · n log n) split search: sort each feature once, then sweep with
+            // running left-partition sums (count, Σy, Σy²) so every candidate threshold's variance
+            // reduction is O(1). The previous path rescanned all n rows for every unique value
+            // (O(features · n²)) through NumOps virtual dispatch — ~95s to fit 752×10; this is ~1s.
+            (bestFeatureIndex, bestSplitValue, bestScore) = FindBestSplitVarianceReduction(x, y, featureIndices);
+        }
+        else
+        {
+            foreach (int featureIndex in featureIndices)
             {
-                var leftIndices = new List<int>();
-                var rightIndices = new List<int>();
+                var featureValues = x.GetColumn(featureIndex);
+                var uniqueValues = featureValues.Distinct().OrderBy(v => v).ToList();
 
-                for (int i = 0; i < x.Rows; i++)
+                foreach (var splitValue in uniqueValues.Skip(1))
                 {
-                    if (NumOps.LessThan(x[i, featureIndex], splitValue))
+                    var leftIndices = new List<int>();
+                    var rightIndices = new List<int>();
+
+                    for (int i = 0; i < x.Rows; i++)
                     {
-                        leftIndices.Add(i);
+                        if (NumOps.LessThan(x[i, featureIndex], splitValue))
+                        {
+                            leftIndices.Add(i);
+                        }
+                        else
+                        {
+                            rightIndices.Add(i);
+                        }
                     }
-                    else
+
+                    if (leftIndices.Count == 0 || rightIndices.Count == 0) continue;
+
+                    T score = StatisticsHelper<T>.CalculateSplitScore(y, leftIndices, rightIndices, _options.SplitCriterion);
+
+                    if (NumOps.GreaterThan(score, bestScore))
                     {
-                        rightIndices.Add(i);
+                        bestScore = score;
+                        bestFeatureIndex = featureIndex;
+                        bestSplitValue = splitValue;
                     }
-                }
-
-                if (leftIndices.Count == 0 || rightIndices.Count == 0) continue;
-
-                T score = StatisticsHelper<T>.CalculateSplitScore(y, leftIndices, rightIndices, _options.SplitCriterion);
-
-                if (NumOps.GreaterThan(score, bestScore))
-                {
-                    bestScore = score;
-                    bestFeatureIndex = featureIndex;
-                    bestSplitValue = splitValue;
                 }
             }
         }
@@ -790,6 +801,95 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         };
 
         return node;
+    }
+
+    /// <summary>
+    /// Finds the best (feature, threshold) under the variance-reduction criterion in
+    /// O(features · n log n): each feature is sorted once, then a single sweep maintains the
+    /// left partition's running count / Σy / Σy² so the population-variance reduction of every
+    /// candidate threshold is evaluated in O(1). Produces the same split the per-threshold rescan
+    /// would (left = value &lt; threshold; thresholds = the distinct values except the smallest;
+    /// strict-improvement tie-break in feature-then-ascending-value order).
+    /// </summary>
+    private (int featureIndex, T splitValue, T score) FindBestSplitVarianceReduction(
+        Matrix<T> x, Vector<T> y, List<int> featureIndices)
+    {
+        int n = x.Rows;
+
+        // Run the whole search in native double: NumOps virtual dispatch (and a delegate-based sort
+        // comparator) per element/comparison was the dominant cost on bushy trees. The result is
+        // converted back to T at the end.
+        var ySpan = y.AsTensor().Data.Span;
+        var yArr = new double[n];
+        double totalSumY = 0.0;
+        double totalSumY2 = 0.0;
+        for (int i = 0; i < n; i++)
+        {
+            double yi = Convert.ToDouble(ySpan[i]);
+            yArr[i] = yi;
+            totalSumY += yi;
+            totalSumY2 += yi * yi;
+        }
+
+        double totalMean = totalSumY / n;
+        double totalVar = (totalSumY2 / n) - (totalMean * totalMean);
+
+        int bestFeatureIndex = -1;
+        double bestThreshold = 0.0;
+        double bestReduction = double.NegativeInfinity;
+
+        var keys = new double[n];
+        var order = new int[n];
+
+        foreach (int featureIndex in featureIndices)
+        {
+            var colSpan = x.GetColumn(featureIndex).AsTensor().Data.Span;
+            for (int i = 0; i < n; i++)
+            {
+                keys[i] = Convert.ToDouble(colSpan[i]);
+                order[i] = i;
+            }
+
+            // Native key sort (no delegate, no NumOps): keys ascending, order permuted to match.
+            Array.Sort(keys, order);
+
+            double leftSumY = 0.0;
+            double leftSumY2 = 0.0;
+            int leftCount = 0;
+
+            for (int k = 0; k < n; k++)
+            {
+                // At each new distinct value, the accumulated rows are exactly those strictly smaller —
+                // score that split before folding the current row in.
+                if (k > 0 && leftCount > 0 && keys[k] != keys[k - 1])
+                {
+                    int rightCount = n - leftCount;
+                    double leftMean = leftSumY / leftCount;
+                    double rightSumY = totalSumY - leftSumY;
+                    double rightSumY2 = totalSumY2 - leftSumY2;
+                    double rightMean = rightSumY / rightCount;
+                    double leftVar = (leftSumY2 / leftCount) - (leftMean * leftMean);
+                    double rightVar = (rightSumY2 / rightCount) - (rightMean * rightMean);
+                    double reduction = totalVar - (((double)leftCount / n * leftVar) + ((double)rightCount / n * rightVar));
+
+                    if (reduction > bestReduction)
+                    {
+                        bestReduction = reduction;
+                        bestFeatureIndex = featureIndex;
+                        bestThreshold = keys[k];
+                    }
+                }
+
+                double yi = yArr[order[k]];
+                leftSumY += yi;
+                leftSumY2 += yi * yi;
+                leftCount++;
+            }
+        }
+
+        return bestFeatureIndex == -1
+            ? (-1, NumOps.Zero, NumOps.MinValue)
+            : (bestFeatureIndex, NumOps.FromDouble(bestThreshold), NumOps.FromDouble(bestReduction));
     }
 
     /// <summary>
