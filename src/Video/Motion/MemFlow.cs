@@ -258,8 +258,32 @@ public class MemFlow<T> : OpticalFlowBase<T>
     {
         _numFeatures = reader.ReadInt32();
         _numLayers = reader.ReadInt32();
+        // The base deserializer has already repopulated Layers with the restored
+        // weights. Re-point the typed field references at those layers rather than
+        // calling InitializeNativeLayers, which would Clear + recreate them with
+        // FRESH RANDOM weights — discarding the deserialized weights and making a
+        // cloned model produce different output (Clone_ShouldProduceIdenticalOutput).
+        ExtractLayerReferences();
+    }
+
+    /// <summary>
+    /// Re-derives the typed layer field references (<see cref="_featureExtract"/>,
+    /// <see cref="_processingBlocks"/>, <see cref="_outputConv"/>) from the
+    /// <see cref="NeuralNetworkBase{T}.Layers"/> list. Idempotent — safe to call
+    /// after deserialization, where Layers holds the restored-weight layers in the
+    /// same order InitializeLayers added them (feature-extract conv, processing
+    /// convs, output conv).
+    /// </summary>
+    private void ExtractLayerReferences()
+    {
+        var convs = Layers.OfType<ConvolutionalLayer<T>>().ToList();
+        if (convs.Count < 2) return;
+
+        _featureExtract = convs[0];
+        _outputConv = convs[convs.Count - 1];
         _processingBlocks.Clear();
-        InitializeNativeLayers(Architecture);
+        for (int i = 1; i < convs.Count - 1; i++)
+            _processingBlocks.Add(convs[i]);
     }
 
     /// <inheritdoc/>
