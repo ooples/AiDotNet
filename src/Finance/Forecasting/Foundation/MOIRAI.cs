@@ -521,11 +521,9 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
         // feedback_tensor_reshape_gradient memory: tensor.Reshape detaches,
         // Engine.Reshape preserves the gradient chain).
         Tensor<T> current = input;
-        bool addedBatchDim = false;
         if (current.Rank == 1)
         {
             current = Engine.Reshape(current, new[] { 1, current.Length });
-            addedBatchDim = true;
         }
 
         foreach (var layer in Layers)
