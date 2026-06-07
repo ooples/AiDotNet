@@ -442,9 +442,9 @@ public class SegmentationInterfaceContractTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task GroundedSAM2_OpenVocabInterface_SegmentWithText()
+    public async Task OpenVocabGroundedSAM_OpenVocabInterface_SegmentWithText()
     {
-        var model = new GroundedSAM2<double>(Arch(), numClasses: 5);
+        var model = new OpenVocabGroundedSAM<double>(Arch(), numClasses: 5);
         var ov = (IOpenVocabSegmentation<double>)model;
         var result = ov.SegmentWithText(Rand(1, 3, 32, 32), new[] { "car" });
         Assert.NotNull(result);

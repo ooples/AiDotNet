@@ -797,9 +797,9 @@ public class SegmentationTrainingRobustnessTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task GroundedSAM2_MultiStepTrain_DoesNotThrow()
+    public async Task OpenVocabGroundedSAM_MultiStepTrain_DoesNotThrow()
     {
-        var model = new GroundedSAM2<double>(Arch(), numClasses: 5);
+        var model = new OpenVocabGroundedSAM<double>(Arch(), numClasses: 5);
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 

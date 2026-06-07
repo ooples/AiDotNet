@@ -27517,7 +27517,7 @@ public static class LayerHelper<T>
     /// <summary>
     /// Creates encoder layers for the GroundedSAM2 model.
     /// </summary>
-    public static IEnumerable<ILayer<T>> CreateGroundedSAM2EncoderLayers(
+    public static IEnumerable<ILayer<T>> CreateOpenVocabGroundedSAMEncoderLayers(
         int inputChannels, int inputHeight, int inputWidth,
         int[] channelDims, int[] depths, double dropRate)
     {
@@ -27548,7 +27548,7 @@ public static class LayerHelper<T>
     /// <summary>
     /// Creates decoder layers for the GroundedSAM2 model.
     /// </summary>
-    public static IEnumerable<ILayer<T>> CreateGroundedSAM2DecoderLayers(
+    public static IEnumerable<ILayer<T>> CreateOpenVocabGroundedSAMDecoderLayers(
         int encoderOutputChannels, int decoderDim, int numClasses,
         int featureHeight, int featureWidth)
     {

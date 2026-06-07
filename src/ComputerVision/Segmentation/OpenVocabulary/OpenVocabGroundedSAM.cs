@@ -43,10 +43,10 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.BinaryClassification,
 ///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 1);
-/// var model = new GroundedSAM2&lt;double&gt;(architecture, numClasses: 1);
+/// var model = new OpenVocabGroundedSAM&lt;double&gt;(architecture, numClasses: 1);
 ///
 /// // Or load a pre-trained ONNX model for open-world object tracking
-/// var onnxModel = new GroundedSAM2&lt;double&gt;(architecture, "groundedsam2.onnx", numClasses: 1);
+/// var onnxModel = new OpenVocabGroundedSAM&lt;double&gt;(architecture, "groundedsam2.onnx", numClasses: 1);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -59,9 +59,9 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Grounded SAM: Assembling Open-World Models for Diverse Visual Tasks", "https://arxiv.org/abs/2401.14159", Year = 2024, Authors = "Ren et al.")]
-public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
+public class OpenVocabGroundedSAM<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
 {
-    private readonly GroundedSAM2Options _options;
+    private readonly OpenVocabGroundedSAMOptions _options;
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
@@ -80,7 +80,7 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
 
     #region Properties
     /// <summary>
-    /// Gets whether this GroundedSAM2 instance supports training.
+    /// Gets whether this OpenVocabGroundedSAM instance supports training.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -94,7 +94,7 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
 
     #region Constructors
     /// <summary>
-    /// Initializes GroundedSAM2 in native (trainable) mode.
+    /// Initializes OpenVocabGroundedSAM in native (trainable) mode.
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
@@ -104,17 +104,17 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Creates a trainable GroundedSAM2 model.
+    /// <b>For Beginners:</b> Creates a trainable OpenVocabGroundedSAM model.
     /// </para>
     /// </remarks>
-    public GroundedSAM2(NeuralNetworkArchitecture<T> architecture,
+    public OpenVocabGroundedSAM(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         double dropRate = 0,
-        GroundedSAM2Options? options = null)
+        OpenVocabGroundedSAMOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
-        _options = options ?? new GroundedSAM2Options(); Options = _options;
+        _options = options ?? new OpenVocabGroundedSAMOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
@@ -128,7 +128,7 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     }
 
     /// <summary>
-    /// Initializes GroundedSAM2 in ONNX (inference-only) mode.
+    /// Initializes OpenVocabGroundedSAM in ONNX (inference-only) mode.
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
@@ -136,22 +136,22 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Loads a pre-trained GroundedSAM2 from ONNX for inference.
+    /// <b>For Beginners:</b> Loads a pre-trained OpenVocabGroundedSAM from ONNX for inference.
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public GroundedSAM2(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
+    public OpenVocabGroundedSAM(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 1,
-        GroundedSAM2Options? options = null)
+        OpenVocabGroundedSAMOptions? options = null)
         : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
-        _options = options ?? new GroundedSAM2Options(); Options = _options;
+        _options = options ?? new OpenVocabGroundedSAMOptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"GroundedSAM2 ONNX model not found: {onnxModelPath}");
+            throw new FileNotFoundException($"OpenVocabGroundedSAM ONNX model not found: {onnxModelPath}");
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
@@ -161,7 +161,7 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
         _depths = [2, 3, 16, 3];
         _decoderDim = 256;
         try { _onnxSession = new InferenceSession(onnxModelPath); }
-        catch (Exception ex) { throw new InvalidOperationException($"Failed to load GroundedSAM2 ONNX model: {ex.Message}", ex); }
+        catch (Exception ex) { throw new InvalidOperationException($"Failed to load OpenVocabGroundedSAM ONNX model: {ex.Message}", ex); }
         InitializeLayers();
     }
     #endregion
@@ -256,10 +256,10 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
         { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Architecture.Layers.Count / 2; }
         else
         {
-            var encoderLayers = LayerHelper<T>.CreateGroundedSAM2EncoderLayers(_channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
+            var encoderLayers = LayerHelper<T>.CreateOpenVocabGroundedSAMEncoderLayers(_channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
             _encoderLayerEnd = encoderLayers.Count; Layers.AddRange(encoderLayers);
             int fH = _height / 32, fW = _width / 32;
-            var decoderLayers = LayerHelper<T>.CreateGroundedSAM2DecoderLayers(_channelDims[^1], _decoderDim, _numClasses, fH, fW);
+            var decoderLayers = LayerHelper<T>.CreateOpenVocabGroundedSAMDecoderLayers(_channelDims[^1], _decoderDim, _numClasses, fH, fW);
             Layers.AddRange(decoderLayers);
         }
     }
@@ -287,7 +287,7 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        AdditionalInfo = new Dictionary<string, object> { { "ModelName", "GroundedSAM2" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
+        AdditionalInfo = new Dictionary<string, object> { { "ModelName", "OpenVocabGroundedSAM" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = this.Serialize()
     };
 
@@ -325,8 +325,8 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     /// </para>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new GroundedSAM2<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
-        : new GroundedSAM2<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
+        ? new OpenVocabGroundedSAM<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
+        : new OpenVocabGroundedSAM<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
 
     /// <summary>
     /// Releases managed resources including the ONNX inference session.
