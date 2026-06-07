@@ -453,11 +453,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         // spiking simulation while Train ran it through the readout path —
         // inference saw a different forward pass than training optimized
         // against, defeating supervised learning end-to-end.
-        int readoutBoundary = Layers.Count;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            if (Layers[i] is Layers.SpikingLayer<T>) { readoutBoundary = i + 1; break; }
-        }
+        int readoutBoundary = FindReadoutBoundary();
         // -1 sentinel preserved for downstream code that prefers the "no
         // readout" branch (entire stack runs through the simulation).
         int readoutIdx = readoutBoundary < Layers.Count ? readoutBoundary : -1;
@@ -588,15 +584,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         // LayerHelper.CreateDefaultSpikingLayers appends
         // {DenseLayer, ActivationLayer} after the SpikingLayer stack;
         // both must run as continuous (non-spiking) readout layers.
-        int readoutBoundary = Layers.Count;
-        for (int li = Layers.Count - 1; li >= 0; li--)
-        {
-            if (Layers[li] is SpikingLayer<T>)
-            {
-                readoutBoundary = li + 1;
-                break;
-            }
-        }
+        int readoutBoundary = FindReadoutBoundary();
 
         // Run simulation for training
         for (int step = 0; step < _simulationSteps; step++)
@@ -772,7 +760,8 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         // surrogate gradient maps the non-differentiable spike function
         // S(u)=Θ(u−θ) to a smooth backward derivative S'(u)≈α/(1+α|u−θ|)²
         // so the standard rate-coded delta rule applies end-to-end.
-        T learningRate = NumOps.FromDouble(_options.ReadoutLearningRate);
+        // Note: the Adam update at lines ~942-963 computes its own double-typed
+        // lrD with decay; no T-typed learningRate is needed at this scope.
         // _options.StdpWindow intentionally not read here: this Train()
         // path uses surrogate-gradient Adam on the output layer and freezes
         // hidden layers (see hidden-layer `continue` below). StdpWindow
@@ -1593,5 +1582,26 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         if (shape is null || shape.Length == 0) return 0;
         return shape[0];
+    }
+
+    /// <summary>
+    /// Returns the index of the first non-spiking layer in the stack (i.e. the
+    /// readout tail's starting position): scan from the end, find the last
+    /// <see cref="Layers.SpikingLayer{T}"/>, and return its index + 1. Equals
+    /// <c>Layers.Count</c> when every layer is spiking (no readout tail).
+    /// Predict and Train MUST use the same boundary so the forward path
+    /// trained against matches the forward path evaluated at inference —
+    /// previously these scans were duplicated and the inference version
+    /// diverged from training (peeled off only the LAST non-spiking layer
+    /// instead of every layer after the last spiking one).
+    /// </summary>
+    private int FindReadoutBoundary()
+    {
+        int boundary = Layers.Count;
+        for (int i = Layers.Count - 1; i >= 0; i--)
+        {
+            if (Layers[i] is Layers.SpikingLayer<T>) { boundary = i + 1; break; }
+        }
+        return boundary;
     }
 }
