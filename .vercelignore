@@ -1,18 +1,29 @@
-src/
-tests/
-tools/
-samples/
-testconsole/
-AiDotNetBenchmarkTests/
-PhaseATestRunner/
-.worktrees/
+# Leading-slash patterns are gitignore-anchored to this file's directory
+# (the repo root) so they only match the top-level C# project directories
+# WITHOUT also matching the Astro Vercel project at /website/. Unanchored
+# patterns like `src/` would also match `website/src/` (gitignore-style
+# matching is depth-agnostic by default), removing the Astro pages before
+# `npm run build` ever sees them — that's the bug that produced 0-page
+# production deploys and aidotnet.dev → 404 until this was anchored.
+/src/
+/tests/
+/tools/
+/samples/
+/testconsole/
+/AiDotNetBenchmarkTests/
+/PhaseATestRunner/
+/.worktrees/
+/bin/
+/obj/
+/.github/
+/docs/
+# Build outputs anywhere in the tree (these patterns intentionally match
+# at any depth — keep them unanchored).
 *.dll
 *.exe
 *.pdb
 *.nupkg
-bin/
-obj/
-.github/
-docs/
+# Website-tree exclusions: explicit because these live under /website/
+# and aren't caught by the anchored patterns above.
 website/node_modules/
 website/.astro/
