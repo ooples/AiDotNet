@@ -606,19 +606,20 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// <summary>
     /// Updates model parameters by applying gradient descent.
     /// </summary>
-    public override void UpdateParameters(Vector<T> gradients)
+    public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode)
         {
             throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
         }
 
-        var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.0001); // Wav2Vec2 uses smaller learning rate
-
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-
-        SetParameters(currentParams);
+        // NeuralNetworkBase.UpdateParameters contract: caller passes NEW
+        // parameter values (post-optimizer-step), NOT raw gradients. The
+        // previous body computed `current − lr · input` then SetParameters,
+        // which on top of Adam's own update produced a double-step that
+        // destabilised training. Forward straight to SetParameters per the
+        // contract — Adam already produced the correct new values.
+        SetParameters(parameters);
     }
 
     /// <summary>

@@ -252,6 +252,21 @@ public class BuildAsyncResidualModeCollapseTests
     public async Task BuildAsync_ResidualModeCollapse_EightArmDiagnostic()
     {
         await Task.Yield();
+
+        // Defensive CPU pin. Root cause (confirmed via dotnet-trace): on a GPU-equipped dev box,
+        // AiModelBuilder.BuildAsync's default path auto-detected the OpenCL GPU and left
+        // AiDotNetEngine.Current = DirectGpuTensorEngine for the rest of the process; this
+        // diagnostic's tiny per-sample tensor ops then ran on the GPU with a host<->device copy PER
+        // OP, inflating it from ~13s to >600s (trace dominated by DirectOpenClBuffer.CopyTo/FromHost
+        // + StreamingWorkerPool spin) — NOT a CPU-threading issue, which is why no determinism/
+        // BLAS/MaxDOP reset helped. CI has no GPU so it never reproduced there. The assembly now
+        // runs CPU-only (TestAssemblyDeterminismInit + AiModelBuilder honoring AIDOTNET_DISABLE_GPU);
+        // this reset additionally guards against an explicit-GPU-config test leaving the GPU engine
+        // active before this one (mirrors NeuralNetworkModelTestBase, which integration tests don't
+        // inherit).
+        if (AiDotNet.Tensors.Engines.AiDotNetEngine.Current is not AiDotNet.Tensors.Engines.CpuEngine)
+            AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+
         var (arch, xTrain, yTrain) = BuildFixture();
 
         // ARM 0: per-sample Train reference (one sample at a time)
