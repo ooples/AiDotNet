@@ -182,7 +182,11 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         // Build the decision tree using the original data
         // Note: Decision tree regularization is handled through tree structure parameters
         // (MaxDepth, MinSamplesSplit, etc.), not through data transformation
-        Root = BuildTree(x, y, 0);
+        // The default variance-reduction criterion uses an allocation-light index-based builder
+        // (no per-node matrix rebuilds or retained sample sets); other criteria use the generic path.
+        Root = _options.SplitCriterion == SplitCriterion.VarianceReduction
+            ? BuildTreeFast(x, y)
+            : BuildTree(x, y, 0);
         CalculateFeatureImportances(x);
     }
 
@@ -714,48 +718,39 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         int featuresToConsider = (int)Math.Min(x.Columns, Math.Max(1, _options.MaxFeatures * x.Columns));
         var featureIndices = Enumerable.Range(0, x.Columns).OrderBy(_ => _random.Next()).Take(featuresToConsider).ToList();
 
-        if (_options.SplitCriterion == SplitCriterion.VarianceReduction)
+        // Generic per-criterion path (variance reduction uses the faster index-based BuildTreeFast,
+        // dispatched in Train; this path serves the other split criteria).
+        foreach (int featureIndex in featureIndices)
         {
-            // Fast O(features · n log n) split search: sort each feature once, then sweep with
-            // running left-partition sums (count, Σy, Σy²) so every candidate threshold's variance
-            // reduction is O(1). The previous path rescanned all n rows for every unique value
-            // (O(features · n²)) through NumOps virtual dispatch — ~95s to fit 752×10; this is ~1s.
-            (bestFeatureIndex, bestSplitValue, bestScore) = FindBestSplitVarianceReduction(x, y, featureIndices);
-        }
-        else
-        {
-            foreach (int featureIndex in featureIndices)
+            var featureValues = x.GetColumn(featureIndex);
+            var uniqueValues = featureValues.Distinct().OrderBy(v => v).ToList();
+
+            foreach (var splitValue in uniqueValues.Skip(1))
             {
-                var featureValues = x.GetColumn(featureIndex);
-                var uniqueValues = featureValues.Distinct().OrderBy(v => v).ToList();
+                var leftIndices = new List<int>();
+                var rightIndices = new List<int>();
 
-                foreach (var splitValue in uniqueValues.Skip(1))
+                for (int i = 0; i < x.Rows; i++)
                 {
-                    var leftIndices = new List<int>();
-                    var rightIndices = new List<int>();
-
-                    for (int i = 0; i < x.Rows; i++)
+                    if (NumOps.LessThan(x[i, featureIndex], splitValue))
                     {
-                        if (NumOps.LessThan(x[i, featureIndex], splitValue))
-                        {
-                            leftIndices.Add(i);
-                        }
-                        else
-                        {
-                            rightIndices.Add(i);
-                        }
+                        leftIndices.Add(i);
                     }
-
-                    if (leftIndices.Count == 0 || rightIndices.Count == 0) continue;
-
-                    T score = StatisticsHelper<T>.CalculateSplitScore(y, leftIndices, rightIndices, _options.SplitCriterion);
-
-                    if (NumOps.GreaterThan(score, bestScore))
+                    else
                     {
-                        bestScore = score;
-                        bestFeatureIndex = featureIndex;
-                        bestSplitValue = splitValue;
+                        rightIndices.Add(i);
                     }
+                }
+
+                if (leftIndices.Count == 0 || rightIndices.Count == 0) continue;
+
+                T score = StatisticsHelper<T>.CalculateSplitScore(y, leftIndices, rightIndices, _options.SplitCriterion);
+
+                if (NumOps.GreaterThan(score, bestScore))
+                {
+                    bestScore = score;
+                    bestFeatureIndex = featureIndex;
+                    bestSplitValue = splitValue;
                 }
             }
         }
@@ -804,92 +799,164 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     }
 
     /// <summary>
-    /// Finds the best (feature, threshold) under the variance-reduction criterion in
-    /// O(features · n log n): each feature is sorted once, then a single sweep maintains the
-    /// left partition's running count / Σy / Σy² so the population-variance reduction of every
-    /// candidate threshold is evaluated in O(1). Produces the same split the per-threshold rescan
-    /// would (left = value &lt; threshold; thresholds = the distinct values except the smallest;
-    /// strict-improvement tie-break in feature-then-ascending-value order).
+    /// Allocation-light variance-reduction tree builder. Extracts each feature column and the target
+    /// once into native double arrays, then recurses over row-index subsets — no per-node matrix
+    /// rebuilds and no retained per-node sample sets (the previous path stored all samples at every
+    /// node). Feature importance / impurity is recorded on each node as it is built.
     /// </summary>
-    private (int featureIndex, T splitValue, T score) FindBestSplitVarianceReduction(
-        Matrix<T> x, Vector<T> y, List<int> featureIndices)
+    private DecisionTreeNode<T> BuildTreeFast(Matrix<T> x, Vector<T> y)
     {
         int n = x.Rows;
+        int numFeatures = x.Columns;
+        if (n == 0)
+        {
+            return new DecisionTreeNode<T> { IsLeaf = true, Prediction = NumOps.Zero };
+        }
 
-        // Run the whole search in native double: NumOps virtual dispatch (and a delegate-based sort
-        // comparator) per element/comparison was the dominant cost on bushy trees. The result is
-        // converted back to T at the end.
+        var columns = new double[numFeatures][];
+        for (int f = 0; f < numFeatures; f++)
+        {
+            var span = x.GetColumn(f).AsTensor().Data.Span;
+            var arr = new double[n];
+            for (int i = 0; i < n; i++) arr[i] = Convert.ToDouble(span[i]);
+            columns[f] = arr;
+        }
+
         var ySpan = y.AsTensor().Data.Span;
         var yArr = new double[n];
-        double totalSumY = 0.0;
-        double totalSumY2 = 0.0;
-        for (int i = 0; i < n; i++)
+        for (int i = 0; i < n; i++) yArr[i] = Convert.ToDouble(ySpan[i]);
+
+        var indices = new int[n];
+        for (int i = 0; i < n; i++) indices[i] = i;
+
+        return BuildTreeFastIndexed(columns, yArr, indices, 0);
+    }
+
+    private DecisionTreeNode<T> BuildTreeFastIndexed(double[][] columns, double[] yArr, int[] indices, int depth)
+    {
+        int count = indices.Length;
+        if (depth >= _options.MaxDepth || count < _options.MinSamplesSplit)
         {
-            double yi = Convert.ToDouble(ySpan[i]);
-            yArr[i] = yi;
+            return MakeLeaf(yArr, indices);
+        }
+
+        int numFeatures = columns.Length;
+        int featuresToConsider = (int)Math.Min(numFeatures, Math.Max(1, _options.MaxFeatures * numFeatures));
+        var featureIndices = Enumerable.Range(0, numFeatures).OrderBy(_ => _random.Next()).Take(featuresToConsider).ToList();
+
+        var (bestFeature, bestThreshold, reduction, nodeVar) = FindBestSplitFast(columns, yArr, indices, featureIndices);
+        if (bestFeature == -1)
+        {
+            return MakeLeaf(yArr, indices);
+        }
+
+        var col = columns[bestFeature];
+        var left = new List<int>(count);
+        var right = new List<int>(count);
+        foreach (int idx in indices)
+        {
+            if (col[idx] < bestThreshold) left.Add(idx); else right.Add(idx);
+        }
+
+        if (left.Count == 0 || right.Count == 0)
+        {
+            return MakeLeaf(yArr, indices);
+        }
+
+        return new DecisionTreeNode<T>
+        {
+            FeatureIndex = bestFeature,
+            SplitValue = NumOps.FromDouble(bestThreshold),
+            IsLeaf = false,
+            NodeImportance = NumOps.FromDouble(reduction * count),
+            NodeImpurity = NumOps.FromDouble(nodeVar),
+            LeftSampleCount = left.Count,
+            RightSampleCount = right.Count,
+            Left = BuildTreeFastIndexed(columns, yArr, [.. left], depth + 1),
+            Right = BuildTreeFastIndexed(columns, yArr, [.. right], depth + 1),
+        };
+    }
+
+    private DecisionTreeNode<T> MakeLeaf(double[] yArr, int[] indices)
+    {
+        int count = indices.Length;
+        double sum = 0.0;
+        for (int i = 0; i < count; i++) sum += yArr[indices[i]];
+        double mean = count > 0 ? sum / count : 0.0;
+        double sse = 0.0;
+        for (int i = 0; i < count; i++) { double d = yArr[indices[i]] - mean; sse += d * d; }
+        double variance = count > 0 ? sse / count : 0.0;
+        return new DecisionTreeNode<T>
+        {
+            IsLeaf = true,
+            Prediction = NumOps.FromDouble(mean),
+            NodeImpurity = NumOps.FromDouble(variance),
+        };
+    }
+
+    /// <summary>
+    /// Index-subset variance-reduction split search in native double: each candidate feature is
+    /// sorted once, then a single sweep with running left-partition sums (count, Σy, Σy²) scores
+    /// every threshold in O(1). Returns the best (feature, threshold), its variance reduction, and
+    /// the node's population variance.
+    /// </summary>
+    private (int featureIndex, double threshold, double reduction, double nodeVariance) FindBestSplitFast(
+        double[][] columns, double[] yArr, int[] indices, List<int> featureIndices)
+    {
+        int count = indices.Length;
+        double totalSumY = 0.0, totalSumY2 = 0.0;
+        for (int i = 0; i < count; i++)
+        {
+            double yi = yArr[indices[i]];
             totalSumY += yi;
             totalSumY2 += yi * yi;
         }
+        double totalMean = totalSumY / count;
+        double totalVar = (totalSumY2 / count) - (totalMean * totalMean);
 
-        double totalMean = totalSumY / n;
-        double totalVar = (totalSumY2 / n) - (totalMean * totalMean);
-
-        int bestFeatureIndex = -1;
+        int bestFeature = -1;
         double bestThreshold = 0.0;
         double bestReduction = double.NegativeInfinity;
 
-        var keys = new double[n];
-        var order = new int[n];
+        var keys = new double[count];
+        var ord = new int[count];
 
-        foreach (int featureIndex in featureIndices)
+        foreach (int f in featureIndices)
         {
-            var colSpan = x.GetColumn(featureIndex).AsTensor().Data.Span;
-            for (int i = 0; i < n; i++)
-            {
-                keys[i] = Convert.ToDouble(colSpan[i]);
-                order[i] = i;
-            }
+            var col = columns[f];
+            for (int i = 0; i < count; i++) { keys[i] = col[indices[i]]; ord[i] = indices[i]; }
+            Array.Sort(keys, ord);
 
-            // Native key sort (no delegate, no NumOps): keys ascending, order permuted to match.
-            Array.Sort(keys, order);
-
-            double leftSumY = 0.0;
-            double leftSumY2 = 0.0;
+            double leftSumY = 0.0, leftSumY2 = 0.0;
             int leftCount = 0;
-
-            for (int k = 0; k < n; k++)
+            for (int k = 0; k < count; k++)
             {
-                // At each new distinct value, the accumulated rows are exactly those strictly smaller —
-                // score that split before folding the current row in.
+                // Distinct-value boundary: accumulated rows are exactly those strictly smaller.
                 if (k > 0 && leftCount > 0 && keys[k] != keys[k - 1])
                 {
-                    int rightCount = n - leftCount;
+                    int rightCount = count - leftCount;
                     double leftMean = leftSumY / leftCount;
                     double rightSumY = totalSumY - leftSumY;
                     double rightSumY2 = totalSumY2 - leftSumY2;
                     double rightMean = rightSumY / rightCount;
                     double leftVar = (leftSumY2 / leftCount) - (leftMean * leftMean);
                     double rightVar = (rightSumY2 / rightCount) - (rightMean * rightMean);
-                    double reduction = totalVar - (((double)leftCount / n * leftVar) + ((double)rightCount / n * rightVar));
-
-                    if (reduction > bestReduction)
+                    double red = totalVar - (((double)leftCount / count * leftVar) + ((double)rightCount / count * rightVar));
+                    if (red > bestReduction)
                     {
-                        bestReduction = reduction;
-                        bestFeatureIndex = featureIndex;
+                        bestReduction = red;
+                        bestFeature = f;
                         bestThreshold = keys[k];
                     }
                 }
-
-                double yi = yArr[order[k]];
+                double yi = yArr[ord[k]];
                 leftSumY += yi;
                 leftSumY2 += yi * yi;
                 leftCount++;
             }
         }
 
-        return bestFeatureIndex == -1
-            ? (-1, NumOps.Zero, NumOps.MinValue)
-            : (bestFeatureIndex, NumOps.FromDouble(bestThreshold), NumOps.FromDouble(bestReduction));
+        return (bestFeature, bestThreshold, bestReduction, totalVar);
     }
 
     /// <summary>
@@ -962,6 +1029,12 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         if (node.IsLeaf || node.Left == null || node.Right == null)
         {
             return NumOps.Zero;
+        }
+
+        // Index-based builder records importance directly and does not retain per-node samples.
+        if (node.Samples == null || node.Samples.Count == 0)
+        {
+            return node.NodeImportance;
         }
 
         T parentVariance = StatisticsHelper<T>.CalculateVariance(node.Samples.Select(s => s.Target));
@@ -1107,6 +1180,12 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
             if (node == null || node.IsLeaf)
             {
                 return NumOps.Zero;
+            }
+
+            // Index-based builder records impurity directly and does not retain per-node samples.
+            if (node.Samples == null || node.Samples.Count == 0)
+            {
+                return node.NodeImpurity;
             }
 
             // For regression trees, we use variance as the impurity measure
