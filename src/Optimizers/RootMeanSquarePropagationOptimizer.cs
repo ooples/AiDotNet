@@ -315,12 +315,22 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
         T oneMinusDecay = NumOps.FromDouble(1 - _options.Decay);
         T epsilon = NumOps.FromDouble(_options.Epsilon);
 
+        // GPU-resident step (AIDOTNET_GPU_ADAM=1); gated off, CPU fallback per-param when not GPU-resident.
+        bool gpuAdam = typeof(T) == typeof(float)
+            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
+            && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
+
         foreach (var param in context.Parameters)
         {
             if (!context.Gradients.TryGetValue(param, out var grad))
                 continue;
 
-            if (!_tapeSqGrad.TryGetValue(param, out var sqGrad)) { sqGrad = new Tensor<T>(param._shape); _tapeSqGrad[param] = sqGrad; }
+            if (!_tapeSqGrad.TryGetValue(param, out var sqGrad)) { sqGrad = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) sqGrad.AsWritableSpan().Clear(); _tapeSqGrad[param] = sqGrad; }
+
+            if (gpuAdam && param.Length == grad.Length
+                && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryRmspropStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)sqGrad,
+                    (float)NumOps.ToDouble(CurrentLearningRate), (float)_options.Decay, (float)_options.Epsilon, 0f))
+                continue;
 
             // sqGrad = decay * sqGrad + (1 - decay) * grad^2
             var sqGradNew = Engine.TensorAdd(Engine.TensorMultiplyScalar(sqGrad, decay), Engine.TensorMultiplyScalar(Engine.TensorMultiply(grad, grad), oneMinusDecay));
@@ -463,6 +473,9 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
         base.Reset();
         _t = 0;
         _squaredGradient = Vector<T>.Empty();
+        // Clear the tape-side per-parameter squared averages so a reused instance
+        // does not carry RMSProp history into the next run.
+        _tapeSqGrad.Clear();
     }
 
     /// <summary>
