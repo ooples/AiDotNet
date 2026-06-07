@@ -846,8 +846,13 @@ public class TimeLLM<T> : ForecastingModelBase<T>
         // RevIN reverse: restore the input's per-instance level/scale.
         current = DenormalizeForecast(current);
 
+        // Drop the synthetic batch axis through the tape-aware Engine.Reshape —
+        // the instance Tensor.Reshape detaches the result from the autodiff tape,
+        // which severs the loss from every layer's weights (zero gradients →
+        // params never change, loss never decreases) on the rank-1 forecasting
+        // input path the ModelFamily tests exercise.
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
-            current = current.Reshape(new[] { current.Shape[1] });
+            current = Engine.Reshape(current, new[] { current.Shape[1] });
 
         return current;
     }
