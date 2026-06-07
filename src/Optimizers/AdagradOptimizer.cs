@@ -30,8 +30,27 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <summary>
+    /// Describes this Adagrad instance for the fused kernel (Tensors
+    /// <c>OptimizerType.Adagrad</c> = <c>AdagradUpdateSimd(lr, eps)</c>):
+    /// Epsilon → eps; the running squared-gradient accumulator lives in the plan.
+    /// The adaptive LR-increase/decrease factors only fire under
+    /// UseAdaptiveLearningRate, which is declined here (→ eager). Parity-gated.
+    /// </summary>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        if (_options.UseAdaptiveLearningRate) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+        config = new Fused.FusedOptimizerConfig(
+            Tensors.Engines.Compilation.OptimizerType.Adagrad,
+            (float)GetCurrentLearningRate(),
+            0f, 0f, (float)_options.Epsilon, 0f, schedule);
+        return true;
+    }
+
     /// <summary>
     /// The configuration options specific to the Adagrad optimizer.
     /// </summary>
@@ -158,6 +177,9 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         _accumulatedSquaredGradients = new Vector<T>(InterfaceGuard.Parameterizable(currentSolution).GetParameters().Length);
+        // Clear the tape-side accumulator so a reused optimizer instance starts a
+        // new run with fresh Adagrad state instead of bleeding the previous run's.
+        _tapeAccSqGrad.Clear();
         InitializeAdaptiveParameters();
 
         for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
@@ -335,12 +357,22 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     {
         T epsilon = NumOps.FromDouble(_options.Epsilon);
 
+        // GPU-resident step (AIDOTNET_GPU_ADAM=1); gated off, CPU fallback per-param when not GPU-resident.
+        bool gpuAdam = typeof(T) == typeof(float)
+            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
+            && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
+
         foreach (var param in context.Parameters)
         {
             if (!context.Gradients.TryGetValue(param, out var grad))
                 continue;
 
-            if (!_tapeAccSqGrad.TryGetValue(param, out var accSq)) { accSq = new Tensor<T>(param._shape); _tapeAccSqGrad[param] = accSq; }
+            if (!_tapeAccSqGrad.TryGetValue(param, out var accSq)) { accSq = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) accSq.AsWritableSpan().Clear(); _tapeAccSqGrad[param] = accSq; }
+
+            if (gpuAdam && param.Length == grad.Length
+                && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryAdagradStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)accSq,
+                    (float)NumOps.ToDouble(CurrentLearningRate), (float)_options.Epsilon, 0f))
+                continue;
 
             // accSqGrad += grad^2
             Engine.TensorAddInPlace(accSq, Engine.TensorMultiply(grad, grad));

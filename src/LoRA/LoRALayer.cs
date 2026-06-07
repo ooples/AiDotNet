@@ -247,9 +247,14 @@ public class LoRALayer<T> : LayerBase<T>
     {
         _lastInput = input.Clone();
 
-        // Get batch size and validate input shape
-        int batchSize = input.Shape[0];
-        int inputSize = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
+        // Features live on the LAST axis; every leading axis is batch-like.
+        // Rank-2 [batch, features] is the classic dense case; rank-3
+        // [batch, seq, features] is the sequence case (LoRA wrapping
+        // attention / FFN sublayers inside transformer blocks). Reading
+        // Shape[1] here would misinterpret the SEQUENCE dim of a rank-3
+        // input as the feature dim and reject valid sequence inputs.
+        int inputSize = input.Shape.Length > 1 ? input.Shape[input.Shape.Length - 1] : input.Length;
+        int batchSize = inputSize > 0 ? input.Length / inputSize : input.Shape[0];
 
         if (inputSize != _loraA.Rows)
         {
@@ -295,6 +300,19 @@ public class LoRALayer<T> : LayerBase<T>
 
         // Apply activation if specified
         Tensor<T> result = ScalarActivation != null ? ApplyActivation(deltaOutput) : deltaOutput;
+
+        // Restore the original leading (batch-like) axes so the delta can be
+        // added elementwise to the base layer's output: a rank-3
+        // [batch, seq, in] input must come back as [batch, seq, out], not the
+        // flattened [batch*seq, out] the matmul produced.
+        if (input.Shape.Length > 2)
+        {
+            var outShape = new int[input.Shape.Length];
+            for (int i = 0; i < input.Shape.Length - 1; i++)
+                outShape[i] = input.Shape[i];
+            outShape[input.Shape.Length - 1] = result.Shape[result.Shape.Length - 1];
+            result = Engine.Reshape(result, outShape);
+        }
 
         return result;
     }

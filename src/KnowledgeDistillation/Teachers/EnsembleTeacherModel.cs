@@ -263,7 +263,9 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
                 break;
 
             default:
-                throw new NotImplementedException($"Aggregation mode {_aggregationMode} not implemented");
+                throw new ArgumentOutOfRangeException(nameof(_aggregationMode), _aggregationMode,
+                    $"Unrecognised aggregation mode '{_aggregationMode}'. Valid modes: "
+                    + "WeightedAverage, GeometricMean, Maximum, Median.");
         }
 
         return result;

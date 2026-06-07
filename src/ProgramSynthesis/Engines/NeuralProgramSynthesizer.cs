@@ -15,7 +15,6 @@ using AiDotNet.ProgramSynthesis.Interfaces;
 using AiDotNet.ProgramSynthesis.Models;
 using AiDotNet.ProgramSynthesis.Options;
 using AiDotNet.Tensors.LinearAlgebra;
-using Microsoft.Data.Sqlite;
 using TreeSitter;
 
 namespace AiDotNet.ProgramSynthesis.Engines;
@@ -106,7 +105,8 @@ public class NeuralProgramSynthesizer<T> : NeuralNetworkBase<T>, IProgramSynthes
         ILossFunction<T>? lossFunction = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         IProgramExecutionEngine? executionEngine = null,
-        NeuralProgramSynthesizerOptions? options = null)
+        NeuralProgramSynthesizerOptions? options = null,
+        ISqlSyntaxValidator? sqlSyntaxValidator = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new NeuralProgramSynthesizerOptions();
@@ -115,8 +115,15 @@ public class NeuralProgramSynthesizer<T> : NeuralNetworkBase<T>, IProgramSynthes
         _codeModel = codeModel;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _executionEngine = executionEngine;
+        // Per-instance SQL validator (DI / facade-friendly). Falls back to the
+        // process-global SqlSyntaxValidation.Validator only when not injected here, so
+        // callers can supply their own validator without mutating global state.
+        _sqlSyntaxValidator = sqlSyntaxValidator;
         InitializeLayersCore();
     }
+
+    /// <summary>Per-instance precise SQL validator; null falls back to the global registration.</summary>
+    private readonly ISqlSyntaxValidator? _sqlSyntaxValidator;
 
     protected override void InitializeLayers()
     {
@@ -368,22 +375,22 @@ public class NeuralProgramSynthesizer<T> : NeuralNetworkBase<T>, IProgramSynthes
         return !root.HasError && !root.IsError;
     }
 
-    private static bool ValidateSql(string sourceCode)
+    private bool ValidateSql(string sourceCode)
     {
+        // Precise SQL validation is provided by the opt-in AiDotNet.Storage.Sqlite
+        // package (audit-2026-05 finding #14), which keeps the native SQLite
+        // dependency out of the core package. Prefer a per-instance validator injected
+        // through the constructor (DI / facade-friendly); fall back to the global
+        // registration, then to generic structural validation when neither is set.
+        var validator = _sqlSyntaxValidator ?? SqlSyntaxValidation.Validator;
+        if (validator is null)
+        {
+            return ValidateGenericSource(sourceCode);
+        }
+
         try
         {
-            using var connection = new SqliteConnection("Data Source=:memory:");
-            connection.Open();
-
-            using var command = connection.CreateCommand();
-            command.CommandText = sourceCode ?? string.Empty;
-            command.Prepare();
-
-            return true;
-        }
-        catch (SqliteException)
-        {
-            return false;
+            return validator.IsValidSql(sourceCode);
         }
         catch (TypeInitializationException)
         {
@@ -400,14 +407,6 @@ public class NeuralProgramSynthesizer<T> : NeuralNetworkBase<T>, IProgramSynthes
         catch (BadImageFormatException)
         {
             return ValidateGenericSource(sourceCode);
-        }
-        catch (InvalidOperationException)
-        {
-            return false;
-        }
-        catch (ArgumentException)
-        {
-            return false;
         }
     }
 

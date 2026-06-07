@@ -597,7 +597,19 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
         _lastInput = tapeActive ? null : input;
 
-        if (IsTrainingMode)
+        // A single-sample batch (batch size 1) has zero batch variance, so the
+        // training-mode normalization (x - mean)/sqrt(var + eps) collapses every
+        // feature to 0 → the output is a constant (≈ beta) that is INDEPENDENT of
+        // the input and of upstream parameters. Its gradient is therefore zero,
+        // which silently detaches the autodiff tape and stops the entire model
+        // from learning (surfaced by GradientFlow_ShouldBeNonZeroAndFinite on every
+        // BatchNorm model trained one sample at a time). Batch statistics are
+        // undefined for a single sample, so fall back to the affine
+        // running-statistics path — identical to inference — which is
+        // differentiable end-to-end and lets gradients reach the input and the
+        // affine parameters. Real training uses batch > 1 and is unaffected.
+        int effectiveBatchSize = input.Rank > 0 ? input.Shape[0] : 1;
+        if (IsTrainingMode && effectiveBatchSize > 1)
         {
             // Training: Use Engine.BatchNorm to compute batch stats and normalize
             // This is fully GPU accelerated
@@ -946,6 +958,24 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
 
         _runningMean = Tensor<T>.FromVector(meanVec, [featureSize]);
         _runningVariance = Tensor<T>.FromVector(varVec, [featureSize]);
+        _inferenceScaleDirty = true;
+    }
+
+    /// <summary>
+    /// Switches the layer between training and inference behavior. Switching modes invalidates the
+    /// cached inference scale/shift so the next inference forward recomputes them from the
+    /// <i>current</i> running statistics.
+    /// </summary>
+    /// <remarks>
+    /// Without this invalidation, a cache computed from an intermediate running mean/variance during
+    /// training could be reused after switching to eval — producing inference output that lags the
+    /// final running statistics. That stale cache also made a freshly deserialized clone (which
+    /// always recomputes from the restored running stats) diverge from the original on the very same
+    /// weights. Recomputing on every mode switch keeps inference deterministic and round-trip stable.
+    /// </remarks>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
         _inferenceScaleDirty = true;
     }
 

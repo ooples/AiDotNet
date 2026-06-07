@@ -450,8 +450,14 @@ public partial class S4DLayer<T> : LayerBase<T>
         _cachedKernelDelta = delta;
         _cachedKernelSeqLen = seqLen;
 
+        // Accumulate the kernel into a raw double row buffer so the inner
+        // power-series loop (O(stateDim * seqLen) per channel) avoids the
+        // per-element tensor indexer + NumOps virtual calls; write the row
+        // back to the kernel tensor once per channel.
+        var kAcc = new double[seqLen];
         for (int d = 0; d < _innerDimension; d++)
         {
+            System.Array.Clear(kAcc, 0, seqLen);
             double dt = NumOps.ToDouble(delta[d]);
 
             for (int n = 0; n < _stateDimension; n++)
@@ -462,7 +468,6 @@ public partial class S4DLayer<T> : LayerBase<T>
                 double bi = NumOps.ToDouble(_bImag[d, n]);
                 double cr = NumOps.ToDouble(_cReal[d, n]);
                 double ci = NumOps.ToDouble(_cImag[d, n]);
-                double dSkip = NumOps.ToDouble(_dParam[d]);
 
                 // A_bar = exp(dt * A)
                 double expR = Math.Exp(dt * ar);
@@ -481,8 +486,7 @@ public partial class S4DLayer<T> : LayerBase<T>
                 for (int l = 0; l < seqLen; l++)
                 {
                     // Re(C_eff * A_bar^l) = ceff_r * pow_r - ceff_i * pow_i
-                    double contrib = ceff_r * pow_r - ceff_i * pow_i;
-                    kernel[d, l] = NumOps.Add(kernel[d, l], NumOps.FromDouble(contrib));
+                    kAcc[l] += ceff_r * pow_r - ceff_i * pow_i;
 
                     // Update power: A_bar^(l+1) = A_bar^l * A_bar
                     double new_pow_r = pow_r * abar_r - pow_i * abar_i;
@@ -491,6 +495,9 @@ public partial class S4DLayer<T> : LayerBase<T>
                     pow_i = new_pow_i;
                 }
             }
+
+            for (int l = 0; l < seqLen; l++)
+                kernel[d, l] = NumOps.FromDouble(kAcc[l]);
 
             // Multiply by 2 per S4D paper (conjugate pairs)
             // Note: only needed if using N//2 complex states representing N real states.
@@ -502,21 +509,39 @@ public partial class S4DLayer<T> : LayerBase<T>
         // Causal convolution: y[b, t, d] = sum_{l=0}^{t} K[d, l] * x[b, t-l, d] + D[d] * x[b, t, d]
         var output = TensorAllocator.Rent<T>([batchSize, seqLen, _innerDimension]);
 
+        // The convolution is O(seqLen^2) per (batch, channel). Hoist the kernel
+        // row and the input column into raw double buffers once per (b, d) so
+        // the hot inner loop is pure double arithmetic — the per-element tensor
+        // indexer + NumOps virtual calls would otherwise dominate (~seqLen^2 *
+        // innerDim * batch of them), making paper-scale sequences untrainable.
+        var kRow = new double[seqLen];
+        var xCol = new double[seqLen];
+        var outCol = new double[seqLen];
         for (int b = 0; b < batchSize; b++)
         {
             for (int d = 0; d < _innerDimension; d++)
             {
                 double dSkip = NumOps.ToDouble(_dParam[d]);
+                for (int i = 0; i < seqLen; i++)
+                {
+                    kRow[i] = NumOps.ToDouble(kernel[d, i]);
+                    xCol[i] = NumOps.ToDouble(x[b, i, d]);
+                }
+
                 for (int t = 0; t < seqLen; t++)
                 {
                     double sum = 0;
                     for (int l = 0; l <= t; l++)
                     {
-                        sum += NumOps.ToDouble(kernel[d, l]) * NumOps.ToDouble(x[b, t - l, d]);
+                        sum += kRow[l] * xCol[t - l];
                     }
                     // Add skip connection D * x
-                    sum += dSkip * NumOps.ToDouble(x[b, t, d]);
-                    output[b, t, d] = NumOps.FromDouble(sum);
+                    outCol[t] = sum + dSkip * xCol[t];
+                }
+
+                for (int t = 0; t < seqLen; t++)
+                {
+                    output[b, t, d] = NumOps.FromDouble(outCol[t]);
                 }
             }
         }
@@ -696,30 +721,51 @@ public partial class S4DLayer<T> : LayerBase<T>
         var dK = new double[_innerDimension, seqLen];
         var dX = TensorAllocator.Rent<T>([batchSize, seqLen, _innerDimension]);
 
+        // Both inner accumulations below are O(seqLen^2) per (batch, channel).
+        // Hoist the kernel row and the per-(b,d) input / upstream-gradient
+        // columns into raw double buffers so the hot loops are pure double
+        // arithmetic — the tensor indexer + NumOps virtual calls would
+        // otherwise dominate at paper-scale sequence lengths.
+        var kRowB = new double[seqLen];
+        var xColB = new double[seqLen];
+        var dOutColB = new double[seqLen];
+        var dXColB = new double[seqLen];
         for (int d = 0; d < _innerDimension; d++)
         {
             double dSkip = NumOps.ToDouble(_dParam[d]);
             double dD_acc = 0;
 
+            for (int i = 0; i < seqLen; i++)
+                kRowB[i] = NumOps.ToDouble(kernel[d, i]);
+
             for (int b = 0; b < batchSize; b++)
             {
+                for (int i = 0; i < seqLen; i++)
+                {
+                    xColB[i] = NumOps.ToDouble(x[b, i, d]);
+                    dOutColB[i] = NumOps.ToDouble(dOutput[b, i, d]);
+                }
+
                 for (int t = 0; t < seqLen; t++)
                 {
-                    double dOut = NumOps.ToDouble(dOutput[b, t, d]);
+                    double dOut = dOutColB[t];
 
                     // dK[d, l] += dOut * x[b, t-l, d]
                     for (int l = 0; l <= t; l++)
-                        dK[d, l] += dOut * NumOps.ToDouble(x[b, t - l, d]);
+                        dK[d, l] += dOut * xColB[t - l];
 
                     // dx[b, t, d] = sum_l dOut[b, t+l, d] * K[d, l] + D[d] * dOut[b, t, d]
                     double dxVal = dSkip * dOut;
                     for (int l = 0; l < seqLen - t; l++)
-                        dxVal += NumOps.ToDouble(dOutput[b, t + l, d]) * NumOps.ToDouble(kernel[d, l]);
-                    dX[b, t, d] = NumOps.FromDouble(dxVal);
+                        dxVal += dOutColB[t + l] * kRowB[l];
+                    dXColB[t] = dxVal;
 
                     // dD[d] += dOut * x
-                    dD_acc += dOut * NumOps.ToDouble(x[b, t, d]);
+                    dD_acc += dOut * xColB[t];
                 }
+
+                for (int t = 0; t < seqLen; t++)
+                    dX[b, t, d] = NumOps.FromDouble(dXColB[t]);
             }
 
             _dParamGradient[d] = NumOps.FromDouble(dD_acc);

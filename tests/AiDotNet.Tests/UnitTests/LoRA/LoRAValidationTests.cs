@@ -153,6 +153,12 @@ public class LoRAValidationTests
         // Arrange
         var config = new DefaultLoRAConfiguration<double>(rank: 4, alpha: 4, freezeBaseLayer: true);
         var baseLayer = new DenseLayer<double>(5);
+        // ApplyLoRA wraps shape-RESOLVED layers only: lazy layers are skipped by
+        // design (AiDotNet#1345 guard; AiModelBuilder runs a warmup forward to
+        // resolve them before the LoRA pass, and review #1368 rejected sizing
+        // adapters from heuristic dims as silent fabrication). Materialize the
+        // dense's input dim the way the production pipeline would.
+        baseLayer.ResolveFromShape(new[] { 10 });
 
         // Act
         var adaptedLayer = config.ApplyLoRA(baseLayer);
@@ -162,12 +168,33 @@ public class LoRAValidationTests
     }
 
     [Fact(Timeout = 60000)]
+    public async Task DefaultLoRAConfiguration_LazyUnresolvedLayer_ReturnsUnchanged()
+    {
+        // Pins the lazy-shape design decision: a shape-UNRESOLVED layer must pass
+        // through ApplyLoRA untouched rather than be wrapped from fabricated dims
+        // (#1345 guard + review #1368). The production pipeline resolves shapes
+        // via the warmup forward / TryDeclareShape oracle before wrapping.
+        // Arrange
+        var config = new DefaultLoRAConfiguration<double>(rank: 4, alpha: 4, freezeBaseLayer: true);
+        var lazyLayer = new DenseLayer<double>(5); // input dim unknown until first forward
+
+        // Act
+        var result = config.ApplyLoRA(lazyLayer);
+
+        // Assert - same instance, not wrapped
+        Assert.Same(lazyLayer, result);
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task DefaultLoRAConfiguration_DoRAAdapter_CreatesSuccessfully()
     {
         // Arrange - DoRA has matching constructor signature (ILayer<T>, int, double, bool)
-        var doraAdapter = new DoRAAdapter<double>(new DenseLayer<double>(5), rank: 4, alpha: 4, freezeBaseLayer: true);
+        var prototypeBase = new DenseLayer<double>(5);
+        prototypeBase.ResolveFromShape(new[] { 10 });
+        var doraAdapter = new DoRAAdapter<double>(prototypeBase, rank: 4, alpha: 4, freezeBaseLayer: true);
         var config = new DefaultLoRAConfiguration<double>(rank: 4, alpha: 4, freezeBaseLayer: true, loraAdapter: doraAdapter);
         var baseLayer = new DenseLayer<double>(5);
+        baseLayer.ResolveFromShape(new[] { 10 });
 
         // Act
         var adaptedLayer = config.ApplyLoRA(baseLayer);
@@ -180,9 +207,12 @@ public class LoRAValidationTests
     public async Task DefaultLoRAConfiguration_AdaLoRAAdapter_CreatesSuccessfully()
     {
         // Arrange - AdaLoRA has compatible constructor (4th param is bool, rest have defaults)
-        var adaloraAdapter = new AdaLoRAAdapter<double>(new DenseLayer<double>(5), maxRank: 4);
+        var prototypeBase = new DenseLayer<double>(5);
+        prototypeBase.ResolveFromShape(new[] { 10 });
+        var adaloraAdapter = new AdaLoRAAdapter<double>(prototypeBase, maxRank: 4);
         var config = new DefaultLoRAConfiguration<double>(rank: 4, alpha: 4, freezeBaseLayer: true, loraAdapter: adaloraAdapter);
         var baseLayer = new DenseLayer<double>(5);
+        baseLayer.ResolveFromShape(new[] { 10 });
 
         // Act
         var adaptedLayer = config.ApplyLoRA(baseLayer);
@@ -197,9 +227,12 @@ public class LoRAValidationTests
         // QLoRA has incompatible constructor signature (4th param is QuantizationType, not bool)
         // This should throw a helpful error message
         // Arrange
-        var qloraAdapter = new QLoRAAdapter<double>(new DenseLayer<double>(5), rank: 4);
+        var prototypeBase = new DenseLayer<double>(5);
+        prototypeBase.ResolveFromShape(new[] { 10 });
+        var qloraAdapter = new QLoRAAdapter<double>(prototypeBase, rank: 4);
         var config = new DefaultLoRAConfiguration<double>(rank: 4, alpha: 4, freezeBaseLayer: true, loraAdapter: qloraAdapter);
         var baseLayer = new DenseLayer<double>(5);
+        baseLayer.ResolveFromShape(new[] { 10 });
 
         // Act & Assert
         var ex = Assert.Throws<InvalidOperationException>(() => config.ApplyLoRA(baseLayer));
@@ -253,6 +286,7 @@ public class LoRAValidationTests
         int outputSize = 10;
         int rank = 4;
         var baseLayer = new DenseLayer<double>(outputSize);
+        baseLayer.ResolveFromShape(new[] { inputSize }); // materialize [5 -> 10] weights so merge has a real base
         var adapter = new StandardLoRAAdapter<double>(baseLayer, rank: rank, alpha: rank, freezeBaseLayer: true);
 
         // Act & Assert - should not throw
@@ -269,6 +303,7 @@ public class LoRAValidationTests
         int outputSize = 10;
         int rank = 4;
         var baseLayer = new DenseLayer<double>(outputSize);
+        baseLayer.ResolveFromShape(new[] { inputSize }); // materialize [5 -> 10] weights so merge has a real base
         var adapter = new DoRAAdapter<double>(baseLayer, rank: rank, alpha: rank, freezeBaseLayer: true);
 
         // Act & Assert - should not throw
@@ -285,6 +320,7 @@ public class LoRAValidationTests
         int outputSize = 10;
         int rank = 4;
         var baseLayer = new DenseLayer<double>(outputSize);
+        baseLayer.ResolveFromShape(new[] { inputSize }); // materialize [5 -> 10] weights so QLoRA can quantize a real base
         var adapter = new QLoRAAdapter<double>(baseLayer, rank: rank, alpha: rank, freezeBaseLayer: true);
 
         // Act & Assert - should not throw
@@ -307,6 +343,11 @@ public class LoRAValidationTests
         try
         {
             var baseLayer = new DenseLayer<double>(outputSize);
+            // Materialize [5 -> 10] weights: VeRA validates its shared matrices
+            // against the base layer's REAL input dim, so an unresolved base would
+            // be sized from the outSize*2 heuristic (20) and reject the shared A
+            // initialized for inputSize=5 above.
+            baseLayer.ResolveFromShape(new[] { inputSize });
             var adapter = new VeRAAdapter<double>(baseLayer, rank: rank, alpha: rank, freezeBaseLayer: true);
 
             // Act & Assert - should not throw
@@ -335,6 +376,7 @@ public class LoRAValidationTests
         int rank = 4;
         int batchSize = 2;
         var baseLayer = new DenseLayer<double>(outputSize);
+        baseLayer.ResolveFromShape(new[] { inputSize }); // the [2, 5] input below must match the adapter's real input dim
         var adapter = new DoRAAdapter<double>(baseLayer, rank: rank, alpha: rank, freezeBaseLayer: true);
 
         // Create input tensor [batchSize, inputSize]

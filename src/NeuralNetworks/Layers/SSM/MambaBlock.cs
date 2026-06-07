@@ -432,7 +432,17 @@ internal partial class MambaBlock<T> : LayerBase<T>
         var outputWithBias = Engine.TensorBroadcastAdd(outputFlat, outBias2D);
         var output3D = Engine.Reshape(outputWithBias, new[] { batchSize, seqLen, _modelDimension });
 
-        var result = ApplyActivation(output3D);
+        // Residual connection: h = h + Block(h). Standard Mamba block pattern
+        // per Gu & Dao 2023 (state-spaces/mamba reference impl wraps the inner
+        // block in `residual + Block(LN(residual))`). Without it, repeated
+        // block stacks attenuate ~3 orders of magnitude per layer (observed
+        // 0.036 → 1e-38 through 4 blocks in MultiLayerModel_ProducesNonTrivialOutput),
+        // collapsing the LM head's logits to zero and producing a uniform
+        // distribution. input3D and output3D both have shape
+        // [batchSize, seqLen, _modelDimension] so the add is shape-aligned.
+        var residualOutput = Engine.TensorAdd(output3D, input3D);
+
+        var result = ApplyActivation(residualOutput);
         _lastOutput = result;
 
         // Reshape back to original rank

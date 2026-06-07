@@ -921,14 +921,24 @@ public class GraphWaveNet<T> : ForecastingModelBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        var current = FlattenInput(input);
+        // Organize the input as [numNodes, featuresPerNode] (numNodes as the batch
+        // dimension) so every DenseLayer applies SHARED per-node weights — the
+        // paper-faithful design with O(channels^2) parameters instead of the old
+        // numNodes-wide flattened denses that OOM-crashed the optimizer. The
+        // tape-aware Engine.Reshape keeps gradients flowing back to the input.
+        int totalSize = input.Length;
+        int featuresPerNode = totalSize / _numNodes;
+        var current = featuresPerNode * _numNodes == totalSize
+            ? Engine.Reshape(input, new[] { _numNodes, featuresPerNode })
+            : FlattenInput(input);
 
+        // Per-node WaveNet-style temporal stack (shared weights across nodes).
         foreach (var layer in Layers)
         {
             current = layer.Forward(current);
         }
 
-        // Apply diffusion convolution
+        // Diffusion convolution: adaptive + predefined graph mixing across nodes.
         if (_useNativeMode)
         {
             current = ApplyDiffusionConvolution(current);
@@ -968,71 +978,64 @@ public class GraphWaveNet<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ApplyDiffusionConvolution(Tensor<T> nodeFeatures)
     {
-        var featureVec = nodeFeatures.ToVector();
-        int totalSize = featureVec.Length;
+        int totalSize = nodeFeatures.Length;
         int featuresPerNode = totalSize / _numNodes;
 
         if (featuresPerNode * _numNodes != totalSize)
             return nodeFeatures;
 
-        var result = new double[totalSize];
+        // Collect the graph supports (constant, non-trainable adjacency matrices).
         var supports = new List<double[,]>();
-
-        // Add predefined supports if enabled
         if (_usePredefinedGraph && _predefinedAdjacency is not null)
         {
             supports.Add(_predefinedAdjacency);
             if (_predefinedAdjacencyTranspose is not null)
                 supports.Add(_predefinedAdjacencyTranspose);
         }
-
-        // Add adaptive support if enabled
         if (_useAdaptiveGraph && _adaptiveAdjacency is not null)
         {
             supports.Add(_adaptiveAdjacency);
         }
 
-        // Initialize result with original features
-        for (int i = 0; i < totalSize; i++)
-            result[i] = NumOps.ToDouble(featureVec[i]);
+        // Reshape features to [numNodes, featuresPerNode] via the tape-aware
+        // Engine.Reshape so the diffusion output stays connected to the preceding
+        // layer stack on backward (the old manual double-loop implementation
+        // detached the graph and zeroed every gradient).
+        var xMat = Engine.Reshape(nodeFeatures, new[] { _numNodes, featuresPerNode });
 
-        // Apply diffusion for each support
+        // Diffusion convolution (Wu et al. 2019, "Graph WaveNet"):
+        //   result = X + sum_supports sum_{k=1..K} (1/(k+1)) * P^k X
+        // The supports P are constants, so P^k X stays differentiable w.r.t. X
+        // (and thus the upstream layer weights) through Engine.TensorMatMul.
+        var result = xMat;
         foreach (var support in supports)
         {
-            var currentPower = new double[_numNodes, featuresPerNode];
-            var nextPower = new double[_numNodes, featuresPerNode];
-
-            // Initialize with features
-            for (int n = 0; n < _numNodes; n++)
-                for (int f = 0; f < featuresPerNode; f++)
-                    currentPower[n, f] = NumOps.ToDouble(featureVec[n * featuresPerNode + f]);
-
-            // Apply diffusion steps
+            var supportTensor = BuildConstantMatrix(support);  // [numNodes, numNodes]
+            var currentPower = xMat;
             for (int k = 0; k < _diffusionSteps; k++)
             {
-                // Compute support * currentPower
-                for (int i = 0; i < _numNodes; i++)
-                {
-                    for (int f = 0; f < featuresPerNode; f++)
-                    {
-                        double aggregated = 0;
-                        for (int j = 0; j < _numNodes; j++)
-                            aggregated += support[i, j] * currentPower[j, f];
-                        nextPower[i, f] = aggregated;
-                    }
-                }
-
-                // Add to result with decay weight
+                currentPower = Engine.TensorMatMul(supportTensor, currentPower);  // P^(k+1) X
                 double weight = 1.0 / (k + 2);
-                for (int i = 0; i < _numNodes; i++)
-                    for (int f = 0; f < featuresPerNode; f++)
-                        result[i * featuresPerNode + f] += weight * nextPower[i, f];
-
-                (currentPower, nextPower) = (nextPower, currentPower);
+                result = Engine.TensorAdd(result,
+                    Engine.TensorMultiplyScalar(currentPower, NumOps.FromDouble(weight)));
             }
         }
 
-        return new Tensor<T>(nodeFeatures._shape, new Vector<T>(result.Select(d => NumOps.FromDouble(d)).ToArray()));
+        return Engine.Reshape(result, nodeFeatures._shape);
+    }
+
+    /// <summary>
+    /// Builds a constant (non-trainable) <see cref="Tensor{T}"/> from a graph
+    /// support matrix so it can participate in tape-aware matmuls without being
+    /// treated as a learnable parameter.
+    /// </summary>
+    private Tensor<T> BuildConstantMatrix(double[,] matrix)
+    {
+        var data = new T[_numNodes * _numNodes];
+        for (int i = 0; i < _numNodes; i++)
+            for (int j = 0; j < _numNodes; j++)
+                data[i * _numNodes + j] = NumOps.FromDouble(matrix[i, j]);
+        return new Tensor<T>(new[] { _numNodes, _numNodes }, new Vector<T>(data));
     }
 
     #endregion

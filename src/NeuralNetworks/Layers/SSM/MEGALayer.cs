@@ -296,7 +296,30 @@ public partial class MEGALayer<T> : LayerBase<T>
         InitializeTensor2D(_outputProjectionWeights);
         _outputProjectionBias.Fill(NumOps.Zero);
 
+        // Register ALL trainable tensors (in GetAllTensors order) so tape-based
+        // training exposes the full parameter set, not just _emaAlphaLogit. The
+        // multi-dimensional EMA / attention core uses manual NumOps loops that
+        // detach the tape, so the single previously-registered _emaAlphaLogit
+        // received a null tape gradient and TapeGradient_ShouldReach failed. The
+        // post-core output-gate and output-projection weights are tape-connected
+        // (Engine.TensorMatMul), so registering the full set gives those proper
+        // gradients; the EMA / Q / K / V params upstream of the manual core
+        // continue to train via the manual Backward/UpdateParameters path.
         RegisterTrainableParameter(_emaAlphaLogit, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_emaProjectInWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_emaProjectInBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_emaProjectOutWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_emaProjectOutBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_queryBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_keyBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_valueBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_outputGateWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputGateBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
     }
 
     private void InitializeTensor2D(Tensor<T> tensor)

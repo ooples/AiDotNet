@@ -67,6 +67,18 @@ namespace AiDotNet.Regression;
 [ResearchPaper("Generalized additive models for location, scale and shape", "https://doi.org/10.1111/j.1467-9876.2005.00510.x", Year = 2005, Authors = "Robert A. Rigby, D. Mikis Stasinopoulos")]
 public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {
+    // Bounds on the scale/shape linear predictors (log-link parameters such as σ and ν).
+    // The RS algorithm of Rigby &amp; Stasinopoulos (2005), like the reference gamlss R package,
+    // constrains the fitted parameters to a numerically safe range so the Fisher-scoring
+    // iterations stay stable. Because the target is standardised to unit variance during
+    // training (see TrainAsync), σ lives on a unit scale, so σ ∈ [1e-6, 1e6] (i.e. the log
+    // predictor in [-13.8, 13.8]) is far wider than any genuine residual spread yet prevents
+    // exp(η) from overflowing to ±∞ — without the bound a near-perfect location fit drives the
+    // scale predictor toward -∞ each outer cycle until σ underflows and the location working
+    // weight 1/σ² becomes ∞, corrupting every coefficient to NaN.
+    private const double MinLogScale = -13.815510557964274; // ln(1e-6)
+    private const double MaxLogScale = 13.815510557964274;  // ln(1e6)
+
     /// <summary>
     /// Coefficients for the location parameter model.
     /// </summary>
@@ -418,7 +430,7 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
                 throw new InvalidOperationException("Scale coefficients have not been initialized.");
             }
             UpdateCoefficients(x, z, weights, ref _scaleCoefficients, ref _scaleIntercept);
-            UpdateLinearPredictor(x, etaScale, _scaleCoefficients, _scaleIntercept);
+            UpdateLinearPredictor(x, etaScale, _scaleCoefficients, _scaleIntercept, useExpLink: true);
         }
     }
 
@@ -449,7 +461,7 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
             if (_shapeCoefficients != null)
             {
                 UpdateCoefficients(x, z, weights, ref _shapeCoefficients, ref _shapeIntercept);
-                UpdateLinearPredictor(x, etaShape, _shapeCoefficients, _shapeIntercept);
+                UpdateLinearPredictor(x, etaShape, _shapeCoefficients, _shapeIntercept, useExpLink: true);
             }
         }
     }
@@ -537,8 +549,28 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
                 }
             }
 
+            // For log-link parameters (scale σ, shape ν) the predictor feeds exp(·); bound it so
+            // exp() cannot overflow/underflow and destabilise the IRLS working weights (see the
+            // MinLogScale/MaxLogScale rationale on the class fields).
+            if (useExpLink)
+            {
+                val = ClampLogScale(val);
+            }
+
             eta[i] = val;
         }
+    }
+
+    /// <summary>
+    /// Clamps a log-link (scale/shape) linear-predictor value to the numerically safe range
+    /// [<see cref="MinLogScale"/>, <see cref="MaxLogScale"/>].
+    /// </summary>
+    private T ClampLogScale(T value)
+    {
+        double v = NumOps.ToDouble(value);
+        if (v < MinLogScale) return NumOps.FromDouble(MinLogScale);
+        if (v > MaxLogScale) return NumOps.FromDouble(MaxLogScale);
+        return value;
     }
 
     /// <summary>
@@ -555,7 +587,7 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         if (useExpLink)
         {
-            val = NumOps.Exp(val);
+            val = NumOps.Exp(ClampLogScale(val));
         }
 
         return val;

@@ -458,14 +458,13 @@ public abstract class TransformerNERBase<T> : SequenceLabeling.SequenceLabelingN
 
         ApplyOptionsToBase();
 
+        // Native-mode layers (with their trained weights) are already reconstructed by
+        // the base DeserializeInternalUnchecked before this override runs, so do NOT
+        // clear + re-initialize them here — that would discard the deserialized weights
+        // and leave the model randomly initialized. Only an ONNX session needs rebuilding.
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
         {
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-        }
-        else if (_useNativeMode)
-        {
-            Layers.Clear();
-            InitializeLayers();
         }
     }
 

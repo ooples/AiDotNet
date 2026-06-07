@@ -1,5 +1,8 @@
+using System;
+using System.Collections.Generic;
 using AiDotNet.Autodiff;
 using AiDotNet.Attributes;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -87,6 +90,15 @@ public partial class IntersampleAttentionLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_layerNormGamma, PersistentTensorRole.NormalizationParams);
         RegisterTrainableParameter(_layerNormBeta, PersistentTensorRole.NormalizationParams);
 
+        // Eagerly resolve the four FullyConnectedLayer projections (embed -> embed) with a probe
+        // forward. They resolve their input dim lazily on first Forward, but ParameterCount /
+        // GetParameters / SetParameters and the Clone serialize→deserialize round-trip need their
+        // weights materialized up front (a deserialized layer is asked for parameters before any
+        // real forward pass). The probe input is discarded.
+        var probe = new Tensor<T>([1, 1, embeddingDim]);
+        Forward(probe);
+        _inputCache = null;
+        _normalizedCache = null;
     }
 
     /// <summary>
@@ -102,61 +114,38 @@ public partial class IntersampleAttentionLayer<T> : LayerBase<T>
         int numFeatures = input.Shape[1];
         int embDim = input.Shape[2];
 
-        // Transpose to [numFeatures, batchSize, embeddingDim] for intersample attention
-        var transposed = Engine.TensorPermute(input, new[] { 1, 0, 2 });
+        // Project Q, K, V on every (sample, feature) token. The FC projections map
+        // embed -> embed over the last axis, so flatten the (sample, feature) axes to
+        // apply them per token, then restore the [batch, feature, embed] shape. All
+        // Engine ops, so the tape carries gradients back to the projection weights
+        // (the previous per-feature manual slice copy was a tape dead-end — gradients
+        // never reached _queryProjection / _keyProjection / _valueProjection).
+        var flat = Engine.Reshape(input, new[] { batchSize * numFeatures, embDim });
+        var q = Engine.Reshape(_queryProjection.Forward(flat), new[] { batchSize, numFeatures, embDim });
+        var k = Engine.Reshape(_keyProjection.Forward(flat), new[] { batchSize, numFeatures, embDim });
+        var v = Engine.Reshape(_valueProjection.Forward(flat), new[] { batchSize, numFeatures, embDim });
 
-        // Apply multi-head self-attention across samples
-        var attended = ApplyMultiHeadAttention(transposed, numFeatures, batchSize, embDim);
+        // Intersample attention attends ACROSS samples for each feature independently
+        // (SAINT's row attention, Somepalli et al. 2021). Arrange as
+        // [feature, head, sample, headDim] so the scaled-dot-product primitive treats
+        // `feature` as the batch of independent attention problems, `sample` as the
+        // sequence, and runs multi-head attention across the samples.
+        var qh = Engine.TensorPermute(Engine.Reshape(q, new[] { batchSize, numFeatures, _numHeads, _headDim }), new[] { 1, 2, 0, 3 });
+        var kh = Engine.TensorPermute(Engine.Reshape(k, new[] { batchSize, numFeatures, _numHeads, _headDim }), new[] { 1, 2, 0, 3 });
+        var vh = Engine.TensorPermute(Engine.Reshape(v, new[] { batchSize, numFeatures, _numHeads, _headDim }), new[] { 1, 2, 0, 3 });
 
-        // Transpose back to [batchSize, numFeatures, embeddingDim]
-        var output = Engine.TensorPermute(attended, new[] { 1, 0, 2 });
+        var context = Engine.ScaledDotProductAttention(
+            qh, kh, vh, mask: null, scale: 1.0 / Math.Sqrt(_headDim), out _);
 
-        // Residual connection and layer normalization
-        output = AddResidualAndNormalize(input, output, batchSize, numFeatures, embDim);
+        // context is [feature, head, sample, headDim]; restore [batch(sample), feature, embed].
+        var merged = Engine.Reshape(
+            Engine.TensorPermute(context, new[] { 2, 0, 1, 3 }),
+            new[] { batchSize * numFeatures, embDim });
+        var projected = Engine.Reshape(_outputProjection.Forward(merged), new[] { batchSize, numFeatures, embDim });
+
+        // Residual connection and layer normalization over the embedding axis.
+        var output = AddResidualAndNormalize(input, projected, batchSize, numFeatures, embDim);
         _normalizedCache = output;
-
-        return output;
-    }
-
-    private Tensor<T> ApplyMultiHeadAttention(Tensor<T> input, int numFeatures, int batchSize, int embDim)
-    {
-        var output = new Tensor<T>([numFeatures, batchSize, embDim]);
-        var scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDim));
-
-        // For each feature position, apply attention across samples
-        for (int f = 0; f < numFeatures; f++)
-        {
-            // Extract feature slice [batchSize, embDim]
-            var featureSlice = TensorAllocator.Rent<T>([batchSize, embDim]);
-            int fOffset = f * batchSize * embDim;
-            for (int i = 0; i < batchSize * embDim; i++)
-            {
-                featureSlice[i] = input[fOffset + i];
-            }
-
-            // Project to Q, K, V
-            var queries = _queryProjection.Forward(featureSlice);
-            var keys = _keyProjection.Forward(featureSlice);
-            var values = _valueProjection.Forward(featureSlice);
-
-            // Compute attention: Q * K^T -> [batchSize, batchSize]
-            var kT = keys.Transpose(new[] { 1, 0 });
-            var scores = Engine.TensorMatMul(queries, kT);
-            scores = Engine.TensorMultiplyScalar(scores, scale);
-
-            // Softmax over samples
-            scores = Engine.Softmax(scores);
-
-            // Apply attention to values: scores * V -> [batchSize, embDim]
-            var attended = Engine.TensorMatMul(scores, values);
-
-            // Store result
-            int outOffset = f * batchSize * embDim;
-            for (int i = 0; i < batchSize * embDim; i++)
-            {
-                output[outOffset + i] = attended[i];
-            }
-        }
 
         return output;
     }
@@ -218,6 +207,42 @@ public partial class IntersampleAttentionLayer<T> : LayerBase<T>
         {
             target[offset++] = source[i];
         }
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int qCount = ParameterCountHelper.ToFlatVectorSize(_queryProjection.ParameterCount);
+        int kCount = ParameterCountHelper.ToFlatVectorSize(_keyProjection.ParameterCount);
+        int vCount = ParameterCountHelper.ToFlatVectorSize(_valueProjection.ParameterCount);
+        int oCount = ParameterCountHelper.ToFlatVectorSize(_outputProjection.ParameterCount);
+        int expected = qCount + kCount + vCount + oCount + _embeddingDim * 2;
+        if (parameters.Length != expected)
+        {
+            throw new ArgumentException(
+                $"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
+        }
+
+        int offset = 0;
+        _queryProjection.SetParameters(parameters.SubVector(offset, qCount)); offset += qCount;
+        _keyProjection.SetParameters(parameters.SubVector(offset, kCount)); offset += kCount;
+        _valueProjection.SetParameters(parameters.SubVector(offset, vCount)); offset += vCount;
+        _outputProjection.SetParameters(parameters.SubVector(offset, oCount)); offset += oCount;
+        for (int i = 0; i < _embeddingDim; i++) _layerNormGamma[i] = parameters[offset++];
+        for (int i = 0; i < _embeddingDim; i++) _layerNormBeta[i] = parameters[offset++];
+    }
+
+    /// <summary>
+    /// Persists the head count and dropout rate so the Clone serialize→deserialize round-trip
+    /// can reconstruct the layer (embedding dim is recoverable from the saved shape).
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var m = base.GetMetadata();
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        m["NumHeads"] = _numHeads.ToString(inv);
+        m["DropoutRate"] = _dropoutRate.ToString(inv);
+        return m;
     }
 
     /// <summary>

@@ -68,7 +68,22 @@ public class NeuralNetworkArchitecture<T>
     /// consumer will see different init weights than the same network
     /// built in a fresh process.
     /// </summary>
-    public int? RandomSeed { get; set; }
+    public int? RandomSeed
+    {
+        get => _randomSeed ?? DefaultRandomSeedOverride;
+        set => _randomSeed = value;
+    }
+    private int? _randomSeed;
+
+    /// <summary>
+    /// Process-wide fallback for <see cref="RandomSeed"/> when no explicit per-architecture seed
+    /// was set. Null in production (so weight init stays entropy-seeded and repeated
+    /// default-constructed models differ). Test harnesses set this so model invariants that depend
+    /// on the initial weights — e.g. the "more training never degrades loss" comparison — are
+    /// reproducible run-to-run instead of flaking on an unlucky random init. An explicit
+    /// <see cref="RandomSeed"/> on a given architecture always wins over this fallback.
+    /// </summary>
+    public static int? DefaultRandomSeedOverride { get; set; }
 
     /// <summary>
     /// Gets the type of input the neural network is designed to handle.
@@ -1062,7 +1077,12 @@ public class NeuralNetworkArchitecture<T>
             // Lazy layers carry -1 placeholders until first Forward; skip the strict
             // size check and let runtime shape resolution validate the dimensions.
             bool firstIsLazy = firstShape.Length == 0 || firstShape.Any(d => d <= 0);
-            if (!firstIsLazy)
+            // Embedding-category first layers (EmbeddingLayer, positional encodings, custom
+            // subclasses) consume a SEQUENCE OF TOKEN INDICES and declare a per-token broadcast
+            // input shape of [1] — their flattened "input size" (1) intentionally differs from the
+            // architecture InputSize (the sequence length). Recognise them and skip the strict
+            // size check (#1321); runtime shape resolution validates the real dimensions.
+            if (!firstIsLazy && !IsEmbeddingCategoryLayer(firstLayer))
             {
                 int firstLayerInputSize = firstShape.Aggregate(1, (a, b) => a * b);
                 if (firstLayerInputSize != InputSize)
@@ -1071,6 +1091,28 @@ public class NeuralNetworkArchitecture<T>
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// True when <paramref name="layer"/> is an embedding-category layer (EmbeddingLayer,
+    /// positional encoding, or a custom subclass). Such layers consume token INDICES and declare a
+    /// per-token broadcast input shape, so the architecture-level and inter-layer input-size checks
+    /// must not be applied to them (#1321/#1323). Recognised via <c>LayerBase.GetLayerCategory()</c>
+    /// (which name-matches "Embedding"/"Positional") with a type-name fallback for layers that do
+    /// not derive from <c>LayerBase</c>.
+    /// </summary>
+    internal static bool IsEmbeddingCategoryLayer(ILayer<T> layer)
+    {
+        if (layer is null) return false;
+        // Category path: a LayerBase subclass that reports LayerCategory.Embedding.
+        if (layer is Layers.LayerBase<T> lb && lb.GetLayerCategory() == Interfaces.LayerCategory.Embedding)
+            return true;
+        // Name-based fallback (always checked, even for LayerBase subclasses): recognises custom
+        // embedding/positional layers whose GetLayerCategory() does NOT report Embedding, and true
+        // ILayer implementations that don't derive from LayerBase and can't report a category.
+        var name = layer.GetType().Name;
+        return name.IndexOf("Embedding", StringComparison.OrdinalIgnoreCase) >= 0
+            || name.IndexOf("Positional", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     /// <summary>

@@ -71,7 +71,7 @@ public abstract class HyperparameterOptimizerBase<T, TInput, TOutput> : IHyperpa
         HyperparameterSearchSpace searchSpace,
         int nTrials) where TMetadata : class
     {
-        throw new NotImplementedException("Model-specific optimization requires custom objective function. Use Optimize() method instead.");
+        throw new NotSupportedException("Model-specific OptimizeForModel is not supported on the base class — it requires a model-aware subclass with a custom objective function. Use the generic Optimize(objective, searchSpace, nTrials) overload instead, or derive from HyperparameterOptimizerBase and override OptimizeForModel to wire in your model-specific evaluation.");
     }
 
     /// <summary>

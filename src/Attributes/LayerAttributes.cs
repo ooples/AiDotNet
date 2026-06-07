@@ -40,6 +40,15 @@ public sealed class LayerPropertyAttribute : Attribute
     /// numerical gradient checks are skipped. Default: false.</summary>
     public bool UsesSurrogateGradient { get; set; }
 
+    /// <summary>Whether the layer trains via a custom loss rather than gradients flowing from its Forward
+    /// output. Conditional Random Fields are the canonical example: in training mode Forward returns the
+    /// emission scores unchanged and the transition/start/end parameters are trained by a separate negative
+    /// log-likelihood objective that consumes the gold labels (PyTorch/AllenNLP CRF modules likewise expose
+    /// <c>forward(emissions, tags) -&gt; loss</c> rather than a transform). Because the trainable parameters
+    /// are not in the Forward output's autodiff graph, the generic output-gradient tape checks do not apply
+    /// and are skipped for such layers (they are validated through their own loss path instead). Default: false.</summary>
+    public bool TrainsViaCustomLoss { get; set; }
+
     /// <summary>Relative computational cost. Default: Medium.</summary>
     public ComputeCost Cost { get; set; } = ComputeCost.Medium;
 
@@ -75,6 +84,17 @@ public sealed class LayerPropertyAttribute : Attribute
     /// The generator emits these as integer literal arguments: new LayerType&lt;double&gt;(4, 8).
     /// </summary>
     public string TestConstructorArgs { get; set; } = "";
+
+    /// <summary>
+    /// Whether the layer legitimately produces ±Infinity values in its Forward output,
+    /// by design rather than by numerical instability. Set true for attention masking
+    /// layers (ALiBi, causal masks) that emit -Infinity at future positions so the
+    /// downstream softmax assigns exactly zero weight to those positions. The test
+    /// scaffold generator translates this to an override of <c>ExpectsFiniteOutput</c>
+    /// on the generated layer test so the Forward_ShouldProduceFiniteOutput invariant
+    /// skips checking IsInfinity for these layers. Default: false.
+    /// </summary>
+    public bool ProducesNonFiniteOutput { get; set; }
 }
 
 /// <summary>

@@ -6,6 +6,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.SyntheticData;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -98,6 +99,7 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
     private Random _random;
 
     // Auxiliary layers (not user-overridable)
+    private readonly List<ILayer<T>> _denoiserHidden = new();
     private readonly List<DropoutLayer<T>> _dropoutLayers = new();
     private FullyConnectedLayer<T>? _denoiserOutput;
     private FullyConnectedLayer<T>? _timestepProjection;
@@ -195,8 +197,9 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
         else
         {
             int teDim = _options.TimestepEmbeddingDimension;
-            int inputDim = teDim + Architecture.CalculatedInputSize;
-            int outputDim = Math.Max(1, Architecture.OutputSize);
+            _dataWidth = Math.Max(1, Architecture.OutputSize);
+            int inputDim = teDim + _dataWidth;
+            int outputDim = _dataWidth;
 
             // Use LayerHelper to create ALL layers per TabDDPM architecture
             var allLayers = LayerHelper<T>.CreateDefaultAutoDiffTabDenoiserLayers(
@@ -216,33 +219,95 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
     private void ExtractLayerReferences()
     {
         _dropoutLayers.Clear();
+        _denoiserHidden.Clear();
         int idx = 0;
 
-        // First layer is the timestep projection (FullyConnectedLayer)
+        // Layers = [ timestep projection (FC) , (DenseLayer + optional Dropout)* , denoiser output (FC) ].
         if (idx < Layers.Count && Layers[idx] is FullyConnectedLayer<T> tsProj)
         {
             _timestepProjection = tsProj;
             idx++;
         }
 
-        // Hidden layers: DenseLayer + optional DropoutLayer pairs
-        while (idx < Layers.Count - 1) // -1 because last is output
+        while (idx < Layers.Count - 1)
         {
-            if (Layers[idx] is DenseLayer<T>)
-                idx++;
-
+            _denoiserHidden.Add(Layers[idx]);
+            idx++;
             if (idx < Layers.Count - 1 && Layers[idx] is DropoutLayer<T> drop)
             {
+                _denoiserHidden.Add(drop);
                 _dropoutLayers.Add(drop);
                 idx++;
             }
         }
 
-        // Last layer is the denoiser output (alias to layer already in Layers)
         if (idx < Layers.Count)
         {
             _denoiserOutput = Layers[idx] as FullyConnectedLayer<T>;
         }
+    }
+
+    /// <summary>
+    /// When unfitted (the generated ModelFamily tests call Train/Predict without Fit),
+    /// adapt the denoiser to the actual input width so its first layer accepts
+    /// width + timestep-embedding inputs.
+    /// </summary>
+    private void EnsureSizedForInput(Tensor<T> input)
+    {
+        if (!_usingCustomLayers && !IsFitted && input.Length > 0 && input.Length != _dataWidth)
+        {
+            _dataWidth = input.Length;
+            int teDim = _options.TimestepEmbeddingDimension;
+            RebuildDenoiserLayers(_options.MLPDimensions, _dataWidth + teDim, _dataWidth);
+        }
+    }
+
+    /// <summary>
+    /// Shared denoiser forward over the hidden MLP (+ dropout) and output head,
+    /// taking a [dataWidth + timestepEmbeddingDim] augmented input. Excludes the
+    /// timestep projection (Layers[0]), which is applied to the embedding alone in
+    /// CreateTimestepEmbedding before concatenation.
+    /// </summary>
+    private Tensor<T> DenoiserForward(Tensor<T> augmentedInput)
+    {
+        var current = augmentedInput;
+        foreach (var layer in _denoiserHidden)
+        {
+            current = layer.Forward(current);
+        }
+        if (_denoiserOutput is not null) current = _denoiserOutput.Forward(current);
+        return current;
+    }
+
+    /// <summary>Concatenates a data row with the (projected) timestep embedding into the denoiser input vector.</summary>
+    private Tensor<T> BuildDenoiserInput(Vector<T> xt, int t)
+    {
+        var timeEmbed = CreateTimestepEmbedding(t);
+        var input = new Vector<T>(xt.Length + timeEmbed.Length);
+        for (int i = 0; i < xt.Length; i++) input[i] = xt[i];
+        for (int i = 0; i < timeEmbed.Length; i++) input[xt.Length + i] = timeEmbed[i];
+        return VectorToTensor(input);
+    }
+
+    private Tensor<T> ReduceToScalar(Tensor<T> t)
+        => Engine.ReduceSum(t, Enumerable.Range(0, t.Shape.Length).ToArray(), keepDims: false);
+
+    private void TapeStepOver(GradientTape<T> tape, Tensor<T> loss, IReadOnlyList<ILayer<T>> layers)
+    {
+        var trainable = Training.TapeTrainingStep<T>.CollectParameters(layers);
+        if (trainable.Count == 0) return;
+        var grads = tape.ComputeGradients(loss, trainable);
+        T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
+        LastLoss = lossValue;
+        var ctx = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(trainable, grads, lossValue);
+        _optimizer.Step(ctx);
+    }
+
+    private IReadOnlyList<ILayer<T>> BuildDenoiserLayerList()
+    {
+        var all = new List<ILayer<T>>(_denoiserHidden);
+        if (_denoiserOutput is not null) all.Add(_denoiserOutput);
+        return all;
     }
 
     /// <summary>
@@ -314,27 +379,18 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
     /// <returns>The predicted noise tensor.</returns>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
+        EnsureSizedForInput(input);
+        // Deterministic noise prediction treating the input as x_t at timestep 0.
+        var xt = TensorToVector(input, _dataWidth);
+        return DenoiserForward(BuildDenoiserInput(xt, 0));
+    }
 
-        var current = input;
-        int dropIdx = 0;
-
-        for (int i = 0; i < Layers.Count; i++)
-        {
-            current = Layers[i].Forward(current);
-            if (_options.DropoutRate > 0 && dropIdx < _dropoutLayers.Count)
-            {
-                current = _dropoutLayers[dropIdx++].Forward(current);
-            }
-        }
-
-        if (_denoiserOutput is not null)
-        {
-            current = _denoiserOutput.Forward(current);
-        }
-
-        return current;
+    /// <inheritdoc />
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        EnsureSizedForInput(input);
+        var xt = TensorToVector(input, _dataWidth);
+        return DenoiserForward(BuildDenoiserInput(xt, 0));
     }
 
     /// <inheritdoc />
@@ -409,14 +465,19 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
         int batchSize = Math.Min(_options.BatchSize, data.Rows);
         T lr = NumOps.FromDouble(_options.LearningRate / batchSize);
 
-        for (int epoch = 0; epoch < epochs; epoch++)
+        SetTrainingMode(true);
+        try
         {
-            for (int b = 0; b < data.Rows; b += batchSize)
+            for (int epoch = 0; epoch < epochs; epoch++)
             {
-                int end = Math.Min(b + batchSize, data.Rows);
-                TrainBatch(transformedData, b, end, lr);
+                for (int b = 0; b < data.Rows; b += batchSize)
+                {
+                    int end = Math.Min(b + batchSize, data.Rows);
+                    TrainBatch(transformedData, b, end, lr);
+                }
             }
         }
+        finally { SetTrainingMode(false); }
 
         IsFitted = true;
     }
@@ -449,15 +510,20 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
             int batchSize = Math.Min(_options.BatchSize, data.Rows);
             T lr = NumOps.FromDouble(_options.LearningRate / batchSize);
 
-            for (int epoch = 0; epoch < epochs; epoch++)
+            SetTrainingMode(true);
+            try
             {
-                ct.ThrowIfCancellationRequested();
-                for (int b = 0; b < data.Rows; b += batchSize)
+                for (int epoch = 0; epoch < epochs; epoch++)
                 {
-                    int end = Math.Min(b + batchSize, data.Rows);
-                    TrainBatch(transformedData, b, end, lr);
+                    ct.ThrowIfCancellationRequested();
+                    for (int b = 0; b < data.Rows; b += batchSize)
+                    {
+                        int end = Math.Min(b + batchSize, data.Rows);
+                        TrainBatch(transformedData, b, end, lr);
+                    }
                 }
             }
+            finally { SetTrainingMode(false); }
         }, ct).ConfigureAwait(false);
 
         IsFitted = true;
@@ -559,41 +625,34 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
 
     private double EvaluateConfig(Matrix<T> data, DiffusionConfig config)
     {
-        // Train a small model with this config and evaluate loss
+        // Quick estimate of a config's quality: build the denoiser for this config
+        // and run a few real per-row epsilon-prediction training steps, returning
+        // the resulting loss. Uses the same TrainBatch path as full training so the
+        // denoiser input dims (data width + timestep embedding) always line up.
         ComputeNoiseSchedule(config.Schedule, config.Timesteps);
         _numTimesteps = config.Timesteps;
-
         int teDim = _options.TimestepEmbeddingDimension;
-        int inputDim = _dataWidth + teDim;
-        RebuildDenoiserLayers(config.MLPDims, inputDim, _dataWidth);
+        RebuildDenoiserLayers(config.MLPDims, _dataWidth + teDim, _dataWidth);
 
         int batchSize = Math.Min(_options.BatchSize, data.Rows);
-        T lr = NumOps.FromDouble(_options.LearningRate / batchSize);
-        double totalLoss = 0;
-        int count = 0;
+        T lr = NumOps.FromDouble(_options.LearningRate / Math.Max(1, batchSize));
 
-        for (int epoch = 0; epoch < _options.TrialEpochs; epoch++)
+        SetTrainingMode(true);
+        try
         {
-            for (int b = 0; b < data.Rows; b += batchSize)
+            for (int epoch = 0; epoch < _options.TrialEpochs; epoch++)
             {
-                int end = Math.Min(b + batchSize, data.Rows);
-                int actualBatch = end - b;
-
-                // Extract batch data and train via tape
-                var batchInput = new Tensor<T>([actualBatch, inputDim]);
-                var batchTarget = new Tensor<T>([actualBatch, _dataWidth]);
-                Train(batchInput, batchTarget);
-
-                double batchLoss = NumOps.ToDouble(GetLastLoss());
-                if (!double.IsNaN(batchLoss) && !double.IsInfinity(batchLoss) && batchLoss < 1e10)
+                for (int b = 0; b < data.Rows; b += batchSize)
                 {
-                    totalLoss += batchLoss;
-                    count++;
+                    int end = Math.Min(b + batchSize, data.Rows);
+                    TrainBatch(data, b, end, lr);
                 }
             }
         }
+        finally { SetTrainingMode(false); }
 
-        return count > 0 ? totalLoss / count : double.MaxValue;
+        double loss = NumOps.ToDouble(GetLastLoss());
+        return (double.IsNaN(loss) || double.IsInfinity(loss)) ? double.MaxValue : loss;
     }
 
     #endregion
@@ -645,7 +704,25 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
 
     private void TrainBatch(Matrix<T> data, int startRow, int endRow, T lr)
     {
-        // Tape-based training handled by base class
+        if (_alphasCumprod is null) return;
+        for (int row = startRow; row < endRow; row++)
+        {
+            int t = _random.Next(_numTimesteps);
+            var x0 = GetRow(data, row);
+            var noise = CreateStandardNormalVector(_dataWidth);
+            double sqrtAbar = Math.Sqrt(NumOps.ToDouble(_alphasCumprod[t]));
+            double sqrtOneMinusAbar = Math.Sqrt(1.0 - NumOps.ToDouble(_alphasCumprod[t]));
+
+            var xt = new Vector<T>(_dataWidth);
+            for (int j = 0; j < _dataWidth; j++)
+                xt[j] = NumOps.FromDouble(sqrtAbar * NumOps.ToDouble(x0[j]) + sqrtOneMinusAbar * NumOps.ToDouble(noise[j]));
+
+            using var tape = new GradientTape<T>();
+            var pred = DenoiserForward(BuildDenoiserInput(xt, t));
+            var target = VectorToTensor(noise);
+            var loss = ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(pred, target)));
+            TapeStepOver(tape, loss, BuildDenoiserLayerList());
+        }
     }
 
     #endregion
@@ -654,32 +731,8 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
 
     private Vector<T> PredictNoise(Vector<T> xt, int t)
     {
-        var timeEmbed = CreateTimestepEmbedding(t);
-
-        // Concatenate xt and time embedding
-        int totalLen = xt.Length + timeEmbed.Length;
-        var input = new Vector<T>(totalLen);
-        for (int i = 0; i < xt.Length; i++) input[i] = xt[i];
-        for (int i = 0; i < timeEmbed.Length; i++) input[xt.Length + i] = timeEmbed[i];
-
-        var current = VectorToTensor(input);
-        int dropIdx = 0;
-
-        for (int i = 0; i < Layers.Count; i++)
-        {
-            current = Layers[i].Forward(current);
-            if (_options.DropoutRate > 0 && dropIdx < _dropoutLayers.Count)
-            {
-                current = _dropoutLayers[dropIdx++].Forward(current);
-            }
-        }
-
-        if (_denoiserOutput is not null)
-        {
-            current = _denoiserOutput.Forward(current);
-        }
-
-        return TensorToVector(current, _dataWidth);
+        var pred = DenoiserForward(BuildDenoiserInput(xt, t));
+        return TensorToVector(pred, _dataWidth);
     }
 
     private Vector<T> CreateTimestepEmbedding(int t)
@@ -738,37 +791,6 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
     /// <summary>
     /// Applies NaN sanitization and gradient norm clipping in a single operation.
     /// </summary>
-    private Tensor<T> SafeGradient(Tensor<T> grad, double maxNorm)
-    {
-        for (int i = 0; i < grad.Length; i++)
-        {
-            double v = NumOps.ToDouble(grad[i]);
-            if (double.IsNaN(v) || double.IsInfinity(v))
-            {
-                grad[i] = NumOps.Zero;
-            }
-        }
-
-        if (maxNorm <= 0) return grad;
-
-        double normSq = 0;
-        for (int i = 0; i < grad.Length; i++)
-        {
-            double v = NumOps.ToDouble(grad[i]);
-            normSq += v * v;
-        }
-
-        double norm = Math.Sqrt(normSq);
-        if (norm <= maxNorm) return grad;
-
-        double scale = maxNorm / norm;
-        var clipped = new Tensor<T>(grad._shape);
-        for (int i = 0; i < grad.Length; i++)
-        {
-            clipped[i] = NumOps.FromDouble(NumOps.ToDouble(grad[i]) * scale);
-        }
-        return clipped;
-    }
 
     #endregion
 
@@ -796,24 +818,27 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
     /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        writer.Write(_options.SearchTrials);
-        writer.Write(_options.MaxTimesteps);
         writer.Write(_options.MLPDimensions.Length);
-        foreach (var dim in _options.MLPDimensions)
-        {
-            writer.Write(dim);
-        }
-        writer.Write(_options.BatchSize);
-        writer.Write(_options.LearningRate);
+        foreach (var dim in _options.MLPDimensions) writer.Write(dim);
         writer.Write(_options.TimestepEmbeddingDimension);
         writer.Write(_numTimesteps);
+        writer.Write(_dataWidth);
+        writer.Write(IsFitted);
     }
 
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        // Options are reconstructed from serialized data
-        // Layers are handled by base class
+        int mlpLen = reader.ReadInt32();
+        for (int i = 0; i < mlpLen; i++) _ = reader.ReadInt32();
+        _ = reader.ReadInt32();        // TimestepEmbeddingDimension
+        _numTimesteps = reader.ReadInt32();
+        _dataWidth = reader.ReadInt32();
+        IsFitted = reader.ReadBoolean();
+
+        // The base deserializer rebuilt Layers; re-bind the typed denoiser
+        // references so Clone/DeepCopy reproduce the identical forward.
+        ExtractLayerReferences();
     }
 
     /// <inheritdoc/>

@@ -31,8 +31,15 @@ namespace AiDotNet.ActivationFunctions;
 [ActivationCategory(ActivationCategory.General)]
 [ActivationTask(ActivationTask.HiddenLayer)]
 [ActivationProperty(IsMonotonic = false, ZeroPreserving = false, IsBounded = true, Cost = ComputeCost.Medium)]
-public class GaussianActivation<T> : ActivationFunctionBase<T>
+public class GaussianActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivation
 {
+    /// <inheritdoc/>
+    bool Fused.IFusedActivation.TryGetFusedActivation(out AiDotNet.Tensors.Engines.FusedActivationType type)
+    {
+        type = AiDotNet.Tensors.Engines.FusedActivationType.Gaussian;
+        return true;
+    }
+
     /// <summary>
     /// Indicates that this activation function supports operations on individual scalar values.
     /// </summary>

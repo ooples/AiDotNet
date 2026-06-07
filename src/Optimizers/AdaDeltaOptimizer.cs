@@ -31,8 +31,27 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <summary>
+    /// Describes this AdaDelta instance for the fused kernel (Tensors
+    /// <c>OptimizerType.AdaDelta</c> = <c>AdaDeltaUpdateSimd(lr, rho, eps)</c>):
+    /// Rho → Beta2 slot, Epsilon → eps; the two accumulators live in the plan.
+    /// The adaptive rho schedule only fires under UseAdaptiveLearningRate, which
+    /// is declined here (→ eager). Parity-gated.
+    /// </summary>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        if (_options.UseAdaptiveLearningRate) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+        config = new Fused.FusedOptimizerConfig(
+            Tensors.Engines.Compilation.OptimizerType.AdaDelta,
+            (float)GetCurrentLearningRate(),
+            0f, (float)_options.Rho, (float)_options.Epsilon, 0f, schedule);
+        return true;
+    }
+
     /// <summary>
     /// The configuration options specific to the AdaDelta optimizer.
     /// </summary>
@@ -383,13 +402,22 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         T oneMinusRho = NumOps.FromDouble(1 - _options.Rho);
         T epsilon = NumOps.FromDouble(_options.Epsilon);
 
+        bool gpuAdam = typeof(T) == typeof(float)
+            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
+            && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
+
         foreach (var param in context.Parameters)
         {
             if (!context.Gradients.TryGetValue(param, out var grad))
                 continue;
 
-            if (!_tapeAccSqGrad.TryGetValue(param, out var accSqGrad)) { accSqGrad = new Tensor<T>(param._shape); _tapeAccSqGrad[param] = accSqGrad; }
-            if (!_tapeAccSqUpd.TryGetValue(param, out var accSqUpd)) { accSqUpd = new Tensor<T>(param._shape); _tapeAccSqUpd[param] = accSqUpd; }
+            if (!_tapeAccSqGrad.TryGetValue(param, out var accSqGrad)) { accSqGrad = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) accSqGrad.AsWritableSpan().Clear(); _tapeAccSqGrad[param] = accSqGrad; }
+            if (!_tapeAccSqUpd.TryGetValue(param, out var accSqUpd)) { accSqUpd = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) accSqUpd.AsWritableSpan().Clear(); _tapeAccSqUpd[param] = accSqUpd; }
+
+            if (gpuAdam && param.Length == grad.Length
+                && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryAdadeltaStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)accSqGrad, (Tensor<float>)(object)accSqUpd,
+                    (float)_options.Rho, (float)_options.Epsilon, 0f))
+                continue;
 
             // accSqGrad = rho * accSqGrad + (1 - rho) * grad^2
             Engine.TensorCopy(Engine.TensorAdd(Engine.TensorMultiplyScalar(accSqGrad, rho), Engine.TensorMultiplyScalar(Engine.TensorMultiply(grad, grad), oneMinusRho)), accSqGrad);

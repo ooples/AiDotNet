@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      Matches the TFM set of the core AiDotNet package so this metapackage can
+      be consumed wherever the main package is. net8.0 is intentionally NOT
+      yet in the target list per the AiDotNet core csproj rationale (the
+      AiDotNet.Tensors transitive does not currently ship an explicit net8.0
+      build; tracked there).
+    -->
+    <TargetFrameworks>net10.0;net471</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <Version>0.204.0</Version>
+    <Title>AiDotNet.Storage.Elasticsearch</Title>
+    <Description>Elasticsearch document-store backend for AiDotNet's retrieval-augmented generation pipeline. Implements IDocumentStore via the Elastic.Clients.Elasticsearch 9.x client. Licensed under BSL 1.1 — see https://aidotnet.dev/license.</Description>
+    <Company>Ooples Finance</Company>
+    <Authors>ooples</Authors>
+    <Copyright>Ooples Finance LLC 2023</Copyright>
+    <PackageProjectUrl>https://github.com/ooples/AiDotNet</PackageProjectUrl>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/ooples/AiDotNet</RepositoryUrl>
+    <PackageTags>ai; aidotnet; elasticsearch; rag; document-store; retrieval-augmented-generation</PackageTags>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>AiDotNet.RetrievalAugmentedGeneration.DocumentStores</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Elastic.Clients.Elasticsearch" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AiDotNet.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\LICENSE" Pack="True" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

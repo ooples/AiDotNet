@@ -41,6 +41,11 @@ public class HelixOptions : VisionLanguageActionOptions
         PredictionHorizon = other.PredictionHorizon;
         ObservationHistory = other.ObservationHistory;
         NumJoints = other.NumJoints;
+        System2LatentDim = other.System2LatentDim;
+        System1HiddenDim = other.System1HiddenDim;
+        System1NumLayers = other.System1NumLayers;
+        System1NumHeads = other.System1NumHeads;
+        System1ToSystem2Ratio = other.System1ToSystem2Ratio;
     }
 
     public HelixOptions()
@@ -53,10 +58,28 @@ public class HelixOptions : VisionLanguageActionOptions
         ImageSize = 224;
         VocabSize = 32000;
         LanguageModelName = "LLaMA";
-        ActionDimension = 22;
+        ActionDimension = 35;
         PredictionHorizon = 16;
     }
 
-    /// <summary>Gets or sets the number of joint DOFs controlled.</summary>
-    public int NumJoints { get; set; } = 22;
+    /// <summary>Number of joint DOFs the upper-body controller exposes. Paper §3.4: 35 (torso 3 + arms 7×2 + hands 8×2 + neck 2).</summary>
+    public int NumJoints { get; set; } = 35;
+
+    /// <summary>Dimensionality of the latent vector System 2 emits to condition System 1. Paper §3.2: 512.</summary>
+    public int System2LatentDim { get; set; } = 512;
+
+    /// <summary>Hidden dimension of the System 1 fast visuomotor transformer. Paper §3.3: 384 (yields ~80M params with 8 layers).</summary>
+    public int System1HiddenDim { get; set; } = 384;
+
+    /// <summary>Number of transformer blocks in System 1. Paper §3.3: 8.</summary>
+    public int System1NumLayers { get; set; } = 8;
+
+    /// <summary>Number of attention heads per System 1 transformer block. Paper §3.3: 6.</summary>
+    public int System1NumHeads { get; set; } = 6;
+
+    /// <summary>
+    /// How many S1 ticks one S2 invocation remains valid before the runner re-invokes S2.
+    /// Default 22 — paper §4.1's S1:S2 = 200 Hz : ~9 Hz rate ratio.
+    /// </summary>
+    public int System1ToSystem2Ratio { get; set; } = 22;
 }

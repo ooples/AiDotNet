@@ -972,8 +972,16 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
         var min = _lastTokenMin;
         var range = _lastTokenRange;
 
-        // Create one-hot encoded tokens
-        var tokenized = new Tensor<T>(new[] { values.Length * _numTokens });
+        // Emit ONE token ID per timestep (Chronos quantizes each value to a single
+        // discrete bin — Ansari et al. 2024). The previous code emitted a
+        // [seqLen * numTokens] one-hot, which the EmbeddingLayer then read as
+        // seqLen*numTokens (≈2 M) token indices and expanded to a
+        // [1, seqLen*numTokens, hiddenDim] (≈1.6 B element) tensor through every
+        // transformer layer — a single forward took >60 s and timed out. A token-ID
+        // sequence [seqLen] embeds to [1, seqLen, hiddenDim] (512 tokens) and runs
+        // in seconds; Detokenize already restores the input scale via the stored
+        // min/range so distinct input levels still yield distinct forecasts.
+        var tokenized = new Tensor<T>(new[] { values.Length });
 
         for (int i = 0; i < values.Length; i++)
         {
@@ -984,8 +992,7 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
             int binIndex = Math.Min((int)(scaledDouble * (_numTokens - 1)), _numTokens - 1);
             binIndex = Math.Max(0, binIndex);
 
-            // Set one-hot
-            tokenized.Data.Span[i * _numTokens + binIndex] = NumOps.One;
+            tokenized.Data.Span[i] = NumOps.FromDouble(binIndex);
         }
 
         return tokenized;

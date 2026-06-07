@@ -1929,34 +1929,60 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // Re-assert the builder's determinism policy on this thread.
         AiDotNet.Tensors.Engines.AiDotNetEngine.SetDeterministicMode(!AllowNondeterminism);
 
-        var dataForPrediction = newData;
-        if (SafetyFilter != null && newData is Vector<T> vectorInput && typeof(TInput) == typeof(Vector<T>))
-        {
-            var validation = SafetyFilter.ValidateInput(vectorInput);
-            if (!validation.IsValid)
-            {
-                var issues = validation.Issues.Count > 0
-                    ? string.Join("; ", validation.Issues.Select(i => $"{i.Type}:{i.Severity}"))
-                    : "Unknown safety validation failure.";
-                throw new InvalidOperationException($"Safety validation failed: {issues}");
-            }
+        // Apply input preprocessing FIRST (when configured) so transformers such as
+        // SimpleImputer can replace NaN / missing values before the safety finiteness
+        // check runs. Otherwise a configured imputer never sees the NaN it exists to fix,
+        // and Predict throws "Safety validation failed: InvalidValue:Critical" on exactly
+        // the input the pipeline was meant to repair. Safety then validates the data the
+        // model actually receives. With no preprocessing configured this is a no-op
+        // (preprocessedInput == newData), so non-pipeline behaviour is unchanged.
+        var preprocessedInput = PreprocessingInfo?.IsFitted == true
+            ? PreprocessingInfo.TransformFeatures(newData)
+            : newData;
 
-            if (validation.SanitizedInput != null)
+        var dataForPrediction = preprocessedInput;
+        if (SafetyFilter != null && preprocessedInput is Vector<T> vectorInput && typeof(TInput) == typeof(Vector<T>))
+        {
+            // Fast path for the default numeric SafetyFilter — single-call analog of the
+            // ValidateAndSanitizeMatrix fast path (#1447 / #1458). SafetyFilter<T>.ValidateInput
+            // builds a ConvertToText string over every element THREE times (directly + inside
+            // DetectJailbreak + IdentifyHarmfulContent) then runs English-phrase jailbreak/
+            // harmful-content regexes that can never match numeric stringifications. The only
+            // verdicts that apply to a numeric input vector are input-length and finiteness;
+            // when the vector is within MaxInputLength and all-finite, ValidateInput returns
+            // IsValid with no sanitization (the default filter never sets SanitizedInput), so
+            // the per-call text scan is pure cost. Skip it for clean data; any violation falls
+            // through to the full ValidateInput so the exact diagnostic/throw is preserved.
+            // Custom ISafetyFilter implementations always take the per-call path below.
+            if (!(SafetyFilter is SafetyFilter<T> defaultInputFilter
+                  && IsCleanForDefaultVectorInputFilter(vectorInput, defaultInputFilter)))
             {
-                var sanitized = validation.SanitizedInput;
-                dataForPrediction = Unsafe.As<Vector<T>, TInput>(ref sanitized);
+                var validation = SafetyFilter.ValidateInput(vectorInput);
+                if (!validation.IsValid)
+                {
+                    var issues = validation.Issues.Count > 0
+                        ? string.Join("; ", validation.Issues.Select(i => $"{i.Type}:{i.Severity}"))
+                        : "Unknown safety validation failure.";
+                    throw new InvalidOperationException($"Safety validation failed: {issues}");
+                }
+
+                if (validation.SanitizedInput != null)
+                {
+                    var sanitized = validation.SanitizedInput;
+                    dataForPrediction = Unsafe.As<Vector<T>, TInput>(ref sanitized);
+                }
             }
         }
-        else if (SafetyFilter != null && newData is Matrix<T> matrixInput && typeof(TInput) == typeof(Matrix<T>))
+        else if (SafetyFilter != null && preprocessedInput is Matrix<T> matrixInput && typeof(TInput) == typeof(Matrix<T>))
         {
             var sanitizedMatrix = ValidateAndSanitizeMatrix(matrixInput);
             dataForPrediction = Unsafe.As<Matrix<T>, TInput>(ref sanitizedMatrix);
         }
 
-        // Transform input using preprocessing pipeline if configured
-        var normalizedNewData = PreprocessingInfo?.IsFitted == true
-            ? PreprocessingInfo.TransformFeatures(dataForPrediction)
-            : dataForPrediction;
+        // Input preprocessing was already applied above (before the safety check) so a
+        // configured imputer can repair NaN/missing values; feed the (possibly safety-
+        // sanitized) preprocessed data straight to feature selection + inference.
+        var normalizedNewData = dataForPrediction;
 
         // Apply feature selection if the optimizer selected a subset of features during training.
         // Without this, the model receives all columns but was trained on a subset, causing
@@ -2026,11 +2052,22 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         if (SafetyFilter != null && denormalized is Vector<T> vectorOutput && typeof(TOutput) == typeof(Vector<T>))
         {
-            var filtered = SafetyFilter.FilterOutput(vectorOutput);
-            if (filtered.WasModified || !filtered.IsSafe)
+            // Fast path for the default numeric SafetyFilter — single-call analog of the
+            // FilterMatrixOutput fast path (#1447 / #1458). SafetyFilter<T>.FilterOutput's
+            // only check is IdentifyHarmfulContent, which stringifies the vector
+            // (ConvertToText) and regex-matches English harmful-content phrases —
+            // meaningless on a numeric prediction vector, so it never modifies numeric
+            // output (a match would have been a spurious false-positive block). Skip the
+            // ConvertToText + regex for the default filter and return the output unchanged.
+            // Custom ISafetyFilter implementations keep the per-call path.
+            if (SafetyFilter is not SafetyFilter<T>)
             {
-                var filteredOutput = filtered.FilteredOutput;
-                return Unsafe.As<Vector<T>, TOutput>(ref filteredOutput);
+                var filtered = SafetyFilter.FilterOutput(vectorOutput);
+                if (filtered.WasModified || !filtered.IsSafe)
+                {
+                    var filteredOutput = filtered.FilteredOutput;
+                    return Unsafe.As<Vector<T>, TOutput>(ref filteredOutput);
+                }
             }
         }
         else if (SafetyFilter != null && denormalized is Matrix<T> matrixOutput && typeof(TOutput) == typeof(Matrix<T>))
@@ -2146,7 +2183,58 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             _featureSelectionState = 2;
         }
 
+        // Rank-1 single feature vector: SelectFeatures' tensor path requires
+        // rank>=2 (batch axis + feature axis), but a 1D tensor is an unambiguous
+        // per-sample feature vector with no batch axis — gather the selected
+        // indices directly into a new 1D tensor. This lets callers do
+        // result.Predict(singleVector) with feature selection configured
+        // (e.g. a permutation or column subset) without first wrapping to
+        // [1, features]. Bounds were validated in the state==0 block above.
+        if (input is Tensor<T> tensorInput && tensorInput.Shape.Length == 1)
+        {
+            var selected = new Tensor<T>(new[] { featureIndices.Count });
+            for (int j = 0; j < featureIndices.Count; j++)
+                selected[j] = tensorInput[featureIndices[j]];
+            return (TInput)(object)selected;
+        }
+
         return Helpers.OptimizerHelper<T, TInput, TOutput>.SelectFeatures(input, featureIndices);
+    }
+
+    /// <summary>
+    /// Returns true when the default numeric <see cref="SafetyFilter{T}"/> would pass
+    /// <paramref name="input"/> through unchanged — i.e. input validation is disabled, or
+    /// the vector is within <see cref="SafetyFilterOptions{T}.MaxInputLength"/> and contains
+    /// no NaN/Infinity. In that case <see cref="SafetyFilter{T}.ValidateInput"/> returns a
+    /// valid result with no sanitization, so its per-call text scan can be skipped. Any
+    /// violation returns false so the caller falls through to the full per-call validation
+    /// for the exact diagnostic. Mirrors the matrix fast path in
+    /// <see cref="ValidateAndSanitizeMatrix"/> (#1447 / #1458).
+    /// </summary>
+    private static bool IsCleanForDefaultVectorInputFilter(Vector<T> input, SafetyFilter<T> filter)
+    {
+        var opts = filter.GetOptions();
+        if (!opts.EnableInputValidation)
+        {
+            return true;
+        }
+
+        if (input.Length > opts.MaxInputLength)
+        {
+            return false;
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        for (int i = 0; i < input.Length; i++)
+        {
+            double d = numOps.ToDouble(input[i]);
+            if (double.IsNaN(d) || double.IsInfinity(d))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private Matrix<T> ValidateAndSanitizeMatrix(Matrix<T> input)
@@ -2159,6 +2247,50 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         if (input.Rows == 0 || input.Columns == 0)
         {
             return input;
+        }
+
+        // Vectorized fast path for the default numeric safety filter. The per-row
+        // ValidateInput below runs text-based jailbreak/pattern detection
+        // (ConvertToText stringifies every element, then DetectJailbreak regex-
+        // matches the result) plus a SafetyValidationResult + List allocation PER
+        // ROW. That machinery is meaningless on a numeric feature matrix yet costs
+        // O(rows × cols) string building + regex per row — ~4.4 s on the AIsEval
+        // 48k×10 LargeSet, the dominant term in AiModelBuilder<MultipleRegression>
+        // Predict (issue #1447 P2; PyTorch's equivalent predict is ~0.4 s with no
+        // such scan). For SafetyFilter<T> the only verdicts that apply to numeric
+        // input are input-length and finiteness, so check those in a single pass:
+        // if every row is within MaxInputLength and all elements are finite, the
+        // per-row path would return the input unchanged — so return it directly.
+        // Any violation falls through to the detailed per-row path, preserving the
+        // exact row-level diagnostic and sanitization for genuinely bad data.
+        if (SafetyFilter is SafetyFilter<T> defaultFilter)
+        {
+            var opts = defaultFilter.GetOptions();
+            if (!opts.EnableInputValidation)
+            {
+                return input;
+            }
+            if (input.Columns <= opts.MaxInputLength)
+            {
+                var numOps = MathHelper.GetNumericOperations<T>();
+                bool allFinite = true;
+                for (int i = 0; i < input.Rows && allFinite; i++)
+                {
+                    for (int j = 0; j < input.Columns; j++)
+                    {
+                        double d = numOps.ToDouble(input[i, j]);
+                        if (double.IsNaN(d) || double.IsInfinity(d))
+                        {
+                            allFinite = false;
+                            break;
+                        }
+                    }
+                }
+                if (allFinite)
+                {
+                    return input;
+                }
+            }
         }
 
         bool anySanitized = false;
@@ -2208,6 +2340,23 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         }
 
         if (output.Rows == 0 || output.Columns == 0)
+        {
+            return output;
+        }
+
+        // Vectorized fast path for the default safety filter — mirrors the input
+        // ValidateAndSanitizeMatrix fast path (issue #1447 / safety-filter
+        // generalization). SafetyFilter<T>.FilterOutput's only check is
+        // IdentifyHarmfulContent, which stringifies the row (ConvertToText) and
+        // regex-matches harmful-content patterns. That is text-output moderation —
+        // meaningless on a numeric prediction matrix, yet it allocates a result +
+        // builds a string + runs regex PER ROW, the same O(rows) tax the input
+        // path had. For a numeric matrix output the default filter has nothing to
+        // do, so return it unchanged. (A false-positive harmful-content match on
+        // stringified numbers would have been a spurious block; skipping it is
+        // also the correct outcome.) Custom ISafetyFilter implementations keep the
+        // per-row path below.
+        if (SafetyFilter is SafetyFilter<T>)
         {
             return output;
         }
@@ -2983,8 +3132,18 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     }
 
     /// <summary>
-    /// Gets the number of parameters in the underlying model.
+    /// Gets the number of parameters in the underlying model, or 0 when the model
+    /// has no trainable parameter vector (e.g. tree-based models).
     /// </summary>
+    /// <remarks>
+    /// Derived/query property — returns 0 for non-parameterizable models instead of
+    /// throwing, mirroring <see cref="SanitizeParameters"/>'s <c>TryParameterizable</c>
+    /// pattern. This prevents <see cref="Serialize"/> (which JSON-serializes this facade)
+    /// from failing on models without a parameter vector; the model's own state is
+    /// persisted separately via <c>SerializedModelData</c>. Marked <c>[JsonIgnore]</c>
+    /// because it is derived from <c>Model</c>, not independent serializable state.
+    /// </remarks>
+    [JsonIgnore]
     public long ParameterCount
     {
         get
@@ -2994,11 +3153,12 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 return 0;
             }
 
-            return InterfaceGuard.Parameterizable(Model).ParameterCount;
+            return InterfaceGuard.TryParameterizable(Model)?.ParameterCount ?? 0;
         }
     }
 
     /// <inheritdoc/>
+    [JsonIgnore]
     public bool SupportsParameterInitialization => ParameterCount > 0;
 
     /// <inheritdoc/>

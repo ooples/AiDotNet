@@ -105,6 +105,13 @@ public class CyclicLRScheduler : LearningRateSchedulerBase
     /// </summary>
     public int CycleCount => _cycleCount;
 
+    /// <summary>
+    /// Cyclic mode (Triangular / Triangular2 / ExponentialRange). Exposed so the
+    /// fused-training path can map the symmetric-triangular case to
+    /// <c>LrSchedule.Cyclic</c> and fall back to eager for the others.
+    /// </summary>
+    public CyclicMode Mode => _mode;
+
     /// <inheritdoc/>
     protected override double ComputeLearningRate(int step)
     {

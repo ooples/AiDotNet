@@ -59,8 +59,29 @@ namespace AiDotNet.Optimizers;
 /// </example>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <summary>
+    /// Describes this LAMB instance for the fused kernel (Tensors
+    /// <c>OptimizerType.LAMB</c> = <c>LAMBUpdateSimd(lr, b1, b2, eps, wd)</c>):
+    /// Beta1/Beta2 → β1/β2, Epsilon → eps, WeightDecay → wd. Declines (eager) on
+    /// adaptive LR or an unmappable scheduler. Parity-gated — if AiDotNet's
+    /// trust-ratio clamp (MaxTrustRatio) differs from the kernel's the parity
+    /// test fails and this stays unwired.
+    /// </summary>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        if (_options.UseAdaptiveLearningRate) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+        config = new Fused.FusedOptimizerConfig(
+            Tensors.Engines.Compilation.OptimizerType.LAMB,
+            (float)GetCurrentLearningRate(),
+            (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon,
+            (float)_options.WeightDecay, schedule);
+        return true;
+    }
+
     /// <summary>
     /// The options specific to the LAMB optimizer.
     /// </summary>
@@ -530,6 +551,11 @@ public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             ? NumOps.FromDouble(1.0 - Math.Pow(_options.Beta2, _tapeStep))
             : NumOps.One;
 
+        // NOTE: the CUDA lamb_update kernel computes the layer-wise trust ratio
+        // (||w|| / ||update||) with a different convention than this CPU
+        // implementation (parity harness ~6e-4 at step 1), so the GPU-resident
+        // path is NOT wired for LAMB — it would silently change training dynamics.
+        // Reconcile the kernel's trust-ratio with this formula before enabling.
         foreach (var param in context.Parameters)
         {
             if (!context.Gradients.TryGetValue(param, out var grad))

@@ -32,8 +32,17 @@ namespace AiDotNet.ActivationFunctions;
 [ActivationTask(ActivationTask.HiddenLayer)]
 [ActivationTask(ActivationTask.TransformerFFN)]
 [ActivationProperty(IsMonotonic = false, ZeroPreserving = true, IsBounded = false, Cost = ComputeCost.High)]
-public class GELUActivation<T> : ActivationFunctionBase<T>
+public class GELUActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivation
 {
+    /// <inheritdoc/>
+    // This class uses the tanh approximation of GELU, identical to the fused
+    // ActivationEpilogue GELU kernel (0.5·x·(1+tanh(√(2/π)·(x+0.044715·x³)))).
+    bool Fused.IFusedActivation.TryGetFusedActivation(out AiDotNet.Tensors.Engines.FusedActivationType type)
+    {
+        type = AiDotNet.Tensors.Engines.FusedActivationType.GELU;
+        return true;
+    }
+
     /// <summary>
     /// Indicates that this activation function supports operations on individual scalar values.
     /// </summary>

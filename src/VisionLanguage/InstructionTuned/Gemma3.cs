@@ -6,6 +6,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
@@ -137,6 +138,24 @@ public class Gemma3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
             ComputeEncoderDecoderBoundary();
         }
         ValidateEncoderDecoderBoundary(_encoderLayerEnd);
+
+        // NOTE: Gemma3 is paper-scale by default (VisionDim=1152, 27 vision
+        // layers, DecoderDim=3584, 36 decoder layers — Google's 4B/12B/27B
+        // SigLIP-SO family). The auto-detect streaming gate in
+        // NeuralNetworkBase reads ParameterCount, which returns 0 PRE-first-
+        // forward for lazy DenseLayers; the first warm-up Predict
+        // materializes the full lazy weight matrix on the GC heap and OOMs
+        // the runner before auto-detect gets a chance to engage.
+        //
+        // Calling ConfigureWeightLifetime(new GpuOffloadOptions()) here to
+        // pre-engage streaming was the natural fix but surfaces a downstream
+        // engine bug: when PredictEagerStreaming later calls
+        // RegisterLayerTrainableTensorsWithWeightRegistry on a lazy layer's
+        // freshly-materialized weights, DropStorageForStreaming throws
+        // "storage refcount is 2" — some view/rebind operation in
+        // PatchEmbeddingLayer's OnFirstForward leaves the weight tensor's
+        // storage shared. Deferring streaming pre-engagement until the
+        // engine-side refcount issue is fixed.
     }
 
     // Gemma-3 (Google 2025): 896 / sqrt(4096) = 14 — SigLIP 14x14 patches.

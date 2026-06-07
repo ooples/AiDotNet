@@ -118,21 +118,33 @@ const base = import.meta.env.BASE_URL;
           tier="Enterprise"
           price="$99"
           interval="month / seat"
-          description="For large organizations that need dedicated support, custom SLAs, and volume licensing."
+          description="For large organizations, federal customers (DOE / DOD / civilian agencies), and regulated industries that need air-gapped deployment, FIPS crypto, and NIST SSDF compliance."
           features={[
             'Everything in Professional',
             '10 machine activations per seat',
-            'Dedicated support engineer',
-            'Custom SLA with guaranteed response',
-            'On-premises deployment assistance',
-            'Custom model encryption keys',
-            'Multi-seat team licenses',
+            'Custom builds (telemetry + license-guard compiled out)',
+            'Offline license validation (no network callout)',
+            'Air-gapped deployment support',
+            'FIPS 140-3 compatible cryptography',
+            'NIST SP 800-218 SSDF artifacts (SBOM, SLSA L3 provenance, signed packages)',
+            'Dedicated support engineer + custom SLA',
             'Architecture review and consulting',
           ]}
           cta="Subscribe"
           stripeTier="enterprise"
         />
+
       </div>
+
+      <!-- Federal use note (audit-2026-05 + DOE-readiness).
+           Moved OUT of the 3-column pricing grid so it renders
+           full-width beneath the cards instead of getting squeezed
+           into a fourth column. -->
+      <p class="mt-8 text-sm text-slate-600 dark:text-slate-300 max-w-3xl mx-auto text-center">
+        Federal customers (U.S. government, military, national labs) — see
+        <a href="/federal-use" class="text-blue-600 dark:text-blue-400 hover:underline">/federal-use</a>
+        for the federal-specific terms, procurement vehicles, and compliance documentation.
+      </p>
 
       <!-- What's always free -->
       <div class="mt-16 max-w-3xl mx-auto">

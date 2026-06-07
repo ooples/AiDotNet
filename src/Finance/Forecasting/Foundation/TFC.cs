@@ -91,6 +91,13 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
     private double _dropout;
     private double _contrastiveTemperature;
 
+    // RevIN (reversible instance normalization, Kim et al. 2022) statistics.
+    // TFC normalizes each input series before the time/frequency encoders and
+    // restores the level on the output so distinct input scales produce distinct
+    // forecasts.
+    private Vector<T> _revinMean = new Vector<T>(0);
+    private Vector<T> _revinStd = new Vector<T>(0);
+
     #endregion
 
     #region Properties
@@ -544,6 +551,12 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
         _numFreqLayers = reader.ReadInt32();
         _dropout = reader.ReadDouble();
         _contrastiveTemperature = reader.ReadDouble();
+
+        // The base deserializer has already recreated every layer in Layers with the
+        // copied weights. Re-point the cached encoder/projection/head references at
+        // those layers; otherwise they keep pointing at the stale random-initialized
+        // layers from CreateNewInstance and a clone diverges from the original.
+        ExtractLayerReferences();
     }
 
     #endregion
@@ -611,43 +624,70 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
+        // RevIN forward (Kim et al. 2022). Stats are taken over every non-batch
+        // element of each row (a rank-1 input is a single instance, not one per
+        // element), and stored so DenormalizeForecast can restore the scale.
+        int batchSize = input.Shape.Length > 1 ? input.Shape[0] : 1;
+        int instanceSize = batchSize > 0 ? input.Length / batchSize : input.Length;
+        if (instanceSize <= 0)
+            return input;
+
         var result = new Tensor<T>(input._shape);
+        _revinMean = new Vector<T>(batchSize);
+        _revinStd = new Vector<T>(batchSize);
 
         for (int b = 0; b < batchSize; b++)
         {
+            int start = b * instanceSize;
+
             T mean = NumOps.Zero;
-            for (int t = 0; t < seqLen; t++)
-            {
-                int idx = b * seqLen + t;
-                if (idx < input.Length)
-                    mean = NumOps.Add(mean, input[idx]);
-            }
-            mean = NumOps.Divide(mean, NumOps.FromDouble(seqLen));
+            for (int t = 0; t < instanceSize; t++)
+                mean = NumOps.Add(mean, input[start + t]);
+            mean = NumOps.Divide(mean, NumOps.FromDouble(instanceSize));
 
             T variance = NumOps.Zero;
-            for (int t = 0; t < seqLen; t++)
+            for (int t = 0; t < instanceSize; t++)
             {
-                int idx = b * seqLen + t;
-                if (idx < input.Length)
-                {
-                    var diff = NumOps.Subtract(input[idx], mean);
-                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-                }
+                var diff = NumOps.Subtract(input[start + t], mean);
+                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
             }
-            variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen));
+            variance = NumOps.Divide(variance, NumOps.FromDouble(instanceSize));
             T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
 
-            for (int t = 0; t < seqLen; t++)
-            {
-                int idx = b * seqLen + t;
-                if (idx < input.Length && idx < result.Length)
-                    result.Data.Span[idx] = NumOps.Divide(NumOps.Subtract(input[idx], mean), std);
-            }
+            _revinMean[b] = mean;
+            _revinStd[b] = std;
+
+            for (int t = 0; t < instanceSize; t++)
+                result.Data.Span[start + t] = NumOps.Divide(NumOps.Subtract(input[start + t], mean), std);
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// RevIN reverse step (Kim et al. 2022): restores each instance's mean/std to the
+    /// forecast so it is expressed on the input's original scale. The multiply/add go
+    /// through the Engine so the forecast stays on the autodiff tape.
+    /// </summary>
+    private Tensor<T> DenormalizeForecast(Tensor<T> forecast)
+    {
+        int batch = forecast.Shape.Length > 1 ? forecast.Shape[0] : 1;
+        if (_revinMean.Length != batch || forecast.Length % batch != 0)
+            return forecast;
+
+        var meanT = new Tensor<T>(new[] { batch, 1 });
+        var stdT = new Tensor<T>(new[] { batch, 1 });
+        for (int b = 0; b < batch; b++)
+        {
+            meanT.Data.Span[b] = _revinMean[b];
+            stdT.Data.Span[b] = _revinStd[b];
+        }
+
+        bool reshaped = forecast.Rank != 2;
+        var work = reshaped ? Engine.Reshape(forecast, new[] { batch, forecast.Length / batch }) : forecast;
+        var scaled = Engine.TensorBroadcastMultiply(work, stdT);
+        var shifted = Engine.TensorBroadcastAdd(scaled, meanT);
+        return reshaped ? Engine.Reshape(shifted, forecast._shape) : shifted;
     }
 
     /// <inheritdoc/>
@@ -720,10 +760,25 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
         if (_forecastHead is not null)
             current = _forecastHead.Forward(current);
 
+        // RevIN reverse: restore the input's per-instance level/scale so distinct
+        // input levels yield distinct forecasts (the encoders see only the
+        // mean/std-normalized series).
+        current = DenormalizeForecast(current);
+
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = current.Reshape(new[] { current.Shape[1] });
 
         return current;
+    }
+
+    /// <summary>
+    /// Training-mode forward. Routes through <see cref="ForwardNative"/> so training
+    /// uses the same RevIN normalize/denormalize as inference and keeps training mode
+    /// (dropout) active, instead of the base default that flips to inference.
+    /// </summary>
+    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
+    {
+        return ForwardNative(input);
     }
 
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)

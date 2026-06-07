@@ -6,6 +6,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -96,6 +97,11 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
     private int _dataWidth;
     private Random _random;
 
+    // Encoder layers (the forward iterates this typed list; all sub-networks are
+    // ALSO registered in the shared Layers collection so the tape-training
+    // parameter collection / optimizer sees encoder + heads + decoder together).
+    private readonly List<ILayer<T>> _encoderLayers = new();
+
     // Mean and logvar projection heads (auxiliary, used when not using custom layers)
     // Custom layers produce concatenated 2*latentDim output; default layers use separate heads
     private FullyConnectedLayer<T>? _meanLayer;
@@ -103,10 +109,6 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
 
     // Decoder layers (auxiliary, not user-overridable)
     private readonly List<ILayer<T>> _decoderLayers = new();
-
-    // Cached epsilon from reparameterization for proper backward gradient computation
-    private Tensor<T>? _lastEpsilon;
-    private Tensor<T>? _lastEncoderOutput;
 
     // Whether custom layers are being used (changes encoder output handling)
     private bool _usingCustomLayers;
@@ -201,14 +203,14 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
     /// </remarks>
     protected override void InitializeLayers()
     {
+        _encoderLayers.Clear();
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
             // Use the layers provided by the user for the encoder
-            Layers.AddRange(Architecture.Layers);
+            _encoderLayers.AddRange(Architecture.Layers);
             _usingCustomLayers = true;
 
             // Create separate mean and logvar projection heads for custom layers
-            int lastLayerOutput = Architecture.OutputSize;
             var identity = new IdentityActivation<T>() as IActivationFunction<T>;
             _meanLayer = new FullyConnectedLayer<T>(_options.LatentDimension, identity);
             _logVarLayer = new FullyConnectedLayer<T>(_options.LatentDimension, identity);
@@ -218,7 +220,7 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
             // Create default encoder layers
             // Default encoder outputs 2*latentDim (mean+logvar concatenated)
             int inputDim = Architecture.CalculatedInputSize;
-            Layers.AddRange(LayerHelper<T>.CreateDefaultTVAEEncoderLayers(
+            _encoderLayers.AddRange(LayerHelper<T>.CreateDefaultTVAEEncoderLayers(
                 inputDim, _options.LatentDimension, _options.EncoderDimensions));
             _usingCustomLayers = false;
         }
@@ -227,6 +229,8 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
         _decoderLayers.Clear();
         _decoderLayers.AddRange(LayerHelper<T>.CreateDefaultTVAEDecoderLayers(
             _options.LatentDimension, Architecture.OutputSize, _options.DecoderDimensions));
+
+        RegisterAllLayers();
     }
 
     /// <summary>
@@ -236,14 +240,13 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
     {
         if (!_usingCustomLayers)
         {
-            Layers.Clear();
-            Layers.AddRange(LayerHelper<T>.CreateDefaultTVAEEncoderLayers(
+            _encoderLayers.Clear();
+            _encoderLayers.AddRange(LayerHelper<T>.CreateDefaultTVAEEncoderLayers(
                 dataWidth, _options.LatentDimension, _options.EncoderDimensions));
         }
         else
         {
             // For custom layers, rebuild the projection heads with actual latent dimension
-            int lastLayerOutput = Layers.Count > 0 ? GetLayerOutputSize(Layers[^1]) : dataWidth;
             var identity = new IdentityActivation<T>() as IActivationFunction<T>;
             _meanLayer = new FullyConnectedLayer<T>(_options.LatentDimension, identity);
             _logVarLayer = new FullyConnectedLayer<T>(_options.LatentDimension, identity);
@@ -253,6 +256,26 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
         _decoderLayers.Clear();
         _decoderLayers.AddRange(LayerHelper<T>.CreateDefaultTVAEDecoderLayers(
             _options.LatentDimension, dataWidth, _options.DecoderDimensions));
+
+        RegisterAllLayers();
+    }
+
+    /// <summary>
+    /// Registers every trainable sub-network (encoder, mean/logvar heads, decoder)
+    /// in the shared <see cref="NeuralNetworkBase{T}.Layers"/> collection in a
+    /// stable order so the tape-based training parameter collection and
+    /// GetParameters/GetParameterGradients/UpdateParameters see the full set.
+    /// The forward pass uses the typed lists (<see cref="_encoderLayers"/> /
+    /// <see cref="_decoderLayers"/>), not Layers, so encoder and decoder stay
+    /// distinct stages.
+    /// </summary>
+    private void RegisterAllLayers()
+    {
+        Layers.Clear();
+        Layers.AddRange(_encoderLayers);
+        if (_meanLayer is not null) Layers.Add(_meanLayer);
+        if (_logVarLayer is not null) Layers.Add(_logVarLayer);
+        Layers.AddRange(_decoderLayers);
     }
 
     /// <summary>
@@ -286,35 +309,46 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        // GPU-resident optimization
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
+        EnsureSizedForInput(input);
 
-        Tensor<T> current = input;
-        foreach (var layer in Layers)
-        {
-            current = layer.Forward(current);
-        }
-        return current;
+        // Deterministic VAE reconstruction: encode, take the latent MEAN (no
+        // sampling, so Predict is deterministic), decode, apply per-column output
+        // activations. Sampling-based generation lives in Generate().
+        var (mean, _) = EncoderForward(input);
+        var raw = DecoderForward(mean);
+        return ApplyOutputActivations(raw);
     }
 
     /// <summary>
-    /// Trains the TVAE using the provided input and expected output.
+    /// When the generator has not yet been fitted (e.g. the generated ModelFamily
+    /// tests call Train()/Predict() directly), adapt the encoder/decoder layout to
+    /// the actual input width so the model is a valid network for any 1-D input.
+    /// Once fitted, the width is fixed by the TabularDataTransformer.
+    /// </summary>
+    private void EnsureSizedForInput(Tensor<T> input)
+    {
+        if (!IsFitted && input.Length != _dataWidth)
+        {
+            _dataWidth = input.Length;
+            RebuildLayersWithActualDimensions(_dataWidth);
+        }
+    }
+
+    /// <summary>
+    /// Trains the TVAE on a single sample by running one tape-connected ELBO
+    /// optimization step (encode → reparameterize → decode → reconstruction + KL).
     /// </summary>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        Tensor<T> prediction = Predict(input);
-        LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        Tensor<T> error = prediction.Subtract(expectedOutput);
-        UpdateNetworkParameters();
-    }
-
-    /// <summary>
-    /// Updates the parameters of all layers in the network based on computed gradients.
-    /// </summary>
-    private void UpdateNetworkParameters()
-    {
-        _optimizer.UpdateParameters(Layers);
+        SetTrainingMode(true);
+        try
+        {
+            ElboStep(input);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc />
@@ -373,12 +407,20 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
         int numBatches = Math.Max(1, data.Rows / batchSize);
         T scaledLr = NumOps.FromDouble(_options.LearningRate / batchSize);
 
-        for (int epoch = 0; epoch < epochs; epoch++)
+        SetTrainingMode(true);
+        try
         {
-            for (int batch = 0; batch < numBatches; batch++)
+            for (int epoch = 0; epoch < epochs; epoch++)
             {
-                TrainBatch(transformedData, batch, batchSize, scaledLr);
+                for (int batch = 0; batch < numBatches; batch++)
+                {
+                    TrainBatch(transformedData, batch, batchSize, scaledLr);
+                }
             }
+        }
+        finally
+        {
+            SetTrainingMode(false);
         }
 
         IsFitted = true;
@@ -449,13 +491,21 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
             int numBatches = Math.Max(1, data.Rows / batchSize);
             T scaledLr = NumOps.FromDouble(_options.LearningRate / batchSize);
 
-            for (int epoch = 0; epoch < epochs; epoch++)
+            SetTrainingMode(true);
+            try
             {
-                ct.ThrowIfCancellationRequested();
-                for (int batch = 0; batch < numBatches; batch++)
+                for (int epoch = 0; epoch < epochs; epoch++)
                 {
-                    TrainBatch(transformedData, batch, batchSize, scaledLr);
+                    ct.ThrowIfCancellationRequested();
+                    for (int batch = 0; batch < numBatches; batch++)
+                    {
+                        TrainBatch(transformedData, batch, batchSize, scaledLr);
+                    }
                 }
+            }
+            finally
+            {
+                SetTrainingMode(false);
             }
 
             IsFitted = true;
@@ -474,11 +524,10 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
     private (Tensor<T> Mean, Tensor<T> LogVar) EncoderForward(Tensor<T> input)
     {
         var current = input;
-        foreach (var layer in Layers)
+        foreach (var layer in _encoderLayers)
         {
             current = layer.Forward(current);
         }
-        _lastEncoderOutput = current;
 
         if (_usingCustomLayers)
         {
@@ -495,47 +544,33 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
     }
 
     /// <summary>
-    /// Splits the encoder output tensor into mean and logvar halves.
+    /// Splits the encoder output tensor into mean and logvar halves, using
+    /// tape-connected <see cref="NeuralNetworkBase{T}.Engine"/> slices so the
+    /// reparameterization gradient flows back into the encoder.
     /// </summary>
     private (Tensor<T> Mean, Tensor<T> LogVar) SplitEncoderOutput(Tensor<T> encoderOutput)
     {
         int latentDim = _options.LatentDimension;
-        int[] halfShape = DeriveShapeWithLastDim(encoderOutput._shape, latentDim);
-        var mean = new Tensor<T>(halfShape);
-        var logVar = new Tensor<T>(halfShape);
-
-        for (int i = 0; i < latentDim && i < encoderOutput.Length; i++)
-        {
-            mean[i] = encoderOutput[i];
-        }
-        for (int i = 0; i < latentDim && (latentDim + i) < encoderOutput.Length; i++)
-        {
-            logVar[i] = encoderOutput[latentDim + i];
-        }
-
+        var flat = encoderOutput.Rank == 1 ? encoderOutput : Engine.Reshape(encoderOutput, new[] { encoderOutput.Length });
+        var mean = Engine.TensorSlice(flat, new[] { 0 }, new[] { latentDim });
+        var logVar = Engine.TensorSlice(flat, new[] { latentDim }, new[] { latentDim });
         return (mean, logVar);
     }
 
     /// <summary>
-    /// Reparameterization trick: z = mean + exp(0.5 * logVar) * epsilon.
-    /// Caches epsilon for proper backward gradient computation.
+    /// Reparameterization trick: z = mean + exp(0.5 * logVar) ⊙ epsilon, computed
+    /// with tape-connected <see cref="NeuralNetworkBase{T}.Engine"/> ops (epsilon is
+    /// a sampled constant leaf) so gradients flow into mean and logVar. This is the
+    /// standard low-variance VAE gradient estimator (Kingma &amp; Welling, 2014).
     /// </summary>
     private Tensor<T> Reparameterize(Tensor<T> mean, Tensor<T> logVar)
     {
-        var z = new Tensor<T>(mean._shape);
-        _lastEpsilon = new Tensor<T>(mean._shape);
+        var eps = new Tensor<T>(mean._shape);
+        for (int i = 0; i < eps.Length; i++) eps[i] = SampleStandardNormal();
 
-        for (int i = 0; i < mean.Length; i++)
-        {
-            double m = NumOps.ToDouble(mean[i]);
-            double lv = NumOps.ToDouble(logVar[i]);
-            double std = Math.Exp(0.5 * lv);
-            double eps = NumOps.ToDouble(SampleStandardNormal());
-            _lastEpsilon[i] = NumOps.FromDouble(eps);
-            z[i] = NumOps.FromDouble(m + std * eps);
-        }
-
-        return z;
+        // std = exp(0.5 * logVar); z = mean + std ⊙ eps
+        var std = Engine.TensorExp(Engine.TensorMultiplyScalar(logVar, NumOps.FromDouble(0.5)));
+        return Engine.TensorAdd(mean, Engine.TensorMultiply(std, eps));
     }
 
     /// <summary>
@@ -562,118 +597,109 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
 
         for (int row = startRow; row < endRow; row++)
         {
-            // Get input row
-            var inputVec = GetRow(transformedData, row);
-            var inputTensor = VectorToTensor(inputVec);
-
-            // Forward: encode -> reparameterize -> decode
-            var (mean, logVar) = EncoderForward(inputTensor);
-            var z = Reparameterize(mean, logVar);
-            var rawOutput = DecoderForward(z);
-            var activated = ApplyOutputActivations(rawOutput);
-
-            // Compute gradient of reconstruction loss w.r.t. decoder raw output
-            var outputGrad = ComputeOutputGradient(inputTensor, activated);
-
-            // Sanitize and clip gradient to prevent NaN propagation
-            outputGrad = SafeGradient(outputGrad, 5.0);
-
-            // Backward through decoder -> returns gradient w.r.t. z
-
-            // Backward through reparameterization and encoder
-
-            // Per-sample parameter update
-            UpdateAllParameters(scaledLearningRate);
+            ElboStep(VectorToTensor(GetRow(transformedData, row)));
         }
     }
 
     /// <summary>
-    /// Computes the gradient of the ELBO reconstruction loss with respect to the decoder's raw output,
-    /// properly incorporating the derivatives of per-column output activations (tanh, softmax).
+    /// Runs one tape-connected ELBO optimization step on a single transformed
+    /// input row: encode → reparameterize → decode, then compute the evidence
+    /// lower bound (per-column reconstruction loss + KL divergence) as a
+    /// tape-tracked scalar and let autodiff backpropagate through the whole VAE
+    /// (encoder, reparameterization, decoder) before the optimizer step. Replaces
+    /// the previous hand-rolled gradient path whose decoder/encoder backward was
+    /// never actually wired, so no parameter received a gradient.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// For softmax + cross-entropy: the gradient simplifies to softmax(logit) - target,
-    /// which is already dL/d(logit) (the standard simplification).
-    /// </para>
-    /// <para>
-    /// For tanh + MSE: dL/d(raw) = 2*(tanh(raw) - target) * (1 - tanh(raw)^2),
-    /// which chains the MSE gradient through the tanh derivative.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ComputeOutputGradient(Tensor<T> input, Tensor<T> activated)
+    private void ElboStep(Tensor<T> input)
     {
-        var grad = new Tensor<T>(activated._shape);
+        EnsureSizedForInput(input);
+        using var tape = new GradientTape<T>();
+        var (mean, logVar) = EncoderForward(input);
+        var z = Reparameterize(mean, logVar);
+        var rawOutput = DecoderForward(z);
+        var loss = ComputeElboLossTape(rawOutput, input, mean, logVar);
+        BackwardAndStepOnPrecomputedLoss(tape, loss, _optimizer);
+    }
 
-        if (_transformer is null) return grad;
+    /// <summary>
+    /// Computes the tape-connected negative ELBO: per-column reconstruction loss
+    /// (tanh + MSE for the continuous normalized value, softmax + cross-entropy
+    /// for mode indicators and categorical one-hots — the CTGAN/TVAE loss of Xu
+    /// et al. 2019) scaled by <see cref="TVAEOptions{T}.LossWeight"/>, plus the
+    /// standard Gaussian KL divergence to the N(0,I) prior.
+    /// </summary>
+    private Tensor<T> ComputeElboLossTape(Tensor<T> rawOutput, Tensor<T> target, Tensor<T> mean, Tensor<T> logVar)
+    {
+        var raw = rawOutput.Rank == 1 ? rawOutput : Engine.Reshape(rawOutput, new[] { rawOutput.Length });
+        var tgt = target.Rank == 1 ? target : Engine.Reshape(target, new[] { target.Length });
 
+        Tensor<T>? recon = null;
         int idx = 0;
-        for (int col = 0; col < _columns.Count && idx < input.Length; col++)
+        if (_transformer is not null)
         {
-            var transform = _transformer.GetTransformInfo(col);
-
-            if (transform.IsContinuous)
+            for (int col = 0; col < _columns.Count && idx < raw.Length; col++)
             {
-                // Continuous normalized value: tanh activation + MSE loss
-                if (idx < input.Length && idx < activated.Length)
+                var transform = _transformer.GetTransformInfo(col);
+                if (transform.IsContinuous)
                 {
-                    double target = NumOps.ToDouble(input[idx]);
-                    double tanhVal = NumOps.ToDouble(activated[idx]);
-                    double diff = tanhVal - target;
-                    double tanhDeriv = 1.0 - tanhVal * tanhVal;
-                    grad[idx] = NumOps.FromDouble(2.0 * diff * tanhDeriv * _options.LossWeight);
+                    // Continuous normalized value: tanh + MSE.
+                    var rawScalar = Engine.TensorSlice(raw, new[] { idx }, new[] { 1 });
+                    var tgtScalar = Engine.TensorSlice(tgt, new[] { idx }, new[] { 1 });
+                    var diff = Engine.TensorSubtract(Engine.TensorTanh(rawScalar), tgtScalar);
+                    recon = AddScalarLoss(recon, ReduceToScalar(Engine.TensorSquare(diff)));
                     idx++;
-                }
 
-                // Mode indicators: softmax activation + cross-entropy loss
-                int numModes = transform.Width - 1;
-                for (int m = 0; m < numModes && idx < input.Length; m++)
-                {
-                    double target = NumOps.ToDouble(input[idx]);
-                    double predicted = NumOps.ToDouble(activated[idx]);
-                    grad[idx] = NumOps.FromDouble((predicted - target) * _options.LossWeight);
-                    idx++;
+                    // Mode indicators: softmax + cross-entropy.
+                    int numModes = transform.Width - 1;
+                    if (numModes > 0)
+                    {
+                        recon = AddScalarLoss(recon, SoftmaxCrossEntropy(raw, tgt, idx, numModes));
+                        idx += numModes;
+                    }
                 }
-            }
-            else
-            {
-                // Categorical: softmax activation + cross-entropy loss
-                int numCats = transform.Width;
-                for (int c = 0; c < numCats && idx < input.Length; c++)
+                else
                 {
-                    double target = NumOps.ToDouble(input[idx]);
-                    double predicted = NumOps.ToDouble(activated[idx]);
-                    grad[idx] = NumOps.FromDouble((predicted - target) * _options.LossWeight);
-                    idx++;
+                    // Categorical one-hot: softmax + cross-entropy.
+                    recon = AddScalarLoss(recon, SoftmaxCrossEntropy(raw, tgt, idx, transform.Width));
+                    idx += transform.Width;
                 }
             }
         }
 
-        return grad;
+        recon ??= ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(raw, tgt)));
+        recon = Engine.TensorMultiplyScalar(recon, NumOps.FromDouble(_options.LossWeight));
+
+        // KL(N(mean, exp(logVar)) || N(0, I)) = -0.5 * Σ(1 + logVar - mean² - exp(logVar)).
+        var meanSq = Engine.TensorSquare(mean);
+        var expLogVar = Engine.TensorExp(logVar);
+        var klTerm = Engine.TensorSubtract(
+            Engine.TensorSubtract(Engine.TensorAddScalar(logVar, NumOps.One), meanSq),
+            expLogVar);
+        var kl = Engine.TensorMultiplyScalar(ReduceToScalar(klTerm), NumOps.FromDouble(-0.5));
+
+        return Engine.TensorAdd(recon, kl);
     }
 
-    #endregion
-
-    #region Backward Passes
-
-    private void UpdateAllParameters(T learningRate)
+    /// <summary>Tape-connected softmax cross-entropy −Σ target·log(softmax(raw_slice)) over a column slice.</summary>
+    private Tensor<T> SoftmaxCrossEntropy(Tensor<T> raw, Tensor<T> tgt, int start, int count)
     {
-        // Update encoder layers
-        foreach (var layer in Layers)
-        {
-            layer.UpdateParameters(learningRate);
-        }
-
-        // Update mean/logvar projection heads (if using custom layers)
-        _meanLayer?.UpdateParameters(learningRate);
-        _logVarLayer?.UpdateParameters(learningRate);
-
-        // Update decoder layers
-        foreach (var layer in _decoderLayers)
-        {
-            layer.UpdateParameters(learningRate);
-        }
+        if (count <= 0) return ReduceToScalar(Engine.TensorSlice(raw, new[] { start }, new[] { 0 }));
+        var rawSlice = Engine.TensorSlice(raw, new[] { start }, new[] { count });
+        var tgtSlice = Engine.TensorSlice(tgt, new[] { start }, new[] { count });
+        var logProbs = Engine.TensorLogSoftmax(rawSlice, axis: 0);
+        var ce = Engine.TensorNegate(ReduceToScalar(Engine.TensorMultiply(tgtSlice, logProbs)));
+        return ce;
     }
+
+    /// <summary>Reduces a tensor to a scalar [1] by summing all elements (tape-connected).</summary>
+    private Tensor<T> ReduceToScalar(Tensor<T> t)
+    {
+        var axes = Enumerable.Range(0, t.Shape.Length).ToArray();
+        return Engine.ReduceSum(t, axes, keepDims: false);
+    }
+
+    private Tensor<T> AddScalarLoss(Tensor<T>? acc, Tensor<T> term)
+        => acc is null ? term : Engine.TensorAdd(acc, term);
 
     #endregion
 
@@ -731,43 +757,6 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
 
     #endregion
 
-    #region Gradient Utilities
-
-    /// <summary>
-    /// Sanitizes and clips gradients to prevent NaN propagation and exploding gradients.
-    /// </summary>
-    private Tensor<T> SafeGradient(Tensor<T> grad, double maxNorm)
-    {
-        var result = new Tensor<T>(grad._shape);
-        double sumSq = 0;
-
-        for (int i = 0; i < grad.Length; i++)
-        {
-            double val = NumOps.ToDouble(grad[i]);
-            if (double.IsNaN(val) || double.IsInfinity(val))
-            {
-                val = 0;
-            }
-            result[i] = NumOps.FromDouble(val);
-            sumSq += val * val;
-        }
-
-        double norm = Math.Sqrt(sumSq);
-        if (norm > maxNorm && norm > 0)
-        {
-            double scale = maxNorm / norm;
-            for (int i = 0; i < result.Length; i++)
-            {
-                double val = NumOps.ToDouble(result[i]);
-                result[i] = NumOps.FromDouble(val * scale);
-            }
-        }
-
-        return result;
-    }
-
-    #endregion
-
     #region Serialization and Model Metadata (GANDALF Pattern)
 
     /// <inheritdoc/>
@@ -808,13 +797,67 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
         writer.Write(_options.LearningRate);
         writer.Write(_options.LossWeight);
         writer.Write(_options.VGMModes);
+
+        // Structural layout so a deserialized clone can re-bind its typed layer
+        // references (encoder / mean+logvar heads / decoder) out of the shared
+        // Layers collection and reproduce the identical VAE forward.
+        writer.Write(_dataWidth);
+        writer.Write(IsFitted);
+        writer.Write(_usingCustomLayers);
+        writer.Write(_encoderLayers.Count);
+        writer.Write(_meanLayer is not null);
+        writer.Write(_decoderLayers.Count);
     }
 
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        // Options are reconstructed from serialized data
-        // Layers are handled by base class
+        _ = reader.ReadInt32();    // LatentDimension
+        int encDims = reader.ReadInt32();
+        for (int i = 0; i < encDims; i++) _ = reader.ReadInt32();
+        int decDims = reader.ReadInt32();
+        for (int i = 0; i < decDims; i++) _ = reader.ReadInt32();
+        _ = reader.ReadInt32();    // BatchSize
+        _ = reader.ReadDouble();   // LearningRate
+        _ = reader.ReadDouble();   // LossWeight
+        _ = reader.ReadInt32();    // VGMModes
+
+        _dataWidth = reader.ReadInt32();
+        IsFitted = reader.ReadBoolean();
+        _usingCustomLayers = reader.ReadBoolean();
+        int encoderCount = reader.ReadInt32();
+        bool hasHeads = reader.ReadBoolean();
+        int decoderCount = reader.ReadInt32();
+
+        // The base deserializer rebuilt Layers; re-bind the typed references the
+        // VAE forward uses (encoder, mean/logvar heads, decoder) from it.
+        ExtractLayerReferences(encoderCount, hasHeads, decoderCount);
+    }
+
+    /// <summary>
+    /// Re-binds <see cref="_encoderLayers"/>, <see cref="_meanLayer"/>,
+    /// <see cref="_logVarLayer"/>, and <see cref="_decoderLayers"/> from the shared
+    /// <see cref="NeuralNetworkBase{T}.Layers"/> collection using the serialized
+    /// split, after deserialization replaced Layers with fresh instances.
+    /// </summary>
+    private void ExtractLayerReferences(int encoderCount, bool hasHeads, int decoderCount)
+    {
+        int expected = encoderCount + (hasHeads ? 2 : 0) + decoderCount;
+        if (Layers.Count != expected) return;
+
+        _encoderLayers.Clear();
+        _decoderLayers.Clear();
+        _meanLayer = null;
+        _logVarLayer = null;
+
+        int idx = 0;
+        for (int i = 0; i < encoderCount; i++) _encoderLayers.Add(Layers[idx++]);
+        if (hasHeads)
+        {
+            _meanLayer = Layers[idx++] as FullyConnectedLayer<T>;
+            _logVarLayer = Layers[idx++] as FullyConnectedLayer<T>;
+        }
+        for (int i = 0; i < decoderCount; i++) _decoderLayers.Add(Layers[idx++]);
     }
 
     /// <inheritdoc/>

@@ -57,6 +57,9 @@
     <InternalsVisibleTo Include="AiDotNetBenchmarkTests" />
     <InternalsVisibleTo Include="HarmonicEngine" />
     <InternalsVisibleTo Include="HarmonicEngine.Tests" />
+    <!-- ConsistencyModelPerfDiag reads UNetNoisePredictor.ForwardProfilingSink
+         (internal diagnostics plumbing); without this it can't see the sink. -->
+    <InternalsVisibleTo Include="ConsistencyModelPerfDiag" />
   </ItemGroup>
 
   <!-- Exclude other projects from this build -->
@@ -84,16 +87,40 @@
 
 	<ItemGroup>
 	  <PackageReference Include="Azure.Search.Documents" />
-	  <PackageReference Include="Elastic.Clients.Elasticsearch" />
+	  <!-- audit-2026-05 phase 2b: Elasticsearch backend extracted to
+	       src/AiDotNet.Storage.Elasticsearch (consumers add a project /
+	       package reference to AiDotNet.Storage.Elasticsearch to opt in).
+	       Elastic.Clients.Elasticsearch is no longer a transitive dep
+	       of the core package. -->
+	  <!-- <PackageReference Include="Elastic.Clients.Elasticsearch" /> -->
+
 	  <PackageReference Include="Google.Protobuf" />
 	  <PackageReference Include="Microsoft.CSharp" />
-	  <PackageReference Include="Microsoft.Data.Sqlite" />
+	  <!-- Microsoft.Data.Sqlite extracted to the opt-in AiDotNet.Storage.Sqlite
+	       metapackage in audit-2026-05 phase 2c (finding #14). Core code used it
+	       only in NeuralProgramSynthesizer for precise SQL validation, which now
+	       delegates to an optional ISqlSyntaxValidator (SqlSyntaxValidation.Validator)
+	       and falls back to generic validation when none is registered. The
+	       SQLite-backed validator ships in AiDotNet.Storage.Sqlite.
+	  <PackageReference Include="Microsoft.Data.Sqlite" /> -->
 	  <PackageReference Include="Microsoft.ML.OnnxRuntime" />
-	  <PackageReference Include="Microsoft.Research.SEALNet" />
+	  <!-- Microsoft.Research.SEALNet (homomorphic encryption) extracted to the
+	       opt-in AiDotNet.Privacy.HE metapackage in audit-2026-05 phase 2c
+	       (finding #14). SealHomomorphicEncryptionProvider moved there; the
+	       IHomomorphicEncryptionProvider<T> interface + HomomorphicEncryptionProviderBase
+	       stay in core. InMemoryFederatedTrainer no longer constructs SEAL by default —
+	       it requires an IHomomorphicEncryptionProvider<T> to be supplied when HE is
+	       enabled, and fails loudly otherwise. SEAL is no longer a core dependency.
+	  <PackageReference Include="Microsoft.Research.SEALNet" /> -->
 	  <PackageReference Include="Newtonsoft.Json" />
 	  <!-- MatFileHandler — read .mat split/annotation files (SVHN, Stanford Cars, Flowers-102) -->
 	  <PackageReference Include="MatFileHandler" />
-	  <PackageReference Include="Pinecone.Client" />
+	  <!-- Pinecone.Client removed in audit-2026-05 phase 2b: was declared but
+	       no code in src/ ever referenced it. If we add a Pinecone-backed
+	       IVectorStore implementation in future, it should ship in a
+	       separate AiDotNet.Storage.Pinecone metapackage that ProjectReferences
+	       the core AiDotNet assembly. Keep Pinecone.Client out of the core
+	       package's transitive dependency surface. -->
 	  <!-- SharpZipLib — bzip2 decompression for .tar.bz2 archives (LJSpeech) -->
 	  <PackageReference Include="SharpZipLib" />
 	  <PackageReference Include="StackExchange.Redis" />
@@ -111,10 +138,15 @@
 	  <PackageReference Include="SixLabors.ImageSharp" />
 	</ItemGroup>
 
-	<!-- Npgsql EF Core requires .NET 10+ -->
+	<!-- Npgsql.EntityFrameworkCore.PostgreSQL removed from core in audit-2026-05
+	     phase 2c (finding #14): no code under src/ (excluding the separate
+	     AiDotNet.Serving project, which declares its own Npgsql reference)
+	     uses EF Core or Npgsql. A PostgreSQL-backed IVectorStore/IModelRegistry,
+	     if added, belongs in a separate AiDotNet.Storage.PostgreSQL metapackage
+	     that ProjectReferences core — not in core's transitive surface.
 	<ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
 	  <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
-	</ItemGroup>
+	</ItemGroup> -->
 
 	<!-- System.Net.Http only for .NET Framework (built-in for .NET Core/.NET 5+) -->
 	<ItemGroup Condition="'$(TargetFramework)' == 'net471'">
@@ -142,6 +174,23 @@
 	  <Compile Remove="AiDotNet.Dashboard\**\*.cs" />
 	  <EmbeddedResource Remove="AiDotNet.Dashboard\**\*" />
 	  <None Remove="AiDotNet.Dashboard\**\*" />
+	</ItemGroup>
+
+	<!-- Exclude the AiDotNet.Storage.Elasticsearch metapackage (audit-2026-05 phase 2b extraction). -->
+	<ItemGroup>
+	  <Compile Remove="AiDotNet.Storage.Elasticsearch\**\*.cs" />
+	  <EmbeddedResource Remove="AiDotNet.Storage.Elasticsearch\**\*" />
+	  <None Remove="AiDotNet.Storage.Elasticsearch\**\*" />
+	</ItemGroup>
+
+	<!-- Exclude the opt-in metapackages extracted in audit-2026-05 phase 2c (finding #14). -->
+	<ItemGroup>
+	  <Compile Remove="AiDotNet.Privacy.HE\**\*.cs" />
+	  <EmbeddedResource Remove="AiDotNet.Privacy.HE\**\*" />
+	  <None Remove="AiDotNet.Privacy.HE\**\*" />
+	  <Compile Remove="AiDotNet.Storage.Sqlite\**\*.cs" />
+	  <EmbeddedResource Remove="AiDotNet.Storage.Sqlite\**\*" />
+	  <None Remove="AiDotNet.Storage.Sqlite\**\*" />
 	</ItemGroup>
 
 	<!-- Exclude the AiDotNet.Playground project files from this project -->
