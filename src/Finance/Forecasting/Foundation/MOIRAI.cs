@@ -634,21 +634,27 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
 
         // Split along the parameter axis (axis=2): weights @ index 0, means @ index 1.
         // Variance (index 2) intentionally unused — point prediction is mean only,
-        // matching the inference ExtractPointPredictions semantics.
-        var weights = Engine.TensorSliceAxis(reshaped, 2, 0); // [B, _numMixtures, 1]
-        var means = Engine.TensorSliceAxis(reshaped, 2, 1);   // [B, _numMixtures, 1]
+        // matching the inference ExtractPointPredictions semantics. Engine.TensorSliceAxis
+        // SQUEEZES the indexed dim (codebase convention — see CRF /
+        // DiTNoisePredictor usages), so [B, M, 3] sliced along axis 2 yields
+        // rank-2 [B, M], not [B, M, 1].
+        var weights = Engine.TensorSliceAxis(reshaped, 2, 0); // [B, _numMixtures]
+        var means = Engine.TensorSliceAxis(reshaped, 2, 1);   // [B, _numMixtures]
 
-        // Softmax over the mixture axis (axis=1) — turns the raw weight logits
-        // into mixture probabilities summing to 1. Engine.Softmax preserves the
-        // tape (per ActivationFunctions/SoftmaxActivation.cs).
-        var probs = Engine.Softmax(weights, axis: 1); // [B, _numMixtures, 1]
+        // Softmax over the mixture axis (axis=1 of the squeezed rank-2 tensor)
+        // — turns the raw weight logits into mixture probabilities summing to 1.
+        // Engine.Softmax preserves the tape (per
+        // ActivationFunctions/SoftmaxActivation.cs).
+        var probs = Engine.Softmax(weights, axis: 1); // [B, _numMixtures]
 
         // Weighted sum: ∑_m probs[m] * means[m] along the mixture axis.
-        var weighted = Engine.TensorMultiply(probs, means);             // [B, _numMixtures, 1]
-        var pointPred = Engine.ReduceSum(weighted, new[] { 1 }, keepDims: true); // [B, 1, 1]
+        var weighted = Engine.TensorMultiply(probs, means);             // [B, _numMixtures]
+        var pointPred = Engine.ReduceSum(weighted, new[] { 1 }, keepDims: true); // [B, 1]
 
-        // Tile across horizon: [B, 1, 1] → [B, horizon, 1].
-        return Engine.TensorTile(pointPred, new[] { 1, horizon, 1 });
+        // Reintroduce the trailing feature dim and tile across horizon:
+        // [B, 1] → [B, 1, 1] → [B, horizon, 1].
+        var pointPredRank3 = Engine.Reshape(pointPred, new[] { b, 1, 1 });
+        return Engine.TensorTile(pointPredRank3, new[] { 1, horizon, 1 });
     }
 
     /// <inheritdoc/>
