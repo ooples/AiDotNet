@@ -338,6 +338,76 @@ public class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, ISpeakerE
         }
     }
 
+    /// <summary>
+    /// Number of trailing layers that operate on the segment-level (post-pooling)
+    /// representation. The X-Vector paper (Snyder et al. ICASSP 2018) specifies a
+    /// frame-level TDNN stack, then statistics pooling across time, then segment-
+    /// level dense layers. <see cref="LayerHelper{T}.CreateDefaultSpeakerEmbeddingLayers"/>
+    /// yields three trailing DenseLayers (two post-pool transforms + the final
+    /// embedding projection); a custom Architecture.Layers list is expected to
+    /// follow the same shape contract or override <see cref="Forward"/> /
+    /// <see cref="ForwardForTraining"/> with its own pooling split point.
+    /// </summary>
+    private const int SegmentLevelTrailingLayers = 3;
+
+    /// <summary>
+    /// X-Vector forward pass: run the frame-level TDNN/attention stack, pool
+    /// across the time dimension, then run the segment-level FC layers and
+    /// embedding projection. The default
+    /// <see cref="LayerHelper{T}.CreateDefaultSpeakerEmbeddingLayers"/> chain
+    /// labelled its trailing dense layers as "attentive statistics pooling
+    /// (simplified)" but those layers operate on the last (feature) dim only —
+    /// they do NOT reduce the time axis, so the model returned
+    /// <c>[batch, frames, embed_dim]</c> instead of the
+    /// <c>[batch, embed_dim]</c> the Predict / Train contract expects.
+    /// The MSE loss in TrainWithTape then threw "Tensor shapes must match
+    /// [1, 64, 256] and [256]". Inserting <c>ReduceMean</c> across the time
+    /// axis between the frame-level and segment-level halves restores the
+    /// paper's pooling contract; mean-pool is the simplified form of the
+    /// paper's mean+std pool, sufficient for the segment-level FC chain
+    /// already present in <c>CreateDefaultSpeakerEmbeddingLayers</c>.
+    /// </summary>
+    protected override Tensor<T> Forward(Tensor<T> input)
+    {
+        return ForwardWithTemporalPool(input);
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        return ForwardWithTemporalPool(input);
+    }
+
+    private Tensor<T> ForwardWithTemporalPool(Tensor<T> input)
+    {
+        Tensor<T> x = input;
+        int segCount = System.Math.Min(SegmentLevelTrailingLayers, Layers.Count);
+        int frameCount = Layers.Count - segCount;
+
+        // Frame-level TDNN / attention stack
+        for (int i = 0; i < frameCount; i++)
+        {
+            x = Layers[i].Forward(x);
+        }
+
+        // Temporal pooling: reduce the time dim (rank-3 [B, T, D] → [B, D];
+        // rank-2 [T, D] → [D] for unbatched inputs). No-op for already-pooled
+        // representations (rank <= 1).
+        if (x.Rank >= 2)
+        {
+            int timeAxis = x.Rank - 2;
+            x = Engine.ReduceMean(x, new[] { timeAxis }, keepDims: false);
+        }
+
+        // Segment-level FC + embedding projection
+        for (int i = frameCount; i < Layers.Count; i++)
+        {
+            x = Layers[i].Forward(x);
+        }
+
+        return x;
+    }
+
     #endregion
 
     #region ISpeakerEmbeddingExtractor Implementation

@@ -568,6 +568,44 @@ public class SyntheticTabularGeneratorIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task MisGANGenerator_SaveLoad_PreservesAuxiliaryNetworks()
+    {
+        await Task.CompletedTask;
+        var (data, columns) = CreateTestData();
+        var arch = CreateArchitecture(TotalCols, TotalCols);
+        var options = new MisGANOptions<double>
+        {
+            Seed = Seed,
+            EmbeddingDimension = 32,
+            HiddenDimensions = [64, 64],
+            BatchSize = 50,
+            MissingRate = 0.1
+        };
+
+        var generator = new MisGANGenerator<double>(arch, options);
+        generator.Fit(data, columns, FewEpochs);
+
+        byte[] bytes = generator.Serialize();
+        var restored = new MisGANGenerator<double>(arch, options);
+        restored.Deserialize(bytes);
+
+        // The data-generator batch-norm layers (running mean/variance included) live outside the
+        // base Layers collection; verify they survive serialization, including their extras.
+        AssertAuxLayerListPreserved<BatchNormalizationLayer<double>>(generator, restored, "_dataGenBNLayers");
+
+        // And the eval-mode forward (used by Generate) must match exactly after restore — this also
+        // exercises the restored VGM transformer via ApplyOutputActivations.
+        generator.SetTrainingMode(false);
+        restored.SetTrainingMode(false);
+        var probe = new Tensor<double>([options.EmbeddingDimension]);
+        for (int i = 0; i < probe.Length; i++) probe[i] = 0.1 * i;
+        var expected = generator.Predict(probe);
+        var actual = restored.Predict(probe);
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++) Assert.Equal(expected[i], actual[i], 8);
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task MedSynthGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
