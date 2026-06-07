@@ -1517,7 +1517,14 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         // multi-MB weight tensors on every metadata access. Once the layer
         // sees its first input, _isInitialized flips true and this branch is
         // never taken again.
-        : OutputDepth * (InputDepth > 0 ? InputDepth : 1) * KernelSize * KernelSize + OutputDepth;
+        // Cast one operand to long so the multiplication runs in 64-bit. With
+        // paper-scale convs (e.g. DiT-XL: OutputDepth=1152, InputDepth=1152,
+        // KernelSize=2 → 5,308,416 fits in int; but a 11x11 conv at
+        // OutputDepth=1024, InputDepth=2048 overflows: 1024*2048*121=253M,
+        // and a 7x7 at OutputDepth=4096, InputDepth=4096 is 4096*4096*49 =
+        // 821M which already exceeds int.MaxValue/4) so the placeholder
+        // arithmetic must be long-promoted up front.
+        : (long)OutputDepth * (InputDepth > 0 ? InputDepth : 1) * KernelSize * KernelSize + OutputDepth;
 
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
