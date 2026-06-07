@@ -578,6 +578,36 @@ public class TabDDPMGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         return embedding;
     }
 
+    /// <summary>
+    /// Tape-connected timestep embedding: the sinusoidal features projected
+    /// through the learnable <see cref="_timestepProjection"/>, returned as a
+    /// <see cref="Tensor{T}"/> so its gradient flows back to the projection
+    /// during training. The Vector-returning <see cref="CreateTimestepEmbedding"/>
+    /// detaches (via TensorToVector) and is kept for sampling/inference.
+    /// </summary>
+    private Tensor<T> CreateTimestepEmbeddingTensor(int timestep)
+    {
+        int dim = _options.TimestepEmbeddingDimension;
+        var embedding = new Vector<T>(dim);
+
+        int halfDim = dim / 2;
+        for (int i = 0; i < halfDim; i++)
+        {
+            double freq = Math.Exp(-Math.Log(10000.0) * i / halfDim);
+            double angle = timestep * freq;
+            embedding[i] = NumOps.FromDouble(Math.Sin(angle));
+            if (i + halfDim < dim)
+            {
+                embedding[i + halfDim] = NumOps.FromDouble(Math.Cos(angle));
+            }
+        }
+
+        var embedTensor = VectorToTensor(embedding);
+        return _timestepProjection is not null
+            ? _timestepProjection.Forward(embedTensor)
+            : embedTensor;
+    }
+
     #endregion
 
     #region Denoiser Forward
@@ -665,17 +695,18 @@ public class TabDDPMGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
                 catNoisy = catClean;
             }
 
-            var timeEmbed = CreateTimestepEmbedding(t);
-
             // Tape-connected diffusion training step: run the denoiser forward on
             // the tape, build the TabDDPM hybrid loss (ε-prediction MSE for the
             // Gaussian-diffused numerical features + softmax cross-entropy for the
             // multinomial-diffused categorical features, Kotelnikov et al. 2023),
-            // and backpropagate through the MLP + output heads in one optimizer
-            // step. The previous hand-rolled gradient path never backpropagated
-            // through the denoiser, so layer.UpdateParameters threw for want of
-            // computed gradients.
+            // and backpropagate through the MLP + output heads + timestep
+            // projection in one optimizer step. The previous hand-rolled gradient
+            // path never backpropagated through the denoiser, so
+            // layer.UpdateParameters threw for want of computed gradients.
             using var tape = new GradientTape<T>();
+            // Compute the timestep embedding INSIDE the tape so the learnable
+            // _timestepProjection participates in the backward pass.
+            var timeEmbed = CreateTimestepEmbeddingTensor(t);
             var (predictedNoise, predictedLogits) = DenoiserForwardTensors(numNoisy, catNoisy, timeEmbed);
             var loss = ComputeDiffusionLossTape(predictedNoise, actualNoise, predictedLogits, catClean);
             BackwardAndStepOnPrecomputedLoss(tape, loss, _optimizer);
@@ -688,16 +719,28 @@ public class TabDDPMGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     /// returning <see cref="DenoiserForward"/> is kept for sampling/inference).
     /// </summary>
     private (Tensor<T> NoisePred, Tensor<T> CatLogits) DenoiserForwardTensors(
-        Vector<T> numericalFeatures, Vector<T> categoricalFeatures, Vector<T> timestepEmbed)
+        Vector<T> numericalFeatures, Vector<T> categoricalFeatures, Tensor<T> timestepEmbed)
     {
-        int totalLen = _numNumericalFeatures + _totalCategoricalWidth + _options.TimestepEmbeddingDimension;
-        var input = new Vector<T>(totalLen);
-        int offset = 0;
-        for (int i = 0; i < numericalFeatures.Length; i++) input[offset++] = numericalFeatures[i];
-        for (int i = 0; i < categoricalFeatures.Length; i++) input[offset++] = categoricalFeatures[i];
-        for (int i = 0; i < timestepEmbed.Length; i++) input[offset++] = timestepEmbed[i];
+        // Build the denoiser input tape-connected. The numerical/categorical
+        // features are leaf data, but the timestep embedding flows through the
+        // learnable _timestepProjection, so CONCATENATE the projected embedding
+        // tensor (rather than flattening everything through a detached Vector) to
+        // keep its gradient path intact — otherwise _timestepProjection never
+        // trains (its forward would happen off-tape).
+        var timeT = timestepEmbed.Rank == 1
+            ? timestepEmbed
+            : Engine.Reshape(timestepEmbed, new[] { timestepEmbed.Length });
 
-        var current = VectorToTensor(input);
+        Tensor<T> current;
+        if (numericalFeatures.Length > 0 && categoricalFeatures.Length > 0)
+            current = Engine.TensorConcatenate(new[] { VectorToTensor(numericalFeatures), VectorToTensor(categoricalFeatures), timeT }, 0);
+        else if (numericalFeatures.Length > 0)
+            current = Engine.TensorConcatenate(new[] { VectorToTensor(numericalFeatures), timeT }, 0);
+        else if (categoricalFeatures.Length > 0)
+            current = Engine.TensorConcatenate(new[] { VectorToTensor(categoricalFeatures), timeT }, 0);
+        else
+            current = timeT;
+
         foreach (var layer in Layers)
         {
             current = layer.Forward(current);
@@ -775,6 +818,10 @@ public class TabDDPMGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         var heads = new List<ILayer<T>>();
         if (_numericalOutputHead is not null) heads.Add(_numericalOutputHead);
         if (_categoricalOutputHead is not null) heads.Add(_categoricalOutputHead);
+        // _timestepProjection is applied off the main Layers walk (on the timestep
+        // conditioning path), so surface it here too — it is now trained via the
+        // tape-connected CreateTimestepEmbeddingTensor in TrainBatch.
+        if (_timestepProjection is not null) heads.Add(_timestepProjection);
         return heads.Count == 0
             ? System.Array.Empty<Tensor<T>>()
             : Training.TapeTrainingStep<T>.CollectParameters(heads);

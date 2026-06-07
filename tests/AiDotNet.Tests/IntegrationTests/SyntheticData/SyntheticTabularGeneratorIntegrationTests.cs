@@ -615,7 +615,7 @@ public class SyntheticTabularGeneratorIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task TabDDPMGenerator_SaveLoad_PreservesAuxiliaryNetworks()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
         var options = new TabDDPMOptions<double>
