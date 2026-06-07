@@ -86,7 +86,7 @@ public class NeuralGrangerAlgorithm<T> : TimeSeriesCausalBase<T>
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         T scale = NumOps.FromDouble(Math.Sqrt(2.0 / inputDim));
         T lr = NumOps.FromDouble(_learningRate);
-        T lambda = NumOps.FromDouble(0.1); // Group-lasso penalty
+        T lambda = NumOps.FromDouble(6.0); // Group-lasso penalty (proximal soft-threshold strength)
 
         var result = new Matrix<T>(d, d);
 
@@ -147,39 +147,53 @@ public class NeuralGrangerAlgorithm<T> : TimeSeriesCausalBase<T>
                     }
                 }
 
-                // Group-lasso gradient: for each input variable i, penalize ||W1[i_lags, :]||_2
+                // Data-fit gradient step. The group-sparsity penalty is applied
+                // by the PROXIMAL operator below — not as a subgradient — so the
+                // gradient here is the MSE gradient only.
+                for (int f = 0; f < inputDim; f++)
+                    for (int k = 0; k < h; k++)
+                        W1[f, k] = NumOps.Subtract(W1[f, k], NumOps.Multiply(lr, gW1[f, k]));
+                for (int k = 0; k < h; k++)
+                    W2[k, 0] = NumOps.Subtract(W2[k, 0], NumOps.Multiply(lr, gW2[k, 0]));
+
+                // Proximal group-lasso (Tank et al. 2021, "Neural Granger
+                // Causality", GISTA proximal gradient): the proximal operator of
+                // the group penalty is GROUP SOFT-THRESHOLDING, which drives an
+                // entire input-variable group ||W1[i_lags, :]||_2 to EXACTLY zero
+                // once its norm falls below the threshold lambda*lr. A plain
+                // subgradient step only shrinks the group and never zeros it, so
+                // spurious inputs survive and the recovered graph is dense, cyclic
+                // and full of false adjacencies. Soft-thresholding produces the
+                // true sparsity the algorithm relies on.
+                double threshD = NumOps.ToDouble(lambda) * NumOps.ToDouble(lr);
                 for (int i = 0; i < d; i++)
                 {
-                    // Compute group norm for variable i's lag block
-                    T groupNorm = NumOps.Zero;
-                    for (int l = 0; l < MaxLag; l++)
-                    {
-                        int f = l * d + i;
-                        if (f >= inputDim) continue;
-                        for (int k = 0; k < h; k++)
-                            groupNorm = NumOps.Add(groupNorm, NumOps.Multiply(W1[f, k], W1[f, k]));
-                    }
-                    double gnorm = Math.Sqrt(Math.Max(NumOps.ToDouble(groupNorm), 1e-12));
-
+                    double groupNormSq = 0.0;
                     for (int l = 0; l < MaxLag; l++)
                     {
                         int f = l * d + i;
                         if (f >= inputDim) continue;
                         for (int k = 0; k < h; k++)
                         {
-                            T w1grad = NumOps.Divide(NumOps.Multiply(lambda, W1[f, k]),
-                                NumOps.FromDouble(gnorm));
-                            gW1[f, k] = NumOps.Add(gW1[f, k], w1grad);
+                            double w = NumOps.ToDouble(W1[f, k]);
+                            groupNormSq += w * w;
                         }
                     }
-                }
+                    double groupNorm = Math.Sqrt(groupNormSq);
+                    if (groupNorm < 1e-12) continue;
 
-                // Update weights
-                for (int f = 0; f < inputDim; f++)
-                    for (int k = 0; k < h; k++)
-                        W1[f, k] = NumOps.Subtract(W1[f, k], NumOps.Multiply(lr, gW1[f, k]));
-                for (int k = 0; k < h; k++)
-                    W2[k, 0] = NumOps.Subtract(W2[k, 0], NumOps.Multiply(lr, gW2[k, 0]));
+                    double factor = 1.0 - threshD / groupNorm;
+                    if (factor >= 1.0) continue;       // threshold below noise floor — no change
+                    factor = Math.Max(0.0, factor);    // factor <= 0 => zero the whole group
+                    T factorT = NumOps.FromDouble(factor);
+                    for (int l = 0; l < MaxLag; l++)
+                    {
+                        int f = l * d + i;
+                        if (f >= inputDim) continue;
+                        for (int k = 0; k < h; k++)
+                            W1[f, k] = NumOps.Multiply(W1[f, k], factorT);
+                    }
+                }
             }
 
             // Extract causal strengths: ||W1[i_lags, :]||_2 for each input variable i
