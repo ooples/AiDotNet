@@ -400,6 +400,16 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         public Vector<byte> VQuantized = null!;
         public Vector<double>? MScales;         // null when CompressBothMoments == false
         public Vector<double> VScales = null!;
+
+        // GPU-resident 8-bit state (AIDOTNET_GPU_ADAM=1, CUDA): int8 m/v + per-block
+        // double scales kept on the device across steps so the adam8bit_update kernel
+        // runs the whole dequant→Adam→requant cycle with no host download. Allocated
+        // lazily on the first GPU step for this parameter; null on the CPU path.
+        public AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer? GpuMQ;
+        public AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer? GpuVQ;
+        public AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer? GpuMScales;
+        public AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer? GpuVScales;
+        public bool GpuResident;
     }
 
     private readonly ConcurrentDictionary<Tensor<T>, QuantizedTapeState> _tapeStates =
@@ -418,6 +428,18 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         T epsilon = NumOps.FromDouble(_options.Epsilon);
         T biasCorrection1 = NumOps.FromDouble(1 - Math.Pow(Convert.ToDouble(beta1), _tapeStep));
         T biasCorrection2 = NumOps.FromDouble(1 - Math.Pow(Convert.ToDouble(beta2), _tapeStep));
+
+        // GPU-resident 8-bit Adam (AIDOTNET_GPU_ADAM=1, CUDA): the adam8bit_update
+        // kernel does the whole blockwise dequant→Adam→requant on the device with no
+        // host download. Only the kernel-matched config (both moments compressed,
+        // absolute-max scale, deterministic rounding) is eligible; otherwise the CPU
+        // path runs. Quantized state is kept GPU-resident per parameter across steps.
+        bool gpu8 = typeof(T) == typeof(float)
+            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
+            && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine
+            && _options.CompressBothMoments
+            && _options.QuantizationPercentile >= 100
+            && !_options.UseStochasticRounding;
 
         foreach (var param in context.Parameters)
         {
@@ -439,6 +461,15 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             // would index past the end of the stored vectors.
             if (!_tapeStates.TryGetValue(param, out var state) || state.Length != param.Length)
             {
+                // Free any GPU-resident quant state from the stale (wrong-length) entry
+                // before dropping it, so a shape change doesn't leak device buffers.
+                if (state is not null && state.GpuResident)
+                {
+                    AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.FreeGpuBuffer(state.GpuMQ);
+                    AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.FreeGpuBuffer(state.GpuVQ);
+                    AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.FreeGpuBuffer(state.GpuMScales);
+                    AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.FreeGpuBuffer(state.GpuVScales);
+                }
                 state = AllocateTapeState(param.Length);
                 _tapeStates[param] = state;
             }
@@ -453,6 +484,29 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             if (!param._shape.SequenceEqual(grad._shape) && param.Length == grad.Length)
             {
                 grad = Engine.Reshape(grad, param._shape);
+            }
+
+            // GPU-resident 8-bit step: lazily allocate the device quant state on
+            // first sight of this parameter, then run the in-place kernel. Skips the
+            // CPU dequant/quant path entirely when param/grad resolve to GPU buffers.
+            if (gpu8 && param.Length == grad.Length)
+            {
+                if (!state.GpuResident
+                    && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryAllocAdam8BitState(param.Length, _options.BlockSize,
+                        out state.GpuMQ, out state.GpuVQ, out state.GpuMScales, out state.GpuVScales))
+                {
+                    state.GpuResident = true;
+                }
+                if (state.GpuResident
+                    && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryAdam8BitStep(
+                        (Tensor<float>)(object)param, (Tensor<float>)(object)grad,
+                        state.GpuMQ, state.GpuVQ, state.GpuMScales, state.GpuVScales,
+                        (float)NumOps.ToDouble(CurrentLearningRate), (float)NumOps.ToDouble(beta1), (float)NumOps.ToDouble(beta2),
+                        (float)NumOps.ToDouble(epsilon), (float)NumOps.ToDouble(biasCorrection1), (float)NumOps.ToDouble(biasCorrection2),
+                        _options.BlockSize))
+                {
+                    continue; // weights + quantized moments updated in place on the GPU
+                }
             }
 
             // Dequantize moments into transient Tensors for the math path. These

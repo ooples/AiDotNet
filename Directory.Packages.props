@@ -106,8 +106,19 @@
          over input channels at batch=1 instead of collapsing to serial). This is
          the Tensors-side lever #1463 called for; the memory/OOM half is handled by
          the cache-clearing + diffusion re-shard in this PR (#1485).
-         AiDotNet.Native packages coreleased in lockstep at 0.91.2. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.91.8" />
+
+         Bumped Tensors 0.91.2 -> 0.91.11 (latest PUBLISHED on nuget.org) for the
+         GPU-resident optimizer step (host-read-free Adam for cudaGraph capture) that
+         this PR (#1501) depends on, plus the proximal-L1 (ISTA) and 8-bit Adam GPU
+         kernels and the CUDA-graph capture/replay. The managed API surface these wire
+         against (GpuOptimizer.TryAdamStep/TryAdamWStep/TryAdam8BitStep,
+         TensorAllocator.RentPinnedOnGpu, QuantizedTapeState GPU buffers) is all present
+         in 0.91.11 and the solution builds clean against it; the device-side CUDA
+         kernels are exercised only under AIDOTNET_GPU_ADAM=1 on a real GPU (off in CI).
+         Do NOT pin an unpublished version (0.91.14/0.91.16 broke restore with NU1102);
+         re-bump once a newer Tensors is actually released. The AiDotNet.Native packages
+         stay at 0.91.2 (no native change needed). -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.91.12" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.91.2" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.91.2" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.91.2" />

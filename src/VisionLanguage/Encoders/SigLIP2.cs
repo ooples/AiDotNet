@@ -424,7 +424,9 @@ public class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
                 numMimDecoderLayers: _options.NumMimDecoderLayers,
                 vocabSize: _options.VocabSize,
                 includeCaptioningDecoder: _options.IncludeCaptioningDecoder,
-                dropoutRate: _options.DropoutRate));
+                dropoutRate: _options.DropoutRate,
+                patchSize: _options.PatchSize,
+                inputChannels: 3));
         }
 
         ComputeLayerBoundaries();
@@ -436,9 +438,9 @@ public class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
     /// </summary>
     private void ComputeLayerBoundaries()
     {
-        // Vision encoder: LN + (MHA + LN + FFN_up + FFN_down + LN [+ Dropout]) * numLayers + projection
+        // Vision encoder: PatchEmbed + LN + (MHA + LN + FFN_up + FFN_down + LN [+ Dropout]) * numLayers + projection
         int lpb = _options.DropoutRate > 0 ? 6 : 5; // layers per block
-        _visionEncoderEnd = 1 + _options.NumVisionLayers * lpb + 1; // +1 for initial LN, +1 for projection
+        _visionEncoderEnd = 2 + _options.NumVisionLayers * lpb + 1; // +1 for PatchEmbed, +1 for initial LN, +1 for projection
 
         // Text encoder: LN + (MHA + LN + FFN_up + FFN_down + LN [+ Dropout]) * numLayers + projection
         _textEncoderEnd = _visionEncoderEnd + 1 + _options.NumTextLayers * lpb + 1;

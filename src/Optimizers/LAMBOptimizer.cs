@@ -551,6 +551,11 @@ public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             ? NumOps.FromDouble(1.0 - Math.Pow(_options.Beta2, _tapeStep))
             : NumOps.One;
 
+        // NOTE: the CUDA lamb_update kernel computes the layer-wise trust ratio
+        // (||w|| / ||update||) with a different convention than this CPU
+        // implementation (parity harness ~6e-4 at step 1), so the GPU-resident
+        // path is NOT wired for LAMB — it would silently change training dynamics.
+        // Reconcile the kernel's trust-ratio with this formula before enabling.
         foreach (var param in context.Parameters)
         {
             if (!context.Gradients.TryGetValue(param, out var grad))
