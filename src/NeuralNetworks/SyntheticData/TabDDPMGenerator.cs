@@ -6,6 +6,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -330,14 +331,22 @@ public class TabDDPMGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         int numBatches = Math.Max(1, data.Rows / batchSize);
         T scaledLr = NumOps.FromDouble(_options.LearningRate / batchSize);
 
-        for (int epoch = 0; epoch < epochs; epoch++)
+        SetTrainingMode(true);
+        try
         {
-            for (int batch = 0; batch < numBatches; batch++)
+            for (int epoch = 0; epoch < epochs; epoch++)
             {
-                int startRow = batch * batchSize;
-                int endRow = Math.Min(startRow + batchSize, data.Rows);
-                TrainBatch(numericalData, categoricalData, startRow, endRow, scaledLr);
+                for (int batch = 0; batch < numBatches; batch++)
+                {
+                    int startRow = batch * batchSize;
+                    int endRow = Math.Min(startRow + batchSize, data.Rows);
+                    TrainBatch(numericalData, categoricalData, startRow, endRow, scaledLr);
+                }
             }
+        }
+        finally
+        {
+            SetTrainingMode(false);
         }
 
         IsFitted = true;
@@ -370,15 +379,23 @@ public class TabDDPMGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
             int numBatches = Math.Max(1, data.Rows / batchSize);
             T scaledLr = NumOps.FromDouble(_options.LearningRate / batchSize);
 
-            for (int epoch = 0; epoch < epochs; epoch++)
+            SetTrainingMode(true);
+            try
             {
-                ct.ThrowIfCancellationRequested();
-                for (int batch = 0; batch < numBatches; batch++)
+                for (int epoch = 0; epoch < epochs; epoch++)
                 {
-                    int startRow = batch * batchSize;
-                    int endRow = Math.Min(startRow + batchSize, data.Rows);
-                    TrainBatch(numericalData, categoricalData, startRow, endRow, scaledLr);
+                    ct.ThrowIfCancellationRequested();
+                    for (int batch = 0; batch < numBatches; batch++)
+                    {
+                        int startRow = batch * batchSize;
+                        int endRow = Math.Min(startRow + batchSize, data.Rows);
+                        TrainBatch(numericalData, categoricalData, startRow, endRow, scaledLr);
+                    }
                 }
+            }
+            finally
+            {
+                SetTrainingMode(false);
             }
 
             IsFitted = true;
@@ -561,6 +578,36 @@ public class TabDDPMGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         return embedding;
     }
 
+    /// <summary>
+    /// Tape-connected timestep embedding: the sinusoidal features projected
+    /// through the learnable <see cref="_timestepProjection"/>, returned as a
+    /// <see cref="Tensor{T}"/> so its gradient flows back to the projection
+    /// during training. The Vector-returning <see cref="CreateTimestepEmbedding"/>
+    /// detaches (via TensorToVector) and is kept for sampling/inference.
+    /// </summary>
+    private Tensor<T> CreateTimestepEmbeddingTensor(int timestep)
+    {
+        int dim = _options.TimestepEmbeddingDimension;
+        var embedding = new Vector<T>(dim);
+
+        int halfDim = dim / 2;
+        for (int i = 0; i < halfDim; i++)
+        {
+            double freq = Math.Exp(-Math.Log(10000.0) * i / halfDim);
+            double angle = timestep * freq;
+            embedding[i] = NumOps.FromDouble(Math.Sin(angle));
+            if (i + halfDim < dim)
+            {
+                embedding[i + halfDim] = NumOps.FromDouble(Math.Cos(angle));
+            }
+        }
+
+        var embedTensor = VectorToTensor(embedding);
+        return _timestepProjection is not null
+            ? _timestepProjection.Forward(embedTensor)
+            : embedTensor;
+    }
+
     #endregion
 
     #region Denoiser Forward
@@ -648,79 +695,136 @@ public class TabDDPMGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
                 catNoisy = catClean;
             }
 
-            var timeEmbed = CreateTimestepEmbedding(t);
-            var (predictedNoise, predictedLogits) = DenoiserForward(numNoisy, catNoisy, timeEmbed);
-
-            var numGrad = new Vector<T>(_numNumericalFeatures);
-            if (_numNumericalFeatures > 0)
-            {
-                numGrad = _gaussianDiffusion.ComputeLossGradient(predictedNoise, actualNoise);
-            }
-
-            var catGrad = new Vector<T>(_totalCategoricalWidth);
-            if (_totalCategoricalWidth > 0)
-            {
-                catGrad = ComputeCategoricalGradient(predictedLogits, catClean);
-            }
-
-            numGrad = SafeGradient(numGrad, 5.0);
-            catGrad = SafeGradient(catGrad, 5.0);
-
-            UpdateDenoiserParameters(scaledLearningRate);
+            // Tape-connected diffusion training step: run the denoiser forward on
+            // the tape, build the TabDDPM hybrid loss (ε-prediction MSE for the
+            // Gaussian-diffused numerical features + softmax cross-entropy for the
+            // multinomial-diffused categorical features, Kotelnikov et al. 2023),
+            // and backpropagate through the MLP + output heads + timestep
+            // projection in one optimizer step. The previous hand-rolled gradient
+            // path never backpropagated through the denoiser, so
+            // layer.UpdateParameters threw for want of computed gradients.
+            using var tape = new GradientTape<T>();
+            // Compute the timestep embedding INSIDE the tape so the learnable
+            // _timestepProjection participates in the backward pass.
+            var timeEmbed = CreateTimestepEmbeddingTensor(t);
+            var (predictedNoise, predictedLogits) = DenoiserForwardTensors(numNoisy, catNoisy, timeEmbed);
+            var loss = ComputeDiffusionLossTape(predictedNoise, actualNoise, predictedLogits, catClean);
+            BackwardAndStepOnPrecomputedLoss(tape, loss, _optimizer);
         }
     }
 
-    private Vector<T> ComputeCategoricalGradient(Vector<T> predictedLogits, Vector<T> trueOneHot)
+    /// <summary>
+    /// Tape-connected denoiser forward returning the numerical ε-prediction and
+    /// the categorical logits as <see cref="Tensor{T}"/> outputs (the vector-
+    /// returning <see cref="DenoiserForward"/> is kept for sampling/inference).
+    /// </summary>
+    private (Tensor<T> NoisePred, Tensor<T> CatLogits) DenoiserForwardTensors(
+        Vector<T> numericalFeatures, Vector<T> categoricalFeatures, Tensor<T> timestepEmbed)
     {
-        var grad = new Vector<T>(_totalCategoricalWidth);
-        int offset = 0;
+        // Build the denoiser input tape-connected. The numerical/categorical
+        // features are leaf data, but the timestep embedding flows through the
+        // learnable _timestepProjection, so CONCATENATE the projected embedding
+        // tensor (rather than flattening everything through a detached Vector) to
+        // keep its gradient path intact — otherwise _timestepProjection never
+        // trains (its forward would happen off-tape).
+        var timeT = timestepEmbed.Rank == 1
+            ? timestepEmbed
+            : Engine.Reshape(timestepEmbed, new[] { timestepEmbed.Length });
 
-        for (int j = 0; j < _numCategoricalFeatures; j++)
+        Tensor<T> current;
+        if (numericalFeatures.Length > 0 && categoricalFeatures.Length > 0)
+            current = Engine.TensorConcatenate(new[] { VectorToTensor(numericalFeatures), VectorToTensor(categoricalFeatures), timeT }, 0);
+        else if (numericalFeatures.Length > 0)
+            current = Engine.TensorConcatenate(new[] { VectorToTensor(numericalFeatures), timeT }, 0);
+        else if (categoricalFeatures.Length > 0)
+            current = Engine.TensorConcatenate(new[] { VectorToTensor(categoricalFeatures), timeT }, 0);
+        else
+            current = timeT;
+
+        foreach (var layer in Layers)
         {
-            int numCats = _categoricalColumnWidths[j];
+            current = layer.Forward(current);
+        }
 
-            double maxVal = double.MinValue;
-            for (int c = 0; c < numCats && (offset + c) < predictedLogits.Length; c++)
-            {
-                double v = NumOps.ToDouble(predictedLogits[offset + c]);
-                if (v > maxVal) maxVal = v;
-            }
+        var noisePred = _numericalOutputHead is not null && _numNumericalFeatures > 0
+            ? _numericalOutputHead.Forward(current)
+            : new Tensor<T>([0]);
+        var catLogits = _categoricalOutputHead is not null && _totalCategoricalWidth > 0
+            ? _categoricalOutputHead.Forward(current)
+            : new Tensor<T>([0]);
+        return (noisePred, catLogits);
+    }
 
-            double sumExp = 0;
-            for (int c = 0; c < numCats && (offset + c) < predictedLogits.Length; c++)
-            {
-                sumExp += Math.Exp(NumOps.ToDouble(predictedLogits[offset + c]) - maxVal);
-            }
+    /// <summary>Tape-connected TabDDPM loss: numerical ε-MSE + per-group categorical softmax cross-entropy.</summary>
+    private Tensor<T> ComputeDiffusionLossTape(Tensor<T> noisePred, Vector<T> actualNoise, Tensor<T> catLogits, Vector<T> catClean)
+    {
+        Tensor<T>? loss = null;
 
-            for (int c = 0; c < numCats; c++)
+        if (_numNumericalFeatures > 0)
+        {
+            var pred = noisePred.Rank == 1 ? noisePred : Engine.Reshape(noisePred, new[] { noisePred.Length });
+            var target = VectorToTensor(actualNoise);
+            var diff = Engine.TensorSubtract(pred, target);
+            loss = ReduceToScalar(Engine.TensorSquare(diff));
+        }
+
+        if (_totalCategoricalWidth > 0)
+        {
+            var logits = catLogits.Rank == 1 ? catLogits : Engine.Reshape(catLogits, new[] { catLogits.Length });
+            var tgt = VectorToTensor(catClean);
+            int offset = 0;
+            for (int j = 0; j < _numCategoricalFeatures; j++)
             {
-                if (offset + c < predictedLogits.Length)
+                int numCats = _categoricalColumnWidths[j];
+                if (numCats > 0)
                 {
-                    double softmax = Math.Exp(NumOps.ToDouble(predictedLogits[offset + c]) - maxVal) / Math.Max(sumExp, 1e-10);
-                    double target = offset + c < trueOneHot.Length ? NumOps.ToDouble(trueOneHot[offset + c]) : 0;
-                    grad[offset + c] = NumOps.FromDouble(softmax - target);
+                    var ce = SoftmaxCrossEntropy(logits, tgt, offset, numCats);
+                    loss = loss is null ? ce : Engine.TensorAdd(loss, ce);
+                    offset += numCats;
                 }
             }
-
-            offset += numCats;
         }
 
-        return grad;
+        return loss ?? ReduceToScalar(Engine.TensorSquare(VectorToTensor(new Vector<T>(1))));
     }
+
+    /// <summary>Tape-connected softmax cross-entropy −Σ target·log(softmax(logit_slice)) over a categorical group.</summary>
+    private Tensor<T> SoftmaxCrossEntropy(Tensor<T> logits, Tensor<T> tgt, int start, int count)
+    {
+        var logitSlice = Engine.TensorSlice(logits, new[] { start }, new[] { count });
+        var tgtSlice = Engine.TensorSlice(tgt, new[] { start }, new[] { count });
+        var logProbs = Engine.TensorLogSoftmax(logitSlice, axis: 0);
+        return Engine.TensorNegate(ReduceToScalar(Engine.TensorMultiply(tgtSlice, logProbs)));
+    }
+
+    /// <summary>Reduces a tensor to a scalar [1] by summing all elements (tape-connected).</summary>
+    private Tensor<T> ReduceToScalar(Tensor<T> t)
+        => Engine.ReduceSum(t, Enumerable.Range(0, t.Shape.Length).ToArray(), keepDims: false);
 
     #endregion
 
     #region Backward Pass
 
-    private void UpdateDenoiserParameters(T learningRate)
+    /// <summary>
+    /// Exposes the numerical/categorical output-head parameters to the tape-based
+    /// optimizer step. The heads are intentionally kept OUT of <see cref="NeuralNetworkBase{T}.Layers"/>
+    /// (they are parallel readout branches, not a sequential continuation of the
+    /// denoiser MLP — Predict/ForwardForTraining iterate Layers), so they are
+    /// surfaced here instead so <see cref="NeuralNetworkBase{T}.BackwardAndStepOnPrecomputedLoss"/>
+    /// includes them in the gradient-and-step set.
+    /// </summary>
+    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
     {
-        foreach (var layer in Layers)
-        {
-            layer.UpdateParameters(learningRate);
-        }
-
-        _numericalOutputHead?.UpdateParameters(learningRate);
-        _categoricalOutputHead?.UpdateParameters(learningRate);
+        var heads = new List<ILayer<T>>();
+        if (_numericalOutputHead is not null) heads.Add(_numericalOutputHead);
+        if (_categoricalOutputHead is not null) heads.Add(_categoricalOutputHead);
+        // _timestepProjection is applied off the main Layers walk (on the timestep
+        // conditioning path), so surface it here too — it is now trained via the
+        // tape-connected CreateTimestepEmbeddingTensor in TrainBatch.
+        if (_timestepProjection is not null) heads.Add(_timestepProjection);
+        return heads.Count == 0
+            ? System.Array.Empty<Tensor<T>>()
+            : Training.TapeTrainingStep<T>.CollectParameters(heads);
     }
 
     #endregion
@@ -842,36 +946,6 @@ public class TabDDPMGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
 
     #endregion
 
-    #region Gradient Utilities
-
-    private Vector<T> SafeGradient(Vector<T> grad, double maxNorm)
-    {
-        var result = new Vector<T>(grad.Length);
-        double sumSq = 0;
-
-        for (int i = 0; i < grad.Length; i++)
-        {
-            double val = NumOps.ToDouble(grad[i]);
-            if (double.IsNaN(val) || double.IsInfinity(val)) val = 0;
-            result[i] = NumOps.FromDouble(val);
-            sumSq += val * val;
-        }
-
-        double norm = Math.Sqrt(sumSq);
-        if (norm > maxNorm && norm > 0)
-        {
-            double scale = maxNorm / norm;
-            for (int i = 0; i < result.Length; i++)
-            {
-                result[i] = NumOps.FromDouble(NumOps.ToDouble(result[i]) * scale);
-            }
-        }
-
-        return result;
-    }
-
-    #endregion
-
     #region Serialization and Model Metadata (GANDALF Pattern)
 
     /// <inheritdoc/>
@@ -909,12 +983,114 @@ public class TabDDPMGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         writer.Write(_options.DropoutRate);
         writer.Write(_options.BetaStart);
         writer.Write(_options.BetaEnd);
+
+        // Persist the auxiliary sub-networks that live outside the base Layers collection.
+        // Without this, a saved/cloned model would fall back to freshly-initialized output
+        // heads and timestep projection and generate garbage.
+        writer.Write(IsFitted);
+        writer.Write(_numNumericalFeatures);
+        writer.Write(_totalCategoricalWidth);
+        AuxLayerSerialization.Write(writer, _numericalOutputHead);
+        AuxLayerSerialization.Write(writer, _categoricalOutputHead);
+        AuxLayerSerialization.Write(writer, _timestepProjection);
+
+        // Persist the preprocessing / column layout needed to reconstruct generated samples back
+        // into the original column space. The diffusion processes hold no learned parameters and
+        // are reconstructed from the options on load.
+        writer.Write(_numCategoricalFeatures);
+        WriteIntList(writer, _numericalColumnIndices);
+        WriteIntList(writer, _categoricalColumnIndices);
+        WriteIntList(writer, _categoricalColumnWidths);
+        WriteDoubleArray(writer, _quantileMeans);
+        WriteDoubleArray(writer, _quantileStds);
+        writer.Write(_columns.Count);
+        foreach (var column in _columns)
+        {
+            column.Serialize(writer);
+        }
+    }
+
+    private static void WriteIntList(BinaryWriter writer, List<int> values)
+    {
+        writer.Write(values.Count);
+        foreach (int value in values) writer.Write(value);
+    }
+
+    private static void ReadIntListInto(BinaryReader reader, List<int> target)
+    {
+        target.Clear();
+        int count = reader.ReadInt32();
+        for (int i = 0; i < count; i++) target.Add(reader.ReadInt32());
+    }
+
+    private static void WriteDoubleArray(BinaryWriter writer, double[] values)
+    {
+        writer.Write(values.Length);
+        foreach (double value in values) writer.Write(value);
+    }
+
+    private static double[] ReadDoubleArray(BinaryReader reader)
+    {
+        int count = reader.ReadInt32();
+        var values = new double[count];
+        for (int i = 0; i < count; i++) values[i] = reader.ReadDouble();
+        return values;
     }
 
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        // Options are reconstructed from serialized data
+        // Advance past the option fields (the options themselves are reconstructed in
+        // CreateNewInstance); they must still be read to reach the auxiliary-network data.
+        _ = reader.ReadInt32();              // NumTimesteps
+        int mlpDimCount = reader.ReadInt32();
+        for (int i = 0; i < mlpDimCount; i++) _ = reader.ReadInt32();
+        _ = reader.ReadInt32();              // TimestepEmbeddingDimension
+        _ = reader.ReadInt32();              // BatchSize
+        _ = reader.ReadDouble();             // LearningRate
+        _ = reader.ReadDouble();             // DropoutRate
+        _ = reader.ReadDouble();             // BetaStart
+        _ = reader.ReadDouble();             // BetaEnd
+
+        IsFitted = reader.ReadBoolean();
+        _numNumericalFeatures = reader.ReadInt32();
+        _totalCategoricalWidth = reader.ReadInt32();
+
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        var silu = new SiLUActivation<T>() as IActivationFunction<T>;
+        _numericalOutputHead = AuxLayerSerialization.Read<T>(reader,
+            (inShape, outShape) => new FullyConnectedLayer<T>(outShape[outShape.Length - 1], identity))
+            as FullyConnectedLayer<T>;
+        _categoricalOutputHead = AuxLayerSerialization.Read<T>(reader,
+            (inShape, outShape) => new FullyConnectedLayer<T>(outShape[outShape.Length - 1], identity))
+            as FullyConnectedLayer<T>;
+        _timestepProjection = AuxLayerSerialization.Read<T>(reader,
+            (inShape, outShape) => new FullyConnectedLayer<T>(outShape[outShape.Length - 1], silu))
+            as FullyConnectedLayer<T>;
+
+        _numCategoricalFeatures = reader.ReadInt32();
+        ReadIntListInto(reader, _numericalColumnIndices);
+        ReadIntListInto(reader, _categoricalColumnIndices);
+        ReadIntListInto(reader, _categoricalColumnWidths);
+        _quantileMeans = ReadDoubleArray(reader);
+        _quantileStds = ReadDoubleArray(reader);
+        int columnCount = reader.ReadInt32();
+        _columns = new List<ColumnMetadata>(columnCount);
+        for (int i = 0; i < columnCount; i++)
+        {
+            _columns.Add(ColumnMetadata.Deserialize(reader));
+        }
+
+        // The diffusion processes carry no learned parameters; rebuild them from the options so the
+        // restored model can run the generation denoising loop.
+        if (IsFitted)
+        {
+            _gaussianDiffusion = new GaussianDiffusion<T>(
+                _options.NumTimesteps, _options.BetaStart, _options.BetaEnd,
+                _options.BetaSchedule, _random);
+            _multinomialDiffusion = new MultinomialDiffusion<T>(
+                _options.NumCategoricalDiffusionSteps, _options.BetaStart, _options.BetaEnd, _random);
+        }
     }
 
     /// <inheritdoc/>

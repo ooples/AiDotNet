@@ -613,6 +613,39 @@ public class SyntheticTabularGeneratorIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task TabDDPMGenerator_SaveLoad_PreservesAuxiliaryNetworks()
+    {
+        await Task.Yield();
+        var (data, columns) = CreateTestData();
+        var arch = CreateArchitecture(TotalCols, TotalCols);
+        var options = new TabDDPMOptions<double>
+        {
+            Seed = Seed,
+            MLPDimensions = [64, 64],
+            NumTimesteps = 10,
+            BatchSize = 50
+        };
+
+        var generator = new TabDDPMGenerator<double>(arch, options);
+        generator.Fit(data, columns, FewEpochs);
+
+        byte[] bytes = generator.Serialize();
+        var restored = new TabDDPMGenerator<double>(arch, options);
+        restored.Deserialize(bytes);
+
+        // The output heads and timestep projection live outside the base Layers collection;
+        // verify they survive serialization rather than reverting to fresh random weights.
+        AssertAuxLayerPreserved(generator, restored, "_numericalOutputHead");
+        AssertAuxLayerPreserved(generator, restored, "_categoricalOutputHead");
+        AssertAuxLayerPreserved(generator, restored, "_timestepProjection");
+
+        // End-to-end: the restored model must be able to generate valid data, which requires the
+        // column layout, quantile statistics and diffusion processes to have been restored.
+        var regenerated = restored.Generate(GenSamples);
+        ValidateGeneratedData(regenerated, GenSamples, TotalCols, "TabDDPM (restored)");
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task TabSynGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
