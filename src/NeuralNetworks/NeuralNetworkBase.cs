@@ -5694,7 +5694,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // best-effort: a model whose forward fails in eval mode still falls
         // through to the real training step below, which will surface the
         // failure with the proper diagnostic.
-        if (AnyLayerNeedsShapeResolution())
+        // Gate on actual weight MATERIALIZATION, not just shape resolution:
+        // ResolveLazyLayerShapes()/ResolveShapesOnly (driven by a pre-train
+        // ParameterCount / GetParameters call) can flip IsShapeResolved to true
+        // WITHOUT allocating the weight tensors, leaving length-0 placeholders
+        // that CollectParameters would still capture. So also warm up whenever
+        // any trainable parameter is still an unallocated placeholder.
+        if (AnyLayerNeedsShapeResolution() || AnyLayerHasUnmaterializedParameters())
         {
             bool wasTraining = IsTrainingMode;
             if (wasTraining) SetTrainingMode(false);
@@ -6609,6 +6615,40 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 return true;
             var subs = layer.GetSubLayers();
             if (subs.Count > 0 && AnyLayerNeedsShapeResolutionRecursive(subs))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// True if any (possibly nested) layer still holds an unallocated
+    /// placeholder trainable parameter (a <c>Length == 0</c> tensor). Shape
+    /// resolution alone (<see cref="AnyLayerNeedsShapeResolution"/>) is not
+    /// sufficient to decide whether the lazy-init warmup is needed:
+    /// <c>ResolveShapesOnly</c> can flip <c>IsShapeResolved</c> to true without
+    /// allocating the weight tensors, so a forward is still required to
+    /// materialise them before <c>CollectParameters</c> runs. After a real
+    /// forward materialises the weights this returns false, so it does not
+    /// re-fire the warmup on subsequent training steps.
+    /// </summary>
+    private bool AnyLayerHasUnmaterializedParameters()
+    {
+        return AnyLayerHasUnmaterializedParametersRecursive(Layers);
+    }
+
+    private static bool AnyLayerHasUnmaterializedParametersRecursive(IEnumerable<ILayer<T>> layers)
+    {
+        foreach (var layer in layers)
+        {
+            if (layer is Layers.LayerBase<T> baseLayer)
+            {
+                foreach (var p in baseLayer.GetTrainableParameters())
+                {
+                    if (p is null || p.Length == 0) return true;
+                }
+            }
+            var subs = layer.GetSubLayers();
+            if (subs.Count > 0 && AnyLayerHasUnmaterializedParametersRecursive(subs))
                 return true;
         }
         return false;
