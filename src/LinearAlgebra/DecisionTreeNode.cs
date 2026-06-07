@@ -153,6 +153,19 @@ public class DecisionTreeNode<T>
     public T SumSquaredError { get; set; }
 
     /// <summary>
+    /// Precomputed feature-importance contribution of this split (variance reduction × node sample
+    /// count), set by the index-based regression builder so importances don't require every node to
+    /// retain its full sample set. Zero/unused when the node was built by a sample-retaining path.
+    /// </summary>
+    public T NodeImportance { get; set; }
+
+    /// <summary>
+    /// Precomputed impurity (population variance of the targets) at this node, set by the index-based
+    /// regression builder. Lets feature-importance computation avoid recomputing from stored samples.
+    /// </summary>
+    public T NodeImpurity { get; set; }
+
+    /// <summary>
     /// Gets or sets the numeric operations helper for the generic type T.
     /// </summary>
     /// <remarks>
