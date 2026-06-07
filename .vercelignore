@@ -24,6 +24,8 @@
 *.pdb
 *.nupkg
 # Website-tree exclusions: explicit because these live under /website/
-# and aren't caught by the anchored patterns above.
-website/node_modules/
-website/.astro/
+# and aren't caught by the anchored patterns above. Leading slash keeps
+# them anchored too — without it, a hypothetical `tools/website/node_modules/`
+# or any other nested `website/` directory would also match.
+/website/node_modules/
+/website/.astro/
