@@ -118,7 +118,7 @@
          Do NOT pin an unpublished version (0.91.14/0.91.16 broke restore with NU1102);
          re-bump once a newer Tensors is actually released. The AiDotNet.Native packages
          stay at 0.91.2 (no native change needed). -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.91.11" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.91.12" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.91.2" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.91.2" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.91.2" />
