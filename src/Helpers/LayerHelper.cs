@@ -23210,10 +23210,40 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates default layers for Q-Former-based generative VLMs (InstructBLIP, BLIP-3).
+    /// Creates default layers for Q-Former-based generative VLMs (InstructBLIP, BLIP-3, MiniGPT-4, MiniGPT-v2).
     /// Architecture: ViT vision encoder -> Q-Former (cross-attention queries) -> text decoder.
     /// </summary>
+    /// <param name="visionDim">Vision encoder embedding dimension (default 1408 — EVA-ViT-G per Dai et al. 2023 §3.1).</param>
+    /// <param name="qFormerDim">Q-Former hidden dimension (default 768 — BLIP-2 §3.1 base config).</param>
+    /// <param name="decoderDim">LLM decoder hidden dimension (default 4096 — Vicuna-7B / OPT-2.7B class).</param>
+    /// <param name="numVisionLayers">Number of vision encoder transformer blocks (default 12 — ViT-B; ViT-G uses 39).</param>
+    /// <param name="numQFormerLayers">Number of Q-Former transformer blocks (default 12 — BLIP-2 §3.1).</param>
+    /// <param name="numDecoderLayers">Number of text decoder transformer blocks.</param>
     /// <param name="numQueryTokens">Number of learnable query tokens (managed externally as learnable tensors in the model class, not as a layer).</param>
+    /// <param name="numHeads">Number of attention heads for vision and decoder self-attention. Snapped down to the nearest divisor of <paramref name="visionDim"/> / <paramref name="decoderDim"/> when not exactly divisible (see <see cref="ChooseDivisibleHeadConfig"/>).</param>
+    /// <param name="numQFormerHeads">Number of attention heads for Q-Former self-attention. Snapped down similarly against <paramref name="qFormerDim"/>.</param>
+    /// <param name="dropoutRate">Dropout probability applied after each transformer sub-block (default 0.1).</param>
+    /// <param name="patchSize">ViT patch size for the leading <see cref="PatchEmbeddingLayer{T}"/> (default 14 — EVA-ViT-G / ViT-L/14).</param>
+    /// <returns>The ordered <see cref="ILayer{T}"/> sequence — patch embedding + ViT encoder + optional vision→Q-Former projection + Q-Former blocks + optional Q-Former→decoder projection + decoder blocks. Callers split this stream into named sub-streams (Layers / _qFormerLayers / _decoderLayers) using the pre-computed layer-count boundaries.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This builds the layer chain used by Q-Former-bridge VLMs.
+    /// The first stage is a Vision Transformer (ViT) that turns an image into a
+    /// sequence of visual tokens. The Q-Former then uses a small set of learnable
+    /// "query tokens" that cross-attend to those visual tokens to extract the
+    /// information the language model needs. Finally the text decoder generates
+    /// the output, attending back to the Q-Former's output. Defaults match the
+    /// original BLIP-2 / InstructBLIP paper configurations.
+    /// </para>
+    /// <para>
+    /// Attention head counts use <see cref="ChooseDivisibleHeadConfig"/> so a
+    /// requested head count that doesn't divide the embedding dim cleanly (e.g.
+    /// <c>visionDim=1408 / numHeads=12 = 117.33</c>) is snapped down to the
+    /// nearest divisor instead of silently truncating to <c>12 * 117 = 1404</c>
+    /// and breaking the QKV projection. Same SmolVLM / InternVL root-cause
+    /// pattern as PR #1290 / #1311.
+    /// </para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultQFormerGenerativeLayers(
         int visionDim = 1408,
         int qFormerDim = 768,
@@ -23235,6 +23265,18 @@ public static class LayerHelper<T>
         int qfFfnDim = qFormerDim * 4;
         int decoderFfnDim = decoderDim * 4;
 
+        // Snap requested head counts down to divisors of their respective embed
+        // dims ONCE up front. Inline integer division (e.g. visionDim/numHeads)
+        // would produce heads*headDim != embedDim when numHeads doesn't divide
+        // cleanly (1408/12=117, 12*117=1404≠1408 → "Input embedding dimension
+        // (1408) does not match weight dimension (1404)" on first MHA forward).
+        // Single ChooseDivisibleHeadConfig per stream keeps the qformer block
+        // count formulas in the call sites correct (each iteration still emits
+        // the same number of layers regardless of head snapping).
+        var (visionHeads, visionHeadDim) = ChooseDivisibleHeadConfig(visionDim, numHeads);
+        var (qfHeads, qfHeadDim) = ChooseDivisibleHeadConfig(qFormerDim, numQFormerHeads);
+        var (decoderHeads, decoderHeadDim) = ChooseDivisibleHeadConfig(decoderDim, numHeads);
+
         // === Vision Encoder (ViT) ===
         // Dai et al. 2023 (InstructBLIP) §3.1 / Li et al. 2023 (BLIP-2) §3.1 use
         // EVA-ViT-G (patchSize=14, visionDim=1408) as the frozen vision encoder.
@@ -23248,7 +23290,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (visionDim) / (numHeads));
+            yield return new MultiHeadAttentionLayer<T>(visionHeads, visionHeadDim);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -23266,7 +23308,7 @@ public static class LayerHelper<T>
             yield return new CrossAttentionLayer<T>(qFormerDim, visionDim, numQFormerHeads);
             yield return new LayerNormalizationLayer<T>();
             // Self-attention among query tokens
-            yield return new MultiHeadAttentionLayer<T>(numQFormerHeads, (qFormerDim) / (numQFormerHeads));
+            yield return new MultiHeadAttentionLayer<T>(qfHeads, qfHeadDim);
             yield return new LayerNormalizationLayer<T>();
             // Feed-forward
             yield return new DenseLayer<T>(qfFfnDim, geluActivation);
@@ -23282,7 +23324,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numDecoderLayers; i++)
         {
             // Causal self-attention
-            var decoderSelfAttn = new MultiHeadAttentionLayer<T>(numHeads, (decoderDim) / (numHeads));
+            var decoderSelfAttn = new MultiHeadAttentionLayer<T>(decoderHeads, decoderHeadDim);
             decoderSelfAttn.UseCausalMask = true;
             yield return decoderSelfAttn;
             yield return new LayerNormalizationLayer<T>();
