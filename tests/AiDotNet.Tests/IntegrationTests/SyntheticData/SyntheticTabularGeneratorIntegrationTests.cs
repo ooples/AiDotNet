@@ -672,6 +672,44 @@ public class SyntheticTabularGeneratorIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task TabSynGenerator_SaveLoad_PreservesAuxiliaryNetworks()
+    {
+        await Task.CompletedTask;
+        var (data, columns) = CreateTestData();
+        var arch = CreateArchitecture(TotalCols, TotalCols);
+        var options = new TabSynOptions<double>
+        {
+            Seed = Seed,
+            EncoderDimensions = [64, 64],
+            DecoderDimensions = [64, 64],
+            LatentDimension = 16,
+            DiffusionMLPDimensions = [64, 64],
+            DiffusionSteps = 10,
+            BatchSize = 50,
+            VGMModes = 3
+        };
+
+        var generator = new TabSynGenerator<double>(arch, options);
+        generator.Fit(data, columns, FewEpochs);
+
+        byte[] bytes = generator.Serialize();
+        var restored = new TabSynGenerator<double>(arch, options);
+        restored.Deserialize(bytes);
+
+        // The decoder, diffusion MLP and timestep projection live outside the base Layers
+        // collection; verify they survive serialization rather than reverting to random weights.
+        AssertAuxLayerPreserved(generator, restored, "_timestepProjection");
+        AssertAuxLayerListPreserved<ILayer<double>>(generator, restored, "_decoderLayers");
+        AssertAuxLayerListPreserved<ILayer<double>>(generator, restored, "_diffMLPLayers");
+
+        // End-to-end: the restored model must be able to generate valid data, which requires the
+        // VGM transformer and latent diffusion to have been restored (a null transformer would
+        // yield an empty/garbage result).
+        var regenerated = restored.Generate(GenSamples);
+        ValidateGeneratedData(regenerated, GenSamples, TotalCols, "TabSyn (restored)");
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task TabFlowGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
