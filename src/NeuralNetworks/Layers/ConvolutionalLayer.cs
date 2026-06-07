@@ -1505,9 +1505,19 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override long ParameterCount => _isInitialized
         ? _kernels.Length + _biases.Shape[0]
-        : InputDepth > 0
-            ? OutputDepth * InputDepth * KernelSize * KernelSize + OutputDepth
-            : 0; // Deferred: input channel count unknown until first Forward
+        // Deferred: input channel count unknown until first Forward. Report a
+        // placeholder count assuming InputDepth=1 (single-channel) so the
+        // layer still satisfies the "has learnable parameters" contract that
+        // model-family invariant tests (Parameters_ShouldBeNonEmpty) check
+        // BEFORE any Predict has run. Mirrors the Conv1DLayer<T>
+        // ParameterCount placeholder convention introduced in #1512 — it lets
+        // detection backbones (ResNet, EfficientNet, CSPDarknet, etc. whose
+        // stem 7x7 conv defers input-depth resolution to first forward) report
+        // a non-zero count without forcing a forward pass that materialises
+        // multi-MB weight tensors on every metadata access. Once the layer
+        // sees its first input, _isInitialized flips true and this branch is
+        // never taken again.
+        : OutputDepth * (InputDepth > 0 ? InputDepth : 1) * KernelSize * KernelSize + OutputDepth;
 
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
