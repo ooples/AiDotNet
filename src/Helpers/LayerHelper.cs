@@ -23224,8 +23224,11 @@ public static class LayerHelper<T>
         int numQueryTokens = 32,
         int numHeads = 12,
         int numQFormerHeads = 12,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        int patchSize = 14)
     {
+        ValidatePatchSize(patchSize);
+
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int visionFfnDim = visionDim * 4;
@@ -23233,6 +23236,14 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder (ViT) ===
+        // Dai et al. 2023 (InstructBLIP) §3.1 / Li et al. 2023 (BLIP-2) §3.1 use
+        // EVA-ViT-G (patchSize=14, visionDim=1408) as the frozen vision encoder.
+        // Without PatchEmbeddingLayer the downstream MultiHeadAttentionLayer
+        // reads the raw image's spatial dim (e.g. 128) as the feature dim and
+        // hard-rejects with "Input embedding dimension (128) does not match
+        // weight dimension (1408)" — same root cause pattern as the SmolVLM /
+        // InternVL fix (PR #1290 / #1311).
+        yield return new PatchEmbeddingLayer<T>(patchSize, visionDim, expectedInputChannels: 3);
         yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
