@@ -292,11 +292,15 @@ public partial class Conv1DLayer<T> : LayerBase<T>
                 $"Expected {expectedLength} parameters, but got {parameters.Length}");
         }
 
-        var kernelVec = parameters.Slice(0, _kernels.Length);
-        var biasVec = parameters.Slice(_kernels.Length, _biases.Length);
-
-        _kernels = new Tensor<T>([_outputChannels, _inputChannels, 1, _kernelSize], kernelVec);
-        _biases = new Tensor<T>([_outputChannels], biasVec);
+        // Copy in place via Data.Span to preserve the persistent-tensor identities
+        // registered above (RegisterTrainableParameter at lines 284-285). Replacing
+        // _kernels/_biases with `new Tensor<T>(...)` would leave the registry
+        // pointing at the old tensors — Forward would use the old (un-loaded)
+        // weights while the new ones sat unreferenced — so a Clone restored via
+        // SetParameters would silently lose the loaded values on the next step.
+        // Same pattern DenseLayer.SetParameters uses (DenseLayer.cs:1379-1385).
+        parameters.AsSpan().Slice(0, _kernels.Length).CopyTo(_kernels.Data.Span);
+        parameters.AsSpan().Slice(_kernels.Length, _biases.Length).CopyTo(_biases.Data.Span);
 
         Engine.InvalidatePersistentTensor(_kernels);
         Engine.InvalidatePersistentTensor(_biases);

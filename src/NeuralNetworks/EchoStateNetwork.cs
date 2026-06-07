@@ -375,6 +375,15 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// Indicates whether the network is being trained.
     /// </summary>
     private bool _isTraining = false;
+    /// <summary>
+    /// Number of Train() calls since training began. Compared against
+    /// <see cref="_warmupPeriod"/> to decide whether the current reservoir
+    /// state should join the ridge-regression sample set or be discarded as
+    /// washout (Jaeger 2001 §3.4 / Lukoševičius 2012 §6.4: drop the initial
+    /// transient so the readout fits the reservoir's asymptotic regime).
+    /// Reset alongside the collected-states lists at the start of training.
+    /// </summary>
+    private int _warmupStepsConsumed;
 
     /// <summary>
     /// Leaking rate for controlling the update speed of reservoir neurons.
@@ -1267,6 +1276,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
             _isTraining = true;
             _collectedStates.Clear();
             _collectedTargets.Clear();
+            _warmupStepsConsumed = 0;
         }
 
         Vector<T> inputVector = input.ToVector();
@@ -1281,10 +1291,28 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
             throw new ArgumentException($"Target vector length ({targetVector.Length}) does not match expected output size ({_outputSize}).");
         }
 
-        // Drive the reservoir, then snapshot the current state. Clone so
-        // subsequent UpdateReservoirState calls (next Train iteration)
-        // don't mutate samples we've already collected.
+        // Drive the reservoir on EVERY call so the recurrent state evolves —
+        // the reservoir's "memory" of past inputs is the whole point of an
+        // ESN (Jaeger 2001 §3.4). But only ADD this state to the regression
+        // sample set after the warmup period has elapsed: per Lukoševičius
+        // 2012 §6.4 the initial transient (washout) reflects the random
+        // initial state, not the input-driven attractor, so including it
+        // biases the readout. SetWarmupPeriod was a dead knob before this
+        // gate — the previous implementation accumulated every step,
+        // washout included.
         UpdateReservoirState(inputVector);
+        if (_warmupStepsConsumed < _warmupPeriod)
+        {
+            _warmupStepsConsumed++;
+            // Update LastLoss against the current (unchanged) readout so
+            // callers polling it during warmup get a sensible value rather
+            // than stale-from-previous-training noise.
+            Vector<T> warmupPrediction = ComputeOutput();
+            LastLoss = _lossFunction.CalculateLoss(warmupPrediction, targetVector);
+            return;
+        }
+        // Clone so subsequent UpdateReservoirState calls (next Train iteration)
+        // don't mutate samples we've already collected.
         _collectedStates.Add(_currentState.Clone());
         _collectedTargets.Add(targetVector.Clone());
 
@@ -1434,59 +1462,30 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
             throw new InvalidOperationException("No training data collected. Call Train first.");
         }
 
-        // Prepare matrices for ridge regression
-        // X: Matrix of reservoir states
-        // Y: Matrix of target outputs
-        int numSamples = _collectedStates.Count;
+        // Delegate to the shared dual-form ridge solver. The previous body
+        // here inlined the primal form `(X^T X + λI)^{-1} X^T Y`, which
+        // can numerically explode when reservoir states are nearly
+        // collinear (a regime feedback drives toward over long sequences
+        // — same failure mode that caused per-call Train SGD to diverge).
+        // The shared helper uses the dual form `X^T (X X^T + λI)^{-1} Y`
+        // (Jaeger 2001 §3.4 / Lukoševičius 2012 §6.2) which stays
+        // well-conditioned for any λ > 0; without this delegation a caller
+        // running incremental Train() followed by FinalizeTraining() would
+        // overwrite the stable readout with the numerically weaker path
+        // this PR was introduced to remove.
+        SolveReadoutRidgeRegression();
 
+        // Compute bias terms (mean of target - mean of prediction).
+        // Rebuild X / Y once for the bias-only computation since
+        // SolveReadoutRidgeRegression doesn't expose them.
+        int numSamples = _collectedStates.Count;
         Matrix<T> X = new Matrix<T>(numSamples, _reservoirSize);
         Matrix<T> Y = new Matrix<T>(numSamples, _outputSize);
-
         for (int i = 0; i < numSamples; i++)
         {
-            for (int j = 0; j < _reservoirSize; j++)
-            {
-                X[i, j] = _collectedStates[i][j];
-            }
-
-            for (int j = 0; j < _outputSize; j++)
-            {
-                Y[i, j] = _collectedTargets[i][j];
-            }
+            for (int j = 0; j < _reservoirSize; j++) X[i, j] = _collectedStates[i][j];
+            for (int j = 0; j < _outputSize; j++) Y[i, j] = _collectedTargets[i][j];
         }
-
-        // Perform ridge regression: (X^T X + ?I)^(-1) X^T Y
-        // Step 1: Compute X^T X
-        Matrix<T> XtX = X.Transpose().Multiply(X);
-
-        // Step 2: Add regularization (X^T X + ?I)
-        Matrix<T> regularized = XtX.Clone();
-        for (int i = 0; i < _reservoirSize; i++)
-        {
-            regularized[i, i] = NumOps.Add(regularized[i, i], _regularization);
-        }
-
-        // Step 3: Compute (X^T X + ?I)^(-1)
-        Matrix<T> inverse = ComputeInverse(regularized);
-
-        // Step 4: Compute X^T Y
-        Matrix<T> XtY = X.Transpose().Multiply(Y);
-
-        // Step 5: Compute (X^T X + ?I)^(-1) X^T Y
-        Matrix<T> weights = inverse.Multiply(XtY);
-
-        // Update output weights from ridge regression result
-        for (int i = 0; i < _reservoirSize; i++)
-        {
-            for (int j = 0; j < _outputSize; j++)
-            {
-                _outputWeights[i, j] = weights[i, j];
-            }
-        }
-
-        // Compute bias terms (mean of target - mean of prediction)
-        // For each output dimension, we need to compute:
-        // bias = mean(targets) - mean(weights * states)
         for (int j = 0; j < _outputSize; j++)
         {
             T targetSum = NumOps.Zero;
@@ -1496,7 +1495,6 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
             }
             T targetMean = NumOps.Divide(targetSum, NumOps.FromDouble(numSamples));
 
-            // For each sample, compute the output without bias
             T outputSum = NumOps.Zero;
             for (int i = 0; i < numSamples; i++)
             {
@@ -1509,7 +1507,6 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
             }
             T outputMean = NumOps.Divide(outputSum, NumOps.FromDouble(numSamples));
 
-            // Bias is target mean - output mean
             _outputBias[j] = NumOps.Subtract(targetMean, outputMean);
         }
 

@@ -567,7 +567,7 @@ public class DiffWaveNetwork<T>
     /// to make the cloned network's layers match the original's parameter
     /// layout before <c>SetParameters</c> validates the count.
     /// </summary>
-    public void ResolveLayerShapesFor(int[] audioShape)
+    internal void ResolveLayerShapesFor(int[] audioShape)
     {
         if (audioShape is null) throw new ArgumentNullException(nameof(audioShape));
         if (audioShape.Length < 1)
@@ -648,6 +648,23 @@ public class DiffWaveNetwork<T>
                 $"DiffWave expects rank >= 2 audio input; got rank {rank}.",
                 nameof(audio));
         }
+        // _inputProjection was eagerly constructed with inputChannels=1
+        // (mono — Kong et al. 2021 DiffWave §3 is a mono vocoder). Multi-
+        // channel inputs would reach a kernel sized for a single channel
+        // and produce wrong-shape activations downstream, so reject them
+        // explicitly at the entry point rather than the earlier comment's
+        // "multi-channel passes through" (which is incorrect — it doesn't).
+        // To process stereo / multi-channel audio, callers should run one
+        // DiffWaveModel instance per channel and combine outputs.
+        int channelsAfterReshape = shaped._shape[1];
+        if (channelsAfterReshape != 1)
+        {
+            throw new ArgumentException(
+                $"DiffWave requires mono audio (C=1) per Kong et al. 2021 §3; " +
+                $"got C={channelsAfterReshape}. Process multi-channel audio one " +
+                $"channel at a time, or use a multi-channel vocoder.",
+                nameof(audio));
+        }
         return _inputProjection.Forward(shaped);
     }
 
@@ -679,20 +696,11 @@ public class DiffWaveNetwork<T>
         return _engine.TensorAdd(a, b);
     }
 
-    private Tensor<T> ApplyRelu(Tensor<T> x)
-    {
-        var result = new Tensor<T>(x._shape);
-        var span = x.AsSpan();
-        var resultSpan = result.AsWritableSpan();
-
-        for (int i = 0; i < span.Length; i++)
-        {
-            var val = NumOps.ToDouble(span[i]);
-            resultSpan[i] = NumOps.FromDouble(Math.Max(0, val));
-        }
-
-        return result;
-    }
+    // Tape-tracked ReLU. The earlier manual span loop materialized a fresh
+    // Tensor<T> from raw spans, which detaches the autodiff graph — Conv1DLayer
+    // updates depend on the tape, so the OutputProjection chain wouldn't train
+    // end-to-end through this boundary. _engine.ReLU records the op on the tape.
+    private Tensor<T> ApplyRelu(Tensor<T> x) => _engine.ReLU(x);
 
     private Tensor<T> ReshapeToAudio(Tensor<T> x, int[] targetShape)
     {
@@ -897,12 +905,41 @@ public class DiffWaveResidualBlock<T>
         h = _dilatedConv.Forward(h);
 
         // Step 3 — optional mel-spectrogram conditioning (Kong 2020
-        // §3.3). The mel encoder upsamples to audio rate before this
-        // block, so condition tensor is already [B, melChannels, T];
-        // a 1×1 Conv1D maps it to 2C and we add pointwise.
+        // §3.3). Mel comes in at frame rate ([B, melChannels, frames])
+        // and must be brought up to audio rate ([B, melChannels, T])
+        // before the 1×1 Conv1D projection so the resulting condProj can
+        // be added pointwise to h (which is at audio rate T). The
+        // GenerateFromMelSpectrogram entry point picks T = frames *
+        // hop_size with hop=256, so the ratio T/frames is the per-frame
+        // sample count. Tape-safe nearest-neighbour upsample via
+        // TensorRepeatElements records the op on the autodiff tape (per
+        // GraphConvolutionalLayer's identical pattern at line 1285), so
+        // gradients flow back through the mel encoder during training.
         if (melCondition != null && _conditionProj != null)
         {
-            var condProj = _conditionProj.Forward(melCondition);
+            int audioT = h.Shape[h.Rank - 1];
+            int melT = melCondition.Shape[melCondition.Rank - 1];
+            Tensor<T> melAtAudioRate = melCondition;
+            if (melT != audioT && melT > 0)
+            {
+                int ratio = audioT / melT;
+                if (ratio < 1) ratio = 1;
+                if (ratio > 1)
+                    melAtAudioRate = _engine.TensorRepeatElements(melCondition, ratio, axis: melCondition.Rank - 1);
+                // Truncate if non-integer ratio left a remainder (frame
+                // count doesn't cleanly divide the audio length): clip
+                // the trailing samples so the conv input width matches.
+                int upT = melAtAudioRate.Shape[melAtAudioRate.Rank - 1];
+                if (upT > audioT)
+                {
+                    int batchDim = melAtAudioRate.Shape[0];
+                    int chanDim = melAtAudioRate.Shape[1];
+                    melAtAudioRate = _engine.TensorSlice(melAtAudioRate,
+                        new[] { 0, 0, 0 },
+                        new[] { batchDim, chanDim, audioT });
+                }
+            }
+            var condProj = _conditionProj.Forward(melAtAudioRate);
             h = AddTensors(h, condProj);
         }
 
@@ -960,11 +997,16 @@ public class DiffWaveResidualBlock<T>
         // The 2C-channel pre-activation is split along the CHANNEL axis
         // (dim=1 for channels-first [B, C, T]) into two C-channel halves
         // — first half feeds tanh (filter), second half feeds sigmoid
-        // (gate). Now that the model uses paper-faithful Conv1D with
-        // channels-first layout, the channel axis is consistently at
-        // <c>Shape[1]</c>.
+        // (gate), then element-wise multiplied. Now that the model uses
+        // paper-faithful Conv1D with channels-first layout, the channel
+        // axis is consistently at Shape[1].
+        //
+        // All ops route through _engine (Tanh / Sigmoid / TensorMultiply
+        // / TensorSlice) so the activation participates in the autodiff
+        // tape — Conv1DLayer.UpdateParameters relies on the tape, so the
+        // earlier raw-span loop disconnected the graph and the residual
+        // block's filter/gate convs could not receive gradients.
         var inputShape = x._shape;
-        var span = x.AsSpan();
         int rank = inputShape.Length;
 
         if (rank < 3)
@@ -983,33 +1025,14 @@ public class DiffWaveResidualBlock<T>
                 $"Gated activation requires an even, positive channel dim; got {channels}.");
         }
 
-        var outputShape = new[] { batch, halfChannels, time };
-        var result = new Tensor<T>(outputShape);
-        var resultSpan = result.AsWritableSpan();
-
-        // Layout: span[b * (C*T) + c * T + t]. Filter half lives in
-        // channels [0, halfChannels), gate half in [halfChannels, C).
-        for (int b = 0; b < batch; b++)
-        {
-            int inputBatch = b * channels * time;
-            int outputBatch = b * halfChannels * time;
-            for (int c = 0; c < halfChannels; c++)
-            {
-                int filterRow = inputBatch + c * time;
-                int gateRow = inputBatch + (c + halfChannels) * time;
-                int outRow = outputBatch + c * time;
-                for (int t = 0; t < time; t++)
-                {
-                    var f = NumOps.ToDouble(span[filterRow + t]);
-                    var g = NumOps.ToDouble(span[gateRow + t]);
-                    var tanhVal = Math.Tanh(f);
-                    var sigmoidVal = 1.0 / (1.0 + Math.Exp(-g));
-                    resultSpan[outRow + t] = NumOps.FromDouble(tanhVal * sigmoidVal);
-                }
-            }
-        }
-
-        return result;
+        // Split [B, 2C, T] → two [B, C, T] halves along axis 1.
+        var filterHalf = _engine.TensorSlice(x,
+            new[] { 0, 0, 0 },
+            new[] { batch, halfChannels, time });
+        var gateHalf = _engine.TensorSlice(x,
+            new[] { 0, halfChannels, 0 },
+            new[] { batch, halfChannels, time });
+        return _engine.TensorMultiply(_engine.Tanh(filterHalf), _engine.Sigmoid(gateHalf));
     }
 
     /// <summary>

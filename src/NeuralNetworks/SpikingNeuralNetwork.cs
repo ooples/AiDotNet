@@ -441,14 +441,26 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         // and letting SpikingLayers accumulate membrane potential and generate spikes.
         // The output layer's spike rates over time form the final prediction.
 
-        // Per Neftci et al. 2019: hidden spiking layers produce spikes over T time steps.
-        // The non-spiking readout (last DenseLayer) processes accumulated spike rates.
-        // Separate spiking layers from the readout layer.
-        int readoutIdx = -1;
+        // Per Neftci et al. 2019: hidden spiking layers produce spikes over
+        // T time steps; everything AFTER the last SpikingLayer is the non-
+        // spiking continuous readout tail. Must match Train's boundary
+        // exactly — the default LayerHelper.CreateDefaultSpikingLayers stack
+        // is {Spiking, Spiking, Dense, Activation}, where Dense AND
+        // Activation are both readout (Dense projects spike rates to logits,
+        // Activation applies softmax / sigmoid / etc). Previously this
+        // looked for the LAST non-spiking layer and peeled off only that
+        // one (just the Activation), so Predict ran Dense through the
+        // spiking simulation while Train ran it through the readout path —
+        // inference saw a different forward pass than training optimized
+        // against, defeating supervised learning end-to-end.
+        int readoutBoundary = Layers.Count;
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
-            if (Layers[i] is not Layers.SpikingLayer<T>) { readoutIdx = i; break; }
+            if (Layers[i] is Layers.SpikingLayer<T>) { readoutBoundary = i + 1; break; }
         }
+        // -1 sentinel preserved for downstream code that prefers the "no
+        // readout" branch (entire stack runs through the simulation).
+        int readoutIdx = readoutBoundary < Layers.Count ? readoutBoundary : -1;
 
         // Accumulate spiking layer outputs over time. The readout layer may be
         // lazy (reports input shape as [-1]); fall back to the last spiking
@@ -761,7 +773,16 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         // S(u)=Θ(u−θ) to a smooth backward derivative S'(u)≈α/(1+α|u−θ|)²
         // so the standard rate-coded delta rule applies end-to-end.
         T learningRate = NumOps.FromDouble(_options.ReadoutLearningRate);
-        int stdpWindow = _options.StdpWindow;
+        // _options.StdpWindow intentionally not read here: this Train()
+        // path uses surrogate-gradient Adam on the output layer and freezes
+        // hidden layers (see hidden-layer `continue` below). StdpWindow
+        // controls the unsupervised pair-based STDP rule which is
+        // decoupled from the supervised loss — its XML doc states the
+        // option only applies to unsupervised STDP. Wiring it in here
+        // would require BPTT-through-time on the surrogate gradient
+        // (Zenke 2018 §3.2), filed separately. Reading it as a no-op
+        // would shadow the intentional dead-knob design and confuse
+        // future readers, so don't read it at all.
         // The "output layer" for supervised training is the LAST TRAINABLE
         // layer — not strictly Layers.Count − 1, because the default
         // spiking-net topology in LayerHelper.CreateDefaultSpikingLayers
