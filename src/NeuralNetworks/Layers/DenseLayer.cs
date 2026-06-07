@@ -462,8 +462,15 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _weights = AllocateLazyWeight(wShape, () => TensorAllocator.Rent<T>(wShape));
             _biases = AllocateLazyWeight(bShape, () => TensorAllocator.Rent<T>(bShape));
 
-            // Initialize using strategy or default
-            if (InitializationStrategy is not null)
+            // Initialize using strategy or default. Skip strategies that only
+            // advertise the LAZY deferral contract (IsLazy): their InitializeWeights
+            // does a generic, NON-seeded Xavier fill that ignores this layer's
+            // RandomSeed, so a lazy-strategy DenseLayer initialized off the shared
+            // RNG instead of the architecture seed — order-dependent weights (the
+            // VITS input-projection layer is the canonical case). Fall through to
+            // InitializeParameters, which honours RandomSeed. Mirrors
+            // MultiHeadAttentionLayer's `&& !InitializationStrategy.IsLazy` guard.
+            if (InitializationStrategy is not null && !InitializationStrategy.IsLazy)
             {
                 InitializationStrategy.InitializeWeights(_weights, inputSize, outputSize);
                 InitializationStrategy.InitializeBiases(_biases);
