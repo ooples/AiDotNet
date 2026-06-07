@@ -57,8 +57,11 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>
     // (Forward/ParameterCount/Get-SetParameters/gradients/state) are LayerBase<T> surface.
     private LayerBase<T> _attention;
     private readonly LayerNormalizationLayer<T> _norm1;
-    private readonly DenseLayer<T> _ffnUp;
-    private readonly DenseLayer<T> _ffnDown;
+    // Widened from DenseLayer<T> (same rationale as _attention) so the inference
+    // optimizer / LoRA configuration can swap in wrapped implementations
+    // (QuantizedDenseLayer, StandardLoRAAdapter) via ReplaceFfnUp/ReplaceFfnDown.
+    private LayerBase<T> _ffnUp;
+    private LayerBase<T> _ffnDown;
     private readonly LayerNormalizationLayer<T> _norm2;
     private readonly DropoutLayer<T>? _attnDropout;
     private readonly DropoutLayer<T>? _ffnDropout;
@@ -137,6 +140,40 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>
         UnregisterSubLayer(_attention);
         _attention = replacement;
         RegisterSubLayer(_attention);
+    }
+
+    /// <summary>The block's current FFN up-projection (hiddenSize → ffnDim) sublayer.</summary>
+    public LayerBase<T> FfnUpLayer => _ffnUp;
+
+    /// <summary>The block's current FFN down-projection (ffnDim → hiddenSize) sublayer.</summary>
+    public LayerBase<T> FfnDownLayer => _ffnDown;
+
+    /// <summary>
+    /// Swaps the FFN up-projection sublayer (e.g. for a <c>QuantizedDenseLayer</c> or a
+    /// LoRA adapter). Same registered-sublayer/parameter-count consistency contract as
+    /// <see cref="ReplaceAttention"/>. The replacement must map
+    /// <c>[N, hiddenSize] → [N, ffnDim]</c>.
+    /// </summary>
+    public void ReplaceFfnUp(LayerBase<T> replacement)
+    {
+        if (replacement is null) throw new ArgumentNullException(nameof(replacement));
+        UnregisterSubLayer(_ffnUp);
+        _ffnUp = replacement;
+        RegisterSubLayer(_ffnUp);
+    }
+
+    /// <summary>
+    /// Swaps the FFN down-projection sublayer (e.g. for a <c>QuantizedDenseLayer</c> or a
+    /// LoRA adapter). Same registered-sublayer/parameter-count consistency contract as
+    /// <see cref="ReplaceAttention"/>. The replacement must map
+    /// <c>[N, ffnDim] → [N, hiddenSize]</c>.
+    /// </summary>
+    public void ReplaceFfnDown(LayerBase<T> replacement)
+    {
+        if (replacement is null) throw new ArgumentNullException(nameof(replacement));
+        UnregisterSubLayer(_ffnDown);
+        _ffnDown = replacement;
+        RegisterSubLayer(_ffnDown);
     }
 
     /// <summary>Model (feature) dimension — persisted for deserialization.</summary>

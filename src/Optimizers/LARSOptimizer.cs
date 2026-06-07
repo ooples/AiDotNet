@@ -452,6 +452,11 @@ public class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         T epsilon = NumOps.FromDouble(_options.Epsilon);
         T baseLr = NumOps.FromDouble(GetWarmupLearningRate());
 
+        // NOTE: the CUDA lars_update kernel uses a different trust-ratio /
+        // weight-decay convention than this CPU implementation (parity harness
+        // showed maxDiff ~3e-2 at step 1), so the GPU-resident path is NOT wired
+        // for LARS — it would silently change training dynamics. Reconcile the
+        // kernel with this formula before enabling. CPU path only for now.
         foreach (var param in context.Parameters)
         {
             if (!context.Gradients.TryGetValue(param, out var grad))

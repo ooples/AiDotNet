@@ -176,4 +176,48 @@ public class ColumnMetadata
             Std = Std
         };
     }
+
+    /// <summary>
+    /// Writes this column's metadata (name, type, categories, statistics, index) to a binary stream.
+    /// </summary>
+    internal void Serialize(System.IO.BinaryWriter writer)
+    {
+        writer.Write(Name);
+        writer.Write((int)DataType);
+        writer.Write(Categories.Count);
+        foreach (var category in Categories)
+        {
+            writer.Write(category);
+        }
+        writer.Write(Min);
+        writer.Write(Max);
+        writer.Write(Mean);
+        writer.Write(Std);
+        writer.Write(ColumnIndex);
+    }
+
+    /// <summary>
+    /// Reads a column's metadata previously written by <see cref="Serialize"/>.
+    /// </summary>
+    internal static ColumnMetadata Deserialize(System.IO.BinaryReader reader)
+    {
+        string name = reader.ReadString();
+        var dataType = (ColumnDataType)reader.ReadInt32();
+        int categoryCount = reader.ReadInt32();
+        var categories = new string[categoryCount];
+        for (int i = 0; i < categoryCount; i++)
+        {
+            categories[i] = reader.ReadString();
+        }
+
+        var metadata = new ColumnMetadata(name, dataType, categories)
+        {
+            Min = reader.ReadDouble(),
+            Max = reader.ReadDouble(),
+            Mean = reader.ReadDouble(),
+            Std = reader.ReadDouble()
+        };
+        metadata.ColumnIndex = reader.ReadInt32();
+        return metadata;
+    }
 }

@@ -2057,6 +2057,25 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 folded++;
             }
         }
+
+        if (folded > 0)
+        {
+            // The folds above mutate the weight/bias arrays IN PLACE, which leaves
+            // the engine's identity-keyed inference weight caches stale — chiefly
+            // SimdGemm.SgemmWithCachedB's pre-packed B panels, which are keyed by
+            // the weight ARRAY OBJECT and never re-read its contents
+            // (InferenceWeightCache's documented contract: "callers that mutate
+            // weights in place must call InvalidateAll afterwards"). The per-tensor
+            // Engine.InvalidatePersistentTensor calls inside the fold helpers cover
+            // the GPU-resident persistent buffers but are a NO-OP on CpuEngine, so
+            // the CPU packed-GEMM path kept serving the PRE-fold weights while the
+            // BatchNorm layer was already removed — observed as a deterministic
+            // ~0.17 Dense→BN folded-output divergence on AVX2-only hosts (CI),
+            // invisible on AVX-512 hosts where SgemmWithCachedB bypasses the pack
+            // cache entirely (the `Avx512Sgemm.CanUse` gate).
+            InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+        }
+
         return folded;
     }
 
@@ -2112,10 +2131,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             bSpan[oc] = NumOps.Add(NumOps.Multiply(NumOps.Subtract(bSpan[oc], mSpan[oc]), scale), beSpan[oc]);
         }
 
-        // In-place span mutation bypasses the engine's persistent-tensor cache (packed /
-        // GPU-resident kernel + bias buffers). Invalidate it so a cached forward path
-        // re-reads the folded values instead of the stale pre-fold weights — same fix as
-        // the Dense fold below; mirrors SetWeights / SetParameters.
+        // Per-tensor invalidation of the GPU-resident persistent buffers keyed by
+        // these arrays. NO-OP on CpuEngine — the CPU-side identity-keyed caches
+        // (pre-packed GEMM panels, transposed conv kernels) are flushed by the
+        // InvalidateWeightCachesAfterSuccessfulWeightUpdate() call in
+        // FoldBatchNormForInference after all folds complete (see the Dense fold
+        // below for the full staleness story).
         Engine.InvalidatePersistentTensor(kernels);
         Engine.InvalidatePersistentTensor(biases);
         return true;
@@ -2163,14 +2184,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             bSpan[oc] = NumOps.Add(NumOps.Multiply(NumOps.Subtract(bSpan[oc], mSpan[oc]), scale), beSpan[oc]);
         }
 
-        // The in-place span mutations above bypass the engine's persistent-tensor cache
-        // (the packed / GPU-resident weight + bias buffers keyed by these arrays). Every
-        // other weight-mutation path — SetWeights, SetParameters — invalidates that cache;
-        // the fold must too. Otherwise a forward path that serves weights from the cache
-        // (native-BLAS pre-pack / GPU buffer) reuses the STALE pre-fold weights, so the
-        // BatchNorm fold silently has no effect and the optimized model's output diverges
-        // sharply from the reference (observed as a ~0.18 Dense→BN folded-output divergence
-        // on the Linux native-BLAS CI path; the managed path happened to re-read the arrays).
+        // Per-tensor invalidation of the GPU-resident persistent buffers keyed by
+        // these arrays. NOTE: this is a NO-OP on CpuEngine — the CPU-side
+        // identity-keyed caches (SgemmWithCachedB pre-packed panels, int8 packs,
+        // transposed conv kernels) are flushed by the single
+        // InvalidateWeightCachesAfterSuccessfulWeightUpdate() call in
+        // FoldBatchNormForInference after all folds complete. Relying on this call
+        // alone left the CPU pack cache stale (the ~0.17 Dense→BN divergence on
+        // AVX2-only CI hosts).
         Engine.InvalidatePersistentTensor(weights);
         Engine.InvalidatePersistentTensor(biases);
         return true;
@@ -5652,10 +5673,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             weightDecay: StreamingTrainingWeightDecay);
         _streamingOptimizerState.BeginStep();
 
-        // Topological-min streaming backward: each parameter's gradient is
-        // applied + released at its provably-earliest last-use point.
-        tape.ComputeGradientsStreaming(lossTensor, sources,
-            (param, grad) => _streamingOptimizerState.Apply(param, grad));
+        // Topological-min streaming backward (AiDotNet.Tensors#564) is not yet
+        // published. Fall back to the non-streaming ComputeGradients path:
+        // gradients are computed up-front (transient peak memory equivalent to
+        // the eager training path), then applied + released one parameter at
+        // a time so the 8-bit StreamingAdam state stays bounded across the
+        // optimizer step. End-to-end training results are bit-identical to the
+        // streaming path; the only loss is the peak-RSS savings during the
+        // backward sweep itself. Swap to ComputeGradientsStreaming once #564
+        // releases in a published Tensors NuGet.
+        var gradients = tape.ComputeGradients(lossTensor, sources);
+        foreach (var source in sources)
+        {
+            if (!gradients.TryGetValue(source, out var grad) || grad is null || grad.Length == 0)
+                continue;
+            _streamingOptimizerState.Apply(source, grad);
+        }
     }
 
     protected void TrainWithTape(Tensor<T> input, Tensor<T> expected,
@@ -5767,6 +5800,55 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // AdamW, SGD, etc.) all iterate `context.Parameters` directly
         // and never read `context.ParamBuffer`, so passing null is safe
         // for the model layer's optimizer path.
+        // Lazy-init warmup: materialise weight tensors for any layer whose
+        // shape isn't resolved yet, BEFORE we collect parameters or set up
+        // the ParameterBuffer. Without this, the subsequent
+        // `CollectParameters` call captures `Tensor<T>.Empty()` placeholder
+        // refs from layers built with single-arg ctors (FeedForwardLayer,
+        // DenseLayer, EmbeddingLayer, MultiHeadAttentionLayer, etc. when
+        // input dim is deferred to first forward). The tape's backward pass
+        // then writes gradients keyed by the post-Forward real-tensor refs;
+        // the filter loop that intersects `allGrads` against `trainableParams`
+        // finds zero matches; the optimizer step iterates an empty grad dict
+        // and the first Train() call becomes a complete no-op. Test scaffolds
+        // (LossStrictlyDecreasesOnMemorizationTask,
+        // Training_ShouldChangeParameters) then capture the placeholder-
+        // forward baseline as "step 1" and report flat-loss / no-param-change
+        // failures across every model with at least one lazy layer.
+        //
+        // Industry-standard PyTorch contract (nn.LazyLinear / nn.LazyConv*):
+        // the user runs a dummy forward to materialise lazy params BEFORE
+        // constructing the optimizer. AiDotNet attaches the optimizer at
+        // model construction time, so the framework does the warmup itself.
+        //
+        // EVAL mode (not training) so Dropout/BatchNorm don't consume the
+        // per-forward RNG counter or advance running statistics — same
+        // contract the fused path's pre-init forward already follows at
+        // `CompiledTapeTrainingStep.cs` lines 514-534. Caught exceptions are
+        // best-effort: a model whose forward fails in eval mode still falls
+        // through to the real training step below, which will surface the
+        // failure with the proper diagnostic.
+        // Gate on actual weight MATERIALIZATION, not just shape resolution:
+        // ResolveLazyLayerShapes()/ResolveShapesOnly (driven by a pre-train
+        // ParameterCount / GetParameters call) can flip IsShapeResolved to true
+        // WITHOUT allocating the weight tensors, leaving length-0 placeholders
+        // that CollectParameters would still capture. So also warm up whenever
+        // any trainable parameter is still an unallocated placeholder.
+        if (AnyLayerNeedsShapeResolution() || AnyLayerHasUnmaterializedParameters())
+        {
+            bool wasTraining = IsTrainingMode;
+            if (wasTraining) SetTrainingMode(false);
+            try { ForwardForTraining(input); }
+            catch
+            {
+                // Swallow: warmup is best-effort. If the model genuinely
+                // can't forward in eval mode, the real Train forward below
+                // will hit the same path under training mode and surface
+                // the failure with the actionable stack trace there.
+            }
+            finally { if (wasTraining) SetTrainingMode(true); }
+        }
+
         ParameterBuffer<T>? paramBuffer;
         // Fast-path: a previous training step on the SAME layer structure
         // already concluded "skip buffer" — re-applying that decision is
@@ -6637,6 +6719,74 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// at PerStep still gives per-step detail for those who want it.
     /// </summary>
     private bool _loggedFusedFallback;
+
+    /// <summary>
+    /// Returns <c>true</c> if any layer (including nested sub-layers) reports
+    /// <see cref="Layers.LayerBase{T}.IsShapeResolved"/> = <c>false</c>, i.e.,
+    /// hasn't yet seen a forward pass and is still carrying placeholder
+    /// <c>Tensor&lt;T&gt;.Empty()</c> weight refs. Used by
+    /// <see cref="TrainWithTape"/> to gate a one-shot warmup forward that
+    /// materialises lazy weights before <c>CollectParameters</c> captures
+    /// references the gradient tape will later key by. Short-circuits on the
+    /// first unresolved layer; on fully eager networks (most CNNs / fixed-
+    /// dim transformers constructed with all input sizes known) every layer
+    /// is resolved at construction time so this returns <c>false</c> and
+    /// the warmup is skipped — zero overhead for the common case.
+    /// </summary>
+    private bool AnyLayerNeedsShapeResolution()
+    {
+        // Walk top-level Layers; LayerBase exposes GetSubLayers() so we
+        // recurse to catch composite layers (TransformerEncoder,
+        // ResidualBlock, etc.) that wrap their own children.
+        return AnyLayerNeedsShapeResolutionRecursive(Layers);
+    }
+
+    private static bool AnyLayerNeedsShapeResolutionRecursive(IEnumerable<ILayer<T>> layers)
+    {
+        foreach (var layer in layers)
+        {
+            if (layer is Layers.LayerBase<T> baseLayer && !baseLayer.IsShapeResolved)
+                return true;
+            var subs = layer.GetSubLayers();
+            if (subs.Count > 0 && AnyLayerNeedsShapeResolutionRecursive(subs))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// True if any (possibly nested) layer still holds an unallocated
+    /// placeholder trainable parameter (a <c>Length == 0</c> tensor). Shape
+    /// resolution alone (<see cref="AnyLayerNeedsShapeResolution"/>) is not
+    /// sufficient to decide whether the lazy-init warmup is needed:
+    /// <c>ResolveShapesOnly</c> can flip <c>IsShapeResolved</c> to true without
+    /// allocating the weight tensors, so a forward is still required to
+    /// materialise them before <c>CollectParameters</c> runs. After a real
+    /// forward materialises the weights this returns false, so it does not
+    /// re-fire the warmup on subsequent training steps.
+    /// </summary>
+    private bool AnyLayerHasUnmaterializedParameters()
+    {
+        return AnyLayerHasUnmaterializedParametersRecursive(Layers);
+    }
+
+    private static bool AnyLayerHasUnmaterializedParametersRecursive(IEnumerable<ILayer<T>> layers)
+    {
+        foreach (var layer in layers)
+        {
+            if (layer is Layers.LayerBase<T> baseLayer)
+            {
+                foreach (var p in baseLayer.GetTrainableParameters())
+                {
+                    if (p is null || p.Length == 0) return true;
+                }
+            }
+            var subs = layer.GetSubLayers();
+            if (subs.Count > 0 && AnyLayerHasUnmaterializedParametersRecursive(subs))
+                return true;
+        }
+        return false;
+    }
 
     /// <summary>
     /// Attempts the fused-compiled training path — forward + backward + fused

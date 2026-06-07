@@ -22614,7 +22614,9 @@ public static class LayerHelper<T>
         int numMimDecoderLayers = 2,
         int vocabSize = 250000,
         bool includeCaptioningDecoder = true,
-        double dropoutRate = 0.0)
+        double dropoutRate = 0.0,
+        int patchSize = 16,
+        int inputChannels = 3)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
@@ -22622,6 +22624,19 @@ public static class LayerHelper<T>
         int textFfnDim = textEmbeddingDim * 4;
 
         // === Vision Encoder (same architecture as SigLIP) ===
+        // Per Tschannen et al. 2025 ("SigLIP 2") + Dosovitskiy et al. 2020 ("ViT"):
+        // the vision tower starts with a patch embedding (Conv2D projecting each
+        // patch-sized window of the input image to visionEmbeddingDim), NOT a raw
+        // LayerNorm on the image tensor. Without this projection the transformer
+        // blocks downstream receive an unembedded image tensor whose last-axis
+        // dim doesn't match the MHA weight's embed_dim, surfacing as
+        // "Input embedding dimension (NNN) does not match weight dimension (768)"
+        // on the first attention layer.
+        yield return new PatchEmbeddingLayer<T>(
+            patchSize: patchSize,
+            embeddingDim: visionEmbeddingDim,
+            expectedInputChannels: inputChannels,
+            activationFunction: null);
         yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)

@@ -586,9 +586,25 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
     {
+        // GPU-resident ISTA step: when the regularizer is L1 (the canonical
+        // proximal-gradient case), one proximal_l1_update kernel does
+        // tmp = param - lr*grad; param = sign(tmp)*max(|tmp| - strength, 0),
+        // matching the CPU "subtract gradient, then L1 soft-threshold prox" path
+        // exactly. Other regularizers (or non-GPU-resident tensors) fall back to CPU.
+        bool gpuL1 = typeof(T) == typeof(float)
+            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
+            && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine
+            && _regularization is AiDotNet.Regularization.L1Regularization<T, TInput, TOutput>;
+        float l1Strength = gpuL1 ? (float)_regularization.GetOptions().Strength : 0f;
+
         foreach (var param in context.Parameters)
         {
             if (!context.Gradients.TryGetValue(param, out var grad))
+                continue;
+
+            if (gpuL1 && param.Length == grad.Length
+                && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryProximalL1Step((Tensor<float>)(object)param, (Tensor<float>)(object)grad,
+                    (float)NumOps.ToDouble(CurrentLearningRate), l1Strength))
                 continue;
 
             // Gradient descent step: param -= lr * grad
