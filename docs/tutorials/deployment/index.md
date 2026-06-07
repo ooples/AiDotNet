@@ -361,6 +361,6 @@ app.MapGet("/metrics", (IMetricsCollector metrics) =>
 
 ## Next Steps
 
-- [ModelServing Sample](/samples/deployment/ModelServing/)
-- [Quantization Sample](/samples/deployment/Quantization/)
-- [AiDotNet.Serving API Reference](/api/AiDotNet.Serving/)
+- [ModelServing Sample](https://github.com/ooples/AiDotNet/tree/master/samples/deployment/ModelServing/)
+- [Quantization Sample](https://github.com/ooples/AiDotNet/tree/master/samples/deployment/Quantization/)
+- [AiDotNet.Serving API Reference](../../reference/index.md)

@@ -151,5 +151,5 @@ dotnet nuget list source
 
 ## Next Steps
 
-- [Quick Start Tutorial](./quickstart) - Build your first model
-- [GPU Setup Guide](./gpu-setup) - Detailed GPU configuration
+- [Quick Start Tutorial](./quickstart.md) - Build your first model
+- [GPU Engine Optimization Plan](../GPU_ENGINE_OPTIMIZATION_PLAN.md) - GPU configuration and tuning

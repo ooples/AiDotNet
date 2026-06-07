@@ -45,7 +45,7 @@ dotnet run --project samples/TensorBasics
 
 ## Interactive Playground
 
-Try examples directly in your browser with the [AiDotNet Playground](../../playground/).
+Try examples directly in your browser with the [AiDotNet Playground](https://www.aidotnet.dev/playground/).
 
 ---
 

@@ -63,4 +63,4 @@ var isAnomaly = anomalyDetector.Predict(newValue);
 
 - [Regression Tutorial](../regression/index.md) - Predict continuous values
 - [Classification Tutorial](../classification/index.md) - Predict categories
-- [API Reference](../../api/index.md) - Full documentation
+- [API Reference](../../reference/index.md) - Full documentation

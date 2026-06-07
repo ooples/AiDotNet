@@ -292,7 +292,7 @@ var results = detector.DetectBatch(images, batchSize: 32);
 
 ## Next Steps
 
-- [YOLOv8 Sample](/samples/computer-vision/ObjectDetection/YOLOv8Detection/)
-- [Image Classification Sample](/samples/computer-vision/ImageClassification/)
-- [OCR Sample](/samples/computer-vision/OCR/)
-- [Computer Vision API Reference](/api/AiDotNet.ComputerVision/)
+- [YOLOv8 Sample](https://github.com/ooples/AiDotNet/tree/master/samples/computer-vision/ObjectDetection/YOLOv8Detection/)
+- [Image Classification Sample](https://github.com/ooples/AiDotNet/tree/master/samples/computer-vision/ImageClassification/)
+- [OCR Sample](https://github.com/ooples/AiDotNet/tree/master/samples/computer-vision/OCR/)
+- [Computer Vision API Reference](../../reference/index.md)

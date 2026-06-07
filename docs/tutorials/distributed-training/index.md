@@ -320,6 +320,6 @@ export NCCL_IB_DISABLE=1
 
 ## Next Steps
 
-- [DDP Sample](/samples/advanced/DistributedTraining/DDP/)
-- [FSDP Sample](/samples/advanced/DistributedTraining/FSDP/)
-- [Distributed Training API Reference](/api/AiDotNet.DistributedTraining/)
+- [DDP Sample](https://github.com/ooples/AiDotNet/tree/master/samples/advanced/DistributedTraining/DDP/)
+- [FSDP Sample](https://github.com/ooples/AiDotNet/tree/master/samples/advanced/DistributedTraining/FSDP/)
+- [Distributed Training API Reference](../../reference/index.md)
