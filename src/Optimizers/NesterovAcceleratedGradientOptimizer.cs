@@ -321,7 +321,24 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
         // before enabling.
         foreach (var param in context.Parameters)
         {
-            if (!context.Gradients.TryGetValue(param, out var grad))
+            // True sparse scatter NAG: velocity + param at touched indices only.
+            // Note: this AiDotNet "NAG" is actually plain SGD-momentum in formula
+            // (see comment above re: trust-ratio kernel divergence). Same wiring
+            // as MomentumOptimizer.
+            if (SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            {
+                if (!_tapeVelocity.TryGetValue(param, out var velSp)) { velSp = new Tensor<T>(param._shape); _tapeVelocity[param] = velSp; }
+                if (SparseEmbeddingOptimizerHelpers.TryApplySgdSparse(
+                        param, velSp,
+                        NumOps.ToDouble(CurrentLearningRate),
+                        NumOps.ToDouble(CurrentMomentum),
+                        weightDecay: 0.0))
+                {
+                    continue;
+                }
+            }
+
+            if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
             if (!_tapeVelocity.TryGetValue(param, out var vel)) { vel = new Tensor<T>(param._shape); _tapeVelocity[param] = vel; }

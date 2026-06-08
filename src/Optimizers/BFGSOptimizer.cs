@@ -504,6 +504,13 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
     {
+        // Sparse-by-default: walk any embedding params whose gradient lives
+        // only in the sparse list (Tensors stopped seeding dense alongside) and
+        // materialise via ToDense into context.Gradients before GetFlatGradients
+        // / Hessian assembly reads from the dict. No-op for non-embedding params
+        // and for embedding params that already have a dense entry.
+        SparseEmbeddingOptimizerHelpers.MaterializeSparseIntoGradientsDict(context, Engine);
+
         var pv = context.GetFlatParameters();
         var gv = context.GetFlatGradients();
         var updated = UpdateParameters(pv, gv);
@@ -516,6 +523,12 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             T newLoss = context.Reevaluate();
             if (NumOps.GreaterThan(newLoss, origLoss))
             {
+                // Re-materialize sparse-embedding contributions before reading the
+                // retry's flat gradient: context.Reevaluate() recomputes the dense
+                // gradient dictionary but leaves SparseEmbeddingGradient<T> entries
+                // untouched, so GetFlatGradients on the retry would silently miss
+                // any embedding parameter whose only contribution is sparse.
+                SparseEmbeddingOptimizerHelpers.MaterializeSparseIntoGradientsDict(context, Engine);
                 var pv2 = context.GetFlatParameters();
                 var gv2 = context.GetFlatGradients();
                 var retry = UpdateParameters(pv2, gv2);

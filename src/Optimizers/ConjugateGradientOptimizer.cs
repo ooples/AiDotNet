@@ -382,6 +382,13 @@ public class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBasedOptim
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
     {
+        // Sparse-by-default: walk any embedding params whose gradient lives
+        // only in the sparse list (Tensors stopped seeding dense alongside) and
+        // materialise via ToDense into context.Gradients before GetFlatGradients
+        // / Hessian assembly reads from the dict. No-op for non-embedding params
+        // and for embedding params that already have a dense entry.
+        SparseEmbeddingOptimizerHelpers.MaterializeSparseIntoGradientsDict(context, Engine);
+
         var updated = UpdateParameters(context.GetFlatParameters(), context.GetFlatGradients());
         context.SetFlatParameters(updated);
     }

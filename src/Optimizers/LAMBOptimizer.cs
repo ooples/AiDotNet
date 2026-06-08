@@ -558,7 +558,35 @@ public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // Reconcile the kernel's trust-ratio with this formula before enabling.
         foreach (var param in context.Parameters)
         {
-            if (!context.Gradients.TryGetValue(param, out var grad))
+            // True sparse fast path: scatter LAMB step at touched embedding-table rows
+            // only. ‖p‖₂ via one full-param read; Adam math + ‖update‖₂² collected only
+            // at touched indices. The trust ratio is exact since untouched indices have
+            // zero update so ‖update_sparse‖₂ = ‖update_dense‖₂.
+            //
+            // ClipTrustRatio bail: the helper has no way to honor a MaxTrustRatio clamp,
+            // so callers configured with ClipTrustRatio=true would get an un-clamped
+            // sparse step that diverges from the dense branch's clipped step. The
+            // helper itself also bails when WeightDecay != 0 (untouched rows would
+            // stop decaying); checking it here too lets the dense branch handle the
+            // weight-decay case without an extra helper-internal failure path.
+            if (SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param)
+                && !_options.ClipTrustRatio
+                && _options.WeightDecay == 0.0)
+            {
+                if (!_tapeM.TryGetValue(param, out var mSp)) { mSp = new Tensor<T>(param._shape); _tapeM[param] = mSp; }
+                if (!_tapeV.TryGetValue(param, out var vSp)) { vSp = new Tensor<T>(param._shape); _tapeV[param] = vSp; }
+                if (SparseEmbeddingOptimizerHelpers.TryApplyLambSparse(
+                        param, mSp, vSp,
+                        NumOps.ToDouble(baseLr),
+                        _options.Beta1, _options.Beta2,
+                        NumOps.ToDouble(biasCorrection1), NumOps.ToDouble(biasCorrection2),
+                        _options.Epsilon, _options.WeightDecay))
+                {
+                    continue;
+                }
+            }
+
+            if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
             if (!_tapeM.TryGetValue(param, out var m)) { m = new Tensor<T>(param._shape); _tapeM[param] = m; }

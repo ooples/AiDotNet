@@ -89,6 +89,30 @@ public abstract class TtsModelBase<T> : NeuralNetworkBase<T>
     /// </summary>
     public override bool SupportsTraining => !IsOnnxMode;
 
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _vocoderBaseOptimizer;
+
+    /// <summary>
+    /// Vocoder generators (those implementing <see cref="AiDotNet.TextToSpeech.Interfaces.IVocoder{T}"/>)
+    /// train with AMSGrad rather than plain Adam. Their MRF / dilated-conv loss
+    /// surfaces are bumpy enough that plain Adam's effective step can grow as the
+    /// second-moment estimate shrinks near convergence, letting long training
+    /// drift back up off the minimum. AMSGrad (Reddi et al. 2018; equivalent to
+    /// <c>torch.optim.Adam(amsgrad=True)</c>) keeps a non-decreasing second-moment
+    /// denominator, which bounds that drift. It is a strict convergence-stability
+    /// improvement and does not affect inference. Non-vocoder TTS models (acoustic
+    /// / end-to-end) keep the default base optimizer.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+    {
+        if (this is AiDotNet.TextToSpeech.Interfaces.IVocoder<T>
+            || this is AiDotNet.TextToSpeech.Interfaces.IEndToEndTts<T>)
+        {
+            return _vocoderBaseOptimizer ??= new AiDotNet.Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                this, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { UseAMSGrad = true });
+        }
+        return base.GetOrCreateBaseOptimizer();
+    }
+
     /// <summary>
     /// Preprocesses raw text into a token tensor for model input.
     /// </summary>
