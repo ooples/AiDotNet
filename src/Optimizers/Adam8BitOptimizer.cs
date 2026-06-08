@@ -443,7 +443,51 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
 
         foreach (var param in context.Parameters)
         {
-            if (!context.Gradients.TryGetValue(param, out var grad))
+            // True sparse scatter Adam8Bit: dequant + Adam + requant only on the
+            // BLOCKS that contain touched indices. The block granularity is
+            // necessary because changing a block's per-block scale re-interprets
+            // every byte in that block — we can't touch one byte without
+            // re-encoding the rest at the new scale. Only the most-common
+            // configuration is eligible (compressBothMoments=true,
+            // percentile>=100, no stochastic rounding); other configs fall
+            // through to the dense ToDense path so quantization semantics stay
+            // bit-identical with the dense code.
+            if (!gpu8 && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            {
+                // Lazily allocate quantized state at the parameter's actual length —
+                // mirroring the same shape-mismatch handling as the dense path below
+                // so a lazy-init shape change is caught BEFORE the sparse helper runs
+                // (the helper assumes Length matches between param and state).
+                if (!_tapeStates.TryGetValue(param, out var stateSp) || stateSp.Length != param.Length)
+                {
+                    if (stateSp is not null && stateSp.GpuResident)
+                    {
+                        AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.FreeGpuBuffer(stateSp.GpuMQ);
+                        AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.FreeGpuBuffer(stateSp.GpuVQ);
+                        AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.FreeGpuBuffer(stateSp.GpuMScales);
+                        AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.FreeGpuBuffer(stateSp.GpuVScales);
+                    }
+                    stateSp = AllocateTapeState(param.Length);
+                    _tapeStates[param] = stateSp;
+                }
+                if (SparseEmbeddingOptimizerHelpers.TryApplyAdam8BitSparse(
+                        param,
+                        stateSp.MQuantized, stateSp.MScales,
+                        stateSp.VQuantized, stateSp.VScales,
+                        _options.BlockSize, stateSp.NumBlocks,
+                        NumOps.ToDouble(CurrentLearningRate),
+                        NumOps.ToDouble(beta1), NumOps.ToDouble(beta2),
+                        NumOps.ToDouble(biasCorrection1), NumOps.ToDouble(biasCorrection2),
+                        _options.Epsilon,
+                        _options.CompressBothMoments,
+                        _options.QuantizationPercentile,
+                        _options.UseStochasticRounding))
+                {
+                    continue;
+                }
+            }
+
+            if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
             // Look up or lazily allocate the per-parameter quantized state. The

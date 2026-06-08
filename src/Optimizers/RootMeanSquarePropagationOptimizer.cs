@@ -322,7 +322,21 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
 
         foreach (var param in context.Parameters)
         {
-            if (!context.Gradients.TryGetValue(param, out var grad))
+            // True sparse scatter: update squaredAvg + param at touched embedding-table
+            // rows only. Skip when GPU-resident (no GPU sparse path for RMSProp yet).
+            if (!gpuAdam && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            {
+                if (!_tapeSqGrad.TryGetValue(param, out var sqGradSp)) { sqGradSp = new Tensor<T>(param._shape); _tapeSqGrad[param] = sqGradSp; }
+                if (SparseEmbeddingOptimizerHelpers.TryApplyRmspropSparse(
+                        param, sqGradSp,
+                        NumOps.ToDouble(CurrentLearningRate),
+                        _options.Decay, _options.Epsilon, weightDecay: 0.0))
+                {
+                    continue;
+                }
+            }
+
+            if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
             if (!_tapeSqGrad.TryGetValue(param, out var sqGrad)) { sqGrad = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) sqGrad.AsWritableSpan().Clear(); _tapeSqGrad[param] = sqGrad; }

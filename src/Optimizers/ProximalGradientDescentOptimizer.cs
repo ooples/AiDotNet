@@ -599,7 +599,24 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
 
         foreach (var param in context.Parameters)
         {
-            if (!context.Gradients.TryGetValue(param, out var grad))
+            // True sparse scatter Proximal-L1: SGD step + L1 soft-threshold at touched
+            // indices. Only used when the regularizer is L1 (otherwise the proximal
+            // operator may need to inspect every element).
+            bool useSparseL1 = !gpuL1
+                && _regularization is AiDotNet.Regularization.L1Regularization<T, TInput, TOutput>
+                && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param);
+            if (useSparseL1)
+            {
+                if (SparseEmbeddingOptimizerHelpers.TryApplyProximalL1Sparse(
+                        param,
+                        NumOps.ToDouble(CurrentLearningRate),
+                        _regularization.GetOptions().Strength))
+                {
+                    continue;
+                }
+            }
+
+            if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
             if (gpuL1 && param.Length == grad.Length
