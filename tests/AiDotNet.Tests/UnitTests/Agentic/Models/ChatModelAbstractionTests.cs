@@ -89,17 +89,24 @@ namespace AiDotNetTests.UnitTests.Agentic.Models
         public async Task ImageContent_FromBytes_And_FromUri_SetExpectedState()
         {
             var bytes = new byte[] { 1, 2, 3 };
-            var fromBytes = ImageContent.FromBytes(bytes, "image/png");
+            var fromBytes = ImageContent.FromBytes(bytes, ImageMediaType.Png);
             Assert.True(fromBytes.HasData);
-            Assert.Equal("image/png", fromBytes.MediaType);
+            Assert.Equal(ImageMediaType.Png, fromBytes.MediaType);
+            Assert.Equal("image/png", fromBytes.MediaType!.Value.ToMimeType());
             Assert.Null(fromBytes.Uri);
 
-            var fromUri = ImageContent.FromUri("https://example.com/a.jpg", "image/jpeg");
+            var fromUri = ImageContent.FromUri("https://example.com/a.jpg", ImageMediaType.Jpeg);
             Assert.False(fromUri.HasData);
             Assert.Equal("https://example.com/a.jpg", fromUri.Uri);
-            Assert.Equal("image/jpeg", fromUri.MediaType);
+            Assert.Equal(ImageMediaType.Jpeg, fromUri.MediaType);
 
-            Assert.Equal("image/*", ImageContent.FromUri("https://example.com/a").MediaType);
+            // Unspecified format when referenced by URI: null lets the provider infer it.
+            Assert.Null(ImageContent.FromUri("https://example.com/a").MediaType);
+
+            // MIME round-trip / parsing (incl. the common image/jpg alias).
+            Assert.True(ImageMediaTypeExtensions.TryParseMimeType("image/jpg", out var parsed));
+            Assert.Equal(ImageMediaType.Jpeg, parsed);
+            Assert.False(ImageMediaTypeExtensions.TryParseMimeType("image/tiff", out _));
         }
 
         [Fact(Timeout = 60000)]

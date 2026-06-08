@@ -7,16 +7,18 @@ namespace AiDotNet.Agentic.Models;
 /// <para>
 /// Multimodal models accept images alongside text. An image can be embedded directly as bytes
 /// (which providers typically base64-encode on the wire) or referenced by a URL the provider fetches.
-/// Use the <see cref="FromBytes"/> and <see cref="FromUri"/> factories to construct instances.
+/// The format is a type-safe <see cref="ImageMediaType"/> rather than a raw MIME string. Use the
+/// <see cref="FromBytes"/> and <see cref="FromUri"/> factories to construct instances.
 /// </para>
 /// <para><b>For Beginners:</b> If you want the model to "look at" a picture, wrap it in one of these.
 /// You either hand over the actual image bytes (e.g., a PNG you loaded from disk) via
-/// <see cref="FromBytes"/>, or point at a web address via <see cref="FromUri"/>.
+/// <see cref="FromBytes"/>, or point at a web address via <see cref="FromUri"/>. The image type is
+/// chosen from the <see cref="ImageMediaType"/> enum, so you can't misspell it.
 /// </para>
 /// </remarks>
 public sealed class ImageContent : AiContent
 {
-    private ImageContent(byte[]? data, string? uri, string mediaType)
+    private ImageContent(byte[]? data, string? uri, ImageMediaType? mediaType)
     {
         Data = data;
         Uri = uri;
@@ -34,9 +36,9 @@ public sealed class ImageContent : AiContent
     public string? Uri { get; }
 
     /// <summary>
-    /// Gets the MIME media type of the image (for example, <c>image/png</c> or <c>image/jpeg</c>).
+    /// Gets the image format, or <c>null</c> when referenced by URI with an unspecified format.
     /// </summary>
-    public string MediaType { get; }
+    public ImageMediaType? MediaType { get; }
 
     /// <summary>
     /// Gets a value indicating whether the image is supplied inline as bytes (rather than by URI).
@@ -47,14 +49,12 @@ public sealed class ImageContent : AiContent
     /// Creates an image content part from raw bytes.
     /// </summary>
     /// <param name="data">The image bytes.</param>
-    /// <param name="mediaType">The MIME media type, e.g. <c>image/png</c>.</param>
+    /// <param name="mediaType">The image format.</param>
     /// <returns>A new <see cref="ImageContent"/> wrapping the supplied bytes.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when an argument is <c>null</c>.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="mediaType"/> is empty/whitespace.</exception>
-    public static ImageContent FromBytes(byte[] data, string mediaType)
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="data"/> is <c>null</c>.</exception>
+    public static ImageContent FromBytes(byte[] data, ImageMediaType mediaType)
     {
         Guard.NotNull(data);
-        Guard.NotNullOrWhiteSpace(mediaType);
         return new ImageContent(data, uri: null, mediaType);
     }
 
@@ -62,13 +62,13 @@ public sealed class ImageContent : AiContent
     /// Creates an image content part that references an image by URI.
     /// </summary>
     /// <param name="uri">The image URI the provider will fetch.</param>
-    /// <param name="mediaType">The MIME media type. Defaults to <c>image/*</c> when not specified.</param>
+    /// <param name="mediaType">The image format, when known; <c>null</c> lets the provider infer it.</param>
     /// <returns>A new <see cref="ImageContent"/> referencing the supplied URI.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="uri"/> is <c>null</c>.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="uri"/> is empty/whitespace.</exception>
-    public static ImageContent FromUri(string uri, string? mediaType = null)
+    public static ImageContent FromUri(string uri, ImageMediaType? mediaType = null)
     {
         Guard.NotNullOrWhiteSpace(uri);
-        return new ImageContent(data: null, uri, mediaType ?? "image/*");
+        return new ImageContent(data: null, uri, mediaType);
     }
 }
