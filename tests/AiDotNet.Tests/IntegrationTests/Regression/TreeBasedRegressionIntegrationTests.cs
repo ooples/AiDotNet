@@ -437,6 +437,7 @@ public class TreeBasedRegressionIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ConditionalInferenceTreeRegression_Train_SimpleData_FitsWithinBounds()
     {
+        await Task.Yield();
         // Arrange
         var options = new ConditionalInferenceTreeOptions
         {
@@ -482,6 +483,7 @@ public class TreeBasedRegressionIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ConditionalInferenceTreeRegression_Train_WithSignificanceTest_SelectsFeatures()
     {
+        await Task.Yield();
         // Arrange
         var options = new ConditionalInferenceTreeOptions
         {
@@ -510,6 +512,7 @@ public class TreeBasedRegressionIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ConditionalInferenceTreeRegression_GetModelMetadata_ReturnsCorrectInfo()
     {
+        await Task.Yield();
         // Arrange
         var options = new ConditionalInferenceTreeOptions
         {
