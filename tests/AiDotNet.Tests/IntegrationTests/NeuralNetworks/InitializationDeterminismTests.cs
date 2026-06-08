@@ -57,6 +57,41 @@ public class InitializationDeterminismTests
             Assert.Equal(first[i], second[i], 12);
     }
 
+    private static double[] BuildAndInitConv1DHe(int seed, int inputChannels, int outputChannels, int kernelSize)
+    {
+        // Conv1DLayer defaults to the He strategy, which is NON-LAZY — the exact
+        // case that bypassed the RandomSeed-derived path (InitializeLayerWeights
+        // early-returned for any non-lazy strategy, letting He sample from the
+        // process-shared ThreadSafeRandom). Use the lazy-input-channel constructor
+        // so initialization runs at first Forward, AFTER RandomSeed is assigned.
+        var layer = new Conv1DLayer<double>(outputChannels: outputChannels, kernelSize: kernelSize)
+        {
+            RandomSeed = seed,
+        };
+        layer.Forward(new Tensor<double>(new[] { 1, inputChannels, 8 }));
+        var p = layer.GetParameters();
+        var arr = new double[p.Length];
+        for (int i = 0; i < p.Length; i++) arr[i] = p[i];
+        return arr;
+    }
+
+    [Fact]
+    public void Conv1DLayer_HeStrategy_WithRandomSeed_InitIsDeterministic_DespiteSharedRngDrain()
+    {
+        double[] first = BuildAndInitConv1DHe(seed: 4242, inputChannels: 8, outputChannels: 16, kernelSize: 3);
+
+        // Advance the shared RNG to simulate prior in-process work. Before the fix
+        // this changed He's draws and the conv weights diverged; after it the
+        // seeded He path is independent of the shared RNG.
+        for (int i = 0; i < 5000; i++) RandomHelper.ThreadSafeRandom.Next();
+
+        double[] second = BuildAndInitConv1DHe(seed: 4242, inputChannels: 8, outputChannels: 16, kernelSize: 3);
+
+        Assert.Equal(first.Length, second.Length);
+        for (int i = 0; i < first.Length; i++)
+            Assert.Equal(first[i], second[i], 12);
+    }
+
     [Fact]
     public void NeuralNetwork_SeededArchitecture_InitIsDeterministic_DespiteSharedRngDrain()
     {

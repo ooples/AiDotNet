@@ -173,7 +173,7 @@ public class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        var c = input;
+        SetTrainingMode(false); var c = input;
         int hiddenDim = _options.HiddenDim;
         int lastDim = c.Shape[^1];
         if (lastDim != hiddenDim)

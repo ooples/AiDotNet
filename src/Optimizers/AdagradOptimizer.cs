@@ -364,7 +364,20 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
 
         foreach (var param in context.Parameters)
         {
-            if (!context.Gradients.TryGetValue(param, out var grad))
+            // True sparse scatter: accumulator + param at touched rows only.
+            if (!gpuAdam && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            {
+                if (!_tapeAccSqGrad.TryGetValue(param, out var accSqSp)) { accSqSp = new Tensor<T>(param._shape); _tapeAccSqGrad[param] = accSqSp; }
+                if (SparseEmbeddingOptimizerHelpers.TryApplyAdagradSparse(
+                        param, accSqSp,
+                        NumOps.ToDouble(CurrentLearningRate),
+                        _options.Epsilon, weightDecay: 0.0))
+                {
+                    continue;
+                }
+            }
+
+            if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
             if (!_tapeAccSqGrad.TryGetValue(param, out var accSq)) { accSq = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) accSq.AsWritableSpan().Clear(); _tapeAccSqGrad[param] = accSq; }

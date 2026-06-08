@@ -385,7 +385,19 @@ public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBa
 
         foreach (var param in context.Parameters)
         {
-            if (context.Gradients.TryGetValue(param, out var grad))
+            // True sparse scatter plain SGD.
+            if (!gpuAdam && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            {
+                if (SparseEmbeddingOptimizerHelpers.TryApplySgdSparse(
+                        param, velocity: null,
+                        NumOps.ToDouble(CurrentLearningRate),
+                        momentum: 0.0, weightDecay: 0.0))
+                {
+                    continue;
+                }
+            }
+
+            if (SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
             {
                 if (gpuAdam && param.Length == grad.Length
                     && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TrySgdStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad,

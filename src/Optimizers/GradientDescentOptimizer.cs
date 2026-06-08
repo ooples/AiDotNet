@@ -180,7 +180,19 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
 
         foreach (var param in context.Parameters)
         {
-            if (context.Gradients.TryGetValue(param, out var grad))
+            // True sparse scatter plain SGD: param -= lr·g at touched indices.
+            if (!gpuAdam && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            {
+                if (SparseEmbeddingOptimizerHelpers.TryApplySgdSparse(
+                        param, velocity: null,
+                        NumOps.ToDouble(CurrentLearningRate),
+                        momentum: 0.0, weightDecay: 0.0))
+                {
+                    continue;
+                }
+            }
+
+            if (SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
             {
                 if (gpuAdam && param.Length == grad.Length
                     && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TrySgdStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad,

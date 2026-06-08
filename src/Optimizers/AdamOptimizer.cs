@@ -630,6 +630,21 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         //   Never   : skip the scan (saves the O(total-grad-elements)
         //             per-Step cost; only safe when upstream NaN/Inf isn't
         //             expected, e.g. fully-deterministic regression tests).
+        // Materialize sparse-embedding contributions into context.Gradients BEFORE
+        // the anomaly + global-norm clipping pre-scans run. Both scanners walk
+        // context.Gradients only — without this, a parameter whose entire
+        // gradient lives in the sparse list would slip past the NaN/Inf check
+        // and would not contribute to the global norm, so clipping would
+        // undercount and bad sparse values could poison m/v on the scatter path.
+        // The sparse fast path below skips the dense entry when it scatters (the
+        // dense tensor is left in the dict but the sparse continue keeps m/v in
+        // sync with it), so this materialization is a one-time cost paid only
+        // when AnomalyGuard or clipping is active.
+        if (ShouldRunAnomalyGuard() || GradientOptions.MaxGradientNorm > 0.0)
+        {
+            SparseEmbeddingOptimizerHelpers.MaterializeSparseIntoGradientsDict(context, Engine);
+        }
+
         if (ShouldRunAnomalyGuard() && AnyGradientIsAnomalous(context))
         {
             return;
@@ -712,8 +727,29 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
         foreach (var param in context.Parameters)
         {
-            if (!context.Gradients.TryGetValue(param, out var grad))
+            // Cheap presence check — do NOT materialize sparse→dense yet. When only
+            // sparse embedding grads exist, eagerly resolving the "effective" gradient
+            // here would ToDense the whole [vocab, dim] table and then the sparse fast
+            // path below would scatter + `continue`, throwing the dense tensor away and
+            // defeating the entire sparse optimization. Defer materialization until
+            // after the sparse path declines (review #1526).
+            bool hasDenseGrad = context.Gradients.TryGetValue(param, out var denseGradLookup) && denseGradLookup is not null;
+            bool hasSparseGrad = SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param);
+            if (!hasDenseGrad && !hasSparseGrad)
                 continue;
+
+            // Sparse-aware fast path for embedding-table parameters: when the
+            // backward came from a SparseEmbeddingGradient (Tensors PR #553),
+            // only the gathered rows received non-zero gradients — typically
+            // ~16 rows out of a 250 002-vocab table. Touching m/v/θ across all
+            // 250 002 rows is the actual bottleneck (~192 M cells of memory
+            // traffic per step on LayoutXLM-class models). Scatter the Adam
+            // update onto only the indexed rows; if there are no sparse
+            // contributions, this is a one-look no-op and the dense path
+            // below runs unchanged. Lazy m/v init below the GPU branch still
+            // handles the first-step allocation — call this AFTER the m/v
+            // resolution so we know they share shape with param.
+            // (Re-checked again after m/v init; see the post-init call below.)
 
             // Lazily initialize per-parameter moment tensors. If the parameter
             // was first seen while a lazy-init layer (e.g.
@@ -751,6 +787,32 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                     _tapeVMax[param] = vMax;
                 }
             }
+
+            // Sparse-embedding scatter path FIRST — before materializing any dense
+            // gradient. Tensors#553 ships a sparse representation of the
+            // embedding-lookup backward alongside the dense seeding; on a hit we
+            // update m/v/θ only on the accessed rows (~16 out of 250 002 for a
+            // typical BERT/XLM-R batch) and skip the dense traversal that would read
+            // + write all the zero rows. It reads the sparse grads directly (not the
+            // dense `grad`), so running it here avoids the full-tensor ToDense for the
+            // sparse-only case. Plain Adam here (weightDecay=0); AdamW passes its own
+            // configured weight-decay rate. AMSGrad's running max v̂ is intentionally
+            // not maintained on the sparse path — vMax is dense and the scatter only
+            // touches the indexed rows, which would let the AMSGrad invariant drift.
+            // Take the dense path for AMSGrad to keep its monotonic-v̂ guarantee.
+            if (!useAmsgrad
+                && SparseEmbeddingOptimizerHelpers.TryApplyAdamSparse(
+                    param, m, v, lr, b1, b2, bc1, bc2, eps, weightDecay: 0.0))
+            {
+                continue;
+            }
+
+            // Sparse path declined (AMSGrad, non-rank-2 layout, or no sparse grads) —
+            // now resolve the dense gradient. For a sparse-only param this is where
+            // the ToDense finally happens, and only because a dense update genuinely
+            // needs it. Reuse the lookup we already did above.
+            if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
+                continue;
 
             // Reshape gradient to match parameter shape if element counts match
             // (can happen when Reshape adds/removes batch dimensions in forward pass)

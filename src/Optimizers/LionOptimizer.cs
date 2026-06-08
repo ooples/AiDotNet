@@ -377,7 +377,21 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
         foreach (var param in context.Parameters)
         {
-            if (!context.Gradients.TryGetValue(param, out var grad))
+            // True sparse scatter Lion: m + param at touched indices only.
+            if (!gpuAdam && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            {
+                if (!_tapeMomentum.TryGetValue(param, out var mSp)) { mSp = new Tensor<T>(param._shape); _tapeMomentum[param] = mSp; }
+                if (SparseEmbeddingOptimizerHelpers.TryApplyLionSparse(
+                        param, mSp,
+                        NumOps.ToDouble(CurrentLearningRate),
+                        NumOps.ToDouble(_currentBeta1), NumOps.ToDouble(_currentBeta2),
+                        _options.WeightDecay))
+                {
+                    continue;
+                }
+            }
+
+            if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
             if (!_tapeMomentum.TryGetValue(param, out var m)) { m = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) m.AsWritableSpan().Clear(); _tapeMomentum[param] = m; }
