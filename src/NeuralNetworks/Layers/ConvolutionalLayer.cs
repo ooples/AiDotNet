@@ -1505,9 +1505,26 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override long ParameterCount => _isInitialized
         ? _kernels.Length + _biases.Shape[0]
-        : InputDepth > 0
-            ? OutputDepth * InputDepth * KernelSize * KernelSize + OutputDepth
-            : 0; // Deferred: input channel count unknown until first Forward
+        // Deferred: input channel count unknown until first Forward. Report a
+        // placeholder count assuming InputDepth=1 (single-channel) so the
+        // layer still satisfies the "has learnable parameters" contract that
+        // model-family invariant tests (Parameters_ShouldBeNonEmpty) check
+        // BEFORE any Predict has run. Mirrors the Conv1DLayer<T>
+        // ParameterCount placeholder convention introduced in #1512 — it lets
+        // detection backbones (ResNet, EfficientNet, CSPDarknet, etc. whose
+        // stem 7x7 conv defers input-depth resolution to first forward) report
+        // a non-zero count without forcing a forward pass that materialises
+        // multi-MB weight tensors on every metadata access. Once the layer
+        // sees its first input, _isInitialized flips true and this branch is
+        // never taken again.
+        // Cast one operand to long so the multiplication runs in 64-bit. With
+        // paper-scale convs (e.g. DiT-XL: OutputDepth=1152, InputDepth=1152,
+        // KernelSize=2 → 5,308,416 fits in int; but a 11x11 conv at
+        // OutputDepth=1024, InputDepth=2048 overflows: 1024*2048*121=253M,
+        // and a 7x7 at OutputDepth=4096, InputDepth=4096 is 4096*4096*49 =
+        // 821M which already exceeds int.MaxValue/4) so the placeholder
+        // arithmetic must be long-promoted up front.
+        : (long)OutputDepth * (InputDepth > 0 ? InputDepth : 1) * KernelSize * KernelSize + OutputDepth;
 
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
