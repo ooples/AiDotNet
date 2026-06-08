@@ -391,6 +391,26 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     public int? RandomSeed { get; set; }
 
     /// <summary>
+    /// Assigns <see cref="RandomSeed"/> from the active
+    /// <see cref="LayerInitializationSeedScope"/> when no seed has been set yet.
+    /// Called from the root constructors so the seed is in place BEFORE a derived
+    /// constructor initializes its weights — closing the gap where weight init ran
+    /// against the process-shared <see cref="RandomHelper.ThreadSafeRandom"/>
+    /// (order-dependent) instead of the architecture's deterministic seed. A null
+    /// scope (no architecture seed requested) leaves <see cref="RandomSeed"/> null,
+    /// preserving the existing non-reproducible production default.
+    /// </summary>
+    private void AssignInitializationSeedFromScope()
+    {
+        if (RandomSeed is null)
+        {
+            int? scoped = LayerInitializationSeedScope.NextSeedOrNull();
+            if (scoped.HasValue)
+                RandomSeed = scoped;
+        }
+    }
+
+    /// <summary>
     /// Gets a value indicating whether this layer has been initialized.
     /// </summary>
     /// <remarks>
@@ -781,6 +801,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     protected LayerBase(int[] inputShape, int[] outputShape)
     {
         _instanceId = Interlocked.Increment(ref _instanceCounter);
+        AssignInitializationSeedFromScope();
         InputShape = inputShape;
         InputShapes = [inputShape];
         OutputShape = outputShape;
@@ -866,6 +887,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     protected LayerBase(int[][] inputShapes, int[] outputShape)
     {
         _instanceId = Interlocked.Increment(ref _instanceCounter);
+        AssignInitializationSeedFromScope();
         InputShapes = inputShapes;
         // For multi-input layers, use the first input shape as the primary input shape
         // This ensures GetInputShape() always returns a valid (non-empty) shape
@@ -4128,7 +4150,12 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// </summary>
     protected void InitializeLayerWeights(Tensor<T> tensor, int fanIn, int fanOut)
     {
-        if (InitializationStrategy is not null)
+        // Skip a LAZY strategy: its InitializeWeights is a generic, NON-seeded
+        // Xavier fill that ignores this layer's RandomSeed (the lazy strategy only
+        // advertises the deferral contract — it expects the layer's own seeded init
+        // to run). Falling through to the RandomSeed-derived path below keeps init
+        // reproducible / order-independent.
+        if (InitializationStrategy is not null && !InitializationStrategy.IsLazy)
         {
             InitializationStrategy.InitializeWeights(tensor, fanIn, fanOut);
             return;
