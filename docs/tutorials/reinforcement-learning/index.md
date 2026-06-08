@@ -349,6 +349,6 @@ agent.OnUpdate += (metrics) =>
 
 ## Next Steps
 
-- [CartPole Sample](/samples/reinforcement-learning/CartPole/)
-- [Deep Q-Learning Sample](/samples/reinforcement-learning/DeepQLearning/)
-- [RL API Reference](/api/AiDotNet.ReinforcementLearning/)
+- [CartPole Sample](https://github.com/ooples/AiDotNet/tree/master/samples/reinforcement-learning/CartPole/)
+- [Deep Q-Learning Sample](https://github.com/ooples/AiDotNet/tree/master/samples/reinforcement-learning/DeepQLearning/)
+- [RL API Reference](../../reference/index.md)
