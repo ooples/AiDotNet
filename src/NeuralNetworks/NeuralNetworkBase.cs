@@ -5732,12 +5732,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Apply gradient clipping in parity with the eager TrainWithTape path —
         // omitting this on the streaming path created different optimization
         // semantics depending on which path the autotuner picked, and would
-        // destabilize large models exactly when streaming engaged. Clip in the
-        // deterministic source-order so the per-process total-norm sum is stable.
+        // destabilize large models exactly when streaming engaged. Pass
+        // trainableParams (NOT sources) as the clip set so the per-process
+        // total-norm sum matches the eager path exactly: the eager call site
+        // also clips layer-owned params only, so feeding extras (CLS, positional
+        // embeddings, etc.) into the global norm here would otherwise rescale
+        // layer gradients differently when streaming engages, producing diverging
+        // optimization trajectories on the same architecture.
         double maxGradNorm = MaxGradNormValue;
         if (maxGradNorm > 0.0)
         {
-            ApplyGradientClipping(gradients, maxGradNorm, sources);
+            ApplyGradientClipping(gradients, maxGradNorm, trainableParams);
         }
 
         foreach (var source in sources)
