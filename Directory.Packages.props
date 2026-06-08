@@ -117,10 +117,15 @@
          kernels are exercised only under AIDOTNET_GPU_ADAM=1 on a real GPU (off in CI).
          Do NOT pin an unpublished version (0.91.14/0.91.16/0.91.36 broke restore with
          NU1102); re-bump once a newer Tensors is actually released. The AiDotNet.Native
-         packages stay at 0.91.2 (no native change needed). -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.91.12" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.91.12" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.91.12" />
+         packages stay at 0.91.2 (no native change needed).
+
+         Bumped 0.91.12 -> 0.92.0: ships the FP16 optimizer-agnostic
+         MixedPrecisionCompiledPlan.ComputeGradients (Tensors #574, consumed by the
+         all-fused-optimizer FP16 path here) and the memory-bounded gradient-streaming
+         core (Tensors #564). AiDotNet.Native packages coreleased in lockstep at 0.92.0. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.92.0" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.92.0" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.92.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.92.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
