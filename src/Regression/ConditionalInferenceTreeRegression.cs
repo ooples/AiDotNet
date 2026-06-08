@@ -364,26 +364,40 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
 
         var bestSplit = (Threshold: default(T), PValue: NumOps.MaxValue);
 
+        // Reused across thresholds: a single pass partitions the targets by the threshold, instead
+        // of the previous per-threshold LINQ (Select/Where/ToList for the left indices, then
+        // Range().Except() for the right) which allocated two index lists and a hash set on top of
+        // the two target vectors for every candidate threshold of every feature at every node.
+        // Partition order (ascending sample index) is identical, so the p-values are unchanged.
+        var leftValues = new List<T>(featureValues.Length);
+        var rightValues = new List<T>(featureValues.Length);
+
         for (int i = 0; i < uniqueValues.Count - 1; i++)
         {
             var threshold = NumOps.Divide(NumOps.Add(uniqueValues[i], uniqueValues[i + 1]), NumOps.FromDouble(2));
-            var leftIndices = featureValues.Select((v, idx) => (Value: v, Index: idx))
-                .Where(pair => NumOps.LessThanOrEquals(pair.Value, threshold))
-                .Select(pair => pair.Index)
-                .ToList();
-            var rightIndices = Enumerable.Range(0, y.Length).Except(leftIndices).ToList();
+
+            leftValues.Clear();
+            rightValues.Clear();
+            for (int j = 0; j < featureValues.Length; j++)
+            {
+                if (NumOps.LessThanOrEquals(featureValues[j], threshold))
+                {
+                    leftValues.Add(y[j]);
+                }
+                else
+                {
+                    rightValues.Add(y[j]);
+                }
+            }
 
             // Enforce MinSamplesLeaf: prevent degenerate single-sample splits
             // that exhaust tree depth on the strongest feature (Hothorn 2006 §3.2)
-            if (leftIndices.Count < _options.MinSamplesLeaf || rightIndices.Count < _options.MinSamplesLeaf)
+            if (leftValues.Count < _options.MinSamplesLeaf || rightValues.Count < _options.MinSamplesLeaf)
             {
                 continue;
             }
 
-            var leftY = y.GetElements(leftIndices);
-            var rightY = y.GetElements(rightIndices);
-
-            var pValue = StatisticsHelper<T>.CalculatePValue(leftY, rightY, _options.StatisticalTest);
+            var pValue = StatisticsHelper<T>.CalculatePValue(new Vector<T>(leftValues), new Vector<T>(rightValues), _options.StatisticalTest);
 
             if (NumOps.LessThan(pValue, bestSplit.PValue))
             {
