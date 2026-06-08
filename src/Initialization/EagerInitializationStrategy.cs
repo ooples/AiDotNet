@@ -31,6 +31,10 @@ public class EagerInitializationStrategy<T> : InitializationStrategyBase<T>
     public EagerInitializationStrategy(Random? rng) : base(rng) { }
 
     /// <inheritdoc />
+    public override IInitializationStrategy<T> WithSeededRandom(Random rng)
+        => new EagerInitializationStrategy<T>(rng);
+
+    /// <inheritdoc />
     public override bool IsLazy => false;
 
     /// <inheritdoc />
