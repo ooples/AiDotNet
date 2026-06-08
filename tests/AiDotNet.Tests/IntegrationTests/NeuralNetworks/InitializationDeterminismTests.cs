@@ -60,7 +60,7 @@ public class InitializationDeterminismTests
     [Fact]
     public void NeuralNetwork_SeededArchitecture_InitIsDeterministic_DespiteSharedRngDrain()
     {
-        static double InitParamSum()
+        static double[] InitParams()
         {
             var arch = new NeuralNetworkArchitecture<double>(
                 inputType: InputType.OneDimensional,
@@ -73,16 +73,22 @@ public class InitializationDeterminismTests
             };
             using var net = new FeedForwardNeuralNetwork<double>(arch);
             var p = net.GetParameters();
-            double s = 0; for (int i = 0; i < p.Length; i++) s += p[i];
-            return s;
+            var arr = new double[p.Length];
+            for (int i = 0; i < p.Length; i++) arr[i] = p[i];
+            return arr;
         }
 
-        double a = InitParamSum();
+        double[] a = InitParams();
         for (int i = 0; i < 5000; i++) RandomHelper.ThreadSafeRandom.Next();
-        double b = InitParamSum();
+        double[] b = InitParams();
 
         // Same architecture seed → identical initial weights regardless of how the
-        // shared RNG was advanced between constructions.
-        Assert.Equal(a, b, 9);
+        // shared RNG was advanced between constructions. Compare the FULL parameter
+        // vectors, not an aggregate sum: a sum can collide across different weight
+        // vectors (e.g. a permutation or compensating sign flips), which would let a
+        // real determinism regression slip through.
+        Assert.Equal(a.Length, b.Length);
+        for (int i = 0; i < a.Length; i++)
+            Assert.Equal(a[i], b[i], 12);
     }
 }
