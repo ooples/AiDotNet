@@ -28,15 +28,35 @@ on:
     - cron: '0 8 * * 1'
 
 concurrency:
-  # For PR events: group by PR number so a rapid synchronize / reopen cancels
-  # the previous run for the same PR. For push events (master / main): group
-  # by ref AND commit SHA so back-to-back merges don't cancel each other —
-  # the prior pattern (`build-${{ github.ref }}` + cancel-in-progress: true)
-  # killed every push run on master when two commits landed within seconds,
-  # which is why no PR ever saw a green Build & SonarCloud signal on PR #1318
-  # despite the workflow being marked active.
-  group: build-${{ github.event.pull_request.number || format('{0}-{1}', github.ref, github.sha) }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # For PR events: group by PR number, cancel-in-progress=true so a rapid
+  # synchronize / reopen cancels the previous run for the same PR.
+  #
+  # For push events (master / main): group by ref ONLY (no SHA suffix) AND
+  # cancel-in-progress=true so a newer master commit supersedes the prior
+  # in-flight run. Rationale:
+  #
+  #  - A release is typically a sequence of merges to master; only the latest
+  #    tip needs a green signal. Letting the prior master run finish before
+  #    starting the next one just wastes 45min of CI compute on a SHA nobody
+  #    is going to be on.
+  #
+  #  - With a 49-shard test matrix and the GitHub free-tier 20-concurrent-job
+  #    cap, the prior per-SHA grouping (commit 1906d05f4 — `format('{0}-{1}',
+  #    github.ref, github.sha)`) stacked every dependabot bump's full matrix
+  #    in the FIFO ahead of PR runs and starved them: 2026-06-08 we observed
+  #    11 queued master runs holding ~700 matrix jobs ahead of 4 PR runs that
+  #    couldn't dispatch a single matrix job for 3+ hours.
+  #
+  # The motivation given for that per-SHA revert (`PR #1318 not seeing a
+  # green signal under the prior cancel-in-progress=true pattern`) is most
+  # plausibly explained by PR #1318 checking an INTERMEDIATE master SHA's
+  # status — those signals do get lost under cancel-in-progress=true. But
+  # the LATEST master tip's signal is always preserved (the freshly-triggered
+  # run for the new commit completes and posts), which is what every
+  # downstream check (branch-protection, PR mergeability, release tagging)
+  # actually consumes. The intermediate-SHA loss is acceptable.
+  group: build-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
