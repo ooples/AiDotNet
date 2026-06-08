@@ -29,13 +29,31 @@ on:
 
 concurrency:
   # For PR events: group by PR number so a rapid synchronize / reopen cancels
-  # the previous run for the same PR. For push events (master / main): group
-  # by ref AND commit SHA so back-to-back merges don't cancel each other —
-  # the prior pattern (`build-${{ github.ref }}` + cancel-in-progress: true)
-  # killed every push run on master when two commits landed within seconds,
-  # which is why no PR ever saw a green Build & SonarCloud signal on PR #1318
-  # despite the workflow being marked active.
-  group: build-${{ github.event.pull_request.number || format('{0}-{1}', github.ref, github.sha) }}
+  # the previous run for the same PR.
+  #
+  # For push events (master / main): SHARE a single per-ref group with
+  # cancel-in-progress=false. With a 49-shard test matrix and ~20-job free-tier
+  # cap, every dependabot/master commit that spawned its own per-SHA group
+  # (the prior pattern) stacked in the FIFO ahead of PR runs and starved them
+  # — we observed 11 queued master Build & SonarCloud runs blocking 4 PR runs
+  # for hours on 2026-06-08.
+  #
+  # GitHub's concurrency semantics: with cancel-in-progress=false and one
+  # shared group key, a NEW run waits in the "pending" slot while the old
+  # one keeps running, and only the most recently queued pending run is
+  # kept (older pending runs cancel). So a dependabot flood of N back-to-back
+  # master commits validates the FIRST one in full + only the LATEST queued
+  # one, instead of stacking N full 49-shard fans-out. The intermediate
+  # commits' green signal can be obtained on demand by clicking "Re-run all
+  # jobs" on their workflow run.
+  #
+  # This intentionally REVERSES the earlier per-SHA grouping (commit 1906d05f4)
+  # whose stated motivation was PR #1318 not seeing a green signal under the
+  # OLD pattern (`build-${{ github.ref }}` + cancel-in-progress: TRUE — which
+  # cancels in-progress master runs mid-flight, dropping their signal). Setting
+  # cancel-in-progress to FALSE here gives back-pressure WITHOUT mid-flight
+  # cancels: the running master commit always finishes and posts its signal.
+  group: build-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
