@@ -390,7 +390,24 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
 
         foreach (var param in context.Parameters)
         {
-            if (!context.Gradients.TryGetValue(param, out var grad))
+            // True sparse scatter NAdam: m + v + param at touched indices only.
+            if (!gpuAdam && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            {
+                if (!_tapeM.TryGetValue(param, out var mSp)) { mSp = new Tensor<T>(param._shape); _tapeM[param] = mSp; }
+                if (!_tapeV2.TryGetValue(param, out var vSp)) { vSp = new Tensor<T>(param._shape); _tapeV2[param] = vSp; }
+                double bc1 = 1.0 - Math.Pow(_options.Beta1, _tapeStep);
+                double bc2 = 1.0 - Math.Pow(_options.Beta2, _tapeStep);
+                if (SparseEmbeddingOptimizerHelpers.TryApplyNadamSparse(
+                        param, mSp, vSp,
+                        NumOps.ToDouble(CurrentLearningRate),
+                        _options.Beta1, _options.Beta2, bc1, bc2,
+                        _options.Epsilon, weightDecay: 0.0))
+                {
+                    continue;
+                }
+            }
+
+            if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
             if (!_tapeM.TryGetValue(param, out var m)) { m = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) m.AsWritableSpan().Clear(); _tapeM[param] = m; }

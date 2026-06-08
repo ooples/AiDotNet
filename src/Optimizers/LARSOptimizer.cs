@@ -459,7 +459,22 @@ public class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // kernel with this formula before enabling. CPU path only for now.
         foreach (var param in context.Parameters)
         {
-            if (!context.Gradients.TryGetValue(param, out var grad))
+            // True sparse fast path: ‖p‖₂ via full-param read; ‖g‖₂² over touched values
+            // (= dense ‖g‖₂² since untouched g = 0); scatter velocity + param updates.
+            if (SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            {
+                if (!_tapeVelocity.TryGetValue(param, out var velSp)) { velSp = new Tensor<T>(param._shape); _tapeVelocity[param] = velSp; }
+                if (SparseEmbeddingOptimizerHelpers.TryApplyLarsSparse(
+                        param, velSp,
+                        NumOps.ToDouble(baseLr),
+                        _options.Momentum, _options.WeightDecay, _options.TrustCoefficient,
+                        _options.Epsilon))
+                {
+                    continue;
+                }
+            }
+
+            if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
             if (!_tapeVelocity.TryGetValue(param, out var vel)) { vel = new Tensor<T>(param._shape); _tapeVelocity[param] = vel; }

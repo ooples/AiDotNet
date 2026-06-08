@@ -324,7 +324,21 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
 
         foreach (var param in context.Parameters)
         {
-            if (!context.Gradients.TryGetValue(param, out var grad))
+            // True sparse scatter SGD-momentum: velocity + param at touched indices.
+            if (!gpuAdam && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            {
+                if (!_tapeVelocity.TryGetValue(param, out var velSp)) { velSp = new Tensor<T>(param._shape); _tapeVelocity[param] = velSp; }
+                if (SparseEmbeddingOptimizerHelpers.TryApplySgdSparse(
+                        param, velSp,
+                        NumOps.ToDouble(CurrentLearningRate),
+                        NumOps.ToDouble(CurrentMomentum),
+                        weightDecay: 0.0))
+                {
+                    continue;
+                }
+            }
+
+            if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
             if (!_tapeVelocity.TryGetValue(param, out var vel)) { vel = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) vel.AsWritableSpan().Clear(); _tapeVelocity[param] = vel; }
