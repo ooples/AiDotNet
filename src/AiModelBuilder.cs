@@ -1,6 +1,5 @@
 
 
-global using AiDotNet.Agents;
 global using AiDotNet.Configuration;
 global using AiDotNet.Deployment.Configuration;
 global using AiDotNet.Diagnostics;
@@ -11,7 +10,6 @@ global using AiDotNet.FitDetectors;
 global using AiDotNet.FitnessCalculators;
 global using AiDotNet.Helpers;
 global using AiDotNet.KnowledgeDistillation;
-global using AiDotNet.LanguageModels;
 global using AiDotNet.LinearAlgebra;
 global using AiDotNet.LossFunctions;
 global using AiDotNet.MetaLearning;
@@ -33,7 +31,6 @@ global using AiDotNet.Tensors.Helpers;
 global using AiDotNet.Tokenization.Configuration;
 global using AiDotNet.Tokenization.HuggingFace;
 global using AiDotNet.Tokenization.Interfaces;
-global using AiDotNet.Tools;
 global using AiDotNet.UncertaintyQuantification.Layers;
 using AiDotNet.Augmentation;
 using AiDotNet.AutoML.NAS;
