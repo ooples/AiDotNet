@@ -1,9 +1,15 @@
+using System.Collections.Generic;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Engines.Compilation;
 using AiDotNet.Tensors.Engines.Optimization;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+// MixedPrecisionConfig exists in both AiDotNet.MixedPrecision and the Tensors
+// Autodiff namespace (the latter is the GradScaler config); alias to the
+// Autodiff one to disambiguate.
+using AutodiffMixedPrecisionConfig = AiDotNet.Tensors.Engines.Autodiff.MixedPrecisionConfig;
 
 namespace AiDotNet.Training;
 
@@ -220,7 +226,7 @@ public static class CompiledTapeTrainingStep<T>
             if (InvalidateIfLayerSetChanged(layers))
             {
                 // Caches cleared; cache field rebound below.
-                _mpPlan = null; _mpAdamPlan = null; // also drop the mixed-precision plans (#558)
+                _mpPlan = null; _mpAdamPlan = null; _mpGenericPlan = null; // also drop the mixed-precision plans (#558)
             }
             var cache = _cache ??= new CompiledModelCache<T>();
 
@@ -363,7 +369,7 @@ public static class CompiledTapeTrainingStep<T>
         // and throw, masking what is really a model-structure change.
         _persistentInput = null;
         _persistentTarget = null;
-        _mpAdamPlan = null; // FP16 mixed-precision fused-Adam plan (#558)
+        _mpAdamPlan = null; _mpGenericPlan = null; // FP16 mixed-precision plans (#558)
         // Reset the fused-engagement counter — from this point on, any
         // assertion about "fused ran at least N times" should reflect the
         // new lifecycle.
@@ -423,7 +429,8 @@ public static class CompiledTapeTrainingStep<T>
         float weightDecay,
         out T lossValue,
         double maxGradNorm = 0.0,
-        AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule = null)
+        AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? eagerOptimizer = null)
     {
         lossValue = MathHelper.GetNumericOperations<T>().Zero;
         // AiDotNet#1395: clear the previous-call's exception buffer so the
@@ -617,6 +624,53 @@ public static class CompiledTapeTrainingStep<T>
                 return true;
             }
 
+            // FP16 activation storage for EVERY OTHER fused optimizer (Lion, RMSprop, LAMB, Adagrad,
+            // AdaMax, AdaDelta, Nadam): the Adam/SGD fast paths above apply their update inline in the
+            // plan; here we run the optimizer-agnostic MixedPrecisionCompiledPlan.ComputeGradients
+            // (matmul activations stored as FP16, grads bridged FP16<->FP32) and hand the unscaled FP32
+            // grads to the optimizer INSTANCE so it applies its own master update (and maintains its own
+            // state + gradient clipping) via Step — extending the memory win to all optimizers without
+            // duplicating optimizer math. Requires the eager optimizer (threaded in from
+            // NeuralNetworkBase). Skipped on FP16 overflow (the scaler backs off). Default off => the
+            // single-type fused plan below is byte-identical.
+            if (typeof(T) == typeof(float)
+                && eagerOptimizer is not null
+                && Environment.GetEnvironmentVariable("AIDOTNET_FP16_ACTIVATIONS") == "1")
+            {
+                if (_mpGenericPlan is null || _mpGenericKey is null || !ShapesEqual(_mpGenericKey, compositeKey))
+                {
+                    var fwdF = forward; var lossF = computeLoss;
+                    var pin = _persistentInput!; var ptg = _persistentTarget!;
+                    _mpGenericPlan = MixedPrecisionCompiledPlan.Trace(
+                        () => (Tensor<float>)(object)lossF(fwdF((Tensor<T>)(object)pin), (Tensor<T>)(object)ptg));
+                    _mpGenericKey = (int[])compositeKey.Clone();
+                }
+                _mpScaler ??= new GradScaler(new AutodiffMixedPrecisionConfig { LossScale = 1024f });
+                var gr = _mpGenericPlan.ComputeGradients(
+                    (IReadOnlyList<Tensor<float>>)(object)parameters, _mpScaler);
+                lossValue = (T)(object)gr.Loss;
+                // Skip the optimizer step on FP16 overflow — corrupt grads must never touch the master
+                // weights (the scaler has already backed off and the step retries at a lower scale).
+                if (!gr.FoundInfNan)
+                {
+                    var gradMap = new Dictionary<Tensor<T>, Tensor<T>>(
+                        parameters.Length, ReferenceEqualityComparer<Tensor<T>>.Instance);
+                    for (int i = 0; i < parameters.Length; i++)
+                    {
+                        var g = gr.Gradients[i];
+                        if (g is not null) gradMap[parameters[i]] = (Tensor<T>)(object)g;
+                    }
+                    var ctx = new TapeStepContext<T>(
+                        new List<Tensor<T>>(parameters), gradMap, lossValue,
+                        input, target,
+                        (inp, tgt) => forward(inp), (pred, tgt) => computeLoss(pred, tgt),
+                        parameterBuffer: null);
+                    eagerOptimizer.Step(ctx);
+                }
+                _fusedStepCount++;
+                return true;
+            }
+
             var plan = cache.GetOrCompileTraining(
                 compositeKey,
                 () =>
@@ -789,6 +843,11 @@ public static class CompiledTapeTrainingStep<T>
     private static MixedPrecisionCompiledPlan? _mpAdamPlan;
     private static int[]? _mpAdamKey;
     private static AiDotNet.Tensors.Engines.Autodiff.GradScaler? _mpScaler;
+    // Generic mixed-precision plan: ComputeGradients returns FP32 grads, the eager optimizer INSTANCE
+    // applies its own master update — covers every fused optimizer other than the inline Adam/SGD paths
+    // (Lion, RMSprop, LAMB, Adagrad, AdaMax, AdaDelta, Nadam) without duplicating optimizer math.
+    private static MixedPrecisionCompiledPlan? _mpGenericPlan;
+    private static int[]? _mpGenericKey;
 
     /// <summary>
     /// One mixed-precision (FP16 activation storage) compiled training step. Compiles once per
