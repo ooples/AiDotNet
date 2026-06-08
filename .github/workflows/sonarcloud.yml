@@ -28,33 +28,35 @@ on:
     - cron: '0 8 * * 1'
 
 concurrency:
-  # For PR events: group by PR number so a rapid synchronize / reopen cancels
-  # the previous run for the same PR.
+  # For PR events: group by PR number, cancel-in-progress=true so a rapid
+  # synchronize / reopen cancels the previous run for the same PR.
   #
-  # For push events (master / main): SHARE a single per-ref group with
-  # cancel-in-progress=false. With a 49-shard test matrix and ~20-job free-tier
-  # cap, every dependabot/master commit that spawned its own per-SHA group
-  # (the prior pattern) stacked in the FIFO ahead of PR runs and starved them
-  # — we observed 11 queued master Build & SonarCloud runs blocking 4 PR runs
-  # for hours on 2026-06-08.
+  # For push events (master / main): group by ref ONLY (no SHA suffix) AND
+  # cancel-in-progress=true so a newer master commit supersedes the prior
+  # in-flight run. Rationale:
   #
-  # GitHub's concurrency semantics: with cancel-in-progress=false and one
-  # shared group key, a NEW run waits in the "pending" slot while the old
-  # one keeps running, and only the most recently queued pending run is
-  # kept (older pending runs cancel). So a dependabot flood of N back-to-back
-  # master commits validates the FIRST one in full + only the LATEST queued
-  # one, instead of stacking N full 49-shard fans-out. The intermediate
-  # commits' green signal can be obtained on demand by clicking "Re-run all
-  # jobs" on their workflow run.
+  #  - A release is typically a sequence of merges to master; only the latest
+  #    tip needs a green signal. Letting the prior master run finish before
+  #    starting the next one just wastes 45min of CI compute on a SHA nobody
+  #    is going to be on.
   #
-  # This intentionally REVERSES the earlier per-SHA grouping (commit 1906d05f4)
-  # whose stated motivation was PR #1318 not seeing a green signal under the
-  # OLD pattern (`build-${{ github.ref }}` + cancel-in-progress: TRUE — which
-  # cancels in-progress master runs mid-flight, dropping their signal). Setting
-  # cancel-in-progress to FALSE here gives back-pressure WITHOUT mid-flight
-  # cancels: the running master commit always finishes and posts its signal.
+  #  - With a 49-shard test matrix and the GitHub free-tier 20-concurrent-job
+  #    cap, the prior per-SHA grouping (commit 1906d05f4 — `format('{0}-{1}',
+  #    github.ref, github.sha)`) stacked every dependabot bump's full matrix
+  #    in the FIFO ahead of PR runs and starved them: 2026-06-08 we observed
+  #    11 queued master runs holding ~700 matrix jobs ahead of 4 PR runs that
+  #    couldn't dispatch a single matrix job for 3+ hours.
+  #
+  # The motivation given for that per-SHA revert (`PR #1318 not seeing a
+  # green signal under the prior cancel-in-progress=true pattern`) is most
+  # plausibly explained by PR #1318 checking an INTERMEDIATE master SHA's
+  # status — those signals do get lost under cancel-in-progress=true. But
+  # the LATEST master tip's signal is always preserved (the freshly-triggered
+  # run for the new commit completes and posts), which is what every
+  # downstream check (branch-protection, PR mergeability, release tagging)
+  # actually consumes. The intermediate-SHA loss is acceptable.
   group: build-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
