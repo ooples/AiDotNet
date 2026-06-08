@@ -23,7 +23,6 @@ global using AiDotNet.Optimizers;
 global using AiDotNet.AnomalyDetection;
 global using AiDotNet.ProgramSynthesis.Interfaces;
 global using AiDotNet.ProgramSynthesis.Serving;
-global using AiDotNet.PromptEngineering.Chains;
 global using AiDotNet.PromptEngineering.FewShot;
 global using AiDotNet.PromptEngineering.Optimization;
 global using AiDotNet.PromptEngineering.Templates;
