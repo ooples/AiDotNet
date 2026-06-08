@@ -346,17 +346,18 @@ public class CopulaGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // CopulaGAN is trained adversarially through Fit()/FitAsync (the copula
+        // CopulaGAN is trained adversarially through Fit() / FitAsync (the copula
         // transform is fit statistically and the GAN is trained with the
         // alternating critic/generator loop). The NeuralNetworkBase supervised
         // Train(input, expected) contract does not map onto a GAN's minimax
-        // objective. Record the reconstruction loss for monitoring but do not
-        // attempt a supervised optimizer step here — the previous
-        // implementation called _optimizer.UpdateParameters(Layers) with no
-        // backward pass, which threw "Backward pass must be called before
-        // updating parameters".
-        Tensor<T> prediction = Predict(input);
-        LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
+        // objective — silently running a forward + loss but skipping every
+        // parameter update would report a misleading "training" loss while
+        // making zero learning progress, which is worse than failing fast.
+        throw new NotSupportedException(
+            "CopulaGAN is trained adversarially; the supervised Train(input, expected) " +
+            "contract does not map onto its minimax objective. Use Fit(IEnumerable<Tensor<T>>) " +
+            "or FitAsync to drive the alternating discriminator/generator loop, which fits " +
+            "the copula transform and runs the WGAN critic + generator updates.");
     }
 
     /// <inheritdoc />

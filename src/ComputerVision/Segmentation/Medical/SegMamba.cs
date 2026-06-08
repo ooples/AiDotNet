@@ -561,6 +561,17 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentVolume(Tensor<T> volume)
     {
         var output = Predict(volume); // [numClasses, D, H, W] (batch stripped) or [B, numClasses, D, H, W]
+        // SegmentVolume is single-volume: the IMedicalSegmentation contract returns
+        // ONE MedicalSegmentationResult, so a true batch [B, C, D, H, W] with B > 1
+        // can't be represented. RemoveBatchDimension only handles B == 1; for B > 1
+        // it would either throw or silently collapse multiple volumes into one mask.
+        // Fail fast with a clear error so callers either feed B==1 here or pre-split
+        // the batch upstream.
+        if (output.Rank == 5 && output.Shape[0] != 1)
+            throw new InvalidOperationException(
+                $"SegmentVolume returns a single MedicalSegmentationResult; the model produced a batch " +
+                $"of size {output.Shape[0]}. Pre-split the batch and call SegmentVolume per-volume, " +
+                $"or use the lower-level Predict API directly to handle a batched output.");
         var logits = output.Rank == 5 ? RemoveBatchDimension(output) : output;
         int numC = logits.Shape[0], depth = logits.Shape[1], h = logits.Shape[2], w = logits.Shape[3];
 

@@ -820,10 +820,19 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
-        if (TrainingInvariantsNotApplicable(network)) return;
-        var input = CreateRandomTensor(InputShape, rng);
-        var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
-        network.Train(input, target);
+        // Metadata assertion runs for every model, training-applicable or not:
+        // GetModelMetadata() doesn't depend on the supervised-training contract,
+        // it should populate at construction / first forward. Train() can still
+        // be called when applicable (some models populate richer metadata post-
+        // training) but is skipped for models where Train() is unsupported
+        // (e.g., synthetic tabular generators that train through Fit() and now
+        // throw on Train(input, expected)).
+        if (!TrainingInvariantsNotApplicable(network))
+        {
+            var input = CreateRandomTensor(InputShape, rng);
+            var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
+            network.Train(input, target);
+        }
         Assert.NotNull(network.GetModelMetadata());
     }
 
@@ -843,7 +852,12 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
-        if (TrainingInvariantsNotApplicable(network)) return;
+        // This invariant tests INFERENCE-side activations (GetNamedLayerActivations
+        // never calls Train), so it doesn't depend on the supervised-training
+        // contract. The previous TrainingInvariantsNotApplicable opt-out was too
+        // broad — it suppressed this and Metadata_ShouldExist for synthetic
+        // tabular generators when those models genuinely should produce named
+        // layer activations from a forward pass.
         var input = CreateRandomTensor(InputShape, rng);
 
         var activations = network.GetNamedLayerActivations(input);

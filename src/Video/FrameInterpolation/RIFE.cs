@@ -43,11 +43,15 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// // Create a RIFE model for real-time video frame interpolation
 /// var rife = new RIFE&lt;double&gt;();
 ///
-/// // Or configure with custom flow estimation parameters
+/// // Or configure with custom flow estimation parameters. inputDepth is the
+/// // per-frame channel count (3 for RGB) — RIFE concatenates the two input
+/// // frames internally to feed a 6-channel tensor into the flow network.
+/// // The previous example here showed inputDepth: 6 which recreated the
+/// // exact slicing bug the constructor was patched to prevent.
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 256, inputWidth: 256, inputDepth: 6, outputSize: 3);
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 3);
 /// var model = new RIFE&lt;double&gt;(architecture, numFeatures: 64, numFlowBlocks: 8);
 /// </code>
 /// </example>

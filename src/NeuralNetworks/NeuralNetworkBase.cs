@@ -5728,12 +5728,32 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // backward sweep itself. Swap to ComputeGradientsStreaming once #564
         // releases in a published Tensors NuGet.
         var gradients = tape.ComputeGradients(lossTensor, sources);
+
+        // Apply gradient clipping in parity with the eager TrainWithTape path —
+        // omitting this on the streaming path created different optimization
+        // semantics depending on which path the autotuner picked, and would
+        // destabilize large models exactly when streaming engaged. Clip in the
+        // deterministic source-order so the per-process total-norm sum is stable.
+        double maxGradNorm = MaxGradNormValue;
+        if (maxGradNorm > 0.0)
+        {
+            ApplyGradientClipping(gradients, maxGradNorm, sources);
+        }
+
         foreach (var source in sources)
         {
             if (!gradients.TryGetValue(source, out var grad) || grad is null || grad.Length == 0)
                 continue;
             _streamingOptimizerState.Apply(source, grad);
         }
+
+        // GPU weight-cache coherence after the in-place parameter mutation. The
+        // 8-bit StreamingAdam state already updated source tensors in place; without
+        // invalidation here, the cached derived weights (CPU SIMD-packed copies,
+        // GPU-uploaded copies) would still reference the pre-update parameter values
+        // and subsequent forwards would silently produce stale predictions. Other
+        // update paths (TrainWithTape, batch eager) call this at the same point.
+        InvalidateWeightCachesAfterSuccessfulWeightUpdate();
     }
 
     protected void TrainWithTape(Tensor<T> input, Tensor<T> expected,

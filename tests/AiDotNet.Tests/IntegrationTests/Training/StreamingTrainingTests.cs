@@ -43,13 +43,19 @@ public class StreamingTrainingTests
     private static double Mse(Helix<float> model, Tensor<float> input, Tensor<float> target)
     {
         var pred = model.Predict(input);
-        double sum = 0; int n = Math.Min(pred.Length, target.Length);
-        for (int i = 0; i < n; i++)
+        // Fail fast on length mismatch — the original Math.Min(pred, target) version
+        // silently masked output/target shape regressions, letting these tests pass
+        // even when the model started returning the wrong shape. The training
+        // contract under test here REQUIRES pred and target to be identically
+        // shaped; any drift should surface as a hard assertion failure.
+        Assert.Equal(target.Length, pred.Length);
+        double sum = 0;
+        for (int i = 0; i < pred.Length; i++)
         {
             double d = Convert.ToDouble(pred[i]) - Convert.ToDouble(target[i]);
             sum += d * d;
         }
-        return n > 0 ? sum / n : 0;
+        return pred.Length > 0 ? sum / pred.Length : 0;
     }
 
     private static (Tensor<float> input, Tensor<float> target) FixedSample()

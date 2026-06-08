@@ -496,34 +496,21 @@ public class RAFT<T> : OpticalFlowBase<T>
 
     private Tensor<T> UpsampleFlow(Tensor<T> flow, int factor)
     {
-        int batchSize = flow.Shape[0];
-        int channels = flow.Shape[1];
-        int inHeight = flow.Shape[2];
-        int inWidth = flow.Shape[3];
-
-        int outHeight = inHeight * factor;
-        int outWidth = inWidth * factor;
-
-        var output = new Tensor<T>([batchSize, channels, outHeight, outWidth]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < outHeight; h++)
-                {
-                    for (int w = 0; w < outWidth; w++)
-                    {
-                        double srcH = (h + 0.5) / factor - 0.5;
-                        double srcW = (w + 0.5) / factor - 0.5;
-                        T value = BilinearSample(flow, b, c, srcH, srcW, inHeight, inWidth);
-                        output[b, c, h, w] = NumOps.Multiply(value, NumOps.FromDouble(factor));
-                    }
-                }
-            }
-        }
-
-        return output;
+        // Tape-aware upsample: spatial scale via Engine.Upsample (registered as a
+        // tape op so backward propagates correctly through the GRU stack), then
+        // multiply flow magnitudes by `factor` so pixel-displacements computed at
+        // 1/factor resolution represent the equivalent pixel-displacements at the
+        // full resolution. The previous scalar-read/write BilinearSample loop
+        // produced numerically smoother output but cut the autodiff path, leaving
+        // the upsample step ungradient'd and the trained-on-loss path broken for
+        // the entire flow predictor when ForwardForTraining ends here.
+        //
+        // The paper's preferred upsample is a learnable convex combination; that
+        // is not implemented here yet, so we get a paper-faithful-enough nearest-
+        // neighbor expansion (Engine.Upsample's default semantics) plus the
+        // magnitude rescale.
+        var upsampled = Engine.Upsample(flow, factor, factor);
+        return Engine.TensorMultiplyScalar(upsampled, NumOps.FromDouble(factor));
     }
 
     private T BilinearSample(Tensor<T> tensor, int b, int c, double h, double w, int height, int width)

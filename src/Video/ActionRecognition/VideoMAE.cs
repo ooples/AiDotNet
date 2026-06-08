@@ -367,7 +367,13 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
-        return ClassifyAction(input);
+        // Train on raw logits, not the post-softmax probabilities ClassifyAction
+        // returns: this model is wired with CrossEntropyWithLogitsLoss<T>, which
+        // applies softmax internally. Feeding probabilities into the loss would
+        // double-normalize the head and produce wrong gradients on every step.
+        // Inference (ClassifyAction) keeps the softmax; training drops it.
+        var features = EncodeVideo(input);
+        return ClassificationForward(features);
     }
 
     /// <inheritdoc/>
@@ -445,24 +451,23 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
             return pooled;
         }
 
+        // Express the temporal pooling as engine tensor ops so the operation
+        // stays on the autodiff tape. The previous scalar-read/write loop
+        // (sum-then-write per element) severed the gradient path: the classifier
+        // loss stopped at PoolTubelets and never reached the encoder weights,
+        // leaving the video encoder frozen across training. The reshape +
+        // reduce-along-axis form below records as tape-tracked ops on the
+        // forward pass and produces the same numeric values.
         int channels = pooled.Shape[1];
-        var result = new Tensor<T>([batchSize, channels, 1, 1]);
-        T divisor = NumOps.FromDouble(numTubelets);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                T sum = NumOps.Zero;
-                for (int t = 0; t < numTubelets; t++)
-                {
-                    sum = NumOps.Add(sum, pooled[b * numTubelets + t, c, 0, 0]);
-                }
-                result[b, c, 0, 0] = NumOps.Divide(sum, divisor);
-            }
-        }
-
-        return result;
+        // Reshape [B*T, C, 1, 1] -> [B, T, C] so we can mean over axis 1 (T) via the
+        // engine's ReduceMean (tape-aware). The Reshape -> ReduceMean -> Reshape chain
+        // is all engine ops, so the gradient flows from the classifier head back
+        // through the pooled features and into the tubelet encoder.
+        var reshaped = Engine.Reshape(pooled, new[] { batchSize, numTubelets, channels });
+        var meanBC = Engine.ReduceMean(reshaped, new[] { 1 }, keepDims: false);  // [B, C]
+        // Restore the [B, C, 1, 1] output shape the caller expects.
+        return Engine.Reshape(meanBC, new[] { batchSize, channels, 1, 1 });
     }
 
     private Tensor<T> PatchEmbed(Tensor<T> video)

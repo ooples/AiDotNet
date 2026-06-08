@@ -108,9 +108,23 @@ internal sealed class StreamingAdam8Bit<T>
     /// </summary>
     public void Apply(Tensor<T> param, Tensor<T> grad)
     {
-        if (param is null || grad is null) return;
+        // Apply is on the hot training path — a null tensor or length mismatch is a
+        // hard correctness bug in the backward pass (gradient missing for a registered
+        // source, or a shape regression between forward and backward). Silently
+        // dropping the update hides the bug and leaves the parameter forever frozen,
+        // which is worse than failing fast.
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (grad is null) throw new ArgumentNullException(nameof(grad));
         int length = param.Length;
-        if (length == 0 || grad.Length != length) return;
+        if (length == 0)
+            throw new ArgumentException("StreamingAdam8Bit.Apply: param is empty (length == 0); " +
+                "a zero-length parameter should never be registered as a training source.", nameof(param));
+        if (grad.Length != length)
+            throw new ArgumentException(
+                $"StreamingAdam8Bit.Apply: gradient length {grad.Length} does not match param length {length}. " +
+                "This indicates a shape mismatch between the forward pass and the tape backward — " +
+                "fix the source of the size drift rather than letting Apply silently no-op.",
+                nameof(grad));
 
         int numBlocks = (length + _blockSize - 1) / _blockSize;
         if (!_state.TryGetValue(param, out var st))
