@@ -493,25 +493,61 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     /// <returns>A tuple containing the index of the best feature and the best threshold value.</returns>
     private (int featureIndex, T threshold) FindBestSplitWithWeights(Matrix<T> x, Vector<T> y, Vector<T> weights, IEnumerable<int> featureIndices)
     {
+        int n = y.Length;
         int bestFeatureIndex = -1;
         T bestThreshold = NumOps.Zero;
         T bestScore = NumOps.MinValue;
 
+        // Parent totals, computed once. The old path recomputed the parent weighted variance and the
+        // total weight (plus re-partitioned the data) for every candidate threshold of every feature
+        // at every node — O(n^2)/node, which made AdaBoost (many weighted trees) take minutes.
+        T totW = NumOps.Zero, totWy = NumOps.Zero, totWy2 = NumOps.Zero;
+        for (int i = 0; i < n; i++)
+        {
+            T w = weights[i];
+            T wy = NumOps.Multiply(w, y[i]);
+            totW = NumOps.Add(totW, w);
+            totWy = NumOps.Add(totWy, wy);
+            totWy2 = NumOps.Add(totWy2, NumOps.Multiply(wy, y[i]));
+        }
+
+        // parentTerm = totalWeight * weightedVariance(parent); the split score is
+        // parentTerm - (W_L*var_L + W_R*var_R), identical to the previous formulation.
+        T parentTerm = WeightedSseFromMoments(totW, totWy, totWy2);
+
         foreach (int featureIndex in featureIndices)
         {
             var featureValues = x.GetColumn(featureIndex);
-            var uniqueValues = featureValues.Distinct().OrderBy(v => v).ToList();
+            var sortedIndices = Enumerable.Range(0, n).OrderBy(idx => featureValues[idx]).ToArray();
 
-            for (int i = 0; i < uniqueValues.Count - 1; i++)
+            // Feature-sorted sweep with running left/right weighted moments — each threshold is O(1).
+            T lW = NumOps.Zero, lWy = NumOps.Zero, lWy2 = NumOps.Zero;
+            for (int s = 1; s < n; s++)
             {
-                T threshold = NumOps.Divide(NumOps.Add(uniqueValues[i], uniqueValues[i + 1]), NumOps.FromDouble(2));
-                T score = CalculateWeightedSplitScore(featureValues, y, weights, threshold);
+                int prev = sortedIndices[s - 1];
+                T w = weights[prev];
+                T wy = NumOps.Multiply(w, y[prev]);
+                lW = NumOps.Add(lW, w);
+                lWy = NumOps.Add(lWy, wy);
+                lWy2 = NumOps.Add(lWy2, NumOps.Multiply(wy, y[prev]));
+
+                // No valid threshold between two equal feature values (sorted ascending).
+                if (!NumOps.GreaterThan(featureValues[sortedIndices[s]], featureValues[sortedIndices[s - 1]]))
+                {
+                    continue;
+                }
+
+                T childrenTerm = NumOps.Add(
+                    WeightedSseFromMoments(lW, lWy, lWy2),
+                    WeightedSseFromMoments(NumOps.Subtract(totW, lW), NumOps.Subtract(totWy, lWy), NumOps.Subtract(totWy2, lWy2)));
+                T score = NumOps.Subtract(parentTerm, childrenTerm);
 
                 if (NumOps.GreaterThan(score, bestScore))
                 {
                     bestScore = score;
                     bestFeatureIndex = featureIndex;
-                    bestThreshold = threshold;
+                    bestThreshold = NumOps.Divide(
+                        NumOps.Add(featureValues[sortedIndices[s - 1]], featureValues[sortedIndices[s]]), NumOps.FromDouble(2));
                 }
             }
         }
@@ -520,49 +556,18 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     }
 
     /// <summary>
-    /// Calculates the score of a potential split based on weighted samples.
+    /// Weighted sum of squared deviations of a group from its running moments:
+    /// Σw·y² − (Σw·y)²/Σw, which equals (group weight) × (group weighted variance). Used by the
+    /// weighted split search so each candidate threshold is O(1) with no data re-partitioning.
     /// </summary>
-    /// <param name="featureValues">The values of the feature being considered for splitting.</param>
-    /// <param name="y">The target vector.</param>
-    /// <param name="weights">The sample weights vector.</param>
-    /// <param name="threshold">The threshold value to evaluate for splitting.</param>
-    /// <returns>The score of the split, with higher values indicating better splits.</returns>
-    private T CalculateWeightedSplitScore(Vector<T> featureValues, Vector<T> y, Vector<T> weights, T threshold)
+    private T WeightedSseFromMoments(T sumW, T sumWy, T sumWy2)
     {
-        var leftIndices = new List<int>();
-        var rightIndices = new List<int>();
-
-        for (int i = 0; i < featureValues.Length; i++)
+        if (!NumOps.GreaterThan(sumW, NumOps.Zero))
         {
-            if (NumOps.LessThanOrEquals(featureValues[i], threshold))
-            {
-                leftIndices.Add(i);
-            }
-            else
-            {
-                rightIndices.Add(i);
-            }
+            return NumOps.Zero;
         }
 
-        if (leftIndices.Count == 0 || rightIndices.Count == 0)
-        {
-            return NumOps.MinValue;
-        }
-
-        T leftScore = CalculateWeightedVarianceReduction(y.GetElements(leftIndices), weights.GetElements(leftIndices));
-        T rightScore = CalculateWeightedVarianceReduction(y.GetElements(rightIndices), weights.GetElements(rightIndices));
-
-        T totalWeight = weights.Sum();
-        T leftWeight = weights.GetElements(leftIndices).Sum();
-        T rightWeight = weights.GetElements(rightIndices).Sum();
-
-        return NumOps.Subtract(
-            NumOps.Multiply(totalWeight, CalculateWeightedVarianceReduction(y, weights)),
-            NumOps.Add(
-                NumOps.Multiply(leftWeight, leftScore),
-                NumOps.Multiply(rightWeight, rightScore)
-            )
-        );
+        return NumOps.Subtract(sumWy2, NumOps.Divide(NumOps.Multiply(sumWy, sumWy), sumW));
     }
 
     /// <summary>
