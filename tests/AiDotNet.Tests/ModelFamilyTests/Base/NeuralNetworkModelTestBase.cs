@@ -833,7 +833,16 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
             network.Train(input, target);
         }
-        Assert.NotNull(network.GetModelMetadata());
+        var metadata = network.GetModelMetadata();
+        Assert.NotNull(metadata);
+        // Catch models that override GetModelMetadata to return an empty shell
+        // (e.g. `new ModelMetadata<T>()` with no fields set). The canonical
+        // pattern populates AdditionalInfo with at least InputShape /
+        // OutputShape / hyperparameters; an empty dictionary here means the
+        // model is silently failing to report any actual metadata.
+        Assert.NotNull(metadata.AdditionalInfo);
+        Assert.NotEmpty(metadata.AdditionalInfo);
+        Assert.NotNull(metadata.ModelData);
     }
 
     [Fact(Timeout = 120000)]
