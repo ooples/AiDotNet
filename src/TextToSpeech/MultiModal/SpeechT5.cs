@@ -1,9 +1,11 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.TextToSpeech.Interfaces;
@@ -55,8 +57,42 @@ public class SpeechT5<T> : TtsModelBase<T>, IEndToEndTts<T>
         return PostprocessAudio(output);
     }
     protected override Tensor<T> PreprocessText(string text) { int len = Math.Min(text.Length, _options.MaxTextLength); var t = new Tensor<T>([len]); for (int i = 0; i < len; i++) t[i] = NumOps.FromDouble(text[i] / 128.0); return t; } protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultVITSLayers(_options.EncoderDim, _options.HiddenDim, _options.DecoderDim, _options.NumEncoderLayers, _options.NumFlowSteps, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, inputFeatures: _options.MelChannels)); }
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode) return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); return; }
+        Layers.AddRange(BuildSpeechT5Layers());
+    }
+
+    /// <summary>
+    /// Builds the paper-faithful SpeechT5 layer stack (Ao et al. 2022, "SpeechT5:
+    /// Unified-Modal Encoder-Decoder Pre-Training"). SpeechT5 is a shared
+    /// Transformer encoder-decoder with modality-specific pre/post-nets — NOT a
+    /// VITS flow/HiFi-GAN model. Each Transformer block is a canonical Pre-LN
+    /// residual block (y = x + SelfAttn(LN(x)); z = y + FFN(LN(y)); Vaswani 2017
+    /// §3.1). The residual connections are what keep deep-stack training stable;
+    /// the previous VITS-layer approximation used a residual-LESS flat
+    /// MHA→Norm→FFN→Norm stack that washed out the signal and diverged with more
+    /// training (the #1380 collapse mechanism).
+    /// </summary>
+    private System.Collections.Generic.IEnumerable<ILayer<T>> BuildSpeechT5Layers()
+    {
+        int d = _options.EncoderDim > 0 ? _options.EncoderDim : 192;
+        int mel = _options.MelChannels > 0 ? _options.MelChannels : 80;
+        int heads = _options.NumHeads > 0 ? _options.NumHeads : 8;
+        int ffn = d * 4;
+        int blocks = (_options.NumEncoderLayers > 0 ? _options.NumEncoderLayers : 6)
+                   + (_options.NumDecoderLayers > 0 ? _options.NumDecoderLayers : 6);
+
+        // Speech pre-net: project input mel features → model dimension.
+        yield return new DenseLayer<T>(d, new IdentityActivation<T>() as IActivationFunction<T>);
+        // Shared Transformer encoder-decoder stack (Pre-LN residual blocks).
+        for (int i = 0; i < blocks; i++)
+            yield return new TransformerEncoderBlock<T>(hiddenSize: d, numHeads: heads, ffnDim: ffn, dropoutRate: _options.DropoutRate);
+        // Speech post-net: project model dimension → mel channels.
+        yield return new DenseLayer<T>(mel, new IdentityActivation<T>() as IActivationFunction<T>);
+    }
+    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); SetTrainingMode(false); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
     public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); try { TrainWithTape(input, expected); } finally { SetTrainingMode(false); } }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     public override ModelMetadata<T> GetModelMetadata() { return new ModelMetadata<T> { Name = _useNativeMode ? "SpeechT5-Native" : "SpeechT5-ONNX", Description = "SpeechT5 TTS", FeatureCount = _options.HiddenDim }; }

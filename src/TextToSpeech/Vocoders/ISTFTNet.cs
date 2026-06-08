@@ -47,7 +47,7 @@ public class ISTFTNet<T> : TtsModelBase<T>, IVocoder<T>
     /// </summary>
     public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(melSpectrogram); return Predict(melSpectrogram); }
     protected override Tensor<T> PreprocessText(string text) { var t = new Tensor<T>([1]); t[0] = NumOps.FromDouble(0.0); return t; } protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultVocoderLayers(_options.MelChannels, 512, _options.StftWindow / 2 + 1, _options.NumUpsampleLayers, 3, _options.DropoutRate)); }
+    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultHiFiGANLayers(_options.MelChannels, 512, _options.StftWindow / 2 + 1, _options.NumUpsampleLayers, 3, _options.DropoutRate)); }
     public override Tensor<T> Predict(Tensor<T> input)
     {
         ThrowIfDisposed();
