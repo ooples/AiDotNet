@@ -565,9 +565,8 @@ public async Task CompareStrategiesAsync()
 
 ## Next Steps
 
-- **Advanced Topics**: See [Advanced Guide](./AdvancedGuide.md)
 - **Best Practices**: See [Best Practices](./BestPractices.md)
-- **API Reference**: See [API Documentation](./ApiReference.md)
+- **API Reference**: See [API Documentation](../reference/index.md)
 - **Examples**: Browse `examples/` directory for more code samples
 
 ## Common Issues & Solutions

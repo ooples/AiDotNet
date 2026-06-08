@@ -1127,4 +1127,50 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         // Clear GPU cached tensors
         _lastInputGpu = null;
     }
+
+    #region ONNX Export
+
+    /// <summary>
+    /// Emits an ONNX <c>BatchNormalization</c> op using the layer's running
+    /// statistics (inference mode). 5 graph initializers are added: scale
+    /// (gamma), B (beta), mean (running_mean), var (running_variance).
+    /// </summary>
+    public override AiDotNet.Onnx.OnnxLayerOutputs ConvertToOnnx(
+        AiDotNet.Onnx.OnnxGraphBuilder builder,
+        AiDotNet.Onnx.OnnxLayerInputs inputs)
+    {
+        if (builder is null) throw new ArgumentNullException(nameof(builder));
+        if (inputs is null) throw new ArgumentNullException(nameof(inputs));
+
+        int n = _gamma.Shape[0];
+
+        float[] FlattenRank1(Tensor<T> t)
+        {
+            var arr = new float[t.Shape[0]];
+            for (int i = 0; i < t.Shape[0]; i++) arr[i] = (float)NumOps.ToDouble(t[i]);
+            return arr;
+        }
+
+        var scaleName = builder.AddFloatInitializer("bn_scale", FlattenRank1(_gamma), new[] { n });
+        var biasName  = builder.AddFloatInitializer("bn_B",     FlattenRank1(_beta),  new[] { n });
+        var meanName  = builder.AddFloatInitializer("bn_mean",  FlattenRank1(_runningMean), new[] { n });
+        var varName   = builder.AddFloatInitializer("bn_var",   FlattenRank1(_runningVariance), new[] { n });
+
+        var outputName = builder.NextTensorName("bn_out");
+        var node = builder.AddOp("BatchNormalization",
+            inputs: new[] { inputs.Primary, scaleName, biasName, meanName, varName },
+            outputs: new[] { outputName });
+
+        // Attach the epsilon attribute matching the layer's configured value.
+        node.Attribute.Add(new AiDotNet.Onnx.Protobuf.AttributeProto
+        {
+            Name = "epsilon",
+            Type = AiDotNet.Onnx.Protobuf.AttributeProto.Types.AttributeType.Float,
+            F = (float)NumOps.ToDouble(_epsilon),
+        });
+
+        return new AiDotNet.Onnx.OnnxLayerOutputs(outputName);
+    }
+
+    #endregion
 }

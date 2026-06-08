@@ -1153,8 +1153,34 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             inputHeight: _inputHeight,
             lossFunction: LossFunction);
 
+        // Eager-init the clone's layers BEFORE SetParameters runs. The
+        // internal layers (PyTorch-style lazy shape inference) report
+        // ParameterCount=0 until their first forward; SetParameters
+        // walks each layer's GetParameters() to size its slice of the
+        // incoming vector, so before init it would silently size every
+        // slice to 0 and write zero parameters into the clone — leaving
+        // the clone with fresh random weights and breaking
+        // Clone_ShouldProduceIdenticalOutput across every UNet-based
+        // diffusion model (AudioLDM2, SD, SDXL, etc.).
+        clone.TriggerLazyShapeResolution();
         clone.SetParameters(GetParameters());
         return clone;
+    }
+
+    /// <summary>
+    /// Runs a single dummy forward through the network at the configured
+    /// <c>_inputHeight</c> spatial size so every lazy layer resolves its
+    /// weight shapes. Used by <see cref="Clone"/> to make the clone's
+    /// layer parameter counts match the original's before
+    /// <see cref="SetParameters"/> copies weights across.
+    /// </summary>
+    private void TriggerLazyShapeResolution()
+    {
+        var dummy = new Tensor<T>(new[] { 1, _inputChannels, _inputHeight, _inputHeight });
+        Tensor<T>? dummyCtx = _contextDim > 0
+            ? new Tensor<T>(new[] { 1, 1, _contextDim })
+            : null;
+        _ = PredictNoise(dummy, timestep: 0, conditioning: dummyCtx);
     }
 
     /// <inheritdoc />

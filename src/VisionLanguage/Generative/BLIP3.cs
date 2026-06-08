@@ -175,13 +175,14 @@ public class BLIP3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
         }
 
         // CreateDefaultQFormerGenerativeLayers emits:
-        //   [pre-norm + N×vision-block, optional projection, M×qformer-block, K×decoder-block]
+        //   [patch-embed + pre-norm + N×vision-block, optional projection, M×qformer-block, K×decoder-block]
         //
         // Block sizes (no dropout): vision = 5, qformer = 7, decoder ~ same as transformer = 5.
         // With dropout add 1 per block. Compute boundaries first, then split.
         int blockSize = _options.DropoutRate > 0 ? 6 : 5;
         int qfBlockSize = _options.DropoutRate > 0 ? 8 : 7;
-        int visionLayerEnd = 1 + _options.NumVisionLayers * blockSize;
+        // 2 + ...: PatchEmbeddingLayer + pre-norm, then N×vision-block.
+        int visionLayerEnd = 2 + _options.NumVisionLayers * blockSize;
         int qfProj = _options.VisionDim != _options.QFormerDim ? 1 : 0;
         int qFormerLayerEnd = visionLayerEnd + qfProj + _options.NumQFormerLayers * qfBlockSize;
 

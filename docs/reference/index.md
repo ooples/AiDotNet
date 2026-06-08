@@ -38,7 +38,7 @@ The main entry point for building models:
 public class AiModelBuilder<T, TInput, TOutput>
 ```
 
-[Full documentation →](./prediction-model-builder)
+[Source on GitHub →](https://github.com/ooples/AiDotNet/blob/master/src/AiModelBuilder.cs)
 
 ### AiModelResult
 
@@ -48,7 +48,7 @@ Contains the trained model and results:
 public class AiModelResult<T, TInput, TOutput>
 ```
 
-[Full documentation →](./prediction-model-result)
+[Source on GitHub →](https://github.com/ooples/AiDotNet/blob/master/src/AiModelResult.cs)
 
 ## YAML Configuration
 
@@ -81,11 +81,11 @@ var result = await builder.BuildAsync();
 
 ## Browse by Category
 
-- [Neural Networks](./neural-networks) - All 100+ architectures
-- [Classical ML](./classical-ml) - Classification, regression, clustering
-- [Computer Vision](./computer-vision) - Object detection, segmentation, OCR
-- [Audio](./audio) - Speech recognition, TTS, music
-- [Reinforcement Learning](./reinforcement-learning) - All 80+ agents
-- [Optimizers](./optimizers) - All 42+ optimizers
-- [Loss Functions](./loss-functions) - All 37+ loss functions
-- [YAML Configuration](./yaml-configuration) - Full YAML config reference
+- [Neural Networks](./neural-networks.md) - All 100+ architectures
+- [Classical ML](./classical-ml.md) - Classification, regression, clustering
+- [Computer Vision](../tutorials/computer-vision/index.md) - Object detection, segmentation, OCR
+- [Audio](../tutorials/audio/index.md) - Speech recognition, TTS, music
+- [Reinforcement Learning](../tutorials/reinforcement-learning/index.md) - All 80+ agents
+- [Optimizers](./optimizers.md) - All 42+ optimizers
+- [Loss Functions](./loss-functions.md) - All 37+ loss functions
+- [YAML Configuration](./yaml-configuration.md) - Full YAML config reference

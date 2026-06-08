@@ -183,30 +183,52 @@ public class FinancialA2CAgent<T> : TradingAgentBase<T>
         if (ReplayBuffer.Count < TradingOptions.BatchSize) return NumOps.Zero;
 
         var batch = ReplayBuffer.Sample(TradingOptions.BatchSize);
-        T totalLoss = NumOps.Zero;
+        int n = batch.Count;
+        if (n == 0) return NumOps.Zero;
 
-        foreach (var exp in batch)
+        // Batched advantage-actor-critic update: one batched forward/backward for the critic and
+        // the actor instead of one autograd tape per experience (the per-sample loop dominated RL
+        // training time — see profiling). Standard mini-batch update.
+        int stateDim = batch[0].State.Length;
+        int actionDim = batch[0].Action.Length;
+        var gamma = NumOps.FromDouble(Convert.ToDouble(TradingOptions.DiscountFactor));
+
+        var statesData = new T[n * stateDim];
+        var nextStatesData = new T[n * stateDim];
+        var actionsData = new T[n * actionDim];
+        for (int i = 0; i < n; i++)
         {
-            T vCurrent = _critic.Predict(Tensor<T>.FromVector(exp.State)).Data.Span[0];
-            T vNext = exp.Done ? NumOps.Zero : _critic.Predict(Tensor<T>.FromVector(exp.NextState)).Data.Span[0];
-            T targetV = NumOps.Add(exp.Reward, NumOps.Multiply(NumOps.FromDouble(Convert.ToDouble(TradingOptions.DiscountFactor)), vNext));
-            T advantage = NumOps.Subtract(targetV, vCurrent);
+            var exp = batch[i];
+            for (int j = 0; j < stateDim; j++)
+            {
+                statesData[i * stateDim + j] = exp.State[j];
+                nextStatesData[i * stateDim + j] = exp.NextState[j];
+            }
 
-            // Update Critic (MSE Loss)
-            var targetVVec = new Vector<T>(new[] { targetV });
-            _critic.Train(Tensor<T>.FromVector(exp.State), Tensor<T>.FromVector(targetVVec));
-
-            // Update Actor
-            T actorLoss = (TradingOptions.LossFunction ?? throw new InvalidOperationException("LossFunction has not been initialized.")).CalculateLoss(
-                _actor.Predict(Tensor<T>.FromVector(exp.State)).ToVector(), 
-                exp.Action);
-            
-            _actor.Train(Tensor<T>.FromVector(exp.State), Tensor<T>.FromVector(exp.Action)); 
-
-            totalLoss = NumOps.Add(totalLoss, actorLoss);
+            for (int j = 0; j < actionDim; j++)
+            {
+                actionsData[i * actionDim + j] = exp.Action[j];
+            }
         }
 
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(TradingOptions.BatchSize));
+        var states = new Tensor<T>([n, stateDim], new Vector<T>(statesData));
+        var nextStates = new Tensor<T>([n, stateDim], new Vector<T>(nextStatesData));
+        var actions = new Tensor<T>([n, actionDim], new Vector<T>(actionsData));
+
+        var vNext = _critic.Predict(nextStates).ToVector();
+        var targetData = new T[n];
+        for (int i = 0; i < n; i++)
+        {
+            var bootstrap = batch[i].Done ? NumOps.Zero : NumOps.Multiply(gamma, vNext[i]);
+            targetData[i] = NumOps.Add(batch[i].Reward, bootstrap);
+        }
+
+        var targets = new Tensor<T>([n, 1], new Vector<T>(targetData));
+
+        _critic.Train(states, targets);
+        _actor.Train(states, actions);
+
+        return NumOps.Zero;
     }
 
     #endregion

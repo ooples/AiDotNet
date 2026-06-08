@@ -276,7 +276,7 @@ var semanticChunker = new SemanticChunker<float>(
 
 ## Next Steps
 
-- [BasicRAG Sample](/samples/nlp/RAG/BasicRAG/)
-- [GraphRAG Sample](/samples/nlp/RAG/GraphRAG/)
-- [Embeddings Sample](/samples/nlp/Embeddings/)
-- [RAG API Reference](/api/AiDotNet.RetrievalAugmentedGeneration/)
+- [BasicRAG Sample](https://github.com/ooples/AiDotNet/tree/master/samples/nlp/RAG/BasicRAG/)
+- [GraphRAG Sample](https://github.com/ooples/AiDotNet/tree/master/samples/nlp/RAG/GraphRAG/)
+- [Embeddings Sample](https://github.com/ooples/AiDotNet/tree/master/samples/nlp/Embeddings/)
+- [RAG API Reference](../../reference/index.md)

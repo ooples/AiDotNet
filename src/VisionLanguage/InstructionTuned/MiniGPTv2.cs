@@ -188,7 +188,8 @@ public class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 
         int blockSize = _options.DropoutRate > 0 ? 6 : 5;
         int qfBlockSize = _options.DropoutRate > 0 ? 8 : 7;
-        int visionLayerEnd = 1 + _options.NumVisionLayers * blockSize;
+        // 2 + ...: PatchEmbeddingLayer + pre-norm, then N×vision-block.
+        int visionLayerEnd = 2 + _options.NumVisionLayers * blockSize;
         int qfProj = _options.VisionDim != _options.QFormerDim ? 1 : 0;
         int qFormerLayerEnd = visionLayerEnd + qfProj + _options.NumQFormerLayers * qfBlockSize;
 
