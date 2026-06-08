@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using AiDotNet.Helpers;
+using AiDotNet.Agentic.Models;
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 using Newtonsoft.Json;
@@ -28,14 +29,14 @@ namespace AiDotNet.Reasoning.Components;
 internal class ThoughtEvaluator<T> : IThoughtEvaluator<T>
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
-    private readonly IChatModel<T> _chatModel;
+    private readonly IChatClient<T> _chatModel;
     private readonly INumericOperations<T> _numOps;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ThoughtEvaluator{T}"/> class.
     /// </summary>
     /// <param name="chatModel">The chat model used to evaluate thoughts.</param>
-    public ThoughtEvaluator(IChatModel<T> chatModel)
+    public ThoughtEvaluator(IChatClient<T> chatModel)
     {
         Guard.NotNull(chatModel);
         _chatModel = chatModel;

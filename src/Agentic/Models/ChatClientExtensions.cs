@@ -67,4 +67,20 @@ public static class ChatClientExtensions
         var response = await client.GetResponseAsync(messages, options, cancellationToken).ConfigureAwait(false);
         return response.Text;
     }
+
+    /// <summary>
+    /// Sends a single user prompt and returns the assistant's text reply. Alias of
+    /// <see cref="GenerateTextAsync{T}(IChatClient{T}, string, ChatOptions?, CancellationToken)"/> kept for
+    /// callers that read more naturally as "generate a response".
+    /// </summary>
+    /// <typeparam name="T">The client's numeric type.</typeparam>
+    /// <param name="client">The chat client.</param>
+    /// <param name="prompt">The user prompt.</param>
+    /// <param name="cancellationToken">Token used to cancel the request.</param>
+    /// <returns>The assistant's reply text.</returns>
+    public static Task<string> GenerateResponseAsync<T>(
+        this IChatClient<T> client,
+        string prompt,
+        CancellationToken cancellationToken = default)
+        => client.GenerateTextAsync(prompt, options: null, cancellationToken);
 }

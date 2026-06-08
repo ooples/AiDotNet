@@ -1,3 +1,4 @@
+using AiDotNet.Agentic.Models;
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.Validation;
@@ -33,7 +34,7 @@ namespace AiDotNet.Reasoning.Verification;
 /// </remarks>
 internal class SelfRefinementEngine<T> : ISelfRefinementEngine<T>
 {
-    private readonly IChatModel<T> _chatModel;
+    private readonly IChatClient<T> _chatModel;
     private readonly int _maxIterations;
 
     /// <summary>
@@ -41,7 +42,7 @@ internal class SelfRefinementEngine<T> : ISelfRefinementEngine<T>
     /// </summary>
     /// <param name="chatModel">The chat model used for refinement.</param>
     /// <param name="maxIterations">Maximum refinement attempts per step (default: 3).</param>
-    public SelfRefinementEngine(IChatModel<T> chatModel, int maxIterations = 3)
+    public SelfRefinementEngine(IChatClient<T> chatModel, int maxIterations = 3)
     {
         Guard.NotNull(chatModel);
         _chatModel = chatModel;

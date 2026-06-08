@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text;
+using AiDotNet.Agentic.Models;
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.Reasoning.Strategies;
@@ -179,7 +180,7 @@ namespace AiDotNet.Reasoning.Training;
 /// </remarks>
 internal class ReinforcementLearner<T>
 {
-    private readonly IChatModel<T> _model;
+    private readonly IChatClient<T> _model;
     private readonly IRewardModel<T> _rewardModel;
     private readonly PolicyGradientTrainer<T> _trainer;
     private readonly TrainingDataCollector<T> _dataCollector;
@@ -206,7 +207,7 @@ internal class ReinforcementLearner<T>
     /// Initializes a new instance of the <see cref="ReinforcementLearner{T}"/> class.
     /// </summary>
     public ReinforcementLearner(
-        IChatModel<T> model,
+        IChatClient<T> model,
         IRewardModel<T> rewardModel,
         RLConfig? config = null)
     {

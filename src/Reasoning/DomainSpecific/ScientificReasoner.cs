@@ -1,3 +1,4 @@
+using AiDotNet.Agentic.Models;
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.Reasoning.Strategies;
@@ -114,7 +115,7 @@ namespace AiDotNet.Reasoning.DomainSpecific;
 [ResearchPaper("Chain-of-Thought Prompting Elicits Reasoning in Large Language Models", "https://doi.org/10.48550/arXiv.2201.11903", Year = 2022, Authors = "Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Brian Ichter, Fei Xia, Ed Chi, Quoc Le, Denny Zhou")]
 public class ScientificReasoner<T> : IDomainReasoner<T>
 {
-    private readonly IChatModel<T> _chatModel;
+    private readonly IChatClient<T> _chatModel;
     private readonly ChainOfThoughtStrategy<T> _cotStrategy;
     private readonly SelfConsistencyStrategy<T> _selfConsistencyStrategy;
     private readonly CriticModel<T>? _criticModel;
@@ -126,7 +127,7 @@ public class ScientificReasoner<T> : IDomainReasoner<T>
     /// <param name="chatModel">The chat model to use for reasoning.</param>
     /// <param name="enableCriticalValidation">Whether to enable scientific validation with a critic model.</param>
     public ScientificReasoner(
-        IChatModel<T> chatModel,
+        IChatClient<T> chatModel,
         bool enableCriticalValidation = false)
     {
         Guard.NotNull(chatModel);

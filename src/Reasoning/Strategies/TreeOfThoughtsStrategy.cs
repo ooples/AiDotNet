@@ -1,3 +1,5 @@
+using AiDotNet.Agentic.Models;
+using AiDotNet.Agentic.Tools;
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Components;
 using AiDotNet.Reasoning.Models;
@@ -115,8 +117,8 @@ public class TreeOfThoughtsStrategy<T> : ReasoningStrategyBase<T>
     /// </para>
     /// </remarks>
     public TreeOfThoughtsStrategy(
-        IChatModel<T> chatModel,
-        IEnumerable<ITool>? tools = null,
+        IChatClient<T> chatModel,
+        IEnumerable<IAgentTool>? tools = null,
         SearchAlgorithmType searchAlgorithmType = SearchAlgorithmType.BeamSearch)
         : base(chatModel, tools)
     {

@@ -27,7 +27,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
 using AiDotNet.Interpretability.Explainers;
 using AiDotNet.Interpretability.Helpers;
-using AiDotNet.LanguageModels;
+using AiDotNet.Agentic.Models;
+using AiDotNet.Agentic.Models.Connectors;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
@@ -6953,7 +6954,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <summary>
     /// Creates a chat model from the agent configuration.
     /// </summary>
-    private IChatModel<T> CreateChatModelFromAgentConfig()
+    private IChatClient<T> CreateChatModelFromAgentConfig()
     {
         if (AgentConfig == null)
             throw new InvalidOperationException("Agent configuration is required.");
@@ -6965,12 +6966,12 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         return AgentConfig.Provider switch
         {
-            LLMProvider.OpenAI => new OpenAIChatModel<T>(apiKey),
-            LLMProvider.Anthropic => new AnthropicChatModel<T>(apiKey),
-            LLMProvider.AzureOpenAI => new AzureOpenAIChatModel<T>(
-                AgentConfig.AzureEndpoint ?? throw new InvalidOperationException("Azure endpoint required"),
+            LLMProvider.OpenAI => new OpenAIChatClient<T>(apiKey),
+            LLMProvider.Anthropic => new AnthropicChatClient<T>(apiKey),
+            LLMProvider.AzureOpenAI => new AzureOpenAIChatClient<T>(
                 apiKey,
-                AgentConfig.AzureDeployment ?? "gpt-4"),
+                AgentConfig.AzureDeployment ?? "gpt-4",
+                AgentConfig.AzureEndpoint ?? throw new InvalidOperationException("Azure endpoint required")),
             _ => throw new ArgumentException($"Unknown provider: {AgentConfig.Provider}")
         };
     }
