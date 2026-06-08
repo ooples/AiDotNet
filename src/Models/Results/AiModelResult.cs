@@ -761,37 +761,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     internal IPromptTemplate? PromptTemplate { get; private set; }
 
-    /// <summary>
-    /// Gets or sets the prompt chain used for multi-step inference workflows.
-    /// </summary>
-    /// <value>An implementation of IPromptChain for sequential prompt processing, or null if not configured.</value>
-    /// <remarks>
-    /// <para>
-    /// Prompt chains enable complex multi-step workflows where the output of one prompt
-    /// becomes the input to the next. This supports patterns like:
-    /// - Sequential processing (translate → summarize → format)
-    /// - Conditional branching based on intermediate results
-    /// - Parallel execution of independent steps
-    /// - Map-reduce patterns for processing multiple items
-    /// </para>
-    /// <para><b>For Beginners:</b> A prompt chain is like an assembly line where each step does one thing.
-    ///
-    /// Example workflow:
-    /// <code>
-    /// // Chain: Translate → Summarize → Format
-    /// Step 1: Translate document from Spanish to English
-    /// Step 2: Summarize the translated document
-    /// Step 3: Format the summary as bullet points
-    /// </code>
-    ///
-    /// Each step takes the previous step's output as input, making complex tasks manageable.
-    /// Chains can also:
-    /// - Run steps in parallel when they don't depend on each other
-    /// - Branch based on conditions (if sentiment is negative, escalate)
-    /// - Loop over collections (summarize each chapter)
-    /// </para>
-    /// </remarks>
-    internal IChain<string, string>? PromptChain { get; private set; }
 
     /// <summary>
     /// Gets or sets the prompt optimizer used for automatic prompt improvement.
@@ -1364,7 +1333,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         // Prompt Engineering
         PromptTemplate = options.PromptTemplate;
-        PromptChain = options.PromptChain;
         PromptOptimizer = options.PromptOptimizer;
         FewShotExampleSelector = options.FewShotExampleSelector;
         PromptAnalyzer = options.PromptAnalyzer;
@@ -1484,10 +1452,11 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     public async Task<BenchmarkReport> EvaluateBenchmarksAsync(
         BenchmarkingOptions? options = null,
+        IChatClient<T>? chatClient = null,
         CancellationToken cancellationToken = default)
     {
         var effectiveOptions = options ?? new BenchmarkingOptions();
-        var report = await BenchmarkRunner.RunAsync(this, effectiveOptions, cancellationToken).ConfigureAwait(false);
+        var report = await BenchmarkRunner.RunAsync(this, effectiveOptions, chatClient, cancellationToken).ConfigureAwait(false);
 
         if (effectiveOptions.AttachReportToResult)
         {
@@ -3182,7 +3151,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             Tokenizer = Tokenizer,
             TokenizationConfig = TokenizationConfig,
             PromptTemplate = PromptTemplate,
-            PromptChain = PromptChain,
             PromptOptimizer = PromptOptimizer,
             FewShotExampleSelector = FewShotExampleSelector,
             PromptAnalyzer = PromptAnalyzer,
@@ -4928,7 +4896,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             Tokenizer = Tokenizer,
             TokenizationConfig = TokenizationConfig,
             PromptTemplate = PromptTemplate,
-            PromptChain = PromptChain,
             PromptOptimizer = PromptOptimizer,
             FewShotExampleSelector = FewShotExampleSelector,
             PromptAnalyzer = PromptAnalyzer,
@@ -5717,7 +5684,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Attaches prompt engineering components to this result.
     /// </summary>
     /// <param name="promptTemplate">The prompt template for formatting prompts.</param>
-    /// <param name="promptChain">The chain for multi-step prompt execution.</param>
     /// <param name="promptOptimizer">The optimizer for improving prompt quality.</param>
     /// <param name="fewShotExampleSelector">The selector for choosing relevant few-shot examples.</param>
     /// <param name="promptAnalyzer">The analyzer for prompt metrics and validation.</param>
@@ -5727,14 +5693,12 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     internal void AttachPromptEngineering(
         IPromptTemplate? promptTemplate,
-        IChain<string, string>? promptChain,
         IPromptOptimizer<T>? promptOptimizer,
         IFewShotExampleSelector<T>? fewShotExampleSelector,
         IPromptAnalyzer? promptAnalyzer,
         IPromptCompressor? promptCompressor)
     {
         PromptTemplate = promptTemplate;
-        PromptChain = promptChain;
         PromptOptimizer = promptOptimizer;
         FewShotExampleSelector = fewShotExampleSelector;
         PromptAnalyzer = promptAnalyzer;
@@ -5944,95 +5908,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         return PromptCompressor.CompressWithMetrics(prompt, options ?? CompressionOptions.Default);
     }
 
-    /// <summary>
-    /// Executes a prompt chain synchronously with the given input.
-    /// </summary>
-    /// <param name="input">The initial input to the chain.</param>
-    /// <returns>The output string from the chain execution.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when no prompt chain is configured.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method executes a multi-step prompt workflow where each step's output becomes
-    /// the next step's input. Chains enable complex workflows like translation followed
-    /// by summarization, or analysis followed by formatting.
-    /// </para>
-    /// <para><b>For Beginners:</b> A prompt chain runs multiple AI steps in sequence.
-    ///
-    /// Instead of doing everything in one big prompt, chains break tasks into steps:
-    /// <code>
-    /// // Chain example: Translate → Summarize → Extract Keywords
-    /// // Step 1: Translate document from Spanish to English
-    /// // Step 2: Summarize the translated document
-    /// // Step 3: Extract key points as bullet points
-    /// </code>
-    ///
-    /// Each step takes the previous step's output as input.
-    ///
-    /// Benefits of chains:
-    /// - Simpler prompts (each does one thing well)
-    /// - Better quality (specialized prompts perform better)
-    /// - Easier debugging (inspect intermediate results)
-    /// - Flexible workflows (add/remove/modify steps)
-    ///
-    /// Example:
-    /// <code>
-    /// string spanishDocument = "Documento en español...";
-    /// string result = modelResult.RunChain(spanishDocument);
-    ///
-    /// // Result is available in the returned value
-    /// </code>
-    /// </para>
-    /// </remarks>
-    public string RunChain(string input)
-    {
-        if (PromptChain == null)
-            throw new InvalidOperationException(
-                "No prompt chain configured. Use ConfigurePromptChain() in AiModelBuilder.");
-
-        return PromptChain.Run(input);
-    }
-
-    /// <summary>
-    /// Executes a prompt chain asynchronously with the given input.
-    /// </summary>
-    /// <param name="input">The initial input to the chain.</param>
-    /// <param name="cancellationToken">Token to cancel the operation.</param>
-    /// <returns>A task that resolves to the output string from the chain execution.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when no prompt chain is configured.</exception>
-    /// <remarks>
-    /// <para>
-    /// Async version of RunChain for non-blocking execution. Essential for chains
-    /// that make API calls to language models or perform other I/O operations.
-    /// </para>
-    /// <para><b>For Beginners:</b> Same as RunChain but doesn't block your program.
-    ///
-    /// Use this version when:
-    /// - Running in a web application (keeps server responsive)
-    /// - Processing many documents in parallel
-    /// - Making actual API calls to language models
-    ///
-    /// Example:
-    /// <code>
-    /// string result = await modelResult.RunChainAsync("Input text...");
-    /// // Result is available in the returned value
-    /// </code>
-    ///
-    /// For parallel processing:
-    /// <code>
-    /// var documents = new[] { "Doc 1", "Doc 2", "Doc 3" };
-    /// var tasks = documents.Select(doc => modelResult.RunChainAsync(doc));
-    /// var results = await Task.WhenAll(tasks);
-    /// </code>
-    /// </para>
-    /// </remarks>
-    public Task<string> RunChainAsync(string input, CancellationToken cancellationToken = default)
-    {
-        if (PromptChain == null)
-            throw new InvalidOperationException(
-                "No prompt chain configured. Use ConfigurePromptChain() in AiModelBuilder.");
-
-        return PromptChain.RunAsync(input, cancellationToken);
-    }
 
     /// <summary>
     /// Evaluates a reasoning benchmark using the configured facade (prompt chain or agent reasoning).
@@ -6042,18 +5917,17 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <param name="sampleSize">Optional number of problems to evaluate (null for all).</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>The benchmark evaluation result.</returns>
+    /// <param name="chatClient">The chat client used to answer each benchmark problem.</param>
     /// <remarks>
     /// <para>
     /// This method hides the benchmark wiring so users don't have to manually provide a
-    /// <c>Func&lt;string, Task&lt;string&gt;&gt;</c>. The default evaluation path is:
+    /// <c>Func&lt;string, Task&lt;string&gt;&gt;</c>: each benchmark problem is sent to the supplied
+    /// <paramref name="chatClient"/> and the model's text reply is scored.
     /// </para>
-    /// <list type="bullet">
-    /// <item><description>Use <see cref="PromptChain"/> (via <see cref="RunChainAsync"/>) when configured.</description></item>
-    /// <item><description>Otherwise, use agent reasoning (via <see cref="QuickReasonAsync"/>) when configured.</description></item>
-    /// </list>
     /// </remarks>
     public Task<AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult<TScore>> EvaluateBenchmarkAsync<TScore>(
         IBenchmark<TScore> benchmark,
+        IChatClient<T> chatClient,
         int? sampleSize = null,
         CancellationToken cancellationToken = default)
     {
@@ -6062,17 +5936,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             throw new ArgumentNullException(nameof(benchmark));
         }
 
-        Func<string, Task<string>> evaluateFunction;
+        Guard.NotNull(chatClient);
 
-        if (PromptChain != null)
-        {
-            evaluateFunction = problem => RunChainAsync(problem, cancellationToken);
-        }
-        else
-        {
-            throw new InvalidOperationException(
-                "Benchmark evaluation requires a configured prompt chain (ConfigurePromptChain).");
-        }
+        Func<string, Task<string>> evaluateFunction =
+            problem => chatClient.GenerateResponseAsync(problem, cancellationToken);
 
         return benchmark.EvaluateAsync(evaluateFunction, sampleSize, cancellationToken);
     }
@@ -6275,11 +6142,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <returns>True if a prompt compressor is configured; otherwise, false.</returns>
     public bool HasPromptCompressor => PromptCompressor != null;
 
-    /// <summary>
-    /// Checks whether a prompt chain is configured and available for use.
-    /// </summary>
-    /// <returns>True if a prompt chain is configured; otherwise, false.</returns>
-    public bool HasPromptChain => PromptChain != null;
 
     /// <summary>
     /// Checks whether a few-shot example selector is configured and available for use.
