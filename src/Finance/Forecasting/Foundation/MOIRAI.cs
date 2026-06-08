@@ -376,7 +376,30 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
 
         _useNativeMode = true;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Paper-faithful default optimizer (Woo et al. 2024 §5.1): Adam.
+        // Paper text reports lr=1e-4, but at fp64 (test default) the
+        // 12-transformer-encoder chain amplifies single-step Adam updates
+        // past the saturation cliff of GELU + linear-output-head, collapsing
+        // forward output to zero after the first real training step (observed:
+        // call #1 output=0.227 loss=0.136 → call #2 output=13.4 loss=168.6
+        // explosion → call #3+ output=0 with all-zero gradients). Lowering
+        // the initial LR by 100× to 1e-6 keeps the per-element Adam step
+        // shrunk enough that amplification through 12 stacked transformer
+        // blocks stays bounded for the test-precision baseline; the schedule
+        // can still ramp to MaxLearningRate=1e-3 (the paper's headline LR)
+        // through warmup. MinLearningRate=1e-9 keeps Plateau-style schedulers
+        // from clamping the floor too high.
+        var __adamOpts = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = 1e-6,
+            MinLearningRate = 1e-9,
+            MaxLearningRate = 1e-3,
+        };
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, __adamOpts);
+        // Wire into the base train-optimizer slot so TrainWithTape uses our
+        // configured Adam (initial lr=1e-6, ramping toward the paper's
+        // headline lr=1e-3), not the framework default.
+        SetBaseTrainOptimizer(_optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _contextLength = options.ContextLength;
@@ -515,6 +538,16 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
             throw new InvalidOperationException(
                 "Training is only supported in native mode.");
 
+        // Decoder-only training mirrors the inference decoder-only path but
+        // skips the non-tape-safe quantile expansion — Train computes loss
+        // against point predictions, so the quantile spread (a learned offset
+        // around the median in ExpandToQuantiles) doesn't affect the gradient
+        // signal that reaches the mixture head's weight/mean parameters.
+        if (_useDecoderOnly)
+        {
+            return ForwardDecoderOnlyForTraining(input);
+        }
+
         // Tape-safe layer-stack forward. Mirrors ForwardDecoderOnly /
         // Forward but uses Engine.Reshape for rank adaptation so the
         // tape stays connected across each reshape (per
@@ -531,38 +564,97 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
             current = layer.Forward(current);
         }
 
-        // After the layer stack, `current` shape is [B, distributionParams]
-        // — a SINGLE mixture-distribution output per batch element. The
-        // training target (and Predict via ExtractMedianFromQuantiles) has
-        // shape [B, forecastHorizon, 1] — one point prediction per horizon
-        // step. Project to that shape tape-aware:
-        //   1. Slice the first feature of the distribution (treat as the
-        //      mean of the dominant mixture, the same value
-        //      ExtractMedianFromQuantiles picks at inference).
-        //   2. Reshape to [B, 1, 1] and TensorTile across the horizon axis
-        //      so loss can compare against a [B, H, 1] target without a
-        //      shape mismatch.
-        // Per Woo et al. 2024, MOIRAI emits per-position mixture parameters
-        // and the loss is NLL of the target under that distribution. The
-        // existing layer chain doesn't actually patch the input — every
-        // position collapses to one token — so the "per-horizon"
-        // distinction is degenerate. Tiling the single-token output across
-        // horizon makes training shape-compatible and lets gradients flow,
-        // which is the prerequisite for the deeper patching refactor to
-        // even start producing meaningfully-different per-horizon
-        // predictions.
+        // After the layer stack, `current` shape is [B, _numMixtures * 3]
+        // — a SINGLE mixture-distribution output per batch element (the layer
+        // chain doesn't yet patch across horizon; that refactor is filed
+        // separately). The training target shape is [B, forecastHorizon, 1].
+        // Bridge the two tape-safely via ExtractPointPredictionsTapeSafe,
+        // which (1) reshapes mixture params to (mixture, parameter) axes,
+        // (2) applies Softmax to the weight column so EVERY weight stays on
+        // the tape, (3) does a weighted sum of means using
+        // ReduceSum / TensorMultiply (so every mean is a tape input too),
+        // and (4) tiles across horizon. Gradients flow through every
+        // mixture parameter the model emits — the earlier slice-column-0
+        // shortcut grabbed only weight[0] and zeroed gradients for the
+        // remaining 3 * numMixtures - 1 parameters per batch element.
         if (current.Rank == 2)
         {
-            // Take first column [B, 1] (selected as the point-prediction proxy).
-            var firstFeature = Engine.TensorSliceAxis(current, 1, 0);
-            // Reshape [B] or [B, 1] → [B, 1, 1] for tiling.
-            int batchDim = firstFeature.Rank == 2 ? firstFeature.Shape[0] : firstFeature.Shape[0];
-            var batchShaped = Engine.Reshape(firstFeature, new[] { batchDim, 1, 1 });
-            // Tile across horizon: [B, 1, 1] → [B, H, 1].
-            current = Engine.TensorTile(batchShaped, new[] { 1, _forecastHorizon, 1 });
+            current = ExtractPointPredictionsTapeSafe(current, _forecastHorizon);
         }
 
         return current;
+    }
+
+    /// <summary>
+    /// Tape-safe equivalent of <see cref="ForwardDecoderOnly"/> used by
+    /// <see cref="ForwardNativeForTraining"/> when <c>_useDecoderOnly</c> is true.
+    /// Mirrors the inference layer-iteration but routes through
+    /// <see cref="ExtractPointPredictionsTapeSafe"/> instead of the
+    /// scalar-loop <see cref="ExpandToQuantiles"/> — quantile expansion
+    /// isn't differentiable through scalar element access and isn't
+    /// needed at training time since the loss is over point predictions.
+    /// </summary>
+    private Tensor<T> ForwardDecoderOnlyForTraining(Tensor<T> input)
+    {
+        Tensor<T> current = input;
+        if (current.Rank == 1)
+        {
+            current = Engine.Reshape(current, new[] { 1, current.Length });
+        }
+        foreach (var layer in Layers)
+        {
+            current = layer.Forward(current);
+        }
+        if (current.Rank == 2)
+        {
+            current = ExtractPointPredictionsTapeSafe(current, _forecastHorizon);
+        }
+        return current;
+    }
+
+    /// <summary>
+    /// Tape-safe mixture-weighted-mean extraction of point predictions from a
+    /// rank-2 mixture-head output. Differentiable replacement for the inference
+    /// <see cref="ExtractPointPredictions"/> (which uses scalar
+    /// <c>NumOps</c> + raw <c>tensor.Data.Span</c> indexing and so detaches
+    /// from the autodiff tape).
+    /// </summary>
+    /// <param name="mixtureOutput">Layer-head output, shape <c>[B, _numMixtures * 3]</c>
+    /// with interleaved (weight, mean, variance) triples per mixture.</param>
+    /// <param name="horizon">Forecast horizon — the result is tiled along this axis.</param>
+    /// <returns>Tensor of shape <c>[B, horizon, 1]</c>: the same weighted-mean point
+    /// prediction repeated across every horizon step. Every mixture parameter on
+    /// the tape participates in the result, so gradients reach the full head.</returns>
+    private Tensor<T> ExtractPointPredictionsTapeSafe(Tensor<T> mixtureOutput, int horizon)
+    {
+        int b = mixtureOutput.Shape[0];
+
+        // [B, _numMixtures * 3] → [B, _numMixtures, 3]
+        var reshaped = Engine.Reshape(mixtureOutput, new[] { b, _numMixtures, 3 });
+
+        // Split along the parameter axis (axis=2): weights @ index 0, means @ index 1.
+        // Variance (index 2) intentionally unused — point prediction is mean only,
+        // matching the inference ExtractPointPredictions semantics. Engine.TensorSliceAxis
+        // SQUEEZES the indexed dim (codebase convention — see CRF /
+        // DiTNoisePredictor usages), so [B, M, 3] sliced along axis 2 yields
+        // rank-2 [B, M], not [B, M, 1].
+        var weights = Engine.TensorSliceAxis(reshaped, 2, 0); // [B, _numMixtures]
+        var means = Engine.TensorSliceAxis(reshaped, 2, 1);   // [B, _numMixtures]
+
+        // Softmax over the mixture axis (axis=1 of the squeezed rank-2 tensor)
+        // — turns the raw weight logits into mixture probabilities summing to 1.
+        // Engine.Softmax preserves the tape (per
+        // ActivationFunctions/SoftmaxActivation.cs).
+        var probs = Engine.Softmax(weights, axis: 1); // [B, _numMixtures]
+
+        // Weighted sum: ∑_m probs[m] * means[m] along the mixture axis.
+        var weighted = Engine.TensorMultiply(probs, means);             // [B, _numMixtures]
+        var pointPred = Engine.ReduceSum(weighted, new[] { 1 }, keepDims: true); // [B, 1]
+
+        // Reintroduce the trailing feature dim and tile across horizon:
+        // [B, 1] → [B, 1, 1] → [B, horizon, 1].
+        var pointPredRank3 = Engine.Reshape(pointPred, new[] { b, 1, 1 });
+        return Engine.TensorTile(pointPredRank3, new[] { 1, horizon, 1 });
     }
 
     /// <inheritdoc/>
