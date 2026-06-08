@@ -29,8 +29,11 @@ public class OpenAIChatClient<T> : ChatClientBase<T>
 {
     private static readonly JsonSerializerSettings JsonSettings = new() { NullValueHandling = NullValueHandling.Ignore };
 
-    private readonly string _apiKey;
-    private readonly string _endpoint;
+    /// <summary>Gets the API key used for authentication.</summary>
+    protected string ApiKey { get; }
+
+    /// <summary>Gets the endpoint the request is posted to.</summary>
+    protected string Endpoint { get; }
 
     /// <summary>
     /// Initializes a new OpenAI chat client.
@@ -50,8 +53,8 @@ public class OpenAIChatClient<T> : ChatClientBase<T>
     {
         ValidateApiKey(apiKey);
         Guard.NotNullOrWhiteSpace(modelName);
-        _apiKey = apiKey;
-        _endpoint = endpoint ?? "https://api.openai.com/v1/chat/completions";
+        ApiKey = apiKey;
+        Endpoint = endpoint ?? "https://api.openai.com/v1/chat/completions";
         ModelId = modelName;
     }
 
@@ -211,12 +214,22 @@ public class OpenAIChatClient<T> : ChatClientBase<T>
     protected virtual HttpRequestMessage CreateHttpRequest(JObject payload)
     {
         var json = JsonConvert.SerializeObject(payload, JsonSettings);
-        var request = new HttpRequestMessage(HttpMethod.Post, _endpoint)
+        var request = new HttpRequestMessage(HttpMethod.Post, Endpoint)
         {
             Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
         };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
+        ApplyAuthentication(request);
         return request;
+    }
+
+    /// <summary>
+    /// Applies authentication to the outbound request. The base uses an OpenAI-style
+    /// <c>Authorization: Bearer</c> header; Azure overrides this to use an <c>api-key</c> header.
+    /// </summary>
+    /// <param name="request">The request to authenticate.</param>
+    protected virtual void ApplyAuthentication(HttpRequestMessage request)
+    {
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", ApiKey);
     }
 
     /// <summary>
