@@ -191,6 +191,8 @@ public class DecisionTreeNode<T>
         Prediction = _numOps.Zero;
         Threshold = _numOps.Zero;
         SumSquaredError = _numOps.Zero;
+        NodeImportance = _numOps.Zero;
+        NodeImpurity = _numOps.Zero;
     }
 
     /// <summary>
@@ -212,6 +214,8 @@ public class DecisionTreeNode<T>
         Prediction = _numOps.Zero;
         Threshold = _numOps.Zero;
         SumSquaredError = _numOps.Zero;
+        NodeImportance = _numOps.Zero;
+        NodeImpurity = _numOps.Zero;
     }
 
     /// <summary>
@@ -231,6 +235,8 @@ public class DecisionTreeNode<T>
         SplitValue = _numOps.Zero;
         Threshold = _numOps.Zero;
         SumSquaredError = _numOps.Zero;
+        NodeImportance = _numOps.Zero;
+        NodeImpurity = _numOps.Zero;
     }
 
     /// <summary>
