@@ -491,4 +491,50 @@ public class ActivationLayer<T> : LayerBase<T>
             return ScalarActivation.GetType().Name;
         return "Unknown";
     }
+
+    #region ONNX Export
+
+    /// <summary>
+    /// Emits a single ONNX op corresponding to the layer's activation function.
+    /// v0.1 supports: Identity (no-op pass-through), ReLU, Sigmoid, Tanh, Softmax.
+    /// Other activation types throw <see cref="AiDotNet.Onnx.OnnxExportUnsupportedException"/>.
+    /// </summary>
+    public override AiDotNet.Onnx.OnnxLayerOutputs ConvertToOnnx(
+        AiDotNet.Onnx.OnnxGraphBuilder builder,
+        AiDotNet.Onnx.OnnxLayerInputs inputs)
+    {
+        if (builder is null) throw new ArgumentNullException(nameof(builder));
+        if (inputs is null) throw new ArgumentNullException(nameof(inputs));
+
+        var actName = GetActivationTypeName();
+        int tickIndex = actName.IndexOf('`');
+        if (tickIndex > 0) actName = actName.Substring(0, tickIndex);
+
+        // Identity is a pass-through — no op emitted; downstream layer wires
+        // straight to this layer's input tensor.
+        if (actName == "IdentityActivation")
+        {
+            return new AiDotNet.Onnx.OnnxLayerOutputs(inputs.Primary);
+        }
+
+        string opType = actName switch
+        {
+            "ReLUActivation" or "RELUActivation" => "Relu",
+            "SigmoidActivation" => "Sigmoid",
+            "TanhActivation" => "Tanh",
+            "SoftmaxActivation" => "Softmax",
+            _ => throw new AiDotNet.Onnx.OnnxExportUnsupportedException(
+                $"ActivationLayer ({actName})",
+                $"v0.1 ONNX export supports ActivationLayer with Identity, ReLU, Sigmoid, Tanh, or Softmax. " +
+                $"Got '{actName}'."),
+        };
+
+        var outputName = builder.NextTensorName(opType.ToLowerInvariant() + "_out");
+        builder.AddOp(opType,
+            inputs: new[] { inputs.Primary },
+            outputs: new[] { outputName });
+        return new AiDotNet.Onnx.OnnxLayerOutputs(outputName);
+    }
+
+    #endregion
 }
