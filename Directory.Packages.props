@@ -120,7 +120,7 @@
          stay at 0.91.2 (no native change needed). -->
     <PackageVersion Include="AiDotNet.Tensors" Version="0.91.12" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.91.2" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.91.2" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.91.12" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.91.2" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
