@@ -234,9 +234,12 @@ internal static class MixedPrecisionReflection
         if (result is null) return (0f, false, System.Array.Empty<Tensor<float>?>());
         Type t = result.GetType();
 
+        // Accept float OR double Loss: the current API returns float, but a future
+        // Tensors build could widen it to double — narrow rather than silently 0.
         float loss = 0f;
         object? lossVal = t.GetProperty("Loss")?.GetValue(result) ?? t.GetField("Loss")?.GetValue(result);
         if (lossVal is float lf) loss = lf;
+        else if (lossVal is double ld) loss = (float)ld;
 
         bool foundInfNan = false;
         object? nanVal = t.GetProperty("FoundInfNan")?.GetValue(result) ?? t.GetField("FoundInfNan")?.GetValue(result);
@@ -268,19 +271,29 @@ internal static class MixedPrecisionReflection
     {
         if (result is null) return 0f;
         if (result is float f) return f;
+        if (result is double dd) return (float)dd;
         Type resultType = result.GetType();
         PropertyInfo? lossProp = resultType.GetProperty("Loss");
         if (lossProp is not null)
         {
             object? val = lossProp.GetValue(result);
-            return val is float fv ? fv : 0f;
+            return AsFloat(val);
         }
         FieldInfo? lossField = resultType.GetField("Loss");
         if (lossField is not null)
         {
             object? val = lossField.GetValue(result);
-            return val is float fv ? fv : 0f;
+            return AsFloat(val);
         }
         return 0f;
     }
+
+    /// <summary>Narrow a boxed loss scalar to float, accepting either float or double
+    /// (the API returns float today, but tolerate a future double widening).</summary>
+    private static float AsFloat(object? val) => val switch
+    {
+        float fv => fv,
+        double dv => (float)dv,
+        _ => 0f,
+    };
 }

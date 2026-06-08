@@ -368,7 +368,10 @@ public static class CompiledTapeTrainingStep<T>
         // and throw, masking what is really a model-structure change.
         _persistentInput = null;
         _persistentTarget = null;
-        _mpAdamPlan = null; _mpGenericPlan = null; // FP16 mixed-precision plans (#558)
+        // Drop ALL mixed-precision plans (SGD/Adam/generic) on explicit Invalidate,
+        // matching InvalidateIfLayerSetChanged — a model-structure change must not
+        // leave any stale FP16 plan capturing the old layer set's tensors (#558).
+        _mpPlan = null; _mpAdamPlan = null; _mpGenericPlan = null; // FP16 mixed-precision plans (#558)
         // Reset the fused-engagement counter — from this point on, any
         // assertion about "fused ran at least N times" should reflect the
         // new lifecycle.
