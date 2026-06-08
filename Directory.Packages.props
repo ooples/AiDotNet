@@ -122,11 +122,15 @@
          (feat: streaming backward). That hasn't been released yet — the consumer-side
          code in this PR is held behind a feature flag that no-ops gracefully when the
          Tensors API isn't available, so the build stays green on 0.91.12 until #564 ships
-         and we can bump again. -->
+         and we can bump again.
 
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.91.12" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.91.12" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.91.12" />
+         Bumped 0.91.12 -> 0.92.0: Tensors #564 (memory-bounded gradient-streaming core)
+         shipped, enabling this PR's streaming-training path at runtime. AiDotNet.Native
+         packages coreleased in lockstep at 0.92.0. -->
+
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.92.0" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.92.0" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.92.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.92.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
