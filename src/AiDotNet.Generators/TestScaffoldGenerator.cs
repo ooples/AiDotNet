@@ -868,6 +868,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool implementsDiffusionModel = false;
         bool implementsGaussianProcess = false;
         bool implementsDetectionBackbone = false;
+        bool implementsVocoder = false;
 
         foreach (var iface in modelClass.AllInterfaces)
         {
@@ -875,6 +876,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 continue;
 
             var display = iface.OriginalDefinition.ToDisplayString();
+
+            // Vocoders implement IVocoder<T> (mel-spectrogram -> waveform). They
+            // get a channels-first rank-3 [B, melCh, T] input contract so the
+            // 1-D conv generator (CreateDefaultVocoderLayers) runs natively.
+            if (display.EndsWith(".IVocoder<T>", System.StringComparison.Ordinal) ||
+                display.Contains(".IVocoder<"))
+            {
+                implementsVocoder = true;
+            }
 
             if (display.StartsWith(INeuralNetworkModelName, System.StringComparison.Ordinal))
             {
@@ -1125,6 +1135,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             Categories = categories,
             Tasks = tasks,
             ImplementsNeuralNetworkModel = implementsNeuralNetworkModel,
+            ImplementsVocoder = implementsVocoder,
             ImplementsDiffusionModel = implementsDiffusionModel,
             ImplementsDetectionBackbone = implementsDetectionBackbone,
             ImplementsGaussianProcess = implementsGaussianProcess,
@@ -2316,8 +2327,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
             }
         }
-        else if (family == TestFamily.TTS)
+        else if (family == TestFamily.TTS || model.ExtendsTtsModelBase)
         {
+            // Route ALL TTS-base models here — including GAN/diffusion-family
+            // vocoders (HiFiGAN, MelGAN, BigVGAN, …) whose CategoryGAN/Diffusion
+            // makes ResolveTestBaseClass pick GAN/Diffusion family BEFORE the TTS
+            // check, so without the ExtendsTtsModelBase clause they fell through to
+            // the generic `isAudioModel` shape ([1,64,32] → [4]). A vocoder's
+            // mel→waveform dense stack maps [T, melCh] → [T, 1], so the generic
+            // [4] OutputShape never matched the [T,1] (=T) output length
+            // (GeneratorOutput_ShouldHaveCorrectShape: expected 4, actual 64).
             // TTS family covers two distinct sub-architectures:
             //   • Vocoders (HiFi-GAN / MelGAN / ParallelWaveGAN / WaveNet
             //     etc.): mel-spectrogram → waveform. Input is [T, 80] mel,
@@ -2342,6 +2361,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // encoder→speaker-projection→decoder chain actually runs.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 8, 256 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 8, 256 };");
+            }
+            else if (model.ImplementsVocoder && IsConv1DWaveformVocoder(model.ClassName))
+            {
+                // HiFi-GAN-style waveform vocoders run the paper-faithful 1-D conv
+                // generator (CreateDefaultHiFiGANLayers, Kong et al. 2020) that
+                // operates on channels-first rank-3 [B, melChannels, T] mel input
+                // and emits [B, 1, T] waveform — Conv1DLayer strictly requires
+                // rank-3 [B, C, T]. These models configure melChannels=80; T=8
+                // frames keeps the per-test cost low. Output product = 8.
+                // Heterogeneous vocoders (BigVGAN melChannels=100, the Fourier
+                // Vocos, flow-based WaveGlow, ParallelWaveGAN) keep the rank-2
+                // dimension-flexible Dense contract below.
+                // (Voice-cloning models are handled above; a model is never both.)
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 80, 8 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 8 };");
             }
             else if (IsTextToMelTTS(model.ClassName))
             {
@@ -4395,6 +4429,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         // Interface detection
         public bool ImplementsNeuralNetworkModel { get; set; }
+        public bool ImplementsVocoder { get; set; }
         public bool ImplementsDiffusionModel { get; set; }
         public bool ImplementsDetectionBackbone { get; set; }
         public bool ImplementsGaussianProcess { get; set; }
@@ -4592,6 +4627,37 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// 2024 §3.1) and the test scaffold should supply rank-1 [seq] integer
     /// token IDs rather than the rank-2 [T, 80] mel default.
     /// </summary>
+    /// <summary>
+    /// Returns true for the HiFi-GAN-style waveform vocoders that use the
+    /// paper-faithful channels-first 1-D conv generator
+    /// (<c>LayerHelper.CreateDefaultHiFiGANLayers</c>): mel-channels = 80, a
+    /// single waveform output channel, rank-3 [B, 80, T] input. Other IVocoder
+    /// models (BigVGAN with mel = 100, the Fourier-based Vocos, flow-based
+    /// WaveGlow, ParallelWaveGAN) keep the dimension-flexible Dense generator and
+    /// its rank-2 [T, 80] -> [T, 1] contract.
+    /// </summary>
+    private static bool IsConv1DWaveformVocoder(string className)
+    {
+        int tickIdx = className.IndexOf('`');
+        if (tickIdx > 0) className = className.Substring(0, tickIdx);
+        return className switch
+        {
+            "HiFiGAN" => true,
+            "MelGAN" => true,
+            "UnivNet" => true,
+            "MultiBandMelGAN" => true,
+            "APNet" => true,
+            "APNet2" => true,
+            "ISTFTNet" => true,
+            // WaveNet-style single-stack dilated-conv vocoders (Yamamoto 2020;
+            // WaveGlow's coupling nets are WaveNet convs) — channels-first
+            // [B, 80, T] -> [B, 1, T].
+            "ParallelWaveGAN" => true,
+            "WaveGlow" => true,
+            _ => false,
+        };
+    }
+
     private static bool IsTextToMelTTS(string className)
     {
         int tickIdx = className.IndexOf('`');

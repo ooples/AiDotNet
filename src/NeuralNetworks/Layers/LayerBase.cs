@@ -391,6 +391,26 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     public int? RandomSeed { get; set; }
 
     /// <summary>
+    /// Assigns <see cref="RandomSeed"/> from the active
+    /// <see cref="LayerInitializationSeedScope"/> when no seed has been set yet.
+    /// Called from the root constructors so the seed is in place BEFORE a derived
+    /// constructor initializes its weights — closing the gap where weight init ran
+    /// against the process-shared <see cref="RandomHelper.ThreadSafeRandom"/>
+    /// (order-dependent) instead of the architecture's deterministic seed. A null
+    /// scope (no architecture seed requested) leaves <see cref="RandomSeed"/> null,
+    /// preserving the existing non-reproducible production default.
+    /// </summary>
+    private void AssignInitializationSeedFromScope()
+    {
+        if (RandomSeed is null)
+        {
+            int? scoped = LayerInitializationSeedScope.NextSeedOrNull();
+            if (scoped.HasValue)
+                RandomSeed = scoped;
+        }
+    }
+
+    /// <summary>
     /// Gets a value indicating whether this layer has been initialized.
     /// </summary>
     /// <remarks>
@@ -781,6 +801,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     protected LayerBase(int[] inputShape, int[] outputShape)
     {
         _instanceId = Interlocked.Increment(ref _instanceCounter);
+        AssignInitializationSeedFromScope();
         InputShape = inputShape;
         InputShapes = [inputShape];
         OutputShape = outputShape;
@@ -866,6 +887,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     protected LayerBase(int[][] inputShapes, int[] outputShape)
     {
         _instanceId = Interlocked.Increment(ref _instanceCounter);
+        AssignInitializationSeedFromScope();
         InputShapes = inputShapes;
         // For multi-input layers, use the first input shape as the primary input shape
         // This ensures GetInputShape() always returns a valid (non-empty) shape
@@ -4128,45 +4150,53 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// </summary>
     protected void InitializeLayerWeights(Tensor<T> tensor, int fanIn, int fanOut)
     {
-        if (InitializationStrategy is not null)
-        {
-            InitializationStrategy.InitializeWeights(tensor, fanIn, fanOut);
-            return;
-        }
-
-        // Closes #1383: when this layer has a RandomSeed pinned (set by
-        // LayerHelper from architecture.RandomSeed), build a FRESH seeded
-        // strategy per call rather than the process-shared
-        // DefaultStrategy singleton. The singleton wraps
-        // RandomHelper.ThreadSafeRandom whose per-thread Random state
-        // advances cumulatively across consecutive trainings — so two
-        // back-to-back trainings at the same architecture seed produce
-        // different initial weights without this branch.
+        // Closes #1383, #1539: when this layer has a RandomSeed pinned (set by
+        // LayerHelper from architecture.RandomSeed), drive initialization from a
+        // FRESH seeded RNG so init is reproducible / order-independent. This
+        // takes precedence over the configured strategy's own (process-shared)
+        // RNG even when the strategy is NON-LAZY — e.g. the He init that
+        // Conv1DLayer/ConvolutionalLayer use samples from
+        // RandomHelper.ThreadSafeRandom, whose per-thread state advances
+        // cumulatively across consecutive model constructions. Two back-to-back
+        // trainings at the same architecture seed must produce identical
+        // initial weights (flaky training invariants like
+        // MoreData_ShouldNotDegrade for conv-based models otherwise break).
+        // The lazy contract still works here because the WithSeededRandom /
+        // EagerInitializationStrategy branch below handles both lazy and
+        // non-lazy strategies uniformly when RandomSeed is set.
         if (RandomSeed.HasValue)
         {
-            // Mix the tensor shape (fanIn, fanOut) into the derivation
-            // alongside the layer's RandomSeed and the per-call counter.
-            // This defends the seeded path against the case where two
-            // different layer instances share the same RandomSeed value
-            // (uncommon — LayerHelper.CreateDefaultTransformerLayers
-            // assigns each layer a unique seed via seedRng.Next() — but
-            // possible if a consumer manually sets RandomSeed). Without
-            // shape-mixing, two layers at the same RandomSeed + same
-            // _initWeightsCallCounter index initializing weight tensors
-            // of the same fanIn × fanOut would land on bit-identical
-            // weights, breaking the symmetry the network architecture
-            // relies on. Different-shape tensors already differ via
-            // (fanIn, fanOut); same-shape tensors at the same call
-            // index across distinct layer instances now also differ
-            // via the counter, which is per-instance.
+            // Mix the tensor shape (fanIn, fanOut) into the derivation alongside
+            // the layer's RandomSeed and a per-instance call counter so two
+            // distinct layers (or two weight tensors in one layer) that share a
+            // RandomSeed value + shape don't land on bit-identical weights and
+            // break the symmetry the architecture relies on.
             int derived = unchecked((int)(
                 ((uint)RandomSeed.Value * 2654435761u)
                 ^ ((uint)fanIn * 40503u)
                 ^ ((uint)fanOut * 2654435789u)
                 ^ (uint)System.Threading.Interlocked.Increment(ref _initWeightsCallCounter)));
-            var seeded = new Initialization.EagerInitializationStrategy<T>(
-                AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(derived));
+            var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(derived);
+
+            // Preserve the configured distribution (He for conv layers, Xavier
+            // for dense, etc.) but drive it from the seeded RNG. A non-lazy
+            // strategy that supports re-seeding returns a seeded copy via
+            // WithSeededRandom; a lazy/null strategy defers to the seeded Xavier
+            // EagerInitializationStrategy (the lazy contract expects this path).
+            IInitializationStrategy<T> seeded =
+                (InitializationStrategy is Initialization.InitializationStrategyBase<T> sb
+                    && !InitializationStrategy.IsLazy)
+                    ? sb.WithSeededRandom(rng)
+                    : new Initialization.EagerInitializationStrategy<T>(rng);
             seeded.InitializeWeights(tensor, fanIn, fanOut);
+            return;
+        }
+
+        // No pinned seed: use the configured non-lazy strategy as-is (its own
+        // distribution + RNG), else the process default.
+        if (InitializationStrategy is not null && !InitializationStrategy.IsLazy)
+        {
+            InitializationStrategy.InitializeWeights(tensor, fanIn, fanOut);
             return;
         }
 

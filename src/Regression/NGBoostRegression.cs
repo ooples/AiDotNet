@@ -180,8 +180,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
             int[] sampleIndices = GetSampleIndices(n);
             int sampleSize = sampleIndices.Length;
 
-            // Compute scores and gradients for the sample
-            var scores = new Vector<T>(sampleSize);
+            // Compute gradients for the sample
             var gradients = new Vector<T>[_numParams];
             for (int p = 0; p < _numParams; p++)
             {

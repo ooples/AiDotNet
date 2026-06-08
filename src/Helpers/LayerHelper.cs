@@ -31892,32 +31892,31 @@ public static class LayerHelper<T>
         // input fails the first MHA's hidden-dim contract.
         yield return new EmbeddingLayer<T>(vocabSize, encoderDim);
 
-        // === Text Encoder (FFT blocks) ===
-        yield return new LayerNormalizationLayer<T>();
-
+        // === Text Encoder (FFT blocks; Li et al. 2019 §3, FastSpeech Ren et al.
+        // 2019 §3.1) ===
+        // Each FFT block is a canonical Pre-LN residual Transformer block
+        // (y = x + SelfAttn(LN(x)); z = y + FFN(LN(y)); Vaswani 2017 §3.1). The
+        // prior flat MHA→Norm→FFN→Norm sequence had NO residual connections, so
+        // each block replaced rather than refined the hidden state — washing out
+        // the signal and diverging with more training (the #1380 collapse
+        // mechanism). NOTE: kept at ONE layer per block — TransformerTTS's
+        // encoder/decoder split (_encoderLayerEnd in ComputeEncoderDecoderBoundary)
+        // counts 1 block per layer now.
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (encoderDim) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(encoderFfnDim, geluActivation);
-            yield return new DenseLayer<T>(encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: encoderDim, numHeads: numHeads, ffnDim: encoderFfnDim, dropoutRate: dropoutRate);
         }
 
         // === Projection (encoder dim -> hidden dim) ===
         if (encoderDim != hiddenDim)
             yield return new DenseLayer<T>(hiddenDim, identityActivation);
 
-        // === Mel Decoder (FFT blocks) ===
+        // === Mel Decoder (FFT blocks; residual Pre-LN, as above) ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(decoderFfnDim, geluActivation);
-            yield return new DenseLayer<T>(hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: hiddenDim, numHeads: numHeads, ffnDim: decoderFfnDim, dropoutRate: dropoutRate);
         }
 
         // === Output projection to mel channels ===
@@ -31940,9 +31939,27 @@ public static class LayerHelper<T>
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         IActivationFunction<T> tanhActivation = new TanhActivation<T>();
 
+        // NOTE: GAN vocoder generators (HiFi-GAN, MelGAN, BigVGAN, UnivNet) use
+        // weight normalization on the (transposed-)conv weights and contain NO
+        // activation-normalization layers (LayerNorm/BatchNorm/InstanceNorm) in
+        // the main path. Earlier versions of this template inserted a LayerNorm
+        // after every block, which is BOTH non-paper-faithful and the cause of a
+        // forward-pass collapse: with zero-bias initialization the LeakyReLU path
+        // is positively homogeneous (leakyReLU(a*x) = a*leakyReLU(x), a>0), so a
+        // constant mel input produces only a SCALED activation; the terminal
+        // LayerNorm then divides out that scale, making the waveform identical for
+        // any constant input (DifferentInputs/ScaledInput/DifferentText collapse).
+        // Dropping LayerNorm restores input sensitivity through the final tanh.
+        //
+        // This builder is the dimension-flexible fallback used by vocoders whose
+        // mel-channel count or output representation does not fit the channels-
+        // first Conv1D contract (BigVGAN melChannels=100, Vocos Fourier output,
+        // WaveGlow flow, ParallelWaveGAN noise input). The HiFi-GAN-style
+        // waveform vocoders use the paper-faithful 1-D conv generator
+        // CreateDefaultHiFiGANLayers instead.
+
         // === Input projection from mel to hidden ===
         yield return new DenseLayer<T>(hiddenDim, leakyRelu);
-        yield return new LayerNormalizationLayer<T>();
 
         // === Upsampling blocks ===
         int currentDim = hiddenDim;
@@ -31953,13 +31970,11 @@ public static class LayerHelper<T>
 
             // Transposed convolution equivalent (upsampling via dense)
             yield return new DenseLayer<T>(nextDim, leakyRelu);
-            yield return new LayerNormalizationLayer<T>();
 
             // Multi-receptive-field residual blocks
             for (int r = 0; r < numResBlocks; r++)
             {
                 yield return new DenseLayer<T>(nextDim, leakyRelu);
-                yield return new LayerNormalizationLayer<T>();
             }
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
@@ -31968,6 +31983,130 @@ public static class LayerHelper<T>
 
         // === Output projection to waveform ===
         yield return new DenseLayer<T>(outputDim, tanhActivation);
+    }
+
+    /// <summary>
+    /// Paper-faithful HiFi-GAN generator (Kong et al. 2020, "HiFi-GAN", §2.2),
+    /// operating on channels-first rank-3 <c>[B, melChannels, T]</c> tensors:
+    /// <list type="number">
+    /// <item><c>conv_pre</c>: 1-D conv mel -> hidden (kernel 7).</item>
+    /// <item>Upsampling blocks: each halves the channel width through a 1-D conv,
+    /// then runs the Multi-Receptive-Field (MRF) module — dilated 1-D convs
+    /// (dilation 1/3/5) covering multiple receptive fields.</item>
+    /// <item><c>conv_post</c>: 1-D conv hidden -> 1 with tanh (waveform in
+    /// <c>[-1, 1]</c>).</item>
+    /// </list>
+    /// Convolutional weight-sharing — not a fully-connected MLP — is what lets the
+    /// optimizer converge stably; the generator uses weight normalization on the
+    /// conv weights and contains NO activation-normalization layers. Used by the
+    /// HiFi-GAN-style waveform vocoders (HiFiGAN, MelGAN, UnivNet, MultiBandMelGAN,
+    /// APNet, APNet2, ISTFTNet) which all configure melChannels=80 and a single
+    /// waveform output channel. Heterogeneous vocoders (BigVGAN melChannels=100,
+    /// the Fourier Vocos, flow-based WaveGlow, ParallelWaveGAN) use the
+    /// dimension-flexible <see cref="CreateDefaultVocoderLayers"/> instead.
+    /// </summary>
+    internal static IEnumerable<ILayer<T>> CreateDefaultHiFiGANLayers(
+        int melChannels = 80,
+        int hiddenDim = 512,
+        int outputDim = 1,
+        int numUpsampleBlocks = 4,
+        int numResBlocks = 3,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> leakyRelu = new LeakyReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        IActivationFunction<T> tanhActivation = new TanhActivation<T>();
+
+        // === conv_pre: mel channels -> hidden (kernel 7, "same" padding) ===
+        yield return new Conv1DLayer<T>(
+            inputChannels: melChannels, outputChannels: hiddenDim,
+            kernelSize: 7, dilation: 1, stride: 1, padding: null,
+            activation: identityActivation);
+
+        int currentDim = hiddenDim;
+        for (int i = 0; i < numUpsampleBlocks; i++)
+        {
+            int nextDim = currentDim / 2;
+            if (nextDim < 32) nextDim = 32;
+
+            // Channel-narrowing conv (stands in for HiFi-GAN's ConvTranspose1d
+            // upsampling block; not residual because the channel count changes).
+            yield return new Conv1DLayer<T>(
+                inputChannels: currentDim, outputChannels: nextDim,
+                kernelSize: 7, dilation: 1, stride: 1, padding: null,
+                activation: leakyRelu);
+
+            // MRF dilated convs — channel-preserving (nextDim -> nextDim),
+            // dilation 1/3/5 to cover multiple receptive fields.
+            for (int r = 0; r < numResBlocks; r++)
+            {
+                int dilation = r == 0 ? 1 : (r == 1 ? 3 : 5);
+                yield return new Conv1DLayer<T>(
+                    inputChannels: nextDim, outputChannels: nextDim,
+                    kernelSize: 3, dilation: dilation, stride: 1, padding: null,
+                    activation: leakyRelu);
+            }
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+            currentDim = nextDim;
+        }
+
+        // === conv_post: hidden -> waveform channel (kernel 7) + tanh ===
+        yield return new Conv1DLayer<T>(
+            inputChannels: currentDim, outputChannels: outputDim,
+            kernelSize: 7, dilation: 1, stride: 1, padding: null,
+            activation: tanhActivation);
+    }
+
+    /// <summary>
+    /// Paper-faithful WaveNet-style vocoder generator (Parallel WaveGAN, Yamamoto
+    /// et al. 2020 §2.1; WaveNet, van den Oord et al. 2016): a SINGLE stack of
+    /// dilated 1-D convolutional residual blocks at a constant channel width with
+    /// an exponential dilation cycle (dilation = 2^(i mod cycle)), operating on
+    /// channels-first rank-3 [B, melChannels, T] tensors. This differs from the
+    /// HiFi-GAN generator (which has explicit upsample groups that halve the
+    /// channel width) — Parallel WaveGAN keeps the channel width fixed through all
+    /// residual blocks and upsamples the mel conditioning separately, so the
+    /// 4-group HiFi-GAN builder is not faithful here.
+    ///
+    /// Convolutional weight-sharing keeps the deep stack stable (the previous
+    /// fully-connected fallback built ~120 Dense layers for the paper's 30 blocks,
+    /// whose pre-tanh activations saturated and collapsed the output to be
+    /// identical for any constant input — DifferentText_DifferentAudio). No
+    /// dropout / activation-normalization, matching the paper.
+    /// </summary>
+    internal static IEnumerable<ILayer<T>> CreateDefaultWaveNetVocoderLayers(
+        int melChannels = 80,
+        int hiddenChannels = 64,
+        int numResBlocks = 30,
+        int dilationCycle = 10,
+        int outputDim = 1)
+    {
+        IActivationFunction<T> leakyRelu = new LeakyReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        IActivationFunction<T> tanhActivation = new TanhActivation<T>();
+
+        // Input 1x1 conv: mel channels -> hidden channels.
+        yield return new Conv1DLayer<T>(
+            inputChannels: melChannels, outputChannels: hiddenChannels,
+            kernelSize: 1, dilation: 1, stride: 1, padding: null,
+            activation: leakyRelu);
+
+        // Dilated residual conv blocks (constant channel width, dilation cycle).
+        for (int i = 0; i < numResBlocks; i++)
+        {
+            int dilation = 1 << (i % dilationCycle);
+            yield return new Conv1DLayer<T>(
+                inputChannels: hiddenChannels, outputChannels: hiddenChannels,
+                kernelSize: 3, dilation: dilation, stride: 1, padding: null,
+                activation: leakyRelu);
+        }
+
+        // Output 1x1 conv -> waveform channel(s) + tanh.
+        yield return new Conv1DLayer<T>(
+            inputChannels: hiddenChannels, outputChannels: outputDim,
+            kernelSize: 1, dilation: 1, stride: 1, padding: null,
+            activation: tanhActivation);
     }
 
     /// <summary>
@@ -32025,6 +32164,7 @@ public static class LayerHelper<T>
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         IActivationFunction<T> tanhActivation = new TanhActivation<T>();
+        IActivationFunction<T> leakyRelu = new LeakyReLUActivation<T>();
         int encoderFfnDim = encoderDim * 4;
 
         // Lazy weight init keeps construction cheap — VITS / NaturalSpeech /
@@ -32049,27 +32189,46 @@ public static class LayerHelper<T>
         // === Text Encoder (relative positional transformer) ===
         yield return new LayerNormalizationLayer<T>();
 
+        // Canonical Pre-LN residual Transformer blocks (Kim et al. 2021 §2.2 text
+        // encoder; Vaswani 2017 §3.1). The prior flat MHA→Norm→FFN→Norm sequence
+        // had NO residual connections → signal washout → training diverges /
+        // doesn't reduce loss (the #1380 collapse mechanism). One block per layer.
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (encoderDim) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(encoderFfnDim, geluActivation);
-            yield return new DenseLayer<T>(encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: encoderDim, numHeads: numHeads, ffnDim: encoderFfnDim, dropoutRate: dropoutRate);
         }
 
-        // === Normalizing Flow (invertible coupling layers) ===
+        // === Projection (encoder dim -> flow/decoder hidden dim) ===
+        if (encoderDim != hiddenDim)
+            yield return new DenseLayer<T>(hiddenDim, identityActivation);
+
+        // === Normalizing Flow (residual affine-coupling approximation) ===
+        // Coupling layers are invertible residual transforms (x + f(x)); model the
+        // per-block FFN as a residual Pre-LN Transformer block at hiddenDim so the
+        // flow refines rather than overwrites the latent (was residual-less).
         for (int i = 0; i < numFlowLayers; i++)
         {
-            yield return new DenseLayer<T>(hiddenDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: hiddenDim, numHeads: numHeads, ffnDim: hiddenDim * 4, dropoutRate: dropoutRate);
         }
 
         // === HiFi-GAN Decoder ===
-        yield return new DenseLayer<T>(decoderDim, geluActivation);
+        // Paper-faithful to the HiFi-GAN generator (Kong et al. 2020): LeakyReLU
+        // activations, NO activation-normalization (LayerNorm/BatchNorm), NO
+        // dropout — it relies on weight normalization of the conv weights instead.
+        // The previous GELU + LayerNorm + Dropout decoder was the source of the
+        // VITS-family training collapse:
+        //   • GELU's analytic derivative is term2·sech²(term1) with term2 ~ x³; once
+        //     a decoder pre-activation grows, term2 overflows to ±inf while sech²
+        //     underflows to 0, giving inf·0 = NaN gradients on the first backward
+        //     step (ForwardPass_ShouldBeFinite_AfterTraining: params NaN after
+        //     iter 1). LeakyReLU's derivative is a bounded constant (1 or 0.01).
+        //   • the terminal LayerNorm over a positively-homogeneous stack divides
+        //     out the input scale and collapses the waveform across inputs
+        //     (DifferentInputs_AfterTraining); dropout adds process-shared-RNG mask
+        //     noise that destabilizes the deep dim-reducing stack.
+        yield return new DenseLayer<T>(decoderDim, leakyRelu);
         yield return new LayerNormalizationLayer<T>();
 
         int currentDim = decoderDim;
@@ -32077,13 +32236,19 @@ public static class LayerHelper<T>
         {
             int nextDim = decoderDim / (1 << (i + 1));
             if (nextDim < 32) nextDim = 32;
-            yield return new DenseLayer<T>(nextDim, geluActivation);
+            yield return new DenseLayer<T>(nextDim, leakyRelu);
+            // Intermediate LayerNorm stabilizes the deep dim-reducing stack
+            // (without it the un-normalized stack diverges — loss rises during
+            // training). NOTE: deliberately NO LayerNorm immediately before the
+            // final tanh output below, so the terminal activation stays
+            // scale-sensitive and distinct inputs map to distinct waveforms
+            // (a terminal LayerNorm divides out the input scale → collapse).
             yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             currentDim = nextDim;
         }
 
-        // === Waveform output ===
+        // === Waveform output (no pre-norm — preserve input sensitivity) ===
+        yield return new DenseLayer<T>(currentDim, leakyRelu);
         yield return new DenseLayer<T>(1, tanhActivation);
     }
 

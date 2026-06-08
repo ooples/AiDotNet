@@ -399,6 +399,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected NeuralNetworkBase(NeuralNetworkArchitecture<T> architecture, ILossFunction<T> lossFunction, double maxGradNorm = 1.0)
     {
         Architecture = architecture;
+        // Begin a deterministic per-layer initialization-seed sequence for this
+        // model's construction BEFORE the derived constructor builds its layers.
+        // Each LayerBase<T> constructor pulls a seed from this scope so weight
+        // init derives from architecture.RandomSeed instead of the process-shared
+        // RandomHelper.ThreadSafeRandom (whose cumulative state made initial
+        // weights depend on prior, unrelated work — the cross-test / cross-process
+        // training-determinism bug). Inert when no seed was requested (production
+        // default), preserving the existing non-reproducible init behaviour.
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(architecture.RandomSeed);
         _layers = new List<ILayer<T>>();
         NumOps = MathHelper.GetNumericOperations<T>();
         MaxGradNorm = NumOps.FromDouble(maxGradNorm);

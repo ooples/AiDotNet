@@ -616,7 +616,13 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
 
         foreach (var param in context.Parameters)
         {
-            if (!context.Gradients.TryGetValue(param, out var grad))
+            // Cheap presence check — defer sparse→dense materialization until after
+            // the sparse fast path declines, so a sparse-only embedding param isn't
+            // ToDense'd into a full [vocab, dim] tensor that the scatter path below
+            // would then discard via `continue` (review #1526).
+            bool hasDenseGrad = context.Gradients.TryGetValue(param, out var denseGradLookup) && denseGradLookup is not null;
+            bool hasSparseGrad = SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param);
+            if (!hasDenseGrad && !hasSparseGrad)
                 continue;
 
             if (!_tapeM.TryGetValue(param, out var m))
@@ -631,6 +637,32 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
                 if (gpuAdam) v.AsWritableSpan().Clear();
                 _tapeV[param] = v;
             }
+
+            // Sparse-embedding scatter path (Tensors#553). Same rationale as the
+            // AdamOptimizer path — only the ~16 accessed rows of a 250 002-vocab
+            // embedding table receive real gradients per step, and touching m/v/θ
+            // on the other 249 986 rows is the actual bottleneck. AdamW differs
+            // from Adam only in decoupled weight decay (θ ← θ(1 − lr·wd) − step),
+            // which the helper applies per-row when weightDecay > 0. AMSGrad
+            // keeps the dense path (vMax invariant requires touching every row).
+            if (!_options.UseAMSGrad
+                && SparseEmbeddingOptimizerHelpers.TryApplyAdamSparse(
+                    param, m, v,
+                    NumOps.ToDouble(CurrentLearningRate),
+                    _options.Beta1, _options.Beta2,
+                    1.0 - Math.Pow(_options.Beta1, _tapeStep),
+                    1.0 - Math.Pow(_options.Beta2, _tapeStep),
+                    _options.Epsilon,
+                    weightDecay: _options.WeightDecay))
+            {
+                continue;
+            }
+
+            // Sparse path declined (AMSGrad / non-rank-2 / no sparse grads) — resolve
+            // the dense gradient now (ToDense only happens here, for a path that needs
+            // it). Reuse the lookup performed by the presence check above.
+            if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
+                continue;
 
             // GPU-resident fused AdamW (no host download); falls back if any tensor isn't GPU-resident.
             if (gpuAdam && param.Length == grad.Length)

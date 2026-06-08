@@ -429,7 +429,22 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
 
         foreach (var param in context.Parameters)
         {
-            if (!context.Gradients.TryGetValue(param, out var grad))
+            // True sparse scatter Adamax: per-row update of m + u + param.
+            if (!gpuAdam && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            {
+                if (!_tapeM.TryGetValue(param, out var mSp)) { mSp = new Tensor<T>(param._shape); _tapeM[param] = mSp; }
+                if (!_tapeU.TryGetValue(param, out var uSp)) { uSp = new Tensor<T>(param._shape); _tapeU[param] = uSp; }
+                double bc1 = 1.0 - Math.Pow(_options.Beta1, _tapeStep);
+                if (SparseEmbeddingOptimizerHelpers.TryApplyAdamaxSparse(
+                        param, mSp, uSp,
+                        NumOps.ToDouble(CurrentLearningRate),
+                        _options.Beta1, _options.Beta2, bc1, eps: 1e-8, weightDecay: 0.0))
+                {
+                    continue;
+                }
+            }
+
+            if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
             if (!_tapeM.TryGetValue(param, out var m)) { m = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) m.AsWritableSpan().Clear(); _tapeM[param] = m; }
