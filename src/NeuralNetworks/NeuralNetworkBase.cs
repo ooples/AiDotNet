@@ -5648,6 +5648,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // weights + gradients + Adam first/second moments at full precision.
                 double footprintBytes = (double)paramCount * elemSize * 4.0;
                 double available;
+#if NET5_0_OR_GREATER
+                // GC.GetGCMemoryInfo().TotalAvailableMemoryBytes is .NET 5+. The try/catch
+                // guards a runtime throw; the #if guards the COMPILE on net471, where the
+                // API doesn't exist at all (a try/catch can't rescue a missing method).
                 try
                 {
                     available = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
@@ -5656,6 +5660,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 {
                     available = 0;
                 }
+#else
+                // net471: no GC memory-info API — fall through to the conservative default
+                // below so the autotuner stays well-behaved on .NET Framework.
+                available = 0;
+#endif
                 if (available <= 0) available = 8L * 1024 * 1024 * 1024; // conservative fallback
                 return footprintBytes > 0.5 * available;
         }
