@@ -642,6 +642,6 @@ Before deploying to production:
 For more information:
 - [Getting Started Guide](./GettingStarted.md)
 - [Tutorials](./Tutorials.md)
-- [API Reference](./ApiReference.md)
+- [API Reference](../reference/index.md)
 
 Happy reasoning! 🚀

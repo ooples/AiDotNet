@@ -4307,6 +4307,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual void SetTrainingMode(bool isTraining)
     {
+        // Auto-detect weight streaming on first model touch. Every Predict
+        // override (~933 of them across the codebase) calls SetTrainingMode
+        // before iterating layers; the base-class Predict's auto-detect
+        // hooks (lines 3080, 3170) never fire because the subclass
+        // overrides bypass them. Wiring detection here covers all forward-
+        // path callers in one place. Both calls are idempotent (gated by
+        // _layerShapesResolved / _streamingAutoDetectFinalized) so the
+        // hot path is one branch + early-return after the first call.
+        ResolveLazyLayerShapes();
+        TryAutoEnableWeightStreaming();
+
         if (SupportsTraining)
         {
             IsTrainingMode = isTraining;
@@ -4660,15 +4671,27 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     /// <summary>
     /// Default parameter-count threshold above which weight streaming is
-    /// auto-enabled. 10 billion parameters ≈ 40 GB at fp32 / 20 GB at fp16
-    /// — the point at which consumer GPUs (24 GB max) and most workstation
-    /// systems (32–64 GB RAM) start hitting memory pressure. Models below
-    /// this train eagerly with no streaming overhead. Override per-process
-    /// via the <c>AIDOTNET_STREAMING_THRESHOLD_PARAMS</c> environment
-    /// variable, or per-instance via <see cref="DisableAutoStreaming"/> /
-    /// the explicit <see cref="ConfigureWeightLifetime"/> call.
+    /// auto-enabled. 500 million parameters covers the memory-pressure
+    /// inflection point across precisions and host environments:
+    /// <list type="bullet">
+    /// <item>fp64 (default for ModelFamily tests): 4 GB of weights — CI
+    /// runners with 7 GB total RAM need this headroom for activations
+    /// + optimizer state + runtime, otherwise paper-scale VLMs (EVA-ViT-G
+    /// in InstructBLIP/MiniGPT4/BLIP3 ≈ 1 B params, Gemma3 vision ≈ 1.2 B)
+    /// OOM at first DenseLayer allocation.</item>
+    /// <item>fp32: 2 GB of weights — consumer GPUs (8–24 GB) keep ample
+    /// headroom for activations.</item>
+    /// <item>fp16: 1 GB of weights — workstation systems unaffected.</item>
+    /// </list>
+    /// Was 10 B (fp32-only sizing); raised the floor for paper-scale fp64
+    /// model tests that OOM'd before the threshold check ever fired.
+    /// Models below this train eagerly with no streaming overhead. Override
+    /// per-process via the <c>AIDOTNET_STREAMING_THRESHOLD_PARAMS</c>
+    /// environment variable, or per-instance via
+    /// <see cref="DisableAutoStreaming"/> / the explicit
+    /// <see cref="ConfigureWeightLifetime"/> call.
     /// </summary>
-    private const long DefaultStreamingThresholdParams = 10_000_000_000L;
+    private const long DefaultStreamingThresholdParams = 500_000_000L;
 
     /// <summary>
     /// Public-readable view of the auto-detect threshold for telemetry
@@ -5150,6 +5173,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </para>
     /// </remarks>
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        try
+        {
+            TrainCore(input, expectedOutput);
+        }
+        catch (Exception ex) when (IsGpuTransientFailure(ex))
+        {
+            // A sticky GPU fault tripped the circuit breaker (engine is now CPU); retry on CPU.
+            TrainCore(input, expectedOutput);
+        }
+    }
+
+    private void TrainCore(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // Universal batch-dim auto-promotion. When the caller passes an
         // unbatched single sample (matching the architecture's declared rank
@@ -6987,6 +7023,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // is also attached for catch (InvalidOperationException ex) callers
             // that introspect ex.InnerException.
             var fallbackEx = Training.CompiledTapeTrainingStep<T>.GetLastFallbackException();
+
+            // Transient GPU/CUDA fault in the committed fused plan (e.g. CUDA error 700 from the
+            // activation-cache deferred-materializer race, or a device fault): the compiled plan
+            // can't continue on the GPU. Rather than abort the whole training run, reset the
+            // fused/compiled state and fall back to the eager path — the optimizer moments reset
+            // (a one-time trajectory perturbation), which is far better than crashing. Non-GPU
+            // causes (shape drift, hyperparameter changes) still surface loudly below.
+            if (IsGpuTransientFailure(fallbackEx))
+            {
+                _fusedTrainingDisabled = true;
+                _fusedTrainingCommitted = false;
+                InvalidateParameterCountCache();
+                return false;
+            }
+
             var rootCauseSuffix = fallbackEx is not null
                 ? $" Root-cause exception (caught in CompiledTapeTrainingStep): " +
                   $"{fallbackEx.GetType().FullName}: {fallbackEx.Message}"
@@ -7014,6 +7065,32 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             _fusedTrainingDisabled = true;
         }
         return ran;
+    }
+
+    /// <summary>
+    /// True if the exception chain indicates a transient GPU/CUDA fault (device error, failed
+    /// host/device copy, or the activation-cache deferred-materializer race) — as opposed to a
+    /// logical cause (shape drift, hyperparameter change). Used to decide whether a committed
+    /// fused step can reset-and-recover on the eager path instead of aborting.
+    /// </summary>
+    protected static bool IsGpuTransientFailure(Exception? exception)
+    {
+        for (var e = exception; e is not null; e = e.InnerException)
+        {
+            var message = e.Message;
+            if (message.Contains("CUDA error", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("cuMem", StringComparison.Ordinal)
+                || message.Contains("cuStream", StringComparison.Ordinal)
+                || message.Contains("cuLaunch", StringComparison.Ordinal)
+                || message.Contains("OpenCL", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("released before materialization", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("buffer was released", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>

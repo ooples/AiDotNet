@@ -1,5 +1,4 @@
 using AiDotNet.Helpers;
-using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -7,246 +6,309 @@ using AiDotNet.Tensors.Engines;
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
-/// A one-dimensional convolutional layer that slides a learnable kernel along the
-/// length (time) axis of a <c>[batch, channels, length]</c> signal.
+/// 1D convolutional layer for sequence / waveform data, with optional
+/// dilation. Operates on rank-3 input <c>[B, C_in, T]</c> and produces
+/// rank-3 output <c>[B, C_out, T_out]</c>, where
+/// <c>T_out = (T + 2*padding - dilation*(kernelSize - 1) - 1) / stride + 1</c>
+/// per the standard 1D convolution formula (PyTorch <c>nn.Conv1d</c>
+/// convention).
 /// </summary>
-/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 /// <remarks>
 /// <para>
-/// 1-D convolution is the standard building block for raw-waveform and sequence
-/// models (e.g. Silero VAD, WaveNet-style encoders, Conv-TasNet). It is mathematically
-/// a 2-D convolution whose kernel and padding/stride are degenerate on one spatial axis,
-/// so this layer reshapes the rank-3 signal <c>[B, C, L]</c> to <c>[B, C, 1, L]</c> and
-/// dispatches the engine's per-axis Conv2D (stride <c>[1, S]</c>, padding <c>[0, P]</c>,
-/// kernel <c>[outC, inC, 1, K]</c>). This reuses the engine's tape-aware, accelerated
-/// convolution path, so the kernel and bias appear as graph leaves and are updated by
-/// the optimizer under <c>TrainWithTape</c> exactly like <see cref="ConvolutionalLayer{T}"/>.
+/// Implemented by delegating to <c>Engine.Conv2D</c> with the time axis
+/// expanded to a degenerate 2D layout — input <c>[B, C, T]</c> is
+/// reshaped to <c>[B, C, 1, T]</c>, kernel shape is
+/// <c>[C_out, C_in, 1, kernelSize]</c>, dilation is <c>(1, dilation)</c>,
+/// and padding is <c>(0, padding)</c>. This avoids duplicating the conv
+/// kernel inside the layer and keeps the tape autodiff path identical to
+/// every other Conv layer in the codebase. The degenerate height axis is
+/// reshaped away on return.
 /// </para>
-/// <para><b>For Beginners:</b> A regular convolutional layer scans a 2-D image with a
-/// little square window. A 1-D convolutional layer scans a 1-D signal (like an audio
-/// waveform) with a window that slides left-to-right in time. It's the right tool when
-/// your data has one sequential axis instead of two spatial ones.</para>
+/// <para>
+/// Used by <see cref="AiDotNet.Diffusion.Audio.DiffWaveModel{T}"/> for the
+/// dilated convolution stack from Kong et al. 2020 "DiffWave" §3 — kernel
+/// size 3, dilation <c>2^(i % dilation_cycle)</c>. Also valid as a 1×1
+/// channel mixer (<c>kernelSize=1</c>) — the same shape used by DiffWave
+/// for the input/skip/output projections.
+/// </para>
 /// </remarks>
+/// <typeparam name="T">Numeric type (float / double).</typeparam>
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 1, 16", TestConstructorArgs = "1, 2, 3")]
-public class Conv1DLayer<T> : LayerBase<T>
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 2, 8", TestConstructorArgs = "4, 3, 1, 1, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+public partial class Conv1DLayer<T> : LayerBase<T>
 {
-    /// <summary>Number of input channels the layer expects.</summary>
-    public int InputChannels { get; }
+    private int _inputChannels;
+    private readonly int _outputChannels;
+    private readonly int _kernelSize;
+    private readonly int _stride;
+    private readonly int _padding;
+    private readonly int _dilation;
 
-    /// <summary>Number of output channels (filters) the layer produces.</summary>
-    public int OutputChannels { get; }
-
-    /// <summary>Length of the 1-D convolution kernel.</summary>
-    public int KernelSize { get; }
-
-    /// <summary>Step size of the kernel along the length axis.</summary>
-    public int Stride { get; }
-
-    /// <summary>Zero-padding applied to both ends of the length axis.</summary>
-    public int Padding { get; }
-
-    // Kernel stored in NCHW-compatible 4-D layout [outChannels, inChannels, 1, kernelSize]
-    // so it can be fed directly to the engine's Conv2D without a per-forward reshape.
     private Tensor<T> _kernels;
     private Tensor<T> _biases;
+    private int[]? _originalInputShape;
 
-    private static readonly int[] ConvDilation2D = { 1, 1 };
+    /// <summary>
+    /// Live parameter count. Returns the eventual <c>(C_out·C_in·K) + C_out</c>
+    /// formula once <see cref="OnFirstForward"/> has resolved input
+    /// channels; before that, falls back to <c>(C_out·1·K) + C_out</c>
+    /// (assumes a 1-channel input until proven otherwise) so a
+    /// freshly-constructed model still reports a non-zero
+    /// <c>ParameterCount</c> for the
+    /// <see cref="AiDotNet.Tests.ModelFamilyTests.Base.NeuralNetworkModelTestBase.Parameters_ShouldBeNonEmpty"/>
+    /// invariant — without locking the lazy shape resolution to a wrong
+    /// input channel count.
+    /// </summary>
+    public override long ParameterCount
+    {
+        get
+        {
+            int effectiveInputChannels = _inputChannels > 0 ? _inputChannels : 1;
+            return ((long)_outputChannels * effectiveInputChannels * _kernelSize) + _outputChannels;
+        }
+    }
 
-    /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
     /// <summary>
-    /// Initializes a new <see cref="Conv1DLayer{T}"/>.
+    /// Initializes a new 1D convolutional layer with lazy input-channel
+    /// resolution. The kernel and bias tensors aren't allocated until
+    /// <see cref="OnFirstForward"/> sees the first real input — mirrors
+    /// PyTorch's lazy <c>nn.LazyConv1d</c> semantics so DiffWave-style
+    /// models can be constructed without knowing audio rate at compile
+    /// time.
     /// </summary>
-    /// <param name="inputChannels">Number of input channels.</param>
-    /// <param name="outputChannels">Number of output channels (filters).</param>
-    /// <param name="kernelSize">Length of the convolution kernel.</param>
-    /// <param name="stride">Step size along the length axis (default 1).</param>
-    /// <param name="padding">Zero-padding on each end of the length axis (default 0).</param>
-    /// <param name="activationFunction">Element-wise activation (default identity).</param>
+    /// <param name="outputChannels">Number of output feature maps (<c>C_out</c>).</param>
+    /// <param name="kernelSize">Kernel width along the time axis.</param>
+    /// <param name="dilation">Dilation factor (Kong 2020 §3 uses <c>2^i</c>).</param>
+    /// <param name="stride">Stride along the time axis. Defaults to 1.</param>
+    /// <param name="padding">Zero padding along the time axis. Defaults to <c>(kernelSize-1)*dilation/2</c> for "same" output length when stride=1.</param>
+    /// <param name="activation">Optional scalar activation.</param>
+    /// <param name="initializationStrategy">Optional weight initialization (defaults to He).</param>
+    public Conv1DLayer(
+        int outputChannels,
+        int kernelSize,
+        int dilation = 1,
+        int stride = 1,
+        int? padding = null,
+        IActivationFunction<T>? activation = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
+        : base(new[] { -1, -1 }, new[] { outputChannels, -1 },
+               activation ?? new AiDotNet.ActivationFunctions.IdentityActivation<T>())
+    {
+        if (outputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(outputChannels));
+        if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize));
+        if (dilation <= 0) throw new ArgumentOutOfRangeException(nameof(dilation));
+        if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride));
+        if (padding.HasValue && padding.Value < 0) throw new ArgumentOutOfRangeException(nameof(padding));
+
+        InitializationStrategy = initializationStrategy ?? Initialization.InitializationStrategies<T>.He;
+
+        _inputChannels = -1;
+        _outputChannels = outputChannels;
+        _kernelSize = kernelSize;
+        _stride = stride;
+        // Default "same" padding when stride=1 — preserves the input
+        // sequence length, which is what DiffWave residual blocks rely on
+        // (each block must return tensors with the same T as its input
+        // for the residual add). Caller can override for downsampling.
+        _padding = padding ?? ((kernelSize - 1) * dilation / 2);
+        _dilation = dilation;
+
+        _kernels = new Tensor<T>([0, 0, 0, 0]);
+        _biases = new Tensor<T>([0]);
+    }
+
+    /// <summary>
+    /// Eager-init constructor — pre-allocates kernel and bias tensors at
+    /// construction time when the input channel count is known up-front
+    /// (DiffWave / WaveNet style architectures with fixed per-block
+    /// channel counts). Avoids the lazy-init disagreement between
+    /// <see cref="ParameterCount"/> (placeholder estimate) and
+    /// <see cref="GetParameters"/> (empty until first Forward) that
+    /// breaks Clone-via-SetParameters round-trips.
+    /// </summary>
     public Conv1DLayer(
         int inputChannels,
         int outputChannels,
         int kernelSize,
+        int dilation = 1,
         int stride = 1,
-        int padding = 0,
-        IActivationFunction<T>? activationFunction = null)
+        int? padding = null,
+        IActivationFunction<T>? activation = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base(new[] { inputChannels, -1 }, new[] { outputChannels, -1 },
-               activationFunction ?? new IdentityActivation<T>())
+               activation ?? new AiDotNet.ActivationFunctions.IdentityActivation<T>())
     {
-        if (inputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(inputChannels), "inputChannels must be positive.");
-        if (outputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(outputChannels), "outputChannels must be positive.");
-        if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize), "kernelSize must be positive.");
-        if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride), "stride must be positive.");
-        if (padding < 0) throw new ArgumentOutOfRangeException(nameof(padding), "padding cannot be negative.");
+        if (inputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(inputChannels));
+        if (outputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(outputChannels));
+        if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize));
+        if (dilation <= 0) throw new ArgumentOutOfRangeException(nameof(dilation));
+        if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride));
+        if (padding.HasValue && padding.Value < 0) throw new ArgumentOutOfRangeException(nameof(padding));
 
-        InputChannels = inputChannels;
-        OutputChannels = outputChannels;
-        KernelSize = kernelSize;
-        Stride = stride;
-        Padding = padding;
+        InitializationStrategy = initializationStrategy ?? Initialization.InitializationStrategies<T>.He;
 
-        _kernels = new Tensor<T>([outputChannels, inputChannels, 1, kernelSize]);
-        _biases = new Tensor<T>([outputChannels]);
+        _inputChannels = inputChannels;
+        _outputChannels = outputChannels;
+        _kernelSize = kernelSize;
+        _stride = stride;
+        _padding = padding ?? ((kernelSize - 1) * dilation / 2);
+        _dilation = dilation;
 
-        InitializeParameters();
-
+        _kernels = AllocateLazyWeight([outputChannels, inputChannels, 1, kernelSize]);
+        _biases = AllocateLazyWeight([outputChannels]);
+        InitializeLayerWeights(_kernels, inputChannels * kernelSize, outputChannels);
+        InitializeLayerBiases(_biases);
         RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+
+        // Resolve output shape against a placeholder T = required minimum
+        // for the dilated kernel to fit; the real T is bound on first
+        // Forward via EnsureInitializedFromInput and doesn't change the
+        // parameter count (Conv1D is translation-invariant in T).
+        int minTime = _dilation * (_kernelSize - 1) + 1;
+        int outTime = (minTime + 2 * _padding - _dilation * (_kernelSize - 1) - 1) / _stride + 1;
+        ResolveShapes(new[] { inputChannels, minTime }, new[] { outputChannels, outTime });
     }
 
-    private void InitializeParameters()
+    /// <inheritdoc/>
+    protected override void OnFirstForward(Tensor<T> input)
     {
-        // He-uniform (Kaiming) initialization: fan_in = inChannels * kernelSize.
-        int fanIn = InputChannels * KernelSize;
-        double limit = Math.Sqrt(6.0 / fanIn);
-        var rng = RandomHelper.CreateSecureRandom();
-
-        var kSpan = _kernels.Data.Span;
-        for (int i = 0; i < kSpan.Length; i++)
+        int rank = input.Shape.Length;
+        if (rank != 3)
         {
-            double v = (rng.NextDouble() * 2.0 - 1.0) * limit;
-            kSpan[i] = NumOps.FromDouble(v);
+            throw new ArgumentException(
+                $"Conv1DLayer requires rank-3 [B, C, T] input; got rank {rank}.",
+                nameof(input));
         }
-        _biases.Fill(NumOps.Zero);
+
+        int cIn = input.Shape[1];
+        int tIn = input.Shape[2];
+        int tOut = (tIn + 2 * _padding - _dilation * (_kernelSize - 1) - 1) / _stride + 1;
+
+        _inputChannels = cIn;
+        _kernels = AllocateLazyWeight([_outputChannels, cIn, 1, _kernelSize]);
+        _biases = AllocateLazyWeight([_outputChannels]);
+        InitializeLayerWeights(_kernels, cIn * _kernelSize, _outputChannels);
+        InitializeLayerBiases(_biases);
+        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+
+        ResolveShapes(new[] { cIn, tIn }, new[] { _outputChannels, tOut });
     }
 
     /// <inheritdoc/>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        // Accept [C, L] (no batch) or [B, C, L].
-        Tensor<T> input3D = input.Rank == 2
-            ? Engine.Reshape(input, [1, input.Shape[0], input.Shape[1]])
-            : input;
+        EnsureInitializedFromInput(input);
+        _originalInputShape = input._shape;
 
-        if (input3D.Rank != 3)
-            throw new ArgumentException(
-                $"Conv1DLayer expects a rank-2 [C, L] or rank-3 [B, C, L] input, got rank {input.Rank}.",
-                nameof(input));
+        // Reshape [B, C, T] -> [B, C, 1, T] for the Engine.Conv2D call.
+        // The kernel is already [C_out, C_in, 1, K] from OnFirstForward,
+        // so Conv2D produces [B, C_out, 1, T_out]; we strip the H=1 axis
+        // on return.
+        var input4D = Engine.Reshape(input,
+            new[] { input.Shape[0], input.Shape[1], 1, input.Shape[2] });
 
-        int batch = input3D.Shape[0];
-        int inC = input3D.Shape[1];
-        int length = input3D.Shape[2];
+        var conv = Engine.Conv2D(
+            input4D, _kernels,
+            new[] { 1, _stride },
+            new[] { 0, _padding },
+            new[] { 1, _dilation });
 
-        if (inC != InputChannels)
-            throw new ArgumentException(
-                $"Conv1DLayer expected {InputChannels} input channels, got {inC}.", nameof(input));
+        // Broadcast bias [C_out] -> [1, C_out, 1, 1] and add.
+        var biasReshaped = Engine.Reshape(_biases, new[] { 1, _outputChannels, 1, 1 });
+        var withBias = Engine.TensorBroadcastAdd(conv, biasReshaped);
+        var activated = ApplyActivation(withBias);
 
-        // [B, C, L] -> [B, C, 1, L] so a per-axis Conv2D performs a 1-D convolution
-        // along the length (width) axis only. stride [1, S] / padding [0, P] leave the
-        // singleton height axis (kernel height 1) untouched.
-        var input4D = Engine.Reshape(input3D, [batch, inC, 1, length]);
-        int[] stride2D = { 1, Stride };
-        int[] padding2D = { 0, Padding };
-
-        var conv = Engine.Conv2D(input4D, _kernels, stride2D, padding2D, ConvDilation2D);
-
-        // Tape-aware broadcast bias add: [1, outC, 1, 1] over [B, outC, 1, outL].
-        var biasReshaped = Engine.Reshape(_biases, [1, OutputChannels, 1, 1]);
-        var biased = Engine.TensorBroadcastAdd(conv, biasReshaped);
-
-        int outLength = biased.Shape[3];
-        var output3D = Engine.Reshape(biased, [batch, OutputChannels, outLength]);
-
-        return ApplyActivation(output3D);
+        // [B, C_out, 1, T_out] -> [B, C_out, T_out]
+        return Engine.Reshape(activated,
+            new[] { activated.Shape[0], activated.Shape[1], activated.Shape[3] });
     }
 
     /// <inheritdoc/>
-    /// <remarks>
-    /// Training uses the gradient tape: <see cref="Forward"/> records the engine
-    /// convolution and the registered <c>_kernels</c>/<c>_biases</c> are updated in place
-    /// by the optimizer in <c>TrainWithTape</c>. This SGD-from-stored-gradients entry
-    /// point is therefore a no-op, matching <see cref="ConvolutionalLayer{T}"/>.
-    /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
-        // No-op: parameters are updated by the optimizer through the gradient tape.
+        // Tape-based autodiff drives parameter updates through the
+        // engine's optimizer integration; manual UpdateParameters is a
+        // legacy hook kept only for API completeness. No-op here — the
+        // tape's Backward pass already accumulated and applied gradients
+        // to _kernels / _biases via the registered trainable parameters.
     }
 
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
-        int total = _kernels.Length + _biases.Length;
-        var result = new Vector<T>(total);
-        int idx = 0;
-        var kSpan = _kernels.Data.Span;
-        for (int i = 0; i < kSpan.Length; i++) result[idx++] = kSpan[i];
-        var bSpan = _biases.Data.Span;
-        for (int i = 0; i < bSpan.Length; i++) result[idx++] = bSpan[i];
-        return result;
+        if (!IsShapeResolved)
+        {
+            // Caller asked for parameters before first Forward — return
+            // an empty vector that round-trips with SetParameters'
+            // pre-resolved branch below. This matches DenseLayer's
+            // pre-init contract.
+            return new Vector<T>(0);
+        }
+        return Vector<T>.Concatenate(
+            new Vector<T>(_kernels.ToArray()),
+            new Vector<T>(_biases.ToArray()));
     }
 
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
-        int expected = _kernels.Length + _biases.Length;
-        if (parameters.Length != expected)
-            throw new ArgumentException(
-                $"Conv1DLayer expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
+        // Infer input channels from the parameter layout when the layer
+        // hasn't seen a Forward yet — needed for Clone() paths that
+        // SetParameters(GetParameters()) on a fresh clone before
+        // PredictNoise has run. (C_out * C_in * K) + C_out = params.Length,
+        // solve for C_in.
+        if (!IsShapeResolved)
+        {
+            int candidateInputChannels = (parameters.Length - _outputChannels) /
+                                         (_outputChannels * _kernelSize);
+            if (candidateInputChannels <= 0
+                || candidateInputChannels * _outputChannels * _kernelSize + _outputChannels != parameters.Length)
+            {
+                throw new ArgumentException(
+                    $"Cannot infer inputChannels for Conv1DLayer from {parameters.Length} parameters " +
+                    $"(outputChannels={_outputChannels}, kernelSize={_kernelSize}).");
+            }
+            _inputChannels = candidateInputChannels;
+            // Conv2D needs T >= dilation*(K-1)+1 for the dummy shape
+            // check; use that as the placeholder spatial dim.
+            int minSpatial = _dilation * (_kernelSize - 1) + 1;
+            ResolveFromShape(new[] { candidateInputChannels, minSpatial });
+            _kernels = AllocateLazyWeight([_outputChannels, candidateInputChannels, 1, _kernelSize]);
+            _biases = AllocateLazyWeight([_outputChannels]);
+            RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        }
 
-        // Copy into the existing tensors in place to preserve the trainable-parameter
-        // registration (object identity) the gradient tape and optimizer bind to.
-        int idx = 0;
-        var kSpan = _kernels.Data.Span;
-        for (int i = 0; i < kSpan.Length; i++) kSpan[i] = parameters[idx++];
-        var bSpan = _biases.Data.Span;
-        for (int i = 0; i < bSpan.Length; i++) bSpan[i] = parameters[idx++];
+        int expectedLength = _kernels.Length + _biases.Length;
+        if (parameters.Length != expectedLength)
+        {
+            throw new ArgumentException(
+                $"Expected {expectedLength} parameters, but got {parameters.Length}");
+        }
+
+        // Copy in place via Data.Span to preserve the persistent-tensor identities
+        // registered above (RegisterTrainableParameter at lines 284-285). Replacing
+        // _kernels/_biases with `new Tensor<T>(...)` would leave the registry
+        // pointing at the old tensors — Forward would use the old (un-loaded)
+        // weights while the new ones sat unreferenced — so a Clone restored via
+        // SetParameters would silently lose the loaded values on the next step.
+        // Same pattern DenseLayer.SetParameters uses (DenseLayer.cs:1379-1385).
+        parameters.AsSpan().Slice(0, _kernels.Length).CopyTo(_kernels.Data.Span);
+        parameters.AsSpan().Slice(_kernels.Length, _biases.Length).CopyTo(_biases.Data.Span);
+
+        Engine.InvalidatePersistentTensor(_kernels);
+        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <inheritdoc/>
     public override void ResetState()
     {
-        // Stateless between forward passes (no recurrent or cached activation state).
-    }
-
-    /// <inheritdoc/>
-    internal override Dictionary<string, string> GetMetadata()
-    {
-        var metadata = base.GetMetadata();
-        metadata["InputChannels"] = InputChannels.ToString();
-        metadata["OutputChannels"] = OutputChannels.ToString();
-        metadata["KernelSize"] = KernelSize.ToString();
-        metadata["Stride"] = Stride.ToString();
-        metadata["Padding"] = Padding.ToString();
-        return metadata;
-    }
-
-    /// <inheritdoc/>
-    public override void Serialize(BinaryWriter writer)
-    {
-        base.Serialize(writer);
-        writer.Write(InputChannels);
-        writer.Write(OutputChannels);
-        writer.Write(KernelSize);
-        writer.Write(Stride);
-        writer.Write(Padding);
-
-        var kSpan = _kernels.Data.Span;
-        for (int i = 0; i < kSpan.Length; i++) writer.Write(Convert.ToDouble(kSpan[i]));
-        var bSpan = _biases.Data.Span;
-        for (int i = 0; i < bSpan.Length; i++) writer.Write(Convert.ToDouble(bSpan[i]));
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(BinaryReader reader)
-    {
-        base.Deserialize(reader);
-        // Configuration is fixed at construction; validate the persisted values match
-        // so a mismatched stream surfaces clearly rather than corrupting weights.
-        int inC = reader.ReadInt32();
-        int outC = reader.ReadInt32();
-        int k = reader.ReadInt32();
-        int s = reader.ReadInt32();
-        int p = reader.ReadInt32();
-        if (inC != InputChannels || outC != OutputChannels || k != KernelSize || s != Stride || p != Padding)
-            throw new InvalidOperationException(
-                "Conv1DLayer.Deserialize: serialized configuration does not match this layer instance.");
-
-        var kSpan = _kernels.Data.Span;
-        for (int i = 0; i < kSpan.Length; i++) kSpan[i] = NumOps.FromDouble(reader.ReadDouble());
-        var bSpan = _biases.Data.Span;
-        for (int i = 0; i < bSpan.Length; i++) bSpan[i] = NumOps.FromDouble(reader.ReadDouble());
+        _originalInputShape = null;
     }
 }

@@ -368,7 +368,6 @@ var silhouettes = Enumerable.Range(2, 14)
 
 ## Next Steps
 
-- [K-Means Sample](../../../samples/clustering/KMeans/)
-- [DBSCAN Sample](../../../samples/clustering/DBSCAN/)
 - [Customer Segmentation Example](../../../samples/clustering/CustomerSegmentation/)
-- [Clustering API Reference](../../api/)
+- [Anomaly Detection Sample](../../../samples/clustering/AnomalyDetection/)
+- [Clustering API Reference](../../reference/)

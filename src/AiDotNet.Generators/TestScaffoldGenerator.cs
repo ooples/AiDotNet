@@ -33,6 +33,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private const string IFullModelName = "AiDotNet.Interfaces.IFullModel";
     private const string INeuralNetworkModelName = "AiDotNet.Interfaces.INeuralNetworkModel";
     private const string IDiffusionModelName = "AiDotNet.Interfaces.IDiffusionModel";
+    private const string IDetectionBackbonePrefix = "AiDotNet.Interfaces.IDetectionBackbone<";
     private const string IGaussianProcessPrefix = "AiDotNet.Interfaces.IGaussianProcess<";
     private const string IActivationFunctionPrefix = "AiDotNet.Interfaces.IActivationFunction<";
     private const string ILossFunctionPrefix = "AiDotNet.Interfaces.ILossFunction<";
@@ -866,6 +867,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool implementsNeuralNetworkModel = false;
         bool implementsDiffusionModel = false;
         bool implementsGaussianProcess = false;
+        bool implementsDetectionBackbone = false;
 
         foreach (var iface in modelClass.AllInterfaces)
         {
@@ -881,6 +883,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (display.StartsWith(IDiffusionModelName, System.StringComparison.Ordinal))
             {
                 implementsDiffusionModel = true;
+            }
+            else if (display.StartsWith(IDetectionBackbonePrefix, System.StringComparison.Ordinal))
+            {
+                implementsDetectionBackbone = true;
             }
             else if (display.StartsWith(IGaussianProcessPrefix, System.StringComparison.Ordinal))
             {
@@ -1120,6 +1126,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             Tasks = tasks,
             ImplementsNeuralNetworkModel = implementsNeuralNetworkModel,
             ImplementsDiffusionModel = implementsDiffusionModel,
+            ImplementsDetectionBackbone = implementsDetectionBackbone,
             ImplementsGaussianProcess = implementsGaussianProcess,
             UsesTensorInput = usesTensorInput,
             UsesMatrixInput = usesMatrixInput,
@@ -1279,6 +1286,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // tests all failing at the same Forward boundary.
         "Gemma", "DeepSeekVL", "InternVL", "Llama32Vision",
         "Phi3Vision", "Phi4Multimodal",
+        // Q-Former-family generative VLMs (InstructBLIP Dai et al. NeurIPS
+        // 2023 §3.1, MiniGPT4 Zhu et al. 2023 §3.1, MiniGPTv2 Chen et al.
+        // 2023 §3.1, BLIP-3 / XGen-MM Salesforce 2024 §3.1) all wrap a frozen
+        // EVA-ViT-G or CLIP ViT-L/14 vision encoder. CreateDefaultQFormer-
+        // GenerativeLayers now prepends PatchEmbeddingLayer(patchSize=14,
+        // visionDim=1408 default), so the scaffold's spatial size must be
+        // divisible by 14 — same root cause as the LLaVA / Gemma3 entries
+        // above. The bug surfaced in PR #1501 Generated Layers shard run
+        // 27040737008 as 6 InstructBLIPTests all throwing "Image H/W
+        // (128/128) must be divisible by patchSize (14)".
+        "InstructBLIP", "MiniGPT4", "MiniGPTv2", "BLIP3",
     };
 
     /// <summary>
@@ -2236,6 +2254,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int MemorizationTaskIterations => 2;");
                 sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
             }
+        }
+        else if (isVisionModel && model.ImplementsDetectionBackbone)
+        {
+            // Detection backbones (ResNet, EfficientNet, CSPDarknet, SwinTransformer,
+            // ... in AiDotNet.ComputerVision.Detection.Backbones.*) override Predict
+            // directly to walk their own conv stack — they bypass
+            // NeuralNetworkBase.Predict's NormalizeInputBatchDim, so they require
+            // an explicit batch axis. Without the leading [1, ...] dim,
+            // BackboneOps.MaxPool2D reads x.Shape[3] and throws
+            // IndexOutOfRangeException because the rank-3 [C, H, W] only has
+            // shape indices [0..2]. Emit rank-4 [B=1, C=3, H, W] so the
+            // backbone's strided 3x3 conv → max-pool stem sees the shape it
+            // expects per the standard CV literature
+            // (He et al. 2016 ResNet, Tan & Le 2019 EfficientNet, etc.).
+            int spatial = GetVisionSpatialSize(model.ClassName);
+            sb.AppendLine($"    protected override int[] InputShape => new[] {{ 1, 3, {spatial}, {spatial} }};");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
         else if (isVisionModel)
         {
@@ -4361,6 +4396,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Interface detection
         public bool ImplementsNeuralNetworkModel { get; set; }
         public bool ImplementsDiffusionModel { get; set; }
+        public bool ImplementsDetectionBackbone { get; set; }
         public bool ImplementsGaussianProcess { get; set; }
 
         // Input type detection (from IFullModel type arguments)
@@ -4650,6 +4686,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // Predict — surfaced in PR #1408 Generated Layers shard as 23
             // Gemma3 tests all failing.
             "Gemma3" => true,
+            // Q-Former-family VLMs (InstructBLIP Dai et al. NeurIPS 2023,
+            // MiniGPT4 Zhu et al. 2023, MiniGPTv2 Chen et al. 2023, BLIP-3
+            // Salesforce 2024) all wrap EVA-ViT-G (VisionDim=1408, 39 vision
+            // layers) + Q-Former (QFormerDim=768, 12 qformer layers) + LLM
+            // decoder (DecoderDim=4096, 32 decoder layers) per their paper
+            // defaults. A single Predict forward iterates all 39 vision
+            // layers at dim 1408 — Training_* invariants at the default
+            // 30/50/200 iters overflow the xUnit 120 s timeout.
+            "InstructBLIP" => true,
+            "MiniGPT4" => true,
+            "MiniGPTv2" => true,
+            "BLIP3" => true,
             _ => false,
         };
     }

@@ -300,6 +300,6 @@ TargetModules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj",
 
 ## Next Steps
 
-- [LoRA Sample](/samples/llm-fine-tuning/LoRA/)
-- [QLoRA Sample](/samples/llm-fine-tuning/QLoRA/)
-- [LoRA API Reference](/api/AiDotNet.LoRA/)
+- [LoRA Sample](https://github.com/ooples/AiDotNet/tree/master/samples/llm-fine-tuning/LoRA/)
+- [QLoRA Sample](https://github.com/ooples/AiDotNet/tree/master/samples/llm-fine-tuning/QLoRA/)
+- [LoRA API Reference](../../reference/index.md)

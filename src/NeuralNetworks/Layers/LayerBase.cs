@@ -4186,4 +4186,38 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     }
 
     #endregion
+
+    #region ONNX Export
+
+    /// <summary>
+    /// Emits this layer as one or more ONNX nodes into <paramref name="builder"/>.
+    /// Overrides on individual layer types make those types ONNX-exportable; the
+    /// default implementation throws so unsupported layer types fail loudly with
+    /// a clear error message rather than silently producing a broken ONNX graph.
+    /// </summary>
+    /// <remarks>
+    /// This is part of the protobuf-based ONNX export path that lives alongside
+    /// the legacy <see cref="AiDotNet.Onnx.OnnxExporter"/> (which hand-rolls
+    /// protobuf bytes and is documented as proof-of-concept). New layer types
+    /// should override this method; the old exporter stays available until
+    /// parity tests confirm the new path matches its behavior for all currently
+    /// supported layer types.
+    /// </remarks>
+    /// <param name="builder">Graph the layer should write its nodes into.</param>
+    /// <param name="inputs">Named tensors flowing into this layer.</param>
+    /// <returns>Named tensors this layer produces (consumed by the next layer).</returns>
+    /// <exception cref="AiDotNet.Onnx.OnnxExportUnsupportedException">
+    /// Thrown when no override has been provided for this layer type.
+    /// </exception>
+    public virtual AiDotNet.Onnx.OnnxLayerOutputs ConvertToOnnx(
+        AiDotNet.Onnx.OnnxGraphBuilder builder,
+        AiDotNet.Onnx.OnnxLayerInputs inputs)
+    {
+        throw new AiDotNet.Onnx.OnnxExportUnsupportedException(
+            GetType().Name,
+            "Add a ConvertToOnnx override to this layer type, or use the legacy " +
+            "AiDotNet.Onnx.OnnxExporter for the subset of layers it supports.");
+    }
+
+    #endregion
 }

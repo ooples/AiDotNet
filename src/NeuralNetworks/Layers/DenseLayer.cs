@@ -1591,4 +1591,100 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         base.Dispose(disposing);
     }
+
+    #region ONNX Export
+
+    /// <summary>
+    /// Emits this Dense layer as an ONNX <c>Gemm</c> node (Y = A·B + C) with the
+    /// layer's weights and biases as initializers.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Throws <see cref="AiDotNet.Onnx.OnnxExportUnsupportedException"/> if this
+    /// layer has a non-Identity embedded activation function. For ONNX export,
+    /// use a separate <c>ActivationLayer</c> after the Dense layer so the
+    /// per-layer-to-per-ONNX-op mapping stays clean.
+    /// </para>
+    /// <para>v0.1 supports float32 element type only. Weights and biases are
+    /// down-converted via <c>NumOps.ToDouble</c> → <c>(float)</c>.</para>
+    /// </remarks>
+    public override AiDotNet.Onnx.OnnxLayerOutputs ConvertToOnnx(
+        AiDotNet.Onnx.OnnxGraphBuilder builder,
+        AiDotNet.Onnx.OnnxLayerInputs inputs)
+    {
+        if (builder is null) throw new ArgumentNullException(nameof(builder));
+        if (inputs is null) throw new ArgumentNullException(nameof(inputs));
+
+        // Determine the activation op to emit AFTER the Gemm. AiDotNet's
+        // DenseLayer defaults to ReLU when no activation is passed, so the
+        // common case requires us to emit BOTH Gemm and the activation node.
+        // If the activation isn't one v0.1 supports, throw with a clear message.
+        string? activationOp = null;
+        if (ScalarActivation is not null)
+        {
+            var actName = ScalarActivation.GetType().Name;
+            // Strip the generic arity suffix (`1`) for cleaner matching.
+            int tickIndex = actName.IndexOf('`');
+            if (tickIndex > 0) actName = actName.Substring(0, tickIndex);
+
+            activationOp = actName switch
+            {
+                "IdentityActivation" => null,
+                "ReLUActivation" or "RELUActivation" => "Relu",
+                "SigmoidActivation" => "Sigmoid",
+                "TanhActivation" => "Tanh",
+                "SoftmaxActivation" => "Softmax",
+                _ => throw new AiDotNet.Onnx.OnnxExportUnsupportedException(
+                    $"DenseLayer (embedded {actName})",
+                    $"v0.1 ONNX export supports embedded activations: Identity, ReLU, Sigmoid, Tanh, Softmax. " +
+                    $"Got '{actName}'. Add an ActivationLayer override or remove the embedded activation."),
+            };
+        }
+
+        int inputSize = _weights.Shape[0];
+        int outputSize = _weights.Shape[1];
+
+        // ONNX Gemm with default attributes computes Y = A·B + C.
+        // A = [batch, inputSize], B = [inputSize, outputSize], C = [outputSize] (broadcast).
+        // AiDotNet stores weights as [inputSize, outputSize] — same layout as B,
+        // so no transpose is needed.
+        var weightsFlat = new float[inputSize * outputSize];
+        for (int i = 0; i < inputSize; i++)
+        {
+            for (int j = 0; j < outputSize; j++)
+            {
+                weightsFlat[i * outputSize + j] = (float)NumOps.ToDouble(_weights[i, j]);
+            }
+        }
+
+        var biasFlat = new float[outputSize];
+        for (int j = 0; j < outputSize; j++)
+        {
+            biasFlat[j] = (float)NumOps.ToDouble(_biases[j]);
+        }
+
+        var weightsName = builder.AddFloatInitializer(
+            "dense_W", weightsFlat, new[] { inputSize, outputSize });
+        var biasName = builder.AddFloatInitializer(
+            "dense_B", biasFlat, new[] { outputSize });
+
+        var gemmOut = builder.NextTensorName(activationOp is null ? "dense_out" : "dense_pre_act");
+        builder.AddOp("Gemm",
+            inputs: new[] { inputs.Primary, weightsName, biasName },
+            outputs: new[] { gemmOut });
+
+        if (activationOp is null)
+        {
+            return new AiDotNet.Onnx.OnnxLayerOutputs(gemmOut);
+        }
+
+        // Chain the activation op directly after the Gemm.
+        var actOut = builder.NextTensorName("dense_out");
+        builder.AddOp(activationOp,
+            inputs: new[] { gemmOut },
+            outputs: new[] { actOut });
+        return new AiDotNet.Onnx.OnnxLayerOutputs(actOut);
+    }
+
+    #endregion
 }
