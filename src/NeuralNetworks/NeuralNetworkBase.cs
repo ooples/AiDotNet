@@ -5174,6 +5174,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        try
+        {
+            TrainCore(input, expectedOutput);
+        }
+        catch (Exception ex) when (IsGpuTransientFailure(ex))
+        {
+            // A sticky GPU fault tripped the circuit breaker (engine is now CPU); retry on CPU.
+            TrainCore(input, expectedOutput);
+        }
+    }
+
+    private void TrainCore(Tensor<T> input, Tensor<T> expectedOutput)
+    {
         // Universal batch-dim auto-promotion. When the caller passes an
         // unbatched single sample (matching the architecture's declared rank
         // exactly), prepend a unit batch dim so downstream Conv/BN/Dense
@@ -6876,6 +6889,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // is also attached for catch (InvalidOperationException ex) callers
             // that introspect ex.InnerException.
             var fallbackEx = Training.CompiledTapeTrainingStep<T>.GetLastFallbackException();
+
+            // Transient GPU/CUDA fault in the committed fused plan (e.g. CUDA error 700 from the
+            // activation-cache deferred-materializer race, or a device fault): the compiled plan
+            // can't continue on the GPU. Rather than abort the whole training run, reset the
+            // fused/compiled state and fall back to the eager path — the optimizer moments reset
+            // (a one-time trajectory perturbation), which is far better than crashing. Non-GPU
+            // causes (shape drift, hyperparameter changes) still surface loudly below.
+            if (IsGpuTransientFailure(fallbackEx))
+            {
+                _fusedTrainingDisabled = true;
+                _fusedTrainingCommitted = false;
+                InvalidateParameterCountCache();
+                return false;
+            }
+
             var rootCauseSuffix = fallbackEx is not null
                 ? $" Root-cause exception (caught in CompiledTapeTrainingStep): " +
                   $"{fallbackEx.GetType().FullName}: {fallbackEx.Message}"
@@ -6903,6 +6931,32 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             _fusedTrainingDisabled = true;
         }
         return ran;
+    }
+
+    /// <summary>
+    /// True if the exception chain indicates a transient GPU/CUDA fault (device error, failed
+    /// host/device copy, or the activation-cache deferred-materializer race) — as opposed to a
+    /// logical cause (shape drift, hyperparameter change). Used to decide whether a committed
+    /// fused step can reset-and-recover on the eager path instead of aborting.
+    /// </summary>
+    protected static bool IsGpuTransientFailure(Exception? exception)
+    {
+        for (var e = exception; e is not null; e = e.InnerException)
+        {
+            var message = e.Message;
+            if (message.Contains("CUDA error", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("cuMem", StringComparison.Ordinal)
+                || message.Contains("cuStream", StringComparison.Ordinal)
+                || message.Contains("cuLaunch", StringComparison.Ordinal)
+                || message.Contains("OpenCL", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("released before materialization", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("buffer was released", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
