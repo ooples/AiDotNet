@@ -385,7 +385,7 @@ public class RAFT<T> : OpticalFlowBase<T>
 
             flow = AddTensors(flow, deltaFlow);
 
-            var fullResFlow = UpsampleFlow(flow, 8);
+            var fullResFlow = UpsampleFlow(flow, hiddenState, 8);
             flowPredictions.Add(fullResFlow);
         }
 
@@ -494,23 +494,74 @@ public class RAFT<T> : OpticalFlowBase<T>
         });
     }
 
-    private Tensor<T> UpsampleFlow(Tensor<T> flow, int factor)
+    private Tensor<T> UpsampleFlow(Tensor<T> flow, Tensor<T> features, int factor)
     {
-        // Tape-aware upsample: spatial scale via Engine.Upsample (registered as a
-        // tape op so backward propagates correctly through the GRU stack), then
-        // multiply flow magnitudes by `factor` so pixel-displacements computed at
-        // 1/factor resolution represent the equivalent pixel-displacements at the
-        // full resolution. The previous scalar-read/write BilinearSample loop
-        // produced numerically smoother output but cut the autodiff path, leaving
-        // the upsample step ungradient'd and the trained-on-loss path broken for
-        // the entire flow predictor when ForwardForTraining ends here.
+        // Paper-faithful convex upsampling (Teed & Deng 2020, sec 3.3): predict
+        // per-output-pixel 3×3 mask weights from the GRU hidden state, soft-max
+        // them so the mask is a convex combination, then synthesize each
+        // full-resolution flow pixel as a learnable weighted sum of the 3×3
+        // low-resolution flow neighborhood (scaled by `factor` so flow
+        // magnitudes match the new pixel grid).
         //
-        // The paper's preferred upsample is a learnable convex combination; that
-        // is not implemented here yet, so we get a paper-faithful-enough nearest-
-        // neighbor expansion (Engine.Upsample's default semantics) plus the
-        // magnitude rescale.
-        var upsampled = Engine.Upsample(flow, factor, factor);
-        return Engine.TensorMultiplyScalar(upsampled, NumOps.FromDouble(factor));
+        // mask[b, i·F + j, k, h, w] = softmax_k of upsample_conv(features),
+        // up_flow[b, c, h·F + i, w·F + j] = Σ_k mask[…] · factor · flow[b, c, h+dh_k, w+dw_k]
+        //
+        // The reshape-multiply-reduce-pixel-shuffle sequence is entirely on the
+        // tape, so _upsampleConv participates in the backward sweep and trains
+        // jointly with the rest of the recurrent flow refiner.
+        var upsampleConv = _upsampleConv ?? throw new InvalidOperationException("Upsample conv not initialized.");
+
+        int B = flow.Shape[0];
+        int H = flow.Shape[2];
+        int W = flow.Shape[3];
+        int F2 = factor * factor;
+
+        // 1. Mask: upsampleConv(features) ∈ [B, 9·F², H, W]. Reshape so that
+        //    the 9-neighbor axis is contiguous, then soft-max along it to get
+        //    a convex combination over the 3×3 source neighborhood per sub-pixel.
+        var mask = upsampleConv.Forward(features);
+        var maskGrouped = Engine.Reshape(mask, new[] { B, F2, 9, H, W });
+        var maskNormalized = Engine.Softmax(maskGrouped, axis: 2);
+
+        // 2. Unfolded flow: ×factor magnitude rescale, then pad+crop nine 3×3
+        //    spatial offsets and concat along a new neighbor axis. Result:
+        //    [B, 2, 9, H, W] containing each low-res pixel's 3×3 neighborhood.
+        var flowScaled = Engine.TensorMultiplyScalar(flow, NumOps.FromDouble(factor));
+        var flowPadded = Engine.Pad(flowScaled, 1, 1, 1, 1, NumOps.Zero);
+
+        var patchTensors = new Tensor<T>[9];
+        for (int dy = 0; dy < 3; dy++)
+        {
+            for (int dx = 0; dx < 3; dx++)
+            {
+                var patch = Engine.Crop(flowPadded, dy, dx, H, W);
+                patchTensors[dy * 3 + dx] = Engine.Reshape(patch, new[] { B, 2, 1, H, W });
+            }
+        }
+        var flowUnfolded = Engine.TensorConcatenate(patchTensors, axis: 2);
+
+        // 3. For each flow component c ∈ {0, 1}, slice [B, 1, 9, H, W], broadcast-
+        //    multiply against the [B, F², 9, H, W] mask, and sum across the 9-
+        //    neighbor axis. Keeps the two flow channels in separate accumulators
+        //    so the final stack lands in PixelShuffle's canonical [c, sub-pixel]
+        //    channel order — avoids an N-D transpose we don't have on the tape.
+        var sliceStart = new int[] { 0, 0, 0, 0, 0 };
+        var sliceLen = new int[] { B, 1, 9, H, W };
+        var subPixelByChannel = new Tensor<T>[2];
+        for (int c = 0; c < 2; c++)
+        {
+            sliceStart[1] = c;
+            var flowC = Engine.TensorSlice(flowUnfolded, sliceStart, sliceLen);
+            var product = Engine.TensorBroadcastMultiply(maskNormalized, flowC);
+            subPixelByChannel[c] = Engine.ReduceSum(product, new[] { 2 }, keepDims: false);
+        }
+
+        // 4. Stack the per-channel sub-pixel maps in PixelShuffle's expected
+        //    layout [B, C·F², H, W] with C outer, F² inner. PixelShuffle then
+        //    reshape-permute-reshapes to [B, C, F·H, F·W] (a tape-tracked
+        //    depth-to-space — the only N-D permute we have available here).
+        var stacked = Engine.TensorConcatenate(subPixelByChannel, axis: 1);
+        return Engine.PixelShuffle(stacked, factor);
     }
 
     private T BilinearSample(Tensor<T> tensor, int b, int c, double h, double w, int height, int width)
