@@ -971,6 +971,33 @@ public static class DeserializationHelper
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             instance = ctor.Invoke(new object?[] { memoryDim, activation });
         }
+        else if (genericDef == typeof(Conv1DLayer<>))
+        {
+            // Conv1DLayer(inputChannels?, outputChannels, kernelSize, dilation,
+            // stride, padding?, activation?). The conv hyper-parameters are not
+            // recoverable from the input/output shapes, so they come from the
+            // metadata written by Conv1DLayer.GetMetadata(). When InputChannels
+            // is known we use the eager ctor (concrete ParameterCount → the
+            // per-layer Clone fast path and SetParameters both line up); the
+            // lazy ctor still works because SetParameters infers inputChannels
+            // from the restored parameter-vector length.
+            int outputChannels = TryGetInt(additionalParams, "OutputChannels")
+                ?? (outputShape.Length > 0 ? outputShape[0] : 1);
+            int kernelSize = TryGetInt(additionalParams, "KernelSize") ?? 3;
+            int dilation = TryGetInt(additionalParams, "Dilation") ?? 1;
+            int stride = TryGetInt(additionalParams, "Stride") ?? 1;
+            int padding = TryGetInt(additionalParams, "Padding") ?? ((kernelSize - 1) * dilation / 2);
+            int? inputChannels = TryGetInt(additionalParams, "InputChannels");
+
+            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+            if (activation is null && additionalParams is not null && additionalParams.ContainsKey("ScalarActivationType"))
+                throw new InvalidOperationException($"Failed to deserialize activation function of type '{additionalParams["ScalarActivationType"]}' for Conv1DLayer.");
+
+            instance = (inputChannels.HasValue && inputChannels.Value > 0)
+                ? new Conv1DLayer<T>(inputChannels.Value, outputChannels, kernelSize, dilation, stride, padding, activation as IActivationFunction<T>)
+                : new Conv1DLayer<T>(outputChannels, kernelSize, dilation, stride, padding, activation as IActivationFunction<T>);
+        }
         else if (genericDef == typeof(ConvolutionalLayer<>))
         {
             // ConvolutionalLayer(int outputDepth, int kernelSize, int stride, int padding, IActivationFunction<T>?, IInitializationStrategy<T>?)

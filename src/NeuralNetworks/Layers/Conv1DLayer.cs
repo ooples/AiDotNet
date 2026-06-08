@@ -311,4 +311,29 @@ public partial class Conv1DLayer<T> : LayerBase<T>
     {
         _originalInputShape = null;
     }
+
+    /// <summary>
+    /// Returns layer-specific metadata for serialization. The convolution
+    /// hyper-parameters (channel counts, kernel width, dilation, stride,
+    /// padding) are NOT recoverable from the input/output shapes alone, so they
+    /// must round-trip through metadata for <c>CreateLayerFromType</c> to
+    /// reconstruct an identically-shaped layer on Clone/Deserialize.
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["OutputChannels"] = _outputChannels.ToString();
+        metadata["KernelSize"] = _kernelSize.ToString();
+        metadata["Dilation"] = _dilation.ToString();
+        metadata["Stride"] = _stride.ToString();
+        metadata["Padding"] = _padding.ToString();
+        if (_inputChannels > 0)
+            metadata["InputChannels"] = _inputChannels.ToString();
+        if (ScalarActivation is not null)
+        {
+            metadata["ScalarActivationType"] = ScalarActivation.GetType().AssemblyQualifiedName
+                ?? ScalarActivation.GetType().FullName ?? string.Empty;
+        }
+        return metadata;
+    }
 }
