@@ -23,16 +23,22 @@ public class StreamingTrainingTests
             inputType: InputType.ThreeDimensional,
             taskType: NeuralNetworkTaskType.Regression,
             inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 4);
+        // Reduced-scale dual-system config mirroring the validated ModelFamily
+        // HelixTests (same dimensional shape as the ~6.7B paper model, ~4-8×
+        // smaller). The lazy vision/decoder LayerNorms size from VisionDim/
+        // DecoderDim, so the FixedSample input width MUST equal VisionDim — see
+        // FixedSample below. An inconsistent width (e.g. VisionDim=32 with a
+        // 224-derived arch warmup) bakes a mismatched LayerNorm gamma.
         var options = new HelixOptions
         {
-            VisionDim = 32,
-            DecoderDim = 64,
-            NumVisionLayers = 2,
-            NumDecoderLayers = 2,
-            NumHeads = 4,
-            System2LatentDim = 24,
-            System1HiddenDim = 24,
-            System1NumLayers = 1,
+            VisionDim = 256,
+            DecoderDim = 512,
+            NumVisionLayers = 4,
+            NumDecoderLayers = 4,
+            NumHeads = 8,
+            System2LatentDim = 128,
+            System1HiddenDim = 96,
+            System1NumLayers = 2,
             System1NumHeads = 4,
             ActionDimension = 35,
             DropoutRate = 0.0,
@@ -61,7 +67,10 @@ public class StreamingTrainingTests
     private static (Tensor<float> input, Tensor<float> target) FixedSample()
     {
         var rng = new Random(123);
-        var input = new Tensor<float>(new[] { 1, 4, 32 });
+        // Post-patch-embedding token features [batch, num_tokens, VisionDim] — Helix's
+        // documented input contract (see ModelFamily HelixTests). Width MUST equal
+        // VisionDim (256) so the lazy vision LayerNorm gamma matches.
+        var input = new Tensor<float>(new[] { 1, 4, 256 });
         for (int i = 0; i < input.Length; i++) input[i] = (float)(rng.NextDouble() - 0.5);
         // Output is the action head: [1, 4, 35].
         var target = new Tensor<float>(new[] { 1, 4, 35 });

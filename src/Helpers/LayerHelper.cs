@@ -24139,7 +24139,13 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder ===
-        yield return new LayerNormalizationLayer<T>();
+        // Leading LayerNorm normalizes the per-token vision features, whose width is
+        // visionDim (the documented input contract is [batch, num_tokens, visionDim]
+        // post-patch-embedding). Size it EXPLICITLY: as the first layer it has no
+        // preceding layer to infer from, so a bare lazy LayerNorm gets wired to the
+        // architecture's raw input dimension (e.g. inputHeight=224) and then rejects
+        // the real visionDim-wide input ("Gamma shape (224) does not match ...").
+        yield return new LayerNormalizationLayer<T>(visionDim);
 
         for (int i = 0; i < numVisionLayers; i++)
         {
