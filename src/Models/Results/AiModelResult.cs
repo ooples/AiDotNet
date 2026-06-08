@@ -3,7 +3,6 @@ global using Formatting = Newtonsoft.Json.Formatting;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using AiDotNet.AdversarialRobustness.Safety;
-using AiDotNet.Agents;
 using AiDotNet.Benchmarking;
 using AiDotNet.Benchmarking.Models;
 using AiDotNet.CheckpointManagement;
@@ -526,46 +525,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </para>
     /// </remarks>
     internal ILoRAConfiguration<T>? LoRAConfiguration { get; private set; }
-
-    /// <summary>
-    /// Gets the agent configuration used during model building.
-    /// </summary>
-    /// <value>Agent configuration containing API keys and settings, or null if agent assistance wasn't used.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> If you enabled agent assistance during model building with ConfigureAgentAssistance(),
-    /// this property stores the configuration. The API key is stored here so you can use AskAsync() on the trained
-    /// model without providing the key again.
-    ///
-    /// Note: API keys are NOT serialized when saving the model to disk for security reasons.
-    /// </para>
-    /// </remarks>
-    [JsonIgnore]
-    internal AgentConfiguration<T>? AgentConfig { get; private set; }
-
-    /// <summary>
-    /// Gets the agent's recommendations made during model building.
-    /// </summary>
-    /// <value>Agent recommendations including suggested models and reasoning, or null if agent assistance wasn't used.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> If you used agent assistance during building, this contains all the recommendations
-    /// the agent made, such as:
-    /// - Which model type to use (e.g., "RidgeRegression")
-    /// - Why that model was chosen
-    /// - Suggested hyperparameter values
-    ///
-    /// You can examine these recommendations to understand why the agent made certain choices.
-    ///
-    /// Example:
-    /// <code>
-    /// if (result.AgentRecommendation != null)
-    /// {
-    ///     Console.WriteLine($"Agent selected: {result.AgentRecommendation.SuggestedModelType}");
-    ///     Console.WriteLine($"Reasoning: {result.AgentRecommendation.ModelSelectionReasoning}");
-    /// }
-    /// </code>
-    /// </para>
-    /// </remarks>
-    internal AgentRecommendation<T, TInput, TOutput>? AgentRecommendation { get; private set; }
 
     /// <summary>
     /// Gets the deployment configuration for model export, caching, versioning, A/B testing, and telemetry.
@@ -1360,10 +1319,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         // Fine-tuning and adaptation
         LoRAConfiguration = options.LoRAConfiguration;
-
-        // Agent assistance
-        AgentConfig = options.AgentConfig;
-        AgentRecommendation = options.AgentRecommendation;
 
         // Deployment
         DeploymentConfiguration = options.DeploymentConfiguration;
@@ -3213,8 +3168,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             LoRAConfiguration = LoRAConfiguration,
             CrossValidationResult = CrossValidationResult,
             AutoMLSummary = AutoMLSummary,
-            AgentConfig = AgentConfig,
-            AgentRecommendation = AgentRecommendation,
             DeploymentConfiguration = DeploymentConfiguration,
             // JIT compilation is parameter-specific, don't copy
             InferenceOptimizationConfig = InferenceOptimizationConfig,
@@ -4961,8 +4914,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             LoRAConfiguration = LoRAConfiguration,
             CrossValidationResult = CrossValidationResult,
             AutoMLSummary = AutoMLSummary,
-            AgentConfig = AgentConfig,
-            AgentRecommendation = AgentRecommendation,
             DeploymentConfiguration = DeploymentConfiguration,
             // JIT compilation is model-specific, don't copy
             InferenceOptimizationConfig = InferenceOptimizationConfig,
@@ -5173,8 +5124,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 LoRAConfiguration = deserializedObject.LoRAConfiguration;
                 CrossValidationResult = deserializedObject.CrossValidationResult;
                 AutoMLSummary = deserializedObject.AutoMLSummary;
-                AgentConfig = deserializedObject.AgentConfig;
-                AgentRecommendation = deserializedObject.AgentRecommendation;
                 DeploymentConfiguration = deserializedObject.DeploymentConfiguration;
                 // Weight-streaming telemetry — preserve through deserialize so
                 // a saved-and-loaded result keeps the report that was produced
@@ -6119,14 +6068,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         {
             evaluateFunction = problem => RunChainAsync(problem, cancellationToken);
         }
-        else if (AgentConfig != null && AgentConfig.IsEnabled)
-        {
-            evaluateFunction = problem => QuickReasonAsync(problem, cancellationToken);
-        }
         else
         {
             throw new InvalidOperationException(
-                "Benchmark evaluation requires either a prompt chain (ConfigurePromptChain) or agent assistance (ConfigureAgentAssistance).");
+                "Benchmark evaluation requires a configured prompt chain (ConfigurePromptChain).");
         }
 
         return benchmark.EvaluateAsync(evaluateFunction, sampleSize, cancellationToken);
@@ -6794,25 +6739,18 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     public async Task<ReasoningResult<T>> ReasonAsync(
         string problem,
+        IChatClient<T> chatClient,
         ReasoningMode mode = ReasoningMode.Auto,
         ReasoningConfig? config = null,
         CancellationToken cancellationToken = default)
     {
-        if (AgentConfig == null || !AgentConfig.IsEnabled)
-        {
-            throw new InvalidOperationException(
-                "Reasoning requires agent configuration. Use ConfigureAgentAssistance() during model building " +
-                "to set up the LLM provider and API key required for reasoning capabilities.");
-        }
+        Guard.NotNull(chatClient);
 
         // Use stored config if none provided
         var effectiveConfig = config ?? ReasoningConfig ?? new ReasoningConfig();
 
-        // Create chat model from agent config
-        var chatModel = CreateChatModelFromAgentConfig();
-
         // Create internal Reasoner and delegate
-        var reasoner = new Reasoner<T>(chatModel);
+        var reasoner = new Reasoner<T>(chatClient);
         return await reasoner.SolveAsync(problem, mode, effectiveConfig, cancellationToken);
     }
 
@@ -6841,16 +6779,11 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     public async Task<string> QuickReasonAsync(
         string problem,
+        IChatClient<T> chatClient,
         CancellationToken cancellationToken = default)
     {
-        if (AgentConfig == null || !AgentConfig.IsEnabled)
-        {
-            throw new InvalidOperationException(
-                "Reasoning requires agent configuration. Use ConfigureAgentAssistance() during model building.");
-        }
-
-        var chatModel = CreateChatModelFromAgentConfig();
-        var reasoner = new Reasoner<T>(chatModel);
+        Guard.NotNull(chatClient);
+        var reasoner = new Reasoner<T>(chatClient);
         return await reasoner.QuickSolveAsync(problem, cancellationToken);
     }
 
@@ -6888,16 +6821,11 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     public async Task<ReasoningResult<T>> DeepReasonAsync(
         string problem,
+        IChatClient<T> chatClient,
         CancellationToken cancellationToken = default)
     {
-        if (AgentConfig == null || !AgentConfig.IsEnabled)
-        {
-            throw new InvalidOperationException(
-                "Reasoning requires agent configuration. Use ConfigureAgentAssistance() during model building.");
-        }
-
-        var chatModel = CreateChatModelFromAgentConfig();
-        var reasoner = new Reasoner<T>(chatModel);
+        Guard.NotNull(chatClient);
+        var reasoner = new Reasoner<T>(chatClient);
         return await reasoner.DeepSolveAsync(problem, cancellationToken);
     }
 
@@ -6937,43 +6865,13 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     public async Task<ReasoningResult<T>> ReasonWithConsensusAsync(
         string problem,
+        IChatClient<T> chatClient,
         int numAttempts = 5,
         CancellationToken cancellationToken = default)
     {
-        if (AgentConfig == null || !AgentConfig.IsEnabled)
-        {
-            throw new InvalidOperationException(
-                "Reasoning requires agent configuration. Use ConfigureAgentAssistance() during model building.");
-        }
-
-        var chatModel = CreateChatModelFromAgentConfig();
-        var reasoner = new Reasoner<T>(chatModel);
+        Guard.NotNull(chatClient);
+        var reasoner = new Reasoner<T>(chatClient);
         return await reasoner.SolveWithConsensusAsync(problem, numAttempts, cancellationToken);
-    }
-
-    /// <summary>
-    /// Creates a chat model from the agent configuration.
-    /// </summary>
-    private IChatClient<T> CreateChatModelFromAgentConfig()
-    {
-        if (AgentConfig == null)
-            throw new InvalidOperationException("Agent configuration is required.");
-
-        var apiKey = AgentKeyResolver.ResolveApiKey(
-            AgentConfig.ApiKey,
-            AgentConfig,
-            AgentConfig.Provider);
-
-        return AgentConfig.Provider switch
-        {
-            LLMProvider.OpenAI => new OpenAIChatClient<T>(apiKey),
-            LLMProvider.Anthropic => new AnthropicChatClient<T>(apiKey),
-            LLMProvider.AzureOpenAI => new AzureOpenAIChatClient<T>(
-                apiKey,
-                AgentConfig.AzureDeployment ?? "gpt-4",
-                AgentConfig.AzureEndpoint ?? throw new InvalidOperationException("Azure endpoint required")),
-            _ => throw new ArgumentException($"Unknown provider: {AgentConfig.Provider}")
-        };
     }
 
     #endregion
