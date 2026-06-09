@@ -2370,9 +2370,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // and emits [B, 1, T] waveform — Conv1DLayer strictly requires
                 // rank-3 [B, C, T]. These models configure melChannels=80; T=8
                 // frames keeps the per-test cost low. Output product = 8.
-                // Heterogeneous vocoders (BigVGAN melChannels=100, the Fourier
-                // Vocos, flow-based WaveGlow, ParallelWaveGAN) keep the rank-2
-                // dimension-flexible Dense contract below.
+                // WaveGlow and ParallelWaveGAN belong HERE too: both build their
+                // generator from CreateDefaultWaveNetVocoderLayers, a 1-D dilated-conv
+                // (WaveNet-style) stack that is likewise channels-first [B, 80, T].
+                // The vocoders that genuinely keep the rank-2 dimension-flexible Dense
+                // contract below are the non-conv ones (BigVGAN melChannels=100, the
+                // Fourier Vocos) — they are NOT in IsConv1DWaveformVocoder and fall
+                // through to the else branch.
                 // (Voice-cloning models are handled above; a model is never both.)
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 80, 8 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 8 };");
@@ -4628,13 +4632,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// token IDs rather than the rank-2 [T, 80] mel default.
     /// </summary>
     /// <summary>
-    /// Returns true for the HiFi-GAN-style waveform vocoders that use the
-    /// paper-faithful channels-first 1-D conv generator
-    /// (<c>LayerHelper.CreateDefaultHiFiGANLayers</c>): mel-channels = 80, a
-    /// single waveform output channel, rank-3 [B, 80, T] input. Other IVocoder
-    /// models (BigVGAN with mel = 100, the Fourier-based Vocos, flow-based
-    /// WaveGlow, ParallelWaveGAN) keep the dimension-flexible Dense generator and
-    /// its rank-2 [T, 80] -> [T, 1] contract.
+    /// Returns true for the waveform vocoders that use a paper-faithful
+    /// channels-first 1-D conv generator: the HiFi-GAN family via
+    /// <c>LayerHelper.CreateDefaultHiFiGANLayers</c> AND the WaveNet-style stacks
+    /// (WaveGlow, ParallelWaveGAN) via <c>LayerHelper.CreateDefaultWaveNetVocoderLayers</c>.
+    /// Both are mel-channels = 80, single waveform output channel, rank-3 [B, 80, T]
+    /// input. The IVocoder models that keep the dimension-flexible Dense generator and
+    /// its rank-2 [T, 80] -> [T, 1] contract (BigVGAN with mel = 100, the Fourier-based
+    /// Vocos) are NOT listed here and fall through to the rank-2 default.
     /// </summary>
     private static bool IsConv1DWaveformVocoder(string className)
     {
