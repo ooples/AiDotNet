@@ -55,6 +55,11 @@ public static class MarkowitzOptimizer<T>
     public static Vector<T> Tangency(Vector<T> expectedReturns, Matrix<T> covariance, T riskFreeRate)
     {
         var n = ValidateSquare(covariance);
+        if (expectedReturns is null)
+        {
+            throw new ArgumentNullException(nameof(expectedReturns));
+        }
+
         if (expectedReturns.Length != n)
         {
             throw new ArgumentException(
@@ -86,6 +91,11 @@ public static class MarkowitzOptimizer<T>
     public static Vector<T> TargetReturn(Vector<T> expectedReturns, Matrix<T> covariance, T targetReturn)
     {
         var n = ValidateSquare(covariance);
+        if (expectedReturns is null)
+        {
+            throw new ArgumentNullException(nameof(expectedReturns));
+        }
+
         if (expectedReturns.Length != n)
         {
             throw new ArgumentException(
@@ -179,6 +189,11 @@ public static class MarkowitzOptimizer<T>
     /// <summary>Validates that the covariance is square and non-empty; returns its dimension N.</summary>
     private static int ValidateSquare(Matrix<T> covariance)
     {
+        if (covariance is null)
+        {
+            throw new ArgumentNullException(nameof(covariance));
+        }
+
         if (covariance.Rows == 0 || covariance.Rows != covariance.Columns)
         {
             throw new ArgumentException(

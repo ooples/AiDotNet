@@ -35,10 +35,22 @@ public static class BlackScholes<T>
     /// <param name="isCall">True for a call, false for a put.</param>
     public static T Price(T spot, T strike, T timeToExpiry, T riskFreeRate, T volatility, bool isCall)
     {
-        // At/after expiry, or with degenerate vol/time, value collapses to the discounted intrinsic.
-        if (!NumOps.GreaterThan(timeToExpiry, NumOps.Zero) || !NumOps.GreaterThan(volatility, NumOps.Zero))
+        // At/after expiry the value collapses to the (undiscounted) intrinsic.
+        if (!NumOps.GreaterThan(timeToExpiry, NumOps.Zero))
         {
             return Intrinsic(spot, strike, isCall);
+        }
+
+        // Zero-volatility limit at positive maturity: the underlying grows
+        // deterministically at the risk-free rate, so the payoff is the forward
+        // intrinsic against the DISCOUNTED strike, max(S - K·e^(-rT), 0) for a
+        // call (put analog). Returning the undiscounted intrinsic here is wrong
+        // whenever r != 0.
+        if (!NumOps.GreaterThan(volatility, NumOps.Zero))
+        {
+            var discounted = NumOps.Multiply(strike, Discount(riskFreeRate, timeToExpiry));
+            var payoff = isCall ? NumOps.Subtract(spot, discounted) : NumOps.Subtract(discounted, spot);
+            return NumOps.GreaterThan(payoff, NumOps.Zero) ? payoff : NumOps.Zero;
         }
 
         var (d1, d2) = D1D2(spot, strike, timeToExpiry, riskFreeRate, volatility);
@@ -141,9 +153,22 @@ public static class BlackScholes<T>
         T marketPrice, T spot, T strike, T timeToExpiry, T riskFreeRate, bool isCall,
         int maxIterations = 100, double tolerance = 1e-8)
     {
+        if (!NumOps.GreaterThan(timeToExpiry, NumOps.Zero))
+            throw new ArgumentOutOfRangeException(nameof(timeToExpiry), "timeToExpiry must be > 0 for implied volatility.");
+
         double price = NumOps.ToDouble(marketPrice);
         double s = NumOps.ToDouble(spot), k = NumOps.ToDouble(strike), t = NumOps.ToDouble(timeToExpiry);
         double r = NumOps.ToDouble(riskFreeRate);
+
+        // Reject prices outside the no-arbitrage bounds up front: a European option
+        // price must lie in [max(±(S − K·e^(−rT)), 0), upper] where upper is S for a
+        // call and K·e^(−rT) for a put — otherwise no real σ reproduces it.
+        double discountedK = k * Math.Exp(-r * t);
+        double lowerBound = isCall ? Math.Max(s - discountedK, 0.0) : Math.Max(discountedK - s, 0.0);
+        double upperBound = isCall ? s : discountedK;
+        if (double.IsNaN(price) || double.IsInfinity(price) || price < lowerBound || price > upperBound)
+            throw new ArgumentOutOfRangeException(nameof(marketPrice),
+                "marketPrice violates the European no-arbitrage bounds; no implied volatility exists.");
 
         // Brenner-Subrahmanyam closed-form seed for at-the-money, bracketed to a sane vol range.
         // (Math.Max/Min instead of Math.Clamp, explicit finite check instead of double.IsFinite: net471.)
@@ -151,6 +176,7 @@ public static class BlackScholes<T>
         var seed = !double.IsNaN(sigma) && !double.IsInfinity(sigma) ? sigma : 0.2;
         sigma = Math.Max(1e-4, Math.Min(5.0, seed));
         double low = 1e-4, high = 5.0;
+        var converged = false;
 
         for (var i = 0; i < maxIterations; i++)
         {
@@ -159,6 +185,7 @@ public static class BlackScholes<T>
             double diff = modelPrice - price;
             if (Math.Abs(diff) < tolerance)
             {
+                converged = true;
                 break;
             }
 
@@ -170,11 +197,20 @@ public static class BlackScholes<T>
             sigma = (next > low && next < high) ? next : (low + high) / 2.0;
         }
 
+        // Fail loudly rather than silently returning an unconverged σ in production.
+        if (!converged)
+            throw new InvalidOperationException(
+                "Implied-volatility solver did not converge within maxIterations; the price may be too close to a bound.");
+
         return NumOps.FromDouble(sigma);
     }
 
     private static (T d1, T d2) D1D2(T spot, T strike, T timeToExpiry, T riskFreeRate, T volatility)
     {
+        if (!NumOps.GreaterThan(spot, NumOps.Zero))
+            throw new ArgumentOutOfRangeException(nameof(spot), "spot must be > 0.");
+        if (!NumOps.GreaterThan(strike, NumOps.Zero))
+            throw new ArgumentOutOfRangeException(nameof(strike), "strike must be > 0.");
         var sqrtT = NumOps.Sqrt(timeToExpiry);
         var volSqrtT = NumOps.Multiply(volatility, sqrtT);
         // d1 = [ln(S/K) + (r + σ²/2)·T] / (σ·√T)

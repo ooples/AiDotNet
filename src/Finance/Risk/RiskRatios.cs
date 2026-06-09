@@ -23,9 +23,24 @@ public static class RiskRatios<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    /// <summary>Validates the shared external inputs of every ratio.</summary>
+    private static void Validate(IReadOnlyList<T> returns, int periodsPerYear)
+    {
+        if (returns is null)
+        {
+            throw new ArgumentNullException(nameof(returns));
+        }
+
+        if (periodsPerYear <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(periodsPerYear), "periodsPerYear must be > 0.");
+        }
+    }
+
     /// <summary>Annualized Sharpe ratio: (mean(excess) / std(excess)) · √periodsPerYear.</summary>
     public static T Sharpe(IReadOnlyList<T> returns, double riskFreePerPeriod = 0.0, int periodsPerYear = 252)
     {
+        Validate(returns, periodsPerYear);
         if (returns.Count < 2)
         {
             return NumOps.Zero;
@@ -44,6 +59,7 @@ public static class RiskRatios<T>
     /// <summary>Annualized Sortino ratio: (mean(excess) / downsideDeviation) · √periodsPerYear.</summary>
     public static T Sortino(IReadOnlyList<T> returns, double riskFreePerPeriod = 0.0, int periodsPerYear = 252)
     {
+        Validate(returns, periodsPerYear);
         if (returns.Count < 2)
         {
             return NumOps.Zero;
@@ -79,6 +95,7 @@ public static class RiskRatios<T>
     /// </summary>
     public static T Calmar(IReadOnlyList<T> returns, int periodsPerYear = 252)
     {
+        Validate(returns, periodsPerYear);
         if (returns.Count < 2)
         {
             return NumOps.Zero;
@@ -108,7 +125,13 @@ public static class RiskRatios<T>
             return NumOps.Zero;
         }
 
-        var annualizedReturn = Math.Pow(equity, (double)periodsPerYear / returns.Count) - 1.0;
+        // A losing streak can drive the compounded equity to zero or negative
+        // (any period return <= -100%). Math.Pow of a non-positive base by a
+        // fractional exponent is NaN, so treat a wiped-out account as a total
+        // (-100%) annualized loss rather than emitting NaN.
+        var annualizedReturn = equity > 0.0
+            ? Math.Pow(equity, (double)periodsPerYear / returns.Count) - 1.0
+            : -1.0;
         return NumOps.FromDouble(annualizedReturn / maxDrawdown);
     }
 

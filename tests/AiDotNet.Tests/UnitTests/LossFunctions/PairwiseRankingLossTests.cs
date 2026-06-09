@@ -15,7 +15,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
         [Fact(Timeout = 60000)]
         public async Task PerfectlyOrderedPredictions_GiveZeroLossInTheLimit()
         {
-            await Task.CompletedTask;
+            await Task.Yield();
             // Predictions perfectly ordered with a huge margin => log(1+exp(-large)) -> 0.
             var loss = new PairwiseRankingLoss<double>();
             var predicted = new Vector<double>(new double[] { 100.0, 50.0, 0.0, -50.0 });
@@ -30,7 +30,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
         [Fact(Timeout = 60000)]
         public async Task EqualScores_GiveLog2_StandardRankNetReference()
         {
-            await Task.CompletedTask;
+            await Task.Yield();
             // All predicted scores equal => every pair loss = log(1+exp(0)) = log(2).
             var loss = new PairwiseRankingLoss<double>();
             var predicted = new Vector<double>(new double[] { 0.0, 0.0, 0.0 });
@@ -44,7 +44,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
         [Fact(Timeout = 60000)]
         public async Task MisorderedPair_GivesPositiveLoss()
         {
-            await Task.CompletedTask;
+            await Task.Yield();
             var loss = new PairwiseRankingLoss<double>();
             // True order says item0 > item1, but predictions say item0 < item1 => positive loss.
             var predicted = new Vector<double>(new double[] { 0.0, 2.0 });
@@ -60,7 +60,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
         [Fact(Timeout = 60000)]
         public async Task Gradient_OnMisorderedPair_HasCorrectSign()
         {
-            await Task.CompletedTask;
+            await Task.Yield();
             var loss = new PairwiseRankingLoss<double>();
             // item0 should rank above item1 (actual 1 > 0) but predicted score is lower.
             var predicted = new Vector<double>(new double[] { 0.0, 2.0 });
@@ -79,7 +79,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
         [Fact(Timeout = 60000)]
         public async Task Gradient_MatchesFiniteDifference()
         {
-            await Task.CompletedTask;
+            await Task.Yield();
             var loss = new PairwiseRankingLoss<double>(tailWeightPower: 1.0);
             var predicted = new Vector<double>(new double[] { 0.3, -0.1, 1.2, 0.7 });
             var actual = new Vector<double>(new double[] { 0.05, -0.02, 0.10, -0.08 });
@@ -106,7 +106,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
         [Fact(Timeout = 60000)]
         public async Task TailWeighting_IncreasesContributionOfExtremePairs()
         {
-            await Task.CompletedTask;
+            await Task.Yield();
             // Two mis-ordered pairs of equal predicted-margin error, but one pair sits at the
             // extreme tails of the actual distribution and the other near the median.
             // Construct so that the extreme misorder dominates under tail weighting.
@@ -143,7 +143,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
         [Fact(Timeout = 60000)]
         public async Task TailWeightPower_Zero_EqualsStandardRankNet()
         {
-            await Task.CompletedTask;
+            await Task.Yield();
             var plain = new PairwiseRankingLoss<double>(tailWeightPower: 0.0);
             var explicitDefault = new PairwiseRankingLoss<double>();
 
@@ -156,14 +156,14 @@ namespace AiDotNetTests.UnitTests.LossFunctions
         [Fact(Timeout = 60000)]
         public async Task Constructor_RejectsNegativePower()
         {
-            await Task.CompletedTask;
+            await Task.Yield();
             Assert.Throws<ArgumentOutOfRangeException>(() => new PairwiseRankingLoss<double>(-0.5));
         }
 
         [Fact(Timeout = 60000)]
         public async Task AllTiedActuals_GiveZeroLossAndZeroGradient()
         {
-            await Task.CompletedTask;
+            await Task.Yield();
             var loss = new PairwiseRankingLoss<double>();
             var predicted = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
             var actual = new Vector<double>(new double[] { 5.0, 5.0, 5.0 });
@@ -178,7 +178,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
         [Fact(Timeout = 60000)]
         public async Task Ndcg_PerfectRanking_IsOne()
         {
-            await Task.CompletedTask;
+            await Task.Yield();
             var predicted = new Vector<double>(new double[] { 3.0, 2.0, 1.0, 0.0 });
             var relevance = new Vector<double>(new double[] { 3.0, 2.0, 1.0, 0.0 });
 
@@ -190,7 +190,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
         [Fact(Timeout = 60000)]
         public async Task Ndcg_SwapDegradesScoreBelowOne()
         {
-            await Task.CompletedTask;
+            await Task.Yield();
             var relevance = new Vector<double>(new double[] { 3.0, 2.0, 1.0, 0.0 });
             // Swap top two predicted scores so the #2 item is ranked first.
             var predicted = new Vector<double>(new double[] { 2.0, 3.0, 1.0, 0.0 });
@@ -204,7 +204,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
         [Fact(Timeout = 60000)]
         public async Task Ndcg_AtK_OnlyConsidersTopK()
         {
-            await Task.CompletedTask;
+            await Task.Yield();
             // Mistakes beyond the cutoff should not affect NDCG@1.
             var relevance = new Vector<double>(new double[] { 5.0, 0.0, 4.0, 3.0 });
             var predicted = new Vector<double>(new double[] { 9.0, 8.0, 1.0, 0.0 }); // top item correct, rest wrong
@@ -218,7 +218,7 @@ namespace AiDotNetTests.UnitTests.LossFunctions
         [Fact(Timeout = 60000)]
         public async Task Ndcg_LinearGain_HandlesSignedReturns()
         {
-            await Task.CompletedTask;
+            await Task.Yield();
             // Signed forward returns: linear gain ranks the perfect order at its own ideal => 1.0.
             var relevance = new Vector<double>(new double[] { 0.08, 0.01, -0.02, -0.07 });
             var predicted = new Vector<double>(new double[] { 4.0, 3.0, 2.0, 1.0 });

@@ -200,6 +200,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         [Fact(Timeout = 60000)]
         public async Task BuildOnnxInputs_WhenTokenTypeIdsDeclared_ProducesZerosMatchingInputIdsLength()
         {
+            await Task.Yield();
             // Arrange
             var inputIds = new long[] { 101, 7592, 2088, 102 };
             var attentionMask = new long[] { 1, 1, 1, 1 };
@@ -224,6 +225,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         [Fact(Timeout = 60000)]
         public async Task BuildOnnxInputs_WhenTokenTypeIdsNotDeclared_OmitsIt()
         {
+            await Task.Yield();
             // Arrange
             var inputIds = new long[] { 101, 7592, 102 };
             var attentionMask = new long[] { 1, 1, 1 };
@@ -243,6 +245,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         [Fact(Timeout = 60000)]
         public async Task BuildOnnxInputs_AlwaysIncludesInputIdsWithCorrectShape()
         {
+            await Task.Yield();
             // Arrange
             var inputIds = new long[] { 101, 7592, 2088, 999, 102 };
             var attentionMask = new long[] { 1, 1, 1, 1, 1 };
