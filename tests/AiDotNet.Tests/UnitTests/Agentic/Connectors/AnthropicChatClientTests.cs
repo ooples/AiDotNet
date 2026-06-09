@@ -66,8 +66,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Connectors
             var request = JObject.Parse(handler.LastRequestBody);
             Assert.Equal("be helpful", (string?)request["system"]);
             Assert.NotNull(request["max_tokens"]);
-            Assert.Equal("user", (string?)request["messages"]![0]!["role"]);
-            Assert.Equal("get_weather", (string?)request["tools"]![0]!["name"]);
+            Assert.Equal("user", (string?)request["messages"]?[0]?["role"]);
+            Assert.Equal("get_weather", (string?)request["tools"]?[0]?["name"]);
         }
 
         [Fact(Timeout = 60000)]

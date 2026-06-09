@@ -33,7 +33,7 @@ public sealed class ToolCallContent : AiContent
         Guard.NotNullOrWhiteSpace(toolName);
         CallId = callId;
         ToolName = toolName;
-        ArgumentsJson = string.IsNullOrWhiteSpace(argumentsJson) ? "{}" : argumentsJson!;
+        ArgumentsJson = argumentsJson is null || argumentsJson.Trim().Length == 0 ? "{}" : argumentsJson;
     }
 
     /// <summary>

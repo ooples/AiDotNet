@@ -77,8 +77,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Connectors
             // Verify the outbound request was shaped correctly.
             var request = JObject.Parse(handler.LastRequestBody);
             Assert.Equal("gpt-4o", (string?)request["model"]);
-            Assert.Equal("user", (string?)request["messages"]![0]!["role"]);
-            Assert.Equal("get_weather", (string?)request["tools"]![0]!["function"]!["name"]);
+            Assert.Equal("user", (string?)request["messages"]?[0]?["role"]);
+            Assert.Equal("get_weather", (string?)request["tools"]?[0]?["function"]?["name"]);
             Assert.Equal("auto", (string?)request["tool_choice"]);
         }
 
@@ -100,8 +100,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Connectors
             await client.GetResponseAsync(new[] { ChatMessage.User("hi") }, options);
 
             var request = JObject.Parse(handler.LastRequestBody);
-            Assert.Equal("get_weather", (string?)request["tool_choice"]!["function"]!["name"]);
-            Assert.Equal("json_schema", (string?)request["response_format"]!["type"]);
+            Assert.Equal("get_weather", (string?)request["tool_choice"]?["function"]?["name"]);
+            Assert.Equal("json_schema", (string?)request["response_format"]?["type"]);
         }
 
         [Fact(Timeout = 60000)]

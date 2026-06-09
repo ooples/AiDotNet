@@ -92,7 +92,7 @@ namespace AiDotNetTests.UnitTests.Agentic.Models
             var fromBytes = ImageContent.FromBytes(bytes, ImageMediaType.Png);
             Assert.True(fromBytes.HasData);
             Assert.Equal(ImageMediaType.Png, fromBytes.MediaType);
-            Assert.Equal("image/png", fromBytes.MediaType!.Value.ToMimeType());
+            Assert.Equal("image/png", fromBytes.MediaType?.ToMimeType());
             Assert.Null(fromBytes.Uri);
 
             var fromUri = ImageContent.FromUri("https://example.com/a.jpg", ImageMediaType.Jpeg);

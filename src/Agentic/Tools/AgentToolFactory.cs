@@ -45,7 +45,8 @@ public static class AgentToolFactory
                 continue;
             }
 
-            var name = string.IsNullOrWhiteSpace(attribute.Name) ? method.Name : attribute.Name!;
+            var attrName = attribute.Name;
+            var name = attrName is null || attrName.Trim().Length == 0 ? method.Name : attrName;
             var toolTarget = method.IsStatic ? null : target;
             tools.Add(new DelegateAgentTool(name, attribute.Description, method, toolTarget));
         }
