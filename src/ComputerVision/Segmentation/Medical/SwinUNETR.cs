@@ -3,6 +3,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
@@ -268,6 +269,22 @@ public class SwinUNETR<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
             var decoderLayers = LayerHelper<T>.CreateSwinUNETRDecoderLayers(_channelDims[^1], _decoderDim, _numClasses, fH, fW);
             Layers.AddRange(decoderLayers);
         }
+    }
+
+    /// <summary>
+    /// Use the AdamW optimizer the constructor stored in <c>_optimizer</c>
+    /// for the base class's tape-training path. The default
+    /// <see cref="GetOrCreateBaseOptimizer"/> returns plain Adam with
+    /// lr=0.001, which is too conservative for the per-pixel CE-with-logits
+    /// memorization task — the network only achieves ≈0.25% loss decrease
+    /// over the 100-step probe, well under the 1% threshold. The
+    /// constructor-supplied AdamW (default lr=0.001 but with decoupled weight
+    /// decay) is the paper-recommended optimizer (Hatamizadeh 2022); routing
+    /// it through the base path so TrainWithTape actually steps it.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+    {
+        return _optimizer ?? base.GetOrCreateBaseOptimizer();
     }
 
     /// <summary>
