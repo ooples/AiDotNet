@@ -21,6 +21,20 @@ internal static class BuildKeyProvider
     private static readonly object _lock = new();
 
     /// <summary>
+    /// TEST-ONLY: overrides the embedded build key so tests can exercise the real HMAC verification
+    /// path with a known key, or simulate a dev/fork build (pass null or empty) to assert fail-closed
+    /// offline behaviour. Not used by production code paths.
+    /// </summary>
+    internal static void OverrideForTesting(byte[]? key)
+    {
+        lock (_lock)
+        {
+            _cachedKey = key is { Length: > 0 } ? (byte[])key.Clone() : null;
+            _loaded = true;
+        }
+    }
+
+    /// <summary>
     /// Gets whether this is an official build with an embedded build key.
     /// </summary>
     internal static bool IsOfficialBuild
