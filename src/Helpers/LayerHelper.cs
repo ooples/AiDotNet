@@ -32245,21 +32245,27 @@ public static class LayerHelper<T>
                 hiddenSize: hiddenDim, numHeads: numHeads, ffnDim: hiddenDim * 4, dropoutRate: dropoutRate);
         }
 
-        // === HiFi-GAN Decoder ===
-        // Paper-faithful to the HiFi-GAN generator (Kong et al. 2020): LeakyReLU
-        // activations, NO activation-normalization (LayerNorm/BatchNorm), NO
-        // dropout — it relies on weight normalization of the conv weights instead.
-        // The previous GELU + LayerNorm + Dropout decoder was the source of the
-        // VITS-family training collapse:
+        // === HiFi-GAN-inspired Decoder ===
+        // Takes the HiFi-GAN generator's stabilizing choices (Kong et al. 2020):
+        // LeakyReLU activations (NOT GELU), NO dropout, and crucially NO TERMINAL
+        // activation-normalization. It deliberately DIVERGES from pure HiFi-GAN in two
+        // ways that the test invariants pin: (a) it is a dense dim-reducing stack (not
+        // the channels-first Conv1D ConvTranspose1d generator — that is
+        // CreateDefaultHiFiGANLayers, used by the standalone vocoders), and (b) it
+        // RETAINS an INTERMEDIATE LayerNorm after each dense block (see the per-layer
+        // note below) because the VAE-flow latent this decodes is unbounded and the
+        // un-normalized dense stack otherwise diverges. The two failure modes this
+        // design fixes (vs the previous GELU+terminal-LayerNorm+Dropout decoder):
         //   • GELU's analytic derivative is term2·sech²(term1) with term2 ~ x³; once
         //     a decoder pre-activation grows, term2 overflows to ±inf while sech²
         //     underflows to 0, giving inf·0 = NaN gradients on the first backward
         //     step (ForwardPass_ShouldBeFinite_AfterTraining: params NaN after
         //     iter 1). LeakyReLU's derivative is a bounded constant (1 or 0.01).
-        //   • the terminal LayerNorm over a positively-homogeneous stack divides
+        //   • the TERMINAL LayerNorm over a positively-homogeneous stack divides
         //     out the input scale and collapses the waveform across inputs
-        //     (DifferentInputs_AfterTraining); dropout adds process-shared-RNG mask
-        //     noise that destabilizes the deep dim-reducing stack.
+        //     (DifferentInputs_AfterTraining) — so there is NO LayerNorm before the
+        //     final tanh; dropout adds process-shared-RNG mask noise that
+        //     destabilizes the deep dim-reducing stack, so it is omitted too.
         yield return new DenseLayer<T>(decoderDim, leakyRelu);
         yield return new LayerNormalizationLayer<T>();
 
