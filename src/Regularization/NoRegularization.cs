@@ -82,8 +82,12 @@ public class NoRegularization<T, TInput, TOutput> : RegularizationBase<T, TInput
     /// </remarks>
     public override Matrix<T> Regularize(Matrix<T> data)
     {
-        // Return a zero matrix - no regularization penalty to add
-        return new Matrix<T>(data.Rows, data.Columns);
+        // Return data unchanged. The other regularizers (L1, L2, ElasticNet)
+        // treat Regularize(Matrix) as a TRANSFORM of the input — L1 applies
+        // soft-thresholding, L2 scales — so the no-op equivalent is the
+        // identity. Returning a zero matrix here silently zeroed every X^T X
+        // when the regularization layer composed with builder pipelines.
+        return data;
     }
 
     /// <summary>
