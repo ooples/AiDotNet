@@ -155,9 +155,14 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
         [Fact(Timeout = 60000)]
         public async Task Engine_IsDropInForAgentExecutor()
         {
-            var tokenizer = new WordTokenizer("done");
+            var tokenizer = new WordTokenizer("done", "later");
             var model = new ScriptedCausalModel(tokenizer.VocabularySize, new[] { 1, 0 });
-            var engine = new LocalEngineChatClient<double>(model, tokenizer);
+            // AgentExecutor does not specify a temperature, so make the engine greedy by default for a
+            // deterministic assertion (otherwise it samples stochastically at the default temperature).
+            var engine = new LocalEngineChatClient<double>(model, tokenizer, options: new LocalEngineOptions
+            {
+                Sampling = new LocalSamplingOptions { Temperature = 0.0 }
+            });
 
             // The local engine drives a standard agent with no code changes.
             var agent = new AgentExecutor<double>(engine);
