@@ -221,6 +221,118 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
     {
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); ExtractLayerReferences(); }
         else if (_useNativeMode) { Layers.AddRange(LayerHelper<T>.CreateDefaultMGTSDLayers(Architecture, _contextLength, _forecastHorizon, _hiddenDimension, _numLayers, _numHeads, _numGranularities, _dropout)); ExtractLayerReferences(); }
+
+        // Manually resolve each sub-stage's lazy layers from its OWN known
+        // input shape so ParameterCount reports correctly before any forward
+        // — the base class's linear-chain ResolveLazyLayerShapes can't do this
+        // because MGTSD's Layers list isn't a single end-to-end pipeline:
+        // _inputProjection consumes [1, contextLength], _denoisingLayers
+        // consume [1, forecastHorizon + hiddenDimension + forecastHorizon + 1],
+        // and _outputProjection consumes the denoising stack's output shape.
+        // Propagating _inputProjection's output through the whole list would
+        // lock the denoising stack to hiddenDimension and break every real
+        // forward pass.
+        if (_useNativeMode)
+        {
+            int denoiseLen = _forecastHorizon + _hiddenDimension + _forecastHorizon + 1;
+            try
+            {
+                if (_inputProjection is AiDotNet.NeuralNetworks.Layers.LayerBase<T> ip && !ip.IsShapeResolved)
+                    ip.ResolveFromShape(new[] { 1, _contextLength });
+            }
+            catch { /* layer rejects shape; leave lazy */ }
+            int[] denoiseShape = new[] { 1, denoiseLen };
+            foreach (var layer in _denoisingLayers)
+            {
+                if (layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> lb && !lb.IsShapeResolved)
+                {
+                    try { lb.ResolveFromShape(denoiseShape); }
+                    catch { break; }
+                    try
+                    {
+                        var outShape = lb.GetOutputShape();
+                        if (outShape is { Length: > 0 } && System.Array.TrueForAll(outShape, d => d > 0))
+                            denoiseShape = outShape;
+                    }
+                    catch { /* keep going with the same shape */ }
+                }
+            }
+            try
+            {
+                if (_outputProjection is AiDotNet.NeuralNetworks.Layers.LayerBase<T> op && !op.IsShapeResolved)
+                    op.ResolveFromShape(denoiseShape);
+            }
+            catch { /* leave lazy */ }
+        }
+    }
+
+    /// <summary>
+    /// MGTSD's <see cref="NeuralNetworkBase{T}.Layers"/> chain consumes the
+    /// concatenated [x_t | conditioning | guidance | t-embedding] pack of
+    /// length forecastHorizon + hiddenDimension + forecastHorizon + 1
+    /// (24 + 128 + 24 + 1 = 177 on the default options), NOT
+    /// Architecture.InputWidth (168 = contextLength). Suppress the base
+    /// class's architecture-driven ResolveLazyLayerShapes pre-walk so the
+    /// lazy denoising-stack layers resolve from the actual 177-width pack
+    /// the first time ForwardForTraining / ForwardNative builds it.
+    /// Without this override the pre-walk locks every lazy layer in the
+    /// stack to 128 and every real forward fails with "Tensors with shapes
+    /// [1, 177] and [1, 128] cannot be broadcast" — same root cause as
+    /// MisGAN / AutoDiffTabGenerator / GOGGLEGenerator.
+    /// </summary>
+    protected override int[]? TryGetArchitectureInputShape() => null;
+
+    /// <summary>
+    /// Override the base class's naive linear-chain Layers walk because MGTSD's
+    /// Layers list isn't a single pipeline — it's [inputProjection,
+    /// denoisingLayers..., outputProjection] where each stage takes a different
+    /// input shape (contextLength → hidden, denoiseLen=fh+hd+fh+1 →
+    /// denoise-stack output, denoise-stack output → forecastHorizon). Feeding
+    /// the contextLength input straight through every layer crashes on the
+    /// denoising-stack entry because the shapes don't match. Run the real
+    /// forward path and snapshot its intermediate activations instead.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode) return base.GetNamedLayerActivations(input);
+
+        var activations = new Dictionary<string, Tensor<T>>();
+        var conditioned = ApplyInstanceNormalization(input);
+        if (conditioned.Rank == 1) conditioned = conditioned.Reshape(new[] { 1, conditioned.Length });
+
+        // Stage 1: input projection — context-length input → hidden representation.
+        Tensor<T> condHidden = _inputProjection is not null
+            ? _inputProjection.Forward(conditioned)
+            : conditioned;
+        if (_inputProjection is not null)
+            activations[$"Layer_0_{_inputProjection.GetType().Name}"] = condHidden.Clone();
+
+        // Stage 2: build the [x_t | cond | guidance | t] denoising pack and
+        // walk the denoising stack on it. Use a zero noise tensor + the
+        // mid-schedule timestep so the activation magnitudes are reasonable.
+        int segLen = _forecastHorizon;
+        int condLen = Math.Min(condHidden.Length, _hiddenDimension);
+        int denoiseLen = segLen + condLen + segLen + 1;
+        var pack = new Tensor<T>(new[] { 1, denoiseLen });
+        condHidden.Data.Span.Slice(0, condLen).CopyTo(pack.Data.Span.Slice(segLen, condLen));
+        pack[0, denoiseLen - 1] = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * (_diffusionSteps / 2.0) / Math.Max(1, _diffusionSteps - 1)));
+        var current = pack;
+        int layerIdx = 1;
+        foreach (var layer in _denoisingLayers)
+        {
+            current = layer.Forward(current);
+            activations[$"Layer_{layerIdx}_{layer.GetType().Name}"] = current.Clone();
+            layerIdx++;
+        }
+
+        // Stage 3: output projection — denoising stack output → forecast.
+        if (_outputProjection is not null)
+        {
+            current = _outputProjection.Forward(current);
+            activations[$"Layer_{layerIdx}_{_outputProjection.GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
     }
 
     private void ExtractLayerReferences()
