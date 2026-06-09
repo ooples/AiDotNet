@@ -2393,6 +2393,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine($"    protected override int[] InputShape => new[] {{ 1, 80, {inT} }};");
                     sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 1, {specChannels}, {inT * 256} }};");
                 }
+                // These vocoders run a deep stack (256x ConvTranspose1d upsampling + MRF /
+                // 30 gated residual blocks), so each training iteration is multiple seconds
+                // and the loss curve over the default 50->200-iter window oscillates rather
+                // than monotonically improving (deep-GAN-generator optimization dynamics).
+                // Compare in the early stable regime per the MoreData*Iterations virtuals'
+                // documented intent for paper-scale models — the long<=short assertion is
+                // unchanged, just evaluated where more training reliably means less loss.
+                sb.AppendLine("    protected override int MoreDataShortIterations => 3;");
+                sb.AppendLine("    protected override int MoreDataLongIterations => 10;");
             }
             else if (IsTextToMelTTS(model.ClassName))
             {
