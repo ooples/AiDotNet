@@ -239,6 +239,26 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     }
 
     /// <summary>
+    /// MisGAN's <see cref="LayerBase{T}"/> collection is the data GENERATOR
+    /// — it consumes a latent z of size <c>EmbeddingDimension</c>, not the
+    /// data row of size <c>Architecture.InputWidth</c>. Suppress the base
+    /// class's architecture-driven shape pre-walk so the first real
+    /// <c>DataGeneratorForward</c> call (which feeds latent z) is the one
+    /// that resolves Layer[0]'s input dim. Without this, the base walker
+    /// allocates Layer[0]'s weights with input=InputWidth and the latent-z
+    /// forward fails with "Matrix dimensions incompatible: [1,z] x [InputWidth, hidden]".
+    /// </summary>
+    protected override int[]? TryGetArchitectureInputShape()
+    {
+        // Custom-layers path mirrors the architecture's signal chain, so
+        // the default walk is correct there.
+        if (_usingCustomLayers) return base.TryGetArchitectureInputShape();
+        // null tells ResolveLazyLayerShapes to leave Layers lazy and resolve
+        // on first Forward — exactly what we want for the generator path.
+        return null;
+    }
+
+    /// <summary>
     /// Builds the data discriminator network (auxiliary, not user-overridable).
     /// </summary>
     private void BuildDataDiscriminator()
