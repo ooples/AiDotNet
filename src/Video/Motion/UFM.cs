@@ -130,6 +130,19 @@ public class UFM<T> : OpticalFlowBase<T>
             Layers.Add(_outputConv);
     }
 
+    /// <summary>
+    /// UFM consumes two RGB frames concatenated channel-wise — 2 ×
+    /// Architecture.InputDepth = 6 channels — but Architecture.InputDepth
+    /// itself reports the SINGLE-FRAME count (3) so it matches the
+    /// architecture's per-frame metadata. Returning null suppresses the
+    /// base class's ResolveLazyLayerShapes pre-walk, which would size the
+    /// first ConvolutionalLayer (`_featureExtract`) for depth 3 and then
+    /// every real Train()/Predict() with the [1, 6, H, W] concat would
+    /// fail with "Expected input depth 3, but got 6". Same root-cause fix
+    /// as MisGAN / AutoDiffTabGenerator / GOGGLE / MGTSD.
+    /// </summary>
+    protected override int[]? TryGetArchitectureInputShape() => null;
+
     /// <inheritdoc/>
     protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
     {
