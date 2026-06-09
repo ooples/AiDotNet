@@ -28,13 +28,15 @@ public sealed class AgentRunResult
         IReadOnlyList<ChatMessage> messages,
         int iterations,
         bool completed,
-        ChatUsage? usage)
+        ChatUsage? usage,
+        string? agentName)
     {
         FinalText = finalText;
         Messages = messages;
         Iterations = iterations;
         Completed = completed;
         Usage = usage;
+        AgentName = agentName;
     }
 
     /// <summary>
@@ -67,14 +69,21 @@ public sealed class AgentRunResult
     public ChatUsage? Usage { get; }
 
     /// <summary>
+    /// Gets the name of the agent that produced the final answer, or <c>null</c> when not tracked. For a
+    /// single agent this is its own name; for a swarm it is the member that was active when the run ended.
+    /// </summary>
+    public string? AgentName { get; }
+
+    /// <summary>
     /// Creates a result for a run that produced a final answer.
     /// </summary>
     internal static AgentRunResult Finished(
         string finalText,
         IReadOnlyList<ChatMessage> messages,
         int iterations,
-        ChatUsage? usage) =>
-        new(finalText, messages, iterations, completed: true, usage);
+        ChatUsage? usage,
+        string? agentName = null) =>
+        new(finalText, messages, iterations, completed: true, usage, agentName);
 
     /// <summary>
     /// Creates a result for a run that hit its iteration cap before producing a final answer.
@@ -83,6 +92,7 @@ public sealed class AgentRunResult
         string lastText,
         IReadOnlyList<ChatMessage> messages,
         int iterations,
-        ChatUsage? usage) =>
-        new(lastText, messages, iterations, completed: false, usage);
+        ChatUsage? usage,
+        string? agentName = null) =>
+        new(lastText, messages, iterations, completed: false, usage, agentName);
 }

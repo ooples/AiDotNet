@@ -140,7 +140,8 @@ public sealed class AgentExecutor<T> : IAgent<T>
                 response.Message.Text,
                 transcript,
                 iteration,
-                sawUsage ? new ChatUsage(inputTokens, outputTokens) : null);
+                sawUsage ? new ChatUsage(inputTokens, outputTokens) : null,
+                Name);
         }
 
         var lastText = transcript.Count > 0 ? transcript[transcript.Count - 1].Text : string.Empty;
@@ -148,6 +149,7 @@ public sealed class AgentExecutor<T> : IAgent<T>
             lastText,
             transcript,
             maxIterations,
-            sawUsage ? new ChatUsage(inputTokens, outputTokens) : null);
+            sawUsage ? new ChatUsage(inputTokens, outputTokens) : null,
+            Name);
     }
 }

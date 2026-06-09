@@ -45,7 +45,7 @@ public sealed class AgentAsTool<T> : IAgentTool
         Guard.NotNull(agent);
         _agent = agent;
         var prefix = namePrefix ?? DefaultNamePrefix;
-        Name = prefix + Sanitize(_agent.Name);
+        Name = prefix + ToolNaming.Sanitize(_agent.Name);
         Description = BuildDescription(_agent);
     }
 
@@ -106,17 +106,5 @@ public sealed class AgentAsTool<T> : IAgentTool
         }
 
         return builder.ToString();
-    }
-
-    private static string Sanitize(string name)
-    {
-        var builder = new StringBuilder(name.Length);
-        foreach (var ch in name)
-        {
-            builder.Append(char.IsLetterOrDigit(ch) || ch is '_' or '-' ? ch : '_');
-        }
-
-        var sanitized = builder.ToString().Trim('_');
-        return sanitized.Length == 0 ? "agent" : sanitized;
     }
 }
