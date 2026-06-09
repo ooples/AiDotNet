@@ -32304,6 +32304,7 @@ public static class LayerHelper<T>
         double dropoutRate = 0.1,
         int vocabSize = 256)
     {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int textFfnDim = textEncoderDim * 4;
         int llmFfnDim = llmDim * 4;
@@ -32314,29 +32315,33 @@ public static class LayerHelper<T>
         yield return new EmbeddingLayer<T>(vocabSize, textEncoderDim);
 
         // === Text Encoder ===
-        // Canonical Pre-LN residual Transformer blocks (Vaswani 2017 §3.1). The prior
-        // flat MHA→Norm→FFN→Norm sequence had NO residual connections, so the signal
-        // washed out through the deep stack → training diverged / loss didn't decrease /
-        // identical inputs produced identical outputs (the #1380 collapse mechanism).
-        // One residual block per layer fixes it (same fix as the VITS text encoder).
+        yield return new LayerNormalizationLayer<T>();
+
         for (int i = 0; i < numTextEncoderLayers; i++)
         {
-            yield return new TransformerEncoderBlock<T>(
-                hiddenSize: textEncoderDim, numHeads: numHeads, ffnDim: textFfnDim, dropoutRate: dropoutRate);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (textEncoderDim) / (numHeads));
+            yield return new LayerNormalizationLayer<T>();
+            yield return new DenseLayer<T>(textFfnDim, geluActivation);
+            yield return new DenseLayer<T>(textEncoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>();
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // === Projection to LLM dim ===
         if (textEncoderDim != llmDim)
             yield return new DenseLayer<T>(llmDim, identityActivation);
 
-        // === LLM Decoder (codec token prediction) ===
-        // Residual Pre-LN blocks at llmDim — same residual-connection fix. (Autoregressive
-        // causal masking is applied by the model's generation loop at inference; the
-        // training-invariant tests teacher-force the full sequence.)
+        // === Autoregressive LLM Decoder (codec token prediction) ===
         for (int i = 0; i < numLLMLayers; i++)
         {
-            yield return new TransformerEncoderBlock<T>(
-                hiddenSize: llmDim, numHeads: numHeads, ffnDim: llmFfnDim, dropoutRate: dropoutRate);
+            var selfAttn = new MultiHeadAttentionLayer<T>(numHeads, (llmDim) / (numHeads));
+            selfAttn.UseCausalMask = true;
+            yield return selfAttn;
+            yield return new LayerNormalizationLayer<T>();
+            yield return new DenseLayer<T>(llmFfnDim, geluActivation);
+            yield return new DenseLayer<T>(llmDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>();
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // === Codec token output projection ===
@@ -32362,6 +32367,7 @@ public static class LayerHelper<T>
         if (inputFeatures <= 0)
             throw new ArgumentOutOfRangeException(nameof(inputFeatures), "inputFeatures must be positive.");
 
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int encoderFfnDim = encoderDim * 4;
         int flowFfnDim = flowDim * 4;
@@ -32378,14 +32384,16 @@ public static class LayerHelper<T>
             yield return new DenseLayer<T>(encoderDim, identityActivation, lazy);
 
         // === Text Encoder ===
-        // Canonical Pre-LN residual Transformer blocks. The prior flat
-        // MHA→Norm→FFN→Norm sequence had NO residual connections → signal washout →
-        // training diverged / loss didn't decrease / identical inputs produced identical
-        // outputs (the #1380 collapse). One residual block per layer (the VITS fix).
+        yield return new LayerNormalizationLayer<T>();
+
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new TransformerEncoderBlock<T>(
-                hiddenSize: encoderDim, numHeads: numHeads, ffnDim: encoderFfnDim, dropoutRate: dropoutRate);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (encoderDim) / (numHeads));
+            yield return new LayerNormalizationLayer<T>();
+            yield return new DenseLayer<T>(encoderFfnDim, geluActivation);
+            yield return new DenseLayer<T>(encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>();
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // === Projection ===
@@ -32393,12 +32401,14 @@ public static class LayerHelper<T>
             yield return new DenseLayer<T>(flowDim, identityActivation);
 
         // === Flow Matching Blocks (conditional vector field estimator) ===
-        // Residual Pre-LN blocks at flowDim — the OT-CFM vector field is a residual
-        // refinement, so the blocks must add to (not overwrite) the latent.
         for (int i = 0; i < numFlowLayers; i++)
         {
-            yield return new TransformerEncoderBlock<T>(
-                hiddenSize: flowDim, numHeads: numHeads, ffnDim: flowFfnDim, dropoutRate: dropoutRate);
+            yield return new MultiHeadAttentionLayer<T>(numHeads, (flowDim) / (numHeads));
+            yield return new LayerNormalizationLayer<T>();
+            yield return new DenseLayer<T>(flowFfnDim, geluActivation);
+            yield return new DenseLayer<T>(flowDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>();
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
         // === Output projection to mel/codec ===
