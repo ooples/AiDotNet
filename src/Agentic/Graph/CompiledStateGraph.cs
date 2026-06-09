@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using AiDotNet.Agentic.Graph.Checkpointing;
 
 namespace AiDotNet.Agentic.Graph;
 
@@ -46,26 +47,128 @@ public sealed class CompiledStateGraph<TState>
     /// <param name="cancellationToken">Token used to cancel the run.</param>
     /// <returns>The final state when flow reaches the end node.</returns>
     /// <exception cref="GraphRecursionException">Thrown when the step budget is exceeded.</exception>
-    public async Task<TState> InvokeAsync(
+    public Task<TState> InvokeAsync(
         TState initialState,
         GraphRunOptions? options = null,
         CancellationToken cancellationToken = default)
+        => RunCoreAsync(initialState, _entryPoint, startStep: 0, ResolveMaxSteps(options), checkpointer: null, threadId: null, cancellationToken);
+
+    /// <summary>
+    /// Runs the graph with durable checkpointing under a thread id, resuming automatically from the latest
+    /// saved checkpoint if one exists for that thread (otherwise starting fresh from <paramref name="initialState"/>).
+    /// </summary>
+    /// <param name="initialState">The starting state (used only when the thread has no prior checkpoint).</param>
+    /// <param name="checkpointer">The checkpoint store.</param>
+    /// <param name="threadId">The run/thread id under which checkpoints are saved and resumed.</param>
+    /// <param name="options">Run options (step budget). <c>null</c> uses defaults. The budget is cumulative across resumes.</param>
+    /// <param name="cancellationToken">Token used to cancel the run.</param>
+    /// <returns>The final state.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="checkpointer"/> or <paramref name="threadId"/> is <c>null</c>.</exception>
+    /// <exception cref="GraphRecursionException">Thrown when the step budget is exceeded.</exception>
+    public async Task<TState> InvokeAsync(
+        TState initialState,
+        IGraphCheckpointer<TState> checkpointer,
+        string threadId,
+        GraphRunOptions? options = null,
+        CancellationToken cancellationToken = default)
     {
+        Guard.NotNull(checkpointer);
+        Guard.NotNullOrWhiteSpace(threadId);
         var maxSteps = ResolveMaxSteps(options);
-        var state = initialState;
-        var current = _entryPoint;
-        var steps = 0;
+
+        var latest = await checkpointer.GetLatestAsync(threadId, cancellationToken).ConfigureAwait(false);
+        string startNode;
+        TState state;
+        int startStep;
+        if (latest is not null)
+        {
+            startNode = latest.NextNode;
+            state = latest.State;
+            startStep = latest.Step;
+        }
+        else
+        {
+            startNode = _entryPoint;
+            state = initialState;
+            startStep = 0;
+            await checkpointer.SaveAsync(
+                new GraphCheckpoint<TState>(threadId, $"{threadId}-0", 0, _entryPoint, initialState), cancellationToken).ConfigureAwait(false);
+        }
+
+        if (startNode == GraphSpecialNodes.End)
+        {
+            return state; // thread already complete
+        }
+
+        return await RunCoreAsync(state, startNode, startStep, maxSteps, checkpointer, threadId, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Resumes (replays) a thread from a specific past checkpoint — the basis for time-travel — continuing
+    /// execution from that checkpoint's next node and state, and saving new checkpoints as it goes.
+    /// </summary>
+    /// <param name="checkpointer">The checkpoint store.</param>
+    /// <param name="threadId">The run/thread id.</param>
+    /// <param name="checkpointId">The id of the checkpoint to resume from.</param>
+    /// <param name="options">Run options (step budget). <c>null</c> uses defaults.</param>
+    /// <param name="cancellationToken">Token used to cancel the run.</param>
+    /// <returns>The final state.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="checkpointer"/>, <paramref name="threadId"/>, or <paramref name="checkpointId"/> is <c>null</c>.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the checkpoint does not exist.</exception>
+    public async Task<TState> ResumeFromAsync(
+        IGraphCheckpointer<TState> checkpointer,
+        string threadId,
+        string checkpointId,
+        GraphRunOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        Guard.NotNull(checkpointer);
+        Guard.NotNullOrWhiteSpace(threadId);
+        Guard.NotNullOrWhiteSpace(checkpointId);
+
+        var checkpoint = await checkpointer.GetAsync(threadId, checkpointId, cancellationToken).ConfigureAwait(false);
+        if (checkpoint is null)
+        {
+            throw new InvalidOperationException($"Checkpoint '{checkpointId}' was not found for thread '{threadId}'.");
+        }
+
+        if (checkpoint.NextNode == GraphSpecialNodes.End)
+        {
+            return checkpoint.State;
+        }
+
+        return await RunCoreAsync(
+            checkpoint.State, checkpoint.NextNode, checkpoint.Step, ResolveMaxSteps(options), checkpointer, threadId, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<TState> RunCoreAsync(
+        TState state,
+        string startNode,
+        int startStep,
+        int maxSteps,
+        IGraphCheckpointer<TState>? checkpointer,
+        string? threadId,
+        CancellationToken cancellationToken)
+    {
+        var current = startNode;
+        var step = startStep;
 
         while (current != GraphSpecialNodes.End)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (++steps > maxSteps)
+            if (++step > maxSteps)
             {
                 throw new GraphRecursionException(maxSteps);
             }
 
             state = await _nodes[current](state, cancellationToken).ConfigureAwait(false);
             current = NextNode(current, state);
+
+            if (checkpointer is not null && threadId is not null)
+            {
+                await checkpointer.SaveAsync(
+                    new GraphCheckpoint<TState>(threadId, $"{threadId}-{step}", step, current, state), cancellationToken).ConfigureAwait(false);
+            }
         }
 
         return state;
