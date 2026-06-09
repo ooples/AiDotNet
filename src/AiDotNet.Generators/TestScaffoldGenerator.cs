@@ -2403,6 +2403,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int MoreDataShortIterations => 3;");
                 sb.AppendLine("    protected override int MoreDataLongIterations => 10;");
             }
+            else if (IsCodecLMTokenModel(model.ClassName))
+            {
+                // Autoregressive codec LM (GPT-SoVITS GPT stage: a Text-to-Semantic
+                // Transformer DECODER, RVC-Boss/GPT-SoVITS): CreateDefaultCodecLMLayers
+                // is EmbeddingLayer-first, so it consumes DISCRETE token IDs [seq] (not
+                // continuous features — feeding [8,80] floats made the embedding index on
+                // garbage → NaN / no learning). Output is the codec logits
+                // [seq, NumCodebooks*CodebookSize].
+                int codecDim = CodecLMOutputDim(model.ClassName);
+                sb.AppendLine("    protected override int[] InputShape => new[] { 4 };");
+                sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 4, {codecDim} }};");
+                sb.AppendLine("    protected override int MoreDataShortIterations => 3;");
+                sb.AppendLine("    protected override int MoreDataLongIterations => 10;");
+            }
             else if (IsTextToMelTTS(model.ClassName))
             {
                 sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
@@ -2412,6 +2426,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             {
                 sb.AppendLine("    protected override int[] InputShape => new[] { 8, 80 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 8, 1 };");
+                // Deep end-to-end TTS (VITS / NaturalSpeech / flow-matching): the encoder+
+                // flow+decoder stack's loss oscillates over the default 50->200-iter window,
+                // so compare MoreData in the early stable regime (the long<=short assertion
+                // is unchanged; same documented use of the iteration virtuals as elsewhere).
+                sb.AppendLine("    protected override int MoreDataShortIterations => 3;");
+                sb.AppendLine("    protected override int MoreDataLongIterations => 10;");
             }
         }
         else if (isAudioModel)
@@ -4714,6 +4734,35 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "APNet2" => 513,
             "ISTFTNet" => 513,
             _ => 1,
+        };
+    }
+
+    /// <summary>
+    /// True for autoregressive codec-LM TTS models whose layer stack
+    /// (<c>CreateDefaultCodecLMLayers</c>) begins with an EmbeddingLayer and therefore
+    /// consumes DISCRETE token IDs [seq] rather than continuous features. (E2TTS also
+    /// uses that helper but is covered by the text-to-mel token-input list with an
+    /// 80-d output; the models here have a wider codec output dimension.)
+    /// </summary>
+    private static bool IsCodecLMTokenModel(string className)
+    {
+        int tickIdx = className.IndexOf('`');
+        if (tickIdx > 0) className = className.Substring(0, tickIdx);
+        return className is "GPTSoVITS";
+    }
+
+    /// <summary>
+    /// Codec-logit output width of a codec-LM model's final projection
+    /// (<c>NumCodebooks * CodebookSize</c>). GPT-SoVITS: 1 codebook x 1024.
+    /// </summary>
+    private static int CodecLMOutputDim(string className)
+    {
+        int tickIdx = className.IndexOf('`');
+        if (tickIdx > 0) className = className.Substring(0, tickIdx);
+        return className switch
+        {
+            "GPTSoVITS" => 1024,
+            _ => 1024,
         };
     }
 
