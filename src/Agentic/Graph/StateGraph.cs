@@ -169,6 +169,72 @@ public sealed class StateGraph<TState>
     }
 
     /// <summary>
+    /// Adds a dynamic fan-out (map-reduce) node: it derives a set of items from the current state, runs a
+    /// branch over each item in parallel, then reduces the branch results back into the state. This is the
+    /// typed equivalent of LangGraph's <c>Send</c>/map-reduce.
+    /// </summary>
+    /// <typeparam name="TItem">The per-branch input item type.</typeparam>
+    /// <typeparam name="TResult">The per-branch result type.</typeparam>
+    /// <param name="name">The node name.</param>
+    /// <param name="map">Derives the items to fan out over from the current state.</param>
+    /// <param name="branch">The work run for each item (in parallel).</param>
+    /// <param name="reduce">Merges the ordered branch results back into the state.</param>
+    /// <param name="maxDegreeOfParallelism">Optional cap on concurrent branches; <c>null</c> runs all at once.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="map"/>, <paramref name="branch"/>, or <paramref name="reduce"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="maxDegreeOfParallelism"/> is less than 1.</exception>
+    public StateGraph<TState> AddFanOutNode<TItem, TResult>(
+        string name,
+        Func<TState, IEnumerable<TItem>> map,
+        Func<TItem, CancellationToken, Task<TResult>> branch,
+        Func<TState, IReadOnlyList<TResult>, TState> reduce,
+        int? maxDegreeOfParallelism = null)
+    {
+        Guard.NotNull(map);
+        Guard.NotNull(branch);
+        Guard.NotNull(reduce);
+        if (maxDegreeOfParallelism is { } dop && dop < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxDegreeOfParallelism), "Max degree of parallelism must be at least 1.");
+        }
+
+        return AddNode(name, async (state, ct) =>
+        {
+            var items = (map(state) ?? Enumerable.Empty<TItem>()).ToList();
+            IReadOnlyList<TResult> results = await RunBranchesAsync(items, branch, maxDegreeOfParallelism, ct).ConfigureAwait(false);
+            return reduce(state, results);
+        });
+    }
+
+    private static async Task<TResult[]> RunBranchesAsync<TItem, TResult>(
+        IReadOnlyList<TItem> items,
+        Func<TItem, CancellationToken, Task<TResult>> branch,
+        int? maxDegreeOfParallelism,
+        CancellationToken cancellationToken)
+    {
+        if (maxDegreeOfParallelism is not { } dop)
+        {
+            return await Task.WhenAll(items.Select(item => branch(item, cancellationToken))).ConfigureAwait(false);
+        }
+
+        using var throttle = new SemaphoreSlim(dop);
+        async Task<TResult> RunThrottled(TItem item)
+        {
+            await throttle.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                return await branch(item, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                throttle.Release();
+            }
+        }
+
+        return await Task.WhenAll(items.Select(RunThrottled)).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Marks a node as a human-in-the-loop interrupt point: a run pauses just before this node so a human
     /// can review (and optionally edit) the state, then resume.
     /// </summary>
