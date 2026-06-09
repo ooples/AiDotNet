@@ -6824,7 +6824,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             weightDecay: wd,
             out T lossValue,
             maxGradNorm: MaxGradNormValue,
-            lrSchedule: lrSched);
+            lrSchedule: lrSched,
+            // Lets the compiled FP16-activation path (AIDOTNET_FP16_ACTIVATIONS=1) cover
+            // fused optimizers beyond the inline Adam/SGD fast paths by applying this
+            // optimizer's own master update to the FP16-computed FP32 gradients.
+            eagerOptimizer: resolvedOptimizer);
 
         if (ran)
         {
