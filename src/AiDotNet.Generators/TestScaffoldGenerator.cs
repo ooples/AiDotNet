@@ -1756,7 +1756,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool pinInitSeed = false;
 
         {
-            bool needsArchitectureUsing = false;
 
             if (model.HasParameterlessConstructor)
             {
@@ -1805,7 +1804,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Video=4. The previous check used 3 which mis-flagged every
                 // audio model (PlayHT, Bark) as "temporal video" — ten
                 // PlayHTTests failures on PR #1156 traced to that off-by-one.
-                needsArchitectureUsing = true;
                 // Clip shape chosen to be small enough to build on a 60 s
                 // smoke-test budget while still exercising the 4D code path:
                 // 4 frames × 3 channels × 32 × 32 = 12,288 input elements.
@@ -1820,7 +1818,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Architecture-only constructor: provide a domain-appropriate NeuralNetworkArchitecture.
                 // Vision/3D models need ThreeDimensional input; Audio needs TwoDimensional;
                 // others default to OneDimensional. Temporal video is handled above.
-                needsArchitectureUsing = true;
                 // A forecasting model that merely BORROWS a vision backbone (e.g.
                 // VisionTS, which renders the series as an image internally) still
                 // declares the Vision domain for discovery, but it is a time-series

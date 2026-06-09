@@ -1,0 +1,60 @@
+name: Cancel in-progress runs on PR close
+
+# When a PR is merged or closed, cancel any in-progress workflow runs that
+# were targeting the PR's HEAD ref. Without this, the last `synchronize`
+# event's Build & SonarCloud run keeps executing for ~45min on a SHA that
+# is now dead (PR branch typically auto-deletes on merge), wasting a CI
+# slot that PR runs on other branches would otherwise use.
+#
+# Triggered on:
+#   - pull_request.closed (merged OR closed-without-merge — both leave the
+#     run orphaned)
+#
+# Permissions: actions:write is the minimum needed for `gh run cancel`.
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  actions: write
+
+jobs:
+  cancel:
+    name: Cancel orphaned PR runs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Cancel in-progress workflow runs for this PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # Find in-progress AND queued runs that match this PR's head ref or
+          # head SHA. We check both because:
+          #   - `pull_request` event runs are keyed by PR number but list their
+          #     head ref as the PR branch name.
+          #   - A run can be queued (not yet started) and still consume a FIFO
+          #     slot — kill those too.
+          #
+          # `gh api` returns runs across ALL workflows in the repo; filter by
+          # branch match. The PR's head ref + head SHA together uniquely
+          # identify any run that was triggered for this PR's last sync push.
+          for status in in_progress queued; do
+            echo "::group::Looking for $status runs on $PR_HEAD_REF"
+            gh api "repos/${{ github.repository }}/actions/runs?branch=${PR_HEAD_REF}&status=${status}&per_page=100" \
+              --jq '.workflow_runs[] | "\(.id) \(.head_sha) \(.name)"' \
+              | while read run_id head_sha run_name; do
+                  # Defense in depth: only cancel if the run is for this PR's
+                  # head SHA. Avoids false-positives if the same branch name
+                  # gets reused for a different PR later.
+                  if [ "$head_sha" = "$PR_HEAD_SHA" ]; then
+                    echo "Cancelling run $run_id ($run_name) for PR #$PR_NUMBER head $head_sha"
+                    gh run cancel "$run_id" --repo "${{ github.repository }}" || true
+                  fi
+                done
+            echo "::endgroup::"
+          done

@@ -118,15 +118,11 @@
          with NU1102); re-bump once a newer Tensors is actually released. The
          AiDotNet.Native packages bump with the Tensors lockstep when available.
 
-         PR #1514's memory-bounded gradient-streaming work depends on AiDotNet.Tensors#564
-         (feat: streaming backward). That hasn't been released yet — the consumer-side
-         code in this PR is held behind a feature flag that no-ops gracefully when the
-         Tensors API isn't available, so the build stays green on 0.91.12 until #564 ships
-         and we can bump again.
-
-         Bumped 0.91.12 -> 0.92.0: Tensors #564 (memory-bounded gradient-streaming core)
-         shipped, enabling this PR's streaming-training path at runtime. AiDotNet.Native
-         packages coreleased in lockstep at 0.92.0. -->
+         Bumped 0.91.12 -> 0.92.0: ships BOTH Tensors #564 (memory-bounded gradient-
+         streaming core — this PR's streaming-training path) and Tensors #574 (FP16
+         optimizer-agnostic MixedPrecisionCompiledPlan.ComputeGradients — the
+         all-fused-optimizer FP16 path). AiDotNet.Native packages coreleased in lockstep
+         at 0.92.0. -->
 
     <PackageVersion Include="AiDotNet.Tensors" Version="0.92.0" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.92.0" />
