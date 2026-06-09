@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -22,9 +23,34 @@ namespace AiDotNet.Finance.Options;
 /// rate) — which traders use to size positions and hedge risk.</para>
 /// </remarks>
 /// <typeparam name="T">Numeric type (float/double).</typeparam>
-public static class BlackScholes<T>
+/// <remarks>
+/// Implements <see cref="IOptionPricer{T}"/> so it can be injected as a swappable pricing strategy
+/// (the default) into models that need option valuation; the static methods remain available for
+/// direct, allocation-free use.
+/// </remarks>
+public class BlackScholes<T> : IOptionPricer<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>Shared stateless default instance for injection as an <see cref="IOptionPricer{T}"/>.</summary>
+    public static IOptionPricer<T> Default { get; } = new BlackScholes<T>();
+
+    // Explicit IOptionPricer<T> members delegate to the static closed forms (no behavior change;
+    // explicit implementation avoids any clash with the like-named static methods).
+    T IOptionPricer<T>.Price(T spot, T strike, T timeToExpiry, T riskFreeRate, T volatility, bool isCall)
+        => Price(spot, strike, timeToExpiry, riskFreeRate, volatility, isCall);
+    T IOptionPricer<T>.Delta(T spot, T strike, T timeToExpiry, T riskFreeRate, T volatility, bool isCall)
+        => Delta(spot, strike, timeToExpiry, riskFreeRate, volatility, isCall);
+    T IOptionPricer<T>.Gamma(T spot, T strike, T timeToExpiry, T riskFreeRate, T volatility)
+        => Gamma(spot, strike, timeToExpiry, riskFreeRate, volatility);
+    T IOptionPricer<T>.Vega(T spot, T strike, T timeToExpiry, T riskFreeRate, T volatility)
+        => Vega(spot, strike, timeToExpiry, riskFreeRate, volatility);
+    T IOptionPricer<T>.Theta(T spot, T strike, T timeToExpiry, T riskFreeRate, T volatility, bool isCall)
+        => Theta(spot, strike, timeToExpiry, riskFreeRate, volatility, isCall);
+    T IOptionPricer<T>.Rho(T spot, T strike, T timeToExpiry, T riskFreeRate, T volatility, bool isCall)
+        => Rho(spot, strike, timeToExpiry, riskFreeRate, volatility, isCall);
+    T IOptionPricer<T>.ImpliedVolatility(T marketPrice, T spot, T strike, T timeToExpiry, T riskFreeRate, bool isCall, int maxIterations, double tolerance)
+        => ImpliedVolatility(marketPrice, spot, strike, timeToExpiry, riskFreeRate, isCall, maxIterations, tolerance);
 
     /// <summary>Black-Scholes price of a European call (<paramref name="isCall"/> = true) or put.</summary>
     /// <param name="spot">Current underlying price S.</param>
@@ -41,10 +67,11 @@ public static class BlackScholes<T>
             return Intrinsic(spot, strike, isCall);
         }
 
-        // Zero-volatility limit at positive maturity: the underlying grows deterministically
-        // at the risk-free rate, so the payoff is the forward intrinsic against the DISCOUNTED
-        // strike, max(S - K·e^(-rT), 0) for a call (put analog). Returning the undiscounted
-        // intrinsic here is wrong whenever r != 0.
+        // Zero-volatility limit at positive maturity: the underlying grows
+        // deterministically at the risk-free rate, so the payoff is the forward
+        // intrinsic against the DISCOUNTED strike, max(S - K·e^(-rT), 0) for a
+        // call (put analog). Returning the undiscounted intrinsic here is wrong
+        // whenever r != 0.
         if (!NumOps.GreaterThan(volatility, NumOps.Zero))
         {
             var discounted = NumOps.Multiply(strike, Discount(riskFreeRate, timeToExpiry));
@@ -159,8 +186,9 @@ public static class BlackScholes<T>
         double s = NumOps.ToDouble(spot), k = NumOps.ToDouble(strike), t = NumOps.ToDouble(timeToExpiry);
         double r = NumOps.ToDouble(riskFreeRate);
 
-        // Reject prices outside the no-arbitrage bounds up front: a European option price must lie in
-        // [max(±(S − K·e^(−rT)), 0), upper] where upper is S for a call and K·e^(−rT) for a put.
+        // Reject prices outside the no-arbitrage bounds up front: a European option
+        // price must lie in [max(±(S − K·e^(−rT)), 0), upper] where upper is S for a
+        // call and K·e^(−rT) for a put — otherwise no real σ reproduces it.
         double discountedK = k * Math.Exp(-r * t);
         double lowerBound = isCall ? Math.Max(s - discountedK, 0.0) : Math.Max(discountedK - s, 0.0);
         double upperBound = isCall ? s : discountedK;
@@ -195,6 +223,7 @@ public static class BlackScholes<T>
             sigma = (next > low && next < high) ? next : (low + high) / 2.0;
         }
 
+        // Fail loudly rather than silently returning an unconverged σ in production.
         if (!converged)
             throw new InvalidOperationException(
                 "Implied-volatility solver did not converge within maxIterations; the price may be too close to a bound.");

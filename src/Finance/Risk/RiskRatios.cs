@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -19,13 +20,44 @@ namespace AiDotNet.Finance.Risk;
 /// worst peak-to-trough drawdown. Higher is better for all three.</para>
 /// </remarks>
 /// <typeparam name="T">Numeric type (float/double).</typeparam>
-public static class RiskRatios<T>
+/// <remarks>
+/// Implements <see cref="IRiskRatioCalculator{T}"/> so it can be injected as the default, swappable
+/// risk-scoring strategy into risk models, backtests, and trading agents; the static methods remain
+/// available for direct use.
+/// </remarks>
+public class RiskRatios<T> : IRiskRatioCalculator<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>Shared stateless default instance for injection as an <see cref="IRiskRatioCalculator{T}"/>.</summary>
+    public static IRiskRatioCalculator<T> Default { get; } = new RiskRatios<T>();
+
+    // Explicit IRiskRatioCalculator<T> members delegate to the static implementations.
+    T IRiskRatioCalculator<T>.Sharpe(IReadOnlyList<T> returns, double riskFreePerPeriod, int periodsPerYear)
+        => Sharpe(returns, riskFreePerPeriod, periodsPerYear);
+    T IRiskRatioCalculator<T>.Sortino(IReadOnlyList<T> returns, double riskFreePerPeriod, int periodsPerYear)
+        => Sortino(returns, riskFreePerPeriod, periodsPerYear);
+    T IRiskRatioCalculator<T>.Calmar(IReadOnlyList<T> returns, int periodsPerYear)
+        => Calmar(returns, periodsPerYear);
+
+    /// <summary>Validates the shared external inputs of every ratio.</summary>
+    private static void Validate(IReadOnlyList<T> returns, int periodsPerYear)
+    {
+        if (returns is null)
+        {
+            throw new ArgumentNullException(nameof(returns));
+        }
+
+        if (periodsPerYear <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(periodsPerYear), "periodsPerYear must be > 0.");
+        }
+    }
 
     /// <summary>Annualized Sharpe ratio: (mean(excess) / std(excess)) · √periodsPerYear.</summary>
     public static T Sharpe(IReadOnlyList<T> returns, double riskFreePerPeriod = 0.0, int periodsPerYear = 252)
     {
+        Validate(returns, periodsPerYear);
         if (returns.Count < 2)
         {
             return NumOps.Zero;
@@ -44,6 +76,7 @@ public static class RiskRatios<T>
     /// <summary>Annualized Sortino ratio: (mean(excess) / downsideDeviation) · √periodsPerYear.</summary>
     public static T Sortino(IReadOnlyList<T> returns, double riskFreePerPeriod = 0.0, int periodsPerYear = 252)
     {
+        Validate(returns, periodsPerYear);
         if (returns.Count < 2)
         {
             return NumOps.Zero;
@@ -79,6 +112,7 @@ public static class RiskRatios<T>
     /// </summary>
     public static T Calmar(IReadOnlyList<T> returns, int periodsPerYear = 252)
     {
+        Validate(returns, periodsPerYear);
         if (returns.Count < 2)
         {
             return NumOps.Zero;
@@ -108,7 +142,13 @@ public static class RiskRatios<T>
             return NumOps.Zero;
         }
 
-        var annualizedReturn = Math.Pow(equity, (double)periodsPerYear / returns.Count) - 1.0;
+        // A losing streak can drive the compounded equity to zero or negative
+        // (any period return <= -100%). Math.Pow of a non-positive base by a
+        // fractional exponent is NaN, so treat a wiped-out account as a total
+        // (-100%) annualized loss rather than emitting NaN.
+        var annualizedReturn = equity > 0.0
+            ? Math.Pow(equity, (double)periodsPerYear / returns.Count) - 1.0
+            : -1.0;
         return NumOps.FromDouble(annualizedReturn / maxDrawdown);
     }
 

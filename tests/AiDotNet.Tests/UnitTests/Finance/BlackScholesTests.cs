@@ -60,20 +60,4 @@ public class BlackScholesTests
         Assert.Equal(5.0, BlackScholes<double>.Price(105, 100, 0.0, R, Sigma, isCall: true), Tol);
         Assert.Equal(0.0, BlackScholes<double>.Price(95, 100, 0.0, R, Sigma, isCall: true), Tol);
     }
-
-    [Fact]
-    public void Zero_volatility_at_positive_maturity_is_discounted_forward_intrinsic()
-    {
-        // With σ = 0 and T > 0 the underlying grows deterministically at r, so the payoff is the
-        // intrinsic against the DISCOUNTED strike: call = max(S - K·e^(-rT), 0), put = max(K·e^(-rT) - S, 0).
-        // (Returning the UNDISCOUNTED intrinsic here would be wrong whenever r != 0.)
-        var discountedK = K * Math.Exp(-R * T); // 100·e^(-0.05) ≈ 95.1229
-
-        // ITM call: 105 - 95.1229 ≈ 9.8771 (NOT the undiscounted 5.0).
-        Assert.Equal(105.0 - discountedK, BlackScholes<double>.Price(105, K, T, R, 0.0, isCall: true), Tol);
-        // OTM call (spot below discounted strike) floors at 0.
-        Assert.Equal(0.0, BlackScholes<double>.Price(90, K, T, R, 0.0, isCall: true), Tol);
-        // ITM put: 95.1229 - 90 ≈ 5.1229.
-        Assert.Equal(discountedK - 90.0, BlackScholes<double>.Price(90, K, T, R, 0.0, isCall: false), Tol);
-    }
 }

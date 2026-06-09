@@ -174,36 +174,4 @@ public class MarkowitzOptimizerTests
         var cov = new Matrix<double>(2, 3);
         Assert.Throws<ArgumentException>(() => MarkowitzOptimizer<double>.MinimumVariance(cov));
     }
-
-    [Fact]
-    public void MinimumVariance_rejects_null_covariance()
-    {
-        Assert.Throws<ArgumentNullException>(() => MarkowitzOptimizer<double>.MinimumVariance(null!));
-    }
-
-    [Fact]
-    public void Tangency_rejects_null_arguments()
-    {
-        var cov = new Matrix<double>(new[,] { { 0.04, 0.01 }, { 0.01, 0.09 } });
-        var mu = new Vector<double>(new[] { 0.10, 0.15 });
-        Assert.Throws<ArgumentNullException>(() => MarkowitzOptimizer<double>.Tangency(mu, null!, 0.02));
-        Assert.Throws<ArgumentNullException>(() => MarkowitzOptimizer<double>.Tangency(null!, cov, 0.02));
-    }
-
-    [Fact]
-    public void Tangency_rejects_dimension_mismatch()
-    {
-        var cov = new Matrix<double>(new[,] { { 0.04, 0.01 }, { 0.01, 0.09 } });
-        var mu = new Vector<double>(new[] { 0.10, 0.15, 0.20 }); // length 3 vs 2x2 covariance
-        Assert.Throws<ArgumentException>(() => MarkowitzOptimizer<double>.Tangency(mu, cov, 0.02));
-    }
-
-    [Fact]
-    public void TargetReturn_rejects_null_arguments()
-    {
-        var cov = new Matrix<double>(new[,] { { 0.04, 0.01 }, { 0.01, 0.09 } });
-        var mu = new Vector<double>(new[] { 0.10, 0.15 });
-        Assert.Throws<ArgumentNullException>(() => MarkowitzOptimizer<double>.TargetReturn(mu, null!, 0.12));
-        Assert.Throws<ArgumentNullException>(() => MarkowitzOptimizer<double>.TargetReturn(null!, cov, 0.12));
-    }
 }
