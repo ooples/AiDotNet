@@ -40,6 +40,25 @@ public class LoRAIntegrationTests
         return layer;
     }
 
+    /// <summary>
+    /// Same as <see cref="CreateResolvedBaseLayer"/> but produces a SQUARE
+    /// layer (input dim = output dim = <paramref name="dim"/>). MoRA
+    /// (Jiang et al. 2024, "MoRA: High-Rank Updating for
+    /// Parameter-Efficient Fine-Tuning") replaces the LoRA AB factorization
+    /// with a single square matrix M ∈ ℝ^{d×d}, so the base layer must be
+    /// square — see <c>MoRAAdapter</c> ctor's
+    /// <c>inputSize != outputSize</c> guard. The "compress then
+    /// decompress" non-parameter mapping (paper §3) preserves layer
+    /// throughput even when the layer is square, so this helper is
+    /// faithful to the paper's intended usage.
+    /// </summary>
+    private static DenseLayer<double> CreateSquareResolvedBaseLayer(int dim)
+    {
+        var layer = new DenseLayer<double>(dim);
+        layer.ResolveFromShape(new[] { dim });
+        return layer;
+    }
+
     #region LoRALayer Tests
 
     [Fact(Timeout = 120000)]
@@ -434,7 +453,15 @@ public class LoRAIntegrationTests
             ("LoHa", new LoHaAdapter<double>(CreateResolvedBaseLayer(), Rank, Alpha), OutputSize),
             ("LoRAFA", new LoRAFAAdapter<double>(CreateResolvedBaseLayer(), Rank, Alpha), OutputSize),
             ("PiSSA", new PiSSAAdapter<double>(CreateResolvedBaseLayer(), Rank, Alpha), OutputSize),
-            ("MoRA", new MoRAAdapter<double>(new DenseLayer<double>(InputSize), Rank, Alpha), InputSize), // MoRA requires square
+            // MoRA wraps the base layer's I/O dimensions for its square-rank
+            // calculation, so the base layer must already report a resolved
+            // shape — a lazy `new DenseLayer<double>(N)` reports either
+            // input=-1 or input=128 (the project-wide LazyResolveFallbackDim)
+            // depending on how downstream code probes it, neither of which
+            // equals the requested square dimension. Use the same
+            // ResolveFromShape helper the rest of the LoRA tests use, with
+            // an explicit square input == output == InputSize.
+            ("MoRA", new MoRAAdapter<double>(CreateSquareResolvedBaseLayer(InputSize), Rank, Alpha), InputSize),
         };
 
         foreach (var (name, adapter, expectedOutputSize) in adapters)
