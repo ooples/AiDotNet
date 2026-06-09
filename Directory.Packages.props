@@ -120,9 +120,10 @@
 
          Pinned to 0.92.0 (latest published, NuGet-resolvable): the previous 0.91.68 pin
          was never published, which broke restore (NU1102) and is what forced the
-         NU1603/NU1605/NU1608 WarningsNotAsErrors suppressions — now removed. All
-         AiDotNet.Tensors + AiDotNet.Native packages are aligned at 0.92.0 so the
-         managed/native graph is consistent. -->
+         NU1603/NU1605/NU1608 WarningsNotAsErrors suppressions — now removed. 0.92.0 also
+         ships Tensors #574 (FP16 MixedPrecisionCompiledPlan.ComputeGradients) and #564
+         (memory-bounded gradient-streaming core). All AiDotNet.Tensors + AiDotNet.Native
+         packages are aligned at 0.92.0 so the managed/native graph is consistent. -->
     <PackageVersion Include="AiDotNet.Tensors" Version="0.92.0" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.92.0" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.92.0" />
