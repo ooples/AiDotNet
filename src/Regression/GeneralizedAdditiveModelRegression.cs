@@ -164,9 +164,25 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
         ValidateInputs(x, y);
         TrainingFeatureCount = x.Columns;
 
-        // Use OLS as fallback to ensure reliable predictions
-        // GAM spline basis can be ill-conditioned on generic data
-        _useOLS = true;
+        // Fit spline basis per Hastie & Tibshirani 1986: each feature gets a
+        // smooth (truncated-power spline) basis with NumSplines knots and a
+        // small ridge penalty for stability — that's the "Additive" of GAM.
+        // The earlier OLS fallback collapsed every feature to a linear term,
+        // so GAM on quadratic data y = x₀² + 0.5·x₁ + noise scored R² ≈ 0.1
+        // (the linear part of a quadratic only explains a small fraction of
+        // variance). Spline fitting captures the curvature and lifts R² above
+        // the 0.3 detection threshold the integration test asserts.
+        _useOLS = false;
+        _basisFunctions = CreateBasisFunctions(x);
+        FitModel(y);
+
+        // Also seed the linear (intercept + coeffs) path so callers that
+        // read Intercept / Coefficients directly (metadata, feature
+        // importance, downstream classification heads) still see sensible
+        // first-order summaries — OLS on the raw features alongside the
+        // spline fit. This doesn't drive Predict (which now always uses
+        // the spline path) but keeps the publicly-exposed linear
+        // descriptors meaningful.
         if (Options.UseIntercept)
         {
             var xWithInt = x.AddConstantColumn(NumOps.One);
@@ -186,10 +202,6 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
                 xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
             Coefficients = SolveSystem(xTx, xTy);
         }
-
-        // Also fit spline model for the spline-specific prediction path
-        _basisFunctions = CreateBasisFunctions(x);
-        FitModel(y);
     }
 
     /// <summary>
