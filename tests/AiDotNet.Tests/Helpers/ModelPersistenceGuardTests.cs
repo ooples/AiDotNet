@@ -21,7 +21,7 @@ namespace AiDotNet.Tests.Helpers;
 /// the default trial file. Each test restores state in its Dispose method.
 /// Tests run sequentially via [Collection] to avoid env var races.
 /// </remarks>
-[Collection("LicensingTests")]
+[Collection("License")]
 public class ModelPersistenceGuardTests : IDisposable
 {
     private readonly string _tempDir;
@@ -97,7 +97,7 @@ public class ModelPersistenceGuardTests : IDisposable
     [Fact(Timeout = 60000)]
     public async Task EnforceBeforeSave_WithLicenseKey_DoesNotThrow()
     {
-        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testkey1234.abcdefghijklmnop");
+        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", LicenseTestSupport.SignedKey("testkey1234"));
 
         // Should not throw — license key present bypasses trial
         ModelPersistenceGuard.EnforceBeforeSave();
@@ -106,7 +106,7 @@ public class ModelPersistenceGuardTests : IDisposable
     [Fact(Timeout = 60000)]
     public async Task EnforceBeforeLoad_WithLicenseKey_DoesNotThrow()
     {
-        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testkey1234.abcdefghijklmnop");
+        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", LicenseTestSupport.SignedKey("testkey1234"));
 
         ModelPersistenceGuard.EnforceBeforeLoad();
     }
@@ -114,7 +114,7 @@ public class ModelPersistenceGuardTests : IDisposable
     [Fact(Timeout = 60000)]
     public async Task EnforceBeforeSerialize_WithLicenseKey_DoesNotThrow()
     {
-        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testkey1234.abcdefghijklmnop");
+        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", LicenseTestSupport.SignedKey("testkey1234"));
 
         ModelPersistenceGuard.EnforceBeforeSerialize();
     }
@@ -122,7 +122,7 @@ public class ModelPersistenceGuardTests : IDisposable
     [Fact(Timeout = 60000)]
     public async Task EnforceBeforeDeserialize_WithLicenseKey_DoesNotThrow()
     {
-        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testkey1234.abcdefghijklmnop");
+        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", LicenseTestSupport.SignedKey("testkey1234"));
 
         ModelPersistenceGuard.EnforceBeforeDeserialize();
     }
@@ -437,7 +437,7 @@ public class ModelPersistenceGuardTests : IDisposable
         WithIsolatedTrial(() =>
         {
             // Set license key
-            Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.validlicens.abcdefghijklmnop");
+            Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", LicenseTestSupport.SignedKey("validlicens"));
 
             // Call enforce many times — should never count operations
             for (int i = 0; i < 50; i++)
@@ -694,7 +694,7 @@ public class ModelPersistenceGuardTests : IDisposable
         // "Cannot find MultiHeadAttentionLayer constructor ..." during
         // Deserialize(). This verifies that a Transformer round-trips
         // through Serialize/Deserialize successfully.
-        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testkey1234.abcdefghijklmnop");
+        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", LicenseTestSupport.SignedKey("testkey1234"));
 
         var architecture = new TransformerArchitecture<float>(
             inputType: InputType.TwoDimensional,
@@ -851,7 +851,7 @@ public class ModelPersistenceGuardTests : IDisposable
         //
         // Use a valid license key to avoid tripping the guard on the public
         // Serialize path while we observe DeepCopy's behaviour.
-        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testkey1234.abcdefghijklmnop");
+        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", LicenseTestSupport.SignedKey("testkey1234"));
 
         var arch = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
