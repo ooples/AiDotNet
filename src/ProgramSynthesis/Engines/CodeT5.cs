@@ -147,6 +147,21 @@ public class CodeT5<T> : CodeModelBase<T>
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Route through TrainWithTape — same fix as CodeBERT.Train.
+        // CodeT5 is a T5-class encoder-decoder per Wang et al. 2021
+        // "CodeT5: Identifier-aware Unified Pre-trained Encoder-Decoder
+        // Models for Code Understanding and Generation"
+        // (arXiv:2109.00859). Backprop via the tape covers the embedding,
+        // encoder, decoder, and output-projection trainables.
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override ModelMetadata<T> GetModelMetadata()
