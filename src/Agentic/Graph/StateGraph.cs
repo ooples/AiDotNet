@@ -44,6 +44,7 @@ public sealed class StateGraph<TState>
     private readonly Dictionary<string, Func<TState, CancellationToken, Task<TState>>> _nodes = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _edges = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Func<TState, string>> _conditionalEdges = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _interruptBefore = new(StringComparer.Ordinal);
     private string? _entryPoint;
 
     /// <summary>
@@ -128,6 +129,24 @@ public sealed class StateGraph<TState>
     }
 
     /// <summary>
+    /// Marks a node as a human-in-the-loop interrupt point: a run pauses just before this node so a human
+    /// can review (and optionally edit) the state, then resume.
+    /// </summary>
+    /// <param name="name">The node to pause before.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="name"/> is empty/whitespace.</exception>
+    /// <remarks>
+    /// Interrupts are honored by <see cref="CompiledStateGraph{TState}.RunAsync(TState, AiDotNet.Agentic.Graph.Checkpointing.IGraphCheckpointer{TState}, string, GraphRunOptions, System.Threading.CancellationToken)"/>;
+    /// the plain <c>InvokeAsync</c> overloads run straight through without pausing.
+    /// </remarks>
+    public StateGraph<TState> AddInterruptBefore(string name)
+    {
+        Guard.NotNullOrWhiteSpace(name);
+        _interruptBefore.Add(name);
+        return this;
+    }
+
+    /// <summary>
     /// Sets the node where execution begins.
     /// </summary>
     /// <param name="name">The entry node name.</param>
@@ -185,11 +204,20 @@ public sealed class StateGraph<TState>
             }
         }
 
+        foreach (var node in _interruptBefore)
+        {
+            if (!_nodes.ContainsKey(node))
+            {
+                throw new InvalidOperationException($"Interrupt node '{node}' is not a registered node.");
+            }
+        }
+
         // Snapshot so post-compile builder mutations don't affect the compiled graph.
         return new CompiledStateGraph<TState>(
             new Dictionary<string, Func<TState, CancellationToken, Task<TState>>>(_nodes, StringComparer.Ordinal),
             new Dictionary<string, string>(_edges, StringComparer.Ordinal),
             new Dictionary<string, Func<TState, string>>(_conditionalEdges, StringComparer.Ordinal),
+            new HashSet<string>(_interruptBefore, StringComparer.Ordinal),
             entry);
     }
 }

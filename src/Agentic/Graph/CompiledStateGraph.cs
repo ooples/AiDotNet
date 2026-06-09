@@ -25,17 +25,20 @@ public sealed class CompiledStateGraph<TState>
     private readonly IReadOnlyDictionary<string, Func<TState, CancellationToken, Task<TState>>> _nodes;
     private readonly IReadOnlyDictionary<string, string> _edges;
     private readonly IReadOnlyDictionary<string, Func<TState, string>> _conditionalEdges;
+    private readonly HashSet<string> _interruptBefore;
     private readonly string _entryPoint;
 
     internal CompiledStateGraph(
         IReadOnlyDictionary<string, Func<TState, CancellationToken, Task<TState>>> nodes,
         IReadOnlyDictionary<string, string> edges,
         IReadOnlyDictionary<string, Func<TState, string>> conditionalEdges,
+        HashSet<string> interruptBefore,
         string entryPoint)
     {
         _nodes = nodes;
         _edges = edges;
         _conditionalEdges = conditionalEdges;
+        _interruptBefore = interruptBefore;
         _entryPoint = entryPoint;
     }
 
@@ -47,11 +50,16 @@ public sealed class CompiledStateGraph<TState>
     /// <param name="cancellationToken">Token used to cancel the run.</param>
     /// <returns>The final state when flow reaches the end node.</returns>
     /// <exception cref="GraphRecursionException">Thrown when the step budget is exceeded.</exception>
-    public Task<TState> InvokeAsync(
+    public async Task<TState> InvokeAsync(
         TState initialState,
         GraphRunOptions? options = null,
         CancellationToken cancellationToken = default)
-        => RunCoreAsync(initialState, _entryPoint, startStep: 0, ResolveMaxSteps(options), checkpointer: null, threadId: null, cancellationToken);
+    {
+        var result = await RunCoreAsync(
+            initialState, _entryPoint, startStep: 0, ResolveMaxSteps(options),
+            checkpointer: null, threadId: null, honorInterrupts: false, honorFirstInterrupt: false, cancellationToken).ConfigureAwait(false);
+        return result.State;
+    }
 
     /// <summary>
     /// Runs the graph with durable checkpointing under a thread id, resuming automatically from the latest
@@ -100,7 +108,10 @@ public sealed class CompiledStateGraph<TState>
             return state; // thread already complete
         }
 
-        return await RunCoreAsync(state, startNode, startStep, maxSteps, checkpointer, threadId, cancellationToken).ConfigureAwait(false);
+        var result = await RunCoreAsync(
+            state, startNode, startStep, maxSteps, checkpointer, threadId,
+            honorInterrupts: false, honorFirstInterrupt: false, cancellationToken).ConfigureAwait(false);
+        return result.State;
     }
 
     /// <summary>
@@ -137,25 +148,100 @@ public sealed class CompiledStateGraph<TState>
             return checkpoint.State;
         }
 
-        return await RunCoreAsync(
-            checkpoint.State, checkpoint.NextNode, checkpoint.Step, ResolveMaxSteps(options), checkpointer, threadId, cancellationToken).ConfigureAwait(false);
+        var result = await RunCoreAsync(
+            checkpoint.State, checkpoint.NextNode, checkpoint.Step, ResolveMaxSteps(options), checkpointer, threadId,
+            honorInterrupts: false, honorFirstInterrupt: false, cancellationToken).ConfigureAwait(false);
+        return result.State;
     }
 
-    private async Task<TState> RunCoreAsync(
+    /// <summary>
+    /// Runs the graph with human-in-the-loop interrupts under a thread id. On the first call it runs from
+    /// the entry node and pauses just before the first interrupt node (returning an interrupted result);
+    /// calling it again on the same thread resumes past that pause and runs until the next interrupt or
+    /// completion. Optionally applies the human's edit to the state when resuming.
+    /// </summary>
+    /// <param name="initialState">The starting state (used only when the thread has no prior checkpoint).</param>
+    /// <param name="checkpointer">The checkpoint store.</param>
+    /// <param name="threadId">The run/thread id.</param>
+    /// <param name="applyOnResume">When resuming, an optional transform applied to the saved state (the human's input). Ignored on a fresh run.</param>
+    /// <param name="options">Run options (step budget). <c>null</c> uses defaults.</param>
+    /// <param name="cancellationToken">Token used to cancel the run.</param>
+    /// <returns>A <see cref="GraphRunResult{TState}"/> indicating completion or an interrupt point.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="checkpointer"/> or <paramref name="threadId"/> is <c>null</c>.</exception>
+    public async Task<GraphRunResult<TState>> RunAsync(
+        TState initialState,
+        IGraphCheckpointer<TState> checkpointer,
+        string threadId,
+        Func<TState, TState>? applyOnResume = null,
+        GraphRunOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        Guard.NotNull(checkpointer);
+        Guard.NotNullOrWhiteSpace(threadId);
+        var maxSteps = ResolveMaxSteps(options);
+
+        var latest = await checkpointer.GetLatestAsync(threadId, cancellationToken).ConfigureAwait(false);
+        string startNode;
+        TState state;
+        int startStep;
+        bool honorFirstInterrupt;
+        if (latest is not null)
+        {
+            // Resuming: the caller chose to continue, so do not re-pause at the node we stopped before.
+            startNode = latest.NextNode;
+            state = applyOnResume is not null ? applyOnResume(latest.State) : latest.State;
+            startStep = latest.Step;
+            honorFirstInterrupt = false;
+        }
+        else
+        {
+            startNode = _entryPoint;
+            state = initialState;
+            startStep = 0;
+            honorFirstInterrupt = true;
+            await checkpointer.SaveAsync(
+                new GraphCheckpoint<TState>(threadId, $"{threadId}-0", 0, _entryPoint, initialState), cancellationToken).ConfigureAwait(false);
+        }
+
+        if (startNode == GraphSpecialNodes.End)
+        {
+            return GraphRunResult<TState>.Complete(state);
+        }
+
+        return await RunCoreAsync(
+            state, startNode, startStep, maxSteps, checkpointer, threadId,
+            honorInterrupts: true, honorFirstInterrupt: honorFirstInterrupt, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<GraphRunResult<TState>> RunCoreAsync(
         TState state,
         string startNode,
         int startStep,
         int maxSteps,
         IGraphCheckpointer<TState>? checkpointer,
         string? threadId,
+        bool honorInterrupts,
+        bool honorFirstInterrupt,
         CancellationToken cancellationToken)
     {
         var current = startNode;
         var step = startStep;
+        var firstNode = true;
 
         while (current != GraphSpecialNodes.End)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            var considerInterrupt = honorInterrupts && (honorFirstInterrupt || !firstNode);
+            if (considerInterrupt && _interruptBefore.Contains(current))
+            {
+                // Pause before this node. The latest checkpoint already records NextNode == current,
+                // so a subsequent resume picks up here.
+                return GraphRunResult<TState>.Interrupted(state, current);
+            }
+
+            firstNode = false;
+
             if (++step > maxSteps)
             {
                 throw new GraphRecursionException(maxSteps);
@@ -171,7 +257,7 @@ public sealed class CompiledStateGraph<TState>
             }
         }
 
-        return state;
+        return GraphRunResult<TState>.Complete(state);
     }
 
     /// <summary>
