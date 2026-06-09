@@ -68,22 +68,31 @@ public static class KellyCriterion<T>
     /// </summary>
     public static T FromReturns(IEnumerable<T> returns, double fraction = 1.0)
     {
-        var count = 0;
-        var sum = NumOps.Zero;
-        foreach (var r in returns)
+        if (returns is null)
         {
-            sum = NumOps.Add(sum, r);
-            count++;
+            throw new ArgumentNullException(nameof(returns));
         }
 
+        // Materialize once: the source may be a deferred / non-repeatable enumerable
+        // (a LINQ query, a generator), so enumerating it twice could recompute or yield
+        // nothing the second pass.
+        var series = returns as IReadOnlyList<T> ?? new List<T>(returns);
+
+        var count = series.Count;
         if (count < 2)
         {
             return NumOps.Zero;
         }
 
+        var sum = NumOps.Zero;
+        foreach (var r in series)
+        {
+            sum = NumOps.Add(sum, r);
+        }
+
         var mean = NumOps.Divide(sum, NumOps.FromDouble(count));
         var sse = NumOps.Zero;
-        foreach (var r in returns)
+        foreach (var r in series)
         {
             var d = NumOps.Subtract(r, mean);
             sse = NumOps.Add(sse, NumOps.Multiply(d, d));
