@@ -278,7 +278,9 @@ internal class SecondOrderMatrixModel : LinearVectorModel, ISecondOrderGradientC
     }
 }
 
-internal class TensorEmbeddingModel : IFullModel<double, Matrix<double>, Tensor<double>>, ICloneable
+internal class TensorEmbeddingModel : IFullModel<double, Matrix<double>, Tensor<double>>,
+    IParameterizable<double, Matrix<double>, Tensor<double>>,
+    ICloneable
 {
     private Vector<double> _parameters;
     private readonly int _inputFeatures;
