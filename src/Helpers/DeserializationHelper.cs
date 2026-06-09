@@ -998,6 +998,50 @@ public static class DeserializationHelper
                 ? new Conv1DLayer<T>(inputChannels.Value, outputChannels, kernelSize, dilation, stride, padding, activation as IActivationFunction<T>)
                 : new Conv1DLayer<T>(outputChannels, kernelSize, dilation, stride, padding, activation as IActivationFunction<T>);
         }
+        else if (genericDef == typeof(Conv1DTransposeLayer<>))
+        {
+            // Conv1DTransposeLayer(inputChannels?, outputChannels, kernelSize, stride,
+            // padding?, outputPadding, dilation, activation?). Hyper-parameters come
+            // from Conv1DTransposeLayer.GetMetadata(); eager ctor when InputChannels
+            // is known, else lazy (SetParameters infers C_in from the vector length).
+            int outputChannels = TryGetInt(additionalParams, "OutputChannels")
+                ?? (outputShape.Length > 0 ? outputShape[0] : 1);
+            int kernelSize = TryGetInt(additionalParams, "KernelSize") ?? 1;
+            int stride = TryGetInt(additionalParams, "Stride") ?? 1;
+            int outputPadding = TryGetInt(additionalParams, "OutputPadding") ?? 0;
+            int dilation = TryGetInt(additionalParams, "Dilation") ?? 1;
+            int padding = TryGetInt(additionalParams, "Padding") ?? ((kernelSize - stride) / 2);
+            int? inputChannels = TryGetInt(additionalParams, "InputChannels");
+
+            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+            if (activation is null && additionalParams is not null && additionalParams.ContainsKey("ScalarActivationType"))
+                throw new InvalidOperationException($"Failed to deserialize activation function of type '{additionalParams["ScalarActivationType"]}' for Conv1DTransposeLayer.");
+
+            instance = (inputChannels.HasValue && inputChannels.Value > 0)
+                ? new Conv1DTransposeLayer<T>(inputChannels.Value, outputChannels, kernelSize, stride, padding, outputPadding, dilation, activation as IActivationFunction<T>)
+                : new Conv1DTransposeLayer<T>(outputChannels, kernelSize, stride, padding, outputPadding, dilation, activation as IActivationFunction<T>);
+        }
+        else if (genericDef == typeof(HiFiGANResBlockLayer<>))
+        {
+            // HiFiGANResBlockLayer(channels, kernelSizes?, dilations?) — fully
+            // reconstructable from metadata; SetParameters restores the inner convs.
+            int channels = TryGetInt(additionalParams, "Channels")
+                ?? (outputShape.Length > 0 ? outputShape[0] : 1);
+            int[]? kernelSizes = TryGetIntArray(additionalParams, "KernelSizes");
+            int[]? dilations = TryGetIntArray(additionalParams, "Dilations");
+            instance = new HiFiGANResBlockLayer<T>(channels, kernelSizes, dilations);
+        }
+        else if (genericDef == typeof(WaveNetResidualBlockLayer<>))
+        {
+            // WaveNetResidualBlockLayer(channels, kernelSize, dilation) — fully
+            // reconstructable from metadata; SetParameters restores the inner convs.
+            int channels = TryGetInt(additionalParams, "Channels")
+                ?? (outputShape.Length > 0 ? outputShape[0] : 1);
+            int kernelSize = TryGetInt(additionalParams, "KernelSize") ?? 3;
+            int dilation = TryGetInt(additionalParams, "Dilation") ?? 1;
+            instance = new WaveNetResidualBlockLayer<T>(channels, kernelSize, dilation);
+        }
         else if (genericDef == typeof(ConvolutionalLayer<>))
         {
             // ConvolutionalLayer(int outputDepth, int kernelSize, int stride, int padding, IActivationFunction<T>?, IInitializationStrategy<T>?)

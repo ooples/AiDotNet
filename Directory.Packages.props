@@ -106,7 +106,6 @@
          over input channels at batch=1 instead of collapsing to serial). This is
          the Tensors-side lever #1463 called for; the memory/OOM half is handled by
          the cache-clearing + diffusion re-shard in this PR (#1485).
-
          Bumped Tensors 0.91.2 -> 0.91.11 (latest PUBLISHED on nuget.org) for the
          GPU-resident optimizer step (host-read-free Adam for cudaGraph capture) that
          this PR (#1501) depends on, plus the proximal-L1 (ISTA) and 8-bit Adam GPU

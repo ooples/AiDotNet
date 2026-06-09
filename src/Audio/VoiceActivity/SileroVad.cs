@@ -323,25 +323,69 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
                 numLstmLayers: _numLstmLayers, lstmHiddenDim: _lstmHiddenDim).ToList();
 
         Layers.Clear();
-        _convLayers.Clear();
-        _lstmLayers.Clear();
         Layers.AddRange(layers);
 
-        // Assign internal references for forward pass (3 conv + numLstm LSTM + 1 output)
+        ExtractLayerReferences();
+    }
+
+    /// <summary>
+    /// (Re)populates the conv / LSTM / output sub-layer references from the
+    /// canonical <see cref="NeuralNetworkBase{T}.Layers"/> list and materializes
+    /// any lazy weights.
+    /// </summary>
+    /// <remarks>
+    /// Called both after <see cref="InitializeLayers"/> builds the layers and
+    /// after deserialization rebuilds <c>Layers</c>. Deserialization replaces the
+    /// <c>Layers</c> list with freshly reconstructed layers but does not know
+    /// about SileroVad's cached <c>_convLayers</c>/<c>_lstmLayers</c>/<c>_outputLayer</c>
+    /// references — without re-extracting them, a deserialized/cloned model would
+    /// keep running the constructor's randomly-initialized layers in Forward while
+    /// the loaded weights sit unused in <c>Layers</c> (the cause of
+    /// Clone_ShouldProduceIdenticalOutput diverging). Idempotent.
+    /// </remarks>
+    private void ExtractLayerReferences()
+    {
+        _convLayers.Clear();
+        _lstmLayers.Clear();
+
         int expectedCount = 3 + _numLstmLayers + 1;
-        if (layers.Count < expectedCount)
+        if (Layers.Count < expectedCount)
         {
             throw new ArgumentException(
                 $"Layer list must have at least {expectedCount} layers " +
-                $"(3 conv + {_numLstmLayers} LSTM + 1 output), but got {layers.Count}.",
-                "Architecture.Layers");
+                $"(3 conv + {_numLstmLayers} LSTM + 1 output), but got {Layers.Count}.",
+                nameof(Layers));
         }
 
         for (int i = 0; i < 3; i++)
-            _convLayers.Add(layers[i]);
+            _convLayers.Add(Layers[i]);
         for (int i = 0; i < _numLstmLayers; i++)
-            _lstmLayers.Add(layers[3 + i]);
-        _outputLayer = layers[3 + _numLstmLayers];
+            _lstmLayers.Add(Layers[3 + i]);
+        _outputLayer = Layers[3 + _numLstmLayers];
+
+        // Materialize the lazy LSTM weights now (their feature dim is known:
+        // convFilters into the first LSTM, lstmHiddenDim thereafter). Without
+        // this the LSTM weights stay at zero size until the first forward, so a
+        // clone/serialize of a never-yet-run model would capture no weights and
+        // the clone would resolve fresh random weights — diverging from the
+        // original (Clone_ShouldProduceIdenticalOutput).
+        int lstmInputDim = _convFilters;
+        foreach (var lstm in _lstmLayers)
+        {
+            if (lstm is LayerBase<T> lb && !lb.IsShapeResolved)
+            {
+                lb.ResolveFromShape(new[] { 1, 1, lstmInputDim });
+            }
+            lstmInputDim = _lstmHiddenDim;
+        }
+
+        // The output dense layer is also lazy (input size = lstmHiddenDim, the
+        // last-timestep feature width). Resolve it now for the same reason as
+        // the LSTMs.
+        if (_outputLayer is LayerBase<T> outLb && !outLb.IsShapeResolved)
+        {
+            outLb.ResolveFromShape(new[] { 1, _lstmHiddenDim });
+        }
     }
 
     #endregion
@@ -522,36 +566,24 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
     /// <inheritdoc/>
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
-        // Normalize audio to [-1, 1] range
+        // Silero VAD (Silero Team, 2021) consumes float PCM already scaled to
+        // [-1, 1]; it does NOT re-normalize each chunk by its own peak amplitude.
+        // A per-chunk max-abs normalization would make the model amplitude-blind
+        // (a loud and a quiet copy of the same clip would map to identical
+        // features) and collapse a constant signal to all-ones, which is neither
+        // paper-faithful nor desirable. Reshape the waveform to the
+        // [batch, channels, samples] layout the 1-D conv frontend expects and
+        // leave the sample values intact.
         var samples = rawAudio.ToVector().ToArray();
-        double maxAbs = 0;
-
+        var result = new Tensor<T>([1, 1, samples.Length]);
+        // Write directly into the tensor's backing storage. Tensor.ToVector()
+        // returns a COPY, so assigning into that copy would leave `result` all
+        // zeros (the bug that made the conv frontend see a zero signal and emit
+        // a constant 0.5 for every input).
+        var resultSpan = result.Data.Span;
         for (int i = 0; i < samples.Length; i++)
         {
-            double absVal = Math.Abs(NumOps.ToDouble(samples[i]));
-            if (absVal > maxAbs) maxAbs = absVal;
-        }
-
-        var normalizedSamples = new T[samples.Length];
-        if (maxAbs > 0)
-        {
-            for (int i = 0; i < samples.Length; i++)
-            {
-                double normalized = NumOps.ToDouble(samples[i]) / maxAbs;
-                normalizedSamples[i] = NumOps.FromDouble(normalized);
-            }
-        }
-        else
-        {
-            Array.Copy(samples, normalizedSamples, samples.Length);
-        }
-
-        // Reshape to [batch, channels, samples] for Conv
-        var result = new Tensor<T>([1, 1, samples.Length]);
-        var resultVector = result.ToVector();
-        for (int i = 0; i < normalizedSamples.Length; i++)
-        {
-            resultVector[i] = normalizedSamples[i];
+            resultSpan[i] = samples[i];
         }
 
         return result;
@@ -590,10 +622,22 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
 
         var output = input;
 
-        // Pass through conv layers
+        // Pass through 1-D conv layers: [batch, 1, samples] -> [batch, convFilters, T].
         foreach (var layer in _convLayers)
         {
             output = layer.Forward(output);
+        }
+
+        // The conv stack emits [batch, channels, time]; the LSTM consumes a
+        // sequence [batch, time, features]. Transpose the channel and time axes
+        // so each timestep's convFilters-dim feature vector becomes the LSTM
+        // input (Silero Team, 2021 — conv frontend feeding a recurrent core).
+        // Use the engine's tape-aware permute so the gradient flows back into
+        // the conv frontend during training (a plain Tensor.Transpose would
+        // detach the tape and leave the convs/LSTM untrained).
+        if (output.Rank == 3)
+        {
+            output = Engine.TensorPermute(output, [0, 2, 1]);
         }
 
         // Pass through LSTM layers
@@ -602,15 +646,36 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
             output = layer.Forward(output);
         }
 
-        // Take the last timestep output and pass through dense layer
+        // Take the last timestep and pass through the dense layer. Use the
+        // tape-aware axis slice ([batch, seq, hidden] -> [batch, hidden]) so the
+        // gradient propagates back through the LSTM and conv frontend.
         if (_outputLayer is not null)
         {
-            // Get last timestep: shape [batch, hidden] from [batch, seq, hidden]
-            var lastTimestep = ExtractLastTimestep(output);
+            var lastTimestep = output.Rank == 3
+                ? Engine.TensorSliceAxis(output, axis: 1, index: output.Shape[1] - 1)
+                : output;
             output = _outputLayer.Forward(lastTimestep);
         }
 
         return output;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// SileroVad's forward is the conv frontend → axis transpose → LSTM →
+    /// last-timestep → dense pipeline in <see cref="Forward"/>, not a sequential
+    /// pass over the flat <c>Layers</c> list (which would feed the conv output
+    /// straight into the LSTM with the wrong axis order and skip the
+    /// last-timestep reduction). Route the training forward through the real
+    /// pipeline so the gradient tape records the actual operations.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        // Mirror Predict: normalize + reshape the raw waveform to [1, 1, samples]
+        // before running the conv frontend. Without this the training forward
+        // would feed the un-preprocessed input straight into the first 1-D conv
+        // (channel-count mismatch).
+        return Forward(PreprocessAudio(input));
     }
 
     /// <summary>
@@ -636,6 +701,55 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         }
 
         return result;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The base implementation runs the flat <c>Layers</c> list sequentially on
+    /// the raw input, which neither preprocesses the waveform nor applies the
+    /// conv→LSTM axis transpose, so it fails on SileroVad's custom pipeline.
+    /// Capture activations along the model's actual forward path instead.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>();
+        if (!_useNativeMode)
+        {
+            return activations;
+        }
+
+        var current = PreprocessAudio(input);
+        int idx = 0;
+
+        foreach (var layer in _convLayers)
+        {
+            current = layer.Forward(current);
+            activations[$"Layer_{idx}_{layer.GetType().Name}"] = current.Clone();
+            idx++;
+        }
+
+        if (current.Rank == 3)
+        {
+            current = Engine.TensorPermute(current, [0, 2, 1]);
+        }
+
+        foreach (var layer in _lstmLayers)
+        {
+            current = layer.Forward(current);
+            activations[$"Layer_{idx}_{layer.GetType().Name}"] = current.Clone();
+            idx++;
+        }
+
+        if (_outputLayer is not null)
+        {
+            var lastTimestep = current.Rank == 3
+                ? Engine.TensorSliceAxis(current, axis: 1, index: current.Shape[1] - 1)
+                : current;
+            current = _outputLayer.Forward(lastTimestep);
+            activations[$"Layer_{idx}_{_outputLayer.GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
     }
 
     /// <inheritdoc/>
@@ -722,6 +836,15 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         _ = reader.ReadInt32(); // _convFilters
         _ = reader.ReadInt32(); // _lstmHiddenDim
         _ = reader.ReadInt32(); // _numLstmLayers
+
+        // Deserialization has already rebuilt the canonical Layers list with the
+        // loaded weights. Re-point the cached conv/LSTM/output references at those
+        // layers; otherwise Forward would keep running the constructor's
+        // randomly-initialized layers and ignore the loaded weights.
+        if (_useNativeMode && Layers.Count >= 3 + _numLstmLayers + 1)
+        {
+            ExtractLayerReferences();
+        }
     }
 
     /// <inheritdoc/>
