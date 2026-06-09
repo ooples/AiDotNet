@@ -91,8 +91,12 @@ internal sealed class LicenseValidator
         // would otherwise fail open), so such keys still go ONLINE, where the server is the source of truth.
         // explicitOfflineOnly remains its own deliberate air-gapped opt-in.
         bool buildKeyEmbedded = BuildKeyProvider.GetBuildKey().Length > 0;
+        // Only the DEFAULT server config (ServerUrl == null) opportunistically validates a signed key
+        // offline; if the caller set an explicit custom ServerUrl they want online validation (e.g. for
+        // revocation), so respect it. ServerUrl == "" is the explicit offline-only opt-in handled above.
+        bool serverUrlIsDefault = _licenseKey.ServerUrl is null;
         bool useOfflineValidation = explicitOfflineOnly
-            || (IsSignedKeyFormat(_licenseKey.Key) && buildKeyEmbedded);
+            || (serverUrlIsDefault && IsSignedKeyFormat(_licenseKey.Key) && buildKeyEmbedded);
 
         if (useOfflineValidation)
         {
@@ -508,7 +512,8 @@ internal sealed class LicenseValidator
         // server-validated keys always require online validation. ValidateOffline() itself fails closed.
         bool explicitOfflineOnly = _licenseKey.ServerUrl is not null && _licenseKey.ServerUrl.Trim().Length == 0;
         bool buildKeyEmbedded = BuildKeyProvider.GetBuildKey().Length > 0;
-        if (explicitOfflineOnly || (IsSignedKeyFormat(_licenseKey.Key) && buildKeyEmbedded))
+        bool serverUrlIsDefault = _licenseKey.ServerUrl is null;
+        if (explicitOfflineOnly || (serverUrlIsDefault && IsSignedKeyFormat(_licenseKey.Key) && buildKeyEmbedded))
         {
             if (!IsSignedKeyFormat(_licenseKey.Key))
             {
