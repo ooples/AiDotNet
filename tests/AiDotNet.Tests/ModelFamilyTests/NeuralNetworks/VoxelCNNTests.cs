@@ -23,19 +23,6 @@ public class VoxelCNNTests : NeuralNetworkModelTestBase
     protected override int MoreDataLongIterations => 2;
     protected override double MoreDataTolerance => 0.5;
 
-    // LossStrictlyDecreasesOnMemorizationTask defaults to 100 iters which
-    // overflows the 180 s xUnit timeout on Conv3D-heavy VoxelCNN (CI
-    // hardware is slower than a dev laptop — observed 1 ms per step on a
-    // workstation but the test-class probe time crosses 180 s in the
-    // shared-CI shard). 10 iters still exercises the "loss strictly
-    // decreases" invariant — gradient-sign errors, optimizer divergence,
-    // and first-step explosion all surface within a handful of steps on a
-    // memorization task; only slow-drift bugs need >10 iters to surface,
-    // and those would already fail the relative threshold here. Same
-    // pattern paper-scale CLIP / ChronosBolt encoders use (see the
-    // MemorizationTaskIterations XML doc in NeuralNetworkModelTestBase).
-    protected override int MemorizationTaskIterations => 10;
-
     protected override INeuralNetworkModel<double> CreateNetwork()
         => new VoxelCNN<double>();
 }
