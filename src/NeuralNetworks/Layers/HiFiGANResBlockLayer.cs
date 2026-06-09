@@ -61,6 +61,13 @@ public partial class HiFiGANResBlockLayer<T> : LayerBase<T>
         _channels = channels;
         _kernelSizes = kernelSizes is { Length: > 0 } ? kernelSizes : new[] { 3, 7, 11 };
         _dilations = dilations is { Length: > 0 } ? dilations : new[] { 1, 3, 5 };
+        // Each kernel size / dilation feeds a Conv1DLayer, which requires positive
+        // values — validate at the boundary so a bad caller array fails here with a
+        // clear message rather than deep inside conv construction.
+        foreach (int k in _kernelSizes)
+            if (k <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSizes), "All kernel sizes must be positive.");
+        foreach (int d in _dilations)
+            if (d <= 0) throw new ArgumentOutOfRangeException(nameof(dilations), "All dilations must be positive.");
 
         _convs1 = new List<Conv1DLayer<T>>(_kernelSizes.Length * _dilations.Length);
         _convs2 = new List<Conv1DLayer<T>>(_kernelSizes.Length * _dilations.Length);
@@ -110,8 +117,12 @@ public partial class HiFiGANResBlockLayer<T> : LayerBase<T>
         }
 
         // MRF returns the AVERAGE over the kernel-size branches (Kong 2020 §2.2).
+        // _kernelSizes is non-empty (validated in the ctor) so the loop always runs;
+        // guard explicitly rather than use the null-forgiving operator.
+        if (sum is null)
+            throw new InvalidOperationException("HiFiGANResBlockLayer requires at least one kernel size.");
         T inv = NumOps.FromDouble(1.0 / _kernelSizes.Length);
-        return Engine.TensorMultiplyScalar(sum!, inv);
+        return Engine.TensorMultiplyScalar(sum, inv);
     }
 
     /// <inheritdoc/>

@@ -102,7 +102,13 @@ public partial class Conv1DTransposeLayer<T> : LayerBase<T>
         if (outputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(outputChannels));
         if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize));
         if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride));
-        if (dilation <= 0) throw new ArgumentOutOfRangeException(nameof(dilation));
+        // The engine's transposed-conv kernel (Engine.ConvTranspose2D) takes no
+        // dilation argument and does not dilate, so honouring dilation > 1 here is
+        // impossible — reject it at the boundary rather than silently ignore it.
+        // HiFi-GAN upsampling is always dilation=1; the dilated convolutions in the
+        // MRF use the FORWARD Conv1DLayer (which does support dilation).
+        if (dilation != 1) throw new ArgumentOutOfRangeException(nameof(dilation),
+            "Conv1DTransposeLayer supports only dilation == 1; use Conv1DLayer for dilated (non-transposed) convolutions.");
         if (padding.HasValue && padding.Value < 0) throw new ArgumentOutOfRangeException(nameof(padding));
         if (outputPadding < 0) throw new ArgumentOutOfRangeException(nameof(outputPadding));
 
@@ -113,7 +119,9 @@ public partial class Conv1DTransposeLayer<T> : LayerBase<T>
         _kernelSize = kernelSize;
         _stride = stride;
         // HiFi-GAN convention: padding = (kernel - stride) / 2 keeps T_out = T * stride.
-        _padding = padding ?? ((kernelSize - stride) / 2);
+        // Clamp to 0: when stride > kernelSize the symmetric formula goes negative,
+        // which is not a valid padding (PyTorch rejects it) — 0 is the only sane default.
+        _padding = padding ?? System.Math.Max(0, (kernelSize - stride) / 2);
         _outputPadding = outputPadding;
         _dilation = dilation;
 
@@ -144,7 +152,9 @@ public partial class Conv1DTransposeLayer<T> : LayerBase<T>
         if (outputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(outputChannels));
         if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize));
         if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride));
-        if (dilation <= 0) throw new ArgumentOutOfRangeException(nameof(dilation));
+        // See lazy ctor: the engine's transposed-conv path does not dilate.
+        if (dilation != 1) throw new ArgumentOutOfRangeException(nameof(dilation),
+            "Conv1DTransposeLayer supports only dilation == 1; use Conv1DLayer for dilated (non-transposed) convolutions.");
         if (padding.HasValue && padding.Value < 0) throw new ArgumentOutOfRangeException(nameof(padding));
         if (outputPadding < 0) throw new ArgumentOutOfRangeException(nameof(outputPadding));
 
@@ -154,7 +164,8 @@ public partial class Conv1DTransposeLayer<T> : LayerBase<T>
         _outputChannels = outputChannels;
         _kernelSize = kernelSize;
         _stride = stride;
-        _padding = padding ?? ((kernelSize - stride) / 2);
+        // Clamp the symmetric default to 0 (negative padding is invalid; see lazy ctor).
+        _padding = padding ?? System.Math.Max(0, (kernelSize - stride) / 2);
         _outputPadding = outputPadding;
         _dilation = dilation;
 

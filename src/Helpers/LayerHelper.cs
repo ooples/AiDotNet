@@ -32114,6 +32114,16 @@ public static class LayerHelper<T>
         int dilationCycle = 10,
         int outputDim = 1)
     {
+        if (melChannels <= 0) throw new ArgumentOutOfRangeException(nameof(melChannels));
+        if (hiddenChannels <= 0) throw new ArgumentOutOfRangeException(nameof(hiddenChannels));
+        if (numResBlocks < 0) throw new ArgumentOutOfRangeException(nameof(numResBlocks));
+        if (outputDim <= 0) throw new ArgumentOutOfRangeException(nameof(outputDim));
+        // dilation = 1 << (i % dilationCycle): dilationCycle <= 0 would be a mod-by-zero,
+        // and a cycle > 30 lets the shift reach/overflow the 32-bit signed int range.
+        if (dilationCycle <= 0 || dilationCycle > 30)
+            throw new ArgumentOutOfRangeException(nameof(dilationCycle),
+                "dilationCycle must be in [1, 30] so that 1 << (i % dilationCycle) stays within the int range.");
+
         var leakyRelu = (IActivationFunction<T>)new LeakyReLUActivation<T>();
         var tanhActivation = (IActivationFunction<T>)new TanhActivation<T>();
 

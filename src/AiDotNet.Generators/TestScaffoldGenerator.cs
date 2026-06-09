@@ -4700,13 +4700,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     }
 
     /// <summary>
-    /// Returns true for TTS models whose contract is text/phoneme tokens →
-    /// audio (not the vocoder mel → audio path). These models' first layer
-    /// is a phoneme/character embedding (Ren et al. 2019 §3.1, Eskimez et al.
-    /// 2024 §3.1) and the test scaffold should supply rank-1 [seq] integer
-    /// token IDs rather than the rank-2 [T, 80] mel default.
-    /// </summary>
-    /// <summary>
     /// Returns true for the waveform vocoders that use a paper-faithful
     /// channels-first 1-D conv generator: the HiFi-GAN family via
     /// <c>LayerHelper.CreateDefaultHiFiGANLayers</c> AND the WaveNet-style stacks
@@ -4799,6 +4792,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         };
     }
 
+    /// <summary>
+    /// Returns true for TTS models whose contract is text/phoneme tokens →
+    /// audio (not the vocoder mel → audio path). These models' first layer
+    /// is a phoneme/character embedding (Ren et al. 2019 §3.1, Eskimez et al.
+    /// 2024 §3.1) and the test scaffold should supply rank-1 [seq] integer
+    /// token IDs rather than the rank-2 [T, 80] mel default.
+    /// </summary>
     private static bool IsTextToMelTTS(string className)
     {
         int tickIdx = className.IndexOf('`');
