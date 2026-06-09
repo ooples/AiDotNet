@@ -2364,22 +2364,30 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ImplementsVocoder && IsConv1DWaveformVocoder(model.ClassName))
             {
-                // HiFi-GAN-style waveform vocoders run the paper-faithful 1-D conv
-                // generator (CreateDefaultHiFiGANLayers, Kong et al. 2020) that
-                // operates on channels-first rank-3 [B, melChannels, T] mel input
-                // and emits [B, 1, T] waveform — Conv1DLayer strictly requires
-                // rank-3 [B, C, T]. These models configure melChannels=80; T=8
-                // frames keeps the per-test cost low. Output product = 8.
-                // WaveGlow and ParallelWaveGAN belong HERE too: both build their
-                // generator from CreateDefaultWaveNetVocoderLayers, a 1-D dilated-conv
-                // (WaveNet-style) stack that is likewise channels-first [B, 80, T].
-                // The vocoders that genuinely keep the rank-2 dimension-flexible Dense
-                // contract below are the non-conv ones (BigVGAN melChannels=100, the
-                // Fourier Vocos) — they are NOT in IsConv1DWaveformVocoder and fall
-                // through to the else branch.
-                // (Voice-cloning models are handled above; a model is never both.)
-                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 80, 8 };");
-                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 8 };");
+                // All channels-first rank-3 [B, melChannels=80, T] 1-D conv vocoders, in
+                // three shape families (Conv1DLayer/Conv1DTransposeLayer require rank-3):
+                //
+                //  1. WaveNet-style T-PRESERVING (WaveGlow, ParallelWaveGAN): the gated
+                //     residual stack (CreateDefaultWaveNetVocoderLayers) keeps T, so a
+                //     [1,80,8] mel -> [1,1,8] waveform. (Voice-cloning handled above.)
+                //  2. HiFi-GAN waveform UPSAMPLERS (HiFiGAN, MelGAN, UnivNet,
+                //     MultiBandMelGAN): real ConvTranspose1d stages expand T by
+                //     prod(upsample_rates) = 8*8*2*2 = 256 and emit 1 waveform channel,
+                //     so a 1-frame mel -> [1,1,256]. T=1 keeps the per-test cost low.
+                //  3. HiFi-GAN SPECTRAL upsamplers (APNet, APNet2, ISTFTNet): same 256x
+                //     time upsampling but conv_post emits FftSize/2+1 = 1024/2+1 = 513
+                //     spectral channels (amplitude/phase or STFT coeffs), so -> [1,513,256].
+                if (IsTimePreservingConv1DVocoder(model.ClassName))
+                {
+                    sb.AppendLine("    protected override int[] InputShape => new[] { 1, 80, 8 };");
+                    sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 8 };");
+                }
+                else
+                {
+                    int specChannels = SpectralConv1DVocoderOutputChannels(model.ClassName);
+                    sb.AppendLine("    protected override int[] InputShape => new[] { 1, 80, 1 };");
+                    sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 1, {specChannels}, 256 }};");
+                }
             }
             else if (IsTextToMelTTS(model.ClassName))
             {
@@ -4660,6 +4668,38 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "ParallelWaveGAN" => true,
             "WaveGlow" => true,
             _ => false,
+        };
+    }
+
+    /// <summary>
+    /// True for the conv1d vocoders whose generator preserves the time axis
+    /// (the WaveNet/Parallel-WaveGAN gated-residual stack via
+    /// <c>CreateDefaultWaveNetVocoderLayers</c>) rather than upsampling it. The
+    /// HiFi-GAN family upsamples T by prod(upsample_rates).
+    /// </summary>
+    private static bool IsTimePreservingConv1DVocoder(string className)
+    {
+        int tickIdx = className.IndexOf('`');
+        if (tickIdx > 0) className = className.Substring(0, tickIdx);
+        return className is "WaveGlow" or "ParallelWaveGAN";
+    }
+
+    /// <summary>
+    /// Output channel count of a HiFi-GAN-family conv1d vocoder's <c>conv_post</c>:
+    /// the spectral vocoders (APNet/APNet2 amplitude-phase, ISTFTNet STFT coeffs)
+    /// emit <c>FftSize/2 + 1 = 1024/2 + 1 = 513</c> channels; the rest emit a single
+    /// waveform channel.
+    /// </summary>
+    private static int SpectralConv1DVocoderOutputChannels(string className)
+    {
+        int tickIdx = className.IndexOf('`');
+        if (tickIdx > 0) className = className.Substring(0, tickIdx);
+        return className switch
+        {
+            "APNet" => 513,
+            "APNet2" => 513,
+            "ISTFTNet" => 513,
+            _ => 1,
         };
     }
 
