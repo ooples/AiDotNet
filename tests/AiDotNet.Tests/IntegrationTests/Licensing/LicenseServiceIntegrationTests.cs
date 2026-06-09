@@ -247,11 +247,16 @@ public class LicenseServiceIntegrationTests : IDisposable
                 OutputShapeValue = new[] { 10 }
             };
 
+            // Pass the server decryption token as proof of server-side validation — server-issued keys
+            // are escrow-signed and cannot be verified offline, so the persist guard honors the token
+            // instead of offline-rejecting the key.
             ModelLoader.SaveEncrypted(model, tempFile, createResponse.LicenseKey,
-                model.GetInputShape(), model.GetOutputShape());
+                model.GetInputShape(), model.GetOutputShape(),
+                decryptionToken: System.Text.Encoding.UTF8.GetBytes(validateResponse.DecryptionToken!));
 
             // Step 4: Client-side — decrypt with the same license key
-            var loaded = ModelLoader.Load<double>(tempFile, createResponse.LicenseKey);
+            var loaded = ModelLoader.Load<double>(tempFile, createResponse.LicenseKey,
+                decryptionToken: System.Text.Encoding.UTF8.GetBytes(validateResponse.DecryptionToken!));
             Assert.NotNull(loaded);
             Assert.IsType<StubModelSerializer>(loaded);
             Assert.Equal(payload, ((StubModelSerializer)loaded).GetDeserializedData());
