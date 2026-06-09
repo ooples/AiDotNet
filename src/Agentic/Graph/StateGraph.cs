@@ -129,6 +129,46 @@ public sealed class StateGraph<TState>
     }
 
     /// <summary>
+    /// Adds a node that runs an entire compiled graph as a single step (a subgraph), threading the same
+    /// state in and out. Enables composition: build small graphs and embed them in larger ones.
+    /// </summary>
+    /// <param name="name">The node name for the subgraph.</param>
+    /// <param name="subgraph">The compiled graph to run when this node executes.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="subgraph"/> is <c>null</c>.</exception>
+    public StateGraph<TState> AddSubgraph(string name, CompiledStateGraph<TState> subgraph)
+    {
+        Guard.NotNull(subgraph);
+        return AddNode(name, (state, ct) => subgraph.InvokeAsync(state, null, ct));
+    }
+
+    /// <summary>
+    /// Adds reward-gated routing after a node: a scoring function rates the state, and flow goes to
+    /// <paramref name="ifMeetsThreshold"/> when the score is at least <paramref name="threshold"/>, else to
+    /// <paramref name="ifBelowThreshold"/>. A differentiator for verifier/critic-driven control flow.
+    /// </summary>
+    /// <param name="from">The source node name.</param>
+    /// <param name="reward">Scores the current state (e.g., a critic/reward model).</param>
+    /// <param name="threshold">The minimum score required to take the "meets" branch.</param>
+    /// <param name="ifMeetsThreshold">The next node when <c>reward(state) &gt;= threshold</c> (may be <see cref="End"/>).</param>
+    /// <param name="ifBelowThreshold">The next node otherwise (may be <see cref="End"/>).</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="reward"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException">Thrown when a node name is empty/whitespace.</exception>
+    public StateGraph<TState> AddRewardGatedEdges(
+        string from,
+        Func<TState, double> reward,
+        double threshold,
+        string ifMeetsThreshold,
+        string ifBelowThreshold)
+    {
+        Guard.NotNull(reward);
+        Guard.NotNullOrWhiteSpace(ifMeetsThreshold);
+        Guard.NotNullOrWhiteSpace(ifBelowThreshold);
+        return AddConditionalEdges(from, state => reward(state) >= threshold ? ifMeetsThreshold : ifBelowThreshold);
+    }
+
+    /// <summary>
     /// Marks a node as a human-in-the-loop interrupt point: a run pauses just before this node so a human
     /// can review (and optionally edit) the state, then resume.
     /// </summary>

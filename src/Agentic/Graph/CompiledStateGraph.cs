@@ -293,6 +293,63 @@ public sealed class CompiledStateGraph<TState>
         }
     }
 
+    /// <summary>
+    /// Deterministically replays a recorded run from its checkpoint history WITHOUT executing any nodes,
+    /// yielding the same (node, state) sequence the original run produced.
+    /// </summary>
+    /// <param name="checkpointer">The checkpoint store holding the recorded run.</param>
+    /// <param name="threadId">The recorded run/thread id.</param>
+    /// <param name="cancellationToken">Token used to cancel the replay.</param>
+    /// <returns>The recorded per-node updates, in order.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Re-watch a past run exactly as it happened, reading from the saved
+    /// checkpoints instead of re-running the (possibly slow or non-deterministic) nodes. Great for
+    /// debugging and audit.
+    /// </para>
+    /// </remarks>
+    public async IAsyncEnumerable<GraphStepUpdate<TState>> ReplayAsync(
+        IGraphCheckpointer<TState> checkpointer,
+        string threadId,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        Guard.NotNull(checkpointer);
+        Guard.NotNullOrWhiteSpace(threadId);
+
+        var history = await checkpointer.GetHistoryAsync(threadId, cancellationToken).ConfigureAwait(false);
+        for (var k = 1; k < history.Count; k++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            // The node that ran to produce history[k] is the one recorded as "next" by history[k-1].
+            var executedNode = history[k - 1].NextNode;
+            yield return new GraphStepUpdate<TState>(executedNode, history[k].State);
+        }
+    }
+
+    /// <summary>
+    /// Returns the final recorded state for a thread (read from checkpoints, no execution).
+    /// </summary>
+    /// <param name="checkpointer">The checkpoint store.</param>
+    /// <param name="threadId">The run/thread id.</param>
+    /// <param name="cancellationToken">Token used to cancel the operation.</param>
+    /// <returns>The latest recorded state.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the thread has no checkpoints.</exception>
+    public async Task<TState> GetRecordedStateAsync(
+        IGraphCheckpointer<TState> checkpointer,
+        string threadId,
+        CancellationToken cancellationToken = default)
+    {
+        Guard.NotNull(checkpointer);
+        Guard.NotNullOrWhiteSpace(threadId);
+
+        var latest = await checkpointer.GetLatestAsync(threadId, cancellationToken).ConfigureAwait(false);
+        if (latest is null)
+        {
+            throw new InvalidOperationException($"No checkpoints found for thread '{threadId}'.");
+        }
+
+        return latest.State;
+    }
+
     private static int ResolveMaxSteps(GraphRunOptions? options)
     {
         var max = options?.MaxSteps ?? new GraphRunOptions().MaxSteps;
