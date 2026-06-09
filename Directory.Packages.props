@@ -123,8 +123,9 @@
          depends on: Tensors #575 (zero the result buffer before the accumulating
          fallback GEMM paths — pooled buffers were read non-deterministically, so the
          Cholesky/Gram zero-alloc copy-buffer dot here could accumulate into stale
-         data). 0.92.1 also carries #574 (FP16 ComputeGradients). AiDotNet.Native
-         packages coreleased in lockstep at 0.92.1. -->
+         data). 0.92.1 also carries #574 (FP16 ComputeGradients) and #564 (memory-bounded
+         gradient-streaming core, merged to master via #1543). AiDotNet.Native packages
+         coreleased in lockstep at 0.92.1. -->
     <PackageVersion Include="AiDotNet.Tensors" Version="0.92.1" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.92.1" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.92.1" />
