@@ -122,7 +122,7 @@
          streaming core — this PR's streaming-training path) and Tensors #574 (FP16
          optimizer-agnostic MixedPrecisionCompiledPlan.ComputeGradients — the
          all-fused-optimizer FP16 path). AiDotNet.Native packages coreleased in lockstep
-         at 0.92.0. -->
+         at 0.92.0.
 
          Bumped 0.91.12 -> 0.92.1 for the matmul fallback-path correctness fix this PR
          depends on: Tensors #575 (zero the result buffer before the accumulating
