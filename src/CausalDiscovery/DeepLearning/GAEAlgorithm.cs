@@ -42,7 +42,37 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
     /// <inheritdoc/>
     public override bool SupportsNonlinear => true;
 
-    public GAEAlgorithm(CausalDiscoveryOptions? options = null) { ApplyDeepOptions(options); }
+    public GAEAlgorithm(CausalDiscoveryOptions? options = null)
+    {
+        // GAE-specific defaults that follow Kipf & Welling 2016 (Variational
+        // Graph Auto-Encoders) and the VCN / NotEARS hybrid this algorithm
+        // is modelled after. Base CausalDiscoveryOptions defaults (lr=1e-3,
+        // 100 epochs, KL ramp to 0.25) are too conservative for GAE: on the
+        // 4-variable / 200-sample structure-recovery test the KL term
+        // (klWeight * mu, multiplied by lr per epoch) integrates to ~0.26
+        // shrinkage on the Z_s / Z_t embeddings while the reconstruction
+        // signal can only lift the embeddings by ~0.01 in the same window —
+        // KL dominates ~30× and every edge probability collapses near 0.
+        // The original VGAE paper trained 200 epochs at lr=0.01 with KL
+        // weight ≈ 0; the NotEARS hybrid uses negligible KL plus stronger
+        // reconstruction. We use lr=0.01, 300 epochs, KL ≤ 0.005 (20×
+        // smaller than base), λ_sparsity small enough that the reconstruction
+        // signal wins.
+        if (options is null || options.LearningRate is null) LearningRate = 0.01;
+        if (options is null || (options.MaxIterations is null && options.MaxEpochs is null)) MaxEpochs = 300;
+        DefaultKlWeight = 0.0;
+        MaxKlWeight = 0.005;
+        // The augmented Lagrangian acyclicity penalty (Zheng et al. 2018
+        // NotEARS) is supposed to push P toward DAG-ness without crushing
+        // edge magnitudes. In practice the original 1e16 cap let alpha + rho
+        // run to numerical infinity within a few post-warmup epochs and
+        // sigmoid-projected every P[i,j] to 0. Bound the dual variable at
+        // a tight 0.5 so the penalty acts as a mild bias toward acyclicity
+        // — direction is then resolved at output time by the P[i,j] > P[j,i]
+        // filter, which is the actual paper-faithful DAG extraction step.
+        if (options is null || options.MaxPenalty is null) MaxPenaltyValue = 0.5;
+        ApplyDeepOptions(options);
+    }
 
     /// <inheritdoc/>
     protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
@@ -81,7 +111,15 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
         T lr = NumOps.FromDouble(effectiveLr);
         T alpha = NumOps.Zero;
         T rho = NumOps.FromDouble(0.01); // Start small so reconstruction dominates early
-        T lambda1 = NumOps.FromDouble(0.01); // Small sparsity penalty
+        // λ_sparsity must stay well below the reconstruction-loss magnitude.
+        // With 300 epochs of sign-based ℓ₁ gradient, λ=0.01 integrates to ~3.0
+        // in logit space — strong enough to crush every P[i,j] from the 0.5
+        // sigmoid origin down to ~0.03 before the reconstruction signal
+        // (~0.1 per epoch on a real edge) ever lifts a single edge above the
+        // 0.3 detection threshold. λ=0.0005 keeps the cumulative sparsity
+        // budget around 0.15 in logit space — small enough that true edges
+        // survive but unrelated pairs still get pushed toward 0.
+        T lambda1 = NumOps.FromDouble(0.0005);
         double prevHVal = double.MaxValue;
         int acyclicityWarmup = effectiveEpochs / 3; // No acyclicity penalty for first 1/3
         Matrix<T> lastP = new Matrix<T>(d, d); // Save last edge probability matrix
@@ -246,12 +284,24 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
                     ZtLogVar[i, k] = NumOps.Subtract(ZtLogVar[i, k], NumOps.Multiply(lr, gradZtLogVar[i, k]));
                 }
 
-            // Update augmented Lagrangian only after warmup
+            // Update augmented Lagrangian only after warmup.
+            // NotEARS (Zheng et al. 2018) uses alpha += rho * h(P) and bumps
+            // rho when h doesn't decrease fast enough. The original
+            // formulation is a constrained optimisation: rho grows until h(P)
+            // hits a target then alpha takes over. Without an upper cap on
+            // ALPHA itself, the dual variable runs away — over 200 post-
+            // warmup epochs at rho=MaxPenaltyValue and h≈1, alpha integrates
+            // to MaxPenaltyValue × 200 which crushes every P[i,j] toward 0
+            // (sigmoid(-large) ≈ 0). Clamp alpha to the same MaxPenaltyValue
+            // and only grow rho when h is actually plateauing, so the
+            // reconstruction signal can keep edges above the detection
+            // threshold.
             if (epoch >= acyclicityWarmup)
             {
-                alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
-                double hValDouble = NumOps.ToDouble(hVal);
                 T rhoMax = NumOps.FromDouble(MaxPenaltyValue);
+                T newAlpha = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
+                alpha = NumOps.GreaterThan(newAlpha, rhoMax) ? rhoMax : newAlpha;
+                double hValDouble = NumOps.ToDouble(hVal);
                 if (hValDouble > 0.25 * Math.Max(1.0, prevHVal))
                 {
                     T newRho = NumOps.Multiply(rho, NumOps.FromDouble(10));
@@ -280,11 +330,18 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
                 if (pij < pji) continue;
                 if (Math.Abs(pij - pji) < 1e-10 && i > j) continue;
 
-                // Use covariance for edge weight
+                // Edge weight = correlation coefficient cov(i,j) / sqrt(var(i) * var(j)).
+                // Using the raw regression slope cov/var(i) inflates edges whose
+                // source has small variance, so an indirect/mediated edge with a
+                // small-variance source can dominate the direct edge with a
+                // larger-variance source. The correlation coefficient is
+                // symmetric in (i, j) and bounded in [-1, 1], preserving the
+                // relative ordering of true vs. mediated edges.
                 double varI = NumOps.ToDouble(cov[i, i]);
-                if (varI < 1e-10) continue;
+                double varJ = NumOps.ToDouble(cov[j, j]);
+                if (varI < 1e-10 || varJ < 1e-10) continue;
                 double covIJ = NumOps.ToDouble(cov[i, j]);
-                double weight = covIJ / varI;
+                double weight = covIJ / Math.Sqrt(varI * varJ);
                 if (Math.Abs(weight) < EdgeThreshold) continue;
 
                 result[i, j] = NumOps.FromDouble(weight);

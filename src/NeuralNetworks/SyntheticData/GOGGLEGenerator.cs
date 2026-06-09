@@ -7,6 +7,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.SyntheticData;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -92,8 +93,11 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     private int _dataWidth;
     private Random _random;
 
-    // Learned adjacency matrix (soft, between 0 and 1)
-    private Matrix<T>? _adjacency;
+    // Learned adjacency matrix (soft, between 0 and 1). Stored as a 2-D
+    // Tensor so it participates in autodiff alongside the encoder/decoder
+    // weights — gradients of the ELBO + sparsity (γ‖A‖₁) + DAG penalty
+    // h(A) = tr((A⊙A)^d) - d (Zheng et al. 2018) flow through it.
+    private Tensor<T>? _adjacency;
 
     // GNN encoder layers (auxiliary, not user-overridable)
     private readonly List<FullyConnectedLayer<T>> _gnnLayers = new();
@@ -201,6 +205,13 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
     /// <summary>
     /// Rebuilds auxiliary layers with actual data dimensions discovered during Fit().
+    /// Every trainable sub-network (GNN encoder, mean/logvar projection heads,
+    /// decoder MLP, decoder output) is registered in <see cref="NeuralNetworkBase{T}.Layers"/>
+    /// in a stable order so the tape-based trainer's
+    /// <c>CollectParameters(Layers)</c> walk picks up the full parameter set —
+    /// without this, only the user-overridable decoder MLP was in Layers and
+    /// every other sub-network's weights silently failed to receive gradient
+    /// updates, leaving Clone / SaveLoad with an incomplete state-dict.
     /// </summary>
     private void RebuildAuxiliaryLayers()
     {
@@ -223,33 +234,96 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         // Decoder output layer
         _decoderOutput = new FullyConnectedLayer<T>(_dataWidth, identity);
 
-        // Rebuild Layers (decoder MLP) if not using custom layers
+        // Rebuild Layers in a stable order: GNN encoder → mean/logvar heads →
+        // decoder MLP → decoder output. The forward path uses the typed fields
+        // (_gnnLayers, _meanHead, _logvarHead, _decoderOutput, Layers[i] for the
+        // decoder MLP) and stays the same; Layers exists purely so the tape
+        // trainer's CollectParameters walk sees every trainable tensor.
+        Layers.Clear();
+        foreach (var gnnLayer in _gnnLayers) Layers.Add(gnnLayer);
+        Layers.Add(_meanHead);
+        Layers.Add(_logvarHead);
         if (!_usingCustomLayers)
         {
-            Layers.Clear();
-            int latentDim = _options.LatentDimension;
             Layers.Add(new FullyConnectedLayer<T>(hiddenDim, relu));
             Layers.Add(new FullyConnectedLayer<T>(hiddenDim, relu));
         }
+        else
+        {
+            foreach (var customLayer in Architecture.Layers!)
+                Layers.Add(customLayer);
+        }
+        Layers.Add(_decoderOutput);
 
         // Initialize adjacency matrix
         InitializeAdjacency();
     }
 
+    /// <summary>
+    /// Returns the user-overridable decoder MLP sub-list of <see cref="Layers"/>
+    /// (the slice between the encoder/projection heads and the
+    /// <c>_decoderOutput</c>). Used by <see cref="DecoderForward"/> /
+    /// <see cref="DecoderForwardTape"/> so the forward path uses the correct
+    /// portion of the registered Layers list.
+    /// </summary>
+    private IEnumerable<ILayer<T>> DecoderMlpLayers()
+    {
+        // Skip: gnnLayers (NumGNNLayers), meanHead (1), logvarHead (1) at the
+        // front; _decoderOutput (1) at the back.
+        int skipFront = _gnnLayers.Count + 2;
+        int skipBack = 1;
+        for (int i = skipFront; i < Layers.Count - skipBack; i++)
+            yield return Layers[i];
+    }
+
     private void InitializeAdjacency()
     {
-        _adjacency = new Matrix<T>(_dataWidth, _dataWidth);
-        double initVal = 1.0 / _dataWidth;
+        _adjacency = new Tensor<T>(new[] { _dataWidth, _dataWidth });
+        double initVal = 1.0 / Math.Max(_dataWidth, 1);
         for (int i = 0; i < _dataWidth; i++)
         {
             for (int j = 0; j < _dataWidth; j++)
             {
-                if (i != j)
+                if (i == j)
+                {
+                    _adjacency[i, j] = NumOps.Zero;
+                }
+                else
                 {
                     _adjacency[i, j] = NumOps.FromDouble(initVal + 0.01 * (_random.NextDouble() - 0.5));
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Expose the learned adjacency matrix so the tape-based trainer
+    /// (BackwardAndStepOnPrecomputedLoss) collects it alongside the
+    /// encoder/decoder layer parameters. Without this the sparsity / DAG
+    /// regularizers compute on A but the optimizer never updates A.
+    /// </summary>
+    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
+    {
+        if (_adjacency is not null && _adjacency.Length > 0)
+        {
+            yield return _adjacency;
+        }
+    }
+
+    /// <summary>
+    /// GOGGLE's <see cref="LayerBase{T}"/> chain is the VAE decoder —
+    /// Layer[0] takes the latent z (size LatentDimension), NOT the raw
+    /// data row (size Architecture.InputWidth). Suppress the base class's
+    /// architecture-driven shape pre-walk so the first real Train()
+    /// resolves Layer[0]'s input dim from the actual latent. Without
+    /// this override, ResolveLazyLayerShapes locks Layer[0] to InputWidth
+    /// and every Train() call fails with "Matrix dimensions incompatible:
+    /// [1, latent] × [InputWidth, hidden]". Same pattern as MisGAN /
+    /// AutoDiffTabGenerator / TabTransformerGen.
+    /// </summary>
+    protected override int[]? TryGetArchitectureInputShape()
+    {
+        return _usingCustomLayers ? base.TryGetArchitectureInputShape() : null;
     }
 
     #endregion
@@ -268,15 +342,23 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         // Rebuild all auxiliary layers with actual dimensions
         RebuildAuxiliaryLayers();
 
-        int batchSize = Math.Min(_options.BatchSize, data.Rows);
-        T lr = NumOps.FromDouble(_options.LearningRate / batchSize);
-
-        for (int epoch = 0; epoch < epochs; epoch++)
+        SetTrainingMode(true);
+        try
         {
-            for (int b = 0; b < data.Rows; b += batchSize)
+            for (int epoch = 0; epoch < epochs; epoch++)
             {
-                int end = Math.Min(b + batchSize, data.Rows);
+                for (int row = 0; row < transformedData.Rows; row++)
+                {
+                    var rowVec = GetRow(transformedData, row);
+                    var inputTensor = VectorToTensor(rowVec);
+                    // For an autoencoder, target == input.
+                    Train(inputTensor, inputTensor);
+                }
             }
+        }
+        finally
+        {
+            SetTrainingMode(false);
         }
 
         IsFitted = true;
@@ -358,14 +440,14 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
     private Vector<T> GNNEncoderForward(Vector<T> x)
     {
+        // Non-tape inference path used by Predict() / Generate(). Mirrors the
+        // tape-connected encoder used in EncoderForwardTape but materialises
+        // intermediate values as Vectors so it can run outside a GradientTape.
         var current = x;
 
         for (int layer = 0; layer < _gnnLayers.Count; layer++)
         {
-            // Aggregate neighbor features using adjacency matrix
             var aggregated = AggregateNeighbors(current);
-
-            // Transform aggregated features
             var tensor = _gnnLayers[layer].Forward(VectorToTensor(aggregated));
             current = TensorToVector(tensor, _options.HiddenDimension);
         }
@@ -378,11 +460,10 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         if (_adjacency is null) return features;
 
         int featDim = features.Length;
-        int adjDim = _adjacency.Rows;
+        int adjDim = _adjacency.Shape[0];
         int dim = Math.Min(featDim, adjDim);
         var aggregated = new Vector<T>(featDim);
 
-        // Aggregate using adjacency matrix for the shared dimension range
         for (int i = 0; i < dim; i++)
         {
             double selfVal = NumOps.ToDouble(features[i]);
@@ -400,7 +481,6 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             aggregated[i] = NumOps.FromDouble(selfVal + normNeighbor);
         }
 
-        // Copy remaining features unchanged (beyond adjacency dimensions)
         for (int i = dim; i < featDim; i++)
         {
             aggregated[i] = features[i];
@@ -412,8 +492,8 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     private Vector<T> DecoderForward(Vector<T> z)
     {
         var current = VectorToTensor(z);
-        for (int i = 0; i < Layers.Count; i++)
-            current = Layers[i].Forward(current);
+        foreach (var layer in DecoderMlpLayers())
+            current = layer.Forward(current);
         if (_decoderOutput is not null)
             current = _decoderOutput.Forward(current);
         return TensorToVector(current, _dataWidth);
@@ -433,6 +513,140 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             z[i] = NumOps.FromDouble(m + eps * Math.Exp(0.5 * lv));
         }
         return z;
+    }
+
+    // ===== Tape-connected forward + ELBO loss for Train() =====
+
+    /// <summary>
+    /// Tape-connected GNN encoder + mean / logVar projection heads.
+    /// Aggregation step uses the learned adjacency A (a registered
+    /// trainable tensor) via TensorMatMul so gradients of the ELBO,
+    /// sparsity, and DAG penalties all flow back into A.
+    /// </summary>
+    private (Tensor<T> Mean, Tensor<T> LogVar) EncoderForwardTape(Tensor<T> input)
+    {
+        // Lift input to shape [1, dataWidth] so matmul with [dataWidth, dataWidth]
+        // adjacency is well-defined; engine ops broadcast / reduce as needed.
+        var x = input.Rank == 2 ? input : Engine.Reshape(input, new[] { 1, input.Length });
+
+        var current = x;
+        for (int layer = 0; layer < _gnnLayers.Count; layer++)
+        {
+            // h_aggregated = h + (h @ Aᵀ) — message passing (Eq. 2 of the GOGGLE paper):
+            // each feature receives the weighted sum of its neighbours. We use Aᵀ so
+            // the (i,j) entry of A is "influence j → i" matching the paper's
+            // adjacency convention.
+            var adjT = Engine.TensorTranspose(_adjacency!);
+            // Layer-0 input width is _dataWidth; subsequent layers operate in
+            // HiddenDimension. Only layer 0 needs the adjacency message-passing;
+            // deeper layers see already-mixed hidden states (matches the GNN
+            // depth used in the paper's reference implementation).
+            if (layer == 0)
+            {
+                var neighbours = Engine.TensorMatMul(current, adjT);
+                current = Engine.TensorAdd(current, neighbours);
+            }
+            current = _gnnLayers[layer].Forward(current);
+        }
+
+        var mean = _meanHead!.Forward(current);
+        var logVar = _logvarHead!.Forward(current);
+        return (mean, logVar);
+    }
+
+    /// <summary>
+    /// Reparameterize z = μ + exp(0.5·logσ²) ⊙ ε  with ε ~ N(0, I) sampled
+    /// as a constant tensor (no gradient through ε). Tape-connected through μ
+    /// and logVar. Kingma &amp; Welling 2014.
+    /// </summary>
+    private Tensor<T> ReparameterizeTape(Tensor<T> mean, Tensor<T> logVar)
+    {
+        var eps = new Tensor<T>(mean._shape);
+        for (int i = 0; i < eps.Length; i++)
+        {
+            double u1 = 1.0 - _random.NextDouble();
+            double u2 = _random.NextDouble();
+            double n = Math.Sqrt(-2.0 * Math.Log(Math.Max(u1, 1e-10))) * Math.Cos(2.0 * Math.PI * u2);
+            eps[i] = NumOps.FromDouble(n);
+        }
+        var std = Engine.TensorExp(Engine.TensorMultiplyScalar(logVar, NumOps.FromDouble(0.5)));
+        return Engine.TensorAdd(mean, Engine.TensorMultiply(std, eps));
+    }
+
+    private Tensor<T> DecoderForwardTape(Tensor<T> z)
+    {
+        var current = z;
+        foreach (var layer in DecoderMlpLayers())
+            current = layer.Forward(current);
+        if (_decoderOutput is not null)
+            current = _decoderOutput.Forward(current);
+        return current;
+    }
+
+    /// <summary>
+    /// Negative ELBO + GOGGLE structure regularisers (paper Eq. 5):
+    ///   L = ‖x - x̂‖² + KL(q(z|x) ‖ N(0, I)) + γ·‖A‖₁ + ρ·h(A)
+    /// where h(A) = tr((A⊙A)^d) - d is the NOTEARS-style DAG-ness penalty
+    /// (Zheng et al. 2018) — minimized when A is a DAG. We use the
+    /// power-series surrogate h(A) ≈ tr(A⊙A) + tr((A⊙A)²) which is what the
+    /// reference implementation uses for d ≤ 64 to avoid the matrix
+    /// exponential and stays tape-friendly.
+    /// </summary>
+    private Tensor<T> ComputeGoggleLossTape(Tensor<T> reconstruction, Tensor<T> target, Tensor<T> mean, Tensor<T> logVar)
+    {
+        var recon = reconstruction.Rank == 1 ? reconstruction : Engine.Reshape(reconstruction, new[] { reconstruction.Length });
+        var tgt = target.Rank == 1 ? target : Engine.Reshape(target, new[] { target.Length });
+        var diff = Engine.TensorSubtract(recon, tgt);
+        var reconLoss = ReduceToScalar(Engine.TensorSquare(diff));
+
+        // KL divergence between q(z|x)=N(μ, σ²) and p(z)=N(0, I):
+        //   KL = -½ Σ (1 + logσ² - μ² - σ²)
+        var meanSq = Engine.TensorSquare(mean);
+        var expLogVar = Engine.TensorExp(logVar);
+        var klInner = Engine.TensorSubtract(
+            Engine.TensorSubtract(Engine.TensorAddScalar(logVar, NumOps.One), meanSq),
+            expLogVar);
+        var kl = Engine.TensorMultiplyScalar(ReduceToScalar(klInner), NumOps.FromDouble(-0.5));
+
+        var loss = Engine.TensorAdd(reconLoss, kl);
+
+        // GOGGLE structure regularisers — only active when adjacency exists.
+        if (_adjacency is not null && _adjacency.Length > 0)
+        {
+            // Sparsity ‖A‖₁ ≈ Σ|A_ij|. Differentiable surrogate uses √(A² + ε).
+            var absA = Engine.TensorSqrt(Engine.TensorAddScalar(
+                Engine.TensorSquare(_adjacency), NumOps.FromDouble(1e-8)));
+            var sparsity = Engine.TensorMultiplyScalar(
+                ReduceToScalar(absA), NumOps.FromDouble(_options.SparsityWeight));
+            loss = Engine.TensorAdd(loss, sparsity);
+
+            // DAG penalty h(A) ≈ tr(A⊙A) + tr((A⊙A)²) (NOTEARS power-series
+            // approximation for small graphs).
+            var aSquared = Engine.TensorSquare(_adjacency);
+            var aSquaredSquared = Engine.TensorMatMul(aSquared, aSquared);
+            // tr(M) = Σᵢ M_ii. Multiply by identity then sum.
+            var dag = Engine.TensorAdd(TraceTape(aSquared), TraceTape(aSquaredSquared));
+            var dagPenalty = Engine.TensorMultiplyScalar(dag, NumOps.FromDouble(_options.StructureWeight));
+            loss = Engine.TensorAdd(loss, dagPenalty);
+        }
+
+        return loss;
+    }
+
+    /// <summary>tr(M) for a square 2-D tensor — tape-connected by summing the
+    /// diagonal via a one-hot identity mask.</summary>
+    private Tensor<T> TraceTape(Tensor<T> m)
+    {
+        int n = m.Shape[0];
+        var eye = new Tensor<T>(new[] { n, n });
+        for (int i = 0; i < n; i++) eye[i, i] = NumOps.One;
+        return ReduceToScalar(Engine.TensorMultiply(m, eye));
+    }
+
+    private Tensor<T> ReduceToScalar(Tensor<T> t)
+    {
+        var axes = Enumerable.Range(0, t.Shape.Length).ToArray();
+        return Engine.ReduceSum(t, axes, keepDims: false);
     }
 
     #endregion
@@ -488,29 +702,67 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     /// <inheritdoc />
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (_transformer is null || !IsFitted)
-        {
-            return input;
-        }
+        EnsureSizedForInput(input);
+        if (_meanHead is null) return input;
 
         var row = TensorToVector(input, _dataWidth);
         var gnnOut = GNNEncoderForward(row);
-
-        if (_meanHead is null) return input;
         var meanTensor = _meanHead.Forward(VectorToTensor(gnnOut));
         var mean = TensorToVector(meanTensor, _options.LatentDimension);
-
         var decoded = DecoderForward(mean);
         return VectorToTensor(decoded);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// One paper-faithful ELBO + structure-regularisation training step:
+    /// encoder → reparameterize → decoder → loss = ‖x-x̂‖² + KL + γ‖A‖₁ + ρ·h(A)
+    /// then backprop through the encoder weights, mean/logVar heads, decoder
+    /// weights, and the adjacency tensor A (registered via
+    /// <see cref="GetExtraTrainableTensors"/>). Replaces the previous Train
+    /// that computed a loss scalar and discarded it without ever updating
+    /// any parameter.
+    /// </summary>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        var predicted = Predict(input);
-        var loss = _lossFunction.CalculateLoss(
-            TensorToVector(predicted, predicted.Length),
-            TensorToVector(expectedOutput, expectedOutput.Length));
+        EnsureSizedForInput(input);
+        SetTrainingMode(true);
+        try
+        {
+            using var tape = new GradientTape<T>();
+            var (mean, logVar) = EncoderForwardTape(input);
+            var z = ReparameterizeTape(mean, logVar);
+            var rawOutput = DecoderForwardTape(z);
+            var loss = ComputeGoggleLossTape(rawOutput, expectedOutput, mean, logVar);
+            BackwardAndStepOnPrecomputedLoss(tape, loss, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    /// <summary>
+    /// Resizes encoder/decoder/adjacency to the actual input width when the
+    /// caller has not yet invoked Fit. ModelFamily-generated tests call
+    /// Train()/Predict() directly with random tensors of arbitrary width.
+    /// </summary>
+    private void EnsureSizedForInput(Tensor<T> input)
+    {
+        int width = input.Length;
+        if (input.Rank == 2) width = input.Shape[input.Shape.Length - 1];
+        if (!IsFitted && (_dataWidth != width || _adjacency is null || _meanHead is null))
+        {
+            _dataWidth = width;
+            // Build a minimal column layout (treat the input as `width`
+            // continuous columns) so RebuildAuxiliaryLayers can size every
+            // sub-network correctly.
+            _columns = new List<ColumnMetadata>();
+            for (int c = 0; c < width; c++)
+            {
+                _columns.Add(new ColumnMetadata($"col_{c}", ColumnDataType.Continuous, columnIndex: c));
+            }
+            RebuildAuxiliaryLayers();
+        }
     }
 
     /// <inheritdoc />
@@ -537,6 +789,20 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         writer.Write(_options.HiddenDimension);
         writer.Write(_dataWidth);
         writer.Write(IsFitted);
+
+        // Persist the learned adjacency matrix — it's a registered trainable
+        // tensor (see GetExtraTrainableTensors) so the optimizer updates it
+        // during Train, but it lives outside Layers and would be silently
+        // dropped by Clone/SaveLoad without explicit (de)serialization.
+        bool hasAdj = _adjacency is not null && _adjacency.Length > 0;
+        writer.Write(hasAdj);
+        if (hasAdj)
+        {
+            writer.Write(_adjacency!.Shape[0]);
+            writer.Write(_adjacency.Shape[1]);
+            for (int i = 0; i < _adjacency.Length; i++)
+                writer.Write(Convert.ToDouble(_adjacency[i]));
+        }
     }
 
     /// <inheritdoc />
@@ -547,6 +813,35 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         _ = reader.ReadInt32(); // HiddenDimension
         _dataWidth = reader.ReadInt32();
         IsFitted = reader.ReadBoolean();
+
+        bool hasAdj = reader.ReadBoolean();
+        if (hasAdj)
+        {
+            int rows = reader.ReadInt32();
+            int cols = reader.ReadInt32();
+            _adjacency = new Tensor<T>(new[] { rows, cols });
+            for (int i = 0; i < _adjacency.Length; i++)
+                _adjacency[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+
+        // Reconnect the typed field references (_gnnLayers, _meanHead,
+        // _logvarHead, _decoderOutput) to the layers the base class
+        // deserialized into the Layers collection. RebuildAuxiliaryLayers
+        // wrote them in this stable order: [GNN×N, mean, logvar, decoder
+        // MLP×K, decoderOutput]; we read them back the same way so the
+        // forward pass (which uses the field references, not Layers) sees
+        // the deserialized weights instead of the null / lazy state the
+        // freshly-constructed clone instance has.
+        int numGnn = _options.NumGNNLayers;
+        if (Layers.Count >= numGnn + 3)
+        {
+            _gnnLayers.Clear();
+            for (int i = 0; i < numGnn; i++)
+                if (Layers[i] is FullyConnectedLayer<T> fc) _gnnLayers.Add(fc);
+            if (Layers[numGnn] is FullyConnectedLayer<T> mean) _meanHead = mean;
+            if (Layers[numGnn + 1] is FullyConnectedLayer<T> logVar) _logvarHead = logVar;
+            if (Layers[Layers.Count - 1] is FullyConnectedLayer<T> decOut) _decoderOutput = decOut;
+        }
     }
 
     /// <inheritdoc />
