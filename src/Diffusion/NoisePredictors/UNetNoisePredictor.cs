@@ -1153,15 +1153,25 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             inputHeight: _inputHeight,
             lossFunction: LossFunction);
 
-        // Eager-init the clone's layers BEFORE SetParameters runs. The
-        // internal layers (PyTorch-style lazy shape inference) report
-        // ParameterCount=0 until their first forward; SetParameters
-        // walks each layer's GetParameters() to size its slice of the
-        // incoming vector, so before init it would silently size every
-        // slice to 0 and write zero parameters into the clone — leaving
-        // the clone with fresh random weights and breaking
-        // Clone_ShouldProduceIdenticalOutput across every UNet-based
-        // diffusion model (AudioLDM2, SD, SDXL, etc.).
+        // Eager-init BOTH source and clone before snapshotting/setting
+        // parameters. PyTorch-style lazy shape inference makes the
+        // DenseLayer time-embedding MLPs report ParameterCount=0 (live
+        // arch-derived) vs GetParameters().Length=0 (lazy storage)
+        // until their first forward.
+        //
+        //   * The clone needs resolution BEFORE SetParameters(),
+        //     otherwise SetLayerParameters sizes every slice to 0 and
+        //     writes nothing, leaving the clone with fresh random
+        //     weights.
+        //
+        //   * The source ALSO needs resolution BEFORE GetParameters(),
+        //     otherwise the snapshot vector under-counts the time-
+        //     embedding MLP params. Downstream diffusion-model
+        //     SetParameters checks (ImprovedConsistencyModel etc.) compare
+        //     parameters.Length to the resolved clone's ParameterCount
+        //     and throw — surfacing as Clone_CreatesIndependentCopy
+        //     failures.
+        TriggerLazyShapeResolution();
         clone.TriggerLazyShapeResolution();
         clone.SetParameters(GetParameters());
         return clone;
@@ -1172,9 +1182,12 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// <c>_inputHeight</c> spatial size so every lazy layer resolves its
     /// weight shapes. Used by <see cref="Clone"/> to make the clone's
     /// layer parameter counts match the original's before
-    /// <see cref="SetParameters"/> copies weights across.
+    /// <see cref="SetParameters"/> copies weights across. Also exposed
+    /// internally so diffusion-model wrappers that copy parameters
+    /// manually (instead of delegating to <see cref="Clone"/>) can
+    /// force lazy shape resolution on both sides too.
     /// </summary>
-    private void TriggerLazyShapeResolution()
+    internal void TriggerLazyShapeResolution()
     {
         var dummy = new Tensor<T>(new[] { 1, _inputChannels, _inputHeight, _inputHeight });
         Tensor<T>? dummyCtx = _contextDim > 0

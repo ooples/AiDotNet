@@ -173,9 +173,22 @@ public class ImprovedConsistencyModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new ImprovedConsistencyModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
-        return clone;
+        // Delegate to the predictor/VAE's own Clone implementations,
+        // which handle their internal lazy shape inference on BOTH
+        // source and clone before copying weights. Constructing a
+        // fresh predictor/VAE here and then calling SetParameters with
+        // GetParameters from this would re-hit the same lazy-init bug:
+        // GetParameters() on a freshly built (unresolved) source
+        // under-counts the time-embedding DenseLayer params, while the
+        // new constructor's ParameterCount is live (arch-derived),
+        // throwing ArgumentException from SetParameters' length check.
+        var predictorClone = (UNetNoisePredictor<T>)_predictor.Clone();
+        var vaeClone = (StandardVAE<T>)_vae.Clone();
+        return new ImprovedConsistencyModel<T>(
+            predictor: predictorClone,
+            vae: vaeClone,
+            conditioner: _conditioner,
+            seed: RandomGenerator.Next());
     }
 
     /// <inheritdoc />
