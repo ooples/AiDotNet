@@ -42,7 +42,9 @@ internal static class LicenseTestSupport
     internal static byte[]? CurrentBuildKeySnapshot()
     {
         var key = BuildKeyProvider.GetBuildKey();
-        return key.Length > 0 ? key : null;
+        // Return an owned copy so callers hold a stable snapshot regardless of how the
+        // provider manages its internal buffer (keeps Restore/fixture defensively consistent).
+        return key.Length > 0 ? (byte[])key.Clone() : null;
     }
 
     /// <summary>
