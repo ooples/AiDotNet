@@ -1,8 +1,10 @@
 using System.Collections.Generic;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
+using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -65,10 +67,19 @@ public partial class WaveNetResidualBlockLayer<T> : LayerBase<T>
         // Filter and gate share shape but learn distinct kernels; "same" padding keeps T
         // so the residual add lines up. Tanh on the filter, sigmoid on the gate — the
         // gated activation is realized by multiplying the two activated branches.
-        _filterConv = new Conv1DLayer<T>(channels, channels, kernelSize, dilation, 1, null, new TanhActivation<T>());
-        _gateConv = new Conv1DLayer<T>(channels, channels, kernelSize, dilation, 1, null, new SigmoidActivation<T>());
+        // Each inner conv inits from a DETERMINISTIC position-derived seed (not the
+        // process-shared ThreadSafeRandom), so weight init is order-independent — the
+        // inner convs are hidden from LayerHelper's per-layer RandomSeed wiring, and an
+        // unseeded shared-RNG init would make training depend on test/run order and
+        // flake MoreData_ShouldNotDegrade.
+        int baseSeed = unchecked(channels * 131 + kernelSize * 17 + dilation * 7 + 1009);
+        _filterConv = new Conv1DLayer<T>(channels, channels, kernelSize, dilation, 1, null, new TanhActivation<T>(),
+            new HeInitializationStrategy<T>(RandomHelper.CreateSeededRandom(baseSeed + 1)));
+        _gateConv = new Conv1DLayer<T>(channels, channels, kernelSize, dilation, 1, null, new SigmoidActivation<T>(),
+            new HeInitializationStrategy<T>(RandomHelper.CreateSeededRandom(baseSeed + 2)));
         // 1×1 residual projection (identity activation).
-        _outConv = new Conv1DLayer<T>(channels, channels, 1, 1, 1, null, new IdentityActivation<T>());
+        _outConv = new Conv1DLayer<T>(channels, channels, 1, 1, 1, null, new IdentityActivation<T>(),
+            new HeInitializationStrategy<T>(RandomHelper.CreateSeededRandom(baseSeed + 3)));
     }
 
     private IEnumerable<Conv1DLayer<T>> InnerConvs()

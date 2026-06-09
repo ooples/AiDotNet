@@ -2,8 +2,10 @@ using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
+using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -62,14 +64,22 @@ public partial class HiFiGANResBlockLayer<T> : LayerBase<T>
 
         _convs1 = new List<Conv1DLayer<T>>(_kernelSizes.Length * _dilations.Length);
         _convs2 = new List<Conv1DLayer<T>>(_kernelSizes.Length * _dilations.Length);
+        // Each inner conv inits from a DETERMINISTIC position-derived seed (not the
+        // process-shared ThreadSafeRandom): the inner convs are hidden from LayerHelper's
+        // per-layer RandomSeed wiring, so an unseeded shared-RNG init would make training
+        // depend on test/run order and flake MoreData_ShouldNotDegrade. The seed varies by
+        // (channels, kernel, dilation, conv-index) so the blocks stay diversely initialized.
         foreach (int k in _kernelSizes)
         {
             foreach (int d in _dilations)
             {
+                int baseSeed = unchecked(channels * 131 + k * 17 + d * 7 + 2003);
                 // conv1: dilated, LeakyReLU; conv2: dilation 1, identity projection. Both
                 // "same"-padded (default) so T is preserved for the residual adds.
-                _convs1.Add(new Conv1DLayer<T>(channels, channels, k, d, 1, null, new LeakyReLUActivation<T>()));
-                _convs2.Add(new Conv1DLayer<T>(channels, channels, k, 1, 1, null, new IdentityActivation<T>()));
+                _convs1.Add(new Conv1DLayer<T>(channels, channels, k, d, 1, null, new LeakyReLUActivation<T>(),
+                    new HeInitializationStrategy<T>(RandomHelper.CreateSeededRandom(baseSeed + 1))));
+                _convs2.Add(new Conv1DLayer<T>(channels, channels, k, 1, 1, null, new IdentityActivation<T>(),
+                    new HeInitializationStrategy<T>(RandomHelper.CreateSeededRandom(baseSeed + 2))));
             }
         }
     }
