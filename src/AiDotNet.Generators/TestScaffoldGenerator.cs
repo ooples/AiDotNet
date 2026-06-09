@@ -1746,9 +1746,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // exactly the "stub returns garbage" pattern the codebase prohibits.
         var typeName = GeneratorHelpers.StripGenericSuffix(model.FullyQualifiedName);
         string factoryBody;
+        // Captured at method scope so the deep-TTS / codec-LM branches below can
+        // re-emit the factory as a block body that pins a deterministic init seed
+        // around construction (see pinInitSeed usage near the factory emission).
+        string constructorExpr;
+        // Set true for init-sensitive models (end-to-end TTS / codec-LM) so their
+        // generated factory wraps construction in a deterministic init-seed scope,
+        // making their training invariants order-independent across xUnit workers.
+        bool pinInitSeed = false;
 
         {
-            string constructorExpr;
             bool needsArchitectureUsing = false;
 
             if (model.HasParameterlessConstructor)
@@ -2416,6 +2423,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 4, {codecDim} }};");
                 sb.AppendLine("    protected override int MoreDataShortIterations => 3;");
                 sb.AppendLine("    protected override int MoreDataLongIterations => 10;");
+                // Deep embedding-first AR codec LM: pin a deterministic init so the
+                // training invariants are order-independent across xUnit workers.
+                pinInitSeed = true;
             }
             else if (IsTextToMelTTS(model.ClassName))
             {
@@ -2432,6 +2442,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // is unchanged; same documented use of the iteration virtuals as elsewhere).
                 sb.AppendLine("    protected override int MoreDataShortIterations => 3;");
                 sb.AppendLine("    protected override int MoreDataLongIterations => 10;");
+                // The VAE+flow+decoder stack is init-sensitive: a poorly-scaled init
+                // (inherited from the order-dependent process-shared RNG when sibling
+                // TTS classes ran first on the same worker) makes training diverge over
+                // the long run, so MoreData_ShouldNotDegrade passes in isolation but
+                // fails interleaved. Pin a deterministic init seed around construction.
+                pinInitSeed = true;
             }
         }
         else if (isAudioModel)
@@ -2747,7 +2763,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
 
         sb.AppendLine($"    protected override {returnTypeCode} {factoryMethodName}()");
-        sb.AppendLine(factoryBody);
+        if (pinInitSeed)
+        {
+            // Init-sensitive models: pin a deterministic per-layer init seed around
+            // construction so weight init does NOT depend on how many sibling tests
+            // advanced the process-shared RandomHelper.ThreadSafeRandom on this xUnit
+            // worker first. Cleared in finally so the scope leaks to no other test.
+            // (LayerInitializationSeedScope falls back to AmbientFallbackSeed only when
+            // the architecture has no explicit seed — production behaviour is unchanged.)
+            sb.AppendLine("    {");
+            sb.AppendLine("        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = 1337;");
+            sb.AppendLine($"        try {{ return {constructorExpr}; }}");
+            sb.AppendLine("        finally { AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = null; }");
+            sb.AppendLine("    }");
+        }
+        else
+        {
+            sb.AppendLine(factoryBody);
+        }
         sb.AppendLine("}");
 
         var hintName = GeneratorHelpers.StripGenericSuffix(model.FullyQualifiedName).Replace(".", "_") + "Tests.g.cs";
