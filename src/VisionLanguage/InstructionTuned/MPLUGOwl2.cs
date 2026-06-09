@@ -65,6 +65,7 @@ public class MPLUGOwl2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     public MPLUGOwl2(NeuralNetworkArchitecture<T> architecture, string modelPath, MPLUGOwl2Options? options = null) : base(architecture)
     {
         _options = options ?? new MPLUGOwl2Options();
+        _options.ValidateVisualSizing();
         SyncImageSizeWithArchitecture();
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
@@ -83,6 +84,7 @@ public class MPLUGOwl2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     public MPLUGOwl2(NeuralNetworkArchitecture<T> architecture, MPLUGOwl2Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
     {
         _options = options ?? new MPLUGOwl2Options();
+        _options.ValidateVisualSizing();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);

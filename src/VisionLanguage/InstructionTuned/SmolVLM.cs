@@ -66,9 +66,10 @@ public class SmolVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     private readonly ITokenizer? _tokenizer; private bool _useNativeMode; private bool _disposed;
     private int _encoderLayerEnd;
 
-    public SmolVLM(NeuralNetworkArchitecture<T> architecture, string modelPath, SmolVLMOptions? options = null) : base(architecture) { _options = options ?? new SmolVLMOptions(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
+    public SmolVLM(NeuralNetworkArchitecture<T> architecture, string modelPath, SmolVLMOptions? options = null) : base(architecture) { _options = options ?? new SmolVLMOptions(); _options.ValidateVisualSizing(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
     public SmolVLM(NeuralNetworkArchitecture<T> architecture, SmolVLMOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) {
         _options = options ?? new SmolVLMOptions();
+        _options.ValidateVisualSizing();
         _useNativeMode = true;
         // Paper-faithful LR: Marafioti et al. 2024 ("SmolVLM") uses LR=5e-5
         // for compact-VLM fine-tuning. Framework AdamW default (LR=1e-3)

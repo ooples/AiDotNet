@@ -7,6 +7,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.VisionLanguage.Reasoning;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.VisionLanguage;
@@ -14,8 +15,9 @@ namespace AiDotNet.Tests.IntegrationTests.VisionLanguage;
 public class KimiVLReviewRegressionIntegrationTests
 {
     [Fact(Timeout = 120000)]
-    public void Constructor_WithInvalidImageSize_ThrowsBeforeLayerInitialization()
+    public async Task Constructor_WithInvalidImageSize_ThrowsBeforeLayerInitialization()
     {
+        await Task.Yield();
         var options = CreateOptions();
         options.ImageSize = 0;
 
@@ -29,8 +31,9 @@ public class KimiVLReviewRegressionIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public void Constructor_WithTinyNativeConfiguration_UsesSharedBoundaryHelpers()
+    public async Task Constructor_WithTinyNativeConfiguration_UsesSharedBoundaryHelpers()
     {
+        await Task.Yield();
         var options = CreateOptions();
         var model = new KimiVL<double>(CreateDefaultLayerArchitecture(), options);
 
@@ -44,8 +47,9 @@ public class KimiVLReviewRegressionIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public void Constructor_WithNonDivisibleTokenBudget_RoundsPatchSizeUp()
+    public async Task Constructor_WithNonDivisibleTokenBudget_RoundsPatchSizeUp()
     {
+        await Task.Yield();
         var options = CreateOptions();
         options.ImageSize = 31;
         options.MaxVisualTokens = 16;
