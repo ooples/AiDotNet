@@ -35,18 +35,37 @@ internal static class LicenseTestSupport
     }
 
     /// <summary>
-    /// Scopes the embedded build key for the duration of a test, restoring the default no-key state on
-    /// dispose. Pass null to simulate a dev/fork build (no build key) and assert fail-closed behaviour.
+    /// Snapshots the build key currently in effect (the collection fixture's injected key, or an official
+    /// build's embedded key), or null when none is set. Used to scope overrides so they restore the prior
+    /// state rather than unconditionally clearing it.
+    /// </summary>
+    internal static byte[]? CurrentBuildKeySnapshot()
+    {
+        var key = BuildKeyProvider.GetBuildKey();
+        return key.Length > 0 ? key : null;
+    }
+
+    /// <summary>
+    /// Scopes the embedded build key for the duration of a test, restoring the PREVIOUS key on dispose
+    /// (not a hard clear). Pass null to simulate a dev/fork build (no build key) and assert fail-closed
+    /// behaviour — the prior key is still restored afterwards, so this is safe inside the License
+    /// collection fixture and won't strip the injected key from later tests.
     /// </summary>
     internal static IDisposable WithBuildKey(byte[]? key = null)
     {
+        var previous = CurrentBuildKeySnapshot();
         BuildKeyProvider.OverrideForTesting(key ?? TestBuildKey);
-        return new Restore();
+        return new Restore(previous);
     }
 
     private sealed class Restore : IDisposable
     {
-        public void Dispose() => BuildKeyProvider.OverrideForTesting(null);
+        private readonly byte[]? _previous;
+
+        public Restore(byte[]? previous) =>
+            _previous = previous is { Length: > 0 } ? (byte[])previous.Clone() : null;
+
+        public void Dispose() => BuildKeyProvider.OverrideForTesting(_previous);
     }
 }
 
@@ -58,9 +77,13 @@ internal static class LicenseTestSupport
 /// </summary>
 public sealed class LicenseBuildKeyFixture : IDisposable
 {
+    // Snapshot whatever key was in effect before the fixture (an official build's embedded key, or none)
+    // so teardown restores it rather than clearing — an official-build run keeps its embedded key afterwards.
+    private readonly byte[]? _previousKey = LicenseTestSupport.CurrentBuildKeySnapshot();
+
     public LicenseBuildKeyFixture() => BuildKeyProvider.OverrideForTesting(LicenseTestSupport.TestBuildKey);
 
-    public void Dispose() => BuildKeyProvider.OverrideForTesting(null);
+    public void Dispose() => BuildKeyProvider.OverrideForTesting(_previousKey);
 }
 
 [CollectionDefinition("License", DisableParallelization = true)]
