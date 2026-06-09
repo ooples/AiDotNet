@@ -133,23 +133,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
 
             var inputIds = tokenizationResult.TokenIds.Select(id => (long)id).ToArray();
             var attentionMask = tokenizationResult.AttentionMask.Select(m => (long)m).ToArray();
-            var tokenTypeIds = tokenizationResult.TokenTypeIds.Select(t => (long)t).ToArray();
 
             var seqLength = inputIds.Length;
             var inputShape = new[] { 1, seqLength };
 
-            // 2. Prepare inputs
-            var inputs = new List<NamedOnnxValue>
-            {
-                NamedOnnxValue.CreateFromTensor("input_ids", new Microsoft.ML.OnnxRuntime.Tensors.DenseTensor<long>(inputIds, inputShape)),
-                NamedOnnxValue.CreateFromTensor("attention_mask", new Microsoft.ML.OnnxRuntime.Tensors.DenseTensor<long>(attentionMask, inputShape))
-            };
-
-            // Some models require token_type_ids
-            if (Session.InputMetadata.ContainsKey("token_type_ids"))
-            {
-                inputs.Add(NamedOnnxValue.CreateFromTensor("token_type_ids", new Microsoft.ML.OnnxRuntime.Tensors.DenseTensor<long>(tokenTypeIds, inputShape)));
-            }
+            // 2. Prepare inputs (only the ones the loaded session declares)
+            var declaredInputs = new HashSet<string>(Session.InputMetadata.Keys);
+            var inputs = BuildOnnxInputs(declaredInputs, inputIds, attentionMask, inputShape);
 
             // 3. Run inference
             using var results = Session.Run(inputs);
@@ -168,6 +158,51 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             }
 
             return new Vector<T>(values).Normalize();
+        }
+
+        /// <summary>
+        /// Builds the list of ONNX inputs for a sentence-transformer encode call.
+        /// </summary>
+        /// <param name="declaredInputs">The names of the inputs the loaded session declares (typically <c>Session.InputMetadata.Keys</c>).</param>
+        /// <param name="inputIds">Int64 token ids, shape [batch, seqLen].</param>
+        /// <param name="attentionMask">Int64 attention mask, same shape as <paramref name="inputIds"/>.</param>
+        /// <param name="inputShape">The [batch, seqLen] shape shared by every input tensor.</param>
+        /// <remarks>
+        /// input_ids is always supplied. attention_mask and token_type_ids are only
+        /// added when the session declares them, so models exported without them keep
+        /// working. token_type_ids is built here as an all-zeros int64 tensor with the
+        /// SAME shape as input_ids (single-sentence embedding → all segment 0). We do
+        /// NOT forward the tokenizer's TokenTypeIds, because some sentence-transformer
+        /// tokenizers return an empty TokenTypeIds array; feeding that as a length-0
+        /// tensor makes onnxruntime throw
+        /// "Length of memory (0) must match product of dimensions (seqLen)".
+        /// </remarks>
+        internal static List<NamedOnnxValue> BuildOnnxInputs(
+            ICollection<string> declaredInputs,
+            long[] inputIds,
+            long[] attentionMask,
+            int[] inputShape)
+        {
+            var inputs = new List<NamedOnnxValue>
+            {
+                NamedOnnxValue.CreateFromTensor("input_ids", new Microsoft.ML.OnnxRuntime.Tensors.DenseTensor<long>(inputIds, inputShape))
+            };
+
+            if (declaredInputs.Contains("attention_mask"))
+            {
+                inputs.Add(NamedOnnxValue.CreateFromTensor("attention_mask", new Microsoft.ML.OnnxRuntime.Tensors.DenseTensor<long>(attentionMask, inputShape)));
+            }
+
+            // Some models (e.g. all-MiniLM-L6-v2) declare token_type_ids. Build it as
+            // an all-zeros int64 tensor with the SAME shape as input_ids rather than
+            // forwarding a possibly-empty tokenizer array.
+            if (declaredInputs.Contains("token_type_ids"))
+            {
+                var tokenTypeIds = new long[inputIds.Length];
+                inputs.Add(NamedOnnxValue.CreateFromTensor("token_type_ids", new Microsoft.ML.OnnxRuntime.Tensors.DenseTensor<long>(tokenTypeIds, inputShape)));
+            }
+
+            return inputs;
         }
 
         private float[] ApplyMeanPooling(Microsoft.ML.OnnxRuntime.Tensors.Tensor<float> lastHiddenState, long[] attentionMask)

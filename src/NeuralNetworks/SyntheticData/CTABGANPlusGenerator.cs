@@ -338,18 +338,18 @@ public class CTABGANPlusGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        Tensor<T> prediction = Predict(input);
-        LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        Tensor<T> error = prediction.Subtract(expectedOutput);
-        UpdateNetworkParameters();
-    }
-
-    /// <summary>
-    /// Updates the parameters of all layers in the network based on computed gradients.
-    /// </summary>
-    private void UpdateNetworkParameters()
-    {
-        _optimizer.UpdateParameters(Layers);
+        // CTAB-GAN+ is trained adversarially through Fit() / FitAsync (alternating
+        // critic and generator updates with the auxiliary classifier and
+        // information loss). The NeuralNetworkBase supervised Train(input,
+        // expected) contract does not map onto a GAN's minimax objective —
+        // silently running a forward + loss but skipping every parameter
+        // update would report a misleading "training" loss while making zero
+        // learning progress, which is worse than failing fast.
+        throw new NotSupportedException(
+            "CTAB-GAN+ is trained adversarially; the supervised Train(input, expected) " +
+            "contract does not map onto its minimax objective. Use Fit(IEnumerable<Tensor<T>>) " +
+            "or FitAsync to drive the alternating discriminator/generator loop with the " +
+            "auxiliary classifier and information losses.");
     }
 
     /// <inheritdoc />

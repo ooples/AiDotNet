@@ -34,6 +34,7 @@ internal static class MixedPrecisionReflection
     private static MethodInfo? _traceMethod;
     private static MethodInfo? _stepMethod;
     private static MethodInfo? _stepAdamMethod;
+    private static MethodInfo? _computeGradientsMethod;
 
     /// <summary>Returns true when the Tensors assembly in scope publishes the
     /// mixed-precision API surface (Tensors #557 or later). When this returns
@@ -50,6 +51,21 @@ internal static class MixedPrecisionReflection
                 _probed = true;
                 return _planType is not null;
             }
+        }
+    }
+
+    /// <summary>Returns true when the Tensors assembly in scope publishes the
+    /// optimizer-agnostic <c>ComputeGradients</c> entry point (Tensors #574 or
+    /// later). Strictly stronger than <see cref="IsAvailable"/>: a build can have
+    /// the mixed-precision plan type (#557) without <c>ComputeGradients</c> (#574),
+    /// in which case the generic fused-optimizer FP16 path must fall back to the
+    /// regular FP32 compiled plan.</summary>
+    public static bool IsComputeGradientsAvailable
+    {
+        get
+        {
+            // Touch IsAvailable to guarantee the one-time probe has run.
+            return IsAvailable && _computeGradientsMethod is not null;
         }
     }
 
@@ -114,6 +130,24 @@ internal static class MixedPrecisionReflection
             _stepAdamMethod = m;
             break;
         }
+
+        // ComputeGradients(IReadOnlyList<Tensor<float>> parameters, GradScaler? scaler)
+        // returns an optimizer-agnostic GradientResult (Loss/FoundInfNan/Gradients)
+        // WITHOUT applying any update — Tensors #574, newer than the #557 plan type.
+        // A Tensors build can therefore expose MixedPrecisionCompiledPlan (so
+        // IsAvailable is true) yet predate ComputeGradients; gate the generic path
+        // on IsComputeGradientsAvailable, not IsAvailable. Bind by name + the
+        // 2-arg shape with the first parameter typed IReadOnlyList<Tensor<float>>
+        // (the GradScaler param isn't expressible as a typeof here).
+        foreach (var m in planType.GetMethods(BindingFlags.Public | BindingFlags.Instance))
+        {
+            if (m.Name != "ComputeGradients") continue;
+            var ps = m.GetParameters();
+            if (ps.Length != 2) continue;
+            if (ps[0].ParameterType != typeof(IReadOnlyList<Tensor<float>>)) continue;
+            _computeGradientsMethod = m;
+            break;
+        }
     }
 
     /// <summary>Trace a forward+loss thunk into a compiled mixed-precision plan.
@@ -172,6 +206,63 @@ internal static class MixedPrecisionReflection
         return ExtractLoss(result);
     }
 
+    /// <summary>Run the optimizer-agnostic mixed-precision gradient pass against a
+    /// previously-traced plan: forward + backward with FP16 activation storage,
+    /// returning the unscaled FP32 per-parameter gradients WITHOUT applying any
+    /// weight update. The returned <c>Gradients</c> list aligns 1:1 with
+    /// <paramref name="parameters"/> (an entry may be null when the tape produced
+    /// no gradient for that parameter). <c>FoundInfNan</c> is true when the scaler
+    /// detected overflow — the caller must then skip the optimizer step.</summary>
+    public static (float Loss, bool FoundInfNan, IReadOnlyList<Tensor<float>?> Gradients) ComputeGradients(
+        object plan, IReadOnlyList<Tensor<float>> parameters, object gradScaler)
+    {
+        if (plan is null) throw new ArgumentNullException(nameof(plan));
+        if (gradScaler is null) throw new ArgumentNullException(nameof(gradScaler));
+        MethodInfo? compute = _computeGradientsMethod;
+        if (compute is null)
+            throw new InvalidOperationException("Mixed-precision ComputeGradients API not available.");
+        object? result = compute.Invoke(plan, new object[] { parameters, gradScaler });
+        return ExtractGradientResult(result);
+    }
+
+    /// <summary>Extract (Loss, FoundInfNan, Gradients) from the boxed <c>GradientResult</c>
+    /// struct returned by <c>ComputeGradients</c>. The exact struct layout isn't known at
+    /// compile time (the type lives in the probed Tensors assembly), so read each member by
+    /// name, tolerating either a property or a field.</summary>
+    private static (float Loss, bool FoundInfNan, IReadOnlyList<Tensor<float>?> Gradients) ExtractGradientResult(object? result)
+    {
+        if (result is null) return (0f, false, System.Array.Empty<Tensor<float>?>());
+        Type t = result.GetType();
+
+        // Accept float OR double Loss: the current API returns float, but a future
+        // Tensors build could widen it to double — narrow rather than silently 0.
+        float loss = 0f;
+        object? lossVal = t.GetProperty("Loss")?.GetValue(result) ?? t.GetField("Loss")?.GetValue(result);
+        if (lossVal is float lf) loss = lf;
+        else if (lossVal is double ld) loss = (float)ld;
+
+        bool foundInfNan = false;
+        object? nanVal = t.GetProperty("FoundInfNan")?.GetValue(result) ?? t.GetField("FoundInfNan")?.GetValue(result);
+        if (nanVal is bool nb) foundInfNan = nb;
+
+        IReadOnlyList<Tensor<float>?> grads = System.Array.Empty<Tensor<float>?>();
+        object? gradsVal = t.GetProperty("Gradients")?.GetValue(result) ?? t.GetField("Gradients")?.GetValue(result);
+        if (gradsVal is IReadOnlyList<Tensor<float>?> typed)
+        {
+            grads = typed;
+        }
+        else if (gradsVal is System.Collections.IEnumerable seq)
+        {
+            // Defensive: if the published list element type differs (e.g. non-nullable
+            // Tensor<float>), copy element-wise into the nullable-typed list we expose.
+            var list = new List<Tensor<float>?>();
+            foreach (object? item in seq) list.Add(item as Tensor<float>);
+            grads = list;
+        }
+
+        return (loss, foundInfNan, grads);
+    }
+
     /// <summary>Extract the loss from the boxed result of a Step / StepAdam invocation.
     /// The result is either a <c>float</c> directly or a result-struct exposing a
     /// <c>Loss</c> property/field; handle both shapes so we don't have to know the
@@ -180,19 +271,29 @@ internal static class MixedPrecisionReflection
     {
         if (result is null) return 0f;
         if (result is float f) return f;
+        if (result is double dd) return (float)dd;
         Type resultType = result.GetType();
         PropertyInfo? lossProp = resultType.GetProperty("Loss");
         if (lossProp is not null)
         {
             object? val = lossProp.GetValue(result);
-            return val is float fv ? fv : 0f;
+            return AsFloat(val);
         }
         FieldInfo? lossField = resultType.GetField("Loss");
         if (lossField is not null)
         {
             object? val = lossField.GetValue(result);
-            return val is float fv ? fv : 0f;
+            return AsFloat(val);
         }
         return 0f;
     }
+
+    /// <summary>Narrow a boxed loss scalar to float, accepting either float or double
+    /// (the API returns float today, but tolerate a future double widening).</summary>
+    private static float AsFloat(object? val) => val switch
+    {
+        float fv => fv,
+        double dv => (float)dv,
+        _ => 0f,
+    };
 }

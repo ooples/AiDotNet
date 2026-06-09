@@ -310,7 +310,8 @@ public class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
         {
             Name = _useNativeMode ? "Kokoro-Native" : "Kokoro-ONNX",
             Description = "Kokoro: Lightweight StyleTTS2-inspired TTS with ISTFTNet (Hexgrad, 2024)",
-            FeatureCount = _options.HiddenDim
+            FeatureCount = _options.HiddenDim,
+            AdditionalInfo = new Dictionary<string, object> { ["HiddenDim"] = _options.HiddenDim, ["Mode"] = _useNativeMode ? "Native" : "ONNX" }
         };
     }
 
