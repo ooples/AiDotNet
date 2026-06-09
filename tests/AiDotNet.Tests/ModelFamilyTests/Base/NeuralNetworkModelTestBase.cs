@@ -240,15 +240,27 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     }
 
     /// <summary>
-    /// True when the model under test is a detection BACKBONE (<see cref="IDetectionBackbone{T}"/>).
-    /// These don't train standalone — their <c>Train()</c> throws by design ("detection backbones
-    /// train as part of a parent detector") and they expose feature maps via
-    /// <c>ExtractFeatures</c> rather than a flat <c>Layers</c> list — so the standalone-training and
-    /// layer-introspection invariants below are not applicable. Inference invariants (forward
-    /// finiteness, determinism, different-inputs-different-outputs) still run and assert normally.
+    /// True when the model under test does not use the supervised
+    /// <c>NeuralNetworkBase.Train(input, expected)</c> gradient-descent contract that the
+    /// training invariants below probe, so those invariants are not applicable:
+    /// <list type="bullet">
+    /// <item><description>Detection BACKBONES (<see cref="IDetectionBackbone{T}"/>) don't train
+    /// standalone — their <c>Train()</c> throws by design ("detection backbones train as part of a
+    /// parent detector") and they expose feature maps via <c>ExtractFeatures</c> rather than a flat
+    /// <c>Layers</c> list.</description></item>
+    /// <item><description>Synthetic tabular generators (<see cref="ISyntheticTabularGenerator{T}"/>)
+    /// — CTGAN/CopulaGAN/CTAB-GAN+/TVAE/diffusion-table models, etc. — train through their own
+    /// <c>Fit()</c> pipeline (adversarial minimax, VAE ELBO, diffusion denoising, or a statistical
+    /// copula fit), NOT a supervised MSE gradient step. Their real training is covered by the
+    /// SyntheticTabularGenerator integration tests (Fit → Generate). The supervised
+    /// <c>Train(input, expected)</c> path is a NeuralNetworkBase compatibility no-op for them.</description></item>
+    /// </list>
+    /// Inference invariants (forward finiteness, determinism, different-inputs-different-outputs)
+    /// still run and assert normally.
     /// </summary>
     protected static bool TrainingInvariantsNotApplicable(INeuralNetworkModel<T> network)
-        => network is AiDotNet.Interfaces.IDetectionBackbone<T>;
+        => network is AiDotNet.Interfaces.IDetectionBackbone<T>
+        || network is AiDotNet.Interfaces.ISyntheticTabularGenerator<T>;
 
     // =====================================================
     // MATHEMATICAL INVARIANT: Training Should Reduce Loss
@@ -808,11 +820,29 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
-        if (TrainingInvariantsNotApplicable(network)) return;
-        var input = CreateRandomTensor(InputShape, rng);
-        var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
-        network.Train(input, target);
-        Assert.NotNull(network.GetModelMetadata());
+        // Metadata assertion runs for every model, training-applicable or not:
+        // GetModelMetadata() doesn't depend on the supervised-training contract,
+        // it should populate at construction / first forward. Train() can still
+        // be called when applicable (some models populate richer metadata post-
+        // training) but is skipped for models where Train() is unsupported
+        // (e.g., synthetic tabular generators that train through Fit() and now
+        // throw on Train(input, expected)).
+        if (!TrainingInvariantsNotApplicable(network))
+        {
+            var input = CreateRandomTensor(InputShape, rng);
+            var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
+            network.Train(input, target);
+        }
+        var metadata = network.GetModelMetadata();
+        Assert.NotNull(metadata);
+        // Catch models that override GetModelMetadata to return an empty shell
+        // (e.g. `new ModelMetadata<T>()` with no fields set). The canonical
+        // pattern populates AdditionalInfo with at least InputShape /
+        // OutputShape / hyperparameters; an empty dictionary here means the
+        // model is silently failing to report any actual metadata.
+        Assert.NotNull(metadata.AdditionalInfo);
+        Assert.NotEmpty(metadata.AdditionalInfo);
+        Assert.NotNull(metadata.ModelData);
     }
 
     [Fact(Timeout = 120000)]
@@ -831,7 +861,12 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
-        if (TrainingInvariantsNotApplicable(network)) return;
+        // This invariant tests INFERENCE-side activations (GetNamedLayerActivations
+        // never calls Train), so it doesn't depend on the supervised-training
+        // contract. The previous TrainingInvariantsNotApplicable opt-out was too
+        // broad — it suppressed this and Metadata_ShouldExist for synthetic
+        // tabular generators when those models genuinely should produce named
+        // layer activations from a forward pass.
         var input = CreateRandomTensor(InputShape, rng);
 
         var activations = network.GetNamedLayerActivations(input);

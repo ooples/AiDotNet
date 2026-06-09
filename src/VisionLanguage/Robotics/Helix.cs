@@ -126,6 +126,16 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         _tokenEmbedding = new EmbeddingLayer<T>(_options.VocabSize, _options.DecoderDim);
         InitializeLayers();
+
+        // Stream / offload Helix's ~6.7B paper-scale weights when the caller opts
+        // in. At double precision the full chain otherwise holds ~54 GB of weights
+        // resident; a training step then needs grad + Adam moments on top, which
+        // exceeds a typical box. Per HelixOptions.WeightOffloadOptions contract:
+        // non-null is honoured as-is; null keeps weights resident.
+        if (_options.WeightOffloadOptions is { } callerOffload)
+        {
+            ConfigureWeightLifetime(callerOffload);
+        }
     }
 
     public int EmbeddingDimension => _options.DecoderDim;
@@ -300,6 +310,13 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         IActivationFunction<T> gelu = new GELUActivation<T>();
         int s1Dim = _options.System1HiddenDim;
         int s1FfnDim = s1Dim * 4;
+        // The System-2 latent head emits System2LatentDim features, but System-1
+        // runs at System1HiddenDim. Project the latent into S1's embedding width
+        // so the first S1 attention sees a dimensionally-consistent input — paper
+        // §3.3: S1 is conditioned on the S2 latent, which must be mapped into S1's
+        // space. Without this projection the flat layer chain feeds a 512-d latent
+        // into a 384-d attention and the forward throws on a shape mismatch.
+        Layers.Add(new DenseLayer<T>(s1Dim, identity));
         for (int i = 0; i < _options.System1NumLayers; i++)
         {
             Layers.Add(new MultiHeadAttentionLayer<T>(_options.System1NumHeads, s1Dim / Math.Max(1, _options.System1NumHeads)));

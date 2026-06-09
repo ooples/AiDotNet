@@ -78,6 +78,21 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>, Fused.IFusedAct
     }
 
     /// <summary>
+    /// Initializes a new instance of the Leaky ReLU activation function with the
+    /// default slope (alpha = 0.01).
+    /// </summary>
+    /// <remarks>
+    /// An explicit parameterless constructor is required so the layer
+    /// (de)serialization layer, which reflectively reconstructs activation
+    /// functions via <see cref="System.Activator"/>, can recreate this activation
+    /// on a clone / load round-trip. A constructor with an all-defaulted parameter
+    /// is not treated as parameterless by <c>Activator.CreateInstance(Type)</c>.
+    /// </remarks>
+    public LeakyReLUActivation() : this(0.01)
+    {
+    }
+
+    /// <summary>
     /// Indicates whether this activation function can operate on individual scalar values.
     /// </summary>
     /// <returns>Always returns true as the Leaky ReLU function can be applied to individual values.</returns>
