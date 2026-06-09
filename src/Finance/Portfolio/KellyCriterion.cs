@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -21,9 +22,22 @@ namespace AiDotNet.Finance.Portfolio;
 /// don't take the trade."</para>
 /// </remarks>
 /// <typeparam name="T">Numeric type (float/double).</typeparam>
-public static class KellyCriterion<T>
+/// <remarks>
+/// Implements <see cref="IPositionSizer{T}"/> so it can be injected as the default, swappable sizing
+/// strategy into trading/portfolio models; the static methods remain available for direct use.
+/// </remarks>
+public class KellyCriterion<T> : IPositionSizer<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>Shared stateless default instance for injection as an <see cref="IPositionSizer{T}"/>.</summary>
+    public static IPositionSizer<T> Default { get; } = new KellyCriterion<T>();
+
+    // Explicit IPositionSizer<T> members delegate to the static implementations.
+    T IPositionSizer<T>.Discrete(T winProbability, T winLossRatio) => Discrete(winProbability, winLossRatio);
+    T IPositionSizer<T>.Continuous(T expectedReturn, T variance) => Continuous(expectedReturn, variance);
+    T IPositionSizer<T>.Fractional(T baseFraction, double fraction) => Fractional(baseFraction, fraction);
+    T IPositionSizer<T>.FromReturns(IEnumerable<T> returns, double fraction) => FromReturns(returns, fraction);
 
     /// <summary>
     /// Discrete Kelly fraction: f* = p − (1 − p) / b, where <paramref name="winProbability"/> is p and

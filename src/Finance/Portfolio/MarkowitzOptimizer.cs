@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -24,9 +25,24 @@ namespace AiDotNet.Finance.Portfolio;
 /// hits a return you specify. All three allow negative weights (short selling) and sum to 100%.</para>
 /// </remarks>
 /// <typeparam name="T">Numeric type (float/double).</typeparam>
-public static class MarkowitzOptimizer<T>
+/// <remarks>
+/// Implements <see cref="IMeanVarianceOptimizer{T}"/> so the closed-form solver can be injected as the
+/// default, swappable analytic optimizer (e.g. as a baseline alongside the neural
+/// <see cref="IPortfolioOptimizer{T}"/> family); the static methods remain available for direct use.
+/// </remarks>
+public class MarkowitzOptimizer<T> : IMeanVarianceOptimizer<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>Shared stateless default instance for injection as an <see cref="IMeanVarianceOptimizer{T}"/>.</summary>
+    public static IMeanVarianceOptimizer<T> Default { get; } = new MarkowitzOptimizer<T>();
+
+    // Explicit IMeanVarianceOptimizer<T> members delegate to the static closed forms.
+    Vector<T> IMeanVarianceOptimizer<T>.MinimumVariance(Matrix<T> covariance) => MinimumVariance(covariance);
+    Vector<T> IMeanVarianceOptimizer<T>.Tangency(Vector<T> expectedReturns, Matrix<T> covariance, T riskFreeRate)
+        => Tangency(expectedReturns, covariance, riskFreeRate);
+    Vector<T> IMeanVarianceOptimizer<T>.TargetReturn(Vector<T> expectedReturns, Matrix<T> covariance, T targetReturn)
+        => TargetReturn(expectedReturns, covariance, targetReturn);
 
     /// <summary>
     /// Global minimum-variance portfolio: w = (Σ⁻¹·1) / (1ᵀ·Σ⁻¹·1). The fully-invested (weights sum to 1)

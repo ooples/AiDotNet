@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -19,9 +20,25 @@ namespace AiDotNet.Finance.Risk;
 /// worst peak-to-trough drawdown. Higher is better for all three.</para>
 /// </remarks>
 /// <typeparam name="T">Numeric type (float/double).</typeparam>
-public static class RiskRatios<T>
+/// <remarks>
+/// Implements <see cref="IRiskRatioCalculator{T}"/> so it can be injected as the default, swappable
+/// risk-scoring strategy into risk models, backtests, and trading agents; the static methods remain
+/// available for direct use.
+/// </remarks>
+public class RiskRatios<T> : IRiskRatioCalculator<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>Shared stateless default instance for injection as an <see cref="IRiskRatioCalculator{T}"/>.</summary>
+    public static IRiskRatioCalculator<T> Default { get; } = new RiskRatios<T>();
+
+    // Explicit IRiskRatioCalculator<T> members delegate to the static implementations.
+    T IRiskRatioCalculator<T>.Sharpe(IReadOnlyList<T> returns, double riskFreePerPeriod, int periodsPerYear)
+        => Sharpe(returns, riskFreePerPeriod, periodsPerYear);
+    T IRiskRatioCalculator<T>.Sortino(IReadOnlyList<T> returns, double riskFreePerPeriod, int periodsPerYear)
+        => Sortino(returns, riskFreePerPeriod, periodsPerYear);
+    T IRiskRatioCalculator<T>.Calmar(IReadOnlyList<T> returns, int periodsPerYear)
+        => Calmar(returns, periodsPerYear);
 
     /// <summary>Validates the shared external inputs of every ratio.</summary>
     private static void Validate(IReadOnlyList<T> returns, int periodsPerYear)
