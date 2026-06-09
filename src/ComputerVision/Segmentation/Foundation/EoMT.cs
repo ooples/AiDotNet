@@ -248,7 +248,9 @@ public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
             throw new InvalidOperationException(
                 "Training is not supported in ONNX mode. Use the native mode constructor for training.");
 
-        if (input.Shape.Length < 4) throw new ArgumentException($"Tape-based training requires rank >= 4, got rank {input.Shape.Length}. Reshape to [batch, channels, height, width].", nameof(input));
+        if (input.Shape.Length == 3) input = AddBatchDimension(input);
+        if (expectedOutput.Shape.Length == 3) expectedOutput = AddBatchDimension(expectedOutput);
+        if (input.Shape.Length < 4) throw new ArgumentException($"Tape-based training requires rank >= 3 (CHW) or 4 (NCHW), got rank {input.Shape.Length}.", nameof(input));
         SetTrainingMode(true);
         try
         {
