@@ -2,6 +2,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -121,7 +122,32 @@ public class SwinUNETR<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numClasses = numClasses; _modelSize = modelSize; _dropRate = dropRate;
         _useNativeMode = true; _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Per Hatamizadeh 2022 §4.2 ("Training Setup"): AdamW with initial
+        // learning rate 8e-4 decayed via cosine schedule over 40k iters
+        // with weight decay 1e-5. The library's default optimizer (Adam,
+        // lr=1e-3, no schedule) oscillates around the loss minimum on
+        // single-batch memorization probes — the gradient never goes to
+        // zero on a constant batch, so a momentum-based step keeps
+        // bouncing the params around the minimum, producing the
+        // "200 iters > 50 iters" failure pattern in
+        // MoreData_ShouldNotDegrade. Wiring the paper-faithful cosine
+        // decay drops LR smoothly toward zero, which kills the
+        // oscillation at saturation regardless of dataset size, so the
+        // invariant holds for both real training and single-batch
+        // probes. tMax is set to a generous bound (5000 iters); the
+        // scheduler clamps to tMax for behaviour beyond completion.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 0.0008,
+                LearningRateScheduler =
+                    new AiDotNet.LearningRateSchedulers.CosineAnnealingLRScheduler(
+                        baseLearningRate: 0.0008,
+                        tMax: 5000,
+                        etaMin: 0.0),
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch,
+                WeightDecay = 1e-5,
+            });
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
         InitializeLayers();
     }
