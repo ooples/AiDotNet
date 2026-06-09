@@ -1182,6 +1182,15 @@ public partial class LSTMLayer<T> : LayerBase<T>
 
         var currentH = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
         var currentC = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
+        // TensorAllocator.Rent returns POOLED memory that is not zero-initialized.
+        // currentH/currentC are the initial hidden/cell state (h0/c0) consumed at
+        // t=0 before being overwritten, so they MUST be zeroed — otherwise the
+        // sequence starts from leftover pool garbage. That garbage is consistent
+        // within one instance (hence deterministic per model) but differs across
+        // instances, so a clone with identical weights produced a different output
+        // (Clone_ShouldProduceIdenticalOutput). Standard LSTM init is h0 = c0 = 0.
+        currentH.Fill(NumOps.Zero);
+        currentC.Fill(NumOps.Zero);
 
         // Pre-transpose weights for efficiency
         var WfiT = Engine.TensorTranspose(_weightsFi);

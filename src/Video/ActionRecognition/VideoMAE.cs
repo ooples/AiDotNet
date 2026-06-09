@@ -354,6 +354,29 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// VideoMAE's forward is the tubelet patch-embedding + transformer encoder
+    /// in <see cref="EncodeVideo"/>/<see cref="ClassifyAction"/>, not a
+    /// sequential pass over the flat <c>Layers</c> list (Layers[0] is the
+    /// tubelet conv that consumes channels*tubeletSize input; the remaining
+    /// layers operate on pooled features and the classification head). The
+    /// base <see cref="NeuralNetworkBase{T}.ForwardForTraining"/> runs the
+    /// layers in order and feeds the raw 5-D video straight into a transformer
+    /// block. Route the training forward through the real graph so the tape
+    /// records the actual operations.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        // Train on raw logits, not the post-softmax probabilities ClassifyAction
+        // returns: this model is wired with CrossEntropyWithLogitsLoss<T>, which
+        // applies softmax internally. Feeding probabilities into the loss would
+        // double-normalize the head and produce wrong gradients on every step.
+        // Inference (ClassifyAction) keeps the softmax; training drops it.
+        var features = EncodeVideo(input);
+        return ClassificationForward(features);
+    }
+
+    /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode)
@@ -383,7 +406,11 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
             return RunOnnxInference(video);
         }
 
-        // Reshape video to batch of frame pairs
+        int batchSize = video.Shape[0];
+        int numTubelets = video.Shape[1] / _tubeletSize;
+
+        // Reshape video to batch of frame pairs. PatchEmbed folds the tubelet
+        // axis into the leading dim, producing [batchSize * numTubelets, ...].
         var patchEmbedded = PatchEmbed(video);
 
         // Apply encoder blocks
@@ -395,8 +422,52 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
             features = ApplyGELU(features);
         }
 
-        // Global average pool for features
-        return GlobalAveragePool(features);
+        // Spatial global average pool: [B * numTubelets, C, 1, 1].
+        var pooled = GlobalAveragePool(features);
+
+        // Temporal pool: collapse the tubelet axis that PatchEmbed folded into
+        // the batch dimension back down so the result is grouped per input
+        // video ([batchSize, C, 1, 1]). Without this, downstream
+        // RemoveBatchDimension assumes a leading dim of 1 and throws
+        // "Destination is too short" whenever numFrames > tubeletSize (i.e.
+        // numTubelets > 1), and the classification head produced one logit row
+        // per tubelet instead of one per video.
+        return PoolTubelets(pooled, batchSize, numTubelets);
+    }
+
+    /// <summary>
+    /// Averages the per-tubelet feature rows that <see cref="PatchEmbed"/>
+    /// folded into the batch dimension back down to one row per input video.
+    /// </summary>
+    /// <param name="pooled">Spatially pooled features of shape
+    /// [batchSize * numTubelets, channels, 1, 1].</param>
+    /// <param name="batchSize">Number of input videos.</param>
+    /// <param name="numTubelets">Tubelets per video.</param>
+    /// <returns>Temporally pooled features [batchSize, channels, 1, 1].</returns>
+    private Tensor<T> PoolTubelets(Tensor<T> pooled, int batchSize, int numTubelets)
+    {
+        if (numTubelets <= 1)
+        {
+            return pooled;
+        }
+
+        // Express the temporal pooling as engine tensor ops so the operation
+        // stays on the autodiff tape. The previous scalar-read/write loop
+        // (sum-then-write per element) severed the gradient path: the classifier
+        // loss stopped at PoolTubelets and never reached the encoder weights,
+        // leaving the video encoder frozen across training. The reshape +
+        // reduce-along-axis form below records as tape-tracked ops on the
+        // forward pass and produces the same numeric values.
+        int channels = pooled.Shape[1];
+
+        // Reshape [B*T, C, 1, 1] -> [B, T, C] so we can mean over axis 1 (T) via the
+        // engine's ReduceMean (tape-aware). The Reshape -> ReduceMean -> Reshape chain
+        // is all engine ops, so the gradient flows from the classifier head back
+        // through the pooled features and into the tubelet encoder.
+        var reshaped = Engine.Reshape(pooled, new[] { batchSize, numTubelets, channels });
+        var meanBC = Engine.ReduceMean(reshaped, new[] { 1 }, keepDims: false);  // [B, C]
+        // Restore the [B, C, 1, 1] output shape the caller expects.
+        return Engine.Reshape(meanBC, new[] { batchSize, channels, 1, 1 });
     }
 
     private Tensor<T> PatchEmbed(Tensor<T> video)

@@ -106,7 +106,6 @@
          over input channels at batch=1 instead of collapsing to serial). This is
          the Tensors-side lever #1463 called for; the memory/OOM half is handled by
          the cache-clearing + diffusion re-shard in this PR (#1485).
-
          Bumped Tensors 0.91.2 -> 0.91.11 (latest PUBLISHED on nuget.org) for the
          GPU-resident optimizer step (host-read-free Adam for cudaGraph capture) that
          this PR (#1501) depends on, plus the proximal-L1 (ISTA) and 8-bit Adam GPU
@@ -115,9 +114,15 @@
          TensorAllocator.RentPinnedOnGpu, QuantizedTapeState GPU buffers) is all present
          in 0.91.11 and the solution builds clean against it; the device-side CUDA
          kernels are exercised only under AIDOTNET_GPU_ADAM=1 on a real GPU (off in CI).
-         Do NOT pin an unpublished version (0.91.14/0.91.16/0.91.36 broke restore with
-         NU1102); re-bump once a newer Tensors is actually released. The AiDotNet.Native
-         packages stay at 0.91.2 (no native change needed).
+         Do NOT pin an unpublished version (0.91.14/0.91.16/0.91.36/0.92.0 broke restore
+         with NU1102); re-bump once a newer Tensors is actually released. The
+         AiDotNet.Native packages bump with the Tensors lockstep when available.
+
+         Bumped 0.91.12 -> 0.92.0: ships BOTH Tensors #564 (memory-bounded gradient-
+         streaming core — this PR's streaming-training path) and Tensors #574 (FP16
+         optimizer-agnostic MixedPrecisionCompiledPlan.ComputeGradients — the
+         all-fused-optimizer FP16 path). AiDotNet.Native packages coreleased in lockstep
+         at 0.92.0. -->
 
          Bumped 0.91.12 -> 0.92.1 for the matmul fallback-path correctness fix this PR
          depends on: Tensors #575 (zero the result buffer before the accumulating
