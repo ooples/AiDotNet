@@ -558,6 +558,11 @@ public class LoRADeepMathIntegrationTests
         int size = 1024;
         int rank = 8;
         var baseLayer = new DenseLayer<double>(size);
+        // Resolve the lazy DenseLayer's InputShape before wrapping so the
+        // adapter's ParameterCount reflects the real LoRA rank
+        // (size*rank + rank*size) instead of falling back to a larger
+        // pre-resolution estimate.
+        baseLayer.ResolveFromShape(new[] { size });
         var adapter = new StandardLoRAAdapter<double>(baseLayer, rank, freezeBaseLayer: true);
 
         int fullWeights = size * size;
