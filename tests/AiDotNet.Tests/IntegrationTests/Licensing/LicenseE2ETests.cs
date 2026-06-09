@@ -7,6 +7,7 @@ using AiDotNet.Regression;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System.Threading.Tasks;
+using AiDotNet.Tests.Helpers;
 
 namespace AiDotNet.Tests.IntegrationTests.Licensing;
 
@@ -18,7 +19,7 @@ namespace AiDotNet.Tests.IntegrationTests.Licensing;
 /// These tests validate the full chain without a live server by simulating the key registration
 /// response format and then exercising the library's persistence pipeline.
 /// </remarks>
-[Collection("LicensingTests")]
+[Collection("License")]
 public class LicenseE2ETests : IDisposable
 {
     private readonly string? _originalEnvVar;
@@ -64,7 +65,7 @@ public class LicenseE2ETests : IDisposable
     {
         // Step 1: Simulate receiving a community license key from the register-community-license
         // Edge Function. The response shape is: { success: true, license_key: "aidn.xxx.yyy", tier: "community" }
-        var communityKey = "aidn.comm12345678.abcdefghijklmnop";
+        var communityKey = LicenseTestSupport.SignedKey("comm12345678");
 
         // Step 2: Set the key via environment variable (one of the three resolution methods)
         Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", communityKey);
@@ -108,7 +109,7 @@ public class LicenseE2ETests : IDisposable
         ClearAllLicenseSources();
 
         // Step 1: Simulate writing a community key to the license file (as the website would instruct)
-        var communityKey = "aidn.filekey12345.zyxwvutsrqponmlk";
+        var communityKey = LicenseTestSupport.SignedKey("filekey12345");
 
         string dir = Path.GetDirectoryName(_licenseFilePath)!;
         if (!Directory.Exists(dir))
@@ -144,7 +145,7 @@ public class LicenseE2ETests : IDisposable
         ClearAllLicenseSources();
 
         // Step 1: Create an explicit license key object (as a paid customer would)
-        var licenseKey = new AiDotNetLicenseKey("aidn.pro123456789.abcdefghijklmnop")
+        var licenseKey = new AiDotNetLicenseKey(LicenseTestSupport.SignedKey("pro123456789"))
         {
             ServerUrl = string.Empty, // offline-only for test
         };
@@ -231,7 +232,7 @@ public class LicenseE2ETests : IDisposable
                     builder.SerializeModel(result));
 
                 // Step 5: Add a license key — should immediately unblock
-                Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.rescue12345.abcdefghijklmnop");
+                Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", LicenseTestSupport.SignedKey("rescue12345"));
 
                 byte[] serialized2 = builder.SerializeModel(result);
                 Assert.True(serialized2.Length > 0, "Licensed serialize should succeed after trial exhaustion");
@@ -288,11 +289,13 @@ public class LicenseE2ETests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task E2E_ValidKeyFormat_AcceptedByOfflineValidator()
     {
+        // Post-fail-closed: a valid FORMAT alone is no longer accepted offline — the signature must
+        // verify against the embedded build key. These are genuinely signed keys, so they're accepted.
         var validKeys = new[]
         {
-            "aidn.abc123def456.ghijklmnopqrstuv",
-            "aidn.a.b",
-            "aidn.community123.longersignature1",
+            LicenseTestSupport.SignedKey("abc123def456"),
+            LicenseTestSupport.SignedKey("community123"),
+            LicenseTestSupport.SignedKey("anothervalidid"),
         };
 
         foreach (var key in validKeys)
@@ -384,16 +387,10 @@ public class LicenseE2ETests : IDisposable
     /// </summary>
     private static void AssertOfflineValidationStatus(LicenseValidationResult result)
     {
-        if (BuildKeyProvider.IsOfficialBuild)
-        {
-            // Official builds enforce HMAC — unsigned test keys should be rejected
-            Assert.Equal(LicenseKeyStatus.Invalid, result.Status);
-        }
-        else
-        {
-            // Dev/CI builds without a build key only check format — valid format passes
-            Assert.Equal(LicenseKeyStatus.Active, result.Status);
-        }
+        // Tests now pass genuinely HMAC-signed keys (LicenseTestSupport.SignedKey) and the License
+        // collection fixture injects the build key, so offline validation verifies the signature and
+        // returns Active. (Pre-fail-closed this branched on IsOfficialBuild because the keys were unsigned.)
+        Assert.Equal(LicenseKeyStatus.Active, result.Status);
     }
 
     private static AiModelResult<double, Matrix<double>, Vector<double>> TrainSimpleModel()
