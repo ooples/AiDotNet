@@ -2385,8 +2385,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 else
                 {
                     int specChannels = SpectralConv1DVocoderOutputChannels(model.ClassName);
-                    sb.AppendLine("    protected override int[] InputShape => new[] { 1, 80, 1 };");
-                    sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 1, {specChannels}, 256 }};");
+                    // Spectral vocoders (513-channel conv_post) need more than a single
+                    // mel frame for MoreData_ShouldNotDegrade to train stably — 1 frame
+                    // -> 256 samples is an underdetermined mapping. Use T=2 (-> 512
+                    // output); waveform vocoders (1 channel) are fine at T=1.
+                    int inT = specChannels > 1 ? 2 : 1;
+                    sb.AppendLine($"    protected override int[] InputShape => new[] {{ 1, 80, {inT} }};");
+                    sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 1, {specChannels}, {inT * 256} }};");
                 }
             }
             else if (IsTextToMelTTS(model.ClassName))
