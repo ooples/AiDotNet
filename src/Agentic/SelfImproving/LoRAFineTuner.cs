@@ -1,6 +1,9 @@
+using AiDotNet.Agentic.Models.Local;
 using AiDotNet.FineTuning;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors;
 
 namespace AiDotNet.Agentic.SelfImproving;
 
@@ -44,5 +47,52 @@ public static class LoRAFineTuner
 
         var trainingData = FineTuningDataConverter.ToSupervisedData<T>(dataset);
         return fineTuner.FineTuneAsync(model, trainingData, cancellationToken);
+    }
+
+    /// <summary>
+    /// Trains a <em>tensor</em> model end-to-end on a reward-filtered dataset: the dataset text is tokenized
+    /// into next-token tensor supervision (via <see cref="TextTensorDatasetConverter"/>) and the model is
+    /// trained on it for the given number of epochs using the network's own supervised training path
+    /// (<see cref="NeuralNetworkBase{T}.Train"/>). This is the runnable path for AiDotNet's own language models
+    /// — the string overload suits text-native models, but a tensor model needs tokenization in front, which
+    /// this provides, and it drives the verified per-example training loop rather than the generic
+    /// gradient-vector path.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="model">The tensor language model to train (updated in place).</param>
+    /// <param name="tokenizer">The tokenizer used to encode the dataset text.</param>
+    /// <param name="vocabSize">The model's vocabulary size (one-hot width).</param>
+    /// <param name="sequenceLength">The fixed token window length per example.</param>
+    /// <param name="dataset">The reward-filtered dataset.</param>
+    /// <param name="epochs">The number of passes over the dataset.</param>
+    /// <param name="cancellationToken">Token used to cancel training.</param>
+    /// <returns>The trained model (the same instance).</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="model"/>, <paramref name="tokenizer"/>, or <paramref name="dataset"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="epochs"/> is not positive.</exception>
+    public static NeuralNetworkBase<T> TrainTensorModelOnDataset<T>(
+        NeuralNetworkBase<T> model,
+        IGenerationTokenizer tokenizer,
+        int vocabSize,
+        int sequenceLength,
+        FineTuningDataset dataset,
+        int epochs,
+        CancellationToken cancellationToken = default)
+    {
+        Guard.NotNull(model);
+        Guard.NotNull(tokenizer);
+        Guard.NotNull(dataset);
+        Guard.Positive(epochs);
+
+        var data = TextTensorDatasetConverter.ToTensorData<T>(dataset, tokenizer, vocabSize, sequenceLength);
+        for (var epoch = 0; epoch < epochs; epoch++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            for (var i = 0; i < data.Count; i++)
+            {
+                model.Train(data.Inputs[i], data.Outputs[i]);
+            }
+        }
+
+        return model;
     }
 }

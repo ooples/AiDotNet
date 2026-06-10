@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using AiDotNet.Agentic.Models;
+using AiDotNet.Agentic.Models.Local;
 using AiDotNet.Agentic.SelfImproving;
 using AiDotNet.Enums;
 using AiDotNet.FineTuning;
@@ -12,6 +13,9 @@ using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors;
+using AiDotNet.Tensors.Engines;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
@@ -56,6 +60,86 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
             Assert.NotNull(tuner.LastData);
             Assert.Equal(2, tuner.LastData?.Count);             // converted data reached the fine-tuner
             Assert.True(tuner.LastData?.HasSFTData == true);
+        }
+
+        [Fact(Timeout = 180000)]
+        public async Task TensorBridge_EndToEnd_ReducesLoss_OnRealMamba()
+        {
+            // End-to-end CPU-verifiable self-improvement: tokenize a reward-filtered dataset into next-token
+            // tensor supervision and actually fine-tune a real (tiny) Mamba model. Training must reduce the
+            // dataset loss — proving the loop runs, not just that the bridge forwards data.
+            const int vocab = 16;
+            const int seqLen = 6;
+
+            var priorEngine = AiDotNetEngine.Current;
+            AiDotNetEngine.Current = new CpuEngine();
+            try
+            {
+                var arch = new NeuralNetworkArchitecture<double>(
+                    InputType.OneDimensional, NeuralNetworkTaskType.TextGeneration, inputSize: vocab, outputSize: vocab);
+                var model = new MambaLanguageModel<double>(
+                    arch, vocabSize: vocab, modelDimension: 16, numLayers: 1, stateDimension: 4, maxSeqLength: seqLen);
+
+                // A small, repetitive dataset so the tiny model has a clear pattern to fit.
+                var dataset = new FineTuningDataset(new[]
+                {
+                    new FineTuningExample("two plus two", "is four", 1.0),
+                    new FineTuningExample("three plus three", "is six", 1.0),
+                    new FineTuningExample("two plus two", "is four", 0.9),
+                    new FineTuningExample("three plus three", "is six", 0.9),
+                });
+
+                var tokenizer = new BoundedTokenizer(vocab);
+
+                // Train one epoch and record the early loss, then train many more and record the late loss.
+                LoRAFineTuner.TrainTensorModelOnDataset<double>(model, tokenizer, vocab, seqLen, dataset, epochs: 1);
+                var earlyLoss = Convert.ToDouble(model.GetLastLoss());
+
+                LoRAFineTuner.TrainTensorModelOnDataset<double>(model, tokenizer, vocab, seqLen, dataset, epochs: 60);
+                var lateLoss = Convert.ToDouble(model.GetLastLoss());
+
+                Assert.True(lateLoss < earlyLoss,
+                    $"Training did not reduce loss: early={earlyLoss:G6}, late={lateLoss:G6}");
+            }
+            finally
+            {
+                AiDotNetEngine.Current = priorEngine;
+            }
+        }
+
+        // Deterministic whitespace tokenizer whose ids stay within the model's vocabulary.
+        private sealed class BoundedTokenizer : IGenerationTokenizer
+        {
+            private readonly int _vocab;
+
+            public BoundedTokenizer(int vocab) => _vocab = vocab;
+
+            public int EosTokenId => -1;
+
+            public IReadOnlyList<int> Encode(string text)
+            {
+                var ids = new List<int>();
+                foreach (var word in text.Split(new[] { ' ', '\n', '\r', '\t' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var sum = 0;
+                    foreach (var ch in word)
+                    {
+                        sum = (sum + ch) & 0x7fffffff;
+                    }
+
+                    ids.Add((sum % (_vocab - 1)) + 1);
+                }
+
+                if (ids.Count == 0)
+                {
+                    ids.Add(1);
+                }
+
+                return ids;
+            }
+
+            public string Decode(IReadOnlyList<int> tokenIds) =>
+                string.Join(" ", tokenIds.Select(id => "t" + id));
         }
 
         // A fine-tuner that records the data it received and returns the model unchanged.

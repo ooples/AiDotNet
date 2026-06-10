@@ -207,8 +207,14 @@ within this subsystem:
 - **In-model K/V cache for other architectures** — done for Mamba (see *Delivered*). The same per-token
   `Step` treatment can be extended to the other recurrent/attention LMs (GLA, RWKV, Transformer attention
   cache); each needs its own state object + an equivalence test against its full-sequence forward.
-- **LoRA fine-tuning execution on a tensor model** — the bridge to `SupervisedFineTuning` is done; running it
-  end-to-end needs a text-consuming model (tokenization in front of a tensor model) and real GPU training.
+- **LoRA / supervised fine-tuning execution on a tensor model** — *delivered*: `TextTensorDatasetConverter`
+  tokenizes a reward-filtered dataset into next-token tensor supervision, and
+  `LoRAFineTuner.TrainTensorModelOnDataset` runs the model's training loop over it. Verified CPU end-to-end
+  (loss strictly decreases) on a real `MambaLanguageModel`. This surfaced and fixed a core bug: `MambaBlock`
+  /`Mamba2Block` registered their trainable parameters only inside `UpdateParameters` (never reached by the
+  tape training path) and omitted `_aLog`/`_dParam`, so every `Train()` was a silent no-op; registration now
+  happens at init for the full parameter set, and a `Training_ChangesParameters_AndReducesLoss` invariant
+  guards it.
 - **Quantized k-quants (Q4_K/Q6_K)** super-block decoding (classic Q4_0/Q4_1/Q8_0 are done) and a built-in
   **per-architecture tensor-name map** (`WeightImporter` takes the caller's name ordering today, since
   networks expose a flat parameter vector rather than named layers).

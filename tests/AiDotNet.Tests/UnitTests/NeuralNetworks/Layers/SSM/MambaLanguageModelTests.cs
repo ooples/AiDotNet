@@ -3,7 +3,9 @@ using AiDotNet.Models;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers.SSM;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Engines;
 using Xunit;
+using System;
 using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
@@ -346,6 +348,59 @@ public class MambaLanguageModelTests
                 Assert.True(System.Math.Abs(expected - actual) < 1e-8,
                     $"Multi-layer Step diverged at t={t}, v={v}: full={expected:G9} vs step={actual:G9}");
             }
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Training_ChangesParameters_AndReducesLoss()
+    {
+        // Learning invariant: training must actually move parameters and reduce loss. This guards the
+        // regression where MambaBlock registered its trainable parameters only inside UpdateParameters
+        // (never reached by the tape path) and omitted _aLog/_dParam — making every Train() a silent no-op.
+        await Task.CompletedTask;
+        var priorEngine = AiDotNetEngine.Current;
+        AiDotNetEngine.Current = new CpuEngine();
+        try
+        {
+            int seqLen = 5;
+            int vocabSize = 20;
+            int modelDim = 16;
+
+            var model = new MambaLanguageModel<double>(
+                CreateDoubleArch(vocabSize), vocabSize, modelDim, numLayers: 2, stateDimension: 4, maxSeqLength: seqLen);
+
+            var input = CreateOneHotDoubleInput(1, seqLen, vocabSize, seed: 5);
+            var target = CreateOneHotDoubleInput(1, seqLen, vocabSize, seed: 6);
+
+            model.Predict(input); // warmup: materialize lazy params before snapshotting
+            var before = model.GetParameters().ToArray();
+
+            model.Train(input, target);
+            var earlyLoss = Convert.ToDouble(model.GetLastLoss());
+            for (var i = 0; i < 40; i++)
+            {
+                model.Train(input, target);
+            }
+
+            var lateLoss = Convert.ToDouble(model.GetLastLoss());
+            var after = model.GetParameters().ToArray();
+
+            var changed = false;
+            for (var i = 0; i < before.Length; i++)
+            {
+                if (Math.Abs(before[i] - after[i]) > 1e-12)
+                {
+                    changed = true;
+                    break;
+                }
+            }
+
+            Assert.True(changed, "Mamba parameters did not change after training (tape-trainable registration regression).");
+            Assert.True(lateLoss < earlyLoss, $"Mamba training did not reduce loss: early={earlyLoss:G6}, late={lateLoss:G6}");
+        }
+        finally
+        {
+            AiDotNetEngine.Current = priorEngine;
         }
     }
 
