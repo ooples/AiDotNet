@@ -254,7 +254,9 @@ public class RRDBNetGenerator<T> : LayerBase<T>
         // Upsampling: ×2 → 1 stage, ×4 → 2 stages, ×8 → 3 stages.
         // Each stage: Conv (numFeatures → numFeatures × 4) + PixelShuffle(2) + LeakyReLU.
         // log2(scale) gives the right number of stages for every supported scale.
-        int numUpsampleStages = (int)Math.Log2(scale);
+        // Math.Log2 is .NET Core/5+ only — use Math.Log(x, 2) (rounded for exact
+        // powers of two) so this also compiles on the net471 target.
+        int numUpsampleStages = (int)Math.Round(Math.Log(scale, 2.0));
         _upsampleConvs = new ConvolutionalLayer<T>[numUpsampleStages];
         _pixelShuffleLayers = new PixelShuffleLayer<T>[numUpsampleStages];
 
