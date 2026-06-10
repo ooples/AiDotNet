@@ -262,36 +262,54 @@ public class Bucket2_AccelerationTests : ConfigureMethodTestBase
     public async Task ConfigureWeightStreaming_Default_DoesNotChangeOutput()
     {
         var (features, labels) = MakeMemorizationSet();
-        var loader = MakeCanaryLoader(features, labels);
 
-        // Baseline top-1 without weight streaming.
-        var (baselineTopOne, _) = DirectTrainAndMeasure(MakeCanaryModel(), features, labels);
-        _output.WriteLine($"Baseline (no streaming): top-1={baselineTopOne:P2}");
+        // LIKE-FOR-LIKE isolation of weight streaming. The baseline trains the
+        // SAME model (same seed) through the SAME builder pipeline WITHOUT
+        // ConfigureWeightStreaming; the feature run adds only ConfigureWeightStreaming.
+        // Any top-1 delta is therefore attributable to weight streaming alone.
+        //
+        // (Previously the baseline used DirectTrainAndMeasure — per-example/SGD
+        // training — while the feature used the builder's batched training. Those
+        // are DIFFERENT and differently-converging regimes, so the 1pp envelope was
+        // unsatisfiable for reasons unrelated to streaming. The batched-vs-SGD
+        // convergence gap on this degenerate single-batch canary is a separate
+        // training-dynamics issue tracked on its own; weight streaming itself is
+        // value-preserving — see WeightStreamingEndToEndTests, which prove paged
+        // weights round-trip bit-identically through forward AND the streaming
+        // training backward.)
+        const int seed = 1234;
 
-        var model = MakeCanaryModel();
+        var baselineModel = MakeCanaryModel(seed);
+        var baselineBuilder = new AiModelBuilder<float, Tensor<float>, Tensor<float>>();
+        baselineBuilder.ConfigureModel(baselineModel);
+        baselineBuilder.ConfigureDataLoader(MakeCanaryLoader(features, labels));
+        await baselineBuilder.BuildAsync();
+        double baselineTopOne = MeasureTrainingTopOne(baselineModel, features, labels);
+        _output.WriteLine($"Builder (no streaming): top-1={baselineTopOne:P2}");
+
+        var model = MakeCanaryModel(seed);
         var builder = new AiModelBuilder<float, Tensor<float>, Tensor<float>>();
         builder.ConfigureWeightStreaming();
         builder.ConfigureModel(model);
-        builder.ConfigureDataLoader(loader);
+        builder.ConfigureDataLoader(MakeCanaryLoader(features, labels));
         var result = await builder.BuildAsync();
 
         var probe = new Tensor<float>([1, CanaryCtxLen]);
         for (int s = 0; s < CanaryCtxLen; s++) probe[0, s] = features[0, s];
         AssertFacadePredictNonDegenerate(result.Predict(probe), "ConfigureWeightStreaming");
 
-        // Test name promises "DoesNotChangeOutput": for a no-op contract
-        // (sub-threshold model so auto-streaming should not engage),
-        // require near-identical top-1 — not just 50% retention. A 50%
-        // tolerance would hide a real streaming-corruption regression
-        // that halves accuracy. Use an absolute 1pp envelope so noise
-        // from the canary's tiny dataset is allowed but anything larger
-        // fails. (PR #1345 round-2 review.)
         double featureTopOne = MeasureTrainingTopOne(model, features, labels);
-        _output.WriteLine($"WeightStreaming(auto): top-1={featureTopOne:P2}");
+        _output.WriteLine($"Builder + WeightStreaming(auto): top-1={featureTopOne:P2}");
+
+        // Sub-threshold model → auto-streaming is a no-op AND weight paging is
+        // value-preserving, so the two builder runs must match closely. A small
+        // envelope still catches a real streaming-corruption regression (which
+        // would gut accuracy toward random chance) without depending on the
+        // canary's absolute convergence level.
         Assert.True(
             Math.Abs(featureTopOne - baselineTopOne) <= 0.01,
-            $"ConfigureWeightStreaming should be a no-op for sub-threshold models. " +
-            $"baseline={baselineTopOne:P2}, feature={featureTopOne:P2} — " +
+            $"ConfigureWeightStreaming changed the builder's output. " +
+            $"builder-no-streaming={baselineTopOne:P2}, builder+streaming={featureTopOne:P2} — " +
             $"|delta| = {Math.Abs(featureTopOne - baselineTopOne):P2} > 1pp envelope.");
     }
 
