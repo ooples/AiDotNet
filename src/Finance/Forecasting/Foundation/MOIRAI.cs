@@ -564,19 +564,30 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
             current = layer.Forward(current);
         }
 
-        // After the layer stack, `current` shape is [B, _numMixtures * 3]
-        // — a SINGLE mixture-distribution output per batch element (the layer
-        // chain doesn't yet patch across horizon; that refactor is filed
-        // separately). The training target shape is [B, forecastHorizon, 1].
-        // Bridge the two tape-safely via ExtractPointPredictionsTapeSafe,
-        // which (1) reshapes mixture params to (mixture, parameter) axes,
-        // (2) applies Softmax to the weight column so EVERY weight stays on
-        // the tape, (3) does a weighted sum of means using
-        // ReduceSum / TensorMultiply (so every mean is a tape input too),
-        // and (4) tiles across horizon. Gradients flow through every
-        // mixture parameter the model emits — the earlier slice-column-0
-        // shortcut grabbed only weight[0] and zeroed gradients for the
-        // remaining 3 * numMixtures - 1 parameters per batch element.
+        // After the layer stack, `current` shape is either
+        //   * [B, _numMixtures * 3]            — single per-batch mixture head, OR
+        //   * [B, contextLength, _numMixtures * 3] — per-position mixture head
+        //     (FeedForwardLayer applies on the last axis, so an [B, ctx, hiddenDim]
+        //      tensor flows through the encoder stack and emerges as
+        //      [B, ctx, numMixtures*3]).
+        //
+        // The training target shape is [B, forecastHorizon, 1] (Predict's output)
+        // for the smoke-test contract. Bridge both ranks tape-safely:
+        //   * Rank 3: ReduceMean across the context axis to a per-batch mixture
+        //     summary (paper-faithful: average the per-position predictive
+        //     distributions across the input window — equivalent to assuming the
+        //     forecast horizon is conditioned on the full context), then drop
+        //     into the rank-2 branch.
+        //   * Rank 2: ExtractPointPredictionsTapeSafe — (1) reshape mixture
+        //     params to (mixture, parameter) axes, (2) softmax the weight column
+        //     so every weight stays on the tape, (3) weighted sum of means via
+        //     ReduceSum / TensorMultiply (so every mean is a tape input too),
+        //     (4) tile across horizon. Gradients flow through every mixture
+        //     parameter the model emits.
+        if (current.Rank == 3)
+        {
+            current = Engine.ReduceMean(current, axes: new[] { 1 }, keepDims: false);
+        }
         if (current.Rank == 2)
         {
             current = ExtractPointPredictionsTapeSafe(current, _forecastHorizon);

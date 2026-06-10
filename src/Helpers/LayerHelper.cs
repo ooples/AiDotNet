@@ -34043,23 +34043,35 @@ public static class LayerHelper<T>
         int inputDim = sequenceLength * numFeatures;
         int intermediateDim = hiddenDimension * 4;
 
-        // Input projection
-        yield return new DenseLayer<T>( outputSize: sequenceLength * hiddenDimension, activationFunction: null);
+        // Tashiro et al. 2021 "CSDI: Conditional Score-based Diffusion Models for
+        // Probabilistic Time Series Imputation" applies the score network ONCE PER
+        // reverse-diffusion step on a per-step packed input (current x_t + condition
+        // hidden state + sinusoidal time embedding), NOT on the flattened
+        // sequenceLength × numFeatures tensor. Hidden width must therefore be
+        // hiddenDimension, not sequenceLength × hiddenDimension (the same anti-pattern
+        // fixed for MG-TSD / TimeDiff). Using the flattened size sized BatchNorm
+        // channels to the flat figure (e.g. 192/288) so the per-call rank-2 input
+        // (e.g. [1, 33]) couldn't broadcast against the channels-encoded running stats.
+        // Layer count and structure are unchanged.
 
-        // Residual blocks with attention
+        // Input projection — bring per-step packed input to per-position hidden width.
+        yield return new DenseLayer<T>( outputSize: hiddenDimension, activationFunction: null);
+
+        // Residual blocks with attention (each acts on the per-position hidden vector).
         for (int layer = 0; layer < numResidualLayers; layer++)
         {
             yield return new BatchNormalizationLayer<T>();
-            yield return new DenseLayer<T>( outputSize: sequenceLength * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>( outputSize: sequenceLength * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>( outputSize: hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>( outputSize: hiddenDimension, activationFunction: null);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
             yield return new BatchNormalizationLayer<T>();
-            yield return new DenseLayer<T>( outputSize: sequenceLength * intermediateDim, activationFunction: new GELUActivation<T>());
-            yield return new DenseLayer<T>( outputSize: sequenceLength * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>( outputSize: intermediateDim, activationFunction: new GELUActivation<T>());
+            yield return new DenseLayer<T>( outputSize: hiddenDimension, activationFunction: null);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        // Output projection
+        // Output projection — emit per-step score / noise vector of size
+        // sequenceLength × numFeatures (the flat target the reverse-diffusion step expects).
         yield return new DenseLayer<T>( outputSize: inputDim, activationFunction: null);
     }
 
@@ -34076,19 +34088,25 @@ public static class LayerHelper<T>
 
         int intermediateDim = hiddenDimension * 4;
 
-        // Input projection
-        yield return new DenseLayer<T>( outputSize: sequenceLength * hiddenDimension, activationFunction: null);
+        // Kollovieh et al. 2024 "Predict, Refine, Synthesize: Self-Guiding Diffusion Models
+        // for Probabilistic Time Series Forecasting" (TSDiff) applies the score network once
+        // per reverse-diffusion step on a per-step packed input, NOT on the flattened
+        // sequenceLength × hiddenDimension tensor. Same per-call denoiser-hidden-width
+        // anti-pattern as CSDI / TimeDiff / MG-TSD. Layer count and structure are unchanged.
 
-        // Residual blocks
+        // Input projection — per-step packed input to per-position hidden width.
+        yield return new DenseLayer<T>( outputSize: hiddenDimension, activationFunction: null);
+
+        // Residual blocks (each acts on the per-position hidden vector).
         for (int block = 0; block < numResidualBlocks; block++)
         {
             yield return new BatchNormalizationLayer<T>();
-            yield return new DenseLayer<T>( outputSize: sequenceLength * hiddenDimension, activationFunction: new GELUActivation<T>());
+            yield return new DenseLayer<T>( outputSize: hiddenDimension, activationFunction: new GELUActivation<T>());
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
-            yield return new DenseLayer<T>( outputSize: sequenceLength * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>( outputSize: hiddenDimension, activationFunction: null);
         }
 
-        // Output projection
+        // Output projection — emit per-horizon noise estimates.
         yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
     }
 
@@ -34103,26 +34121,35 @@ public static class LayerHelper<T>
         if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
         if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
 
-        int totalLen = contextLength + forecastHorizon;
         int intermediateDim = hiddenDimension * 4;
 
-        // Input projection
-        yield return new DenseLayer<T>( outputSize: totalLen * hiddenDimension, activationFunction: null);
+        // Shen & Kwok 2023 "Non-autoregressive Conditional Diffusion Models for Time Series
+        // Prediction" runs the denoiser once per reverse-diffusion step on a single packed
+        // per-call input of shape [1, forecastHorizon + condLen + timeEmbed]. Hidden width
+        // must therefore be the per-position model width (hiddenDimension), NOT the flattened
+        // totalLen × hiddenDimension (the same anti-pattern fixed for MG-TSD just below — see
+        // #1464). Using totalLen×hiddenDimension as the hidden width forced every Dense to be
+        // a (~10^4 × 10^4) matmul and sized BatchNorm channels to the flattened figure, so the
+        // per-call rank-2 input ([1, 29]) couldn't broadcast against the channels-encoded
+        // running stats ([1, 192]/[1, 288]). Layer count and structure are unchanged.
 
-        // Transformer-based denoiser layers
+        // Input projection — bring packed input to per-position hidden width.
+        yield return new DenseLayer<T>( outputSize: hiddenDimension, activationFunction: null);
+
+        // Transformer-based denoiser layers (each acts on the per-position hidden vector).
         for (int layer = 0; layer < numLayers; layer++)
         {
             yield return new BatchNormalizationLayer<T>();
-            yield return new DenseLayer<T>( outputSize: totalLen * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>( outputSize: totalLen * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>( outputSize: hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>( outputSize: hiddenDimension, activationFunction: null);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
             yield return new BatchNormalizationLayer<T>();
-            yield return new DenseLayer<T>( outputSize: totalLen * intermediateDim, activationFunction: new GELUActivation<T>());
-            yield return new DenseLayer<T>( outputSize: totalLen * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>( outputSize: intermediateDim, activationFunction: new GELUActivation<T>());
+            yield return new DenseLayer<T>( outputSize: hiddenDimension, activationFunction: null);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        // Output projection
+        // Output projection — emit per-horizon noise estimates ε̂_{t,1..H}.
         yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
     }
 
@@ -34179,23 +34206,30 @@ public static class LayerHelper<T>
 
         int intermediateDim = hiddenDimension * 4;
 
-        // Input projection
-        yield return new DenseLayer<T>( outputSize: contextLength * hiddenDimension, activationFunction: null);
+        // Wen et al. 2023 "Conditional Continuous Diffusion Models for Probabilistic Time
+        // Series Forecasting" (CCDM) runs the score network once per reverse-diffusion step
+        // on a per-step packed input (current x_t + condition encoding + time embedding),
+        // NOT on the flattened contextLength × hiddenDimension. Same per-call
+        // denoiser-hidden-width anti-pattern as CSDI / TSDiff / TimeDiff / MG-TSD. Layer
+        // count and structure are unchanged.
 
-        // Score network layers
+        // Input projection — per-step packed input to per-position hidden width.
+        yield return new DenseLayer<T>( outputSize: hiddenDimension, activationFunction: null);
+
+        // Score network layers (each acts on the per-position hidden vector).
         for (int layer = 0; layer < numLayers; layer++)
         {
             yield return new BatchNormalizationLayer<T>();
-            yield return new DenseLayer<T>( outputSize: contextLength * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>( outputSize: contextLength * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>( outputSize: hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>( outputSize: hiddenDimension, activationFunction: null);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
             yield return new BatchNormalizationLayer<T>();
-            yield return new DenseLayer<T>( outputSize: contextLength * intermediateDim, activationFunction: new GELUActivation<T>());
-            yield return new DenseLayer<T>( outputSize: contextLength * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>( outputSize: intermediateDim, activationFunction: new GELUActivation<T>());
+            yield return new DenseLayer<T>( outputSize: hiddenDimension, activationFunction: null);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        // Output projection
+        // Output projection — emit per-horizon noise / score estimates.
         yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
     }
 

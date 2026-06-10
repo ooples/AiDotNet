@@ -54,6 +54,23 @@ public class KairosMultiSizePatchLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Persists the constructor arguments so the deserializer can rebuild this layer
+    /// at the same shape. Without this override the layer is reconstructed with default
+    /// patch sizes and SetParameters throws "expected N parameters, got M" because the
+    /// number of per-patch-size DenseLayers (and the router width) drives total
+    /// parameter count.
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        metadata["ContextLength"] = _contextLength.ToString(ci);
+        metadata["HiddenDim"] = _hiddenDim.ToString(ci);
+        metadata["PatchSizes"] = string.Join(",", _patchSizes.Select(p => p.ToString(ci)));
+        return metadata;
+    }
+
+    /// <summary>
     /// Initializes a new <see cref="KairosMultiSizePatchLayer{T}"/>.
     /// </summary>
     /// <param name="contextLength">Input sequence length.</param>
