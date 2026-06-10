@@ -15,7 +15,7 @@ namespace AiDotNet.Agentic.Models.Local;
 /// tensors it has, and read the float ones as numbers.
 /// </para>
 /// </remarks>
-public sealed class GgufFile
+public sealed class GgufFile : INamedTensorSource
 {
     private readonly byte[] _data;
     private readonly long _dataStart;
@@ -53,6 +53,9 @@ public sealed class GgufFile
 
     /// <summary>Gets the tensor directory.</summary>
     public IReadOnlyList<GgufTensorInfo> Tensors { get; }
+
+    /// <inheritdoc/>
+    public IReadOnlyCollection<string> TensorNames => _byName.Keys;
 
     /// <summary>Returns the tensor info for a name, or <c>null</c> when not present.</summary>
     /// <param name="name">The tensor name.</param>
@@ -103,9 +106,81 @@ public sealed class GgufFile
 
                 return result;
 
+            case GgufTensorInfo.TypeQ4_0:
+                DequantizeQ4_0(offset, count, result);
+                return result;
+
+            case GgufTensorInfo.TypeQ4_1:
+                DequantizeQ4_1(offset, count, result);
+                return result;
+
+            case GgufTensorInfo.TypeQ8_0:
+                DequantizeQ8_0(offset, count, result);
+                return result;
+
             default:
                 throw new NotSupportedException(
-                    $"Tensor '{name}' uses quantized ggml type {tensor.GgmlType}; dequantization is not yet supported.");
+                    $"Tensor '{name}' uses ggml type {tensor.GgmlType}; only F32/F16/Q4_0/Q4_1/Q8_0 are dequantized " +
+                    "(k-quants such as Q4_K are a follow-up). Use GetRawBytes for raw access.");
+        }
+    }
+
+    // Q4_0: per 32-value block = fp16 scale + 16 bytes of packed 4-bit quants; value = (nibble - 8) * scale.
+    private void DequantizeQ4_0(int offset, int count, double[] result)
+    {
+        const int blockBytes = 2 + 16;
+        var blocks = count / GgufTensorInfo.QuantBlockSize;
+        for (var b = 0; b < blocks; b++)
+        {
+            var p = offset + (b * blockBytes);
+            var scale = HalfToFloat(BitConverter.ToUInt16(_data, p));
+            var qs = p + 2;
+            var outBase = b * GgufTensorInfo.QuantBlockSize;
+            for (var j = 0; j < 16; j++)
+            {
+                var packed = _data[qs + j];
+                result[outBase + j] = ((packed & 0x0F) - 8) * scale;
+                result[outBase + j + 16] = ((packed >> 4) - 8) * scale;
+            }
+        }
+    }
+
+    // Q4_1: per block = fp16 scale + fp16 min + 16 bytes of 4-bit quants; value = nibble * scale + min.
+    private void DequantizeQ4_1(int offset, int count, double[] result)
+    {
+        const int blockBytes = 2 + 2 + 16;
+        var blocks = count / GgufTensorInfo.QuantBlockSize;
+        for (var b = 0; b < blocks; b++)
+        {
+            var p = offset + (b * blockBytes);
+            var scale = HalfToFloat(BitConverter.ToUInt16(_data, p));
+            var min = HalfToFloat(BitConverter.ToUInt16(_data, p + 2));
+            var qs = p + 4;
+            var outBase = b * GgufTensorInfo.QuantBlockSize;
+            for (var j = 0; j < 16; j++)
+            {
+                var packed = _data[qs + j];
+                result[outBase + j] = ((packed & 0x0F) * scale) + min;
+                result[outBase + j + 16] = ((packed >> 4) * scale) + min;
+            }
+        }
+    }
+
+    // Q8_0: per block = fp16 scale + 32 signed 8-bit quants; value = q * scale.
+    private void DequantizeQ8_0(int offset, int count, double[] result)
+    {
+        const int blockBytes = 2 + 32;
+        var blocks = count / GgufTensorInfo.QuantBlockSize;
+        for (var b = 0; b < blocks; b++)
+        {
+            var p = offset + (b * blockBytes);
+            var scale = HalfToFloat(BitConverter.ToUInt16(_data, p));
+            var qs = p + 2;
+            var outBase = b * GgufTensorInfo.QuantBlockSize;
+            for (var j = 0; j < GgufTensorInfo.QuantBlockSize; j++)
+            {
+                result[outBase + j] = unchecked((sbyte)_data[qs + j]) * scale;
+            }
         }
     }
 

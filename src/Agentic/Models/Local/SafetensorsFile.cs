@@ -15,7 +15,7 @@ namespace AiDotNet.Agentic.Models.Local;
 /// one as an array of numbers — the raw material for loading pretrained weights into a model.
 /// </para>
 /// </remarks>
-public sealed class SafetensorsFile
+public sealed class SafetensorsFile : INamedTensorSource
 {
     private readonly byte[] _data;
     private readonly long _dataStart;
@@ -38,6 +38,9 @@ public sealed class SafetensorsFile
 
     /// <summary>Gets the names of all tensors.</summary>
     public IReadOnlyCollection<string> Names => _byName.Keys;
+
+    /// <inheritdoc/>
+    public IReadOnlyCollection<string> TensorNames => _byName.Keys;
 
     /// <summary>Returns the descriptor for a tensor, or <c>null</c> when not present.</summary>
     /// <param name="name">The tensor name.</param>

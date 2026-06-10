@@ -17,6 +17,18 @@ public sealed class GgufTensorInfo
     /// <summary>The ggml type code for 16-bit float tensors.</summary>
     public const uint TypeF16 = 1;
 
+    /// <summary>The ggml type code for Q4_0 quantization (32-value blocks, 4-bit, single scale).</summary>
+    public const uint TypeQ4_0 = 2;
+
+    /// <summary>The ggml type code for Q4_1 quantization (32-value blocks, 4-bit, scale + min).</summary>
+    public const uint TypeQ4_1 = 3;
+
+    /// <summary>The ggml type code for Q8_0 quantization (32-value blocks, 8-bit, single scale).</summary>
+    public const uint TypeQ8_0 = 8;
+
+    /// <summary>The number of values per quantization block (ggml QK).</summary>
+    public const int QuantBlockSize = 32;
+
     /// <summary>
     /// Initializes a new tensor info.
     /// </summary>
