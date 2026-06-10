@@ -175,33 +175,41 @@ var server = new McpServer(myTools);
 
 ---
 
-## Delivered since the first cut
+## Delivered follow-ups
 
 - **Hosting/DI** — `AddAgentChatClient` / `AddAgentTools` / `AddAgentExecutor` in `AiDotNet.Serving`.
 - **Real MCP transports** — `HttpMcpTransport` (JSON-RPC over HTTP) and `StreamMcpTransport`
   (newline-delimited JSON-RPC over stdio streams), plus the in-memory transport.
 - **Weight loaders** — `SafetensorsReader` and `GgufReader` (header, metadata, tensor directory; F32/F16
-  value reads).
+  **and Q4_0/Q4_1/Q8_0** value reads) + `WeightImporter` (named tensors → a model's flat parameter vector).
 - **LLM-as-judge evaluator** (`ChatClientTrajectoryEvaluator`) and a **REINFORCE policy router**
   (`SoftmaxPolicyRouter`).
 - **Deterministic record/replay** of model IO (`RecordingChatClient` / `ReplayingChatClient`).
+- **Multi-agent-on-graph** — `AddAgentNode` runs any `IAgent<T>` (executor/supervisor/swarm) as a typed
+  `StateGraph` node (graph runtime converged onto this branch).
+- **Postgres + Redis graph checkpointers** — `PostgresGraphCheckpointer` / `RedisGraphCheckpointer` (opt-in
+  packages; integration-tested, skip without a live server).
+- **LoRA fine-tuning bridge** — `FineTuningDataConverter` + `LoRAFineTuner.FineTuneFromDatasetAsync` feed a
+  reward-filtered dataset into `SupervisedFineTuning`.
+- **Benchmark harness** — `AgenticBenchmarks` (agent loop + middleware overhead) + documented head-to-head
+  methodology.
 
-## Remaining work (blocked on capabilities outside this subsystem)
+## Remaining work (model-layer / external infrastructure)
 
-These genuinely require model-layer changes, branch convergence, or live infrastructure — they are tracked
-with their exact integration points rather than stubbed:
+Tracked with exact integration points; deliberately not stubbed because they cannot be built **and verified**
+within this subsystem:
 
-- **Real K/V cache inside the model forward** — the engine-side seam (`IIncrementalCausalLanguageModel<T>`)
-  is implemented and tested; caching keys/values inside a network's attention (e.g. `MambaLanguageModel`,
-  `GLALanguageModel`) is a model-layer change and is verified there.
-- **LoRA fine-tuning execution** — the reward-filtered `FineTuningDataset` is produced; running it is a
-  model-pipeline step via `FineTuningBase<T,TInput,TOutput>.FineTuneAsync(model, FineTuningData<…>)`, which
-  requires committing to concrete `TInput`/`TOutput` tokenization and a trainable model (GPU training).
-- **Quantized GGUF dequantization** — Q4_K/Q8_0/… block decoding (the F32/F16 path and full metadata/tensor
-  directory are done) and **per-architecture tensor→layer mapping** for both loaders.
-- **Multi-agent-on-graph** — running agents as `StateGraph` nodes; needs the Phase 1 graph and Phase 2 agents
-  on one branch (they currently live on separate stacked PRs).
-- **Postgres / Redis graph checkpointers** — interface-ready on the Phase 1 branch; need live servers to
-  verify, so they are integration-tested separately rather than in CI.
+- **Real K/V cache inside the model forward** — investigated: `MambaBlock.Forward` runs a full-sequence
+  selective scan with no per-token step API, so a correct cache means adding a stateful per-token step
+  (matching the parallel scan + the causal-conv state exactly) to the block and threading it through the
+  model — a delicate model-perf rewrite verified there. The engine-side seam
+  (`IIncrementalCausalLanguageModel<T>`) is implemented and tested and is what it plugs into.
+- **LoRA fine-tuning execution on a tensor model** — the bridge to `SupervisedFineTuning` is done; running it
+  end-to-end needs a text-consuming model (tokenization in front of a tensor model) and real GPU training.
+- **Quantized k-quants (Q4_K/Q6_K)** super-block decoding (classic Q4_0/Q4_1/Q8_0 are done) and a built-in
+  **per-architecture tensor-name map** (`WeightImporter` takes the caller's name ordering today, since
+  networks expose a flat parameter vector rather than named layers).
+- **Cross-framework benchmark execution** vs Semantic Kernel & LangGraph — needs those frameworks installed
+  in a dedicated environment (the AiDotNet-side harness + methodology are in place).
 - **Head-to-head benchmarks vs Semantic Kernel & LangGraph** — a cross-framework measurement harness (those
   frameworks are external to this repo).
