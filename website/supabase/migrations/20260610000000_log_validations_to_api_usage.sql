@@ -122,7 +122,14 @@ begin
         set last_seen_at = now(),
             hostname = coalesce(p_hostname, hostname),
             os_description = coalesce(p_os_description, os_description),
-            last_seen_package = p_package
+            -- `coalesce` (NOT raw assignment) preserves the prior
+            -- `last_seen_package` when an older SDK that pre-dates issue
+            -- #1195 validates with `p_package => null`. The
+            -- validate-license edge function documents `null` as "no
+            -- package tag — leave the stored value unchanged"; a raw
+            -- overwrite would clobber that legitimate prior tag every
+            -- time a legacy client checks in.
+            last_seen_package = coalesce(p_package, last_seen_package)
         where id = v_existing_activation.id;
 
         v_status_code := 200;
@@ -149,9 +156,49 @@ begin
         return v_response;
     end if;
 
-    -- Advisory lock on the license key ID to prevent race conditions
-    -- when two concurrent validations try to activate the same license
+    -- Advisory lock on the license key ID to serialise the
+    -- new-activation path. Two concurrent validations from the same
+    -- new machine would otherwise both miss the existing-activation
+    -- lookup above (race window between SELECT and INSERT), and the
+    -- waiter would either spuriously hit activation_limit or insert a
+    -- duplicate row. Re-check the activation lookup INSIDE the locked
+    -- section so one of the racers finds the row the other just wrote
+    -- and short-circuits into the existing-activation update path.
     perform pg_advisory_xact_lock(v_license.id);
+
+    -- Repeat the activation lookup now that we hold the lock.
+    select * into v_existing_activation
+    from public.license_activations
+    where license_key_id = v_license.id
+      and machine_id_hash = p_machine_id_hash
+      and is_active = true;
+
+    if found then
+        update public.license_activations
+        set last_seen_at = now(),
+            hostname = coalesce(p_hostname, hostname),
+            os_description = coalesce(p_os_description, os_description),
+            last_seen_package = coalesce(p_package, last_seen_package)
+        where id = v_existing_activation.id;
+
+        v_status_code := 200;
+        v_response := jsonb_build_object(
+            'valid', true,
+            'tier', v_license.tier::text,
+            'capabilities', v_capabilities,
+            'license_id', v_license.id,
+            'activation_id', v_existing_activation.id,
+            'message', 'License validated (existing activation, raced into lock).'
+        );
+        insert into public.api_usage (user_id, endpoint, status_code, latency_ms)
+        values (
+            v_license.user_id,
+            v_endpoint,
+            v_status_code,
+            extract(milliseconds from clock_timestamp() - v_started)::int
+        );
+        return v_response;
+    end if;
 
     -- Re-count active activations after acquiring the lock
     select count(*) into v_activation_count

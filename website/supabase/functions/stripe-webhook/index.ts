@@ -379,9 +379,27 @@ async function handleSubscriptionUpdated(
     professional: 1,
     enterprise: 2,
   };
-  const seenCanonical = (subscription.items?.data ?? [])
+  const items = subscription.items?.data ?? [];
+  const seenCanonical = items
     .map((item) => resolveTier(item.price?.metadata?.tier))
     .filter((c): c is CanonicalTier => c !== null);
+
+  // If the subscription has items but NONE resolved to a known tier,
+  // fail loud. Silently updating `status` without `tier`/`max_activations`
+  // would leave the old entitlement in place after a plan change —
+  // exactly the "license still active for the wrong tier" footgun
+  // this handler is supposed to prevent. Stripe will retry the event
+  // and the admin can investigate the metadata drift in the meantime.
+  if (items.length > 0 && seenCanonical.length === 0) {
+    const rawTiers = items.map((it) => it.price?.metadata?.tier ?? '(missing)');
+    throw new Error(
+      `customer.subscription.updated: subscription ${subscription.id} has ${items.length} ` +
+      `item(s) but none of their price.metadata.tier values resolve to a canonical tier. ` +
+      `Saw: [${rawTiers.join(', ')}]. ` +
+      `Update Stripe Price metadata to one of: 'pro', 'professional', 'enterprise'.`
+    );
+  }
+
   const winner = seenCanonical.length > 0
     ? seenCanonical.reduce((a, b) =>
         TIER_LICENSE_RANK[a.licenseTier] >= TIER_LICENSE_RANK[b.licenseTier] ? a : b
