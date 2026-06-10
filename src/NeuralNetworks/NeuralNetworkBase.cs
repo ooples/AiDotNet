@@ -5651,31 +5651,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             case StreamingTrainingMode.ForceOn:
                 return true;
             default:
-                long paramCount = ParameterCount;
-                if (paramCount <= 0) return false;
-                long elemSize = typeof(T) == typeof(float) ? 4L : 8L;
-                // weights + gradients + Adam first/second moments at full precision.
-                double footprintBytes = (double)paramCount * elemSize * 4.0;
-                double available;
-#if NET5_0_OR_GREATER
-                // GC.GetGCMemoryInfo().TotalAvailableMemoryBytes is .NET 5+. The try/catch
-                // guards a runtime throw; the #if guards the COMPILE on net471, where the
-                // API doesn't exist at all (a try/catch can't rescue a missing method).
-                try
-                {
-                    available = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
-                }
-                catch
-                {
-                    available = 0;
-                }
-#else
-                // net471: no GC memory-info API — fall through to the conservative default
-                // below so the autotuner stays well-behaved on .NET Framework.
-                available = 0;
-#endif
-                if (available <= 0) available = 8L * 1024 * 1024 * 1024; // conservative fallback
-                return footprintBytes > 0.5 * available;
+                // Auto must NOT silently engage streaming yet. The streaming step
+                // (TrainWithTapeStreaming) still computes gradients via the
+                // non-streaming tape.ComputeGradients until the topological-min
+                // streaming backward (AiDotNet.Tensors#564) is published — so its
+                // transient backward peak is identical to the eager path. Routing a
+                // memory-constrained model here on a footprint heuristic would
+                // promise a memory bound the backward sweep cannot deliver and could
+                // hit the exact OOM this mode is meant to prevent. Until #564 ships,
+                // Auto resolves to the classic path; users who want the (partial)
+                // 8-bit-optimizer-state savings opt in explicitly via ForceOn. The
+                // footprint/available-memory autotuner is restored here once the
+                // streaming backward lands.
+                return false;
         }
     }
 
@@ -8358,8 +8346,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             return false;
         }
 
-        // If feature index is out of range, it's not used
-        if (Layers.Count == 0 || featureIndex < 0 || featureIndex >= Layers[0].GetInputShape()[0])
+        // If feature index is out of range, it's not used. Guard the input-shape
+        // read the same way GetActiveFeatureIndices does: pre-warmup lazy layers
+        // report a null/empty/-1 shape, and indexing [0] on that would crash
+        // instead of returning the safe default.
+        if (Layers.Count == 0 || featureIndex < 0)
+            return false;
+        int[] inputShape = Layers[0].GetInputShape();
+        if (inputShape == null || inputShape.Length == 0 || inputShape[0] <= 0)
+            return false;
+        if (featureIndex >= inputShape[0])
             return false;
 
         // Get active feature indices
