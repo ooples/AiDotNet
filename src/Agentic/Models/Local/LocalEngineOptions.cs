@@ -33,4 +33,11 @@ public sealed class LocalEngineOptions
     /// <see cref="ChatOptions"/> values (temperature, top-k, top-p, seed) override the matching fields.
     /// </summary>
     public LocalSamplingOptions? Sampling { get; set; }
+
+    /// <summary>
+    /// Gets or sets a token constraint applied during generation (constrained decoding). <c>null</c> means
+    /// unconstrained generation. Use this to guarantee structured output (a grammar, JSON shape, or a closed
+    /// vocabulary) at the logits rather than relying on prompting.
+    /// </summary>
+    public ITokenConstraint? Constraint { get; set; }
 }

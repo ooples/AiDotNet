@@ -35,20 +35,30 @@ public sealed class TokenSampler<T>
     }
 
     /// <summary>
-    /// Chooses the next token id from the supplied logits.
+    /// Chooses the next token id from the supplied logits, optionally restricted to an allowed set
+    /// (constrained decoding).
     /// </summary>
     /// <param name="logits">The next-token logits (length = vocabulary size). Must be non-empty.</param>
     /// <param name="options">The sampling settings. <c>null</c> uses defaults (temperature 1.0, no filters).</param>
+    /// <param name="allowedTokenIds">
+    /// When non-null, sampling is restricted to these token ids (others are excluded). Must be non-empty when
+    /// provided. <c>null</c> means all tokens are eligible.
+    /// </param>
     /// <returns>The chosen token id (an index into <paramref name="logits"/>).</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="logits"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="logits"/> is empty.</exception>
-    public int Sample(Vector<T> logits, LocalSamplingOptions? options = null)
+    /// <exception cref="ArgumentException">Thrown when <paramref name="logits"/> or <paramref name="allowedTokenIds"/> is empty.</exception>
+    public int Sample(Vector<T> logits, LocalSamplingOptions? options = null, IReadOnlyCollection<int>? allowedTokenIds = null)
     {
         Guard.NotNull(logits);
         var count = logits.Length;
         if (count == 0)
         {
             throw new ArgumentException("Logits must be non-empty.", nameof(logits));
+        }
+
+        if (allowedTokenIds is not null && allowedTokenIds.Count == 0)
+        {
+            throw new ArgumentException("The allowed token set must be non-empty when provided.", nameof(allowedTokenIds));
         }
 
         var settings = options ?? new LocalSamplingOptions();
@@ -59,10 +69,12 @@ public sealed class TokenSampler<T>
             scores[i] = Convert.ToDouble(logits[i]);
         }
 
+        var allowed = BuildAllowedMask(count, allowedTokenIds);
+
         var temperature = settings.Temperature ?? 1.0;
         if (temperature <= 0)
         {
-            return ArgMax(scores);
+            return ArgMax(scores, allowed);
         }
 
         for (var i = 0; i < count; i++)
@@ -94,11 +106,15 @@ public sealed class TokenSampler<T>
             probabilities[i] /= sum;
         }
 
-        // Candidate token ids, ordered by descending probability (so top-k / top-p slice from the front).
+        // Candidate token ids (allowed only), ordered by descending probability so top-k / top-p slice
+        // from the front.
         var candidates = new List<int>(count);
         for (var i = 0; i < count; i++)
         {
-            candidates.Add(i);
+            if (allowed is null || allowed[i])
+            {
+                candidates.Add(i);
+            }
         }
 
         candidates.Sort((a, b) => probabilities[b].CompareTo(probabilities[a]));
@@ -145,19 +161,44 @@ public sealed class TokenSampler<T>
         return candidates[candidates.Count - 1];
     }
 
-    private static int ArgMax(double[] scores)
+    private static bool[]? BuildAllowedMask(int count, IReadOnlyCollection<int>? allowedTokenIds)
     {
-        var bestIndex = 0;
-        var best = scores[0];
-        for (var i = 1; i < scores.Length; i++)
+        if (allowedTokenIds is null)
         {
-            if (scores[i] > best)
+            return null;
+        }
+
+        var mask = new bool[count];
+        foreach (var id in allowedTokenIds)
+        {
+            if (id >= 0 && id < count)
+            {
+                mask[id] = true;
+            }
+        }
+
+        return mask;
+    }
+
+    private static int ArgMax(double[] scores, bool[]? allowed)
+    {
+        var bestIndex = -1;
+        var best = double.NegativeInfinity;
+        for (var i = 0; i < scores.Length; i++)
+        {
+            if (allowed is not null && !allowed[i])
+            {
+                continue;
+            }
+
+            if (bestIndex < 0 || scores[i] > best)
             {
                 best = scores[i];
                 bestIndex = i;
             }
         }
 
-        return bestIndex;
+        // If the allowed set referenced only out-of-range ids, fall back to the global argmax.
+        return bestIndex >= 0 ? bestIndex : 0;
     }
 }

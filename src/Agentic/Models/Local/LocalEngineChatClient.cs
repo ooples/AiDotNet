@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Runtime.CompilerServices;
 using AiDotNet.Agentic.Models;
 
@@ -74,10 +75,12 @@ public sealed class LocalEngineChatClient<T> : IChatClient<T>
         var sampler = new TokenSampler<T>(sampling.Seed);
         var maxTokens = ResolveMaxTokens(options);
 
+        var stopSequences = ResolveStopSequences(options);
         var generated = new List<int>();
-        var finishReason = RunGeneration(promptIds, maxTokens, sampler, sampling, generated, cancellationToken);
+        var finishReason = RunGeneration(promptIds, maxTokens, sampler, sampling, stopSequences, generated, cancellationToken);
 
         var text = generated.Count > 0 ? _tokenizer.Decode(generated) : string.Empty;
+        text = TrimAtStopSequence(text, stopSequences);
         var usage = new ChatUsage(promptIds.Count, generated.Count);
         var response = new ChatResponse(ChatMessage.Assistant(text), finishReason, usage, ModelId);
         return Task.FromResult(response);
@@ -98,6 +101,7 @@ public sealed class LocalEngineChatClient<T> : IChatClient<T>
 
         yield return new ChatResponseUpdate(role: ChatRole.Assistant);
 
+        var stopSequences = ResolveStopSequences(options);
         var context = new List<int>(promptIds);
         var generated = new List<int>();
         var previousText = string.Empty;
@@ -107,23 +111,28 @@ public sealed class LocalEngineChatClient<T> : IChatClient<T>
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var logits = _model.NextTokenLogits(context);
-            var next = sampler.Sample(logits, sampling);
-            if (next == _tokenizer.EosTokenId)
+            var next = NextToken(context, generated, sampler, sampling);
+            if (next is null || next.Value == _tokenizer.EosTokenId)
             {
                 finishReason = ChatFinishReason.Stop;
                 break;
             }
 
-            generated.Add(next);
-            context.Add(next);
+            generated.Add(next.Value);
+            context.Add(next.Value);
 
-            var fullText = _tokenizer.Decode(generated);
+            var fullText = TrimAtStopSequence(_tokenizer.Decode(generated), stopSequences);
             if (fullText.Length > previousText.Length)
             {
                 var delta = fullText.Substring(previousText.Length);
                 previousText = fullText;
                 yield return ChatResponseUpdate.ForText(delta);
+            }
+
+            if (stopSequences is not null && ContainsStopSequence(_tokenizer.Decode(generated), stopSequences))
+            {
+                finishReason = ChatFinishReason.Stop;
+                break;
             }
         }
 
@@ -135,6 +144,7 @@ public sealed class LocalEngineChatClient<T> : IChatClient<T>
         int maxTokens,
         TokenSampler<T> sampler,
         LocalSamplingOptions sampling,
+        IReadOnlyList<string>? stopSequences,
         List<int> generated,
         CancellationToken cancellationToken)
     {
@@ -143,18 +153,90 @@ public sealed class LocalEngineChatClient<T> : IChatClient<T>
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var logits = _model.NextTokenLogits(context);
-            var next = sampler.Sample(logits, sampling);
-            if (next == _tokenizer.EosTokenId)
+            var next = NextToken(context, generated, sampler, sampling);
+            if (next is null || next.Value == _tokenizer.EosTokenId)
             {
+                // null = the constraint reached a terminal state; either way generation is complete.
                 return ChatFinishReason.Stop;
             }
 
-            generated.Add(next);
-            context.Add(next);
+            generated.Add(next.Value);
+            context.Add(next.Value);
+
+            if (stopSequences is not null && ContainsStopSequence(_tokenizer.Decode(generated), stopSequences))
+            {
+                return ChatFinishReason.Stop;
+            }
         }
 
         return ChatFinishReason.Length;
+    }
+
+    // Computes the next token id honoring the configured constraint, or null when the constraint signals a
+    // terminal state (no valid continuation exists).
+    private int? NextToken(
+        List<int> context,
+        List<int> generated,
+        TokenSampler<T> sampler,
+        LocalSamplingOptions sampling)
+    {
+        IReadOnlyCollection<int>? allowed = null;
+        if (_options.Constraint is { } constraint)
+        {
+            allowed = constraint.AllowedNextTokens(generated);
+            if (allowed is not null && allowed.Count == 0)
+            {
+                return null;
+            }
+        }
+
+        var logits = _model.NextTokenLogits(context);
+        return sampler.Sample(logits, sampling, allowed);
+    }
+
+    private static IReadOnlyList<string>? ResolveStopSequences(ChatOptions? options)
+    {
+        var stops = options?.StopSequences;
+        if (stops is null || stops.Count == 0)
+        {
+            return null;
+        }
+
+        var filtered = stops.Where(s => s is not null && s.Length > 0).ToList();
+        return filtered.Count > 0 ? filtered : null;
+    }
+
+    private static bool ContainsStopSequence(string text, IReadOnlyList<string> stopSequences)
+    {
+        foreach (var stop in stopSequences)
+        {
+            if (text.IndexOf(stop, StringComparison.Ordinal) >= 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string TrimAtStopSequence(string text, IReadOnlyList<string>? stopSequences)
+    {
+        if (stopSequences is null)
+        {
+            return text;
+        }
+
+        var earliest = -1;
+        foreach (var stop in stopSequences)
+        {
+            var index = text.IndexOf(stop, StringComparison.Ordinal);
+            if (index >= 0 && (earliest < 0 || index < earliest))
+            {
+                earliest = index;
+            }
+        }
+
+        return earliest >= 0 ? text.Substring(0, earliest) : text;
     }
 
     private List<int> BuildPromptIds(IReadOnlyList<ChatMessage> messages)
