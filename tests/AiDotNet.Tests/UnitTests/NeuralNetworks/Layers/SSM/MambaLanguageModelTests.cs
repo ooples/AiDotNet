@@ -278,7 +278,88 @@ public class MambaLanguageModelTests
         Assert.True(hasVariation, "Output should have variation across positions and vocab");
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task Step_Incremental_MatchesFullSequenceForward()
+    {
+        // The KV-cache fast path (per-token Step) must be mathematically equivalent to the parallel
+        // full-sequence selective scan (Gu & Dao 2023): feeding tokens one at a time while carrying the
+        // recurrent state must reproduce Predict's logits at every position. seqLen > conv kernel (4)
+        // ensures the causal-conv window is fully exercised.
+        await Task.CompletedTask;
+        int seqLen = 5;
+        int vocabSize = 12;
+        int modelDim = 16;
+
+        var model = new MambaLanguageModel<double>(
+            CreateDoubleArch(vocabSize),
+            vocabSize, modelDim, numLayers: 2, stateDimension: 8, maxSeqLength: seqLen);
+
+        var input = CreateOneHotDoubleInput(1, seqLen, vocabSize, seed: 7);
+
+        // Full-sequence (parallel selective scan) reference.
+        model.ResetState();
+        var full = model.Predict(input); // [1, seqLen, vocab]
+
+        // Incremental: feed one token at a time carrying KV-cache state.
+        var state = model.CreateStepState(batchSize: 1);
+        for (int t = 0; t < seqLen; t++)
+        {
+            var token = SliceTimeStep(input, t, vocabSize); // [1, 1, vocab]
+            var stepLogits = model.Step(token, state);      // [1, 1, vocab]
+
+            for (int v = 0; v < vocabSize; v++)
+            {
+                double expected = full[new[] { 0, t, v }];
+                double actual = stepLogits[new[] { 0, 0, v }];
+                Assert.True(System.Math.Abs(expected - actual) < 1e-8,
+                    $"Incremental Step diverged from full Forward at t={t}, v={v}: full={expected:G9} vs step={actual:G9}");
+            }
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Step_Incremental_MatchesFullSequenceForward_MultiLayer()
+    {
+        // Same equivalence guarantee with more blocks, confirming per-block state threads correctly.
+        await Task.CompletedTask;
+        int seqLen = 6;
+        int vocabSize = 10;
+        int modelDim = 16;
+
+        var model = new MambaLanguageModel<double>(
+            CreateDoubleArch(vocabSize),
+            vocabSize, modelDim, numLayers: 4, stateDimension: 4, maxSeqLength: seqLen);
+
+        var input = CreateOneHotDoubleInput(1, seqLen, vocabSize, seed: 13);
+
+        model.ResetState();
+        var full = model.Predict(input);
+
+        var state = model.CreateStepState(batchSize: 1);
+        for (int t = 0; t < seqLen; t++)
+        {
+            var stepLogits = model.Step(SliceTimeStep(input, t, vocabSize), state);
+            for (int v = 0; v < vocabSize; v++)
+            {
+                double expected = full[new[] { 0, t, v }];
+                double actual = stepLogits[new[] { 0, 0, v }];
+                Assert.True(System.Math.Abs(expected - actual) < 1e-8,
+                    $"Multi-layer Step diverged at t={t}, v={v}: full={expected:G9} vs step={actual:G9}");
+            }
+        }
+    }
+
     #region Helpers
+
+    private static Tensor<double> SliceTimeStep(Tensor<double> input, int t, int vocabSize)
+    {
+        var token = new Tensor<double>(new[] { 1, 1, vocabSize });
+        for (int v = 0; v < vocabSize; v++)
+        {
+            token[new[] { 0, 0, v }] = input[new[] { 0, t, v }];
+        }
+        return token;
+    }
 
     private static Tensor<float> CreateOneHotInput(int batchSize, int seqLen, int vocabSize, int seed = 42)
     {

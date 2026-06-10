@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Mamba: Linear-Time Sequence Modeling with Selective State Spaces", "https://arxiv.org/abs/2312.00752", Year = 2023, Authors = "Albert Gu, Tri Dao")]
-public class MambaLanguageModel<T> : NeuralNetworkBase<T>
+public partial class MambaLanguageModel<T> : NeuralNetworkBase<T>
 {
     private readonly MambaOptions _options;
     private readonly int _vocabSize;

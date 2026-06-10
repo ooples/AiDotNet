@@ -87,6 +87,57 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
         }
 
         [Fact(Timeout = 120000)]
+        public async Task IncrementalAdapter_KvCache_MatchesFullRefeed_OverRealMamba()
+        {
+            await PinCpuAsync(() =>
+            {
+                // A 2-layer model so the per-block KV-cache state threads through more than one block.
+                var architecture = new NeuralNetworkArchitecture<double>(
+                    InputType.OneDimensional,
+                    NeuralNetworkTaskType.TextGeneration,
+                    inputSize: Vocab,
+                    outputSize: Vocab);
+                var model = new MambaLanguageModel<double>(
+                    architecture, vocabSize: Vocab, modelDimension: 16, numLayers: 2,
+                    stateDimension: 4, maxSeqLength: MaxSeq);
+
+                var prompt = new[] { 3, 1, 4, 1 };
+                var generated = new[] { 5, 9, 2 };
+
+                // KV-cached fast path: prime with the prompt, then append generated tokens.
+                var cached = new MambaCausalLanguageModel<double>(model, Vocab);
+                var cachedLogits = new List<double[]> { cached.StartSequence(prompt).ToArray() };
+                foreach (var tok in generated)
+                {
+                    cachedLogits.Add(cached.AppendToken(tok).ToArray());
+                }
+
+                // Reference: full re-feed of each growing prefix (O(n^2), no cache).
+                var reference = new NeuralNetworkCausalLanguageModel<double>(model, Vocab);
+                var context = new List<int>(prompt);
+                var referenceLogits = new List<double[]> { reference.NextTokenLogits(context.ToArray()).ToArray() };
+                foreach (var tok in generated)
+                {
+                    context.Add(tok);
+                    referenceLogits.Add(reference.NextTokenLogits(context.ToArray()).ToArray());
+                }
+
+                Assert.Equal(referenceLogits.Count, cachedLogits.Count);
+                for (var step = 0; step < cachedLogits.Count; step++)
+                {
+                    for (var v = 0; v < Vocab; v++)
+                    {
+                        Assert.True(Math.Abs(referenceLogits[step][v] - cachedLogits[step][v]) < 1e-8,
+                            $"KV-cache diverged from full re-feed at step={step}, v={v}: " +
+                            $"{referenceLogits[step][v]:G9} vs {cachedLogits[step][v]:G9}");
+                    }
+                }
+
+                return Task.CompletedTask;
+            });
+        }
+
+        [Fact(Timeout = 120000)]
         public async Task Engine_GeneratesEndToEnd_OverRealNetwork()
         {
             await PinCpuAsync(async () =>

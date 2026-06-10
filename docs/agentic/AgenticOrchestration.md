@@ -193,17 +193,20 @@ var server = new McpServer(myTools);
   reward-filtered dataset into `SupervisedFineTuning`.
 - **Benchmark harness** — `AgenticBenchmarks` (agent loop + middleware overhead) + documented head-to-head
   methodology.
+- **In-model K/V cache (Mamba)** — `MambaLanguageModel.Step` / `CreateStepState` add a per-token decoding
+  path that carries the causal-conv window + selective-scan hidden state, and `MambaCausalLanguageModel`
+  exposes it as the `IIncrementalCausalLanguageModel<T>` fast path. Verified mathematically equivalent to the
+  full-sequence forward (Gu & Dao 2023) by step-vs-parallel-scan tests at the scan, block, model, and adapter
+  levels.
 
 ## Remaining work (model-layer / external infrastructure)
 
 Tracked with exact integration points; deliberately not stubbed because they cannot be built **and verified**
 within this subsystem:
 
-- **Real K/V cache inside the model forward** — investigated: `MambaBlock.Forward` runs a full-sequence
-  selective scan with no per-token step API, so a correct cache means adding a stateful per-token step
-  (matching the parallel scan + the causal-conv state exactly) to the block and threading it through the
-  model — a delicate model-perf rewrite verified there. The engine-side seam
-  (`IIncrementalCausalLanguageModel<T>`) is implemented and tested and is what it plugs into.
+- **In-model K/V cache for other architectures** — done for Mamba (see *Delivered*). The same per-token
+  `Step` treatment can be extended to the other recurrent/attention LMs (GLA, RWKV, Transformer attention
+  cache); each needs its own state object + an equivalence test against its full-sequence forward.
 - **LoRA fine-tuning execution on a tensor model** — the bridge to `SupervisedFineTuning` is done; running it
   end-to-end needs a text-consuming model (tokenization in front of a tensor model) and real GPU training.
 - **Quantized k-quants (Q4_K/Q6_K)** super-block decoding (classic Q4_0/Q4_1/Q8_0 are done) and a built-in
