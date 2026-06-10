@@ -87,8 +87,8 @@ internal static class Im2Col3DHelper
         // m is row-major [rowsTotal, colsPerRow]. Stride per axis:
         //   stride_row = colsPerRow
         //   stride_col = 1
-        var xData = GetDataArray(x);
-        var mData = GetDataArray(m);
+        var xData = GetReadableDataArray(x);     // source (read-only)
+        var mData = GetWritableDataArray(m);     // destination (mutated in place)
         long mLen = (long)rowsTotal * colsPerRow;
         // Zero-fill m first — out-of-bounds positions stay zero.
         Array.Clear(mData, 0, (int)Math.Min(mLen, int.MaxValue));
@@ -188,8 +188,8 @@ internal static class Im2Col3DHelper
         long stride_id = (long)ih * iw;
         long stride_ih = iw;
 
-        var xData = GetDataArray(x);
-        var mData = GetDataArray(m);
+        var xData = GetWritableDataArray(x);     // destination (cleared + scatter-add)
+        var mData = GetReadableDataArray(m);     // source (read-only)
         long xLen = (long)b * stride_b;
         Array.Clear(xData, 0, (int)Math.Min(xLen, int.MaxValue));
 
@@ -263,7 +263,7 @@ internal static class Im2Col3DHelper
     /// virtual <c>NumericOperations</c> dispatch that is unacceptable in a
     /// 32k+ iteration inner loop.
     /// </summary>
-    private static T[] GetDataArray<T>(Tensor<T> t)
+    private static T[] GetReadableDataArray<T>(Tensor<T> t)
     {
         var span = t.Data.Span;
         // Tensor<T>.Data is a Memory<T>; the backing storage is always a
@@ -275,11 +275,32 @@ internal static class Im2Col3DHelper
         {
             return seg.Array;
         }
-        // Fallback: copy out. This shouldn't fire for AiDotNet.Tensors
-        // allocations but it keeps the helper defensible against future
-        // backing-store changes (e.g. native-buffer-backed tensors).
+        // Fallback: copy out — safe ONLY for read paths. Writable destinations
+        // must never use this (see GetWritableDataArray) because mutations would
+        // land in the detached copy and never reach the original tensor.
         var copy = new T[t.Length];
         span.CopyTo(copy);
         return copy;
+    }
+
+    /// <summary>
+    /// Returns the backing array for a tensor that will be MUTATED in place
+    /// (Im2Col3D's <c>m</c> destination, Col2Im3D's <c>x</c> destination).
+    /// Unlike <see cref="GetReadableDataArray"/> there is no copy-out fallback:
+    /// if the tensor is not directly array-backed (offset 0, exact length) we
+    /// fail fast, because writing through a detached copy would silently discard
+    /// the Conv3D forward/backward results.
+    /// </summary>
+    private static T[] GetWritableDataArray<T>(Tensor<T> t)
+    {
+        if (System.Runtime.InteropServices.MemoryMarshal.TryGetArray<T>(t.Data, out var seg)
+            && seg.Array is not null && seg.Offset == 0 && seg.Count == t.Length)
+        {
+            return seg.Array;
+        }
+
+        throw new InvalidOperationException(
+            "Im2Col3DHelper requires array-backed (offset-0, full-length) writable tensors for " +
+            "destination buffers; a sliced or non-array-backed tensor would silently lose writes.");
     }
 }

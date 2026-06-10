@@ -115,7 +115,7 @@ public class BaseClassesIntegrationTests
         // a uniform default — that's never been the contract on the base
         // class. Concrete agents that compute saliency-style importance
         // override the method.
-        Assert.NotNull(importance);
+        Assert.Empty(importance);
 
         var metrics = agent.GetMetrics();
         Assert.True(metrics.ContainsKey("TrainingSteps"));

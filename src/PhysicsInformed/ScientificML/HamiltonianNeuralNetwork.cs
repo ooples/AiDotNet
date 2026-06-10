@@ -173,7 +173,15 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                             && !lb.IsShapeResolved)
                         {
                             try { lb.ResolveFromShape(running); }
-                            catch (Exception) { break; }
+                            catch (Exception ex)
+                            {
+                                // Don't silently swallow: a failure here means the shape chain is
+                                // wrong, which would surface as an opaque error at first Forward.
+                                System.Diagnostics.Trace.TraceWarning(
+                                    "HamiltonianNeuralNetwork: failed pre-resolving {0} with shape [{1}] - {2}",
+                                    lb.GetType().Name, string.Join(",", running), ex.Message);
+                                throw;
+                            }
                         }
                         running = layer.GetOutputShape();
                     }

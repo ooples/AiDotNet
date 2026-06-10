@@ -767,9 +767,12 @@ public partial class Conv3DLayer<T> : LayerBase<T>
         int K = KernelSize;
         int OC = OutputChannels;
 
-        int OD = (ID + 2 * Padding - K) / Stride + 1;
-        int OH = (IH + 2 * Padding - K) / Stride + 1;
-        int OW = (IW + 2 * Padding - K) / Stride + 1;
+        // Validate output dims via the shared checker (throws on zero/negative sizes)
+        // before allocating im2col buffers, matching the normal forward path.
+        int[] outShape = CalculateOutputShape(OC, ID, IH, IW, K, Stride, Padding);
+        int OD = outShape[1];
+        int OH = outShape[2];
+        int OW = outShape[3];
 
         int colsPerRow = CI * K * K * K;
         int rowsTotal = B * OD * OH * OW;

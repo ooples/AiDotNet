@@ -257,21 +257,37 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
                 if (_inputProjection is AiDotNet.NeuralNetworks.Layers.LayerBase<T> ip && !ip.IsShapeResolved)
                     ip.ResolveFromShape(new[] { 1, _contextLength });
             }
-            catch { /* layer rejects shape; leave lazy */ }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "MGTSD: skipped resolving input-projection shape [1,{0}] (left lazy) - {1}",
+                    _contextLength, ex.Message);
+            }
             int[] denoiseShape = new[] { 1, denoiseLen };
             foreach (var layer in _denoisingLayers)
             {
                 if (layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> lb && !lb.IsShapeResolved)
                 {
                     try { lb.ResolveFromShape(denoiseShape); }
-                    catch { break; }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Trace.TraceWarning(
+                            "MGTSD: stopped denoising-layer pre-resolution at {0} with shape [{1}] - {2}",
+                            layer.GetType().Name, string.Join(",", denoiseShape), ex.Message);
+                        break;
+                    }
                     try
                     {
                         var outShape = lb.GetOutputShape();
                         if (outShape is { Length: > 0 } && System.Array.TrueForAll(outShape, d => d > 0))
                             denoiseShape = outShape;
                     }
-                    catch { /* keep going with the same shape */ }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Trace.TraceWarning(
+                            "MGTSD: failed reading output shape from {0}; keeping prior shape [{1}] - {2}",
+                            layer.GetType().Name, string.Join(",", denoiseShape), ex.Message);
+                    }
                 }
             }
             try
@@ -279,7 +295,12 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
                 if (_outputProjection is AiDotNet.NeuralNetworks.Layers.LayerBase<T> op && !op.IsShapeResolved)
                     op.ResolveFromShape(denoiseShape);
             }
-            catch { /* leave lazy */ }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "MGTSD: skipped resolving output-projection shape [{0}] (left lazy) - {1}",
+                    string.Join(",", denoiseShape), ex.Message);
+            }
         }
     }
 

@@ -278,7 +278,11 @@ public class UFM<T> : OpticalFlowBase<T>
         // we read them back in the same positions. Same fix pattern as
         // GOGGLEGenerator.DeserializeNetworkSpecificData.
         int expected = 1 + _numLayers + 1;
-        if (Layers.Count >= expected)
+        // Require EXACT count: the rebind reads layers at fixed positions
+        // [_featureExtract=0, _processingBlocks=1..N, _outputConv=1+N], so an
+        // unexpected layer count means the deserialized graph doesn't match this
+        // configuration and silently rebinding would point fields at wrong convs.
+        if (Layers.Count == expected)
         {
             if (Layers[0] is ConvolutionalLayer<T> fe) _featureExtract = fe;
             _processingBlocks.Clear();
@@ -287,7 +291,9 @@ public class UFM<T> : OpticalFlowBase<T>
                 if (Layers[1 + i] is ConvolutionalLayer<T> block)
                     _processingBlocks.Add(block);
             }
-            if (Layers[Layers.Count - 1] is ConvolutionalLayer<T> oc) _outputConv = oc;
+            // _outputConv is at its produced position 1 + _numLayers (not Count-1,
+            // which would pick the wrong layer if the count ever differs).
+            if (Layers[1 + _numLayers] is ConvolutionalLayer<T> oc) _outputConv = oc;
         }
     }
 

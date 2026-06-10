@@ -64,18 +64,12 @@ public class KimiVL<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
     public KimiVL(NeuralNetworkArchitecture<T> architecture, KimiVLOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
     {
         _options = options ?? new KimiVLOptions();
-        // Fail-fast input validation BEFORE any layer is allocated, so an
-        // invalid options bag can't waste the call stack down to a deep
-        // multi-MB weight allocation and surface as an obscure shape
-        // exception. ImageSize must be positive (a 0×0 image has no visual
-        // tokens — Kim et al. 2024 §3.1 patchifies non-zero spatial
-        // dims). MaxVisualTokens must be positive too (the resampler
-        // produces N visual tokens; N=0 means no visual conditioning at
-        // all, which contradicts the model's purpose).
-        if (_options.ImageSize <= 0)
-            throw new ArgumentOutOfRangeException("imageSize", _options.ImageSize, "ImageSize must be positive.");
-        if (_options.MaxVisualTokens <= 0)
-            throw new ArgumentOutOfRangeException("maxVisualTokens", _options.MaxVisualTokens, "MaxVisualTokens must be positive.");
+        // Fail-fast input validation BEFORE any layer is allocated, so an invalid options bag
+        // can't waste the call stack down to a deep multi-MB weight allocation and surface as
+        // an obscure shape exception. Delegates to the shared InstructionTunedVLMOptions check
+        // (ImageSize and MaxVisualTokens must both be positive) to avoid drift between the
+        // ctor guard and InitializeLayers' validation.
+        _options.ValidateVisualSizing();
         _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers();
     }
 

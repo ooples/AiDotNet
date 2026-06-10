@@ -518,6 +518,15 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
             writer.Write(Convert.ToDouble(_coefficients[i]));
         }
 
+        // Write _basisScales — the per-column normalization factors FitModel divides the
+        // basis by before solving. Predict re-applies them, so without persisting them a
+        // deserialized model applies spline coefficients to UNSCALED bases and predicts wrong.
+        writer.Write(_basisScales.Length);
+        for (int i = 0; i < _basisScales.Length; i++)
+        {
+            writer.Write(Convert.ToDouble(_basisScales[i]));
+        }
+
         return ms.ToArray();
     }
 
@@ -593,6 +602,14 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
         for (int i = 0; i < length; i++)
         {
             _coefficients[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+
+        // Read _basisScales (see Serialize) so Predict scales inputs identically post-load.
+        int scaleLen = reader.ReadInt32();
+        _basisScales = new Vector<T>(scaleLen);
+        for (int i = 0; i < scaleLen; i++)
+        {
+            _basisScales[i] = NumOps.FromDouble(reader.ReadDouble());
         }
     }
 
