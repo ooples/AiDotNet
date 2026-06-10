@@ -315,9 +315,31 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         if (!_isInitialized)
         {
-            throw new InvalidOperationException(
-                "TransformerEncoderLayer.SetParameters cannot run before sublayers are " +
-                "constructed. Run a Forward pass first so _embeddingSize is resolved.");
+            // Mirror the lazy-init contract on the read side (ParameterCount==0 and
+            // GetParameters().Length==0 until first Forward): accept an empty vector
+            // as a no-op so round-trip patterns like
+            //   newParams = parameters.Slice(offset, layer.GetParameters().Length); layer.SetParameters(newParams);
+            // in the host model don't blow up before any data has flowed.
+            if (parameters.Length == 0)
+            {
+                return;
+            }
+
+            // If the eager-ctor embedding size is known, resolve and construct
+            // sublayers now so callers that already have a non-empty parameter
+            // vector (e.g. deserialize → SetParameters) can proceed without a
+            // separate warmup forward.
+            if (_embeddingSize > 0)
+            {
+                EnsureInitialized();
+            }
+
+            if (!_isInitialized)
+            {
+                throw new InvalidOperationException(
+                    "TransformerEncoderLayer.SetParameters cannot run before sublayers are " +
+                    "constructed. Run a Forward pass first so _embeddingSize is resolved.");
+            }
         }
         int idx = 0;
         void Set(ILayer<T> layer)

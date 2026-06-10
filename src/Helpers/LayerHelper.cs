@@ -13412,6 +13412,15 @@ public static class LayerHelper<T>
             }
         }
 
+        // === Encoder→Context Aggregation ===
+        // Wen et al. 2017 MQ-RNN/CNN aggregates the encoder's [batch, seq, channels]
+        // output into a single fixed-size context vector before the decoder
+        // projects to [horizon, numQuantiles]. Without this collapse the
+        // following DenseLayers apply per-time-step and the final projection
+        // emits [batch, seq, horizon*numQuantiles] (= seq×horizon×numQ elements,
+        // not horizon×numQ) — silently training on the wrong window.
+        yield return new GlobalPoolingLayer<T>(PoolingType.Average);
+
         // === Context Layer ===
         // Compress encoder output to context representation
         yield return new DenseLayer<T>(

@@ -8264,18 +8264,29 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         // Get the first layer for analysis
         var firstLayer = Layers[0];
+        var inputShape = firstLayer.GetInputShape();
+
+        // Layers with lazily-resolved input shapes report -1 / 0 / null until the
+        // first forward pass. Return an empty set rather than crashing inside
+        // Enumerable.Range(0, count) — callers treat the result as "no features
+        // can be analyzed yet" which is the right semantic for a pre-warmup model.
+        if (inputShape == null || inputShape.Length == 0 || inputShape[0] <= 0)
+            return Array.Empty<int>();
 
         // If the first layer is not a dense or convolutional layer, we can't easily determine active features
         if (firstLayer is not (DenseLayer<T> or ConvolutionalLayer<T>))
         {
             // Return all indices as potentially active (conservative approach)
-            return Enumerable.Range(0, firstLayer.GetInputShape()[0]);
+            return Enumerable.Range(0, inputShape[0]);
         }
 
         // Get the weights from the first layer
         Vector<T> weights = firstLayer.GetParameters();
-        int inputSize = firstLayer.GetInputShape()[0];
-        int outputSize = firstLayer.GetOutputShape()[0];
+        int inputSize = inputShape[0];
+        var outputShape = firstLayer.GetOutputShape();
+        if (outputShape == null || outputShape.Length == 0 || outputShape[0] <= 0)
+            return Array.Empty<int>();
+        int outputSize = outputShape[0];
 
         // Calculate feature importance by summing absolute weights per input feature
         var featureImportance = new Dictionary<int, T>();
