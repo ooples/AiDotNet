@@ -20,6 +20,10 @@ using Xunit;
 
 namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
 {
+    // The end-to-end tensor-training test runs a real Mamba forward/backward, which dispatches through the
+    // process-wide AiDotNetEngine.Current. Other tests mutate that global in parallel, so join the serialized
+    // RealModelInference collection to keep the CpuEngine pin stable for the duration of training.
+    [Collection("RealModelInference")]
     public class LoRAFineTunerTests
     {
         private static FineTuningDataset Dataset()

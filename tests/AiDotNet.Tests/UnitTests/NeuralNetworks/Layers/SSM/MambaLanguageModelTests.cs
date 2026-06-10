@@ -14,6 +14,10 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 /// Integration tests for <see cref="MambaLanguageModel{T}"/>.
 /// Tests full forward-backward-parameter round-trips and multi-layer compositions.
 /// </summary>
+// Training and per-token Step tests run real Mamba forward/backward through the process-wide
+// AiDotNetEngine.Current; serialize via the RealModelInference collection so parallel tests mutating that
+// global engine cannot defeat the CpuEngine pin mid-run (documented GPU-autodetect flake).
+[Collection("RealModelInference")]
 public class MambaLanguageModelTests
 {
     private static NeuralNetworkArchitecture<float> CreateArch(int vocabSize = 100)
