@@ -331,8 +331,29 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 // re-registered) only while it is currently a materialized tensor
                 // (Length > 0) — mirroring GetTrainableParameters exactly, so the
                 // get/set round-trip stays consistent. The predicate is evaluated on
-                // the *current* field state before assignment, which matches the
-                // state GetTrainableParameters saw when the caller built the list.
+                // the *current* field state, which matches the state
+                // GetTrainableParameters saw when the caller built the list.
+                //
+                // Validate the count up front — BEFORE any state mutation — so a
+                // rejected call leaves the layer untouched rather than partially
+                // updated (a short list would otherwise throw mid-assignment from
+                // parameters[__i], a long list only after every field + registration
+                // had already been mutated). The expected count is the number of
+                // currently-present trainable tensors, computed with the same
+                // predicates the assignment loop uses (field tensors are not mutated
+                // between here and the loop, so the values are stable).
+                sb.AppendLine("        if (parameters is null)");
+                sb.AppendLine("            throw new System.ArgumentNullException(nameof(parameters));");
+                sb.AppendLine("        int __expected = 0;");
+                foreach (var pf in paramFields)
+                {
+                    if (pf.Optional)
+                        sb.AppendLine($"        if ({pf.Name}.Length > 0) __expected++;");
+                    else
+                        sb.AppendLine("        __expected++;");
+                }
+                sb.AppendLine("        if (parameters.Count != __expected)");
+                sb.AppendLine("            throw new System.ArgumentException($\"Expected {__expected} parameters (currently-present trainable tensors), got {parameters.Count}.\", nameof(parameters));");
                 sb.AppendLine("        int __i = 0;");
                 sb.AppendLine("        ClearRegisteredParameters();");
                 foreach (var pf in paramFields)
@@ -353,8 +374,6 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                         sb.AppendLine("        __i++;");
                     }
                 }
-                sb.AppendLine("        if (__i != parameters.Count)");
-                sb.AppendLine("            throw new System.ArgumentException($\"Expected {__i} parameters (currently-present trainable tensors), got {parameters.Count}.\", nameof(parameters));");
             }
             else
             {
