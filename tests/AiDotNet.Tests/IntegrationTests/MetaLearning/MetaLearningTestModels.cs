@@ -21,6 +21,7 @@ namespace AiDotNet.Tests.IntegrationTests.MetaLearning;
 // class already exposes GetParameters / SetParameters / ParameterCount.
 internal class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<double>>,
     IParameterizable<double, Matrix<double>, Vector<double>>,
+    IGradientComputable<double, Matrix<double>, Vector<double>>,
     ICloneable
 {
     private Vector<double> _parameters;
@@ -280,6 +281,7 @@ internal class SecondOrderMatrixModel : LinearVectorModel, ISecondOrderGradientC
 
 internal class TensorEmbeddingModel : IFullModel<double, Matrix<double>, Tensor<double>>,
     IParameterizable<double, Matrix<double>, Tensor<double>>,
+    IGradientComputable<double, Matrix<double>, Tensor<double>>,
     ICloneable
 {
     private Vector<double> _parameters;
