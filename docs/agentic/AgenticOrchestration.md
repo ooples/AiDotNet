@@ -20,7 +20,7 @@ Everything lives under `AiDotNet.Agentic.*` and is built on one numeric type par
 | Layer | Namespace | What it gives you |
 |---|---|---|
 | Model | `AiDotNet.Agentic.Models` | `IChatClient<T>` — message-based, streaming, native tool-calling, structured output |
-| Connectors | `AiDotNet.Agentic.Models.Connectors` | OpenAI, Anthropic, Azure OpenAI, **Ollama**, **Mistral**, **Gemini**, **Cohere**, MEAI adapter |
+| Connectors | `AiDotNet.Agentic.Models.Connectors` | OpenAI, Anthropic, Azure OpenAI, **Ollama**, **Mistral**, **Gemini**, **Cohere**, **bidirectional MEAI adapter** (consume *and* expose, with tool-calling) |
 | Local engine | `AiDotNet.Agentic.Models.Local` | `LocalEngineChatClient<T>` — in-process generation over AiDotNet's own networks |
 | Tools | `AiDotNet.Agentic.Tools` | `IAgentTool`, `ToolCollection`, source-generated JSON schema, structured output |
 | Graph | `AiDotNet.Agentic.Graph` | typed `StateGraph<TState>`, checkpointing, HITL, subgraphs, fan-out, reward-gated edges |
