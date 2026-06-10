@@ -6,7 +6,9 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models;
 using Xunit;
+using AiDotNet.Tests.Helpers;
 
+[Collection("License")]
 public class LicenseKeyTests
 {
     // ────────── AiDotNetLicenseKey construction ──────────
@@ -160,7 +162,7 @@ public class LicenseKeyTests
     {
         // Use empty ServerUrl for explicit offline-only mode.
         // Null ServerUrl now means "use DefaultServerUrl" (online validation).
-        var license = new AiDotNetLicenseKey("aidn.test123.abc456")
+        var license = new AiDotNetLicenseKey(LicenseTestSupport.SignedKey("test123"))
         {
             ServerUrl = ""  // Explicit offline mode
         };
@@ -174,7 +176,7 @@ public class LicenseKeyTests
     [Fact(Timeout = 60000)]
     public async Task LicenseValidator_ExplicitOffline_SetsOfflineMessage()
     {
-        var license = new AiDotNetLicenseKey("aidn.test123.abc456")
+        var license = new AiDotNetLicenseKey(LicenseTestSupport.SignedKey("test123"))
         {
             ServerUrl = ""  // Explicit offline mode
         };

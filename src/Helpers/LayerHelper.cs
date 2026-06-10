@@ -1508,7 +1508,9 @@ public static class LayerHelper<T>
         // representation, and the network produces input-invariant output
         // (the L2-collapse the DBN invariant tests catch). Keeping outputSize
         // strictly on the supervised projection head matches the paper.
-        int[] rbmStackSizes = [architecture.GetInputShape()[0], 500, 500, 2000];
+        // CalculatedInputSize (flattened per-sample dims), NOT GetInputShape()[0] — the latter is the
+        // batch/sample axis (=1 for tabular), which would make the first RBM RBM(1->500) and collapse it.
+        int[] rbmStackSizes = [architecture.CalculatedInputSize, 500, 500, 2000];
 
         IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
         IActivationFunction<T> softmaxActivation = new SoftmaxActivation<T>();
@@ -3097,8 +3099,21 @@ public static class LayerHelper<T>
             throw new ArgumentNullException(nameof(architecture));
         }
 
-        // Get input shape and output size
-        int inputSize = architecture.GetInputShape()[0];
+        // Per-sample feature count = the FLATTENED input size, not axis 0 of the
+        // input shape. For a TwoDimensional (samples × features) tabular architecture
+        // — the one produced by the NeuralNetworkArchitecture(inputFeatures, outputSize)
+        // convenience ctor — GetInputShape() is [InputHeight, InputWidth] where
+        // InputHeight is the variable per-batch SAMPLE dimension (normalized to 1 by
+        // ValidateInputDimensions) and InputWidth is the feature count. Using
+        // GetInputShape()[0] therefore sized the first DenseLayer to InputHeight (=1)
+        // instead of the feature count, so the net consumed a single input value,
+        // collapsed to a near-constant output, AND reported its input dimension as 1
+        // (the optimizer's feature-selection pass then threw "Feature index N exceeds
+        // the input dimension 1"). CalculatedInputSize is the product of the non-batch
+        // dims (= InputWidth here, = InputSize for OneDimensional), which is the value
+        // the per-sample dense layers must be built against — matching the generic
+        // CreateLayers helper above.
+        int inputSize = architecture.CalculatedInputSize;
         int outputSize = architecture.OutputSize;
 
         if (inputSize <= 0)
@@ -3192,7 +3207,12 @@ public static class LayerHelper<T>
             throw new ArgumentNullException(nameof(architecture));
         }
 
-        int inputSize = architecture.GetInputShape()[0];
+        // Per-sample feature count = flattened non-batch dims (CalculatedInputSize), NOT
+        // GetInputShape()[0], which for a tabular (TwoDimensional) architecture is the batch/sample
+        // axis (normalized to 1) — using it sized the first Bayesian dense layer to 1 input, collapsing
+        // the net to a near-constant. Mirrors the standard CreateLayers builder. (Same bug class as the
+        // plain default-layer builder.)
+        int inputSize = architecture.CalculatedInputSize;
         int outputSize = architecture.OutputSize;
 
         if (inputSize <= 0)

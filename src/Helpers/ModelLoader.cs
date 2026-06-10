@@ -94,7 +94,13 @@ public static class ModelLoader
             throw new ArgumentNullException(nameof(data));
         }
 
-        ModelPersistenceGuard.EnforceBeforeLoad();
+        // A server-issued decryption token is proof of server-side validation (server keys are escrow-
+        // signed and cannot be verified offline). When present, skip the offline guard — the token gates
+        // decryption. No token → full enforcement (build-key offline / trial), fail-closed preserved.
+        if (decryptionToken is null || decryptionToken.Length == 0)
+        {
+            ModelPersistenceGuard.EnforceBeforeLoad();
+        }
 
         if (!ModelFileHeader.HasHeader(data))
         {
@@ -215,7 +221,16 @@ public static class ModelLoader
         inputShape ??= Array.Empty<int>();
         outputShape ??= Array.Empty<int>();
 
-        ModelPersistenceGuard.EnforceBeforeSave();
+        // A server-issued decryption token is proof the license server already validated this key
+        // (tier/seat/revocation). Server-issued keys are escrow-signed, NOT build-key-signed, so they
+        // cannot be verified offline — running offline enforcement here would wrongly reject a key the
+        // server already validated. When such a token is supplied we skip the offline guard (the token
+        // gates the actual encryption). Keys WITHOUT a server token (build-key-signed offline keys, or
+        // the free trial) still go through full enforcement, preserving the fail-closed guarantee.
+        if (decryptionToken is null || decryptionToken.Length == 0)
+        {
+            ModelPersistenceGuard.EnforceBeforeSave();
+        }
 
         // Serialize the model — wrap in InternalOperation so that Serialize()
         // guard does not double-count (SaveEncrypted is already a guarded path)

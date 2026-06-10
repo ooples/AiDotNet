@@ -264,16 +264,9 @@ public class LicenseServerEndpointTests
         var validator = new LicenseValidator(key);
         var result = validator.Validate();
 
-        if (BuildKeyProvider.IsOfficialBuild)
-        {
-            // With a build key present, unsigned test keys fail HMAC verification
-            Assert.Equal(LicenseKeyStatus.Invalid, result.Status);
-        }
-        else
-        {
-            // Without a build key, format-valid keys pass offline validation
-            Assert.Equal(LicenseKeyStatus.Active, result.Status);
-        }
+        // Fail-closed: a format-valid key whose signature cannot be verified offline (this unsigned test
+        // key, and/or no embedded build key) is REJECTED. A valid format alone is no longer accepted.
+        Assert.Equal(LicenseKeyStatus.Invalid, result.Status);
     }
 
     [Fact(Timeout = 60000)]
