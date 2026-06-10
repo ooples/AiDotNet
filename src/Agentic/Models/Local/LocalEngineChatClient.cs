@@ -19,9 +19,12 @@ namespace AiDotNet.Agentic.Models.Local;
 /// <para>
 /// Because it implements <see cref="IChatClient{T}"/>, the local engine is a drop-in for every higher layer
 /// (agents, supervisor/swarm, memory). Both non-streaming and streaming generation are supported; streaming
-/// decodes incrementally and yields the new text on each step. Native tool-calling and structured-output
-/// constraints are not applied by this slice (they require constrained decoding, a follow-up) — supplied
-/// tools are ignored and the engine produces plain text.
+/// decodes incrementally and yields the new text on each step. Constrained decoding <em>is</em> supported via
+/// <see cref="LocalEngineOptions.Constraint"/> (an <see cref="ITokenConstraint"/> enforced at the logits, e.g.
+/// <see cref="AllowedTokenSetConstraint"/> / <see cref="FiniteStateTokenConstraint"/>). What this slice does
+/// not do: native tool-calling (any supplied tools are ignored), and auto-deriving a constraint from
+/// <see cref="ChatOptions.ResponseFormat"/> — set <see cref="LocalEngineOptions.Constraint"/> explicitly for
+/// guaranteed-structured output.
 /// </para>
 /// <para><b>For Beginners:</b> This is your own chatbot brain running on your machine. You hand it the
 /// conversation; it writes the reply one word-piece at a time until it decides it's done or hits the length
