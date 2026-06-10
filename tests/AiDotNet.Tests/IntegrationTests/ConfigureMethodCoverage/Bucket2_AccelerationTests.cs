@@ -324,8 +324,12 @@ public class Bucket2_AccelerationTests : ConfigureMethodTestBase
     /// </summary>
     [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]
-    public void ConfigureWeightStreaming_ZeroThreshold_ThrowsArgumentOutOfRange()
+    public async Task ConfigureWeightStreaming_ZeroThreshold_ThrowsArgumentOutOfRange()
     {
+        // Async (returns Task) because xUnit only honours [Fact(Timeout=...)] on async
+        // tests — a Timeout on a sync void method is a hard runtime error. The assertion
+        // itself is synchronous (a builder-config validation throw).
+        await Task.CompletedTask;
         var builder = new AiModelBuilder<float, Tensor<float>, Tensor<float>>();
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             builder.ConfigureWeightStreaming(new WeightStreamingConfig { ThresholdParameters = 0L }));
