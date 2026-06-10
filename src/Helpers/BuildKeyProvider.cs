@@ -35,6 +35,26 @@ internal static class BuildKeyProvider
     }
 
     /// <summary>
+    /// TEST-ONLY: reports whether the embedded build-key RESOURCE is present in the assembly,
+    /// bypassing the in-memory cache (which the test ModuleInitializer overrides process-wide).
+    /// Lets dev-build assertions check the actual ship-state of the DLL instead of the runtime
+    /// cache that has been populated for license-validation tests.
+    /// </summary>
+    internal static bool HasEmbeddedResource()
+    {
+        try
+        {
+            var assembly = typeof(BuildKeyProvider).Assembly;
+            using var stream = assembly.GetManifestResourceStream(ResourceName);
+            return stream is { Length: > 0 };
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Gets whether this is an official build with an embedded build key.
     /// </summary>
     internal static bool IsOfficialBuild

@@ -16,9 +16,14 @@ namespace AiDotNet.Tests.Helpers;
 /// </summary>
 internal static class LicenseTestSupport
 {
-    /// <summary>A fixed 40-byte test build key (never a real signing secret).</summary>
+    /// <summary>
+    /// A fixed 32-byte test build key (never a real signing secret). The size matches the
+    /// official build key (HMAC-SHA256 key length) so tests asserting the published
+    /// "0 bytes (dev) or 32 bytes (official)" key-size contract pass under the
+    /// ModuleInitializer's process-wide override.
+    /// </summary>
     internal static readonly byte[] TestBuildKey =
-        Encoding.UTF8.GetBytes("aidotnet-test-build-key-0123456789ABCDEF");
+        Encoding.UTF8.GetBytes("aidotnet-test-build-key-32bytes!");
 
     /// <summary>
     /// Produces a valid signed key <c>aidn.{id}.{sig}</c> where
