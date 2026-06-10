@@ -180,6 +180,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         var effectiveHeOptions = useHomomorphicEncryption ? heOptions : null;
         HomomorphicEncryptionScheme heScheme = effectiveHeOptions?.Scheme ?? HomomorphicEncryptionScheme.Ckks;
         HomomorphicEncryptionMode heMode = effectiveHeOptions?.Mode ?? HomomorphicEncryptionMode.HeOnly;
+
         // The Microsoft SEAL provider was extracted to the opt-in AiDotNet.Privacy.HE
         // package (audit-2026-05 finding #14) so the homomorphic-encryption native
         // dependency is no longer in the core package's surface. When HE is requested,
@@ -248,11 +249,6 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             if (useSecureAggregation)
             {
                 throw new InvalidOperationException("Secure aggregation is currently not supported with asynchronous federated learning modes.");
-            }
-
-            if (useHomomorphicEncryption && heMode == HomomorphicEncryptionMode.HeOnly)
-            {
-                throw new InvalidOperationException("HE-only aggregation is currently not supported with asynchronous federated learning modes in the in-memory simulator.");
             }
 
             TrainAsyncInMemory(
@@ -668,11 +664,21 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
         bool useCompression = compressionOptions != null &&
                               compressionOptions.Strategy != FederatedCompressionStrategy.None;
+        // FedAsync and FedBuff both aggregate via the HE provider when HE is
+        // enabled. The pre-existing per-arrival HE merge code at the bottom
+        // of each branch already handles both modes uniformly:
+        //   Hybrid   — encryptedIndices spans only the user-marked range, so
+        //              MaskEncryptedIndices preserves plaintext slots and the
+        //              foreach overwrites only the encrypted ones.
+        //   HE-only  — encryptedIndices spans the full parameter range
+        //              (ResolveEncryptedIndices does this), so the mask zeros
+        //              everything and the foreach replaces every slot with
+        //              the homomorphic aggregate.
+        // Both behaviours fall out without a mode branch here.
         bool useHomomorphicEncryption = heProvider != null &&
                                         heOptions != null &&
                                         heOptions.Enabled &&
-                                        encryptedIndices.Length > 0 &&
-                                        heOptions.Mode == HomomorphicEncryptionMode.Hybrid;
+                                        encryptedIndices.Length > 0;
 
         for (int step = 0; step < serverSteps; step++)
         {

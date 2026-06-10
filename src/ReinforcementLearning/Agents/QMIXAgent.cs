@@ -390,8 +390,12 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
                 var mixBase2 = (NeuralNetworkBase<T>)_mixingNetwork;
                 var qTotal = mixBase2.ForwardForTraining(mixInput);
 
-                // MSE loss vs TD target via engine ops
-                var targetScalar = new Tensor<T>([1]);
+                // MSE loss vs TD target via engine ops. The mixing network's
+                // output qTotal is shape [batch=1, 1] (NeuralNetworkBase
+                // forward keeps a leading batch dim) so the scalar target
+                // tensor must match that rank — otherwise TensorSubtract
+                // throws "Tensor shapes must match. Got [1, 1] and [1]."
+                var targetScalar = new Tensor<T>([1, 1]);
                 targetScalar[0] = target;
                 var diff = Engine.TensorSubtract(qTotal, targetScalar);
                 var squared = Engine.TensorMultiply(diff, diff);

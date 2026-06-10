@@ -653,7 +653,7 @@ public class StandardVAE<T> : VAEModelBase<T>
     /// invariant), so any size works as long as the conv stack doesn't
     /// underflow.
     /// </remarks>
-    private void TriggerLazyShapeResolution()
+    internal void TriggerLazyShapeResolution()
     {
         int downsamples = _channelMultipliers.Length - 1;
         int dummySpatial = 1 << Math.Max(downsamples, 1);

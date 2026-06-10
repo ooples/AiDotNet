@@ -364,24 +364,15 @@ public class PlaygroundV25Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedUnet = new UNetNoisePredictor<T>(
-            inputChannels: PG_LATENT_CHANNELS,
-            outputChannels: PG_LATENT_CHANNELS,
-            baseChannels: 320,
-            channelMultipliers: [1, 2, 4],
-            numResBlocks: 2,
-            attentionResolutions: [4, 2],
-            contextDim: PG_CROSS_ATTENTION_DIM);
-        clonedUnet.SetParameters(_unet.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: PG_LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2,
-            latentScaleFactor: 0.13025);
-        clonedVae.SetParameters(_vae.GetParameters());
+        // Delegate to the UNet/VAE's own Clone, which triggers lazy
+        // shape resolution on BOTH source and clone before copying
+        // weights. Reconstructing fresh predictors here and calling
+        // SetParameters with this.GetParameters under-copies the
+        // unresolved time-embedding DenseLayer params, producing a
+        // clone whose Predict diverges from the original — surfaces
+        // as Clone_ShouldProduceIdenticalOutput numerical failure.
+        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
+        var clonedVae = (StandardVAE<T>)_vae.Clone();
 
         return new PlaygroundV25Model<T>(
             unet: clonedUnet,

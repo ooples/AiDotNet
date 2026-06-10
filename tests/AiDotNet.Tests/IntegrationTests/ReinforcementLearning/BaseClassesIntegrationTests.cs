@@ -86,7 +86,20 @@ public class BaseClassesIntegrationTests
         var action = agent.Predict(state);
         Assert.Equal(agent.FeatureCount, action.Length);
 
-        Assert.Throws<NotSupportedException>(() => agent.Train(state, action));
+        // Train(state, target) is now a documented bridge from supervised
+        // input to a one-step RL transition (argmax(target) → action,
+        // target[argmax] → reward, terminal=true) so AiModelBuilder /
+        // IFullModel callers can drive any RL agent without an environment.
+        // The base impl wires this through SelectAction + StoreExperience
+        // + Train(). For a no-op TestBaseAgent (empty StoreExperience), the
+        // call just increments training counters — but it does NOT throw.
+        var metricsBefore = agent.GetMetrics();
+        double stepsBefore = metricsBefore.ContainsKey("TrainingSteps") ? Convert.ToDouble(metricsBefore["TrainingSteps"]) : 0.0;
+        agent.Train(state, action);
+        var metricsAfter = agent.GetMetrics();
+        double stepsAfter = metricsAfter.ContainsKey("TrainingSteps") ? Convert.ToDouble(metricsAfter["TrainingSteps"]) : 0.0;
+        Assert.True(stepsAfter > stepsBefore,
+            "Supervised Train should drive at least one RL update step on the base agent.");
 
         var names = agent.FeatureNames;
         Assert.Equal(agent.FeatureCount, names.Length);
@@ -94,7 +107,15 @@ public class BaseClassesIntegrationTests
         Assert.False(agent.IsFeatureUsed(agent.FeatureCount));
 
         var importance = agent.GetFeatureImportance();
-        Assert.Equal(agent.FeatureCount, importance.Count);
+        // ReinforcementLearningAgentBase.GetFeatureImportance returns an
+        // empty dictionary by default (per its XML remarks: "Returning an
+        // empty dictionary (vs throwing) keeps the interface uniform across
+        // agents and lets callers test ContainsKey(name)..."). The previous
+        // assertion expected FeatureCount entries, which would have implied
+        // a uniform default — that's never been the contract on the base
+        // class. Concrete agents that compute saliency-style importance
+        // override the method.
+        Assert.NotNull(importance);
 
         var metrics = agent.GetMetrics();
         Assert.True(metrics.ContainsKey("TrainingSteps"));

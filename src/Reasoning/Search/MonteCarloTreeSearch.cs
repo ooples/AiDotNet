@@ -98,8 +98,9 @@ internal class MonteCarloTreeSearch<T> : ISearchAlgorithm<T>
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            // 1. Selection: Navigate to leaf using UCB1
-            var node = Select(root);
+            // 1. Selection: Navigate to leaf using UCB1, recording the root → leaf path
+            var path = Select(root);
+            var node = path[path.Count - 1];
 
             // 2. Expansion: Add children if not terminal
             if (!node.IsTerminal && node.Depth < config.ExplorationDepth)
@@ -128,7 +129,15 @@ internal class MonteCarloTreeSearch<T> : ISearchAlgorithm<T>
                 value *= 1.5; // Boost terminal nodes
             }
 
-            // 4. Backpropagation: Update statistics up the tree
+            // 4. Backpropagation: update visit counts and accumulated value along the
+            // selection path (root → leaf) so UCB1 and best-path selection have real statistics.
+            foreach (var pathNode in path)
+            {
+                int nodeVisits = pathNode.Metadata.ContainsKey("visits") ? (int)pathNode.Metadata["visits"] : 0;
+                double nodeValue = pathNode.Metadata.ContainsKey("total_value") ? (double)pathNode.Metadata["total_value"] : 0.0;
+                pathNode.Metadata["visits"] = nodeVisits + 1;
+                pathNode.Metadata["total_value"] = nodeValue + value;
+            }
         }
 
         // Select best path based on visit counts (most explored = most promising)
@@ -157,14 +166,17 @@ internal class MonteCarloTreeSearch<T> : ISearchAlgorithm<T>
     /// <summary>
     /// Selection phase: Navigate to most promising leaf using UCB1.
     /// </summary>
-    private AiDotNet.Reasoning.Models.ThoughtNode<T> Select(AiDotNet.Reasoning.Models.ThoughtNode<T> node)
+    private List<AiDotNet.Reasoning.Models.ThoughtNode<T>> Select(AiDotNet.Reasoning.Models.ThoughtNode<T> node)
     {
+        var path = new List<AiDotNet.Reasoning.Models.ThoughtNode<T>> { node };
+
         while (node.Children.Count > 0)
         {
             // Pick child with highest UCB1 score
             node = node.Children
                 .OrderByDescending(c => CalculateUCB1(c, node))
                 .First();
+            path.Add(node);
 
             // Stop if unvisited or terminal
             if (!node.Metadata.ContainsKey("visits") || (int)node.Metadata["visits"] == 0 || node.IsTerminal)
@@ -173,7 +185,7 @@ internal class MonteCarloTreeSearch<T> : ISearchAlgorithm<T>
             }
         }
 
-        return node;
+        return path;
     }
 
     /// <summary>

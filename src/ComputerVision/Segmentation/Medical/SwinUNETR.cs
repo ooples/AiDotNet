@@ -2,7 +2,9 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
@@ -120,7 +122,32 @@ public class SwinUNETR<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numClasses = numClasses; _modelSize = modelSize; _dropRate = dropRate;
         _useNativeMode = true; _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Per Hatamizadeh 2022 §4.2 ("Training Setup"): AdamW with initial
+        // learning rate 8e-4 decayed via cosine schedule over 40k iters
+        // with weight decay 1e-5. The library's default optimizer (Adam,
+        // lr=1e-3, no schedule) oscillates around the loss minimum on
+        // single-batch memorization probes — the gradient never goes to
+        // zero on a constant batch, so a momentum-based step keeps
+        // bouncing the params around the minimum, producing the
+        // "200 iters > 50 iters" failure pattern in
+        // MoreData_ShouldNotDegrade. Wiring the paper-faithful cosine
+        // decay drops LR smoothly toward zero, which kills the
+        // oscillation at saturation regardless of dataset size, so the
+        // invariant holds for both real training and single-batch
+        // probes. tMax is set to a generous bound (5000 iters); the
+        // scheduler clamps to tMax for behaviour beyond completion.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 0.0008,
+                LearningRateScheduler =
+                    new AiDotNet.LearningRateSchedulers.CosineAnnealingLRScheduler(
+                        baseLearningRate: 0.0008,
+                        tMax: 5000,
+                        etaMin: 0.0),
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch,
+                WeightDecay = 1e-5,
+            });
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
         InitializeLayers();
     }
@@ -268,6 +295,22 @@ public class SwinUNETR<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
             var decoderLayers = LayerHelper<T>.CreateSwinUNETRDecoderLayers(_channelDims[^1], _decoderDim, _numClasses, fH, fW);
             Layers.AddRange(decoderLayers);
         }
+    }
+
+    /// <summary>
+    /// Use the AdamW optimizer the constructor stored in <c>_optimizer</c>
+    /// for the base class's tape-training path. The default
+    /// <see cref="GetOrCreateBaseOptimizer"/> returns plain Adam with
+    /// lr=0.001, which is too conservative for the per-pixel CE-with-logits
+    /// memorization task — the network only achieves ≈0.25% loss decrease
+    /// over the 100-step probe, well under the 1% threshold. The
+    /// constructor-supplied AdamW (default lr=0.001 but with decoupled weight
+    /// decay) is the paper-recommended optimizer (Hatamizadeh 2022); routing
+    /// it through the base path so TrainWithTape actually steps it.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+    {
+        return _optimizer ?? base.GetOrCreateBaseOptimizer();
     }
 
     /// <summary>

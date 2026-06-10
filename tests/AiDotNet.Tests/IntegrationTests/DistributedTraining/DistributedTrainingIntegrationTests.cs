@@ -2090,8 +2090,12 @@ public class DistributedTrainingIntegrationTests
 
     /// <summary>
     /// Mock model that implements IFullModel for distributed training tests.
+    /// Also implements IParameterizable explicitly — distributed-training
+    /// aggregators call InterfaceGuard.Parameterizable(client) at runtime
+    /// and require the closed type to advertise IParameterizable.
     /// </summary>
-    private class MockDistributedModel : IFullModel<double, Vector<double>, Vector<double>>
+    private class MockDistributedModel : IFullModel<double, Vector<double>, Vector<double>>,
+        IParameterizable<double, Vector<double>, Vector<double>>
     {
         private Vector<double> _parameters;
         private Vector<double>? _gradients;

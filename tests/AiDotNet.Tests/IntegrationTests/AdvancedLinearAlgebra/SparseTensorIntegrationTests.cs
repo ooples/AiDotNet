@@ -375,14 +375,19 @@ public class SparseTensorIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SparseTensor_Coo_NegativeRows_ThrowsException()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
+        // AiDotNet.Tensors raises plain ArgumentException ("Shape dimension 0
+        // must be non-negative, got -1.") from TensorBase.ValidateShape, not
+        // the more specific ArgumentOutOfRangeException. Matches the
+        // exception type used by sibling validation tests in this file
+        // (e.g. MismatchedArrayLengths_ThrowsException).
+        Assert.Throws<ArgumentException>(() =>
             new SparseTensor<double>(-1, 3, Array.Empty<int>(), Array.Empty<int>(), Array.Empty<double>()));
     }
 
     [Fact(Timeout = 120000)]
     public async Task SparseTensor_Coo_NegativeColumns_ThrowsException()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
+        Assert.Throws<ArgumentException>(() =>
             new SparseTensor<double>(3, -1, Array.Empty<int>(), Array.Empty<int>(), Array.Empty<double>()));
     }
 

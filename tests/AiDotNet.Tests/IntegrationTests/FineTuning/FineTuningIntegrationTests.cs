@@ -27,7 +27,14 @@ public class FineTuningIntegrationTests
     /// <summary>
     /// Mock model for testing fine-tuning methods.
     /// </summary>
-    private class MockFullModel : IFullModel<double, Vector<double>, Vector<double>>
+    // Implements IParameterizable / IGradientComputable / IFeatureAware
+    // explicitly — fine-tuning algorithms call InterfaceGuard.GradientComputable
+    // and InterfaceGuard.Parameterizable on the inner model. All members
+    // already exist; the interfaces just needed to appear in the signature.
+    private class MockFullModel : IFullModel<double, Vector<double>, Vector<double>>,
+        IParameterizable<double, Vector<double>, Vector<double>>,
+        IGradientComputable<double, Vector<double>, Vector<double>>,
+        IFeatureAware
     {
         private Vector<double> _weights;
         private readonly ILossFunction<double> _lossFunction;

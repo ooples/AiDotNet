@@ -189,6 +189,15 @@ public class TabTransformerGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTab
     /// created internally during Fit() when actual data dimensions are known.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// TabTransformerGen's <see cref="LayerBase{T}"/> chain is composed of
+    /// per-column embeddings + per-block Q/K/V projections + per-column
+    /// decoders — none of which take <c>Architecture.InputWidth</c> as
+    /// their first axis. Skip the base class's architecture-driven shape
+    /// pre-walk so each layer resolves from its real first input.
+    /// </summary>
+    protected override int[]? TryGetArchitectureInputShape() => null;
+
     protected override void InitializeLayers()
     {
         // Before Fit() supplies real column metadata, derive a self-consistent

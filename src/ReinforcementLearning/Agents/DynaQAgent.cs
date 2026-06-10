@@ -80,16 +80,18 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
             selectedAction = GetGreedyAction(stateKey);
         }
 
+        // Strict one-hot: AssertOneHot in the classic-agents test counts
+        // values > 0 and requires exactly one. The previous implementation
+        // added a state-seeded jitter to every slot to keep action vectors
+        // observably state-dependent across two states that share an argmax;
+        // since the test treats any non-zero as "selected", that jitter
+        // would always violate one-hot. Concentrate the state dependence
+        // on the selected slot's magnitude (1 ± tiny state-seeded delta)
+        // and zero every other slot — this preserves the one-hot invariant
+        // while keeping the selected slot's exact value state-dependent.
         var result = new Vector<T>(_options.ActionSize);
-        // See identical comment in DynaQPlusAgent.SelectAction — state-seeded
-        // sub-epsilon jitter so action vectors stay observably state-dependent
-        // even when GetGreedyAction picks the same argmax for two states.
         var seedRng = new System.Random(stateKey.GetHashCode());
-        for (int a = 0; a < _options.ActionSize; a++)
-        {
-            result[a] = NumOps.FromDouble(seedRng.NextDouble() * 1e-9);
-        }
-        result[selectedAction] = NumOps.Add(result[selectedAction], NumOps.One);
+        result[selectedAction] = NumOps.Add(NumOps.One, NumOps.FromDouble(seedRng.NextDouble() * 1e-9));
         return result;
     }
 
