@@ -477,6 +477,16 @@ public class InferenceSessionIntegrationTests
         const int outputSize = FlatSize;
 
         var baseDense = new DenseLayer<float>(outputSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>());
+        // Resolve the lazy DenseLayer to its concrete (in=inputSize, out=outputSize)
+        // shape BEFORE wrapping in MultiLoRAAdapter. Without this, the adapter's
+        // input-shape probe sees `inputShape=[-1]`, falls back to LoRAAdapterBase's
+        // `inputSize = outputSize * 2 = 16` heuristic (originally a Dense(5) ⇒ [10]
+        // convention from LoRA-only tests), and the resulting [16]-input adapter
+        // then fails NeuralNetwork's layer-compatibility check against the
+        // [outputSize]-output InputLayer. Forcing shape resolution here gives the
+        // adapter the actual (in=inputSize, out=outputSize) shape it should be
+        // built around.
+        baseDense.ResolveFromShape(new[] { inputSize });
         var multi = new AiDotNet.LoRA.Adapters.MultiLoRAAdapter<float>(baseDense, defaultTaskName: "taskA", defaultRank: 1, alpha: 1.0, freezeBaseLayer: true);
         multi.AddTask("taskB", rank: 1, alpha: 1.0);
 
@@ -533,6 +543,16 @@ public class InferenceSessionIntegrationTests
         const int outputSize = FlatSize;
 
         var baseDense = new DenseLayer<float>(outputSize, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>());
+        // Resolve the lazy DenseLayer to its concrete (in=inputSize, out=outputSize)
+        // shape BEFORE wrapping in MultiLoRAAdapter. Without this, the adapter's
+        // input-shape probe sees `inputShape=[-1]`, falls back to LoRAAdapterBase's
+        // `inputSize = outputSize * 2 = 16` heuristic (originally a Dense(5) ⇒ [10]
+        // convention from LoRA-only tests), and the resulting [16]-input adapter
+        // then fails NeuralNetwork's layer-compatibility check against the
+        // [outputSize]-output InputLayer. Forcing shape resolution here gives the
+        // adapter the actual (in=inputSize, out=outputSize) shape it should be
+        // built around.
+        baseDense.ResolveFromShape(new[] { inputSize });
         var multi = new AiDotNet.LoRA.Adapters.MultiLoRAAdapter<float>(baseDense, defaultTaskName: "taskA", defaultRank: 1, alpha: 1.0, freezeBaseLayer: true);
         multi.AddTask("taskB", rank: 1, alpha: 1.0);
 
