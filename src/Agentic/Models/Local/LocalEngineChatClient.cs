@@ -86,7 +86,9 @@ public sealed class LocalEngineChatClient<T> : IChatClient<T>
             var sampling = ResolveSampling(options);
             var sampler = new TokenSampler<T>(sampling.Seed);
             generated = new List<int>();
-            finishReason = RunGeneration(promptIds, maxTokens, sampler, sampling, stopSequences, generated, cancellationToken);
+            finishReason = _model is IIncrementalCausalLanguageModel<T> incremental
+                ? RunGenerationIncremental(incremental, promptIds, maxTokens, sampler, sampling, stopSequences, generated, cancellationToken)
+                : RunGeneration(promptIds, maxTokens, sampler, sampling, stopSequences, generated, cancellationToken);
         }
 
         var text = generated.Count > 0 ? _tokenizer.Decode(generated) : string.Empty;
@@ -182,11 +184,51 @@ public sealed class LocalEngineChatClient<T> : IChatClient<T>
         return ChatFinishReason.Length;
     }
 
-    // Computes the next token id honoring the configured constraint, or null when the constraint signals a
-    // terminal state (no valid continuation exists).
-    private int? NextToken(
-        List<int> context,
+    // Incremental (KV-cached) generation: prime with the prompt, then advance one token at a time.
+    private ChatFinishReason RunGenerationIncremental(
+        IIncrementalCausalLanguageModel<T> model,
+        IReadOnlyList<int> promptIds,
+        int maxTokens,
+        TokenSampler<T> sampler,
+        LocalSamplingOptions sampling,
+        IReadOnlyList<string>? stopSequences,
         List<int> generated,
+        CancellationToken cancellationToken)
+    {
+        model.ResetCache();
+        var logits = model.StartSequence(promptIds);
+
+        for (var step = 0; step < maxTokens; step++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var next = PickToken(generated, logits, sampler, sampling);
+            if (next is null || next.Value == _tokenizer.EosTokenId)
+            {
+                return ChatFinishReason.Stop;
+            }
+
+            generated.Add(next.Value);
+
+            if (stopSequences is not null && ContainsStopSequence(_tokenizer.Decode(generated), stopSequences))
+            {
+                return ChatFinishReason.Stop;
+            }
+
+            if (step < maxTokens - 1)
+            {
+                logits = model.AppendToken(next.Value);
+            }
+        }
+
+        return ChatFinishReason.Length;
+    }
+
+    // Computes the next token id from precomputed logits, honoring the configured constraint, or null when
+    // the constraint signals a terminal state (no valid continuation exists).
+    private int? PickToken(
+        List<int> generated,
+        Vector<T> logits,
         TokenSampler<T> sampler,
         LocalSamplingOptions sampling)
     {
@@ -200,9 +242,16 @@ public sealed class LocalEngineChatClient<T> : IChatClient<T>
             }
         }
 
-        var logits = _model.NextTokenLogits(context);
         return sampler.Sample(logits, sampling, allowed);
     }
+
+    // Computes the next token id by re-feeding the full context (fallback when the model has no KV-cache).
+    private int? NextToken(
+        List<int> context,
+        List<int> generated,
+        TokenSampler<T> sampler,
+        LocalSamplingOptions sampling) =>
+        PickToken(generated, _model.NextTokenLogits(context), sampler, sampling);
 
     // Beam search: explore `beamWidth` hypotheses in parallel, expanding each by its top tokens (honoring
     // the constraint), and keep the highest-scoring (length-normalized log-probability) beams. Returns the
