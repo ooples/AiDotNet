@@ -142,6 +142,21 @@ public class GraphCodeBERT<T> : CodeModelBase<T>
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Route through TrainWithTape — same fix as CodeBERT.Train.
+        // GraphCodeBERT is a CodeBERT extension with data-flow attention
+        // per Guo et al. 2021 "GraphCodeBERT: Pre-training Code
+        // Representations with Data Flow" (arXiv:2009.08366). Backprop
+        // via the tape steps both the standard transformer parameters and
+        // the data-flow attention biases.
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override ModelMetadata<T> GetModelMetadata()

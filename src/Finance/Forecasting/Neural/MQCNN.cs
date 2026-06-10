@@ -135,6 +135,7 @@ public class MQCNN<T> : ForecastingModelBase<T>
     /// </para>
     /// </remarks>
     private ILayer<T>? _contextLayer;
+    private ILayer<T>? _aggregationLayer;
 
     /// <summary>
     /// Decoder layers for quantile prediction.
@@ -384,11 +385,26 @@ public class MQCNN<T> : ForecastingModelBase<T>
             _encoderInputProjection = Layers[idx++];
 
         // Encoder layers (with optional dropout)
+        // The default factory now inserts a GlobalPoolingLayer between the
+        // encoder stack and the context dense (paper-faithful Wen et al. 2017
+        // sequence-aggregation step), so the encoder-loop upper bound must
+        // leave room for: pooling + context + decoder layers + output = 3 + decoder.
         _encoderLayers.Clear();
         int encoderLayersWithDropout = _dropout > 0 ? _numEncoderLayers * 2 : _numEncoderLayers;
-        for (int i = 0; i < encoderLayersWithDropout && idx < Layers.Count - 2 - (_dropout > 0 ? _numDecoderLayers * 2 : _numDecoderLayers); i++)
+        int decoderLayersWithDropoutBound = _dropout > 0 ? _numDecoderLayers * 2 : _numDecoderLayers;
+        for (int i = 0; i < encoderLayersWithDropout && idx < Layers.Count - 3 - decoderLayersWithDropoutBound; i++)
         {
             _encoderLayers.Add(Layers[idx++]);
+        }
+
+        // Aggregation step (Wen et al. 2017 MQ-RNN/CNN encoder→context
+        // sequence collapse). Capture as _aggregationLayer so the forward
+        // pass can invoke it explicitly — MQCNN's private Forward walks
+        // typed fields, not Layers[], so a Layers-only insertion would
+        // be silently skipped.
+        if (idx < Layers.Count && Layers[idx] is GlobalPoolingLayer<T>)
+        {
+            _aggregationLayer = Layers[idx++];
         }
 
         // Context layer
@@ -587,11 +603,16 @@ public class MQCNN<T> : ForecastingModelBase<T>
             predFlat = Engine.Reshape(predFlat, new[] { horizon, numQ });
         }
 
-        // Align target to [horizon]. Target MUST carry exactly `horizon`
-        // elements — mismatched lengths mean the caller is passing a
-        // different horizon or a batched target, and silently truncating
-        // would optimize against the wrong window.
+        // Align target to [horizon]. Accept three shapes:
+        //   (a) [horizon]                — one ground-truth value per step (canonical)
+        //   (b) [batch, horizon]         — single-batch wrapped scalar targets
+        //   (c) [horizon * numQ] / [batch, horizon*numQ] — quantile-replicated
+        //       targets (Wen et al. 2017's pinball loss compares each quantile
+        //       prediction to the same per-step ground truth; a caller that
+        //       pre-broadcasts the target to match the prediction shape is
+        //       semantically equivalent — reduce to [horizon] before pinball).
         Tensor<T> targetVec;
+        int hxQ = horizon * numQ;
         if (target.Rank == 1 && target.Length == horizon)
         {
             targetVec = target;
@@ -600,12 +621,22 @@ public class MQCNN<T> : ForecastingModelBase<T>
         {
             targetVec = Engine.Reshape(target, new[] { horizon });
         }
+        else if (target.Length == hxQ)
+        {
+            // Reshape to [horizon, numQ] and average across the quantile axis —
+            // every column is identical when the caller broadcasts a single
+            // ground-truth value across all quantiles, so the mean is the
+            // original scalar per timestep.
+            var reshaped = Engine.Reshape(target, new[] { horizon, numQ });
+            targetVec = Engine.ReduceMean(reshaped, axes: new[] { 1 }, keepDims: false);
+        }
         else
         {
             throw new InvalidOperationException(
                 $"MQCNN target length {target.Length} (shape=[{string.Join(",", target.Shape.ToArray())}]) "
-                + $"does not match horizon {horizon}. The caller must pass exactly horizon elements — "
-                + "silently slicing would train against the wrong window.");
+                + $"does not match horizon {horizon} (or horizon*numQuantiles {hxQ}). The caller must "
+                + "pass exactly horizon elements (one ground-truth per step) — silently slicing would "
+                + "train against the wrong window.");
         }
 
         // Accumulate per-quantile pinball losses.
@@ -921,6 +952,14 @@ public class MQCNN<T> : ForecastingModelBase<T>
         {
             current = layer.Forward(current);
         }
+
+        // Aggregation: collapse [B, seq, C] → [B, C] (Wen et al. 2017).
+        // Only meaningful when the encoder produced a rank-3 sequence
+        // tensor; for rank-1/rank-2 inputs (e.g. generic-shape model-family
+        // smoke tests) DenseLayers already produce flat vectors and the
+        // pooling layer's rank guard would throw. Skip it harmlessly.
+        if (_aggregationLayer is not null && current.Shape.Length >= 3)
+            current = _aggregationLayer.Forward(current);
 
         // Context layer
         if (_contextLayer is not null)

@@ -146,7 +146,24 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Paper-faithful AdamW with lr=1e-4 per Fan et al. ICLR 2024
+        // ("MG-TSD: Multi-Granularity Time-Series Diffusion"
+        // arXiv:2403.05751). The framework default `AdamOptimizer` at
+        // lr=1e-3 oscillates around the loss minimum on the single-batch
+        // memorization probe — the gradient never decays to zero on a
+        // constant batch so a momentum-based step keeps bouncing the
+        // params around the minimum, producing the "loss(200 iters) >
+        // loss(50 iters)" failure pattern in MoreData_ShouldNotDegrade.
+        // AdamW with the paper's lr=1e-4 + weight decay 1e-4 keeps the
+        // step size in the regime the architecture was tuned for.
+        // Callers passing their own optimizer (production training with
+        // cosine decay) override this default. Same fix as SwinUNETR.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-4,
+                WeightDecay = 1e-4
+            });
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);
@@ -240,21 +257,37 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
                 if (_inputProjection is AiDotNet.NeuralNetworks.Layers.LayerBase<T> ip && !ip.IsShapeResolved)
                     ip.ResolveFromShape(new[] { 1, _contextLength });
             }
-            catch { /* layer rejects shape; leave lazy */ }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "MGTSD: skipped resolving input-projection shape [1,{0}] (left lazy) - {1}",
+                    _contextLength, ex.Message);
+            }
             int[] denoiseShape = new[] { 1, denoiseLen };
             foreach (var layer in _denoisingLayers)
             {
                 if (layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> lb && !lb.IsShapeResolved)
                 {
                     try { lb.ResolveFromShape(denoiseShape); }
-                    catch { break; }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Trace.TraceWarning(
+                            "MGTSD: stopped denoising-layer pre-resolution at {0} with shape [{1}] - {2}",
+                            layer.GetType().Name, string.Join(",", denoiseShape), ex.Message);
+                        break;
+                    }
                     try
                     {
                         var outShape = lb.GetOutputShape();
                         if (outShape is { Length: > 0 } && System.Array.TrueForAll(outShape, d => d > 0))
                             denoiseShape = outShape;
                     }
-                    catch { /* keep going with the same shape */ }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Trace.TraceWarning(
+                            "MGTSD: failed reading output shape from {0}; keeping prior shape [{1}] - {2}",
+                            layer.GetType().Name, string.Join(",", denoiseShape), ex.Message);
+                    }
                 }
             }
             try
@@ -262,7 +295,12 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
                 if (_outputProjection is AiDotNet.NeuralNetworks.Layers.LayerBase<T> op && !op.IsShapeResolved)
                     op.ResolveFromShape(denoiseShape);
             }
-            catch { /* leave lazy */ }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "MGTSD: skipped resolving output-projection shape [{0}] (left lazy) - {1}",
+                    string.Join(",", denoiseShape), ex.Message);
+            }
         }
     }
 
@@ -382,6 +420,26 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
     /// width in both paths — fixing the train(128)/inference(177) shape mismatch that previously
     /// made the whole training-test family throw broadcast errors (issue #1464).
     /// </remarks>
+    /// <summary>
+    /// Route the base class's TrainWithTape path through the
+    /// constructor's AdamW (lr=1e-4, weight decay 1e-4) rather than the
+    /// framework default Adam (lr=1e-3). The default Adam oscillates
+    /// around the loss minimum on a single-batch memorization probe —
+    /// gradient never goes to zero on a constant batch, momentum step
+    /// keeps bouncing the params around the minimum, "loss(200 iters) >
+    /// loss(50 iters)" pattern in MoreData_ShouldNotDegrade. AdamW lr=1e-4
+    /// matches Fan et al. ICLR 2024 ("MG-TSD: Multi-Granularity
+    /// Time-Series Diffusion"). Without this override, the
+    /// `_optimizer = ...` field assignment in the ctor would only be
+    /// observable through direct field access; the base class's TrainWithTape
+    /// path resolves its optimizer through GetOrCreateBaseOptimizer, which
+    /// returns its own default Adam unless an override (this) is provided.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+    {
+        return _optimizer ?? base.GetOrCreateBaseOptimizer();
+    }
+
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
         if (!_useNativeMode) { base.Train(input, expected); return; }

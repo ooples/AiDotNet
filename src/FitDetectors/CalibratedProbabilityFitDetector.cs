@@ -270,6 +270,25 @@ public class CalibratedProbabilityFitDetector<T, TInput, TOutput> : FitDetectorB
         }
         else if (predicted.Length != actual.Length)
         {
+            // Truly incompatible shapes — neither length divides the other —
+            // are a pipeline bug, not a research quirk. Surface them as a clear
+            // InvalidOperationException so the developer can fix the upstream
+            // shape mismatch instead of silently shipping empty calibration.
+            // The #1322 lenient-warn-and-empty fallback below remains for
+            // rank-discordant cases where ONE side is a multiple of the other
+            // (per-sample vs stacked-batch).
+            bool oneSideMultipleOfOther =
+                (actual.Length > 0 && predicted.Length % actual.Length == 0)
+                || (predicted.Length > 0 && actual.Length % predicted.Length == 0);
+            if (!oneSideMultipleOfOther)
+            {
+                throw new InvalidOperationException(
+                    "CalibratedProbabilityFitDetector: predicted length (" + predicted.Length + ") and "
+                    + "actual length (" + actual.Length + ") have incompatible shapes — neither divides "
+                    + "the other, so binning cannot align them. Check that the model's Predict output "
+                    + "and the labels share a consistent batch axis.");
+            }
+
             // Non-multiclass mismatch (e.g. rank-discordant tensors, or
             // model emits per-sample output while batch labels are stacked
             // — the inverse of the multiclass case above). Two scenarios

@@ -68,6 +68,7 @@ public class MiniGPT4<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     public MiniGPT4(NeuralNetworkArchitecture<T> architecture, string modelPath, MiniGPT4Options? options = null) : base(architecture)
     {
         _options = options ?? new MiniGPT4Options();
+        _options.ValidateVisualSizing();
         SyncImageSizeWithArchitecture();
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
@@ -86,6 +87,7 @@ public class MiniGPT4<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     public MiniGPT4(NeuralNetworkArchitecture<T> architecture, MiniGPT4Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
     {
         _options = options ?? new MiniGPT4Options();
+        _options.ValidateVisualSizing();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);

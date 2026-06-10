@@ -83,6 +83,7 @@ public class Qwen25VL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     public Qwen25VL(NeuralNetworkArchitecture<T> architecture, string modelPath, Qwen25VLOptions? options = null) : base(architecture)
     {
         _options = options ?? new Qwen25VLOptions();
+        _options.ValidateVisualSizing();
         SyncImageSizeWithArchitecture();
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
@@ -101,6 +102,7 @@ public class Qwen25VL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     public Qwen25VL(NeuralNetworkArchitecture<T> architecture, Qwen25VLOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
     {
         _options = options ?? new Qwen25VLOptions();
+        _options.ValidateVisualSizing();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);

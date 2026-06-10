@@ -135,7 +135,13 @@ public class DeploymentExtendedIntegrationTests
 
         Assert.Equal(string.Empty, node.Name);
         Assert.Equal("float", node.DataType);
-        Assert.Null(node.Shape.ToArray());
+        // OnnxNode.Shape is declared as `int[]?` and defaults to null —
+        // "shape will be inferred" per its XML doc. The previous assertion
+        // `Assert.Null(node.Shape.ToArray())` was a typo: calling ToArray()
+        // on a null reference throws ArgumentNullException, so the test
+        // could never pass against the actual property contract. Assert
+        // the nullable property directly.
+        Assert.Null(node.Shape);
         Assert.Null(node.DocString);
     }
 

@@ -233,8 +233,22 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
         }
         else if (rank == 4) { c = input.Shape[1]; hOut = input.Shape[2]; wOut = input.Shape[3]; }
         else if (rank == 3) { c = input.Shape[0]; hOut = input.Shape[1]; wOut = input.Shape[2]; }
+        else if (rank == 2)
+        {
+            // [B, C] — already-flat input, nothing to pool. Record [C, 1, 1]
+            // so OutputShape stays rank-3 (the layer's contract); Forward()
+            // returns input unchanged for rank-2 via its axes-empty branch.
+            c = input.Shape[1]; hOut = 1; wOut = 1;
+        }
+        else if (rank == 1)
+        {
+            // [C] — single-sample flat input (e.g. ModelFamily generic-shape
+            // smoke tests). Forward() reduces axis 0 for rank-1; record a
+            // benign rank-3 shape so the resolved-shape contract holds.
+            c = input.Shape[0]; hOut = 1; wOut = 1;
+        }
         else throw new ArgumentException(
-            $"GlobalPoolingLayer requires rank-3, rank-4, or rank-5 input; got rank {rank}.",
+            $"GlobalPoolingLayer requires rank-1, rank-2, rank-3, rank-4, or rank-5 input; got rank {rank}.",
             nameof(input));
         ResolveShapes(new[] { c, hOut, wOut }, new[] { c, 1, 1 });
     }

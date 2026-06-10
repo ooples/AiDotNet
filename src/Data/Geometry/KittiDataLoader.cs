@@ -168,8 +168,19 @@ public class KittiDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
     {
         var features = LoadedFeatures ?? throw new InvalidOperationException("Features not loaded.");
         var labels = LoadedLabels ?? throw new InvalidOperationException("Labels not loaded.");
-        var nfs = (int[])features._shape; nfs[0] = indices.Length;
-        var nls = (int[])labels._shape; nls[0] = indices.Length;
+        // Clone the shape arrays. The cast `(int[])tensor._shape` returns the
+        // underlying TensorShape's backing array by reference — mutating
+        // nfs[0] / nls[0] without cloning would mutate the SOURCE tensor's
+        // shape in place, which corrupts every subsequent ExtractBatch
+        // against the same Loaded* tensor. (Manifested as
+        // KittiDataLoader_SplitsData failing with "Source index 8 is out of
+        // range. Valid range: 0 to 6." on the second CreateSplit call —
+        // the first call had shrunk LoadedFeatures._shape[0] from 10 to 7.)
+        // The Ade20k / CelebA loaders already use this Clone() pattern; the
+        // rest of the Data/Geometry, Data/Graph, Data/Text loaders were
+        // missing it.
+        var nfs = (int[])features._shape.Clone(); nfs[0] = indices.Length;
+        var nls = (int[])labels._shape.Clone(); nls[0] = indices.Length;
         var bf = new Tensor<T>(nfs);
         var bl = new Tensor<T>(nls);
         for (int i = 0; i < indices.Length; i++)

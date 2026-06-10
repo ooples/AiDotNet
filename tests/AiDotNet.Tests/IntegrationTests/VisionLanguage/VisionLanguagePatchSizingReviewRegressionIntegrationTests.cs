@@ -7,6 +7,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.VisionLanguage.InstructionTuned;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.VisionLanguage;
@@ -14,8 +15,9 @@ namespace AiDotNet.Tests.IntegrationTests.VisionLanguage;
 public class VisionLanguagePatchSizingReviewRegressionIntegrationTests
 {
     [Fact(Timeout = 120000)]
-    public void InstructionTunedModels_WithNonDivisibleTokenBudgets_RoundPatchSizeUp()
+    public async Task InstructionTunedModels_WithNonDivisibleTokenBudgets_RoundPatchSizeUp()
     {
+        await Task.Yield();
         var architecture = CreateArchitectureWithCustomLayers();
 
         AssertPatchSizeIsEight(() => new DeepSeekVL<double>(architecture, CreateOptions<DeepSeekVLOptions>()));
@@ -37,8 +39,9 @@ public class VisionLanguagePatchSizingReviewRegressionIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public void InstructionTunedModels_WithInvalidVisualSizingOptions_RejectBeforeLayerInitialization()
+    public async Task InstructionTunedModels_WithInvalidVisualSizingOptions_RejectBeforeLayerInitialization()
     {
+        await Task.Yield();
         var architecture = CreateArchitectureWithCustomLayers();
 
         AssertInvalidSizingRejected(() => new DeepSeekVL<double>(architecture, CreateOptions<DeepSeekVLOptions>(imageSize: 0)), "imageSize");

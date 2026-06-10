@@ -381,7 +381,9 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
                 // ArgumentOutOfRangeException for [ActionSize + i].
                 var nextStateTensor = Tensor<T>.FromVector(batch[i].NextState);
                 var nextPolicyOutput = _policyNetwork.Predict(nextStateTensor).ToVector();
-                var (nextAction, nextLogProb) = SampleAction(nextPolicyOutput, false);
+                // Stochastic branch (training: true) so nextLogProb is the real log π(a'|s');
+                // the SAC critic target needs the entropy term y = r + γ(minQ' − α·nextLogProb).
+                var (nextAction, nextLogProb) = SampleAction(nextPolicyOutput, training: true);
                 var nextSA = ConcatenateStateAction(batch[i].NextState, nextAction);
                 var nextSATensor = Tensor<T>.FromVector(nextSA, [1, stateSize + actionSize]);
                 var q1Next = _q1TargetNetwork.Predict(nextSATensor).ToVector()[0];

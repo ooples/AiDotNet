@@ -75,12 +75,30 @@ internal static class TestModuleInitializer
         // tests don't depend on trial state. Tests that explicitly test trial behavior
         // (e.g., ModelPersistenceGuardTests, AiModelBuilderLicensingTests) clear this
         // in their own setup via ClearAllLicenseSources().
+        //
+        // Only injected when no real license key is already configured (e.g. via a CI
+        // secret) — that real key validates against the official embedded build key, so
+        // we must NOT clobber its build key with the test one below.
         if (string.IsNullOrWhiteSpace(System.Environment.GetEnvironmentVariable("AIDOTNET_LICENSE_KEY")))
         {
-            // Test-only placeholder key. Format: aidn.{id}.{signature}
-            // This is NOT a real license key — it exists solely to bypass trial state in tests.
+            // Inject the test build key process-wide so offline license validation
+            // (HMAC-SHA256 of the key against the embedded build key, per the
+            // ValidateOffline hardening) can actually VERIFY the default key below.
+            // This mirrors LicenseBuildKeyFixture but applies globally, so
+            // serialize/persistence-gated tests in EVERY collection get a valid
+            // license rather than failing closed with LicenseRequiredException.
+            // Tests needing a different build key scope it via
+            // LicenseTestSupport.WithBuildKey (save/restore); trial tests clear the
+            // license key via ClearAllLicenseSources.
+            AiDotNet.Helpers.BuildKeyProvider.OverrideForTesting(Helpers.LicenseTestSupport.TestBuildKey);
+
+            // A REAL signed key — sig = base64url(HMACSHA256(testBuildKey, "aidn.testdefault1")) —
+            // so ValidateOffline returns Active. The previous hardcoded
+            // "aidn.testdefault1.testsignature1" carried a bogus signature that the
+            // hardened offline validator (correctly) rejects as Invalid, which made
+            // every serialize-gated build throw LicenseRequiredException.
             System.Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY",
-                "aidn." + "testdefault1" + "." + "testsignature1");
+                Helpers.LicenseTestSupport.SignedKey("testdefault1"));
         }
     }
 }

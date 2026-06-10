@@ -323,7 +323,11 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     /// </summary>
     protected override int[]? TryGetArchitectureInputShape()
     {
-        return _usingCustomLayers ? base.TryGetArchitectureInputShape() : null;
+        // Always disable the architecture-driven pre-walk: Layer[0] consumes the latent z,
+        // not Architecture.InputWidth, for BOTH default and custom decoder stacks. Delegating
+        // to base when _usingCustomLayers is true re-enabled the pre-walk and locked custom
+        // decoder layers to InputWidth, breaking their first forward.
+        return null;
     }
 
     #endregion
@@ -447,8 +451,12 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
         for (int layer = 0; layer < _gnnLayers.Count; layer++)
         {
-            var aggregated = AggregateNeighbors(current);
-            var tensor = _gnnLayers[layer].Forward(VectorToTensor(aggregated));
+            // Mirror EncoderForwardTape EXACTLY: adjacency message-passing is
+            // injected ONLY at layer 0 (deeper layers see already-mixed hidden
+            // states). Aggregating at every layer made Predict()/Generate()
+            // serve a different encoder than Train() optimizes.
+            var layerInput = layer == 0 ? AggregateNeighbors(current) : current;
+            var tensor = _gnnLayers[layer].Forward(VectorToTensor(layerInput));
             current = TensorToVector(tensor, _options.HiddenDimension);
         }
 
@@ -468,17 +476,16 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         {
             double selfVal = NumOps.ToDouble(features[i]);
             double neighborSum = 0;
-            double weightSum = 0;
 
             for (int j = 0; j < dim; j++)
             {
                 double aij = NumOps.ToDouble(_adjacency[i, j]);
                 neighborSum += aij * NumOps.ToDouble(features[j]);
-                weightSum += aij;
             }
 
-            double normNeighbor = weightSum > 1e-8 ? neighborSum / weightSum : 0;
-            aggregated[i] = NumOps.FromDouble(selfVal + normNeighbor);
+            // Unnormalized x + (x @ Aᵀ), identical to EncoderForwardTape; the
+            // previous weightSum normalization diverged from the trained path.
+            aggregated[i] = NumOps.FromDouble(selfVal + neighborSum);
         }
 
         for (int i = dim; i < featDim; i++)
@@ -734,10 +741,34 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             var rawOutput = DecoderForwardTape(z);
             var loss = ComputeGoggleLossTape(rawOutput, expectedOutput, mean, logVar);
             BackwardAndStepOnPrecomputedLoss(tape, loss, _optimizer);
+            ProjectAdjacencyConstraints();
         }
         finally
         {
             SetTrainingMode(false);
+        }
+    }
+
+    /// <summary>
+    /// Re-projects <see cref="_adjacency"/> onto the valid GOGGLE soft-adjacency
+    /// set after each optimizer step: off-diagonal entries are clamped to [0, 1]
+    /// and the diagonal is forced to zero. The optimizer updates the raw tensor
+    /// (registered via <see cref="GetExtraTrainableTensors"/>) without these
+    /// constraints, so unprojected steps could introduce negative edges or
+    /// self-loops that the encoder/regularizers assume never occur.
+    /// </summary>
+    private void ProjectAdjacencyConstraints()
+    {
+        if (_adjacency is null) return;
+
+        for (int i = 0; i < _dataWidth; i++)
+        {
+            for (int j = 0; j < _dataWidth; j++)
+            {
+                _adjacency[i, j] = i == j
+                    ? NumOps.Zero
+                    : NumOps.FromDouble(Math.Min(Math.Max(NumOps.ToDouble(_adjacency[i, j]), 0.0), 1.0));
+            }
         }
     }
 
@@ -765,6 +796,40 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         }
     }
 
+    /// <summary>
+    /// Total trainable parameter count = the layer parameters PLUS the learned
+    /// adjacency tensor (a registered extra trainable tensor). Overridden so the
+    /// flat-parameter contract (GetParameters / UpdateParameters / ParameterCount)
+    /// stays symmetric with <see cref="GetExtraTrainableTensors"/>.
+    /// </summary>
+    public override long ParameterCount
+    {
+        get
+        {
+            long total = base.ParameterCount;
+            if (_adjacency is not null && _adjacency.Length > 0)
+                total += _adjacency.Length;
+            return total;
+        }
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        var layerParams = base.GetParameters();
+        if (_adjacency is null || _adjacency.Length == 0)
+            return layerParams;
+
+        // Append adjacency after the layer parameters; UpdateParameters consumes
+        // it in the identical order so the flat-parameter round-trip is lossless.
+        var combined = new Vector<T>(layerParams.Length + _adjacency.Length);
+        for (int i = 0; i < layerParams.Length; i++)
+            combined[i] = layerParams[i];
+        for (int i = 0; i < _adjacency.Length; i++)
+            combined[layerParams.Length + i] = _adjacency[i];
+        return combined;
+    }
+
     /// <inheritdoc />
     public override void UpdateParameters(Vector<T> parameters)
     {
@@ -778,6 +843,16 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
                 layer.UpdateParameters(layerParameters);
                 startIndex += layerParameterCount;
             }
+        }
+
+        // Consume the adjacency block appended by GetParameters() so any
+        // parameter-vector-based flow (clone-by-parameters, external optimizers)
+        // actually updates the learned graph instead of silently dropping it.
+        if (_adjacency is not null && _adjacency.Length > 0
+            && startIndex + _adjacency.Length <= parameters.Length)
+        {
+            for (int i = 0; i < _adjacency.Length; i++)
+                _adjacency[i] = parameters[startIndex + i];
         }
     }
 

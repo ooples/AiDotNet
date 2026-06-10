@@ -190,6 +190,10 @@ public class EfficientSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         if (expectedOutput.Shape.Length == 3) expectedOutput = AddBatchDimension(expectedOutput);
         if (input.Shape.Length != 4) throw new ArgumentException($"Tape-based training requires rank 3 (CHW) or rank 4 (NCHW), got rank {input.Shape.Length}.", nameof(input));
         if (expectedOutput.Shape.Length != 4) throw new ArgumentException($"Tape-based training target requires rank 3 (CHW) or rank 4 (NCHW), got rank {expectedOutput.Shape.Length}.", nameof(expectedOutput));
+        if (input.Shape[0] != expectedOutput.Shape[0])
+            throw new ArgumentException(
+                $"Input batch size ({input.Shape[0]}) must match target batch size ({expectedOutput.Shape[0]}).",
+                nameof(expectedOutput));
         SetTrainingMode(true);
         try
         {

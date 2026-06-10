@@ -67,6 +67,7 @@ public class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     public MiniGPTv2(NeuralNetworkArchitecture<T> architecture, string modelPath, MiniGPTv2Options? options = null) : base(architecture)
     {
         _options = options ?? new MiniGPTv2Options();
+        _options.ValidateVisualSizing();
         SyncImageSizeWithArchitecture();
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
@@ -85,6 +86,7 @@ public class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     public MiniGPTv2(NeuralNetworkArchitecture<T> architecture, MiniGPTv2Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
     {
         _options = options ?? new MiniGPTv2Options();
+        _options.ValidateVisualSizing();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);

@@ -642,13 +642,50 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// and data from its neighbors in the graph.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Auto-default to an identity adjacency when no graph structure has been
+    /// wired up — every node only attends to itself, so A·X·W reduces to X·W
+    /// (a per-node linear transform). This is the graph-convolution identity
+    /// element and is the natural fallback for downstream pipelines (e.g.
+    /// GraphCodeBERT's Predict probe in the test scaffold) that don't have a
+    /// data-flow graph computed for the synthetic input. Previously the CPU
+    /// path threw and required every caller to wire SetAdjacencyMatrix before
+    /// any forward — incompatible with the model-family scaffold's
+    /// "Predict(random input)" probes.
+    /// </summary>
+    /// <remarks>
+    /// Shared by <see cref="Forward"/> and <see cref="ForwardGpu"/> so the two
+    /// paths keep an identical graph-setup contract. The identity is also
+    /// rebuilt when an existing dense adjacency's node count no longer matches
+    /// the current input (the previous auto-set was sticky and could go
+    /// shape-stale when the node count changed between calls).
+    /// </remarks>
+    private void EnsureDenseAdjacencyForInput(Tensor<T> input)
+    {
+        if (_useSparseAggregation) return;
+
+        int inferredNumNodes = input.Shape.Length >= 2
+            ? input.Shape[input.Shape.Length - 2]
+            : 1;
+
+        bool missing = _adjacencyMatrix == null;
+        bool mismatched2D = _adjacencyMatrix is not null
+            && _adjacencyMatrix.Shape.Length == 2
+            && (_adjacencyMatrix.Shape[0] != inferredNumNodes
+                || _adjacencyMatrix.Shape[1] != inferredNumNodes);
+
+        if (missing || mismatched2D)
+        {
+            var identity = new Tensor<T>(new[] { inferredNumNodes, inferredNumNodes });
+            for (int i = 0; i < inferredNumNodes; i++)
+                identity[i, i] = NumOps.One;
+            SetAdjacencyMatrix(identity);
+        }
+    }
+
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        // Check that either adjacency matrix or edge indices are set
-        if (_adjacencyMatrix == null && !_useSparseAggregation)
-        {
-            throw new InvalidOperationException("Graph structure must be set using SetAdjacencyMatrix or SetEdges before calling Forward.");
-        }
+        EnsureDenseAdjacencyForInput(input);
 
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
@@ -821,11 +858,13 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         if (backend == null)
             throw new InvalidOperationException("GPU backend unavailable");
 
-        // Check that graph structure is set
-        if (_adjacencyMatrix == null && !_useSparseAggregation)
-            throw new InvalidOperationException("Graph structure must be set using SetAdjacencyMatrix or SetEdges before calling ForwardGpu.");
-
         var input = inputs[0];
+
+        // Mirror Forward's graph-setup contract: auto-default to an identity
+        // adjacency (or rebuild a shape-stale one) instead of throwing, so the
+        // GPU path accepts the same "no graph wired" inference scenarios the
+        // CPU path already supports.
+        EnsureDenseAdjacencyForInput(input);
 
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;

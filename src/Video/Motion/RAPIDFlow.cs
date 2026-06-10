@@ -328,6 +328,23 @@ public class RAPIDFlow<T> : OpticalFlowBase<T>
         if (_flowHead is not null) Layers.Add(_flowHead);
     }
 
+    /// <summary>
+    /// RAPIDFlow consumes two RGB frames concatenated channel-wise — 2 ×
+    /// Architecture.InputDepth = 6 channels at the first encoder Conv —
+    /// but Architecture.InputDepth itself reports the SINGLE-FRAME count
+    /// (3) so it matches the architecture's per-frame metadata. Returning
+    /// null suppresses the base class's ResolveLazyLayerShapes pre-walk,
+    /// which would size <see cref="_encoderLevel1"/> for depth 3 and then
+    /// every real Train()/Predict() with the [1, 6, H, W] concat would
+    /// fail with "Expected input depth 3, but got 6". <see cref="WarmUpLazyLayers"/>
+    /// (called from <see cref="InitializeNativeLayers"/>) handles the
+    /// 6-channel warmup explicitly, so the lazy convs still get resolved
+    /// at ctor time — they just don't get pre-walked through the wrong
+    /// per-frame depth first. Same root-cause fix as UFM / MisGAN /
+    /// AutoDiffTabGenerator / GOGGLE / MGTSD.
+    /// </summary>
+    protected override int[]? TryGetArchitectureInputShape() => null;
+
     /// <inheritdoc/>
     protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
     {
