@@ -47,6 +47,22 @@ public class PrototypeAlignmentLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Persists the constructor arguments so the deserializer can rebuild this layer
+    /// at the same shape. Without this override the layer is reconstructed with
+    /// default embedDim / numPrototypes and SetParameters throws "Expected N
+    /// parameters, but got M" because the prototype bank size (numPrototypes ×
+    /// embedDim) drives parameter count.
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        metadata["EmbedDim"] = _embedDim.ToString(ci);
+        metadata["NumPrototypes"] = _numPrototypes.ToString(ci);
+        return metadata;
+    }
+
+    /// <summary>
     /// Initializes a new <see cref="PrototypeAlignmentLayer{T}"/>.
     /// </summary>
     /// <param name="embedDim">Dimension of each prototype and each input token.</param>
