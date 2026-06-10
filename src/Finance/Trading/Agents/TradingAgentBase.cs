@@ -54,6 +54,20 @@ public abstract class TradingAgentBase<T> : ReinforcementLearningAgentBase<T>, I
     protected readonly TradingAgentOptions<T> TradingOptions;
 
     /// <summary>
+    /// Position-sizing strategy used to translate a signal/edge into a capital fraction. Defaults to the
+    /// Kelly criterion (<see cref="AiDotNet.Finance.Portfolio.KellyCriterion{T}"/>); assign a custom
+    /// <see cref="IPositionSizer{T}"/> (fixed-fraction, volatility-target, …) to change sizing behavior.
+    /// </summary>
+    public IPositionSizer<T> PositionSizer { get; set; } = AiDotNet.Finance.Portfolio.KellyCriterion<T>.Default;
+
+    /// <summary>
+    /// Option-pricing strategy for options-aware agents (valuation / Greeks / implied vol). Defaults to
+    /// closed-form Black-Scholes (<see cref="AiDotNet.Finance.Options.BlackScholes{T}"/>); assign a custom
+    /// <see cref="IOptionPricer{T}"/> (binomial tree, Heston, a learned surface, …) to change pricing.
+    /// </summary>
+    public IOptionPricer<T> OptionPricer { get; set; } = AiDotNet.Finance.Options.BlackScholes<T>.Default;
+
+    /// <summary>
     /// History of portfolio values over time.
     /// </summary>
     protected readonly List<T> PortfolioHistory;

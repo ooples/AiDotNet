@@ -40,18 +40,56 @@ internal static class LayerInitializationSeedScope
     [ThreadStatic]
     private static Random? _rng;
 
+    [ThreadStatic]
+    private static int? _ambientFallbackSeed;
+
+    /// <summary>
+    /// Test-only ambient fallback init seed for the current thread. When set,
+    /// model constructions whose architecture carries NO explicit
+    /// <see cref="NeuralNetworks.NeuralNetworkArchitecture{T}.RandomSeed"/> derive
+    /// their per-layer weight init from THIS seed instead of the process-shared,
+    /// order-dependent <see cref="RandomHelper.ThreadSafeRandom"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This exists solely so the ModelFamily test harness can pin weight init for
+    /// deep, init-sensitive models (e.g. the end-to-end TTS family — VITS, VITS2,
+    /// NaturalSpeech, Kokoro, MeloTTS, Piper, YourTTS — whose VAE+flow+decoder
+    /// stack diverges from a poorly-scaled init). Those models otherwise inherit a
+    /// non-reproducible init whose scale depends on how many sibling tests ran on
+    /// the same xUnit worker thread first, so an invariant like
+    /// <c>MoreData_ShouldNotDegrade</c> passes in isolation but fails when
+    /// interleaved with other classes. The generated test's factory sets this seed
+    /// around construction (and clears it in a <c>finally</c>) so the fix is scoped
+    /// to exactly those tests.
+    /// </para>
+    /// <para>
+    /// Production code never sets this (the property is internal and only the test
+    /// assembly is granted access via <c>InternalsVisibleTo</c>), so the
+    /// "reproducible iff a seed was requested" contract is preserved: when neither
+    /// an architecture seed nor this ambient seed is present, the scope stays inert
+    /// and layers keep their existing non-reproducible behaviour.
+    /// </para>
+    /// </remarks>
+    internal static int? AmbientFallbackSeed
+    {
+        get => _ambientFallbackSeed;
+        set => _ambientFallbackSeed = value;
+    }
+
     /// <summary>
     /// Begins a fresh deterministic per-layer init-seed sequence for the model
     /// about to be constructed on this thread. Pass the architecture's resolved
-    /// seed (or <c>null</c> to disable — layers then fall back to their existing
-    /// non-reproducible initialization). Called from the
-    /// <see cref="NeuralNetworkBase{T}"/> constructor, which runs before the
-    /// derived model constructor builds its layers.
+    /// seed (or <c>null</c> to fall back to <see cref="AmbientFallbackSeed"/>, then
+    /// to the existing non-reproducible initialization when neither is set). Called
+    /// from the <see cref="NeuralNetworkBase{T}"/> constructor, which runs before
+    /// the derived model constructor builds its layers.
     /// </summary>
     internal static void ResetForModelConstruction(int? architectureSeed)
     {
-        _rng = architectureSeed.HasValue
-            ? RandomHelper.CreateSeededRandom(architectureSeed.Value)
+        int? effectiveSeed = architectureSeed ?? _ambientFallbackSeed;
+        _rng = effectiveSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(effectiveSeed.Value)
             : null;
     }
 

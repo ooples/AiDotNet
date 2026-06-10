@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using Xunit;
 using Xunit.Abstractions;
+using AiDotNet.Tests.Helpers;
 
 namespace AiDotNet.Tests.IntegrationTests.ConfigureMethodCoverage;
 
@@ -42,6 +43,9 @@ public class Bucket5_LifecycleTests : ConfigureMethodTestBase
     [Trait("category", "integration-configure-method")]
     public async Task ConfigureLicenseKey_OfflineKey_ReachesLicenseScopeDuringBuild()
     {
+        // Fail-closed validation requires a verifiable signature: inject a build key for this scope so
+        // the signed offline key below validates (Active) and the build reaches the license-wiring check.
+        using var _buildKey = LicenseTestSupport.WithBuildKey();
         var (features, labels) = MakeMemorizationSet();
         var loader = MakeCanaryLoader(features, labels);
         var model = MakeCanaryModel();
@@ -56,7 +60,7 @@ public class Bucket5_LifecycleTests : ConfigureMethodTestBase
         // any such key would need to be checked in and would either be
         // an actual offline-license credential or another placeholder
         // that has the same property).
-        var key = new AiDotNetLicenseKey("aidn.test.placeholder")
+        var key = new AiDotNetLicenseKey(LicenseTestSupport.SignedKey("test"))
         {
             ServerUrl = "", // offline-only mode
             Environment = "test",

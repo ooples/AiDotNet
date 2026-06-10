@@ -82,7 +82,23 @@ internal sealed class LicenseValidator
         bool explicitOfflineOnly = _licenseKey.ServerUrl is not null
             && _licenseKey.ServerUrl.Trim().Length == 0;
 
-        if (explicitOfflineOnly)
+        // A signed key (aidn.{id}.{sig}) can be verified LOCALLY by HMAC — but ONLY when this build
+        // actually embeds the official build key (the HMAC secret). When it does, validate the signature
+        // offline and skip the network entirely: this removes the blocking online round-trip (up to the
+        // 15s HttpClient timeout when the license server is slow/unreachable) at model-save time WITHOUT
+        // weakening security — a forged signature fails the constant-time HMAC compare in ValidateOffline().
+        // When the build key is ABSENT we must NOT accept an unverifiable signature offline (ValidateOffline
+        // would otherwise fail open), so such keys still go ONLINE, where the server is the source of truth.
+        // explicitOfflineOnly remains its own deliberate air-gapped opt-in.
+        bool buildKeyEmbedded = BuildKeyProvider.GetBuildKey().Length > 0;
+        // Only the DEFAULT server config (ServerUrl == null) opportunistically validates a signed key
+        // offline; if the caller set an explicit custom ServerUrl they want online validation (e.g. for
+        // revocation), so respect it. ServerUrl == "" is the explicit offline-only opt-in handled above.
+        bool serverUrlIsDefault = _licenseKey.ServerUrl is null;
+        bool useOfflineValidation = explicitOfflineOnly
+            || (serverUrlIsDefault && IsSignedKeyFormat(_licenseKey.Key) && buildKeyEmbedded);
+
+        if (useOfflineValidation)
         {
             // Explicit offline mode — only HMAC-signed keys (aidn.{id}.{sig}) are
             // accepted. Server-validated keys (AIDN-PROD-*, AIDN-DEV-*, etc.) MUST
@@ -227,55 +243,70 @@ internal sealed class LicenseValidator
                 message: "License key format is invalid. Expected format: aidn.{id}.{signature}");
         }
 
-        // When an official build key is available, verify the license key's HMAC signature.
-        // The key is expected to be in the format: payload.signature (base64url-encoded).
+        // Offline validation is CRYPTOGRAPHIC and FAILS CLOSED: a signed key is granted Active offline
+        // ONLY if its HMAC-SHA256 signature verifies against the embedded build key. Two former fail-open
+        // paths are removed: (1) when no build key was embedded, and (2) when the key had no signature
+        // segment, the method previously fell through to Active. Both are now rejected. Without the embedded
+        // build key the SDK cannot verify a signature, so it must NOT trust a well-formed-but-unverified
+        // string — this is precisely what makes air-gapped operation safe: an air-gapped build MUST embed
+        // the official build key to grant licenses offline.
         var buildKey = BuildKeyProvider.GetBuildKey();
-        if (buildKey.Length > 0)
+        if (buildKey.Length == 0)
         {
-            var dotIndex = _licenseKey.Key.LastIndexOf('.');
-            if (dotIndex > 0 && dotIndex < _licenseKey.Key.Length - 1)
-            {
-                string payloadPart = _licenseKey.Key[..dotIndex];
-                string signaturePart = _licenseKey.Key[(dotIndex + 1)..];
-
-                try
-                {
-                    byte[] payloadBytes = Encoding.UTF8.GetBytes(payloadPart);
-                    // Convert Base64URL (RFC 4648) to standard Base64 before decoding.
-                    // Base64URL uses '-' instead of '+' and '_' instead of '/'.
-                    string standardBase64 = signaturePart
-                        .Replace('-', '+')
-                        .Replace('_', '/');
-                    // Restore padding if stripped
-                    switch (standardBase64.Length % 4)
-                    {
-                        case 2: standardBase64 += "=="; break;
-                        case 3: standardBase64 += "="; break;
-                    }
-                    byte[] expectedSignature = Convert.FromBase64String(standardBase64);
-
-                    using var hmac = new System.Security.Cryptography.HMACSHA256(buildKey);
-                    byte[] computedSignature = hmac.ComputeHash(payloadBytes);
-
-                    if (!CryptographicEquals(computedSignature, expectedSignature))
-                    {
-                        return new LicenseValidationResult(
-                            LicenseKeyStatus.Invalid,
-                            message: "License key signature verification failed.");
-                    }
-                }
-                catch (FormatException)
-                {
-                    return new LicenseValidationResult(
-                        LicenseKeyStatus.Invalid,
-                        message: "License key signature is malformed.");
-                }
-            }
-            // Keys without a dot separator are accepted for backwards compatibility
-            // when no server URL is configured (legacy keys).
+            return new LicenseValidationResult(
+                LicenseKeyStatus.Invalid,
+                message: "Offline license verification requires a build that embeds the official build key; " +
+                         "this build cannot verify a signature locally. Use online validation, or deploy an " +
+                         "official signed build for air-gapped operation.");
         }
 
-        return new LicenseValidationResult(LicenseKeyStatus.Active, message: "Offline-only mode.");
+        // The key MUST carry a signature segment: payload.signature (base64url-encoded).
+        var dotIndex = _licenseKey.Key.LastIndexOf('.');
+        if (dotIndex <= 0 || dotIndex >= _licenseKey.Key.Length - 1)
+        {
+            return new LicenseValidationResult(
+                LicenseKeyStatus.Invalid,
+                message: "License key has no verifiable signature (expected payload.signature).");
+        }
+
+        string payloadPart = _licenseKey.Key[..dotIndex];
+        string signaturePart = _licenseKey.Key[(dotIndex + 1)..];
+
+        try
+        {
+            byte[] payloadBytes = Encoding.UTF8.GetBytes(payloadPart);
+            // Convert Base64URL (RFC 4648) to standard Base64 before decoding.
+            // Base64URL uses '-' instead of '+' and '_' instead of '/'.
+            string standardBase64 = signaturePart
+                .Replace('-', '+')
+                .Replace('_', '/');
+            // Restore padding if stripped
+            switch (standardBase64.Length % 4)
+            {
+                case 2: standardBase64 += "=="; break;
+                case 3: standardBase64 += "="; break;
+            }
+            byte[] expectedSignature = Convert.FromBase64String(standardBase64);
+
+            using var hmac = new System.Security.Cryptography.HMACSHA256(buildKey);
+            byte[] computedSignature = hmac.ComputeHash(payloadBytes);
+
+            if (!CryptographicEquals(computedSignature, expectedSignature))
+            {
+                return new LicenseValidationResult(
+                    LicenseKeyStatus.Invalid,
+                    message: "License key signature verification failed.");
+            }
+        }
+        catch (FormatException)
+        {
+            return new LicenseValidationResult(
+                LicenseKeyStatus.Invalid,
+                message: "License key signature is malformed.");
+        }
+
+        // Signature verified against the embedded build key.
+        return new LicenseValidationResult(LicenseKeyStatus.Active, message: "Offline validation succeeded (HMAC verified).");
     }
 
     /// <summary>
@@ -474,13 +505,15 @@ internal sealed class LicenseValidator
     public async System.Threading.Tasks.Task<LicenseValidationResult> ValidateAsync(
         System.Threading.CancellationToken cancellationToken = default)
     {
-        // Offline mode: only when ServerUrl is EXPLICITLY empty string (caller
-        // opted out of server validation). ServerUrl=null still uses the default
-        // server URL — only ""=opt-out skips online validation. Same security
-        // gate as Validate(): AIDN-* server-validated keys are rejected here
-        // because the SDK can't cryptographically verify them; only the
-        // HMAC-signed `aidn.{id}.{sig}` format is accepted offline.
-        if (_licenseKey.ServerUrl is not null && _licenseKey.ServerUrl.Trim().Length == 0)
+        // Offline validation path — mirrors Validate(): taken for explicit offline-only mode
+        // (ServerUrl=="") OR for a signed key when this build embeds the build key (so the HMAC signature
+        // is verifiable locally). A signed key WITHOUT an embedded build key falls through to online
+        // validation (the server is the source of truth) — it is never accepted unverified. AIDN-*
+        // server-validated keys always require online validation. ValidateOffline() itself fails closed.
+        bool explicitOfflineOnly = _licenseKey.ServerUrl is not null && _licenseKey.ServerUrl.Trim().Length == 0;
+        bool buildKeyEmbedded = BuildKeyProvider.GetBuildKey().Length > 0;
+        bool serverUrlIsDefault = _licenseKey.ServerUrl is null;
+        if (explicitOfflineOnly || (serverUrlIsDefault && IsSignedKeyFormat(_licenseKey.Key) && buildKeyEmbedded))
         {
             if (!IsSignedKeyFormat(_licenseKey.Key))
             {

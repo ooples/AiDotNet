@@ -1508,7 +1508,9 @@ public static class LayerHelper<T>
         // representation, and the network produces input-invariant output
         // (the L2-collapse the DBN invariant tests catch). Keeping outputSize
         // strictly on the supervised projection head matches the paper.
-        int[] rbmStackSizes = [architecture.GetInputShape()[0], 500, 500, 2000];
+        // CalculatedInputSize (flattened per-sample dims), NOT GetInputShape()[0] — the latter is the
+        // batch/sample axis (=1 for tabular), which would make the first RBM RBM(1->500) and collapse it.
+        int[] rbmStackSizes = [architecture.CalculatedInputSize, 500, 500, 2000];
 
         IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
         IActivationFunction<T> softmaxActivation = new SoftmaxActivation<T>();
@@ -3097,8 +3099,21 @@ public static class LayerHelper<T>
             throw new ArgumentNullException(nameof(architecture));
         }
 
-        // Get input shape and output size
-        int inputSize = architecture.GetInputShape()[0];
+        // Per-sample feature count = the FLATTENED input size, not axis 0 of the
+        // input shape. For a TwoDimensional (samples × features) tabular architecture
+        // — the one produced by the NeuralNetworkArchitecture(inputFeatures, outputSize)
+        // convenience ctor — GetInputShape() is [InputHeight, InputWidth] where
+        // InputHeight is the variable per-batch SAMPLE dimension (normalized to 1 by
+        // ValidateInputDimensions) and InputWidth is the feature count. Using
+        // GetInputShape()[0] therefore sized the first DenseLayer to InputHeight (=1)
+        // instead of the feature count, so the net consumed a single input value,
+        // collapsed to a near-constant output, AND reported its input dimension as 1
+        // (the optimizer's feature-selection pass then threw "Feature index N exceeds
+        // the input dimension 1"). CalculatedInputSize is the product of the non-batch
+        // dims (= InputWidth here, = InputSize for OneDimensional), which is the value
+        // the per-sample dense layers must be built against — matching the generic
+        // CreateLayers helper above.
+        int inputSize = architecture.CalculatedInputSize;
         int outputSize = architecture.OutputSize;
 
         if (inputSize <= 0)
@@ -3192,7 +3207,12 @@ public static class LayerHelper<T>
             throw new ArgumentNullException(nameof(architecture));
         }
 
-        int inputSize = architecture.GetInputShape()[0];
+        // Per-sample feature count = flattened non-batch dims (CalculatedInputSize), NOT
+        // GetInputShape()[0], which for a tabular (TwoDimensional) architecture is the batch/sample
+        // axis (normalized to 1) — using it sized the first Bayesian dense layer to 1 input, collapsing
+        // the net to a near-constant. Mirrors the standard CreateLayers builder. (Same bug class as the
+        // plain default-layer builder.)
+        int inputSize = architecture.CalculatedInputSize;
         int outputSize = architecture.OutputSize;
 
         if (inputSize <= 0)
@@ -24139,7 +24159,13 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder ===
-        yield return new LayerNormalizationLayer<T>();
+        // Leading LayerNorm normalizes the per-token vision features, whose width is
+        // visionDim (the documented input contract is [batch, num_tokens, visionDim]
+        // post-patch-embedding). Size it EXPLICITLY: as the first layer it has no
+        // preceding layer to infer from, so a bare lazy LayerNorm gets wired to the
+        // architecture's raw input dimension (e.g. inputHeight=224) and then rejects
+        // the real visionDim-wide input ("Gamma shape (224) does not match ...").
+        yield return new LayerNormalizationLayer<T>(visionDim);
 
         for (int i = 0; i < numVisionLayers; i++)
         {
@@ -29938,27 +29964,27 @@ public static class LayerHelper<T>
         int conv2Stride = 2,
         int conv2Padding = 1)
     {
-        int seqLen1 = (frameSize + 2 * conv1Padding - conv1KernelSize) / conv1Stride + 1;
-        int seqLen2 = (seqLen1 + 2 * conv2Padding - conv2KernelSize) / conv2Stride + 1;
-        int seqLen3 = (seqLen2 + 2 * conv2Padding - conv2KernelSize) / conv2Stride + 1;
+        // Silero VAD's frontend is a stack of 1-D convolutions over the raw
+        // waveform [batch, 1, frameSize] (Silero Team, 2021). A 2-D conv with a
+        // square kernel can't process a length-only signal (the height axis is
+        // 1, smaller than the kernel), so use the dedicated 1-D conv layer.
+        // First conv: 1 input channel (waveform) -> convFilters.
+        yield return new Conv1DLayer<T>(
+            inputChannels: 1, outputChannels: convFilters,
+            kernelSize: conv1KernelSize, stride: conv1Stride, padding: conv1Padding,
+            activation: new LeakyReLUActivation<T>());
 
-        // First conv
-        yield return new ConvolutionalLayer<T>(
-            outputDepth: convFilters, kernelSize: conv1KernelSize,
-            stride: conv1Stride, padding: conv1Padding,
-            activationFunction: new LeakyReLUActivation<T>());
+        // Second conv: convFilters -> convFilters.
+        yield return new Conv1DLayer<T>(
+            inputChannels: convFilters, outputChannels: convFilters,
+            kernelSize: conv2KernelSize, stride: conv2Stride, padding: conv2Padding,
+            activation: new LeakyReLUActivation<T>());
 
-        // Second conv
-        yield return new ConvolutionalLayer<T>(
-            outputDepth: convFilters, kernelSize: conv2KernelSize,
-            stride: conv2Stride, padding: conv2Padding,
-            activationFunction: new LeakyReLUActivation<T>());
-
-        // Third conv
-        yield return new ConvolutionalLayer<T>(
-            outputDepth: convFilters, kernelSize: conv2KernelSize,
-            stride: conv2Stride, padding: conv2Padding,
-            activationFunction: new LeakyReLUActivation<T>());
+        // Third conv: convFilters -> convFilters.
+        yield return new Conv1DLayer<T>(
+            inputChannels: convFilters, outputChannels: convFilters,
+            kernelSize: conv2KernelSize, stride: conv2Stride, padding: conv2Padding,
+            activation: new LeakyReLUActivation<T>());
 
         // LSTM layers
         for (int i = 0; i < numLstmLayers; i++)
@@ -31989,33 +32015,54 @@ public static class LayerHelper<T>
     /// Paper-faithful HiFi-GAN generator (Kong et al. 2020, "HiFi-GAN", §2.2),
     /// operating on channels-first rank-3 <c>[B, melChannels, T]</c> tensors:
     /// <list type="number">
-    /// <item><c>conv_pre</c>: 1-D conv mel -> hidden (kernel 7).</item>
-    /// <item>Upsampling blocks: each halves the channel width through a 1-D conv,
-    /// then runs the Multi-Receptive-Field (MRF) module — dilated 1-D convs
-    /// (dilation 1/3/5) covering multiple receptive fields.</item>
+    /// <item><c>conv_pre</c>: 1-D conv mel -> hidden (kernel 7, "same" padding).</item>
+    /// <item>Upsample stages: each is a <see cref="Conv1DTransposeLayer{T}"/> that
+    /// EXPANDS the time axis by the stage's upsample rate and halves the channel
+    /// width — the paper's ConvTranspose1d (official v1
+    /// <c>upsample_rates=[8,8,2,2]</c>, <c>upsample_kernel_sizes=[16,16,4,4]</c>) —
+    /// each followed by a <see cref="HiFiGANResBlockLayer{T}"/> Multi-Receptive-Field
+    /// module that sums residual dilated convs over kernel sizes [3,7,11] and
+    /// dilations [1,3,5].</item>
     /// <item><c>conv_post</c>: 1-D conv hidden -> 1 with tanh (waveform in
     /// <c>[-1, 1]</c>).</item>
     /// </list>
-    /// Convolutional weight-sharing — not a fully-connected MLP — is what lets the
-    /// optimizer converge stably; the generator uses weight normalization on the
-    /// conv weights and contains NO activation-normalization layers. Used by the
-    /// HiFi-GAN-style waveform vocoders (HiFiGAN, MelGAN, UnivNet, MultiBandMelGAN,
-    /// APNet, APNet2, ISTFTNet) which all configure melChannels=80 and a single
-    /// waveform output channel. Heterogeneous vocoders (BigVGAN melChannels=100,
-    /// the Fourier Vocos, flow-based WaveGlow, ParallelWaveGAN) use the
-    /// dimension-flexible <see cref="CreateDefaultVocoderLayers"/> instead.
+    /// The output time resolution is <c>T · ∏ upsampleRates</c> — real
+    /// frame-&gt;sample upsampling (matching PyTorch <c>nn.ConvTranspose1d</c>), not
+    /// the previous T-preserving stand-in. Weight-normalized convs, NO
+    /// activation-normalization (matches the paper). Used by the HiFi-GAN-style
+    /// vocoders (HiFiGAN, MelGAN, UnivNet, MultiBandMelGAN, APNet, APNet2, ISTFTNet);
+    /// WaveGlow / ParallelWaveGAN use <see cref="CreateDefaultWaveNetVocoderLayers"/>.
     /// </summary>
+    /// <param name="melChannels">Input mel-spectrogram channels (paper: 80).</param>
+    /// <param name="hiddenDim">conv_pre output / first upsample-stage input channels (paper: 512).</param>
+    /// <param name="outputDim">Waveform output channels (1).</param>
+    /// <param name="upsampleRates">Per-stage time-axis expansion factors (paper v1: [8,8,2,2]); the product is the total upsampling. Null defaults to [8,8,2,2].</param>
+    /// <param name="resBlockKernelSizes">MRF residual-block kernel sizes (paper v1: [3,7,11]). Null defaults to [3,7,11].</param>
+    /// <param name="resBlockDilations">MRF residual-block dilations (paper v1: [1,3,5]). Null defaults to [1,3,5].</param>
+    /// <returns>The ordered HiFi-GAN generator layer sequence.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> a vocoder turns a compact mel-spectrogram (a coarse,
+    /// frame-by-frame picture of sound) into an actual audio waveform (thousands of
+    /// samples). HiFi-GAN repeatedly "stretches" the time axis with transposed
+    /// convolutions (each stage makes the sequence several times longer) and, after
+    /// each stretch, refines the detail with a bank of small convolutions that look at
+    /// the signal over several window sizes at once (the Multi-Receptive-Field block).
+    /// The final tanh squashes the result into the [-1, 1] range a waveform lives in.</para>
+    /// </remarks>
     internal static IEnumerable<ILayer<T>> CreateDefaultHiFiGANLayers(
         int melChannels = 80,
         int hiddenDim = 512,
         int outputDim = 1,
-        int numUpsampleBlocks = 4,
-        int numResBlocks = 3,
-        double dropoutRate = 0.0)
+        int[]? upsampleRates = null,
+        int[]? resBlockKernelSizes = null,
+        int[]? resBlockDilations = null)
     {
-        IActivationFunction<T> leakyRelu = new LeakyReLUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-        IActivationFunction<T> tanhActivation = new TanhActivation<T>();
+        upsampleRates ??= new[] { 8, 8, 2, 2 };
+        resBlockKernelSizes ??= new[] { 3, 7, 11 };
+        resBlockDilations ??= new[] { 1, 3, 5 };
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+        var leakyRelu = (IActivationFunction<T>)new LeakyReLUActivation<T>();
+        var tanhActivation = (IActivationFunction<T>)new TanhActivation<T>();
 
         // === conv_pre: mel channels -> hidden (kernel 7, "same" padding) ===
         yield return new Conv1DLayer<T>(
@@ -32024,29 +32071,20 @@ public static class LayerHelper<T>
             activation: identityActivation);
 
         int currentDim = hiddenDim;
-        for (int i = 0; i < numUpsampleBlocks; i++)
+        foreach (int rate in upsampleRates)
         {
             int nextDim = currentDim / 2;
-            if (nextDim < 32) nextDim = 32;
+            if (nextDim < 1) nextDim = 1;
 
-            // Channel-narrowing conv (stands in for HiFi-GAN's ConvTranspose1d
-            // upsampling block; not residual because the channel count changes).
-            yield return new Conv1DLayer<T>(
+            // ConvTranspose1d upsample: kernel = 2*rate, stride = rate, padding = rate/2
+            // — the official HiFi-GAN pairing (rate 8 -> kernel 16), giving T_out = T*rate.
+            yield return new Conv1DTransposeLayer<T>(
                 inputChannels: currentDim, outputChannels: nextDim,
-                kernelSize: 7, dilation: 1, stride: 1, padding: null,
-                activation: leakyRelu);
+                kernelSize: 2 * rate, stride: rate, padding: rate / 2,
+                outputPadding: 0, dilation: 1, activation: leakyRelu);
 
-            // MRF dilated convs — channel-preserving (nextDim -> nextDim),
-            // dilation 1/3/5 to cover multiple receptive fields.
-            for (int r = 0; r < numResBlocks; r++)
-            {
-                int dilation = r == 0 ? 1 : (r == 1 ? 3 : 5);
-                yield return new Conv1DLayer<T>(
-                    inputChannels: nextDim, outputChannels: nextDim,
-                    kernelSize: 3, dilation: dilation, stride: 1, padding: null,
-                    activation: leakyRelu);
-            }
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            // MRF: parallel residual dilated convs summed over kernel sizes × dilations.
+            yield return new HiFiGANResBlockLayer<T>(nextDim, resBlockKernelSizes, resBlockDilations);
 
             currentDim = nextDim;
         }
@@ -32075,6 +32113,20 @@ public static class LayerHelper<T>
     /// identical for any constant input — DifferentText_DifferentAudio). No
     /// dropout / activation-normalization, matching the paper.
     /// </summary>
+    /// <param name="melChannels">Input mel-spectrogram channels (paper: 80).</param>
+    /// <param name="hiddenChannels">Residual channel width held constant through the stack.</param>
+    /// <param name="numResBlocks">Number of gated residual blocks (paper: 30).</param>
+    /// <param name="dilationCycle">Dilation cycle length; block i uses dilation 2^(i mod cycle).</param>
+    /// <param name="outputDim">Waveform output channels (1).</param>
+    /// <returns>The ordered WaveNet/Parallel-WaveGAN generator layer sequence.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> WaveNet builds audio with a deep stack of dilated
+    /// convolutions (each block "sees" exponentially further back in time). The key
+    /// trick is the gated activation — two convolutions per block, one squashed with
+    /// tanh and one with sigmoid, multiplied together — which lets the network choose
+    /// how much of each pattern to let through. A residual shortcut around every block
+    /// keeps the deep stack trainable.</para>
+    /// </remarks>
     internal static IEnumerable<ILayer<T>> CreateDefaultWaveNetVocoderLayers(
         int melChannels = 80,
         int hiddenChannels = 64,
@@ -32082,9 +32134,18 @@ public static class LayerHelper<T>
         int dilationCycle = 10,
         int outputDim = 1)
     {
-        IActivationFunction<T> leakyRelu = new LeakyReLUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-        IActivationFunction<T> tanhActivation = new TanhActivation<T>();
+        if (melChannels <= 0) throw new ArgumentOutOfRangeException(nameof(melChannels));
+        if (hiddenChannels <= 0) throw new ArgumentOutOfRangeException(nameof(hiddenChannels));
+        if (numResBlocks < 0) throw new ArgumentOutOfRangeException(nameof(numResBlocks));
+        if (outputDim <= 0) throw new ArgumentOutOfRangeException(nameof(outputDim));
+        // dilation = 1 << (i % dilationCycle): dilationCycle <= 0 would be a mod-by-zero,
+        // and a cycle > 30 lets the shift reach/overflow the 32-bit signed int range.
+        if (dilationCycle <= 0 || dilationCycle > 30)
+            throw new ArgumentOutOfRangeException(nameof(dilationCycle),
+                "dilationCycle must be in [1, 30] so that 1 << (i % dilationCycle) stays within the int range.");
+
+        var leakyRelu = (IActivationFunction<T>)new LeakyReLUActivation<T>();
+        var tanhActivation = (IActivationFunction<T>)new TanhActivation<T>();
 
         // Input 1x1 conv: mel channels -> hidden channels.
         yield return new Conv1DLayer<T>(
@@ -32092,14 +32153,15 @@ public static class LayerHelper<T>
             kernelSize: 1, dilation: 1, stride: 1, padding: null,
             activation: leakyRelu);
 
-        // Dilated residual conv blocks (constant channel width, dilation cycle).
+        // WaveNet gated residual blocks: each = dilated tanh·sigmoid gated convolution
+        // + 1x1 residual projection (van den Oord 2016 §2.3; Yamamoto 2020 §2.1),
+        // dilation = 2^(i mod cycle). T is preserved within the stack (the mel
+        // conditioning is already at waveform rate); the gated activation + residual
+        // is the defining WaveNet structure, replacing the previous plain dilated stack.
         for (int i = 0; i < numResBlocks; i++)
         {
             int dilation = 1 << (i % dilationCycle);
-            yield return new Conv1DLayer<T>(
-                inputChannels: hiddenChannels, outputChannels: hiddenChannels,
-                kernelSize: 3, dilation: dilation, stride: 1, padding: null,
-                activation: leakyRelu);
+            yield return new WaveNetResidualBlockLayer<T>(hiddenChannels, kernelSize: 3, dilation: dilation);
         }
 
         // Output 1x1 conv -> waveform channel(s) + tanh.
@@ -32213,21 +32275,27 @@ public static class LayerHelper<T>
                 hiddenSize: hiddenDim, numHeads: numHeads, ffnDim: hiddenDim * 4, dropoutRate: dropoutRate);
         }
 
-        // === HiFi-GAN Decoder ===
-        // Paper-faithful to the HiFi-GAN generator (Kong et al. 2020): LeakyReLU
-        // activations, NO activation-normalization (LayerNorm/BatchNorm), NO
-        // dropout — it relies on weight normalization of the conv weights instead.
-        // The previous GELU + LayerNorm + Dropout decoder was the source of the
-        // VITS-family training collapse:
+        // === HiFi-GAN-inspired Decoder ===
+        // Takes the HiFi-GAN generator's stabilizing choices (Kong et al. 2020):
+        // LeakyReLU activations (NOT GELU), NO dropout, and crucially NO TERMINAL
+        // activation-normalization. It deliberately DIVERGES from pure HiFi-GAN in two
+        // ways that the test invariants pin: (a) it is a dense dim-reducing stack (not
+        // the channels-first Conv1D ConvTranspose1d generator — that is
+        // CreateDefaultHiFiGANLayers, used by the standalone vocoders), and (b) it
+        // RETAINS an INTERMEDIATE LayerNorm after each dense block (see the per-layer
+        // note below) because the VAE-flow latent this decodes is unbounded and the
+        // un-normalized dense stack otherwise diverges. The two failure modes this
+        // design fixes (vs the previous GELU+terminal-LayerNorm+Dropout decoder):
         //   • GELU's analytic derivative is term2·sech²(term1) with term2 ~ x³; once
         //     a decoder pre-activation grows, term2 overflows to ±inf while sech²
         //     underflows to 0, giving inf·0 = NaN gradients on the first backward
         //     step (ForwardPass_ShouldBeFinite_AfterTraining: params NaN after
         //     iter 1). LeakyReLU's derivative is a bounded constant (1 or 0.01).
-        //   • the terminal LayerNorm over a positively-homogeneous stack divides
+        //   • the TERMINAL LayerNorm over a positively-homogeneous stack divides
         //     out the input scale and collapses the waveform across inputs
-        //     (DifferentInputs_AfterTraining); dropout adds process-shared-RNG mask
-        //     noise that destabilizes the deep dim-reducing stack.
+        //     (DifferentInputs_AfterTraining) — so there is NO LayerNorm before the
+        //     final tanh; dropout adds process-shared-RNG mask noise that
+        //     destabilizes the deep dim-reducing stack, so it is omitted too.
         yield return new DenseLayer<T>(decoderDim, leakyRelu);
         yield return new LayerNormalizationLayer<T>();
 
@@ -32266,7 +32334,6 @@ public static class LayerHelper<T>
         double dropoutRate = 0.1,
         int vocabSize = 256)
     {
-        IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int textFfnDim = textEncoderDim * 4;
         int llmFfnDim = llmDim * 4;
@@ -32277,33 +32344,29 @@ public static class LayerHelper<T>
         yield return new EmbeddingLayer<T>(vocabSize, textEncoderDim);
 
         // === Text Encoder ===
-        yield return new LayerNormalizationLayer<T>();
-
+        // Canonical Pre-LN residual Transformer blocks (Vaswani 2017 §3.1). The prior
+        // flat MHA→Norm→FFN→Norm sequence had NO residual connections, so the signal
+        // washed out through the deep stack → training diverged / loss didn't decrease /
+        // identical inputs produced identical outputs (the #1380 collapse mechanism).
+        // One residual block per layer fixes it (same fix as the VITS text encoder).
         for (int i = 0; i < numTextEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (textEncoderDim) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(textFfnDim, geluActivation);
-            yield return new DenseLayer<T>(textEncoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: textEncoderDim, numHeads: numHeads, ffnDim: textFfnDim, dropoutRate: dropoutRate);
         }
 
         // === Projection to LLM dim ===
         if (textEncoderDim != llmDim)
             yield return new DenseLayer<T>(llmDim, identityActivation);
 
-        // === Autoregressive LLM Decoder (codec token prediction) ===
+        // === LLM Decoder (codec token prediction) ===
+        // Residual Pre-LN blocks at llmDim — same residual-connection fix. (Autoregressive
+        // causal masking is applied by the model's generation loop at inference; the
+        // training-invariant tests teacher-force the full sequence.)
         for (int i = 0; i < numLLMLayers; i++)
         {
-            var selfAttn = new MultiHeadAttentionLayer<T>(numHeads, (llmDim) / (numHeads));
-            selfAttn.UseCausalMask = true;
-            yield return selfAttn;
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(llmFfnDim, geluActivation);
-            yield return new DenseLayer<T>(llmDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: llmDim, numHeads: numHeads, ffnDim: llmFfnDim, dropoutRate: dropoutRate);
         }
 
         // === Codec token output projection ===
@@ -32329,7 +32392,6 @@ public static class LayerHelper<T>
         if (inputFeatures <= 0)
             throw new ArgumentOutOfRangeException(nameof(inputFeatures), "inputFeatures must be positive.");
 
-        IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int encoderFfnDim = encoderDim * 4;
         int flowFfnDim = flowDim * 4;
@@ -32346,16 +32408,14 @@ public static class LayerHelper<T>
             yield return new DenseLayer<T>(encoderDim, identityActivation, lazy);
 
         // === Text Encoder ===
-        yield return new LayerNormalizationLayer<T>();
-
+        // Canonical Pre-LN residual Transformer blocks. The prior flat
+        // MHA→Norm→FFN→Norm sequence had NO residual connections → signal washout →
+        // training diverged / loss didn't decrease / identical inputs produced identical
+        // outputs (the #1380 collapse). One residual block per layer (the VITS fix).
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (encoderDim) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(encoderFfnDim, geluActivation);
-            yield return new DenseLayer<T>(encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: encoderDim, numHeads: numHeads, ffnDim: encoderFfnDim, dropoutRate: dropoutRate);
         }
 
         // === Projection ===
@@ -32363,14 +32423,12 @@ public static class LayerHelper<T>
             yield return new DenseLayer<T>(flowDim, identityActivation);
 
         // === Flow Matching Blocks (conditional vector field estimator) ===
+        // Residual Pre-LN blocks at flowDim — the OT-CFM vector field is a residual
+        // refinement, so the blocks must add to (not overwrite) the latent.
         for (int i = 0; i < numFlowLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (flowDim) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(flowFfnDim, geluActivation);
-            yield return new DenseLayer<T>(flowDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: flowDim, numHeads: numHeads, ffnDim: flowFfnDim, dropoutRate: dropoutRate);
         }
 
         // === Output projection to mel/codec ===

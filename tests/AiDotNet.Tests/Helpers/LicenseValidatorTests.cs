@@ -13,13 +13,14 @@ namespace AiDotNet.Tests.Helpers;
 /// Tests for <see cref="LicenseValidator"/> covering offline validation,
 /// online validation with mock HTTP, caching, grace period, and error handling.
 /// </summary>
-[Collection("LicensingTests")]
+[Collection("License")]
 public class LicenseValidatorTests
 {
-    // Valid format: aidn.{alphanumeric-id}.{alphanumeric-signature}
-    private const string ValidTestKey = "aidn.abc123def456.sig789xyz012abc";
-    private const string ValidTestKey2 = "aidn.cached12key3.sig456cached78";
-    private const string ValidTestKey3 = "aidn.grace12test3.sig789grace012";
+    // Real HMAC-signed keys against the injected test build key (LicenseCollection fixture). After the
+    // fail-closed fix, offline validation only accepts a verified signature — fake strings no longer pass.
+    private static readonly string ValidTestKey = LicenseTestSupport.SignedKey("abc123def456");
+    private static readonly string ValidTestKey2 = LicenseTestSupport.SignedKey("cached12key3");
+    private static readonly string ValidTestKey3 = LicenseTestSupport.SignedKey("grace12test3");
 
     [Fact(Timeout = 60000)]
     public async Task OfflineMode_ValidKey_ReturnsActive()
@@ -33,7 +34,7 @@ public class LicenseValidatorTests
         var result = validator.Validate();
 
         Assert.Equal(LicenseKeyStatus.Active, result.Status);
-        Assert.Equal("Offline-only mode.", result.Message);
+        Assert.Equal("Offline validation succeeded (HMAC verified).", result.Message);
     }
 
     [Fact(Timeout = 60000)]
