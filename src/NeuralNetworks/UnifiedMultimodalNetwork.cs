@@ -1135,7 +1135,17 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
             Name = "UnifiedMultimodalNetwork",
             FeatureCount = _embeddingDimension,
             Complexity = _numTransformerLayers * 4,
-            Description = "Unified multimodal network for any-to-any modality generation"
+            Description = "Unified multimodal network for any-to-any modality generation",
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "NetworkType", "UnifiedMultimodalNetwork" },
+                { "EmbeddingDimension", _embeddingDimension },
+                { "MaxSequenceLength", _maxSequenceLength },
+                { "NumTransformerLayers", _numTransformerLayers },
+                { "LayerCount", Layers.Count },
+                { "ParameterCount", GetParameterCount() }
+            },
+            ModelData = this.Serialize()
         };
     }
 
