@@ -605,11 +605,27 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
         }
 
         // Read _basisScales (see Serialize) so Predict scales inputs identically post-load.
-        int scaleLen = reader.ReadInt32();
-        _basisScales = new Vector<T>(scaleLen);
-        for (int i = 0; i < scaleLen; i++)
+        // Guard for backward compatibility: payloads serialized before _basisScales
+        // was persisted have no trailing block, so fall back to unit scales (no-op
+        // scaling) when the stream is already exhausted.
+        if (ms.Position < ms.Length)
         {
-            _basisScales[i] = NumOps.FromDouble(reader.ReadDouble());
+            int scaleLen = reader.ReadInt32();
+            if (scaleLen < 0)
+                throw new InvalidDataException("Invalid GAM basis-scale length in serialized payload.");
+            _basisScales = new Vector<T>(scaleLen);
+            for (int i = 0; i < scaleLen; i++)
+            {
+                _basisScales[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+        }
+        else
+        {
+            _basisScales = new Vector<T>(_basisFunctions.Columns);
+            for (int i = 0; i < _basisScales.Length; i++)
+            {
+                _basisScales[i] = NumOps.One;
+            }
         }
     }
 
