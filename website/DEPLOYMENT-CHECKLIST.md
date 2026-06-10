@@ -117,7 +117,48 @@ supabase db push
 (Or apply via the Supabase Dashboard → SQL Editor if you don't have CLI
 access configured locally.)
 
-## 6. Smoke-test the live flow
+## 6. GitHub OAuth provider — verify config in Supabase + GitHub
+
+The user reported "GitHub login throws an error now (new issue)". Direct
+testing shows:
+
+* Supabase's OAuth start endpoint correctly emits a 302 to
+  `github.com/login/oauth/authorize?client_id=Ov23liyJTdKbxKrUl9lR&...`
+  (verified by hitting
+  `https://yfkqwpgjahoamlgckjib.supabase.co/auth/v1/authorize?provider=github`).
+* The `/auth/callback/?error=server_error` path correctly surfaces our
+  hint: "OAuth provider is misconfigured on the server side (client
+  secret rotated, callback URL drift, or provider disabled)."
+
+That hint is the exact message the user is most likely seeing. The fix
+is **in the dashboards**, not the code. Walk through each item:
+
+**A. GitHub OAuth App** (https://github.com/settings/developers → OAuth Apps → "AiDotNet" or whichever app owns client_id `Ov23liyJTdKbxKrUl9lR`)
+1. Open the app's settings page.
+2. Confirm **Authorization callback URL** is exactly
+   `https://yfkqwpgjahoamlgckjib.supabase.co/auth/v1/callback` (no
+   trailing slash, no leading whitespace, scheme is `https`). A trailing
+   slash, a `www.` prefix, or any other variant causes GitHub to redirect
+   to a URL Supabase doesn't accept and the token swap silently fails.
+3. Click **Generate a new client secret** → copy the new value
+   immediately (GitHub only shows it once).
+
+**B. Supabase Auth → Providers → GitHub** (Supabase Dashboard)
+1. Verify the toggle is **Enabled**.
+2. Paste the **client_id** (`Ov23liyJTdKbxKrUl9lR` per the live OAuth
+   start URL — confirm it matches the GitHub app).
+3. Paste the **client_secret** you just generated in step A.3.
+4. Save.
+
+**C. Smoke-test from an Incognito window**
+1. Open https://www.aidotnet.dev/login/ in a private window.
+2. Click "Continue with GitHub".
+3. Approve on github.com → expect a redirect back to `/account/`.
+4. If you instead land on `/auth/callback/?error=...`, expand the
+   "Show technical details" disclosure and copy the `error_description`
+   into the support mailto link.
+
+## 7. Smoke-test the live flow
 
 1. Browse to https://www.aidotnet.dev/pricing/ in an Incognito window.
 2. Confirm Subscribe buttons resolve to `buy.stripe.com/` URLs **without**

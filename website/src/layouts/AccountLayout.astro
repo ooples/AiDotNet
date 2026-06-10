@@ -130,12 +130,38 @@ const sidebarLinks = [
       if (signOutBtn) {
         signOutBtn.addEventListener('click', async () => {
           try {
-            const { error } = await supabase.auth.signOut();
+            // `scope: 'local'` clears the browser-side session
+            // unconditionally; the default 'global' makes a network call
+            // to revoke the refresh token server-side first, and when
+            // that 4xx/5xxs (expired refresh token, brief Supabase
+            // outage, captive-portal Wi-Fi, etc.) the SDK can leave the
+            // localStorage `sb-*-auth-token` entry in place. The user
+            // then clicks Sign Out, the page redirects to `/`, but the
+            // next visit to /login/ sees a valid session and redirects
+            // straight back into /account/ — i.e. Sign Out appears
+            // broken. Local scope sidesteps that and gives us a
+            // deterministic local-session clear.
+            const { error } = await supabase.auth.signOut({ scope: 'local' });
             if (error) {
               console.error('Sign out error:', error.message);
             }
           } catch (e) {
             console.error('Sign out failed:', e);
+          }
+          // Defensive belt-and-braces: even if signOut threw or skipped
+          // the localStorage clear (e.g. SDK regression), nuke any
+          // residual sb-*-auth-token keys so the next checkExistingSession
+          // on /login/ doesn't auto-redirect the user back into the
+          // account area they just signed out of.
+          try {
+            for (let i = localStorage.length - 1; i >= 0; i--) {
+              const k = localStorage.key(i);
+              if (k && k.startsWith('sb-') && k.endsWith('-auth-token')) {
+                localStorage.removeItem(k);
+              }
+            }
+          } catch {
+            // localStorage can throw in private-mode Safari; ignore.
           }
           // Always redirect regardless of sign-out result
           const base = import.meta.env.BASE_URL || '/';
