@@ -571,11 +571,17 @@ public partial class RWKV7Block<T> : LayerBase<T>
             Engine.TensorMatMul(normed2d, _outputWeights),
             new[] { batchSize, seqLen, _modelDimension });
 
-        // The fused WKV kernel starts from a zero state each call (training resets per sequence, and
-        // full-sequence inference is computed from t=0), so there is no carried recurrent state to
-        // persist. Keep the token-shift streaming token (last position) for parity with the
-        // decomposed path's _prevToken contract.
-        _recurrentState = null;
+        // Recurrent-state persistence. In TRAINING each sequence is independent and the carried state is
+        // never read back (the read gate above is `!IsTrainingMode`), so we skip the recurrence entirely —
+        // keeping the #1464 per-step-overhead win. In INFERENCE the autoregressive streaming contract
+        // requires the final WKV state S_T so the next call can continue the sequence; the fused
+        // Rwkv7SequenceForward returns only the gated outputs (not S_T), so compute S_T from the same
+        // documented recurrence (off-tape; inference only):
+        //   S_t[di,vi] = sigmoid(A_t)[di]*S_{t-1}[di,vi] + (sigmoid(B_t)[di]*K_t[di])*V_t[vi]
+        // seeded from the prior state (`state`) so token-by-token streaming accumulates correctly.
+        _recurrentState = IsTrainingMode
+            ? null
+            : ComputeFinalWkvState(state, Aall, Ball, Kall, Vall, batchSize, seqLen);
         _prevToken = seqLen > 0 ? x.GetSliceAlongDimension(seqLen - 1, 1) : xPrev;
 
         // Cache for backward
@@ -591,6 +597,56 @@ public partial class RWKV7Block<T> : LayerBase<T>
 
         return output;
     }
+
+    /// <summary>
+    /// Computes the final WKV recurrent state S_T after processing a sequence, for autoregressive streaming
+    /// inference. Mirrors the recurrence the fused <c>Rwkv7SequenceForward</c> kernel applies internally:
+    /// <c>S_t[h,di,vi] = sigmoid(A_t)[h,di]*S_{t-1}[h,di,vi] + sigmoid(B_t)[h,di]*K_t[h,di]*V_t[h,vi]</c>,
+    /// per head. Runs off the autodiff tape (scalar arithmetic over the projected A/B/K/V values) since the
+    /// streaming state carries no gradient — it only seeds the next inference call.
+    /// </summary>
+    /// <param name="seed">The prior state to continue from (zeros on the first call), [batch, heads, headDim, headDim].</param>
+    /// <param name="aAll">Decay projection A over the sequence, [batch, seqLen, modelDim].</param>
+    /// <param name="bAll">Injection-gate projection B over the sequence, [batch, seqLen, modelDim].</param>
+    /// <param name="kAll">Key projection over the sequence, [batch, seqLen, modelDim].</param>
+    /// <param name="vAll">Value projection over the sequence, [batch, seqLen, modelDim].</param>
+    /// <param name="batchSize">The batch size.</param>
+    /// <param name="seqLen">The sequence length.</param>
+    /// <returns>The final state S_T, shape [batch, numHeads, headDim, headDim].</returns>
+    private Tensor<T> ComputeFinalWkvState(
+        Tensor<T> seed, Tensor<T> aAll, Tensor<T> bAll, Tensor<T> kAll, Tensor<T> vAll, int batchSize, int seqLen)
+    {
+        int hd = _headDimension;
+        var s = new Tensor<T>(new[] { batchSize, _numHeads, hd, hd });
+
+        // Seed from the prior state so streaming (seqLen == 1 per call) accumulates across calls.
+        for (int bi = 0; bi < batchSize; bi++)
+            for (int h = 0; h < _numHeads; h++)
+                for (int di = 0; di < hd; di++)
+                    for (int vi = 0; vi < hd; vi++)
+                        s[new[] { bi, h, di, vi }] = seed[new[] { bi, h, di, vi }];
+
+        for (int t = 0; t < seqLen; t++)
+            for (int bi = 0; bi < batchSize; bi++)
+                for (int h = 0; h < _numHeads; h++)
+                    for (int di = 0; di < hd; di++)
+                    {
+                        int idx = (h * hd) + di;
+                        T a = Sigmoid(aAll[new[] { bi, t, idx }]);
+                        T bk = NumOps.Multiply(Sigmoid(bAll[new[] { bi, t, idx }]), kAll[new[] { bi, t, idx }]);
+                        for (int vi = 0; vi < hd; vi++)
+                        {
+                            T v = vAll[new[] { bi, t, (h * hd) + vi }];
+                            T prev = s[new[] { bi, h, di, vi }];
+                            s[new[] { bi, h, di, vi }] = NumOps.Add(NumOps.Multiply(a, prev), NumOps.Multiply(bk, v));
+                        }
+                    }
+
+        return s;
+    }
+
+    private T Sigmoid(T x) =>
+        NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.FromDouble(Math.Exp(-NumOps.ToDouble(x)))));
 
     /// <summary>
     /// Channel mixing forward with SiLU gating (RWKV-7 style).
