@@ -175,15 +175,33 @@ var server = new McpServer(myTools);
 
 ---
 
-## Follow-ups
+## Delivered since the first cut
 
-These are intentionally scoped as separate efforts:
+- **Hosting/DI** — `AddAgentChatClient` / `AddAgentTools` / `AddAgentExecutor` in `AiDotNet.Serving`.
+- **Real MCP transports** — `HttpMcpTransport` (JSON-RPC over HTTP) and `StreamMcpTransport`
+  (newline-delimited JSON-RPC over stdio streams), plus the in-memory transport.
+- **Weight loaders** — `SafetensorsReader` and `GgufReader` (header, metadata, tensor directory; F32/F16
+  value reads).
+- **LLM-as-judge evaluator** (`ChatClientTrajectoryEvaluator`) and a **REINFORCE policy router**
+  (`SoftmaxPolicyRouter`).
+- **Deterministic record/replay** of model IO (`RecordingChatClient` / `ReplayingChatClient`).
 
-- **Hosting/DI** — `Microsoft.Extensions.DependencyInjection` registration helpers + .NET Aspire belong in
-  `AiDotNet.Serving` (which already depends on DI), not the core library.
-- **Real MCP transports** — production stdio / HTTP+SSE transports for `IMcpTransport` (the client/server and
-  an in-memory transport are implemented and tested).
-- **Real K/V cache inside the model forward** — the engine-side incremental seam exists; caching inside the
-  network's attention is a model-layer change.
-- **Weight loaders** (GGUF / safetensors) — binary-format parsing + per-architecture tensor mapping.
-- **Head-to-head benchmarks vs Semantic Kernel & LangGraph** — a cross-framework measurement harness.
+## Remaining work (blocked on capabilities outside this subsystem)
+
+These genuinely require model-layer changes, branch convergence, or live infrastructure — they are tracked
+with their exact integration points rather than stubbed:
+
+- **Real K/V cache inside the model forward** — the engine-side seam (`IIncrementalCausalLanguageModel<T>`)
+  is implemented and tested; caching keys/values inside a network's attention (e.g. `MambaLanguageModel`,
+  `GLALanguageModel`) is a model-layer change and is verified there.
+- **LoRA fine-tuning execution** — the reward-filtered `FineTuningDataset` is produced; running it is a
+  model-pipeline step via `FineTuningBase<T,TInput,TOutput>.FineTuneAsync(model, FineTuningData<…>)`, which
+  requires committing to concrete `TInput`/`TOutput` tokenization and a trainable model (GPU training).
+- **Quantized GGUF dequantization** — Q4_K/Q8_0/… block decoding (the F32/F16 path and full metadata/tensor
+  directory are done) and **per-architecture tensor→layer mapping** for both loaders.
+- **Multi-agent-on-graph** — running agents as `StateGraph` nodes; needs the Phase 1 graph and Phase 2 agents
+  on one branch (they currently live on separate stacked PRs).
+- **Postgres / Redis graph checkpointers** — interface-ready on the Phase 1 branch; need live servers to
+  verify, so they are integration-tested separately rather than in CI.
+- **Head-to-head benchmarks vs Semantic Kernel & LangGraph** — a cross-framework measurement harness (those
+  frameworks are external to this repo).
