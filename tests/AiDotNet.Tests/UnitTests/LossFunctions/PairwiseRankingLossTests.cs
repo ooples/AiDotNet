@@ -52,8 +52,9 @@ namespace AiDotNetTests.UnitTests.LossFunctions
 
             var result = loss.CalculateLoss(predicted, actual);
 
-            // Single pair (0,1): log(1+exp(-(0-2))) = log(1+exp(2)).
-            Assert.Equal(Math.Log(1.0 + Math.Exp(2.0)), result, 9);
+            // Single ordered pair over n=2 items, normalized per ITEM (÷ n, paper-faithful per-item
+            // gradient scale, not ÷ pair-count): log(1+exp(-(0-2))) / 2 = log(1+exp(2)) / 2.
+            Assert.Equal(Math.Log(1.0 + Math.Exp(2.0)) / 2.0, result, 9);
             Assert.True(result > 0.0);
         }
 
