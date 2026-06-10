@@ -148,6 +148,36 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             {
                 Layers.AddRange(Architecture.Layers);
                 ValidateCustomLayers(Layers);
+                // Chain-resolve lazy layers from the architecture's declared
+                // input shape. HamiltonianNeuralNetwork.ComputeHamiltonianGradient
+                // walks the layer stack via NeuralNetworkDerivatives, which
+                // reads `weights.Shape[0]` to size its per-layer activation
+                // buffers — on a lazy DenseLayer that read returns 0 and the
+                // derivative computation throws "Layer input size mismatch.
+                // Expected 0, got <stateDim>" on the very first probe (this
+                // is the HamiltonianNN_ComputeTimeDerivative /
+                // HamiltonianNN_Simulate failure in the Integration P-Q
+                // shard). The else-branch's CreateDefaultHamiltonianLayers
+                // already chain-resolves via LayerHelper's private
+                // ChainResolveLazyLayers; we inline the same walk here so
+                // user-supplied layer stacks also report concrete weight
+                // shapes before any Forward call.
+                var rootShape = Architecture.GetInputShape();
+                if (rootShape != null && rootShape.Length > 0
+                    && System.Linq.Enumerable.All(rootShape, d => d > 0))
+                {
+                    int[] running = rootShape;
+                    foreach (var layer in Layers)
+                    {
+                        if (layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> lb
+                            && !lb.IsShapeResolved)
+                        {
+                            try { lb.ResolveFromShape(running); }
+                            catch (Exception) { break; }
+                        }
+                        running = layer.GetOutputShape();
+                    }
+                }
             }
             else
             {
