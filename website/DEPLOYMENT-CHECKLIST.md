@@ -12,7 +12,7 @@ found") will continue to occur.
 The production bundle at `https://www.aidotnet.dev/_astro/pricing.astro_...js`
 currently hard-codes:
 
-```
+```text
 pro.month:        https://buy.stripe.com/test_7sY6oG3XwbaccTl6tY7bW00   ← TEST mode
 pro.year:         https://buy.stripe.com/test_7sYdR8alU3HKbPh2dI7bW02   ← TEST mode
 enterprise.month: ""                                                     ← missing
@@ -40,11 +40,16 @@ client JS at build time, so a new deploy is required after the change.
 
 Then trigger a redeploy: Vercel → Deployments → latest → "..." → "Redeploy".
 
-**Verify:** after the redeploy completes, fetch the same bundle and
-confirm the `buy.stripe.com/` URLs no longer have the `test_` prefix:
+**Verify:** after the redeploy completes, fetch the page that references
+the hashed asset, extract the real bundle filename, and confirm the
+`buy.stripe.com/` URLs no longer have the `test_` prefix. (The bundle name
+is content-hashed, so a literal `*.js` glob in a `curl` URL won't resolve.)
 
 ```bash
-curl -s "https://www.aidotnet.dev/_astro/pricing.astro_*.js" \
+BUNDLE=$(curl -s https://www.aidotnet.dev/pricing/ \
+  | grep -oE 'pricing\.astro_[A-Za-z0-9_.-]+\.js' \
+  | head -1)
+curl -s "https://www.aidotnet.dev/_astro/${BUNDLE}" \
   | grep -oE 'buy\.stripe\.com/[a-zA-Z0-9_-]+' | sort -u
 ```
 
@@ -94,7 +99,7 @@ Advanced → Metadata, add a key/value pair `tier=pro` (or `tier=enterprise`).
 Each Payment Link's "After payment → Show confirmation page → Custom URL"
 should redirect customers to:
 
-```
+```text
 https://www.aidotnet.dev/account/licenses/?new=true
 ```
 
@@ -109,6 +114,7 @@ plumbs every `validate_license_key` RPC call into `api_usage` so the
 license holders.
 
 **Action:**
+
 ```bash
 cd website
 supabase db push
@@ -153,7 +159,7 @@ is **in the dashboards**, not the code. Walk through each item:
 **C. Smoke-test from an Incognito window**
 1. Open https://www.aidotnet.dev/login/ in a private window.
 2. Click "Continue with GitHub".
-3. Approve on github.com → expect a redirect back to `/account/`.
+3. Approve on GitHub.com → expect a redirect back to `/account/`.
 4. If you instead land on `/auth/callback/?error=...`, expand the
    "Show technical details" disclosure and copy the `error_description`
    into the support mailto link.

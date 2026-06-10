@@ -370,27 +370,28 @@ async function handleSubscriptionUpdated(
   // add-on — are allowed by Stripe and the webhook should degrade
   // gracefully if one lands.
   //
-  // Strategy: walk every item, collect the tiers advertised in each
-  // price's metadata, and pick the highest-ranked tier we know about.
-  // Enterprise wins over professional; anything not in the known set
-  // is ignored rather than trusted. That means adding a "premium"
-  // tier later requires appending it to TIER_RANK below — which keeps
-  // the precedence explicit, unlike a blind `first item wins` fallback.
-  const TIER_RANK: Record<string, number> = {
+  // Strategy: walk every item, normalise each tier through resolveTier
+  // (which accepts both 'pro' and 'professional' aliases — see
+  // TIER_CANONICAL above), and pick the highest-ranked tier we know
+  // about. Enterprise wins over professional; anything resolveTier
+  // returns null for is ignored rather than trusted.
+  const TIER_LICENSE_RANK: Record<CanonicalTier["licenseTier"], number> = {
     professional: 1,
     enterprise: 2,
   };
-  const seenTiers = (subscription.items?.data ?? [])
-    .map((item) => item.price?.metadata?.tier as string | undefined)
-    .filter((t): t is string => typeof t === "string" && t in TIER_RANK);
-  const tier = seenTiers.length > 0
-    ? seenTiers.reduce((a, b) => (TIER_RANK[a] >= TIER_RANK[b] ? a : b))
-    : undefined;
+  const seenCanonical = (subscription.items?.data ?? [])
+    .map((item) => resolveTier(item.price?.metadata?.tier))
+    .filter((c): c is CanonicalTier => c !== null);
+  const winner = seenCanonical.length > 0
+    ? seenCanonical.reduce((a, b) =>
+        TIER_LICENSE_RANK[a.licenseTier] >= TIER_LICENSE_RANK[b.licenseTier] ? a : b
+      )
+    : null;
 
   const updateData: Record<string, string | number> = { status: licenseStatus };
-  if (tier && TIER_MAX_ACTIVATIONS[tier] !== undefined) {
-    updateData.tier = tier;
-    updateData.max_activations = TIER_MAX_ACTIVATIONS[tier];
+  if (winner) {
+    updateData.tier = winner.licenseTier;
+    updateData.max_activations = winner.maxActivations;
   }
 
   const { error } = await client
@@ -412,7 +413,9 @@ async function handleSubscriptionUpdated(
 
   if (stripeCustomerId) {
     const profileUpdate: Record<string, string> = { subscription_status: licenseStatus };
-    if (tier) profileUpdate.subscription_tier = tier;
+    // Use the profile-canonical tier name (`pro`/`enterprise`), not the
+    // license_keys enum name — billing/account UI checks `=== 'pro'`.
+    if (winner) profileUpdate.subscription_tier = winner.profileTier;
     const { error: profileError } = await client
       .from("profiles")
       .update(profileUpdate)

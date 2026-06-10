@@ -134,11 +134,15 @@ begin
             'activation_id', v_existing_activation.id,
             'message', 'License validated (existing activation).'
         );
-        insert into public.api_usage (user_id, endpoint, model_id, status_code, latency_ms)
+        -- model_id intentionally NULL: validate_license_key isn't a
+        -- model invocation, and the /account/usage/ "Top Models Used"
+        -- panel shouldn't list tier names as if they were ML models.
+        -- Tier is already returned in the response and persisted on
+        -- the license_keys row; api_usage only needs endpoint + result.
+        insert into public.api_usage (user_id, endpoint, status_code, latency_ms)
         values (
             v_license.user_id,
             v_endpoint,
-            v_license.tier::text,
             v_status_code,
             extract(milliseconds from clock_timestamp() - v_started)::int
         );
@@ -186,11 +190,13 @@ begin
         'license_id', v_license.id,
         'message', 'License validated and activated on this machine.'
     );
-    insert into public.api_usage (user_id, endpoint, model_id, status_code, latency_ms)
+    -- See "model_id intentionally NULL" comment on the existing-activation
+    -- branch above. Validate-license is not a model call; tier lives on
+    -- license_keys + in the response payload, not in api_usage.model_id.
+    insert into public.api_usage (user_id, endpoint, status_code, latency_ms)
     values (
         v_license.user_id,
         v_endpoint,
-        v_license.tier::text,
         v_status_code,
         extract(milliseconds from clock_timestamp() - v_started)::int
     );
