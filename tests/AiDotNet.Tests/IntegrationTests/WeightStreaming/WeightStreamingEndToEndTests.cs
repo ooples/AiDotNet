@@ -1,4 +1,6 @@
+using System;
 using System.IO;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -367,6 +369,79 @@ public sealed class WeightStreamingEndToEndTests
             + "calls were no-ops — Lifetime was likely never set to Streaming "
             + "before the register call. See ConfigureWeightLifetime + "
             + "_registrationLifetime in NeuralNetworkBase.cs.");
+    }
+
+    [Fact]
+    public void Streaming_TrainingStep_StreamsBothGradientsAndWeights_AndStillLearns()
+    {
+        // End-to-end proof that the gradient-streaming backward
+        // (TrainWithTapeStreaming → tape.ComputeGradientsStreaming) composes
+        // with weight streaming. Every OTHER test in this file exercises only
+        // inference/forward; this is the only one that drives Train() through
+        // the streaming optimizer-in-backward path WHILE the weights are paged
+        // through the streaming pool. It asserts:
+        //   (a) the weight pool stayed under its resident budget across the
+        //       streaming train steps (eviction ran on BOTH the streaming
+        //       forward and the streaming backward's per-step Materialize), AND
+        //       the pool saw real activity (resident > 0 or evictions),
+        //   (b) the streaming backward actually updated the pooled weights —
+        //       verified by a changed prediction, which also proves post-train
+        //       inference still rehydrates the streamed weights correctly.
+        var net = new SmallStreamableNetwork();
+
+        var input = new Tensor<float>([1, 8]);
+        for (int i = 0; i < 8; i++) input[0, i] = (float)(i + 1) * 0.5f;
+        var target = new Tensor<float>([1, 4]);
+        for (int i = 0; i < 4; i++) target[0, i] = (i % 2 == 0) ? 1f : -1f;
+
+        // Force the gradient-streaming path (optimizer-in-backward) regardless of
+        // model size; a higher LR makes the one-step weight change comfortably
+        // above float noise for the assertion below.
+        net.StreamingTraining = StreamingTrainingMode.ForceOn;
+        net.StreamingTrainingLearningRate = 1e-2;
+
+        // Engage weight streaming with a budget below the network's total weight
+        // bytes (4 dense layers ≈ 3 KB) so the pool MUST evict — proving weights
+        // are paged, not merely all-resident. The largest single weight (~1.1 KB)
+        // still fits, so a layer can always be materialized for its forward/backward.
+        const long budget = 2048L;
+        net.ConfigureWeightLifetimeForTest(
+            new GpuOffloadOptions { StreamingPoolMaxResidentBytes = budget });
+        Assert.True(net.IsWeightStreamingActive, "Weight streaming should be active.");
+
+        var before = net.Predict(input);
+
+        net.SetTrainingMode(true);
+        for (int step = 0; step < 5; step++)
+            net.Train(input, target); // Train → TrainWithTape → TrainWithTapeStreaming
+        net.SetTrainingMode(false);
+
+        // (a) Pool stayed under budget, and streaming actually ran.
+        long resident = net.WeightStreamingResidentBytes;
+        Assert.True(resident <= budget,
+            $"Weight pool exceeded its {budget}-byte budget during streaming training "
+            + $"(ResidentBytes={resident}) — eviction did not run on the train path.");
+        var report = AiDotNet.Tensors.LinearAlgebra.WeightRegistry.GetStreamingReport();
+        Assert.True(resident > 0L || report.EvictionCount > 0,
+            $"Streaming training produced no pool activity (ResidentBytes={resident}, "
+            + $"EvictionCount={report.EvictionCount}) — weights never streamed through "
+            + "the pool during Train().");
+
+        // (b) The streaming backward changed the weights → prediction moves, and
+        // post-train inference still materializes the streamed weights.
+        var after = net.Predict(input);
+        Assert.Equal(before.Length, after.Length);
+        bool changed = false;
+        for (int i = 0; i < after.Length; i++)
+        {
+            Assert.True(!float.IsNaN(after[i]) && !float.IsInfinity(after[i]),
+                $"Post-training prediction[{i}] is not finite ({after[i]}).");
+            if (Math.Abs(after[i] - before[i]) > 1e-6f) changed = true;
+        }
+        Assert.True(changed,
+            "Streaming training did not change the prediction — the streaming "
+            + "optimizer-in-backward (ComputeGradientsStreaming + StreamingAdam8Bit) "
+            + "did not update the pooled weights.");
     }
 }
 
