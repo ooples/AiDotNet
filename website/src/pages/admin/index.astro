@@ -153,10 +153,14 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         return;
       }
 
+      // `subscription_tier` carries both the new 'pro' canonical and the
+      // legacy 'professional' value for users whose row was last touched
+      // before the stripe-webhook normalisation. Count both so the admin
+      // dashboard doesn't undercount paid users mid-migration.
       const { count: proUsers } = await supabase
         .from('profiles')
         .select('*', { count: 'exact', head: true })
-        .eq('subscription_tier', 'pro');
+        .in('subscription_tier', ['pro', 'professional']);
 
       const { count: enterpriseUsers } = await supabase
         .from('profiles')

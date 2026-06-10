@@ -177,12 +177,15 @@ const base = import.meta.env.BASE_URL;
         const planDesc = document.getElementById('plan-description');
         const upgradeBtn = document.getElementById('upgrade-btn');
 
-        if (profile.subscription_tier === 'pro' && planBadge) {
+        // Accept both 'pro' and legacy 'professional' — see billing/index.astro
+        // for the matching alias so the badge stays in sync with the billing UI.
+        const tier = profile.subscription_tier;
+        if ((tier === 'pro' || tier === 'professional') && planBadge) {
           planBadge.textContent = 'Pro';
           planBadge.className = 'inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-brand-blue/10 text-brand-blue';
           if (planDesc) planDesc.textContent = 'Cloud-hosted inference API, priority support, and direct team access.';
           if (upgradeBtn) upgradeBtn.textContent = 'Manage Plan';
-        } else if (profile.subscription_tier === 'enterprise' && planBadge) {
+        } else if (tier === 'enterprise' && planBadge) {
           planBadge.textContent = 'Enterprise';
           planBadge.className = 'inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400';
           if (planDesc) planDesc.textContent = 'Dedicated support, SLA, and architecture consulting.';
