@@ -5651,19 +5651,39 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             case StreamingTrainingMode.ForceOn:
                 return true;
             default:
-                // Auto must NOT silently engage streaming yet. The streaming step
-                // (TrainWithTapeStreaming) still computes gradients via the
-                // non-streaming tape.ComputeGradients until the topological-min
-                // streaming backward (AiDotNet.Tensors#564) is published — so its
-                // transient backward peak is identical to the eager path. Routing a
-                // memory-constrained model here on a footprint heuristic would
-                // promise a memory bound the backward sweep cannot deliver and could
-                // hit the exact OOM this mode is meant to prevent. Until #564 ships,
-                // Auto resolves to the classic path; users who want the (partial)
-                // 8-bit-optimizer-state savings opt in explicitly via ForceOn. The
-                // footprint/available-memory autotuner is restored here once the
-                // streaming backward lands.
-                return false;
+                // Auto: engage streaming when the model's estimated full-precision
+                // training footprint (weights + grads + Adam first/second moments)
+                // would not comfortably fit in available memory. TrainWithTapeStreaming
+                // now drives the real topological-min streaming backward
+                // (tape.ComputeGradientsStreaming, AiDotNet.Tensors#564 — shipped in
+                // 0.92.0+), so the gradient set is never fully resident and registered
+                // weights are paged in/out around each backward step. Models that
+                // already fit stay on the classic path below (zero overhead).
+                long paramCount = ParameterCount;
+                if (paramCount <= 0) return false;
+                long elemSize = typeof(T) == typeof(float) ? 4L : 8L;
+                // weights + gradients + Adam first/second moments at full precision.
+                double footprintBytes = (double)paramCount * elemSize * 4.0;
+                double available;
+#if NET5_0_OR_GREATER
+                // GC.GetGCMemoryInfo().TotalAvailableMemoryBytes is .NET 5+. The try/catch
+                // guards a runtime throw; the #if guards the COMPILE on net471, where the
+                // API doesn't exist at all (a try/catch can't rescue a missing method).
+                try
+                {
+                    available = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
+                }
+                catch
+                {
+                    available = 0;
+                }
+#else
+                // net471: no GC memory-info API — fall through to the conservative default
+                // below so the autotuner stays well-behaved on .NET Framework.
+                available = 0;
+#endif
+                if (available <= 0) available = 8L * 1024 * 1024 * 1024; // conservative fallback
+                return footprintBytes > 0.5 * available;
         }
     }
 
@@ -5684,7 +5704,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             ?? throw new InvalidOperationException(
                 "LossFunction must derive from LossFunctionBase<T> for tape-based training.");
 
-        using var tape = new GradientTape<T>();
+        // Global grad-norm clipping (MaxGradNorm > 0, the default) needs the TOTAL
+        // gradient norm before any parameter is updated, which a single
+        // optimizer-in-backward pass cannot provide. We therefore run two streaming
+        // passes over a PERSISTENT tape in that case (norm pass, then apply pass) —
+        // a persistent tape keeps its recorded graph between backward calls. When
+        // clipping is off, one streaming pass suffices and the tape is non-persistent.
+        double maxGradNorm = MaxGradNormValue;
+        bool clip = maxGradNorm > 0.0;
+
+        using var tape = new GradientTape<T>(
+            clip ? new GradientTapeOptions { Persistent = true } : null);
         var output = ForwardForTraining(input);
 
         // Align target rank to the tape-tracked output (reshape the leaf target,
@@ -5715,38 +5745,73 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             weightDecay: StreamingTrainingWeightDecay);
         _streamingOptimizerState.BeginStep();
 
-        // Topological-min streaming backward (AiDotNet.Tensors#564) is not yet
-        // published. Fall back to the non-streaming ComputeGradients path:
-        // gradients are computed up-front (transient peak memory equivalent to
-        // the eager training path), then applied + released one parameter at
-        // a time so the 8-bit StreamingAdam state stays bounded across the
-        // optimizer step. End-to-end training results are bit-identical to the
-        // streaming path; the only loss is the peak-RSS savings during the
-        // backward sweep itself. Swap to ComputeGradientsStreaming once #564
-        // releases in a published Tensors NuGet.
-        var gradients = tape.ComputeGradients(lossTensor, sources);
-
-        // Apply gradient clipping in parity with the eager TrainWithTape path —
-        // omitting this on the streaming path created different optimization
-        // semantics depending on which path the autotuner picked, and would
-        // destabilize large models exactly when streaming engaged. Pass
-        // trainableParams (NOT sources) as the clip set so the per-process
-        // total-norm sum matches the eager path exactly: the eager call site
-        // also clips layer-owned params only, so feeding extras (CLS, positional
-        // embeddings, etc.) into the global norm here would otherwise rescale
-        // layer gradients differently when streaming engages, producing diverging
-        // optimization trajectories on the same architecture.
-        double maxGradNorm = MaxGradNormValue;
-        if (maxGradNorm > 0.0)
+        if (!clip)
         {
-            ApplyGradientClipping(gradients, maxGradNorm, trainableParams);
+            // Memory-bounded optimizer-in-backward: tape.ComputeGradientsStreaming
+            // (AiDotNet.Tensors#564) hands each parameter's gradient to the callback
+            // at its topological last-use and releases it immediately, so the full
+            // gradient set is NEVER resident. The same backward walk also rehydrates
+            // streamed (paged-out) input weights before each step and lets the pool
+            // evict them again afterward — so neither the full gradient set nor the
+            // full weight set has to fit in RAM, which is what makes a model whose
+            // gradients exceed memory trainable at all. The 8-bit StreamingAdam
+            // epilogue runs inside the callback at each gradient's release point.
+            tape.ComputeGradientsStreaming(lossTensor, sources,
+                (source, grad) =>
+                {
+                    if (grad is null || grad.Length == 0) return;
+                    _streamingOptimizerState.Apply(source, grad);
+                });
         }
-
-        foreach (var source in sources)
+        else
         {
-            if (!gradients.TryGetValue(source, out var grad) || grad is null || grad.Length == 0)
-                continue;
-            _streamingOptimizerState.Apply(source, grad);
+            // Clip set = layer-owned trainable params only (NOT the extras), matching
+            // the eager ApplyGradientClipping call site exactly so the global norm and
+            // the rescale set are identical across paths.
+            var clipSet = new HashSet<Tensor<T>>(
+                trainableParams, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+
+            // Pass 1 — accumulate the global L2 norm over the clip set, streaming so
+            // nothing is retained. (Each gradient is released right after we read it.)
+            double totalNormSq = 0.0;
+            tape.ComputeGradientsStreaming(lossTensor, sources,
+                (source, grad) =>
+                {
+                    if (grad is null || grad.Length == 0 || !clipSet.Contains(source)) return;
+                    var span = grad.Data.Span;
+                    int len = grad.Length;
+                    for (int i = 0; i < len; i++)
+                    {
+                        double v = NumOps.ToDouble(span[i]);
+                        totalNormSq += v * v;
+                    }
+                });
+
+            // Match ApplyGradientClipping exactly: only scale down when the norm
+            // exceeds the cap; the +1e-6 mirrors PyTorch's clip_grad_norm_ denominator.
+            double totalNorm = Math.Sqrt(totalNormSq);
+            bool scaleDown = totalNormSq > 0.0 && totalNorm > maxGradNorm;
+            T scale = scaleDown
+                ? NumOps.FromDouble(maxGradNorm / (totalNorm + 1e-6))
+                : NumOps.One;
+
+            // Pass 2 — re-run the streaming backward and fold the clip scale into each
+            // clip-set gradient before the optimizer epilogue (extras pass through
+            // unscaled, exactly as the eager path leaves them). Peak memory stays
+            // bounded in this pass too.
+            tape.ComputeGradientsStreaming(lossTensor, sources,
+                (source, grad) =>
+                {
+                    if (grad is null || grad.Length == 0) return;
+                    if (scaleDown && clipSet.Contains(source))
+                    {
+                        var span = grad.Data.Span;
+                        int len = grad.Length;
+                        for (int i = 0; i < len; i++)
+                            span[i] = NumOps.Multiply(span[i], scale);
+                    }
+                    _streamingOptimizerState.Apply(source, grad);
+                });
         }
 
         // GPU weight-cache coherence after the in-place parameter mutation. The
