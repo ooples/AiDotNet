@@ -184,6 +184,16 @@
 	  <None Remove="AiDotNet.Storage.Elasticsearch\**\*" />
 	</ItemGroup>
 
+	<!-- Exclude the opt-in AiDotNet.Storage.Postgres / AiDotNet.Storage.Redis metapackages (graph checkpointers). -->
+	<ItemGroup>
+	  <Compile Remove="AiDotNet.Storage.Postgres\**\*.cs" />
+	  <EmbeddedResource Remove="AiDotNet.Storage.Postgres\**\*" />
+	  <None Remove="AiDotNet.Storage.Postgres\**\*" />
+	  <Compile Remove="AiDotNet.Storage.Redis\**\*.cs" />
+	  <EmbeddedResource Remove="AiDotNet.Storage.Redis\**\*" />
+	  <None Remove="AiDotNet.Storage.Redis\**\*" />
+	</ItemGroup>
+
 	<!-- Exclude the opt-in metapackages extracted in audit-2026-05 phase 2c (finding #14). -->
 	<ItemGroup>
 	  <Compile Remove="AiDotNet.Privacy.HE\**\*.cs" />
