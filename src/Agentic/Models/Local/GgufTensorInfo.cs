@@ -26,8 +26,17 @@ public sealed class GgufTensorInfo
     /// <summary>The ggml type code for Q8_0 quantization (32-value blocks, 8-bit, single scale).</summary>
     public const uint TypeQ8_0 = 8;
 
+    /// <summary>The ggml type code for Q4_K quantization (256-value super-blocks, 4-bit, 8 sub-scales/mins).</summary>
+    public const uint TypeQ4_K = 12;
+
+    /// <summary>The ggml type code for Q6_K quantization (256-value super-blocks, 6-bit, 16 sub-scales).</summary>
+    public const uint TypeQ6_K = 14;
+
     /// <summary>The number of values per quantization block (ggml QK).</summary>
     public const int QuantBlockSize = 32;
+
+    /// <summary>The number of values per k-quant super-block (ggml QK_K).</summary>
+    public const int SuperBlockSize = 256;
 
     /// <summary>
     /// Initializes a new tensor info.

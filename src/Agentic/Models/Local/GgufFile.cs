@@ -118,10 +118,18 @@ public sealed class GgufFile : INamedTensorSource
                 DequantizeQ8_0(offset, count, result);
                 return result;
 
+            case GgufTensorInfo.TypeQ4_K:
+                DequantizeQ4_K(offset, count, result);
+                return result;
+
+            case GgufTensorInfo.TypeQ6_K:
+                DequantizeQ6_K(offset, count, result);
+                return result;
+
             default:
                 throw new NotSupportedException(
-                    $"Tensor '{name}' uses ggml type {tensor.GgmlType}; only F32/F16/Q4_0/Q4_1/Q8_0 are dequantized " +
-                    "(k-quants such as Q4_K are a follow-up). Use GetRawBytes for raw access.");
+                    $"Tensor '{name}' uses ggml type {tensor.GgmlType}; only F32/F16/Q4_0/Q4_1/Q8_0/Q4_K/Q6_K are " +
+                    "dequantized. Use GetRawBytes for raw access.");
         }
     }
 
@@ -183,6 +191,118 @@ public sealed class GgufFile : INamedTensorSource
             }
         }
     }
+
+    // Q4_K super-block (256 values, 144 bytes): fp16 d + fp16 dmin + 12 packed 6-bit scale/min pairs + 128
+    // bytes of 4-bit quants. value = d*scale*q - dmin*min, with 8 sub-blocks of 32. Layout matches
+    // llama.cpp ggml block_q4_K / dequantize_row_q4_K exactly.
+    private void DequantizeQ4_K(int offset, int count, double[] result)
+    {
+        const int blockBytes = 2 + 2 + 12 + 128;
+        var superBlocks = count / GgufTensorInfo.SuperBlockSize;
+        for (var sb = 0; sb < superBlocks; sb++)
+        {
+            var p = offset + (sb * blockBytes);
+            var d = HalfToFloat(BitConverter.ToUInt16(_data, p));
+            var dmin = HalfToFloat(BitConverter.ToUInt16(_data, p + 2));
+            var scalesAt = p + 4;
+            var qs = p + 4 + 12;
+            var outBase = sb * GgufTensorInfo.SuperBlockSize;
+
+            // Process the 256 values in 4 chunks of 64; each chunk uses 32 quant bytes and two sub-block
+            // scale/min pairs (low nibbles then high nibbles).
+            var y = outBase;
+            var qOffset = qs;
+            for (var chunk = 0; chunk < 4; chunk++)
+            {
+                var iss = chunk * 2;
+                GetScaleMinK4(iss, scalesAt, out var sc1, out var m1);
+                GetScaleMinK4(iss + 1, scalesAt, out var sc2, out var m2);
+                var d1 = d * sc1;
+                var min1 = dmin * m1;
+                var d2 = d * sc2;
+                var min2 = dmin * m2;
+
+                for (var l = 0; l < 32; l++)
+                {
+                    result[y + l] = (d1 * (_data[qOffset + l] & 0x0F)) - min1;
+                }
+
+                for (var l = 0; l < 32; l++)
+                {
+                    result[y + 32 + l] = (d2 * (_data[qOffset + l] >> 4)) - min2;
+                }
+
+                y += 64;
+                qOffset += 32;
+            }
+        }
+    }
+
+    // Unpacks the 6-bit scale (d) and min (m) for sub-block j from the 12-byte packed scales array, matching
+    // llama.cpp get_scale_min_k4.
+    private void GetScaleMinK4(int j, int scalesAt, out int d, out int m)
+    {
+        if (j < 4)
+        {
+            d = _data[scalesAt + j] & 63;
+            m = _data[scalesAt + j + 4] & 63;
+        }
+        else
+        {
+            d = (_data[scalesAt + j + 4] & 0x0F) | ((_data[scalesAt + j - 4] >> 6) << 4);
+            m = (_data[scalesAt + j + 4] >> 4) | ((_data[scalesAt + j] >> 6) << 4);
+        }
+    }
+
+    // Q6_K super-block (256 values, 210 bytes): 128 bytes ql (low 4 bits) + 64 bytes qh (high 2 bits) +
+    // 16 signed 8-bit scales + fp16 d. value = d * scale * (q6 - 32). Layout matches llama.cpp block_q6_K /
+    // dequantize_row_q6_K exactly.
+    private void DequantizeQ6_K(int offset, int count, double[] result)
+    {
+        const int qlBytes = 128;
+        const int qhBytes = 64;
+        const int scaleBytes = 16;
+        const int blockBytes = qlBytes + qhBytes + scaleBytes + 2;
+        var superBlocks = count / GgufTensorInfo.SuperBlockSize;
+        for (var sb = 0; sb < superBlocks; sb++)
+        {
+            var p = offset + (sb * blockBytes);
+            var qlAt = p;
+            var qhAt = p + qlBytes;
+            var scAt = p + qlBytes + qhBytes;
+            var d = HalfToFloat(BitConverter.ToUInt16(_data, p + qlBytes + qhBytes + scaleBytes));
+            var outBase = sb * GgufTensorInfo.SuperBlockSize;
+
+            // Two chunks of 128; each uses 64 ql bytes, 32 qh bytes, and 8 scale bytes.
+            var y = outBase;
+            var ql = qlAt;
+            var qh = qhAt;
+            var sc = scAt;
+            for (var n = 0; n < 2; n++)
+            {
+                for (var l = 0; l < 32; l++)
+                {
+                    var iss = l / 16;
+                    var qhByte = _data[qh + l];
+                    var q1 = ((_data[ql + l] & 0x0F) | (((qhByte >> 0) & 3) << 4)) - 32;
+                    var q2 = ((_data[ql + l + 32] & 0x0F) | (((qhByte >> 2) & 3) << 4)) - 32;
+                    var q3 = ((_data[ql + l] >> 4) | (((qhByte >> 4) & 3) << 4)) - 32;
+                    var q4 = ((_data[ql + l + 32] >> 4) | (((qhByte >> 6) & 3) << 4)) - 32;
+                    result[y + l] = d * Signed8(_data[sc + iss]) * q1;
+                    result[y + l + 32] = d * Signed8(_data[sc + iss + 2]) * q2;
+                    result[y + l + 64] = d * Signed8(_data[sc + iss + 4]) * q3;
+                    result[y + l + 96] = d * Signed8(_data[sc + iss + 6]) * q4;
+                }
+
+                y += 128;
+                ql += 64;
+                qh += 32;
+                sc += 8;
+            }
+        }
+    }
+
+    private static int Signed8(byte value) => unchecked((sbyte)value);
 
     private static float HalfToFloat(ushort half)
     {
