@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using AiDotNet.Agentic.Models.Local;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.Agentic.Local
@@ -51,6 +52,74 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
             Assert.Equal(0.25, parameters[0], 6);
             Assert.Equal(0.75, parameters[count - 1], 6);
             await Task.CompletedTask;
+        }
+
+        [Fact(Timeout = 120000)]
+        public async Task ParameterMap_NamesSegments_ByArchitecture()
+        {
+            // Mamba stack: EmbeddingLayer + MambaBlock x2 + LayerNorm + Dense head.
+            var arch = new NeuralNetworkArchitecture<double>(
+                InputType.OneDimensional, NeuralNetworkTaskType.TextGeneration, inputSize: 12, outputSize: 12);
+            var model = new MambaLanguageModel<double>(arch, vocabSize: 12, modelDimension: 8, numLayers: 2, stateDimension: 4, maxSeqLength: 8);
+
+            var segments = ModelParameterMap.Build(model);
+            var names = segments.Select(s => s.Name).ToList();
+
+            // Recognizable, architecture-derived names in flat-parameter order.
+            Assert.Equal(new[] { "token_embd.0", "blk.0", "blk.1", "norm.0", "output.0" }, names);
+
+            // Segments tile the flat vector exactly: contiguous, non-overlapping, summing to ParameterCount.
+            var offset = 0;
+            foreach (var segment in segments)
+            {
+                Assert.Equal(offset, segment.Offset);
+                offset += segment.Length;
+            }
+
+            Assert.Equal((int)model.ParameterCount, offset);
+            await Task.CompletedTask;
+        }
+
+        [Fact(Timeout = 120000)]
+        public async Task ImportByName_RoundTrips_ExportedWeights()
+        {
+            // Export a trained-ish model's weights by name, then import them by name into a freshly-initialized
+            // model of the same architecture: the parameter vectors must match exactly. This proves the map's
+            // ordering reconstructs the flat parameter vector.
+            var source = TwoLayerModel();
+            var sourceParams = source.GetParameters();
+
+            // Perturb so the two models genuinely differ before import.
+            var perturbed = new double[sourceParams.Length];
+            for (var i = 0; i < perturbed.Length; i++)
+            {
+                perturbed[i] = Math.Sin(i * 0.5) * 0.3;
+            }
+
+            source.SetParameters(new Vector<double>(perturbed));
+
+            var exported = WeightImporter.Export(source);
+            Assert.Equal(new[] { "token_embd.0", "blk.0", "blk.1", "norm.0", "output.0" }, exported.Keys.ToArray());
+
+            var target = TwoLayerModel();
+            var tensorSource = new DictionaryTensorSource(new Dictionary<string, double[]>(exported));
+            WeightImporter.ImportByName(target, tensorSource);
+
+            var targetParams = target.GetParameters();
+            Assert.Equal(source.ParameterCount, target.ParameterCount);
+            for (var i = 0; i < targetParams.Length; i++)
+            {
+                Assert.Equal(perturbed[i], targetParams[i], 9);
+            }
+
+            await Task.CompletedTask;
+        }
+
+        private static MambaLanguageModel<double> TwoLayerModel()
+        {
+            var arch = new NeuralNetworkArchitecture<double>(
+                InputType.OneDimensional, NeuralNetworkTaskType.TextGeneration, inputSize: 12, outputSize: 12);
+            return new MambaLanguageModel<double>(arch, vocabSize: 12, modelDimension: 8, numLayers: 2, stateDimension: 4, maxSeqLength: 8);
         }
 
         [Fact(Timeout = 120000)]

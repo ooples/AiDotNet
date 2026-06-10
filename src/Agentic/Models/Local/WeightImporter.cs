@@ -56,4 +56,50 @@ public static class WeightImporter
 
         model.SetParameters(new Vector<T>(values.ToArray()));
     }
+
+    /// <summary>
+    /// Imports weights using the model's built-in <see cref="ModelParameterMap"/> name ordering, so the caller
+    /// does not supply a name list. The <paramref name="source"/> must expose a tensor for each segment name
+    /// (see <see cref="ModelParameterMap.OrderedNames{T}"/>).
+    /// </summary>
+    /// <typeparam name="T">The model's numeric type.</typeparam>
+    /// <param name="model">The network to load weights into.</param>
+    /// <param name="source">The loaded weight source, keyed by the map's segment names.</param>
+    /// <exception cref="ArgumentNullException">Thrown when any argument is <c>null</c>.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the total imported parameter count does not match the model.</exception>
+    public static void ImportByName<T>(NeuralNetworkBase<T> model, INamedTensorSource source)
+    {
+        Guard.NotNull(model);
+        Guard.NotNull(source);
+        ImportInto(model, ModelParameterMap.OrderedNames(model), source);
+    }
+
+    /// <summary>
+    /// Exports the model's parameters as named segments (the inverse of <see cref="ImportByName{T}"/>), so
+    /// weights can be saved, inspected, or round-tripped by name.
+    /// </summary>
+    /// <typeparam name="T">The model's numeric type.</typeparam>
+    /// <param name="model">The network whose parameters to export.</param>
+    /// <returns>A map from segment name to that segment's values (as <see cref="double"/>).</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="model"/> is <c>null</c>.</exception>
+    public static IReadOnlyDictionary<string, double[]> Export<T>(NeuralNetworkBase<T> model)
+    {
+        Guard.NotNull(model);
+
+        var segments = ModelParameterMap.Build(model);
+        var all = model.GetParameters();
+        var result = new Dictionary<string, double[]>(StringComparer.Ordinal);
+        foreach (var segment in segments)
+        {
+            var values = new double[segment.Length];
+            for (var i = 0; i < segment.Length; i++)
+            {
+                values[i] = Convert.ToDouble(all[segment.Offset + i]);
+            }
+
+            result[segment.Name] = values;
+        }
+
+        return result;
+    }
 }
