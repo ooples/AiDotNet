@@ -71,13 +71,23 @@ public sealed class LocalEngineChatClient<T> : IChatClient<T>
         CancellationToken cancellationToken = default)
     {
         var promptIds = BuildPromptIds(messages);
-        var sampling = ResolveSampling(options);
-        var sampler = new TokenSampler<T>(sampling.Seed);
         var maxTokens = ResolveMaxTokens(options);
-
         var stopSequences = ResolveStopSequences(options);
-        var generated = new List<int>();
-        var finishReason = RunGeneration(promptIds, maxTokens, sampler, sampling, stopSequences, generated, cancellationToken);
+
+        List<int> generated;
+        ChatFinishReason finishReason;
+        var beamWidth = _options.BeamWidth is { } width && width > 1 ? width : 1;
+        if (beamWidth > 1)
+        {
+            (generated, finishReason) = RunBeamSearch(promptIds, maxTokens, beamWidth, stopSequences, cancellationToken);
+        }
+        else
+        {
+            var sampling = ResolveSampling(options);
+            var sampler = new TokenSampler<T>(sampling.Seed);
+            generated = new List<int>();
+            finishReason = RunGeneration(promptIds, maxTokens, sampler, sampling, stopSequences, generated, cancellationToken);
+        }
 
         var text = generated.Count > 0 ? _tokenizer.Decode(generated) : string.Empty;
         text = TrimAtStopSequence(text, stopSequences);
@@ -192,6 +202,152 @@ public sealed class LocalEngineChatClient<T> : IChatClient<T>
 
         var logits = _model.NextTokenLogits(context);
         return sampler.Sample(logits, sampling, allowed);
+    }
+
+    // Beam search: explore `beamWidth` hypotheses in parallel, expanding each by its top tokens (honoring
+    // the constraint), and keep the highest-scoring (length-normalized log-probability) beams. Returns the
+    // best completion. Deterministic.
+    private (List<int> Tokens, ChatFinishReason Finish) RunBeamSearch(
+        IReadOnlyList<int> promptIds,
+        int maxTokens,
+        int beamWidth,
+        IReadOnlyList<string>? stopSequences,
+        CancellationToken cancellationToken)
+    {
+        var beams = new List<Beam> { new(new List<int>(), 0.0, finished: false) };
+
+        for (var step = 0; step < maxTokens; step++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (beams.All(b => b.Finished))
+            {
+                break;
+            }
+
+            var expanded = new List<Beam>();
+            foreach (var beam in beams)
+            {
+                if (beam.Finished)
+                {
+                    expanded.Add(beam);
+                    continue;
+                }
+
+                IReadOnlyCollection<int>? allowed = null;
+                if (_options.Constraint is { } constraint)
+                {
+                    allowed = constraint.AllowedNextTokens(beam.Tokens);
+                    if (allowed is not null && allowed.Count == 0)
+                    {
+                        expanded.Add(new Beam(beam.Tokens, beam.LogProbability, finished: true));
+                        continue;
+                    }
+                }
+
+                var context = new List<int>(promptIds.Count + beam.Tokens.Count);
+                context.AddRange(promptIds);
+                context.AddRange(beam.Tokens);
+
+                var logProbabilities = LogSoftmax(_model.NextTokenLogits(context), allowed);
+                foreach (var (tokenId, logProbability) in TopTokens(logProbabilities, beamWidth))
+                {
+                    var finished = tokenId == _tokenizer.EosTokenId;
+                    var tokens = new List<int>(beam.Tokens);
+                    if (!finished)
+                    {
+                        tokens.Add(tokenId);
+                    }
+
+                    if (!finished && stopSequences is not null && ContainsStopSequence(_tokenizer.Decode(tokens), stopSequences))
+                    {
+                        finished = true;
+                    }
+
+                    expanded.Add(new Beam(tokens, beam.LogProbability + logProbability, finished));
+                }
+            }
+
+            beams = expanded
+                .OrderByDescending(NormalizedScore)
+                .Take(beamWidth)
+                .ToList();
+        }
+
+        var best = beams.OrderByDescending(NormalizedScore).First();
+        return (best.Tokens, best.Finished ? ChatFinishReason.Stop : ChatFinishReason.Length);
+    }
+
+    private static double NormalizedScore(Beam beam) => beam.LogProbability / Math.Max(1, beam.Tokens.Count);
+
+    private static double[] LogSoftmax(Vector<T> logits, IReadOnlyCollection<int>? allowed)
+    {
+        var count = logits.Length;
+        bool[]? allowedMask = null;
+        if (allowed is not null)
+        {
+            allowedMask = new bool[count];
+            foreach (var id in allowed)
+            {
+                if (id >= 0 && id < count)
+                {
+                    allowedMask[id] = true;
+                }
+            }
+        }
+
+        var scores = new double[count];
+        var max = double.NegativeInfinity;
+        for (var i = 0; i < count; i++)
+        {
+            var value = allowedMask is null || allowedMask[i] ? Convert.ToDouble(logits[i]) : double.NegativeInfinity;
+            scores[i] = value;
+            if (value > max)
+            {
+                max = value;
+            }
+        }
+
+        var sumExp = 0.0;
+        for (var i = 0; i < count; i++)
+        {
+            if (!double.IsNegativeInfinity(scores[i]))
+            {
+                sumExp += Math.Exp(scores[i] - max);
+            }
+        }
+
+        var logSumExp = max + Math.Log(sumExp);
+        for (var i = 0; i < count; i++)
+        {
+            scores[i] = double.IsNegativeInfinity(scores[i]) ? double.NegativeInfinity : scores[i] - logSumExp;
+        }
+
+        return scores;
+    }
+
+    private static IEnumerable<(int TokenId, double LogProbability)> TopTokens(double[] logProbabilities, int k)
+    {
+        return Enumerable.Range(0, logProbabilities.Length)
+            .Where(i => !double.IsNegativeInfinity(logProbabilities[i]))
+            .OrderByDescending(i => logProbabilities[i])
+            .Take(k)
+            .Select(i => (i, logProbabilities[i]));
+    }
+
+    private sealed class Beam
+    {
+        public Beam(List<int> tokens, double logProbability, bool finished)
+        {
+            Tokens = tokens;
+            LogProbability = logProbability;
+            Finished = finished;
+        }
+
+        public List<int> Tokens { get; }
+
+        public double LogProbability { get; }
+
+        public bool Finished { get; }
     }
 
     private static IReadOnlyList<string>? ResolveStopSequences(ChatOptions? options)
