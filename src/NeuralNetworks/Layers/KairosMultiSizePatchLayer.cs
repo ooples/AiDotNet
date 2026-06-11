@@ -129,12 +129,34 @@ public class KairosMultiSizePatchLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        // Support both [B, contextLength] and [contextLength] inputs.
+        // Support [B, contextLength], [contextLength], or rank-3
+        // [B, contextLength, features]. The univariate time-series fixtures
+        // hand a rank-3 [B, T, 1] tensor — without the trailing-1 squeeze,
+        // the lazy sublayers (router, patch embeddings) resolve their input
+        // dim from `input.Shape[^1] = 1` instead of contextLength, so a
+        // serialize/deserialize round-trip mismatches against
+        // SetParameters' explicit `ResolveFromShape([contextLength])`.
         bool addedBatch = false;
         if (input.Rank == 1)
         {
             input = Engine.Reshape(input, new[] { 1, input.Shape[0] });
             addedBatch = true;
+        }
+        else if (input.Rank == 3 && input.Shape[2] == 1)
+        {
+            // Squeeze the trailing-1 feature dim so the router and patch
+            // embeddings see a [B, contextLength] flat input matching the
+            // _contextLength field they were constructed with.
+            input = Engine.Reshape(input, new[] { input.Shape[0], input.Shape[1] });
+        }
+        else if (input.Rank == 3)
+        {
+            // Multi-feature case: flatten the last two axes into one so the
+            // total feature count is contextLength_actual = T * F. If that
+            // matches the constructor's _contextLength, the lazy sublayers
+            // resolve correctly; otherwise the existing _contextLength
+            // mismatch error fires downstream.
+            input = Engine.Reshape(input, new[] { input.Shape[0], input.Shape[1] * input.Shape[2] });
         }
         int batchSize = input.Shape[0];
 
@@ -240,9 +262,44 @@ public class KairosMultiSizePatchLayer<T> : LayerBase<T>
         foreach (var emb in _patchEmbeddings) Set(emb);
     }
 
+    /// <summary>
+    /// Forces sublayer shape resolution so router + patch-embedding
+    /// parameter counts stabilise BEFORE any GetParameters /
+    /// ParameterCount / SetParameters call. Without this, the lazy
+    /// sublayers report ParameterCount=0 and GetParameters=[] until first
+    /// forward, but SetParameters' own ResolveFromShape step then
+    /// resolves them and expects the resolved count — the serialize/
+    /// deserialize round-trip therefore mismatches.
+    /// </summary>
+    private void ResolveSublayers()
+    {
+        if (!_router.IsShapeResolved)
+            _router.ResolveFromShape(new[] { _contextLength });
+        for (int k = 0; k < _patchEmbeddings.Count; k++)
+        {
+            if (!_patchEmbeddings[k].IsShapeResolved)
+                _patchEmbeddings[k].ResolveFromShape(new[] { _patchSizes[k] });
+        }
+    }
+
+    /// <inheritdoc/>
+    public override long ParameterCount
+    {
+        get
+        {
+            ResolveSublayers();
+            long total = _router.ParameterCount;
+            foreach (var emb in _patchEmbeddings)
+                total += emb.ParameterCount;
+            return total;
+        }
+    }
+
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
+        ResolveSublayers();
+
         var parts = new List<Vector<T>> { _router.GetParameters() };
         foreach (var emb in _patchEmbeddings)
             parts.Add(emb.GetParameters());

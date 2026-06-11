@@ -616,6 +616,16 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
         {
             current = layer.Forward(current);
         }
+        // Same rank-3 → rank-2 reduction as the encoder branch
+        // (ForwardNativeForTraining lines 587-590). When the input is
+        // rank-3 [B, ctx, F] the per-position FeedForward stack emerges
+        // rank-3 [B, ctx, numMixtures*3]; ReduceMean over the context axis
+        // gives a per-batch mixture summary that the rank-2 point
+        // extractor can consume.
+        if (current.Rank == 3)
+        {
+            current = Engine.ReduceMean(current, axes: new[] { 1 }, keepDims: false);
+        }
         if (current.Rank == 2)
         {
             current = ExtractPointPredictionsTapeSafe(current, _forecastHorizon);
