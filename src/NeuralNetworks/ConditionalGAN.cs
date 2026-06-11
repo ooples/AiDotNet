@@ -98,12 +98,31 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         NeuralNetworkArchitecture<T> generatorArchitecture,
         int numConditionClasses)
     {
-        // Return the generator architecture unchanged. The condition concatenation
-        // is handled at runtime in GenerateConditional() and TrainStep(), not by
-        // modifying the architecture dimensions. This avoids conflicts between
-        // inputSize and dimension parameters for ThreeDimensional input types.
-        // numConditionClasses is part of the factory contract but only used at runtime
-        // in GenerateConditional()/TrainStep() for condition concatenation, not here.
+        // The runtime Predict / TrainStep code concatenates a one-hot
+        // condition vector of length numConditionClasses onto the noise BEFORE
+        // feeding the generator. The flat-feature (OneDimensional / regression)
+        // input path therefore receives inputSize + numConditionClasses
+        // values — the generator's first layer must be sized to consume
+        // that wider input, otherwise FeedForwardNeuralNetwork.Predict
+        // throws "Expected shape [inputSize], but got [inputSize + N]".
+        // For spatial inputs (ThreeDimensional etc.) the condition is added
+        // via a separate channel/embedding path that doesn't change the
+        // declared shape, so we keep the original architecture in that case.
+        if (generatorArchitecture.InputType == InputType.OneDimensional
+            && generatorArchitecture.InputSize > 0)
+        {
+            return new NeuralNetworkArchitecture<T>(
+                inputType: generatorArchitecture.InputType,
+                taskType: generatorArchitecture.TaskType,
+                complexity: generatorArchitecture.Complexity,
+                inputSize: generatorArchitecture.InputSize + numConditionClasses,
+                outputSize: generatorArchitecture.OutputSize,
+                layers: generatorArchitecture.Layers?.ToList(),
+                shouldReturnFullSequence: generatorArchitecture.ShouldReturnFullSequence,
+                imageEmbeddingDim: generatorArchitecture.ImageEmbeddingDim,
+                textEmbeddingDim: generatorArchitecture.TextEmbeddingDim,
+                inputFrames: generatorArchitecture.InputFrames);
+        }
         return generatorArchitecture;
     }
 
