@@ -1,3 +1,5 @@
+using AiDotNet.Agentic.Models;
+using AiDotNet.Agentic.Tools;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Attributes;
@@ -95,8 +97,8 @@ public class SelfConsistencyStrategy<T> : ReasoningStrategyBase<T>
     /// </para>
     /// </remarks>
     public SelfConsistencyStrategy(
-        IChatModel<T> chatModel,
-        IEnumerable<ITool>? tools = null)
+        IChatClient<T> chatModel,
+        IEnumerable<IAgentTool>? tools = null)
         : base(chatModel, tools)
     {
         _cotStrategy = new ChainOfThoughtStrategy<T>(chatModel, tools);

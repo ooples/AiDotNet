@@ -130,14 +130,23 @@
          Cholesky/Gram zero-alloc copy-buffer dot here could accumulate into stale
          data). 0.92.1 also carries #574 (FP16 ComputeGradients) and #564 (memory-bounded
          gradient-streaming core, merged to master via #1543). AiDotNet.Native packages
-         coreleased in lockstep at 0.92.1. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.92.1" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.92.1" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.92.1" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.92.1" />
+         coreleased in lockstep at 0.92.1.
+
+         Bumped 0.92.1 -> 0.92.5 for Tensors #583 (validate the prepacked-B GEMM cache
+         against in-place weight mutation): the SgemmWithCachedB inference path reused a
+         stale pre-packed B panel when a layer's weights were mutated in place without a
+         MarkWeightDirty, so FusedLinear inference returned pre-update results — the root
+         cause of the #1221 transformer production-scale convergence failure. 0.92.5 is
+         the first release carrying that fix. AiDotNet.Native packages coreleased in
+         lockstep at 0.92.5. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.92.5" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.92.5" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.92.5" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.92.5" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.8" />
+    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.6.0" />
     <PackageVersion Include="Microsoft.ML" Version="3.0.1" />
     <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.26.0" />
     <PackageVersion Include="Microsoft.Research.SEALNet" Version="4.1.1" />

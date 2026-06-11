@@ -401,7 +401,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             GraphStore = _graphStore,
             HybridGraphRetriever = _hybridGraphRetriever,
             LoRAConfiguration = _loraConfiguration,
-            AgentConfig = _agentConfig,
             MemoryConfig = _memoryConfig,
             // Weight-streaming telemetry — set on every result-build path
             // (supervised batch, AutoML, RL) so the streaming-data-loader
@@ -587,24 +586,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // Convert inputs to Matrix/Vector for internal processing
         var convertedX = ConversionsHelper.ConvertToMatrix<T, TInput>(x);
         var convertedY = ConversionsHelper.ConvertToVector<T, TOutput>(y);
-
-        // AGENT ASSISTANCE (if enabled)
-        AgentRecommendation<T, TInput, TOutput>? agentRecommendation = null;
-        if (_agentConfig != null && _agentConfig.IsEnabled)
-        {
-            try
-            {
-                agentRecommendation = await GetAgentRecommendationsAsync(x, y);
-                ApplyAgentRecommendations(agentRecommendation);
-            }
-            catch (Exception ex)
-            {
-                // Log warning but don't fail the build if agent assistance fails
-                // The build can proceed without agent recommendations
-                Console.WriteLine($"Warning: Agent assistance failed: {ex.Message}");
-                Console.WriteLine("Proceeding with model building without agent recommendations.");
-            }
-        }
 
         // AUTOML SEARCH (if configured and no model explicitly set)
         // AutoML finds the best model type and hyperparameters automatically
@@ -2276,8 +2257,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             QueryProcessors = _queryProcessors,
             LoRAConfiguration = _loraConfiguration,
             CrossValidationResult = cvResults,
-            AgentConfig = _agentConfig,
-            AgentRecommendation = agentRecommendation,
             DeploymentConfiguration = deploymentConfig,
             QuantizationInfo = quantizationInfo,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
@@ -2295,7 +2274,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             ProgramSynthesisServingClient = _programSynthesisServingClient,
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
             PromptTemplate = null,
-            PromptChain = null,
             PromptOptimizer = null,
             FewShotExampleSelector = null,
             PromptAnalyzer = null,

@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using AiDotNet.Agentic.Models;
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 using Newtonsoft.Json;
@@ -30,13 +31,13 @@ namespace AiDotNet.Reasoning.Components;
 internal class ThoughtGenerator<T> : IThoughtGenerator<T>
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
-    private readonly IChatModel<T> _chatModel;
+    private readonly IChatClient<T> _chatModel;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ThoughtGenerator{T}"/> class.
     /// </summary>
     /// <param name="chatModel">The chat model used to generate thoughts.</param>
-    public ThoughtGenerator(IChatModel<T> chatModel)
+    public ThoughtGenerator(IChatClient<T> chatModel)
     {
         Guard.NotNull(chatModel);
         _chatModel = chatModel;

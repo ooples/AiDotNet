@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using AiDotNet.Helpers;
+using AiDotNet.Agentic.Models;
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 using Newtonsoft.Json;
@@ -38,14 +39,14 @@ namespace AiDotNet.Reasoning.Verification;
 internal class CriticModel<T> : ICriticModel<T>
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
-    private readonly IChatModel<T> _chatModel;
+    private readonly IChatClient<T> _chatModel;
     private readonly INumericOperations<T> _numOps;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CriticModel{T}"/> class.
     /// </summary>
     /// <param name="chatModel">The chat model used for critique generation.</param>
-    public CriticModel(IChatModel<T> chatModel)
+    public CriticModel(IChatClient<T> chatModel)
     {
         Guard.NotNull(chatModel);
         _chatModel = chatModel;

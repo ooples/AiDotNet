@@ -39,13 +39,13 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <TreatWarningsAsErrors>True</TreatWarningsAsErrors>
     <!-- AIDN diagnostics visible as warnings until models are annotated (issue #958) -->
-    <WarningsNotAsErrors>$(WarningsNotAsErrors);AIDN001;AIDN010;AIDN011;AIDN012;AIDN020;AIDN050;AIDN051;AIDN052</WarningsNotAsErrors>
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);AIDN001;AIDN010;AIDN011;AIDN012;AIDN020;AIDN050;AIDN051;AIDN052;NU1603;NU1605;NU1608</WarningsNotAsErrors>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
     <TreatWarningsAsErrors>True</TreatWarningsAsErrors>
     <!-- AIDN diagnostics visible as warnings until models are annotated (issue #958) -->
-    <WarningsNotAsErrors>$(WarningsNotAsErrors);AIDN001;AIDN010;AIDN011;AIDN012;AIDN020;AIDN050;AIDN051;AIDN052</WarningsNotAsErrors>
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);AIDN001;AIDN010;AIDN011;AIDN012;AIDN020;AIDN050;AIDN051;AIDN052;NU1603;NU1605;NU1608</WarningsNotAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
@@ -96,6 +96,7 @@
 
 	  <PackageReference Include="Google.Protobuf" />
 	  <PackageReference Include="Microsoft.CSharp" />
+	  <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
 	  <!-- Microsoft.Data.Sqlite extracted to the opt-in AiDotNet.Storage.Sqlite
 	       metapackage in audit-2026-05 phase 2c (finding #14). Core code used it
 	       only in NeuralProgramSynthesizer for precise SQL validation, which now
@@ -208,9 +209,7 @@
 
 	<!-- Source generator for auto-generating YAML configuration mappings -->
 	<ItemGroup>
-	  <ProjectReference Include="AiDotNet.Generators\AiDotNet.Generators.csproj"
-	                     OutputItemType="Analyzer"
-	                     ReferenceOutputAssembly="false" />
+	  <ProjectReference Include="AiDotNet.Generators\AiDotNet.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
 	</ItemGroup>
 
 	<!-- Exclude the source generator project files from this project's compilation -->

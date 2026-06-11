@@ -1,3 +1,4 @@
+using AiDotNet.Agentic.Models;
 using AiDotNet.Benchmarking.Models;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
@@ -15,6 +16,7 @@ internal static class BenchmarkRunner
     public static async Task<BenchmarkReport> RunAsync<T, TInput, TOutput>(
         AiModelResult<T, TInput, TOutput> model,
         BenchmarkingOptions options,
+        IChatClient<T>? chatClient = null,
         CancellationToken cancellationToken = default)
     {
         if (model is null)
@@ -53,7 +55,7 @@ internal static class BenchmarkRunner
             var suiteStartedUtc = DateTimeOffset.UtcNow;
             try
             {
-                var suiteReport = await RunSuiteAsync(model, suite, options, cancellationToken).ConfigureAwait(false);
+                var suiteReport = await RunSuiteAsync(model, suite, options, chatClient, cancellationToken).ConfigureAwait(false);
                 suiteReport.StartedUtc = suiteStartedUtc;
                 suiteReport.EndedUtc = DateTimeOffset.UtcNow;
                 suiteReports.Add(suiteReport);
@@ -104,6 +106,7 @@ internal static class BenchmarkRunner
         AiModelResult<T, TInput, TOutput> model,
         BenchmarkSuite suite,
         BenchmarkingOptions options,
+        IChatClient<T>? chatClient,
         CancellationToken cancellationToken)
     {
         var kind = BenchmarkSuiteRegistry.GetSuiteKind(suite);
@@ -181,8 +184,14 @@ internal static class BenchmarkRunner
             sampleSize = 25;
         }
 
+        if (chatClient is null)
+        {
+            throw new InvalidOperationException(
+                "Reasoning benchmark suites require an IChatClient<T>. Pass one to EvaluateBenchmarksAsync.");
+        }
+
         IBenchmark<double> benchmark = BenchmarkSuiteRegistry.CreateReasoningBenchmark(suite);
-        BenchmarkResult<double> result = await model.EvaluateBenchmarkAsync(benchmark, sampleSize, cancellationToken)
+        BenchmarkResult<double> result = await model.EvaluateBenchmarkAsync(benchmark, chatClient, sampleSize, cancellationToken)
             .ConfigureAwait(false);
 
         var metrics = new List<BenchmarkMetricValue>

@@ -1,4 +1,5 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Agentic.Tools;
 using AiDotNet.Clustering.Evaluation;
 using AiDotNet.CurriculumLearning.Interfaces;
 using AiDotNet.Evaluation.Metrics;
@@ -39,7 +40,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private ITimeSeriesDecomposition<T>? _configuredTimeSeriesDecomposition;
     private IDistillationStrategy<T>? _configuredDistillationStrategy;
     private IModelCompressionStrategy<T>? _configuredModelCompressionStrategy;
-    private ITool? _configuredTool;
+    private IAgentTool? _configuredTool;
     private INoiseScheduler<T>? _configuredNoiseScheduler;
     private IEnvironment<T>? _configuredEnvironment;
     private IAdversarialAttack<T, TInput, TOutput>? _configuredAdversarialAttack;
@@ -364,7 +365,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// API calls, and database queries. Tools extend an agent's capabilities beyond pure
     /// text generation to real-world actions.</para>
     /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureTool(ITool tool)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureTool(IAgentTool tool)
     {
         _configuredTool = tool;
         return this;

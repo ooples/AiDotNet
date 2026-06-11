@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using AiDotNet.Helpers;
+using AiDotNet.Agentic.Models;
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 
@@ -69,7 +70,7 @@ namespace AiDotNet.Reasoning.Verification;
 internal class OutcomeRewardModel<T> : IRewardModel<T>
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
-    private readonly IChatModel<T>? _chatModel;
+    private readonly IChatClient<T>? _chatModel;
     private readonly INumericOperations<T> _numOps;
     private readonly bool _useSemanticSimilarity;
     private readonly double _partialCreditThreshold;
@@ -81,7 +82,7 @@ internal class OutcomeRewardModel<T> : IRewardModel<T>
     /// <param name="useSemanticSimilarity">Use LLM for semantic comparison vs exact match.</param>
     /// <param name="partialCreditThreshold">Threshold for partial credit (0.0-1.0, default: 0.8).</param>
     public OutcomeRewardModel(
-        IChatModel<T>? chatModel = null,
+        IChatClient<T>? chatModel = null,
         bool useSemanticSimilarity = false,
         double partialCreditThreshold = 0.8)
     {

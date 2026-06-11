@@ -1,6 +1,5 @@
 
 
-global using AiDotNet.Agents;
 global using AiDotNet.Configuration;
 global using AiDotNet.Deployment.Configuration;
 global using AiDotNet.Diagnostics;
@@ -11,7 +10,6 @@ global using AiDotNet.FitDetectors;
 global using AiDotNet.FitnessCalculators;
 global using AiDotNet.Helpers;
 global using AiDotNet.KnowledgeDistillation;
-global using AiDotNet.LanguageModels;
 global using AiDotNet.LinearAlgebra;
 global using AiDotNet.LossFunctions;
 global using AiDotNet.MetaLearning;
@@ -23,7 +21,6 @@ global using AiDotNet.Optimizers;
 global using AiDotNet.AnomalyDetection;
 global using AiDotNet.ProgramSynthesis.Interfaces;
 global using AiDotNet.ProgramSynthesis.Serving;
-global using AiDotNet.PromptEngineering.Chains;
 global using AiDotNet.PromptEngineering.FewShot;
 global using AiDotNet.PromptEngineering.Optimization;
 global using AiDotNet.PromptEngineering.Templates;
@@ -34,7 +31,6 @@ global using AiDotNet.Tensors.Helpers;
 global using AiDotNet.Tokenization.Configuration;
 global using AiDotNet.Tokenization.HuggingFace;
 global using AiDotNet.Tokenization.Interfaces;
-global using AiDotNet.Tools;
 global using AiDotNet.UncertaintyQuantification.Layers;
 using AiDotNet.Augmentation;
 using AiDotNet.AutoML.NAS;
@@ -229,8 +225,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private ActivationCheckpointConfig? _pipelineCheckpointConfig;
     private int _pipelineMicroBatchCount = 1;
     private ICrossValidator<T, TInput, TOutput>? _crossValidator;
-    private AgentConfiguration<T>? _agentConfig;
-    private AgentAssistanceOptions _agentOptions = AgentAssistanceOptions.Default;
     private KnowledgeDistillationOptions<T, TInput, TOutput>? _knowledgeDistillationOptions;
     private MixedPrecisionConfig? _mixedPrecisionConfig;
     private AiDotNet.Configuration.InferenceOptimizationConfig? _inferenceOptimizationConfig;
@@ -478,7 +472,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     InterpretabilityOptions? AiDotNet.Configuration.IConfiguredView<T, TInput, TOutput>.ConfiguredInterpretability => _interpretabilityOptions;
     Training.Memory.TrainingMemoryConfig? AiDotNet.Configuration.IConfiguredView<T, TInput, TOutput>.ConfiguredMemoryManagement => _memoryConfig;
     AiDotNetLicenseKey? AiDotNet.Configuration.IConfiguredView<T, TInput, TOutput>.ConfiguredLicenseKey => _licenseKey;
-    AgentConfiguration<T>? AiDotNet.Configuration.IConfiguredView<T, TInput, TOutput>.ConfiguredAgentAssistance => _agentConfig;
 
     /// <summary>
     /// Creates a new <see cref="AiModelBuilder{T, TInput, TOutput}"/> with configuration loaded from a YAML file.

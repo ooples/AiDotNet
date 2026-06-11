@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using AiDotNet.Helpers;
+using AiDotNet.Agentic.Models;
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.Tensors.Helpers;
@@ -46,13 +47,13 @@ namespace AiDotNet.Reasoning.Components;
 internal class ContradictionDetector<T> : IContradictionDetector<T>
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
-    private readonly IChatModel<T> _chatModel;
+    private readonly IChatClient<T> _chatModel;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ContradictionDetector{T}"/> class.
     /// </summary>
     /// <param name="chatModel">The chat model used for contradiction detection.</param>
-    public ContradictionDetector(IChatModel<T> chatModel)
+    public ContradictionDetector(IChatClient<T> chatModel)
     {
         Guard.NotNull(chatModel);
         _chatModel = chatModel;
