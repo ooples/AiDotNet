@@ -450,6 +450,43 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Eager constructor: allocates and initializes the weight/bias tensors
+    /// immediately for a known input channel count. Use when downstream
+    /// consumers need shape-resolved state (parameter-count introspection,
+    /// serialization) before the first forward; the (outputChannels, spiralLength)
+    /// ctor stays lazy and resolves the input channels from the first forward.
+    /// </summary>
+    /// <param name="inputChannels">Number of input feature channels per vertex. Must be positive.</param>
+    /// <param name="outputChannels">Number of output feature channels per vertex. Must be positive.</param>
+    /// <param name="spiralLength">Length of the spiral sequence (number of neighbors). Must be positive.</param>
+    /// <param name="activationFunction">Activation applied after the spiral convolution. Defaults to ReLU.</param>
+    public SpiralConvLayer(
+        int inputChannels,
+        int outputChannels,
+        int spiralLength,
+        IActivationFunction<T>? activationFunction = null)
+        : base(
+            new[] { -1, inputChannels },
+            new[] { -1, outputChannels },
+            activationFunction ?? new ReLUActivation<T>())
+    {
+        if (inputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(inputChannels));
+        if (outputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(outputChannels));
+        if (spiralLength <= 0) throw new ArgumentOutOfRangeException(nameof(spiralLength));
+
+        InputChannels = inputChannels;
+        OutputChannels = outputChannels;
+        SpiralLength = spiralLength;
+
+        int weightSize = inputChannels * spiralLength;
+        _weights = new Tensor<T>([outputChannels, weightSize]);
+        _biases = new Tensor<T>([outputChannels]);
+        InitializeWeights();
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="SpiralConvLayer{T}"/> class with vector activation.
     /// </summary>
     /// <param name="inputChannels">Number of input feature channels per vertex.</param>
@@ -492,13 +529,19 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
             $"SpiralConvLayer requires rank-2 [V,C] or rank-3 [B,V,C] input; got rank {rank}.",
             nameof(input));
 
-        InputChannels = c;
-        int weightSize = c * SpiralLength;
-        _weights = AllocateLazyWeight([OutputChannels, weightSize]);
-        _biases = AllocateLazyWeight([OutputChannels]);
-        InitializeWeights();
-        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        // Allocate weights lazily only when they weren't already pre-allocated
+        // by the eager (inputChannels, ...) ctor — re-allocating would discard
+        // those weights and double-register the trainable parameters.
+        if (_weights.Length == 0)
+        {
+            InputChannels = c;
+            int weightSize = c * SpiralLength;
+            _weights = AllocateLazyWeight([OutputChannels, weightSize]);
+            _biases = AllocateLazyWeight([OutputChannels]);
+            InitializeWeights();
+            RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        }
 
         ResolveShapes(new[] { v, c }, new[] { v, OutputChannels });
     }

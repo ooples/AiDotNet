@@ -4714,8 +4714,12 @@ public static class LayerHelper<T>
         {
             int outChannels = convChannels[block];
 
-            // SpiralConv layer
+            // SpiralConv layer. Pass the known input channel count (chained from
+            // inputFeatures through the preceding blocks) so weights allocate
+            // eagerly — otherwise the lazy stack reports ParameterCount = 0 until
+            // the first forward.
             yield return new SpiralConvLayer<T>(
+                inputChannels: currentChannels,
                 outputChannels: outChannels,
                 spiralLength: spiralLength,
                 activationFunction: new ReLUActivation<T>());
