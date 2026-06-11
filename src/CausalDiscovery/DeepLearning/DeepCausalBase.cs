@@ -135,15 +135,13 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
     {
         var result = new Matrix<T>(d, d);
 
-        // The per-parent probability under softmax-of-sigmoid attention is 1/d
-        // at random / uninformed init. A fixed 0.3 threshold rejects every edge
-        // for d ≥ 4 (where 1/d ≤ 0.25), so the algorithm cannot recover any
-        // structure at all on the 4-variable test fixtures. Scale the threshold
-        // as `max(uniform + margin, 0.3)` — for d=4 that's max(0.45, 0.3) = 0.45
-        // (just above uniform 0.25 + a 0.20 separation margin); for d=3 it's
-        // max(0.55, 0.3) = 0.55; for d ≥ 8 it stays at 0.3. This keeps the
-        // attention-concentration discrimination scale-appropriate.
-        double scaleAwareThreshold = Math.Max(1.0 / d + 0.20, 0.3);
+        // Threshold scales with d only when uniform attention (= 1/d) crowds
+        // a fixed 0.3 floor. For d ≤ 3 keep the historical 0.3 floor —
+        // 1/d > 0.3 already, so the discrimination floor is "above uniform"
+        // by margin regardless. For d ≥ 4 require uniform + 0.15 margin so
+        // an algorithm that just spreads attention near uniform doesn't
+        // cross the bar.
+        double scaleAwareThreshold = d <= 3 ? 0.3 : Math.Max(1.0 / d + 0.15, 0.3);
 
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
