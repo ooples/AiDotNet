@@ -219,7 +219,12 @@ public class PairwiseRankingLoss<T> : LossFunctionBase<T>
         }
 
         if (weightSum <= 0.0) return NumOps.Zero;
-        return NumOps.FromDouble(lossSum / weightSum);
+        // Normalize by the ITEM count n, not the pair count (~n^2). The original RankNet (Burges et al.
+        // 2005) accumulates per-pair gradients (sum); dividing by the pair count shrinks the per-item
+        // gradient to O(1/n), too weak for the optimizer to learn on larger groups (the constant-output
+        // collapse). Per-item normalization keeps the gradient O(1) at any group size while staying
+        // consistent with CalculateDerivative below.
+        return NumOps.FromDouble(lossSum / n);
     }
 
     /// <summary>
@@ -274,7 +279,9 @@ public class PairwiseRankingLoss<T> : LossFunctionBase<T>
 
         for (int k = 0; k < n; k++)
         {
-            result[k] = NumOps.FromDouble(grad[k] / weightSum);
+            // Per-item normalization (÷ n), consistent with CalculateLoss — the RankNet per-pair gradient
+            // accumulation, scaled so the per-item gradient is O(1) at any group size rather than O(1/n).
+            result[k] = NumOps.FromDouble(grad[k] / n);
         }
 
         return new Vector<T>(result);
