@@ -855,7 +855,15 @@ public class ContinualLearningDeepMathIntegrationTests
     /// <summary>
     /// Mock model for continual learning tests.
     /// </summary>
-    private class CLMockModel : IFullModel<double, Tensor<double>, Tensor<double>>
+    // Implements IParameterizable explicitly: the interface-segregation refactor
+    // moved GetParameters/SetParameters/ParameterCount/WithParameters off IFullModel
+    // and onto IParameterizable, and EWC/SI guard-require it via
+    // InterfaceGuard.Parameterizable (EWC's Fisher matrix and SI's importance are
+    // computed OVER the model's parameters). The mock already implements every
+    // IParameterizable member below; it just needs to declare the interface so the
+    // runtime `model is IParameterizable<...>` check succeeds.
+    private class CLMockModel : IFullModel<double, Tensor<double>, Tensor<double>>,
+        IParameterizable<double, Tensor<double>, Tensor<double>>
     {
         private Vector<double> _parameters;
         private List<int> _activeFeatures;
