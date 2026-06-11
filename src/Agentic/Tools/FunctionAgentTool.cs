@@ -46,7 +46,21 @@ public sealed class FunctionAgentTool : AgentToolBase
     /// <inheritdoc/>
     protected override async Task<ToolInvocationResult> InvokeCoreAsync(JObject arguments, CancellationToken cancellationToken)
     {
-        var content = await _invoker(arguments, cancellationToken).ConfigureAwait(false);
-        return ToolInvocationResult.Success(content);
+        try
+        {
+            var content = await _invoker(arguments, cancellationToken).ConfigureAwait(false);
+            return ToolInvocationResult.Success(content);
+        }
+        catch (OperationCanceledException)
+        {
+            // Honor cancellation — do not convert it into a tool error.
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Match DelegateAgentTool: surface a failing tool as an error result the agent can relay back to
+            // the model, rather than letting the exception unwind the whole agent loop.
+            return ToolInvocationResult.Error($"Tool '{Name}' failed: {ex.Message}");
+        }
     }
 }

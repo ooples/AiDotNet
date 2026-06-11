@@ -108,6 +108,32 @@ public static class JsonSchemaGenerator
         return Nullable.GetUnderlyingType(parameter.ParameterType) is null;
     }
 
+    // A schema property is required when it is a non-nullable member: any non-Nullable<T> value type, or a
+    // reference type whose nullable annotation is non-nullable (detectable only on net6+).
+    private static bool IsRequiredProperty(PropertyInfo property
+#if NET6_0_OR_GREATER
+        , System.Reflection.NullabilityInfoContext nullabilityContext
+#endif
+        )
+    {
+        if (Nullable.GetUnderlyingType(property.PropertyType) is not null)
+        {
+            return false;
+        }
+
+        if (property.PropertyType.IsValueType)
+        {
+            return true;
+        }
+
+#if NET6_0_OR_GREATER
+        return nullabilityContext.Create(property).ReadState == System.Reflection.NullabilityState.NotNull;
+#else
+        // Reference-type nullability annotations are unavailable on this target framework; treat as optional.
+        return false;
+#endif
+    }
+
     private static JObject ForType(Type type, HashSet<Type> visiting, int depth)
     {
         if (type.IsEnum)
@@ -187,6 +213,10 @@ public static class JsonSchemaGenerator
         }
 
         var properties = new JObject();
+        var required = new JArray();
+#if NET6_0_OR_GREATER
+        var nullabilityContext = new System.Reflection.NullabilityInfoContext();
+#endif
         foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
             if (!property.CanRead || property.GetIndexParameters().Length > 0)
@@ -196,10 +226,27 @@ public static class JsonSchemaGenerator
 
             var propertyType = Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;
             properties[property.Name] = ForType(propertyType, visiting, depth + 1);
+
+            if (IsRequiredProperty(property
+#if NET6_0_OR_GREATER
+                , nullabilityContext
+#endif
+                ))
+            {
+                required.Add(property.Name);
+            }
         }
 
         visiting.Remove(type);
-        return new JObject { ["type"] = "object", ["properties"] = properties };
+        var schema = new JObject { ["type"] = "object", ["properties"] = properties };
+        if (required.Count > 0)
+        {
+            // Mark non-nullable members required so schema-enforcing providers / constrained decoding must
+            // emit them — that is the effective guarantee against missing required fields for structured output.
+            schema["required"] = required;
+        }
+
+        return schema;
     }
 
     private static bool TryGetDictionaryValueType(Type type, out Type valueType)

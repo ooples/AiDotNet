@@ -27,6 +27,13 @@ public sealed class ToolCallContent : AiContent
     /// <param name="argumentsJson">The arguments as a raw JSON object string. Defaults to <c>{}</c>.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="callId"/> or <paramref name="toolName"/> is <c>null</c>.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="callId"/> or <paramref name="toolName"/> is empty/whitespace.</exception>
+    /// <remarks>
+    /// <paramref name="argumentsJson"/> is intentionally NOT validated here. The model produces these
+    /// arguments, and malformed JSON is an expected runtime condition: <c>ToolCollection.InvokeAsync</c>
+    /// detects it and returns an error <see cref="ToolResultContent"/> so the agent can feed the failure back
+    /// to the model for correction. Throwing at construction would instead crash the whole agent loop on a
+    /// single bad tool call. Null/whitespace defaults to <c>{}</c>.
+    /// </remarks>
     public ToolCallContent(string callId, string toolName, string? argumentsJson = null)
     {
         Guard.NotNullOrWhiteSpace(callId);

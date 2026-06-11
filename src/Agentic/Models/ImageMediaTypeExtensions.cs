@@ -49,7 +49,9 @@ public static class ImageMediaTypeExtensions
                 mediaType = ImageMediaType.Webp;
                 return true;
             default:
-                mediaType = ImageMediaType.Png;
+                // Return the enum default on failure rather than a specific type, so a false return is not
+                // mistaken for a parsed PNG.
+                mediaType = default;
                 return false;
         }
     }
