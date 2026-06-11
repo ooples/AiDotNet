@@ -370,15 +370,17 @@ public class CCDM<T> : TimeSeriesFoundationModelBase<T>
             // network input projection wasn't wired up — _inputProjection
             // was already consumed by the conditioning encoder above).
             T logSigma = NumOps.FromDouble(Math.Log(Math.Max(1e-10, NumOps.ToDouble(sigmaT))));
-            var scoreInput = new Tensor<T>(new[] { 1, _hiddenDimension });
+            // Build the additive components as separate hiddenDim-wide rank-2
+            // tensors and sum via Engine ops so the per-element work is
+            // SIMD-vectorized at paper scale (hiddenDim ≥ 1024). On test-scale
+            // hiddenDim=24 the gain is negligible but the codebase pattern is
+            // consistent — no per-element NumOps.Add loops in hot paths.
             int xtLen = Math.Min(xt.Length, outputLen);
-            for (int i = 0; i < xtLen && i < _hiddenDimension; i++)
-                scoreInput.Data.Span[i] = xt[i];
             int condLen = Math.Min(condHidden.Length, _hiddenDimension);
-            for (int i = 0; i < condLen; i++)
-                scoreInput.Data.Span[i] = NumOps.Add(scoreInput.Data.Span[i], condHidden[i]);
-            for (int i = 0; i < _hiddenDimension; i++)
-                scoreInput.Data.Span[i] = NumOps.Add(scoreInput.Data.Span[i], logSigma);
+            var xtPadded = PadOrTruncateRank2(xt, _hiddenDimension);
+            var condPadded = PadOrTruncateRank2(condHidden, _hiddenDimension);
+            var summed = Engine.TensorAdd(xtPadded, condPadded);
+            var scoreInput = Engine.TensorAddScalar(summed, logSigma);
 
             // Predict score: s_theta(x_t, sigma_t).
             var score = scoreInput;
@@ -399,6 +401,28 @@ public class CCDM<T> : TimeSeriesFoundationModelBase<T>
 
         if (addedBatchDim && xt.Rank == 2 && xt.Shape[0] == 1) xt = xt.Reshape(new[] { xt.Shape[1] });
         return xt;
+    }
+
+    /// <summary>
+    /// Pads or truncates a rank-1 or rank-2 [1, len] tensor along the last
+    /// axis to a target width using vectorised Engine ops:
+    ///   * len &lt; targetWidth → TensorConcatenate with a zero pad
+    ///   * len &gt; targetWidth → TensorNarrow to truncate
+    ///   * len == targetWidth → return as-is (rank-2)
+    /// Aligns the score-net additive inputs (x_t / cond) to the lazy-
+    /// resolved denoiser hidden width before TensorAdd, so the per-element
+    /// work is SIMD-vectorised by IEngine ops instead of running through
+    /// scalar NumOps loops.
+    /// </summary>
+    private Tensor<T> PadOrTruncateRank2(Tensor<T> src, int targetWidth)
+    {
+        var src2d = src.Rank == 2 ? src : Engine.Reshape(src, new[] { 1, src.Length });
+        int srcLen = src2d.Shape[1];
+        if (srcLen == targetWidth) return src2d;
+        if (srcLen > targetWidth)
+            return Engine.TensorNarrow(src2d, dim: 1, start: 0, length: targetWidth);
+        var pad = new Tensor<T>(new[] { 1, targetWidth - srcLen });
+        return Engine.TensorConcatenate(new[] { src2d, pad }, axis: 1);
     }
 
     protected override Tensor<T> ForecastOnnx(Tensor<T> input) { if (OnnxSession == null) throw new InvalidOperationException("ONNX session is not initialized."); int batchSize = input.Rank > 1 ? input.Shape[0] : 1; int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length; int features = input.Rank > 2 ? input.Shape[2] : 1; var inputData = new float[batchSize * seqLen * features]; for (int i = 0; i < input.Length && i < inputData.Length; i++) inputData[i] = (float)NumOps.ToDouble(input[i]); var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, new[] { batchSize, seqLen, features }); string inputName = OnnxSession.InputMetadata.Keys.FirstOrDefault() ?? "input"; var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, inputTensor) }; using var results = OnnxSession.Run(inputs); var outputTensor = results.First().AsTensor<float>(); var outputShape = outputTensor.Dimensions.ToArray(); var output = new Tensor<T>(outputShape); int totalElements = 1; foreach (var dim in outputShape) totalElements *= dim; for (int i = 0; i < totalElements && i < output.Length; i++) output.Data.Span[i] = NumOps.FromDouble(outputTensor.GetValue(i)); return output; }

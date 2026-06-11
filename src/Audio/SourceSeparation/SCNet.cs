@@ -193,7 +193,67 @@ public class SCNet<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+
+        // SCNet (Chen et al. 2024) uses standard Transformer encoder/decoder
+        // blocks. Each block is MHA → LN → FFN(Dense+ReLU+Dense) → LN, and
+        // standard Transformer practice (Vaswani 2017 §3.1) puts a residual
+        // around the MHA sub-layer AND another around the FFN sub-layer.
+        // The previous straight-sequential forward dropped both residuals,
+        // so the per-block MHA output projection (with He init) attenuated
+        // the signal by ~1/√d per layer; 12 blocks (6 enc + 6 dec) decayed
+        // the input by ~10^-7 — exactly the symptom flagged by
+        // ScaledInput_ShouldChangeOutput / DifferentInputs_ShouldProduceDifferentOutputs.
+        //
+        // Detect block boundaries by layer type and add residuals there.
+        // Layer order from CreateDefaultSCNetLayers:
+        //   [stem] Dense, LN, Dense, LN          ← keep straight
+        //   per block: MHA, LN, Dense(FFN1), Dense(FFN2), LN, [Dropout]
+        //   [tail] Dense, Dense                  ← keep straight
+        Tensor<T> c = input;
+        Tensor<T>? attnResidual = null;
+        Tensor<T>? ffnResidual = null;
+        int sinceMha = -1; // -1: not in a block; 0..n: positions past MHA
+        for (int li = 0; li < Layers.Count; li++)
+        {
+            var layer = Layers[li];
+            // Start of MHA sub-layer in a block — capture the input as the attn residual.
+            if (layer is AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>)
+            {
+                attnResidual = c;
+                c = layer.Forward(c);
+                sinceMha = 0;
+                continue;
+            }
+            if (sinceMha >= 0)
+            {
+                sinceMha++;
+                if (sinceMha == 1)
+                {
+                    // After MHA → LN: add the attn residual to the LN output
+                    // (post-LN residual; Vaswani 2017's original block).
+                    c = layer.Forward(c);
+                    if (attnResidual is not null && c.Length == attnResidual.Length)
+                        c = Engine.TensorAdd(c, attnResidual);
+                    // Now capture this as the FFN input for the FFN residual.
+                    ffnResidual = c;
+                    continue;
+                }
+                if (sinceMha == 4 && ffnResidual is not null)
+                {
+                    // After MHA → LN → FFN1 → FFN2 → LN (= sinceMha 4):
+                    // add the FFN residual to the LN output, ending the block.
+                    c = layer.Forward(c);
+                    if (c.Length == ffnResidual.Length)
+                        c = Engine.TensorAdd(c, ffnResidual);
+                    attnResidual = null;
+                    ffnResidual = null;
+                    sinceMha = -1;
+                    continue;
+                }
+            }
+            c = layer.Forward(c);
+        }
+        return c;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)

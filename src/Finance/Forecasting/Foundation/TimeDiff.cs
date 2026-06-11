@@ -365,16 +365,11 @@ public class TimeDiff<T> : TimeSeriesFoundationModelBase<T>
             // shape-mismatch the first BatchNorm in _transformerLayers,
             // which was lazy-sized to _hiddenDimension by an earlier
             // _inputProjection.Forward).
-            int xtLen = Math.Min(xt.Length, outputLen);
-            int condLen = Math.Min(condHidden.Length, _hiddenDimension);
             T timeEmbed = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _diffusionSteps - 1)));
-            var denoisingInput = new Tensor<T>(new[] { 1, _hiddenDimension });
-            for (int i = 0; i < xtLen && i < _hiddenDimension; i++)
-                denoisingInput.Data.Span[i] = xt[i];
-            for (int i = 0; i < condLen; i++)
-                denoisingInput.Data.Span[i] = NumOps.Add(denoisingInput.Data.Span[i], condHidden[i]);
-            for (int i = 0; i < _hiddenDimension; i++)
-                denoisingInput.Data.Span[i] = NumOps.Add(denoisingInput.Data.Span[i], timeEmbed);
+            var xtPadded = PadOrTruncateRank2(xt, _hiddenDimension);
+            var condPadded = PadOrTruncateRank2(condHidden, _hiddenDimension);
+            var summed = Engine.TensorAdd(xtPadded, condPadded);
+            var denoisingInput = Engine.TensorAddScalar(summed, timeEmbed);
 
             var eps = denoisingInput;
             foreach (var layer in _transformerLayers) eps = layer.Forward(eps);
@@ -399,6 +394,20 @@ public class TimeDiff<T> : TimeSeriesFoundationModelBase<T>
 
         if (addedBatchDim && xt.Rank == 2 && xt.Shape[0] == 1) xt = xt.Reshape(new[] { xt.Shape[1] });
         return xt;
+    }
+
+    /// <summary>Pads-or-truncates a rank-1 / rank-2 [1, len] tensor along the
+    /// last axis to a target width via Engine ops. See CCDM for the shared
+    /// rationale.</summary>
+    private Tensor<T> PadOrTruncateRank2(Tensor<T> src, int targetWidth)
+    {
+        var src2d = src.Rank == 2 ? src : Engine.Reshape(src, new[] { 1, src.Length });
+        int srcLen = src2d.Shape[1];
+        if (srcLen == targetWidth) return src2d;
+        if (srcLen > targetWidth)
+            return Engine.TensorNarrow(src2d, dim: 1, start: 0, length: targetWidth);
+        var pad = new Tensor<T>(new[] { 1, targetWidth - srcLen });
+        return Engine.TensorConcatenate(new[] { src2d, pad }, axis: 1);
     }
 
     protected override Tensor<T> ForecastOnnx(Tensor<T> input) { if (OnnxSession == null) throw new InvalidOperationException("ONNX session is not initialized."); int batchSize = input.Shape[0]; int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length; int features = input.Shape.Length > 2 ? input.Shape[2] : 1; var inputData = new float[batchSize * seqLen * features]; for (int i = 0; i < input.Length && i < inputData.Length; i++) inputData[i] = (float)NumOps.ToDouble(input[i]); var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, new[] { batchSize, seqLen, features }); var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor("input", inputTensor) }; using var results = OnnxSession.Run(inputs); var outputTensor = results.First().AsTensor<float>(); var outputShape = outputTensor.Dimensions.ToArray(); var output = new Tensor<T>(outputShape); int totalElements = 1; foreach (var dim in outputShape) totalElements *= dim; for (int i = 0; i < totalElements && i < output.Length; i++) output.Data.Span[i] = NumOps.FromDouble(outputTensor.GetValue(i)); return output; }

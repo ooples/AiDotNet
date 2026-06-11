@@ -407,13 +407,10 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
         // and shape-mismatched the first BatchNorm of _residualLayers
         // (lazy-sized to hiddenDim by _inputProjection.Forward).
         T timeEmbedTrain = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));
-        var denoisingInput = new Tensor<T>(new[] { 1, _hiddenDimension });
-        for (int i = 0; i < targetLen && i < _hiddenDimension; i++)
-            denoisingInput.Data.Span[i] = xt2d[0, i];
-        for (int i = 0; i < condLen; i++)
-            denoisingInput.Data.Span[i] = NumOps.Add(denoisingInput.Data.Span[i], condHidden[i]);
-        for (int i = 0; i < _hiddenDimension; i++)
-            denoisingInput.Data.Span[i] = NumOps.Add(denoisingInput.Data.Span[i], timeEmbedTrain);
+        var xt2dPadded = PadOrTruncateRank2(xt2d, _hiddenDimension);
+        var condPaddedTrain = PadOrTruncateRank2(condHidden, _hiddenDimension);
+        var summedTrain = Engine.TensorAdd(xt2dPadded, condPaddedTrain);
+        var denoisingInput = Engine.TensorAddScalar(summedTrain, timeEmbedTrain);
 
         // 5. Predict noise via residual stack. _residualLayers[i]
         // .Forward is tape-aware, so gradients flow back through the
@@ -435,16 +432,12 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
         // inference loop's `i < eps.Length` truncation at line ~616.
         if (eps.Length > epsilonTrue.Length && eps.Rank == 2 && epsilonTrue.Rank == 2)
         {
-            // [B, predLen] → [B, trueLen] by indexing the first trueLen
-            // elements per row, tape-tracked so the head's gradient still
-            // reaches every parameter via the first-trueLen output rows.
-            int batch = eps.Shape[0];
-            int trueLen = epsilonTrue.Length;
-            var sliced = new T[batch * trueLen];
-            for (int b = 0; b < batch; b++)
-                for (int i = 0; i < trueLen && i < eps.Shape[1]; i++)
-                    sliced[b * trueLen + i] = eps[b, i];
-            eps = new Tensor<T>(new[] { batch, trueLen }, new Vector<T>(sliced));
+            // [B, predLen] → [B, trueLen] via the tape-tracked
+            // Engine.TensorNarrow op (SIMD-vectorised slice). Gradients
+            // still reach every head parameter via the first-trueLen
+            // output rows because TensorNarrow propagates the tape.
+            int trueLen = epsilonTrue.Shape[1];
+            eps = Engine.TensorNarrow(eps, dim: 1, start: 0, length: trueLen);
         }
         else if (eps.Length != epsilonTrue.Length)
         {
@@ -604,16 +597,11 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
             // t_embed] concatenation would shape-mismatch the first
             // BatchNorm in _residualLayers, which was lazy-sized to
             // _hiddenDimension by an earlier _inputProjection.Forward.
-            int xtLen = Math.Min(xt.Length, outputLen);
-            int condLen = Math.Min(condHidden.Length, _hiddenDimension);
             T timeEmbed = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));
-            var denoisingInput = new Tensor<T>(new[] { 1, _hiddenDimension });
-            for (int i = 0; i < xtLen && i < _hiddenDimension; i++)
-                denoisingInput.Data.Span[i] = xt[i];
-            for (int i = 0; i < condLen; i++)
-                denoisingInput.Data.Span[i] = NumOps.Add(denoisingInput.Data.Span[i], condHidden[i]);
-            for (int i = 0; i < _hiddenDimension; i++)
-                denoisingInput.Data.Span[i] = NumOps.Add(denoisingInput.Data.Span[i], timeEmbed);
+            var xtPadded = PadOrTruncateRank2(xt, _hiddenDimension);
+            var condPadded = PadOrTruncateRank2(condHidden, _hiddenDimension);
+            var summed = Engine.TensorAdd(xtPadded, condPadded);
+            var denoisingInput = Engine.TensorAddScalar(summed, timeEmbed);
 
             // Predict noise through residual layers
             var eps = denoisingInput;
@@ -657,6 +645,20 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
         int totalElements = 1; foreach (var dim in outputShape) totalElements *= dim;
         for (int i = 0; i < totalElements && i < output.Length; i++) output.Data.Span[i] = NumOps.FromDouble(outputTensor.GetValue(i));
         return output;
+    }
+
+    /// <summary>Pads-or-truncates a rank-1 / rank-2 [1, len] tensor along the
+    /// last axis to a target width via Engine ops. See CCDM for the shared
+    /// rationale.</summary>
+    private Tensor<T> PadOrTruncateRank2(Tensor<T> src, int targetWidth)
+    {
+        var src2d = src.Rank == 2 ? src : Engine.Reshape(src, new[] { 1, src.Length });
+        int srcLen = src2d.Shape[1];
+        if (srcLen == targetWidth) return src2d;
+        if (srcLen > targetWidth)
+            return Engine.TensorNarrow(src2d, dim: 1, start: 0, length: targetWidth);
+        var pad = new Tensor<T>(new[] { 1, targetWidth - srcLen });
+        return Engine.TensorConcatenate(new[] { src2d, pad }, axis: 1);
     }
 
     #endregion

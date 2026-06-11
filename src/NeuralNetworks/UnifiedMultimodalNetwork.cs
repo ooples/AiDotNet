@@ -1066,7 +1066,13 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         foreach (var layer in _transformerLayers)
         {
             var attended = layer.Forward(transformed);
-            transformed = AddResidual(transformed, attended);
+            // Engine.TensorAdd is the vectorized residual add. Skip when
+            // shapes don't match (e.g. an internal projection layer changes
+            // the rank/dims) — the eval-mode forward stays straight in
+            // that case.
+            transformed = ShapesMatch(transformed, attended)
+                ? Engine.TensorAdd(transformed, attended)
+                : attended;
         }
         var pooled = transformed.Rank == 3
             ? transformed.Reshape(new[] { transformed.Shape[0], transformed.Shape[2] })
@@ -1074,21 +1080,14 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         return _classificationHead.Forward(pooled);
     }
 
-    /// <summary>
-    /// Element-wise residual addition (eval-mode, no tape recording).
-    /// Falls back to a manual loop if Engine isn't yet bound.
-    /// </summary>
-    private static Tensor<T> AddResidual(Tensor<T> a, Tensor<T> b)
+    /// <summary>True iff the two tensors are element-wise broadcastable
+    /// without any reshape (same rank, same dim values).</summary>
+    private static bool ShapesMatch(Tensor<T> a, Tensor<T> b)
     {
-        if (a.Shape.Length != b.Shape.Length || a.Length != b.Length)
-            return b; // shape changed (e.g., projection layer) — skip residual
+        if (a.Shape.Length != b.Shape.Length || a.Length != b.Length) return false;
         for (int i = 0; i < a.Shape.Length; i++)
-            if (a.Shape[i] != b.Shape[i]) return b;
-        var result = new Tensor<T>(a.Shape.ToArray());
-        var numOps = MathHelper.GetNumericOperations<T>();
-        for (int i = 0; i < a.Length; i++)
-            result[i] = numOps.Add(a[i], b[i]);
-        return result;
+            if (a.Shape[i] != b.Shape[i]) return false;
+        return true;
     }
 
     /// <inheritdoc/>
