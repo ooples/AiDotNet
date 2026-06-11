@@ -294,8 +294,27 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // EncodedSize = latent dimension = input width of the first decoder layer.
-        // Decode() starts at Layers[Count/2], so its input shape is the latent handoff.
-        EncodedSize = Layers[Layers.Count / 2].GetInputShape()[0];
+        // Decode() starts at Layers[Count/2], so its input shape is the latent
+        // handoff. Walk encoder layers to find the latent dimension robustly:
+        // the first decoder Dense layer's GetInputShape is `[-1]` under the
+        // lazy DenseLayer ctor, so prefer its OutputShape (always resolved at
+        // ctor time) by reading the encoder Dense immediately preceding it.
+        int latent = Layers[Layers.Count / 2].GetInputShape()[0];
+        if (latent <= 0)
+        {
+            // Find the last Dense-like layer before the decoder boundary and
+            // read its OutputShape (set eagerly in LayerBase ctor).
+            for (int i = (Layers.Count / 2) - 1; i >= 0; i--)
+            {
+                var outShape = Layers[i].GetOutputShape();
+                if (outShape != null && outShape.Length > 0 && outShape[0] > 0)
+                {
+                    latent = outShape[0];
+                    break;
+                }
+            }
+        }
+        EncodedSize = latent;
     }
 
     /// <summary>

@@ -166,6 +166,36 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
                     defaultIndices[v, s] = (v + s) % numVertices;
             SetSpiralIndices(defaultIndices);
         }
+
+        // Run a dummy eval-mode Forward so lazy layers materialise their
+        // parameter shapes (SpiralConv / BatchNorm / Dense are all lazy under
+        // the default options). Without this, ParameterCount reads 0 until
+        // first real Predict — direct GetParameters / Clone roundtrips can't
+        // see anything to copy.
+        TriggerLazyShapeResolution();
+    }
+
+    private void TriggerLazyShapeResolution()
+    {
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(false);
+        try
+        {
+            int numVertices = _options.NumVertices > 0 ? _options.NumVertices : 64;
+            var dummy = new Tensor<T>([numVertices, _options.InputFeatures]);
+            _ = Forward(dummy);
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+            // Forward materialized lazy SpiralConv / BatchNorm / Dense weights,
+            // but TryAutoEnableWeightStreaming had already cached ParameterCount
+            // at 0 during base-ctor EnsureArchitectureInitialized. Invalidate
+            // so the test-time ParameterCount getter recomputes the now-true
+            // total across all layers (same pattern Predict's first-forward
+            // hook uses for above-threshold lazy networks).
+            InvalidateParameterCountCache();
+        }
     }
 
     /// <summary>
