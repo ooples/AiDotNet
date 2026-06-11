@@ -467,6 +467,43 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>
         metadata["AttentionBlocks"] = attentionCount.ToString();
         metadata["SSMBlocks"] = ssmCount.ToString();
 
+        // Persist the per-position attention/SSM pattern so deserialization
+        // can construct each inner block with the correct type instead of
+        // assuming all-SSM (issue #1239 placeholder follow-up). Format is
+        // a comma-free 0/1 string ("01000010" → length-8 with attention at
+        // positions 1 and 6).
+        var patternChars = new char[_isAttentionBlock.Length];
+        for (int i = 0; i < _isAttentionBlock.Length; i++)
+            patternChars[i] = _isAttentionBlock[i] ? '1' : '0';
+        metadata["AttentionPattern"] = new string(patternChars);
+
+        // Persist enough info for the deserializer to construct real
+        // MambaBlock / GatedLinearAttentionLayer placeholders (each with the
+        // matching ParameterCount). We sample from the first SSM block and
+        // the first attention block we find — the LayerHelper factories
+        // (CreateJambaLayers/CreateSambaLayers/CreateZambaLayers) construct
+        // uniform per-type dimensions, so a single sample suffices.
+        for (int i = 0; i < _blocks.Length; i++)
+        {
+            if (!_isAttentionBlock[i] && _blocks[i] is MambaBlock<T> mamba)
+            {
+                metadata["MambaStateDimension"] = mamba.StateDimension.ToString();
+                metadata["MambaExpandFactor"] =
+                    (mamba.InnerDimension / Math.Max(1, mamba.ModelDimension)).ToString();
+                metadata["MambaConvKernelSize"] = mamba.ConvKernelSize.ToString();
+                metadata["MambaDtRank"] = mamba.DtRank.ToString();
+                break;
+            }
+        }
+        for (int i = 0; i < _blocks.Length; i++)
+        {
+            if (_isAttentionBlock[i] && _blocks[i] is GatedLinearAttentionLayer<T> gla)
+            {
+                metadata["AttentionNumHeads"] = gla.NumHeads.ToString();
+                break;
+            }
+        }
+
         return metadata;
     }
 
