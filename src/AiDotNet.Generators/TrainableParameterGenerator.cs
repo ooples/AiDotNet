@@ -90,6 +90,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 {
                     var role = "PersistentTensorRole.Weights";
                     var order = 0;
+                    var optional = false;
 
                     foreach (var namedArg in attr.NamedArguments)
                     {
@@ -97,11 +98,13 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                             role = $"PersistentTensorRole.{(PersistentTensorRoleEnum)roleVal}";
                         else if (namedArg.Key == "Order" && namedArg.Value.Value is int orderVal)
                             order = orderVal;
+                        else if (namedArg.Key == "Optional" && namedArg.Value.Value is bool optVal)
+                            optional = optVal;
                     }
 
                     paramFields.Add(new ParameterFieldInfo(
                         field.Name, role, order, DeclIndex: 0,
-                        TypeName: field.Type.ToDisplayString()));
+                        TypeName: field.Type.ToDisplayString(), Optional: optional));
                 }
 
                 // Check for gradient fields (convention: {name}Gradient)
@@ -133,8 +136,12 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 {
                     // Build attribute-discovered roles map for enrichment
                     var attrRoles = new Dictionary<string, string>();
+                    var attrOptional = new Dictionary<string, bool>();
                     foreach (var pf in paramFields)
+                    {
                         attrRoles[pf.Name] = pf.Role;
+                        attrOptional[pf.Name] = pf.Optional;
+                    }
 
                     // Replace paramFields with registration-ordered list
                     paramFields.Clear();
@@ -154,9 +161,11 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                             // Prefer attribute role if available (more specific)
                             var finalRole = attrRoles.TryGetValue(fieldName, out var attrRole)
                                 ? attrRole : role;
+                            var finalOptional = attrOptional.TryGetValue(fieldName, out var optFlag)
+                                && optFlag;
                             paramFields.Add(new ParameterFieldInfo(
                                 matchingField.Name, finalRole, paramFields.Count, DeclIndex: 0,
-                                TypeName: matchingField.Type.ToDisplayString()));
+                                TypeName: matchingField.Type.ToDisplayString(), Optional: finalOptional));
                         }
                     }
                 }
@@ -229,6 +238,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         sb.AppendLine("{");
 
         // GetTrainableParameters
+        bool hasOptional = paramFields.Any(p => p.Optional);
         if (paramFields.Count > 0)
         {
             sb.AppendLine("    /// <summary>");
@@ -246,6 +256,14 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    /// case we return the (still-empty) placeholder tensors — those");
             sb.AppendLine("    /// layers will materialize their real weights on their first Forward()");
             sb.AppendLine("    /// and a subsequent CollectTrainableParameters pass will pick them up.");
+            if (hasOptional)
+            {
+                sb.AppendLine("    /// Optional parameters (lazily-materialized, conditionally-used fields)");
+                sb.AppendLine("    /// are omitted while they remain empty [0,0] placeholders so they are");
+                sb.AppendLine("    /// not exposed as trainable params that can never receive a gradient");
+                sb.AppendLine("    /// update; they re-appear once materialized. SetTrainableParameters is");
+                sb.AppendLine("    /// emitted symmetrically (consumes a slot only for currently-present fields).");
+            }
             sb.AppendLine("    /// </remarks>");
             sb.AppendLine($"    public override System.Collections.Generic.IReadOnlyList<Tensor<{GetTypeParamName(classSymbol)}>> GetTrainableParameters()");
             sb.AppendLine("    {");
@@ -254,7 +272,22 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 sb.AppendLine("        EnsureSubLayersRegistered();");
             }
             sb.AppendLine("        if (IsShapeResolved) EnsureInitialized();");
-            sb.AppendLine($"        return new Tensor<{GetTypeParamName(classSymbol)}>[] {{ {string.Join(", ", paramFields.Select(f => f.Name))} }};");
+            if (hasOptional)
+            {
+                sb.AppendLine($"        var __params = new System.Collections.Generic.List<Tensor<{GetTypeParamName(classSymbol)}>>({paramFields.Count});");
+                foreach (var f in paramFields)
+                {
+                    if (f.Optional)
+                        sb.AppendLine($"        if ({f.Name}.Length > 0) __params.Add({f.Name});");
+                    else
+                        sb.AppendLine($"        __params.Add({f.Name});");
+                }
+                sb.AppendLine("        return __params;");
+            }
+            else
+            {
+                sb.AppendLine($"        return new Tensor<{GetTypeParamName(classSymbol)}>[] {{ {string.Join(", ", paramFields.Select(f => f.Name))} }};");
+            }
             sb.AppendLine("    }");
             sb.AppendLine();
 
@@ -265,37 +298,25 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    /// </summary>");
             sb.AppendLine($"    public override void SetTrainableParameters(System.Collections.Generic.IReadOnlyList<Tensor<{GetTypeParamName(classSymbol)}>> parameters)");
             sb.AppendLine("    {");
-            sb.AppendLine($"        if (parameters.Count != {paramFields.Count})");
-            sb.AppendLine($"            throw new System.ArgumentException($\"Expected {paramFields.Count} parameters, got {{parameters.Count}}.\");");
-            for (int i = 0; i < paramFields.Count; i++)
+            // Local helper: emit the assignment of a field from a parameters[idx]
+            // slot, with the sparse-leaf downcast when the field's concrete type
+            // is a Tensor<T> subclass. indexExpr may be a literal index (fixed path)
+            // or a post-increment cursor (optional path).
+            void EmitFieldAssign(ParameterFieldInfo pf, string indexExpr, string idxLabel)
             {
-                var pf = paramFields[i];
-                // For Tensor<T> fields the assignment is direct; for
-                // subclass fields (SparseTensor<T> etc.) we need an
-                // explicit downcast since the API exposes Tensor<T>.
-                // The cast will throw InvalidCastException if the buffer
-                // hands back a tensor whose runtime type doesn't match
-                // the registered field type — which is the right failure
-                // mode (the buffer should preserve the concrete type for
-                // sparse-aware leaves).
                 bool needsCast = pf.TypeName is not null
                     && !(pf.TypeName.StartsWith(TensorTypeName + "<") || pf.TypeName == TensorTypeName);
                 if (needsCast)
                 {
-                    // Generated form (split across two lines for readability):
-                    //   _weights = (parameters[0] ?? throw new ArgumentNullException(...)) as global::SparseTensor<T>
-                    //              ?? throw new ArgumentException("Parameter at index 0 ... is not a SparseTensor<T>", ...);
-                    // Note: the runtime-type message is a plain string (no
-                    // $-interpolation) so we don't have to escape quotes
-                    // inside an interpolation hole.
-                    sb.AppendLine($"        {pf.Name} = (parameters[{i}] ?? throw new System.ArgumentNullException(nameof(parameters), \"Parameter at index {i} is null.\")) as global::{pf.TypeName}");
-                    sb.AppendLine($"            ?? throw new System.ArgumentException(\"Parameter at index {i} is not a {pf.TypeName}. Tape-buffer must preserve sparse leaf types.\", nameof(parameters));");
+                    sb.AppendLine($"        {pf.Name} = (parameters[{indexExpr}] ?? throw new System.ArgumentNullException(nameof(parameters), \"Parameter at index {idxLabel} is null.\")) as global::{pf.TypeName}");
+                    sb.AppendLine($"            ?? throw new System.ArgumentException(\"Parameter at index {idxLabel} is not a {pf.TypeName}. Tape-buffer must preserve sparse leaf types.\", nameof(parameters));");
                 }
                 else
                 {
-                    sb.AppendLine($"        {pf.Name} = parameters[{i}] ?? throw new System.ArgumentNullException(nameof(parameters), \"Parameter at index {i} is null.\");");
+                    sb.AppendLine($"        {pf.Name} = parameters[{indexExpr}] ?? throw new System.ArgumentNullException(nameof(parameters), \"Parameter at index {idxLabel} is null.\");");
                 }
             }
+
             // Re-sync _registeredTensors with the newly assigned field values.
             // We cannot call base.SetTrainableParameters because _registeredTensors
             // may have a different count than paramFields when multiple parameters
@@ -304,15 +325,74 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             // re-register each field so the runtime list matches the generator's
             // field count exactly. The role is read from the [TrainableParameter]
             // attribute at compile time — no hardcoded mapping needed.
-            sb.AppendLine("        ClearRegisteredParameters();");
-            for (int i = 0; i < paramFields.Count; i++)
+            if (hasOptional)
             {
-                // Use AppendTrainableParameter (not RegisterTrainableParameter)
-                // after ClearRegisteredParameters to avoid role-based dedup.
-                // Layers like MultiHeadAttentionLayer have multiple parameters
-                // with the same role (e.g., 4 × Weights) — RegisterTrainableParameter
-                // would collapse them back to 1 via replace-by-role logic.
-                sb.AppendLine($"        AppendTrainableParameter({paramFields[i].Name}, {paramFields[i].Role});");
+                // Count-aware: an optional field consumes a parameter slot (and is
+                // re-registered) only while it is currently a materialized tensor
+                // (Length > 0) — mirroring GetTrainableParameters exactly, so the
+                // get/set round-trip stays consistent. The predicate is evaluated on
+                // the *current* field state, which matches the state
+                // GetTrainableParameters saw when the caller built the list.
+                //
+                // Validate the count up front — BEFORE any state mutation — so a
+                // rejected call leaves the layer untouched rather than partially
+                // updated (a short list would otherwise throw mid-assignment from
+                // parameters[__i], a long list only after every field + registration
+                // had already been mutated). The expected count is the number of
+                // currently-present trainable tensors, computed with the same
+                // predicates the assignment loop uses (field tensors are not mutated
+                // between here and the loop, so the values are stable).
+                sb.AppendLine("        if (parameters is null)");
+                sb.AppendLine("            throw new System.ArgumentNullException(nameof(parameters));");
+                sb.AppendLine("        int __expected = 0;");
+                foreach (var pf in paramFields)
+                {
+                    if (pf.Optional)
+                        sb.AppendLine($"        if ({pf.Name}.Length > 0) __expected++;");
+                    else
+                        sb.AppendLine("        __expected++;");
+                }
+                sb.AppendLine("        if (parameters.Count != __expected)");
+                sb.AppendLine("            throw new System.ArgumentException($\"Expected {__expected} parameters (currently-present trainable tensors), got {parameters.Count}.\", nameof(parameters));");
+                sb.AppendLine("        int __i = 0;");
+                sb.AppendLine("        ClearRegisteredParameters();");
+                foreach (var pf in paramFields)
+                {
+                    if (pf.Optional)
+                    {
+                        sb.AppendLine($"        if ({pf.Name}.Length > 0)");
+                        sb.AppendLine("        {");
+                        EmitFieldAssign(pf, "__i", "__i");
+                        sb.AppendLine($"            AppendTrainableParameter({pf.Name}, {pf.Role});");
+                        sb.AppendLine("            __i++;");
+                        sb.AppendLine("        }");
+                    }
+                    else
+                    {
+                        EmitFieldAssign(pf, "__i", "__i");
+                        sb.AppendLine($"        AppendTrainableParameter({pf.Name}, {pf.Role});");
+                        sb.AppendLine("        __i++;");
+                    }
+                }
+            }
+            else
+            {
+                sb.AppendLine($"        if (parameters.Count != {paramFields.Count})");
+                sb.AppendLine($"            throw new System.ArgumentException($\"Expected {paramFields.Count} parameters, got {{parameters.Count}}.\");");
+                for (int i = 0; i < paramFields.Count; i++)
+                {
+                    EmitFieldAssign(paramFields[i], i.ToString(), i.ToString());
+                }
+                sb.AppendLine("        ClearRegisteredParameters();");
+                for (int i = 0; i < paramFields.Count; i++)
+                {
+                    // Use AppendTrainableParameter (not RegisterTrainableParameter)
+                    // after ClearRegisteredParameters to avoid role-based dedup.
+                    // Layers like MultiHeadAttentionLayer have multiple parameters
+                    // with the same role (e.g., 4 × Weights) — RegisterTrainableParameter
+                    // would collapse them back to 1 via replace-by-role logic.
+                    sb.AppendLine($"        AppendTrainableParameter({paramFields[i].Name}, {paramFields[i].Role});");
+                }
             }
             sb.AppendLine("    }");
             sb.AppendLine();
@@ -576,7 +656,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
     /// (e.g., <c>SparseTensor&lt;T&gt;</c>) the generator emits a downcast
     /// in SetTrainableParameters so the field assignment compiles.
     /// </summary>
-    private record struct ParameterFieldInfo(string Name, string Role, int Order, int DeclIndex = 0, string? TypeName = null);
+    private record struct ParameterFieldInfo(string Name, string Role, int Order, int DeclIndex = 0, string? TypeName = null, bool Optional = false);
     private record struct GradientFieldInfo(string Name, bool IsNullable);
     private record struct SubLayerFieldInfo(string Name, bool IsNullable);
 }
