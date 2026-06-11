@@ -62,9 +62,6 @@ public class SCNetOptions : ModelOptions
 
     #region Attention Architecture
 
-    /// <summary>Gets or sets the hidden dimension for attention layers.</summary>
-    public int AttentionDim { get; set; } = 256;
-
     /// <summary>Gets or sets the number of attention heads.</summary>
     public int NumAttentionHeads { get; set; } = 8;
 

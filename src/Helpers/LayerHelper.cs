@@ -20082,11 +20082,32 @@ public static class LayerHelper<T>
     public static IEnumerable<ILayer<T>> CreateDefaultSCNetLayers(
         int numClusters = 64, int compressionDim = 128,
         int numEncoderBlocks = 6, int numDecoderBlocks = 6,
-        int attentionDim = 256, int numAttentionHeads = 8, int feedForwardDim = 1024,
+        int numAttentionHeads = 8, int feedForwardDim = 1024,
         int numStems = 4, int numFreqBins = 1025, double dropoutRate = 0.0)
     {
         var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
         var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // The encoder/decoder blocks all carry the SAME width because the
+        // residual-style MHA -> norm -> FFN -> dense chain inside each block
+        // ends with `Dense(blockWidth, identity)` and feeds straight into the
+        // next block's MHA. The block width therefore must match the input
+        // each MHA receives — i.e. the cluster compression output dim
+        // (numClusters) — otherwise MHA's lazy Q/K/V projections size their
+        // weight matrices independently of the inbound tensor, producing the
+        // "Input embedding dimension (64) does not match weight dimension (256).
+        // Query shape: [1, 64, 64], Weights shape: [256, 256]" crash that took
+        // out all 23 SCNet tests. Derive a single shared `blockWidth` from
+        // `numClusters` and use it everywhere a block produces a feature width.
+        int blockWidth = numClusters;
+        // Round head count down so head_dim is integral; common defaults
+        // (numClusters=64, numHeads=8) leave this at the requested 8 heads.
+        int effectiveHeads = numAttentionHeads;
+        while (effectiveHeads > 1 && blockWidth % effectiveHeads != 0)
+        {
+            effectiveHeads--;
+        }
+        int headDim = blockWidth / effectiveHeads;
 
         // Input projection: freq bins -> compression dim
         yield return new DenseLayer<T>(compressionDim, reluActivation);
@@ -20099,10 +20120,10 @@ public static class LayerHelper<T>
         // Encoder: attention blocks on compressed representation
         for (int i = 0; i < numEncoderBlocks; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (attentionDim) / (numAttentionHeads));
+            yield return new MultiHeadAttentionLayer<T>(effectiveHeads, headDim);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(feedForwardDim, reluActivation);
-            yield return new DenseLayer<T>(attentionDim, identityActivation);
+            yield return new DenseLayer<T>(blockWidth, identityActivation);
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
@@ -20110,15 +20131,17 @@ public static class LayerHelper<T>
         // Decoder: attention blocks for reconstruction
         for (int i = 0; i < numDecoderBlocks; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (attentionDim) / (numAttentionHeads));
+            yield return new MultiHeadAttentionLayer<T>(effectiveHeads, headDim);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(feedForwardDim, reluActivation);
-            yield return new DenseLayer<T>(attentionDim, identityActivation);
+            yield return new DenseLayer<T>(blockWidth, identityActivation);
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
-        // Decompress: clusters -> freq bins
+        // Decompress: clusters -> freq bins. The `compressionDim` intermediate
+        // is unrelated to the per-block width above; it expands `blockWidth`
+        // back toward the original frequency-bin count.
         yield return new DenseLayer<T>(compressionDim, reluActivation);
         yield return new DenseLayer<T>(numFreqBins * numStems, identityActivation);
     }
