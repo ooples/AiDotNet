@@ -127,12 +127,70 @@ public sealed class JsonFileGraphCheckpointer<TState> : IGraphCheckpointer<TStat
             return new Dictionary<string, List<GraphCheckpoint<TState>>>(StringComparer.Ordinal);
         }
 
-        var data = JsonConvert.DeserializeObject<Dictionary<string, List<GraphCheckpoint<TState>>>>(json);
-        return data ?? new Dictionary<string, List<GraphCheckpoint<TState>>>(StringComparer.Ordinal);
+        try
+        {
+            var data = JsonConvert.DeserializeObject<Dictionary<string, List<GraphCheckpoint<TState>>>>(json);
+            return data ?? new Dictionary<string, List<GraphCheckpoint<TState>>>(StringComparer.Ordinal);
+        }
+        catch (JsonException ex)
+        {
+            // Surface corruption explicitly rather than silently returning empty — silently dropping the
+            // history would let the next Save overwrite (and permanently lose) recoverable checkpoint data.
+            throw new InvalidOperationException(
+                $"The checkpoint file at '{_path}' is corrupt and could not be parsed. " +
+                "Move or delete it to start a fresh checkpoint store.", ex);
+        }
     }
 
     private void Persist(Dictionary<string, List<GraphCheckpoint<TState>>> data)
     {
-        File.WriteAllText(_path, JsonConvert.SerializeObject(data, Formatting.None));
+        var json = JsonConvert.SerializeObject(data, Formatting.None);
+
+        // Atomic write: serialize to a temp file in the same directory, flush it to disk, then atomically
+        // replace the target. A crash mid-write therefore leaves the previous (valid) file intact rather than
+        // a half-written, unparseable one.
+        var directory = Path.GetDirectoryName(_path);
+        var tempPath = Path.Combine(
+            string.IsNullOrEmpty(directory) ? "." : directory,
+            $".{Path.GetFileName(_path)}.{Guid.NewGuid():N}.tmp");
+
+        try
+        {
+            using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var writer = new StreamWriter(stream))
+            {
+                writer.Write(json);
+                writer.Flush();
+                stream.Flush(flushToDisk: true);
+            }
+
+#if NET5_0_OR_GREATER
+            File.Move(tempPath, _path, overwrite: true);
+#else
+            if (File.Exists(_path))
+            {
+                // File.Replace is atomic when the destination exists; it also clears the temp file.
+                File.Replace(tempPath, _path, destinationBackupFileName: null);
+            }
+            else
+            {
+                File.Move(tempPath, _path);
+            }
+#endif
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+            {
+                try
+                {
+                    File.Delete(tempPath);
+                }
+                catch (IOException)
+                {
+                    // Best-effort cleanup of the temp file; a leftover .tmp is harmless.
+                }
+            }
+        }
     }
 }

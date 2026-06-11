@@ -37,10 +37,17 @@ public interface IGraphCheckpointer<TState>
     Task<GraphCheckpoint<TState>?> GetAsync(string threadId, string checkpointId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gets the full checkpoint history for a thread, ordered by step ascending.
+    /// Gets the full <see cref="GraphCheckpoint{TState}"/> history for <paramref name="threadId"/> in
+    /// append (chronological) order — i.e. the order checkpoints were saved, by a persistent monotonic
+    /// sequence (e.g. the SQLite backend orders by <c>Seq ASC</c>), NOT by logical step number.
     /// </summary>
+    /// <remarks>
+    /// Replay/time-travel relies on this chronological ordering: logical step values can repeat or branch
+    /// (loops, re-runs from an earlier checkpoint), so ordering by step would diverge across backends.
+    /// Implementations MUST return checkpoints oldest-first by save order.
+    /// </remarks>
     /// <param name="threadId">The run/thread id.</param>
     /// <param name="cancellationToken">Token used to cancel the operation.</param>
-    /// <returns>The ordered history (possibly empty).</returns>
+    /// <returns>The chronologically-ordered history (possibly empty).</returns>
     Task<IReadOnlyList<GraphCheckpoint<TState>>> GetHistoryAsync(string threadId, CancellationToken cancellationToken = default);
 }

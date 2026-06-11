@@ -63,13 +63,10 @@ public sealed class InMemoryGraphCheckpointer<TState> : IGraphCheckpointer<TStat
         {
             if (_byThread.TryGetValue(threadId, out var list))
             {
-                foreach (var cp in list)
-                {
-                    if (cp.CheckpointId == checkpointId)
-                    {
-                        return Task.FromResult<GraphCheckpoint<TState>?>(cp);
-                    }
-                }
+                // Return the NEWEST checkpoint with this id (history is append-ordered), matching the durable
+                // backends which order by descending sequence — so re-saving an id resolves to the latest.
+                var match = list.LastOrDefault(cp => cp.CheckpointId == checkpointId);
+                return Task.FromResult<GraphCheckpoint<TState>?>(match);
             }
         }
 
