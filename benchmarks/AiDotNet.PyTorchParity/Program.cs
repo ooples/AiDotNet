@@ -154,6 +154,7 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
         return new BenchmarkReport(
             "AiDotNet",
             Environment.Version.ToString(),
+            RunEnvironmentProbe.Capture(),
             AiDotNetProbe.Describe(),
             results);
     }
@@ -190,9 +191,13 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
         }
 
         total.Stop();
+        // Steady-state training time excludes epoch 0 (JIT/autotune warmup). With a
+        // single epoch there is no steady state to report, so fall back to it.
+        var steadyEpochs = epochSeconds.Count > 1 ? epochSeconds.Skip(1).ToList() : epochSeconds;
         return new TrainingReport(
             epochSeconds.Select(Round6).ToArray(),
             Round6(total.Elapsed.TotalSeconds),
+            Round6(steadyEpochs.Count == 0 ? 0 : steadyEpochs.Average()),
             Round6(gradientSeconds.Count == 0 ? 0 : gradientSeconds.Average()),
             Round6(dataSeconds.Count == 0 ? 0 : dataSeconds.Average()),
             monitor.Summary());
@@ -315,6 +320,16 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
     {
         Random = new Random(seed);
         Network = BuildNetwork();
+
+        // Materialize lazy layers BEFORE counting parameters (issue #1566 item 1).
+        // Some layers — notably MultiHeadAttentionLayer — allocate their weight
+        // tensors on first forward, so GetParameters() at construction UNDERCOUNTS:
+        // the Transformer's attention Q/K/V/O projections (~33 K params) don't exist
+        // yet, making it report ~half its true size (35 K vs PyTorch's ~69.7 K) and
+        // invalidating the parameter-matched comparison. One forward pass forces the
+        // lazy allocation so the recorded count is the real, PyTorch-comparable size.
+        LoadSyntheticBatch(1);
+        Forward();
         ParameterCount = Network.GetParameters().Length;
     }
 
@@ -551,6 +566,13 @@ internal sealed class ResourceMonitor : IDisposable
 
     public static ResourceMonitor Start() => new();
 
+    // ProcessRssMbPeak is the max sampled WorkingSet64 — the WHOLE-PROCESS resident
+    // set (managed heap + native allocs + runtime), the SAME quantity PyTorch reports
+    // via psutil rss_mb_peak. (The field was historically misnamed "ManagedRssMbPeak"
+    // though it has always sampled WorkingSet64, not the managed heap — issue #1566.)
+    // ProcessRssMbHwm is the OS high-water-mark (PeakWorkingSet64): the true peak the
+    // 100 ms sampler can miss between ticks.
+    //
     // NvidiaSmiSample is null by design: this benchmark hard-pins the CPU
     // engine (GpuDisableBootstrap + ResetToCpu), and nvidia-smi reports
     // SYSTEM-WIDE GPU utilization/memory — sampling it here attributed
@@ -558,7 +580,14 @@ internal sealed class ResourceMonitor : IDisposable
     // to a CPU-only run. Mirrors the device-gated GPU sampling on the
     // Python side (benchmark.py ResourceMonitor.track_gpu). If a GPU mode
     // is ever added, gate the NvidiaSmi.TryRead() call on it.
-    public ResourceReport Summary() => new(Math.Round(_rssMb.Count == 0 ? 0 : _rssMb.Max(), 3), NvidiaSmiSample: null);
+    public ResourceReport Summary()
+    {
+        _process.Refresh();
+        return new ResourceReport(
+            ProcessRssMbPeak: Math.Round(_rssMb.Count == 0 ? 0 : _rssMb.Max(), 3),
+            ProcessRssMbHwm: Math.Round(_process.PeakWorkingSet64 / 1024d / 1024d, 3),
+            NvidiaSmiSample: null);
+    }
 
     public void Dispose()
     {
@@ -614,11 +643,40 @@ internal static class AiDotNetProbe
     }
 }
 
-internal sealed record BenchmarkReport(string Framework, string DotNetRuntime, object AiDotNet, List<ModelReport> Results);
+internal static class RunEnvironmentProbe
+{
+    public static RunEnvironment Capture() => new(
+        Os: System.Runtime.InteropServices.RuntimeInformation.OSDescription,
+        Cpu: System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString(),
+        ProcessorCount: System.Environment.ProcessorCount,
+        ThreadCount: Process.GetCurrentProcess().Threads.Count,
+        GcServer: System.Runtime.GCSettings.IsServerGC,
+        GcConcurrent: System.Runtime.GCSettings.LatencyMode != System.Runtime.GCLatencyMode.Batch,
+        EngineDevice: AiDotNet.Tensors.Engines.AiDotNetEngine.Current.GetType().Name);
+}
+
+internal sealed record BenchmarkReport(string Framework, string DotNetRuntime, RunEnvironment Environment, object AiDotNet, List<ModelReport> Results);
 internal sealed record ModelReport(string Model, string Backend, long Parameters, TrainingReport Training, List<InferenceReport> Inference);
-internal sealed record TrainingReport(double[] EpochSeconds, double TotalSeconds, double GradientSecondsAvg, double DataLoadingSecondsAvg, ResourceReport Resources);
-internal sealed record ResourceReport(double ManagedRssMbPeak, string? NvidiaSmiSample);
+// SteadyStateEpochSecondsAvg excludes the first epoch (issue #1566 item 4): the
+// AiDotNet first epoch is dominated by JIT + autotune warmup (~2.1 s) and drops to
+// ~0.36 s thereafter, so TotalSeconds/EpochSeconds[0] are warmup-skewed; the
+// steady-state average is the apples-to-apples training number vs PyTorch.
+internal sealed record TrainingReport(double[] EpochSeconds, double TotalSeconds, double SteadyStateEpochSecondsAvg, double GradientSecondsAvg, double DataLoadingSecondsAvg, ResourceReport Resources);
+internal sealed record ResourceReport(double ProcessRssMbPeak, double ProcessRssMbHwm, string? NvidiaSmiSample);
 internal sealed record InferenceReport(int BatchSize, double WarmupSecondsAvg, double SteadyStateLatencyMsAvg, double SteadyStateLatencyMsP95, double ThroughputSamplesPerSecond, double MemoryMbPeak);
+
+// Device / thread / GC metadata so a run is verifiably same-hardware as the
+// PyTorch baseline (issue #1566 item 3 — "record device/thread-count fields
+// (currently absent on the AiDotNet side)"). GcServer/GcConcurrent surface the
+// GC mode that drives process RSS, so a memory comparison is interpretable.
+internal sealed record RunEnvironment(
+    string Os,
+    string Cpu,
+    int ProcessorCount,
+    int ThreadCount,
+    bool GcServer,
+    bool GcConcurrent,
+    string EngineDevice);
 
 internal static class JsonOptions
 {
