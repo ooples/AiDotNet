@@ -120,7 +120,18 @@ public class DiffEditModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount
+    {
+        get
+        {
+            // Lazy-init fix pattern (SDXLTurboModel / DDPMModel / RealESRGANModel /
+            // EDiffIModel): force U-Net + VAE shape resolution so ParameterCount is
+            // arch-derived and matches what SetParameters validates against.
+            _unet.TriggerLazyShapeResolution();
+            _vae.TriggerLazyShapeResolution();
+            return _unet.ParameterCount + _vae.ParameterCount;
+        }
+    }
 
     /// <summary>
     /// Gets the cross-attention dimension (768 for CLIP ViT-L/14).
@@ -256,6 +267,10 @@ public class DiffEditModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
+        // Resolve lazy shape (see ParameterCount comment) so the returned vector
+        // matches the arch-derived total SetParameters validates against.
+        _unet.TriggerLazyShapeResolution();
+        _vae.TriggerLazyShapeResolution();
         var unetParams = _unet.GetParameters();
         var vaeParams = _vae.GetParameters();
 
@@ -278,6 +293,9 @@ public class DiffEditModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        // See GetParameters for the lazy-resolve rationale.
+        _unet.TriggerLazyShapeResolution();
+        _vae.TriggerLazyShapeResolution();
         var unetCount = checked((int)_unet.ParameterCount);
         var vaeCount = checked((int)_vae.ParameterCount);
 
@@ -318,25 +336,10 @@ public class DiffEditModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedUnet = new UNetNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS,
-            outputChannels: LATENT_CHANNELS,
-            baseChannels: 320,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocks: 2,
-            attentionResolutions: [4, 2, 1],
-            contextDim: CROSS_ATTENTION_DIM);
-        clonedUnet.SetParameters(_unet.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2,
-            latentScaleFactor: 0.18215);
-        clonedVae.SetParameters(_vae.GetParameters());
-
+        // Delegate to sub-Clones — same lazy-init fix pattern as
+        // SDXLTurboModel / RealESRGANModel / EDiffIModel / DDPMModel.
+        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
+        var clonedVae = (StandardVAE<T>)_vae.Clone();
         return new DiffEditModel<T>(
             unet: clonedUnet,
             vae: clonedVae,

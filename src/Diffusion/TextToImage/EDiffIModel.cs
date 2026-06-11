@@ -107,7 +107,19 @@ public class EDiffIModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount
+    {
+        get
+        {
+            // Trigger lazy resolution on both sub-models so the count is arch-derived
+            // (includes the U-Net's _timeEmbedMlp1/2 and VAE's lazy projections),
+            // matching what SetParameters validates against. Same lazy-init fix
+            // pattern as SDXLTurboModel / DDPMModel / RealESRGANModel.
+            _unet.TriggerLazyShapeResolution();
+            _vae.TriggerLazyShapeResolution();
+            return _unet.ParameterCount + _vae.ParameterCount;
+        }
+    }
 
     /// <summary>
     /// Gets the number of expert denoisers in the ensemble.
@@ -201,6 +213,9 @@ public class EDiffIModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
+        // Resolve lazy shape so the returned vector matches ParameterCount.
+        _unet.TriggerLazyShapeResolution();
+        _vae.TriggerLazyShapeResolution();
         var unetParams = _unet.GetParameters();
         var vaeParams = _vae.GetParameters();
         var combined = new Vector<T>(unetParams.Length + vaeParams.Length);
@@ -216,6 +231,8 @@ public class EDiffIModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        _unet.TriggerLazyShapeResolution();
+        _vae.TriggerLazyShapeResolution();
         var unetCount = checked((int)_unet.ParameterCount);
         var vaeCount = checked((int)_vae.ParameterCount);
 
@@ -246,19 +263,12 @@ public class EDiffIModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedUnet = new UNetNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS, outputChannels: LATENT_CHANNELS,
-            baseChannels: 320, channelMultipliers: [1, 2, 4, 4],
-            numResBlocks: 2, attentionResolutions: [4, 2, 1],
-            contextDim: CROSS_ATTENTION_DIM);
-        clonedUnet.SetParameters(_unet.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3, latentChannels: LATENT_CHANNELS,
-            baseChannels: 128, channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2, latentScaleFactor: 0.18215);
-        clonedVae.SetParameters(_vae.GetParameters());
-
+        // Delegate to _unet.Clone() + _vae.Clone() — same lazy-init fix pattern as
+        // SDXLTurboModel / RealESRGANModel / DDPMModel. The previous "construct
+        // fresh + SetParameters(GetParameters())" dance under-counts the unresolved
+        // source and leaves clone's lazy projections at fresh random init.
+        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
+        var clonedVae = (StandardVAE<T>)_vae.Clone();
         return new EDiffIModel<T>(
             unet: clonedUnet, vae: clonedVae, conditioner: _conditioner);
     }
