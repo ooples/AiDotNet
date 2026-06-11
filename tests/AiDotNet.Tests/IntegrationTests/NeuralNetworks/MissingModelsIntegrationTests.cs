@@ -204,8 +204,18 @@ public class MissingModelsIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task GraphModels_RequireAdjacencyMatrix()
+    public async Task GraphModels_AdjacencyMatrixContract()
     {
+        // Per-model adjacency contract:
+        //   - LinkPredictionModel.Predict REQUIRES an explicit adjacency (link
+        //     prediction is inherently a structural query; identity-fallback
+        //     would be nonsensical).
+        //   - GraphClassificationModel.Predict and NodeClassificationModel.Predict
+        //     auto-create an identity adjacency for the input's node count
+        //     (Kipf & Welling 2017 §2: A=I degenerates the GCN to a per-node
+        //     dense transform — a defined, if degenerate, model). This keeps
+        //     the test-scaffold's generic Predict/Train invariants runnable
+        //     without each scaffold having to know about SetAdjacencyMatrix.
         int numNodes = 3;
         int inputFeatures = 2;
         int numClasses = 2;
@@ -222,9 +232,12 @@ public class MissingModelsIntegrationTests
         var nodeModel = new NodeClassificationModel<float>(architecture);
         var nodeFeatures = CreateRandomTensor(new[] { numNodes, inputFeatures });
 
-        Assert.Throws<InvalidOperationException>(() => graphModel.Predict(nodeFeatures));
+        // Link prediction must still throw.
         Assert.Throws<InvalidOperationException>(() => linkModel.Predict(nodeFeatures));
-        Assert.Throws<InvalidOperationException>(() => nodeModel.Predict(nodeFeatures));
+
+        // Classification models complete via identity-fallback.
+        _ = graphModel.Predict(nodeFeatures);
+        _ = nodeModel.Predict(nodeFeatures);
     }
 
     [Fact(Timeout = 120000)]

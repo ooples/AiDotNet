@@ -246,17 +246,24 @@ public class GraphLayersIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task GraphConvolutionalLayer_WithoutAdjacencyMatrix_ThrowsException()
+    public async Task GraphConvolutionalLayer_WithoutAdjacencyMatrix_AutoUsesIdentity()
     {
-        // Arrange
+        // GraphConvolutionalLayer.EnsureDenseAdjacencyForInput auto-creates an
+        // identity adjacency sized to the input node count when none is set.
+        // This is the documented "no-graph passthrough" behaviour: each node
+        // sees only itself (A = I), so output[v] = x[v] * W. Verify Forward
+        // completes and produces sensible output shape.
         int inputFeatures = 8;
         int outputFeatures = 16;
+        int numNodes = 5;
 
         var layer = new GraphConvolutionalLayer<float>(inputFeatures, outputFeatures, (IActivationFunction<float>?)null);
-        var nodeFeatures = CreateNodeFeatures(5, inputFeatures);
+        var nodeFeatures = CreateNodeFeatures(numNodes, inputFeatures);
 
-        // Act & Assert
-        Assert.Throws<InvalidOperationException>(() => layer.Forward(nodeFeatures));
+        var output = layer.Forward(nodeFeatures);
+
+        Assert.Equal(numNodes, output.Shape[0]);
+        Assert.Equal(outputFeatures, output.Shape[1]);
     }
 
     [Fact(Timeout = 120000)]
