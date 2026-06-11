@@ -139,10 +139,23 @@ public class BandSplitRNNEnhancer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
         var result = PostprocessOutput(enhanced);
         if (EnhancementStrength < 1.0)
         {
+            // result = s · result + (1 − s) · noisyAudio  via vectorised Engine ops.
+            // Falls back to the scalar min-length loop when shapes can't be
+            // matched directly (e.g., a flat noisy-audio buffer against a
+            // rank-2 result tensor).
             T s = NumOps.FromDouble(EnhancementStrength);
             T inv = NumOps.FromDouble(1.0 - EnhancementStrength);
-            for (int i = 0; i < result.Length && i < noisyAudio.Length; i++)
-                result[i] = NumOps.Add(NumOps.Multiply(s, result[i]), NumOps.Multiply(inv, noisyAudio[i]));
+            if (result.Length == noisyAudio.Length && result._shape.SequenceEqual(noisyAudio._shape))
+            {
+                var scaledResult = Engine.TensorMultiplyScalar(result, s);
+                var scaledNoisy = Engine.TensorMultiplyScalar(noisyAudio, inv);
+                result = Engine.TensorAdd(scaledResult, scaledNoisy);
+            }
+            else
+            {
+                for (int i = 0; i < result.Length && i < noisyAudio.Length; i++)
+                    result[i] = NumOps.Add(NumOps.Multiply(s, result[i]), NumOps.Multiply(inv, noisyAudio[i]));
+            }
         }
         return result;
     }
