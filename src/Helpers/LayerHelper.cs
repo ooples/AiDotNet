@@ -31353,12 +31353,18 @@ public static class LayerHelper<T>
     {
         yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
 
+        // Lieber et al. 2024 §3 — Jamba is mostly Mamba with full attention
+        // every `attentionInterval`-th block. Construct the actual attention
+        // layer (not a Mamba placeholder) at those positions.
         var blocks = new ILayer<T>[numLayers];
         var isAttn = new bool[numLayers];
         for (int i = 0; i < numLayers; i++)
         {
-            blocks[i] = new MambaBlock<T>(maxSeqLength, modelDimension, stateDimension);
-            isAttn[i] = attentionInterval > 0 && (i + 1) % attentionInterval == 0;
+            bool attnHere = attentionInterval > 0 && (i + 1) % attentionInterval == 0;
+            blocks[i] = attnHere
+                ? new GatedLinearAttentionLayer<T>(maxSeqLength, modelDimension)
+                : new MambaBlock<T>(maxSeqLength, modelDimension, stateDimension);
+            isAttn[i] = attnHere;
         }
         yield return new HybridBlockScheduler<T>(maxSeqLength, blocks, isAttn,
             HybridSchedulePattern.JambaStyle, modelDimension);
@@ -31381,15 +31387,20 @@ public static class LayerHelper<T>
     {
         yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
 
+        // Ren et al. 2024 — Samba alternates Mamba and (sliding-window)
+        // attention. We use GatedLinearAttention as the attention primitive.
         var blocks = new ILayer<T>[numLayers];
         var isAttn = new bool[numLayers];
         for (int i = 0; i < numLayers; i++)
         {
-            blocks[i] = new MambaBlock<T>(maxSeqLength, modelDimension, stateDimension);
-            isAttn[i] = attentionInterval > 0 && (i + 1) % attentionInterval == 0;
+            bool attnHere = attentionInterval > 0 && (i + 1) % attentionInterval == 0;
+            blocks[i] = attnHere
+                ? new GatedLinearAttentionLayer<T>(maxSeqLength, modelDimension)
+                : new MambaBlock<T>(maxSeqLength, modelDimension, stateDimension);
+            isAttn[i] = attnHere;
         }
         yield return new HybridBlockScheduler<T>(maxSeqLength, blocks, isAttn,
-            HybridSchedulePattern.JambaStyle, modelDimension);
+            HybridSchedulePattern.SambaStyle, modelDimension);
 
         yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(vocabSize, (IActivationFunction<T>?)null);
@@ -31409,12 +31420,19 @@ public static class LayerHelper<T>
     {
         yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
 
+        // Glorioso et al. 2024 — Zamba interleaves Mamba with shared attention.
+        // We instantiate attention blocks at every Nth position; true weight
+        // sharing across them would need explicit parameter tying — tracked
+        // separately (see HybridBlockScheduler.CreateZambaSchedule comment).
         var blocks = new ILayer<T>[numLayers];
         var isAttn = new bool[numLayers];
         for (int i = 0; i < numLayers; i++)
         {
-            blocks[i] = new MambaBlock<T>(maxSeqLength, modelDimension, stateDimension);
-            isAttn[i] = attentionInterval > 0 && (i + 1) % attentionInterval == 0;
+            bool attnHere = attentionInterval > 0 && (i + 1) % attentionInterval == 0;
+            blocks[i] = attnHere
+                ? new GatedLinearAttentionLayer<T>(maxSeqLength, modelDimension)
+                : new MambaBlock<T>(maxSeqLength, modelDimension, stateDimension);
+            isAttn[i] = attnHere;
         }
         yield return new HybridBlockScheduler<T>(maxSeqLength, blocks, isAttn,
             HybridSchedulePattern.ZambaStyle, modelDimension);
