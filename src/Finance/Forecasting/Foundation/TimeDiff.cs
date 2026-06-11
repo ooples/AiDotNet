@@ -322,11 +322,12 @@ public class TimeDiff<T> : TimeSeriesFoundationModelBase<T>
         bool addedBatchDim = false;
         if (conditioned.Rank == 1) { conditioned = conditioned.Reshape(new[] { 1, conditioned.Length }); addedBatchDim = true; }
 
-        Tensor<T> condHidden;
-        if (_inputProjection is not null)
-            condHidden = _inputProjection.Forward(conditioned);
-        else
-            condHidden = conditioned;
+        // Raw conditioning: _inputProjection projects the WHOLE packed per-step
+        // denoiser input to hidden width (see CSDI for rationale), so the
+        // conditioning is packed RAW rather than pre-projected.
+        var condHidden = conditioned.Rank == 2
+            ? conditioned
+            : Engine.Reshape(conditioned, new[] { 1, conditioned.Length });
 
         int outputLen = _forecastHorizon;
         var rand = RandomHelper.CreateSecureRandom();
@@ -368,6 +369,7 @@ public class TimeDiff<T> : TimeSeriesFoundationModelBase<T>
             denoisingInput.Data.Span[xtLen + condLen] = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _diffusionSteps - 1)));
 
             var eps = denoisingInput;
+            if (_inputProjection is not null) eps = _inputProjection.Forward(eps);
             foreach (var layer in _transformerLayers) eps = layer.Forward(eps);
             if (_outputProjection is not null) eps = _outputProjection.Forward(eps);
 
