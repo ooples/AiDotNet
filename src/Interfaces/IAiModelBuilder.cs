@@ -1,3 +1,4 @@
+using AiDotNet.Agentic.Tools;
 using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Configuration;
 using AiDotNet.Deployment.Configuration;
@@ -690,35 +691,6 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureKnowledgeGraph(
         Action<KnowledgeGraphOptions>? configure = null);
 
-    /// <summary>
-    /// Configures AI agent assistance during model building and inference.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Agent assistance adds AI-powered help during model creation.
-    /// The agent can analyze your data, suggest which model type to use, recommend hyperparameters,
-    /// and provide insights about feature importance.
-    ///
-    /// The configuration is stored securely and will be reused during inference if you call AskAsync() on the trained model.
-    /// </para>
-    /// <para>
-    /// Example usage:
-    /// <code>
-    /// var agentConfig = new AgentConfiguration&lt;double&gt;
-    /// {
-    ///     ApiKey = "sk-...",
-    ///     Provider = LLMProvider.OpenAI,
-    ///     IsEnabled = true
-    /// };
-    ///
-    /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigureAgentAssistance(agentConfig);
-    /// </code>
-    /// </para>
-    /// </remarks>
-    /// <param name="configuration">The agent configuration containing API keys, provider settings, and options.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureAgentAssistance(AgentConfiguration<T> configuration);
 
     /// <summary>
     /// Configures a meta-learning algorithm (MAML, Reptile, SEAL) for training models that can quickly adapt to new tasks.
@@ -2363,7 +2335,7 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="agent">The RL agent implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureRLAgent(IAgent<T> agent);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureRLAgent(IRLAgent<T> agent);
 
     // ── Extended Coverage: Model Options, Data Transformers, Splitting, Metrics, Vectorization, Storage ──
 
@@ -2504,7 +2476,7 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// </summary>
     /// <param name="tool">The tool implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureTool(ITool tool);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureTool(IAgentTool tool);
 
     // ── Extended Coverage: Diffusion, RL Environments, Adversarial, Audio, Similarity ──
 

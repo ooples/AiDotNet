@@ -953,59 +953,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return this;
     }
 
-    /// <summary>
-    /// Enables AI agent assistance during the model building process.
-    /// </summary>
-    /// <param name="configuration">The agent configuration containing API key, provider, and assistance options.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> This enables an AI agent to help you during model building.
-    /// By default, the agent will:
-    /// - Analyze your data characteristics
-    /// - Suggest appropriate model types (if you haven't chosen one)
-    /// - Recommend hyperparameter values
-    /// - Provide insights on feature importance
-    ///
-    /// The API key is stored securely and will be reused during inference if you call AskAsync() on the trained model.
-    ///
-    /// Example with defaults:
-    /// <code>
-    /// var agentConfig = new AgentConfiguration&lt;double&gt;
-    /// {
-    ///     ApiKey = "sk-...",
-    ///     Provider = LLMProvider.OpenAI,
-    ///     IsEnabled = true
-    /// };
-    ///
-    /// var result = await new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigureAgentAssistance(agentConfig)
-    ///     .BuildAsync();
-    /// </code>
-    ///
-    /// Example with customization:
-    /// <code>
-    /// var agentConfig = new AgentConfiguration&lt;double&gt;
-    /// {
-    ///     ApiKey = "sk-...",
-    ///     Provider = LLMProvider.OpenAI,
-    ///     IsEnabled = true,
-    ///     AssistanceOptions = AgentAssistanceOptions.Create()
-    ///         .EnableModelSelection()
-    ///         .EnableHyperparameterTuning()
-    ///         .DisableFeatureAnalysis()
-    /// };
-    ///
-    /// var result = await new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigureAgentAssistance(agentConfig)
-    ///     .BuildAsync();
-    /// </code>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureAgentAssistance(AgentConfiguration<T> configuration)
-    {
-        _agentConfig = configuration;
-        _agentOptions = configuration.AssistanceOptions ?? AgentAssistanceOptions.Default;
-        return this;
-    }
 
     /// <summary>
     /// Configures reinforcement learning options for training an RL agent.
@@ -1045,41 +992,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return this;
     }
 
-    /// <summary>
-    /// Asks the agent a question about your model building process.
-    /// Only available after calling ConfigureAgentAssistance().
-    /// </summary>
-    /// <param name="question">Natural language question to ask the agent.</param>
-    /// <returns>The agent's answer based on your current configuration.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if ConfigureAgentAssistance() hasn't been called.</exception>
-    /// <remarks>
-    /// <b>For Beginners:</b> Use this to get AI-powered advice during model building.
-    ///
-    /// Example:
-    /// <code>
-    /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigureAgentAssistance(apiKey: "sk-...");
-    ///
-    /// var advice = await builder.AskAgentAsync(
-    ///     "Should I use Ridge or Lasso regression for my dataset with 50 features?");
-    /// // Result is available in the returned value
-    /// </code>
-    /// </remarks>
-    public async Task<string> AskAgentAsync(string question)
-    {
-        if (_agentConfig == null || !_agentConfig.IsEnabled)
-        {
-            throw new InvalidOperationException(
-                "Agent assistance not enabled. Call ConfigureAgentAssistance() first.");
-        }
-
-        // Create a simple agent
-        var chatModel = CreateChatModel(_agentConfig);
-        var tools = new List<ITool> { new CalculatorTool() };
-        var agent = new Agent<T>(chatModel, tools);
-
-        return await agent.RunAsync(question);
-    }
 
     /// <summary>
     /// Configures knowledge distillation to train a smaller, faster student model from a larger teacher model.

@@ -1,3 +1,4 @@
+using AiDotNet.Agentic.Models;
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Components;
 using AiDotNet.Reasoning.Models;
@@ -141,7 +142,7 @@ namespace AiDotNet.Reasoning.DomainSpecific;
 [ResearchPaper("Tree of Thoughts: Deliberate Problem Solving with Large Language Models", "https://doi.org/10.48550/arXiv.2305.10601", Year = 2023, Authors = "Shunyu Yao, Dian Yu, Jeffrey Zhao, Izhak Shafran, Thomas L. Griffiths, Yuan Cao, Karthik Narasimhan")]
 public class LogicalReasoner<T> : IDomainReasoner<T>
 {
-    private readonly IChatModel<T> _chatModel;
+    private readonly IChatClient<T> _chatModel;
     private readonly ChainOfThoughtStrategy<T> _cotStrategy;
     private readonly TreeOfThoughtsStrategy<T> _totStrategy;
     private readonly ContradictionDetector<T>? _contradictionDetector;
@@ -153,7 +154,7 @@ public class LogicalReasoner<T> : IDomainReasoner<T>
     /// <param name="chatModel">The chat model to use for reasoning.</param>
     /// <param name="enableContradictionDetection">Whether to enable contradiction detection.</param>
     public LogicalReasoner(
-        IChatModel<T> chatModel,
+        IChatClient<T> chatModel,
         bool enableContradictionDetection = false)
     {
         Guard.NotNull(chatModel);

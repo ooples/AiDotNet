@@ -1,4 +1,3 @@
-using AiDotNet.Agents;
 using AiDotNet.Augmentation;
 using AiDotNet.Benchmarking.Models;
 using AiDotNet.CheckpointManagement;
@@ -442,25 +441,6 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     /// </remarks>
     public IPromptTemplate? PromptTemplate { get; set; }
 
-    /// <summary>
-    /// Gets or sets the prompt chain for composing multiple operations.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// A chain orchestrates multiple language model calls, tools, and transformations
-    /// into a cohesive workflow. Chains can be sequential, conditional, or parallel.
-    /// </para>
-    /// <para><b>For Beginners:</b> This connects multiple AI steps together like a recipe.
-    ///
-    /// Example workflow:
-    /// 1. Classify the customer email (is it a complaint, question, or praise?)
-    /// 2. Route to the appropriate response template
-    /// 3. Generate a personalized response
-    ///
-    /// The chain handles all these steps automatically.
-    /// </para>
-    /// </remarks>
-    public IChain<string, string>? PromptChain { get; set; }
 
     /// <summary>
     /// Gets or sets the prompt optimizer for automatically improving prompts.
@@ -594,33 +574,6 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     // Agent & Reasoning Properties
     // ============================================================================
 
-    /// <summary>
-    /// Gets or sets the agent configuration for AI assistance during inference.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Contains API keys, model settings, and other configuration needed to use
-    /// AI agents for assistance during model building or inference.
-    /// </para>
-    /// <para><b>For Beginners:</b> This stores settings for using AI assistants (like GPT-4)
-    /// to help with model decisions. The API key is stored here securely.
-    /// </para>
-    /// </remarks>
-    public AgentConfiguration<T>? AgentConfig { get; set; }
-
-    /// <summary>
-    /// Gets or sets the agent's recommendations from model building.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Contains recommendations made by AI agents during model selection and tuning,
-    /// including suggested model types, hyperparameters, and reasoning.
-    /// </para>
-    /// <para><b>For Beginners:</b> If an AI helped choose your model type and settings,
-    /// this stores what it recommended and why.
-    /// </para>
-    /// </remarks>
-    public AgentRecommendation<T, TInput, TOutput>? AgentRecommendation { get; set; }
 
     /// <summary>
     /// Gets or sets the reasoning configuration for advanced reasoning capabilities.

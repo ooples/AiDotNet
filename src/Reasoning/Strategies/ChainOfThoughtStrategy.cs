@@ -1,4 +1,6 @@
 using System.Text.RegularExpressions;
+using AiDotNet.Agentic.Models;
+using AiDotNet.Agentic.Tools;
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 using Newtonsoft.Json;
@@ -78,8 +80,8 @@ public class ChainOfThoughtStrategy<T> : ReasoningStrategyBase<T>
     /// </para>
     /// </remarks>
     public ChainOfThoughtStrategy(
-        IChatModel<T> chatModel,
-        IEnumerable<ITool>? tools = null,
+        IChatClient<T> chatModel,
+        IEnumerable<IAgentTool>? tools = null,
         bool useJsonFormat = true)
         : base(chatModel, tools)
     {
