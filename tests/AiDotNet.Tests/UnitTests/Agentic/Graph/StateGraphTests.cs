@@ -87,7 +87,7 @@ namespace AiDotNetTests.UnitTests.Agentic.Graph
         }
 
         [Fact(Timeout = 60000)]
-        public async Task Compile_Validates_EntryPointEdgesAndExclusiveRouting()
+        public Task Compile_Validates_EntryPointEdgesAndExclusiveRouting()
         {
             // No entry point.
             Assert.Throws<InvalidOperationException>(() =>
@@ -106,16 +106,16 @@ namespace AiDotNetTests.UnitTests.Agentic.Graph
                     .SetEntryPoint("a")
                     .Compile());
 
-            await Task.CompletedTask;
+            return Task.CompletedTask;
         }
 
         [Fact(Timeout = 60000)]
-        public async Task AddNode_RejectsDuplicateAndReservedNames()
+        public Task AddNode_RejectsDuplicateAndReservedNames()
         {
             var graph = new StateGraph<int>().AddNode("a", s => s);
             Assert.Throws<ArgumentException>(() => graph.AddNode("a", s => s));            // duplicate
             Assert.Throws<ArgumentException>(() => new StateGraph<int>().AddNode(StateGraph<int>.End, s => s)); // reserved
-            await Task.CompletedTask;
+            return Task.CompletedTask;
         }
     }
 }

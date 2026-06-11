@@ -1,3 +1,5 @@
+using System;
+
 namespace AiDotNet.Agentic.Graph;
 
 /// <summary>
@@ -11,9 +13,25 @@ namespace AiDotNet.Agentic.Graph;
 /// </remarks>
 public sealed class GraphRunOptions
 {
+    private int _maxSteps = 25;
+
     /// <summary>
     /// Gets or sets the maximum number of node executions allowed in a single run before a
     /// <see cref="GraphRecursionException"/> is thrown. Default: 25. Must be positive.
     /// </summary>
-    public int MaxSteps { get; set; } = 25;
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when set to a value &lt;= 0.</exception>
+    public int MaxSteps
+    {
+        get => _maxSteps;
+        set
+        {
+            if (value <= 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(value), value, "MaxSteps must be positive (a run needs at least one step).");
+            }
+
+            _maxSteps = value;
+        }
+    }
 }

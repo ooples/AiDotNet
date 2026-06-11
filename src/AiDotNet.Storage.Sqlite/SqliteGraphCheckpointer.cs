@@ -142,6 +142,13 @@ public sealed class SqliteGraphCheckpointer<TState> : IGraphCheckpointer<TState>
         var nextNode = reader.GetString(2);
         var stateJson = reader.GetString(3);
         var state = JsonConvert.DeserializeObject<TState>(stateJson);
+        if (state is null)
+        {
+            throw new InvalidOperationException(
+                $"Checkpoint '{checkpointId}' for thread '{threadId}' has a null or unparseable state payload " +
+                "and cannot be reconstructed.");
+        }
+
         return new GraphCheckpoint<TState>(threadId, checkpointId, step, nextNode, state);
     }
 
