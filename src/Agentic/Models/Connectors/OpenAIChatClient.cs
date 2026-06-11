@@ -71,17 +71,31 @@ public class OpenAIChatClient<T> : ChatClientBase<T>
 
         var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
         var root = JObject.Parse(body);
-        var choice = root["choices"]?.FirstOrDefault();
-        var messageJson = choice?["message"] as JObject;
+
+        // Validate the 200 payload's shape rather than fabricating an empty assistant message: a missing
+        // choices array / first choice / message means the API contract changed or the response is malformed,
+        // which the caller must see as an error.
+        if (root["choices"] is not JArray choices || choices.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"OpenAI response from '{ModelId}' contained no choices. Raw response: {Truncate(body)}");
+        }
+
+        var choice = choices[0];
+        if (choice["message"] is not JObject messageJson)
+        {
+            throw new InvalidOperationException(
+                $"OpenAI response from '{ModelId}' contained no message in the first choice. Raw response: {Truncate(body)}");
+        }
 
         var contents = new List<AiContent>();
-        var text = (string?)messageJson?["content"] ?? string.Empty;
+        var text = (string?)messageJson["content"] ?? string.Empty;
         if (text.Length > 0)
         {
             contents.Add(new TextContent(text));
         }
 
-        if (messageJson?["tool_calls"] is JArray toolCalls)
+        if (messageJson["tool_calls"] is JArray toolCalls)
         {
             foreach (var toolCall in toolCalls)
             {
@@ -98,10 +112,11 @@ public class OpenAIChatClient<T> : ChatClientBase<T>
 
         if (contents.Count == 0)
         {
-            contents.Add(new TextContent(string.Empty));
+            throw new InvalidOperationException(
+                $"OpenAI response from '{ModelId}' had neither message content nor tool calls. Raw response: {Truncate(body)}");
         }
 
-        var finishReason = ParseFinishReason((string?)choice?["finish_reason"]);
+        var finishReason = ParseFinishReason((string?)choice["finish_reason"]);
         var usage = ParseUsage(root["usage"] as JObject);
         var modelId = (string?)root["model"] ?? ModelId;
 
@@ -423,7 +438,14 @@ public class OpenAIChatClient<T> : ChatClientBase<T>
         {
             case ChatResponseFormatKind.Json:
                 return new JObject { ["type"] = "json_object" };
-            case ChatResponseFormatKind.JsonSchema when options.ResponseJsonSchema is not null:
+            case ChatResponseFormatKind.JsonSchema:
+                if (options.ResponseJsonSchema is null)
+                {
+                    throw new InvalidOperationException(
+                        "ChatOptions.ResponseFormat is JsonSchema but ResponseJsonSchema is null. " +
+                        "Provide the JSON schema to enforce structured output, or use a different ResponseFormat.");
+                }
+
                 return new JObject
                 {
                     ["type"] = "json_schema",
@@ -438,6 +460,9 @@ public class OpenAIChatClient<T> : ChatClientBase<T>
                 return null;
         }
     }
+
+    private static string Truncate(string value) =>
+        value.Length <= 500 ? value : value.Substring(0, 500) + "…";
 
     private static ChatFinishReason ParseFinishReason(string? reason) => reason switch
     {
@@ -469,12 +494,8 @@ public class OpenAIChatClient<T> : ChatClientBase<T>
         }
 
         var error = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-#if NET5_0_OR_GREATER
-        throw new HttpRequestException(
-            $"OpenAI request failed with status {(int)response.StatusCode}: {error}", null, response.StatusCode);
-#else
-        throw new HttpRequestException(
+        throw new HttpResponseException(
+            response.StatusCode,
             $"OpenAI request failed with status {(int)response.StatusCode}: {error}");
-#endif
     }
 }

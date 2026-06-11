@@ -169,8 +169,12 @@ public sealed class MeaiChatClient<T> : IChatClient<T>
             return null;
         }
 
-        var input = (int)(usage.InputTokenCount ?? 0);
-        var output = (int)(usage.OutputTokenCount ?? 0);
+        var input = ClampToInt(usage.InputTokenCount ?? 0);
+        var output = ClampToInt(usage.OutputTokenCount ?? 0);
         return new ChatUsage(input, output);
     }
+
+    // Token counts are long? in MEAI; clamp (don't overflow-cast) into ChatUsage's int range.
+    private static int ClampToInt(long value) =>
+        value < 0 ? 0 : (value > int.MaxValue ? int.MaxValue : (int)value);
 }

@@ -434,12 +434,8 @@ public sealed class AnthropicChatClient<T> : ChatClientBase<T>
         }
 
         var error = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-#if NET5_0_OR_GREATER
-        throw new HttpRequestException(
-            $"Anthropic request failed with status {(int)response.StatusCode}: {error}", null, response.StatusCode);
-#else
-        throw new HttpRequestException(
+        throw new HttpResponseException(
+            response.StatusCode,
             $"Anthropic request failed with status {(int)response.StatusCode}: {error}");
-#endif
     }
 }

@@ -57,8 +57,17 @@ public abstract class ChatClientBase<T> : IChatClient<T>
     /// <param name="httpClient">An optional HTTP client; a new one is created when <c>null</c>.</param>
     protected ChatClientBase(HttpClient? httpClient)
     {
-        HttpClient = httpClient ?? new HttpClient();
-        HttpClient.Timeout = TimeSpan.FromMilliseconds(TimeoutMs);
+        if (httpClient is null)
+        {
+            // We own this instance, so configuring its timeout is safe.
+            HttpClient = new HttpClient { Timeout = TimeSpan.FromMilliseconds(TimeoutMs) };
+        }
+        else
+        {
+            // Never mutate a caller-owned HttpClient (its Timeout may be shared/intentional); rely on the
+            // per-call CancellationToken for time-bounding instead.
+            HttpClient = httpClient;
+        }
     }
 
     /// <inheritdoc/>
@@ -150,15 +159,56 @@ public abstract class ChatClientBase<T> : IChatClient<T>
     /// <returns><c>true</c> when the error is likely transient.</returns>
     protected virtual bool IsRetryable(HttpRequestException ex)
     {
+        // Connectors throw HttpResponseException on a non-success response, preserving the status code on
+        // every target framework (HttpRequestException.StatusCode does not exist on .NET Framework). Classify
+        // from it directly so retry behavior is identical across frameworks.
+        if (ex is HttpResponseException responseEx)
+        {
+            var code = (int)responseEx.ResponseStatusCode;
+            return code == 429 || code == 408 || code >= 500;
+        }
+
 #if NET5_0_OR_GREATER
         if (ex.StatusCode is null)
         {
+            // No HTTP response (transport/network failure) — transient, retry.
             return true;
         }
 
         var statusCode = (int)ex.StatusCode;
         return statusCode == 429 || statusCode == 408 || statusCode >= 500;
 #else
+        // .NET Framework: HttpRequestException exposes no StatusCode. Inspect the inner WebException for a
+        // network-level failure (timeout/connect/DNS — transient) or an HTTP response, retrying only on
+        // 408, 429, or 5xx and treating other HTTP statuses (e.g. 4xx) as permanent.
+        for (Exception? inner = ex.InnerException; inner is not null; inner = inner.InnerException)
+        {
+            if (inner is System.Net.WebException webEx)
+            {
+                if (webEx.Response is System.Net.HttpWebResponse response)
+                {
+                    var statusCode = (int)response.StatusCode;
+                    return statusCode == 429 || statusCode == 408 || statusCode >= 500;
+                }
+
+                switch (webEx.Status)
+                {
+                    case System.Net.WebExceptionStatus.Timeout:
+                    case System.Net.WebExceptionStatus.ConnectFailure:
+                    case System.Net.WebExceptionStatus.ConnectionClosed:
+                    case System.Net.WebExceptionStatus.ReceiveFailure:
+                    case System.Net.WebExceptionStatus.SendFailure:
+                    case System.Net.WebExceptionStatus.KeepAliveFailure:
+                    case System.Net.WebExceptionStatus.NameResolutionFailure:
+                        return true;
+                    default:
+                        return false;
+                }
+            }
+        }
+
+        // No classifiable inner error: an HttpRequestException with no HTTP response is a transport failure,
+        // which is transient.
         return true;
 #endif
     }
