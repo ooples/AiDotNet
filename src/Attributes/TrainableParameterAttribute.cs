@@ -57,4 +57,29 @@ public sealed class TrainableParameterAttribute : Attribute
     /// Defaults to 0 (declaration order).
     /// </summary>
     public int Order { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether this parameter is <i>optional</i>: a conditionally-used,
+    /// lazily-materialized field that stays a zero-length <c>[0,0]</c> placeholder
+    /// until (and unless) the layer actually needs it. Defaults to <c>false</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When <c>false</c> (the default) the field is always reported by
+    /// <c>GetTrainableParameters()</c>, even while it is an empty placeholder — the
+    /// historical fixed-count behavior every layer relies on.
+    /// </para>
+    /// <para>
+    /// When <c>true</c> the generator omits the field from <c>GetTrainableParameters()</c>
+    /// while it is still an empty placeholder (<c>Length == 0</c>) and re-includes it once
+    /// the layer materializes it. <c>SetTrainableParameters</c> is emitted symmetrically
+    /// (count-aware, consuming a slot only for currently-present fields), so the get/set
+    /// round-trip stays consistent. This prevents an unused placeholder from being exposed
+    /// as a trainable parameter that can never receive a gradient update — e.g. the
+    /// continuous-input projection weights of <c>EmbeddingLayer</c> in token-id mode (#1331).
+    /// Use it only for genuinely optional, last-in-order parameters that the layer may never
+    /// materialize; required parameters must stay non-optional so they appear even pre-init.
+    /// </para>
+    /// </remarks>
+    public bool Optional { get; set; }
 }

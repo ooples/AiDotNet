@@ -270,49 +270,32 @@ public class CalibratedProbabilityFitDetector<T, TInput, TOutput> : FitDetectorB
         }
         else if (predicted.Length != actual.Length)
         {
-            // Truly incompatible shapes — neither length divides the other —
-            // are a pipeline bug, not a research quirk. Surface them as a clear
-            // InvalidOperationException so the developer can fix the upstream
-            // shape mismatch instead of silently shipping empty calibration.
-            // The #1322 lenient-warn-and-empty fallback below remains for
-            // rank-discordant cases where ONE side is a multiple of the other
-            // (per-sample vs stacked-batch).
-            bool oneSideMultipleOfOther =
-                (actual.Length > 0 && predicted.Length % actual.Length == 0)
-                || (predicted.Length > 0 && actual.Length % predicted.Length == 0);
-            if (!oneSideMultipleOfOther)
-            {
-                throw new InvalidOperationException(
-                    "CalibratedProbabilityFitDetector: predicted length (" + predicted.Length + ") and "
-                    + "actual length (" + actual.Length + ") have incompatible shapes — neither divides "
-                    + "the other, so binning cannot align them. Check that the model's Predict output "
-                    + "and the labels share a consistent batch axis.");
-            }
-
-            // Non-multiclass mismatch (e.g. rank-discordant tensors, or
-            // model emits per-sample output while batch labels are stacked
-            // — the inverse of the multiclass case above). Two scenarios
-            // we surface gracefully here so the optimizer's per-iteration
-            // loop doesn't unconditionally throw:
+            // Any mismatch that reaches here cannot be reconciled into the
+            // binary-calibration path: the divisible multiclass case (predicted =
+            // actual × numClasses) was already reduced above, and equal lengths
+            // take the calibration path below. What remains is one of:
             //
             //   1. actual.Length is an integer multiple of predicted.Length
             //      (the inverse-multiclass case from #1322 — model returns
             //      one sample's output but labels carry the full batch).
-            //      Calibration is genuinely undefined here: we have one
-            //      prediction and many ground-truth values, so binning
-            //      cannot align them. Return EMPTY calibration vectors so
-            //      DetermineFitType / CalculateConfidenceLevel see a
-            //      no-data signal rather than a thrown exception.
-            //   2. Anything else (rank-discordant tensors, off-by-one
-            //      shape drift). Same handling — empty calibration —
-            //      with a Trace warning so the developer can find the
-            //      shape-contract issue without losing the training run.
+            //   2. Rank-discordant / off-by-one shape drift where neither
+            //      length divides the other (e.g. predicted [10], actual [13]).
             //
-            // The earlier always-throw behaviour blocked legitimate
-            // research / custom-architecture training under the default
-            // FitDetector setting (#1322). Industry-standard pattern:
-            // lenient default + diagnostic trace + the strict gate only
-            // applies when shape can be reconciled. Closes #1322.
+            // Calibration is genuinely undefined in every one of these cases —
+            // binning cannot align a predicted vector to a differently-sized
+            // label vector regardless of whether the ratio happens to be
+            // integral. Return EMPTY calibration vectors (a no-data signal that
+            // DetermineFitType / CalculateConfidenceLevel route to the explicit
+            // "cannot evaluate" verdict: MaxCalibrationError → Overfit, zero
+            // confidence) plus a Trace warning so the developer can find the
+            // shape-contract issue, rather than throwing.
+            //
+            // The earlier behaviour threw on the rank-discordant sub-case, which
+            // blocked legitimate research / custom-architecture training under
+            // the default FitDetector setting and made the lenient handling
+            // inconsistent with the divisible case. Industry-standard pattern:
+            // lenient default + diagnostic trace, never an unconditional throw
+            // inside the optimizer's per-iteration loop. Closes #1322.
             System.Diagnostics.Trace.WriteLine(
                 $"CalibratedProbabilityFitDetector: predicted length ({predicted.Length}) and actual "
                 + $"length ({actual.Length}) cannot be reconciled. Calibration metrics will be empty "

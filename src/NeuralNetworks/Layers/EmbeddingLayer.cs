@@ -112,11 +112,14 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// is materialized on demand — the same pattern <see cref="_embeddingTensor"/>
     /// uses, and the direct analog of PyTorch's <c>nn.LazyLinear</c>
     /// UninitializedParameter (which materializes on first forward and then appears
-    /// in <c>parameters()</c>). Keeping it non-null gives a fixed trainable-parameter
-    /// count so the generated GetTrainableParameters/SetTrainableParameters stay
-    /// consistent; in token-index mode it simply remains the empty placeholder.
+    /// in <c>parameters()</c>). It is marked <c>Optional</c> so the generated
+    /// GetTrainableParameters/SetTrainableParameters omit it while it is still the
+    /// empty placeholder (token-index mode never materializes it) and re-include it
+    /// once continuous-input Forward sizes it. Exposing the empty placeholder as a
+    /// trainable parameter previously made it a permanently "stuck" param that could
+    /// never receive a gradient update on the fused training path (#1331).
     /// </summary>
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Optional = true)]
     private Tensor<T> _projectionWeights;
 
     private Tensor<T>? _projectionWeightsGradient;
@@ -373,10 +376,17 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             _embeddingTensor = AllocateLazyWeight([_vocabularySize, _embeddingDimension]);
             InitializeParameters();
             RegisterTrainableParameter(_embeddingTensor, PersistentTensorRole.Embeddings);
-            // Register the (placeholder) projection weights too so the generated
-            // GetTrainableParameters exposes both; re-registered after the lazy
-            // continuous sizing in Forward keeps the runtime list in sync.
-            RegisterTrainableParameter(_projectionWeights, PersistentTensorRole.Weights);
+            // The projection weights are a continuous-input-mode feature: they stay a
+            // [0,0] placeholder for token-id (discrete) embedding and are only
+            // materialized + registered when Forward sees continuous input (see the
+            // RegisterTrainableParameter calls after the TensorAllocator.Rent below).
+            // The field is [TrainableParameter(Optional = true)], so the generated
+            // GetTrainableParameters/SetTrainableParameters already skip it while empty
+            // (#1331). Keep _registeredTensors in sync with that view by only registering
+            // it here once it actually holds weights; otherwise it would surface as a
+            // permanently "stuck" trainable param on the fused training path.
+            if (_projectionWeights.Length > 0)
+                RegisterTrainableParameter(_projectionWeights, PersistentTensorRole.Weights);
             _embeddingInitialized = true;
         }
     }
