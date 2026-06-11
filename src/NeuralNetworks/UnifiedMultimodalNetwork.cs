@@ -1056,14 +1056,39 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         Tensor<T> transformed = encoded.Rank == 2
             ? encoded.Reshape(new[] { encoded.Shape[0], 1, encoded.Shape[1] })
             : encoded;
+        // Apply transformer layers with residual connections. Standard
+        // Transformer block (Vaswani et al. 2017 §3.1) is `x' = x + MHA(x)`,
+        // not `x' = MHA(x)`. Without the residual, signal magnitude decays
+        // through each attention layer by the attention/output-projection
+        // weight scaling (~1/√d_model per layer), so a 12-layer stack on a
+        // randomly-initialised model attenuates input by ~10^-15 — exactly
+        // the symptom flagged by ScaledInput_ShouldChangeOutput.
         foreach (var layer in _transformerLayers)
         {
-            transformed = layer.Forward(transformed);
+            var attended = layer.Forward(transformed);
+            transformed = AddResidual(transformed, attended);
         }
         var pooled = transformed.Rank == 3
             ? transformed.Reshape(new[] { transformed.Shape[0], transformed.Shape[2] })
             : transformed;
         return _classificationHead.Forward(pooled);
+    }
+
+    /// <summary>
+    /// Element-wise residual addition (eval-mode, no tape recording).
+    /// Falls back to a manual loop if Engine isn't yet bound.
+    /// </summary>
+    private static Tensor<T> AddResidual(Tensor<T> a, Tensor<T> b)
+    {
+        if (a.Shape.Length != b.Shape.Length || a.Length != b.Length)
+            return b; // shape changed (e.g., projection layer) — skip residual
+        for (int i = 0; i < a.Shape.Length; i++)
+            if (a.Shape[i] != b.Shape[i]) return b;
+        var result = new Tensor<T>(a.Shape.ToArray());
+        var numOps = MathHelper.GetNumericOperations<T>();
+        for (int i = 0; i < a.Length; i++)
+            result[i] = numOps.Add(a[i], b[i]);
+        return result;
     }
 
     /// <inheritdoc/>
@@ -1104,7 +1129,13 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
             : encoded;
         foreach (var layer in _transformerLayers)
         {
-            transformed = layer.Forward(transformed);
+            var attended = layer.Forward(transformed);
+            // Engine.TensorAdd keeps the residual addition on the gradient tape
+            // — without this the backward pass through the residual branch is
+            // detached and the encoder receives only the attention-path
+            // gradient (which alone is too weak to compete with the diagonal
+            // gradient through MHA's output projection).
+            transformed = Engine.TensorAdd(transformed, attended);
         }
         var pooled = transformed.Rank == 3
             ? Engine.Reshape(transformed, new[] { transformed.Shape[0], transformed.Shape[2] })
