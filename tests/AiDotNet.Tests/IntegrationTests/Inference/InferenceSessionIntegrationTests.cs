@@ -627,6 +627,29 @@ public class InferenceSessionIntegrationTests
 
         var model = new NeuralNetwork<float>(architecture);
 
+        // Warmup forward to materialize MultiHeadAttention's lazy Q/K/V/O weights
+        // before GetParameters / UpdateParameters runs. Without this, GetParameters
+        // returns a vector that excludes the un-resolved MHA weights, UpdateParameters
+        // writes the deterministic values only into the materialized layers, and the
+        // MHA layer retains its non-deterministic lazy random init.
+        //
+        // The InferenceOptimizer then clones the source ONCE PER SEQUENCE for KV-cache
+        // isolation (see AiModelResult.InferenceSequence.EnsureSequenceOptimizationsInitialized
+        // -> InferenceOptimizer.OptimizeForInference, which calls model.Clone() when
+        // EnableKVCache is true). Each clone calls ResolveLazyLayers AFTER cloning, so
+        // each clone's MHA picks up an INDEPENDENT random init from the SimdRandom
+        // non-deterministic seed — producing different outputs for the same input.
+        // The result was BeginInferenceSession_SequencesAreIndependent failing because
+        // seqA.Predict(t), seqB.Predict(t), seqFresh.Predict(t) all produced different
+        // numbers even though the test fixture was supposedly deterministic.
+        //
+        // Running a probe Predict here materializes the MHA on the SOURCE model BEFORE
+        // GetParameters is called, so the deterministic UpdateParameters then writes
+        // into the resolved weights, and the per-sequence clones inherit those exact
+        // weights via the serialize/deserialize path.
+        var probeInput = new Tensor<float>(new[] { 1, FlatSize });
+        _ = model.Predict(probeInput);
+
         var p = model.GetParameters();
         var deterministic = new float[p.Length];
         for (int i = 0; i < deterministic.Length; i++)
