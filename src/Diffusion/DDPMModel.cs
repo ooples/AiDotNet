@@ -90,7 +90,22 @@ public class DDPMModel<T> : DiffusionModelBase<T>
     #region Properties
 
     /// <inheritdoc />
-    public override long ParameterCount => _unet.ParameterCount;
+    public override long ParameterCount
+    {
+        get
+        {
+            // Trigger lazy shape resolution so the count reflects the arch-derived
+            // total (including the U-Net's top-level time-embedding MLPs), not just
+            // the storage length of the already-materialized layers. Callers that
+            // size a parameter buffer off ParameterCount and then pass it to
+            // SetParameters (the canonical roundtrip pattern, see
+            // DDPMModelTests.SetParameters_ThenGetParameters_ReturnsSetParameters)
+            // must see the SAME count SetParameters then validates against.
+            // Idempotent — first call resolves, subsequent calls no-op.
+            _unet.TriggerLazyShapeResolution();
+            return _unet.ParameterCount;
+        }
+    }
 
     #endregion
 
@@ -284,6 +299,14 @@ public class DDPMModel<T> : DiffusionModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
+        // Materialize the U-Net's top-level time-embedding DenseLayers before
+        // reading. DiffusionResBlock's ctor probe materializes weights INSIDE
+        // each ResBlock, but the top-level _timeEmbedMlp1/_timeEmbedMlp2 on the
+        // U-Net are only resolved when PredictNoise runs. Without this trigger,
+        // GetParameters() returns a vector shorter than ParameterCount and the
+        // roundtrip / Clone assertions fail. Idempotent — first call resolves,
+        // subsequent calls no-op. Same fix pattern as SDXLTurboModel.
+        _unet.TriggerLazyShapeResolution();
         return _unet.GetParameters();
     }
 
@@ -293,6 +316,10 @@ public class DDPMModel<T> : DiffusionModelBase<T>
         if (parameters == null)
             throw new ArgumentNullException(nameof(parameters));
 
+        // See GetParameters: resolve lazy layers BEFORE calling _unet.SetParameters
+        // so the inner length-check compares apples-to-apples against the
+        // architecturally-derived parameter count.
+        _unet.TriggerLazyShapeResolution();
         _unet.SetParameters(parameters);
     }
 
