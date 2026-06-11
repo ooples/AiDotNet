@@ -1302,6 +1302,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     private void AddBlockParameters(List<T> parameters, VideoBlock block)
     {
         AddLayerParameters(parameters, block.SpatialResBlock);
+        AddLayerParameters(parameters, block.TimeCondProjection);
         AddLayerParameters(parameters, block.TemporalResBlock);
         AddLayerParameters(parameters, block.SpatialAttention);
         AddLayerParameters(parameters, block.TemporalAttention);
@@ -1353,6 +1354,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     private void SetBlockParameters(VideoBlock block, Vector<T> parameters, ref int index)
     {
         SetLayerParameters(block.SpatialResBlock, parameters, ref index);
+        SetLayerParameters(block.TimeCondProjection, parameters, ref index);
         SetLayerParameters(block.TemporalResBlock, parameters, ref index);
         SetLayerParameters(block.SpatialAttention, parameters, ref index);
         SetLayerParameters(block.TemporalAttention, parameters, ref index);
@@ -1413,23 +1415,28 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// </summary>
     internal void TriggerLazyShapeResolution()
     {
-        var dummy = new Tensor<T>(new[] { 1, _inputChannels, _numFrames, _inputHeight, _inputWidth });
-        Tensor<T>? dummyText = _contextDim > 0
-            ? new Tensor<T>(new[] { 1, _clipTokenLength, _contextDim })
-            : null;
-
-        if (_imageCondProjection != null)
-        {
-            // Resolve the image-condition projection too — image-to-video
-            // models (SVD) only ever forward through this path, so leaving it
-            // unresolved is the root cause of the clone divergence.
-            var dummyImage = new Tensor<T>(new[] { 1, _inputChannels, _inputHeight, _inputWidth });
-            _ = PredictNoiseWithImageCondition(dummy, timestep: 0, imageCondition: dummyImage, textConditioning: dummyText);
-        }
-        else
-        {
-            _ = PredictNoise(dummy, timestep: 0, conditioning: dummyText);
-        }
+        // Mirror the model's REAL Predict path exactly: a 4D image-mode forward
+        // with no conditioning. LatentDiffusionModelBase.Predict drives the
+        // denoising loop with a 4D latent [B, LatentChannels, H, W] and calls
+        // NoisePredictor.PredictNoise(sample, t, null) — so isVideo=false and
+        // the temporal-mixing, image-condition, and cross-attention layers are
+        // never touched. Resolving those here (via a 5D video pass) would leave
+        // them resolved on the clone but with state the real forward never
+        // exercises, and the temporal-mixing DenseLayer is sized strictly
+        // [_numFrames -> _numFrames] so any partial video pass risks shape
+        // mismatches. The lazy layers the real forward DOES use (input/output
+        // convs, spatial ResBlocks, spatial attention, time-embedding and FiLM
+        // MLPs) all resolve to spatial-independent shapes, so a tiny dummy
+        // resolves identical shapes on both source and clone at negligible cost.
+        // Layers left unresolved stay at 0 params on BOTH sides, so the
+        // GetParameters/SetParameters copy stays index-aligned. Mirrors
+        // UNetNoisePredictor.TriggerLazyShapeResolution.
+        int levels = _channelMultipliers.Length;
+        int side = 1 << System.Math.Max(0, levels - 1);
+        int sideH = System.Math.Min(_inputHeight, side);
+        int sideW = System.Math.Min(_inputWidth, side);
+        var dummy = new Tensor<T>(new[] { 1, _inputChannels, sideH, sideW });
+        _ = PredictNoise(dummy, timestep: 0, conditioning: null);
     }
 
     /// <inheritdoc />
@@ -1474,6 +1481,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     private void AddBlockGradients(List<T> gradients, VideoBlock block)
     {
         AddLayerGradients(gradients, block.SpatialResBlock);
+        AddLayerGradients(gradients, block.TimeCondProjection);
         AddLayerGradients(gradients, block.TemporalResBlock);
         AddLayerGradients(gradients, block.SpatialAttention);
         AddLayerGradients(gradients, block.TemporalAttention);
