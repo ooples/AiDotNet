@@ -82,6 +82,15 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     private int _updateCount;
     private Random _random;
 
+    // Deterministic base seeds for each sub-network's lazy weight init, so a
+    // Clone()'d agent reproduces the original's policy (the networks resolve
+    // their weights on first forward and would otherwise draw from the shared
+    // non-deterministic RNG). Distinct bases keep the three networks' inits
+    // independent.
+    private const int EncoderSeedBase = 7001;
+    private const int DecoderSeedBase = 7101;
+    private const int RNNSeedBase = 7201;
+
     /// <summary>
     /// Initializes a new instance with default settings.
     /// </summary>
@@ -135,51 +144,82 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private NeuralNetwork<T> CreateEncoderNetwork(int inputSize, int outputSize)
     {
+        // Build the layer list explicitly and hand it to the architecture so
+        // NeuralNetwork.InitializeLayers uses EXACTLY these layers. Passing an
+        // architecture with no layers makes InitializeLayers fall back to
+        // CreateDefaultNeuralNetworkLayers, which sizes a hidden layer to ~2x
+        // the (image-flattened) input — for a 64x64x3 = 12,288-wide observation
+        // that alone is a single 12,288x24,576 weight (~2.4 GB at FP64). Those
+        // unintended default layers then sit in front of the agent's own
+        // AddLayer-appended layers, producing a malformed, multi-GB network that
+        // trips weight-streaming's per-tensor byte cap on the first forward.
+        var layers = new List<ILayer<T>>();
+        foreach (var channels in _options.VAEEncoderChannels)
+        {
+            layers.Add(new DenseLayer<T>(channels, (IActivationFunction<T>)new ReLUActivation<T>()));
+        }
+        layers.Add(new DenseLayer<T>(outputSize, (IActivationFunction<T>)new IdentityActivation<T>()));
+
+        // Pin a deterministic per-layer RandomSeed so the lazy weight
+        // initialization (DenseLayer resolves its weights on first forward) is
+        // reproducible. NeuralNetwork.InitializeLayers does NOT wire explicitly
+        // supplied custom layers, so without this they would fall back to the
+        // shared non-deterministic RNG and a Clone()'d agent would initialize a
+        // DIFFERENT policy than the original (Clone_ShouldProduceSamePolicy).
+        AssignDeterministicSeeds(layers, EncoderSeedBase);
+
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Regression,
             complexity: NetworkComplexity.Medium,
             inputSize: inputSize,
-            outputSize: outputSize);
-        var network = new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
-        int previousSize = inputSize;
+            outputSize: outputSize,
+            layers: layers);
+        return new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
+    }
 
-        // Simple feedforward approximation of convolutional VAE
-        foreach (var channels in _options.VAEEncoderChannels)
+    /// <summary>
+    /// Assigns a deterministic, reproducible <see cref="LayerBase{T}.RandomSeed"/>
+    /// to each layer (base seed + index) so lazy weight initialization is
+    /// identical across agent instances built from the same options — required
+    /// for Clone() to reproduce the original's policy.
+    /// </summary>
+    private static void AssignDeterministicSeeds(List<ILayer<T>> layers, int baseSeed)
+    {
+        for (int i = 0; i < layers.Count; i++)
         {
-            network.AddLayer(LayerType.Dense, channels, ActivationFunction.ReLU);
-            previousSize = channels;
+            if (layers[i] is LayerBase<T> layer)
+            {
+                layer.RandomSeed = baseSeed + i;
+            }
         }
-
-        network.AddLayer(LayerType.Dense, outputSize, ActivationFunction.Linear);
-
-        return network;
     }
 
     private NeuralNetwork<T> CreateDecoderNetwork(int inputSize, int outputSize)
     {
+        // Explicit layers (mirror of the encoder, reversed) — see
+        // CreateEncoderNetwork for why we must not let the architecture
+        // auto-generate default layers.
+        var reversedChannels = new List<int>(_options.VAEEncoderChannels);
+        reversedChannels.Reverse();
+
+        var layers = new List<ILayer<T>>();
+        foreach (var channels in reversedChannels)
+        {
+            layers.Add(new DenseLayer<T>(channels, (IActivationFunction<T>)new ReLUActivation<T>()));
+        }
+        layers.Add(new DenseLayer<T>(outputSize, (IActivationFunction<T>)new SigmoidActivation<T>()));
+
+        AssignDeterministicSeeds(layers, DecoderSeedBase);
+
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Regression,
             complexity: NetworkComplexity.Medium,
             inputSize: inputSize,
-            outputSize: outputSize);
-        var network = new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
-        int previousSize = inputSize;
-
-        // Reverse of encoder
-        var reversedChannels = new List<int>(_options.VAEEncoderChannels);
-        reversedChannels.Reverse();
-
-        foreach (var channels in reversedChannels)
-        {
-            network.AddLayer(LayerType.Dense, channels, ActivationFunction.ReLU);
-            previousSize = channels;
-        }
-
-        network.AddLayer(LayerType.Dense, outputSize, ActivationFunction.Sigmoid);
-
-        return network;
+            outputSize: outputSize,
+            layers: layers);
+        return new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
     }
 
     private NeuralNetwork<T> CreateRNNNetwork()
@@ -189,18 +229,25 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         // This simplified version uses single-mode prediction (NumMixtures parameter is for future MDN support)
         int inputSize = _options.LatentSize + _options.ActionSize + _options.RNNHiddenSize;
         int outputSize = _options.LatentSize + _options.RNNHiddenSize;  // Single prediction + hidden state
+
+        // Explicit layers — see CreateEncoderNetwork for why default layers
+        // must not be auto-generated.
+        var layers = new List<ILayer<T>>
+        {
+            new DenseLayer<T>(_options.RNNHiddenSize, (IActivationFunction<T>)new TanhActivation<T>()),
+            new DenseLayer<T>(outputSize, (IActivationFunction<T>)new IdentityActivation<T>())
+        };
+
+        AssignDeterministicSeeds(layers, RNNSeedBase);
+
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Regression,
             complexity: NetworkComplexity.Medium,
             inputSize: inputSize,
-            outputSize: outputSize);
-        var network = new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
-
-        network.AddLayer(LayerType.Dense, _options.RNNHiddenSize, ActivationFunction.Tanh);
-        network.AddLayer(LayerType.Dense, outputSize, ActivationFunction.Linear);
-
-        return network;
+            outputSize: outputSize,
+            layers: layers);
+        return new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
     }
 
     public override Vector<T> SelectAction(Vector<T> observation, bool training = true)
@@ -395,7 +442,21 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override Vector<T> Predict(Vector<T> input)
     {
-        return SelectAction(input, training: false);
+        // Predict is the pure inference contract and MUST be side-effect free:
+        // SelectAction advances the RNN hidden state for sequential rollout, so
+        // snapshot it before and restore it after, keeping repeated Predict
+        // calls deterministic (Policy_ShouldBeDeterministic) and independent of
+        // prior inference calls.
+        var savedHidden = new Vector<T>(_rnnHiddenState.Length);
+        for (int i = 0; i < _rnnHiddenState.Length; i++)
+        {
+            savedHidden[i] = _rnnHiddenState[i];
+        }
+
+        var action = SelectAction(input, training: false);
+
+        _rnnHiddenState = savedHidden;
+        return action;
     }
 
     public Task<Vector<T>> PredictAsync(Vector<T> input)
@@ -567,7 +628,37 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
-        return new WorldModelsAgent<T>(_options);
+        // The fresh constructor reproduces the VAE/RNN networks EXACTLY: their
+        // lazy weights initialize from the deterministic per-layer seeds, and
+        // Train() never updates them (only the controller is trained, via the
+        // evolution strategy). So the only state we must copy is the trained
+        // controller weights plus the rollout/bookkeeping fields.
+        //
+        // A serialization round-trip would instead REBUILD the networks' layers
+        // from the serialized graph, dropping the RandomSeed pins — the clone
+        // would then re-initialize to different weights and produce a different
+        // policy (Clone_ShouldProduceSamePolicy).
+        var clone = new WorldModelsAgent<T>(_options);
+
+        var controllerCopy = new Matrix<T>(_controllerWeights.Rows, _controllerWeights.Columns);
+        for (int i = 0; i < _controllerWeights.Rows; i++)
+        {
+            for (int j = 0; j < _controllerWeights.Columns; j++)
+            {
+                controllerCopy[i, j] = _controllerWeights[i, j];
+            }
+        }
+        clone._controllerWeights = controllerCopy;
+
+        var hiddenCopy = new Vector<T>(_rnnHiddenState.Length);
+        for (int i = 0; i < _rnnHiddenState.Length; i++)
+        {
+            hiddenCopy[i] = _rnnHiddenState[i];
+        }
+        clone._rnnHiddenState = hiddenCopy;
+
+        clone._updateCount = _updateCount;
+        return clone;
     }
 
     public override Vector<T> ComputeGradients(
