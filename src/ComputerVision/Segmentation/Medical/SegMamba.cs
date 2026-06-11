@@ -233,11 +233,21 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         }
 
         // ---- Decoder: upsample + skip-concat + conv, from the coarsest scale up. ----
+        // When an input's spatial dimension is not a multiple of 2^numStages,
+        // each ⌊d/2⌋ downsample loses a row/col/slice that the matching ⌈·⌉
+        // upsample can't recover identically — so the upsampled feature map
+        // mismatches the cached skip on the D/H/W axes. Match-pad/crop the
+        // upsampled map back to the skip's exact spatial shape before concat
+        // (standard U-Net practice — Ronneberger et al. 2015 §3.1 "we lose
+        // pixels at the borders... we apply unpadded convolutions, then crop
+        // the corresponding feature map from the contracting path"; SegMamba
+        // adapts the same skip-shape-reconciliation step to its 3D variant).
         var d = skips[^1];
         int convIdx = 0;
         for (int stage = _channelDims.Length - 2; stage >= 0; stage--)
         {
             d = _decUps[convIdx].Forward(d);
+            d = MatchSpatialShapeToSkip(d, skips[stage]);
             d = Engine.TensorConcatenate([d, skips[stage]], axis: 1);
             d = ApplyConvBlock(_decConvs[convIdx], _decNorms[convIdx], d);
             convIdx++;
@@ -312,6 +322,36 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     /// <summary>Conv → InstanceNorm → ReLU block (decoder).</summary>
     private Tensor<T> ApplyConvBlock(Conv3DLayer<T> conv, InstanceNormalizationLayer<T> norm, Tensor<T> x)
         => Engine.ReLU(norm.Forward(conv.Forward(x)));
+
+    /// <summary>
+    /// Adjusts the spatial dims (D, H, W) of <paramref name="upsampled"/> to
+    /// match those of <paramref name="skip"/>. Crops if larger, zero-pads if
+    /// smaller. Required when an input's spatial dim isn't a multiple of
+    /// 2^numStages — downsample/upsample don't round-trip exactly on odd dims.
+    /// </summary>
+    private Tensor<T> MatchSpatialShapeToSkip(Tensor<T> upsampled, Tensor<T> skip)
+    {
+        // [B, C, D, H, W] — channels (axis 1) are independent; only D/H/W (axes 2/3/4) need matching.
+        if (upsampled.Rank != 5 || skip.Rank != 5) return upsampled;
+        var u = upsampled.Shape;
+        var s = skip.Shape;
+        if (u[2] == s[2] && u[3] == s[3] && u[4] == s[4]) return upsampled;
+
+        int b = u[0], c = u[1];
+        int targetD = s[2], targetH = s[3], targetW = s[4];
+        var result = new Tensor<T>([b, c, targetD, targetH, targetW]);
+        result.Fill(NumOps.Zero);
+        int copyD = Math.Min(u[2], targetD);
+        int copyH = Math.Min(u[3], targetH);
+        int copyW = Math.Min(u[4], targetW);
+        for (int bi = 0; bi < b; bi++)
+            for (int ci = 0; ci < c; ci++)
+                for (int di = 0; di < copyD; di++)
+                    for (int hi = 0; hi < copyH; hi++)
+                        for (int wi = 0; wi < copyW; wi++)
+                            result[bi, ci, di, hi, wi] = upsampled[bi, ci, di, hi, wi];
+        return result;
+    }
 
     /// <summary>
     /// Tri-orientated Mamba (ToM, paper §3.2): flatten the 3-D feature volume into a token
