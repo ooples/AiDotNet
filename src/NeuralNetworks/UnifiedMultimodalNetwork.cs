@@ -1138,6 +1138,12 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
             Description = "Unified multimodal network for any-to-any modality generation",
             AdditionalInfo = new Dictionary<string, object>
             {
+                // Golden-pattern required keys (neural-network metadata contract):
+                // ModelType, Architecture, InputShape, OutputShape, ParameterCount.
+                { "ModelType", nameof(UnifiedMultimodalNetwork<T>) },
+                { "Architecture", $"UnifiedMultimodalNetwork ({_numTransformerLayers} transformer layers, embeddingDim={_embeddingDimension}, maxSeq={_maxSequenceLength})" },
+                { "InputShape", Architecture.GetInputShape() },
+                { "OutputShape", Architecture.GetOutputShape() },
                 { "NetworkType", "UnifiedMultimodalNetwork" },
                 { "EmbeddingDimension", _embeddingDimension },
                 { "MaxSequenceLength", _maxSequenceLength },
