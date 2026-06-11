@@ -99,20 +99,22 @@ public class SpecializedBlocksIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BottleneckBlock_ForwardPass_ProducesValidOutput()
     {
-        // Arrange - Bottleneck uses 1x1 -> 3x3 -> 1x1 pattern with expansion
+        // Arrange - Bottleneck uses 1x1 -> 3x3 -> 1x1 pattern with expansion.
+        // The current API takes baseChannels + stride (inChannels is inferred
+        // from input). Output channels = baseChannels * Expansion (=4).
         int inChannels = 64;
-        int outChannels = 64;
+        int baseChannels = 64;
         int height = 8;
         int width = 8;
-        var block = new BottleneckBlock<float>(inChannels, outChannels);
+        var block = new BottleneckBlock<float>(baseChannels);
         var input = CreateRandomTensor<float>([2, inChannels, height, width]);
 
         // Act
         var output = block.Forward(input);
 
-        // Assert - output channels = outChannels * expansion (4)
+        // Assert - output channels = baseChannels * expansion (4)
         Assert.Equal(2, output.Shape[0]); // batch
-        Assert.Equal(outChannels * 4, output.Shape[1]); // channels * expansion
+        Assert.Equal(baseChannels * 4, output.Shape[1]); // channels * expansion
         Assert.Equal(height, output.Shape[2]);
         Assert.Equal(width, output.Shape[3]);
         Assert.False(ContainsNaN(output));
@@ -146,10 +148,10 @@ public class SpecializedBlocksIntegrationTests
     {
         // Arrange
         int inChannels = 64;
-        int outChannels = 64;
+        int baseChannels = 64;
         int height = 8;
         int width = 8;
-        var original = new BottleneckBlock<float>(inChannels, outChannels);
+        var original = new BottleneckBlock<float>(baseChannels);
         var input = CreateRandomTensor<float>([2, inChannels, height, width]);
         var originalOutput = original.Forward(input);
 
@@ -167,17 +169,17 @@ public class SpecializedBlocksIntegrationTests
     {
         // Arrange - default expansion is 4
         int inChannels = 64;
-        int outChannels = 32;
+        int baseChannels = 32;
         int height = 8;
         int width = 8;
-        var block = new BottleneckBlock<float>(inChannels, outChannels);
+        var block = new BottleneckBlock<float>(baseChannels);
         var input = CreateRandomTensor<float>([1, inChannels, height, width]);
 
         // Act
         var output = block.Forward(input);
 
-        // Assert - output channels should be outChannels * 4
-        Assert.Equal(outChannels * 4, output.Shape[1]); // 32 * 4 = 128
+        // Assert - output channels should be baseChannels * 4
+        Assert.Equal(baseChannels * 4, output.Shape[1]); // 32 * 4 = 128
     }
 
     #endregion
@@ -320,13 +322,18 @@ public class SpecializedBlocksIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DenseBlock_OutputChannels_CorrectlyCalculated()
     {
-        // Arrange
+        // Arrange — DenseBlock ctor only takes numLayers + growthRate; the
+        // inputChannels component of OutputChannels is resolved from the
+        // first input.Shape (see DenseBlock.OnFirstForward), so run a
+        // dummy Forward before asserting on the formula.
         int inputChannels = 32;
         int numLayers = 6;
         int growthRate = 16;
         int height = 8;
         int width = 8;
         var block = new DenseBlock<float>(numLayers, growthRate);
+        var input = CreateRandomTensor<float>([1, inputChannels, height, width]);
+        _ = block.Forward(input);
 
         // Assert - verify property calculation
         Assert.Equal(inputChannels + numLayers * growthRate, block.OutputChannels);
