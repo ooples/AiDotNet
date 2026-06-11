@@ -117,8 +117,14 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     public async Task GRU_HiddenStateCarriesOver_SecondCallDiffersFromFirst()
     {
         await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
+        // stateful: true => Keras-style cross-call hidden carry-over, so a second
+        // Forward with the same input starts from the first call's final hidden
+        // state and produces a different output. The default (stateful: false) is
+        // the standard stateless contract (h0 = zeros each call) used everywhere
+        // else for Clone/Predict determinism.
         var gru = new GRULayer<double>( hiddenSize: 3,
-            activation: (IActivationFunction<double>?)null);
+            activation: (IActivationFunction<double>?)null,
+            stateful: true);
 
         var input = new Tensor<double>(new[] { 1, 2 }, new Vector<double>(new double[] { 1.0, 0.5 }));
 

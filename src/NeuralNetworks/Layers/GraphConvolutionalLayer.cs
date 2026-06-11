@@ -664,17 +664,28 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     {
         if (_useSparseAggregation) return;
 
+        // A graph convolution is undefined without a graph: per Kipf & Welling
+        // (2017) the propagation rule H' = Â·H·W is built on the adjacency Â, so
+        // an unset adjacency is a usage error, not something to paper over with a
+        // silent identity (which would silently degrade the layer to a per-node
+        // MLP). Every in-repo GCN model sets the adjacency before Forward.
+        if (_adjacencyMatrix is null)
+            throw new InvalidOperationException(
+                "GraphConvolutionalLayer requires an adjacency matrix. Call " +
+                "SetAdjacencyMatrix(...) with the graph structure before Forward.");
+
         int inferredNumNodes = input.Shape.Length >= 2
             ? input.Shape[input.Shape.Length - 2]
             : 1;
 
-        bool missing = _adjacencyMatrix == null;
-        bool mismatched2D = _adjacencyMatrix is not null
-            && _adjacencyMatrix.Shape.Length == 2
+        // A previously-set dense adjacency can go shape-stale if the node count
+        // changes between calls; rebuild an identity of the right size so the
+        // matmul stays well-formed (the adjacency was supplied, just outdated).
+        bool mismatched2D = _adjacencyMatrix.Shape.Length == 2
             && (_adjacencyMatrix.Shape[0] != inferredNumNodes
                 || _adjacencyMatrix.Shape[1] != inferredNumNodes);
 
-        if (missing || mismatched2D)
+        if (mismatched2D)
         {
             var identity = new Tensor<T>(new[] { inferredNumNodes, inferredNumNodes });
             for (int i = 0; i < inferredNumNodes; i++)
