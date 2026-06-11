@@ -314,13 +314,36 @@ public abstract class ReasoningStrategyBase<T> : IReasoningStrategy<T>
             return $"Error: Tool '{toolName}' not found. Available tools: {string.Join(", ", _tools.Select(t => t.Name))}";
         }
 
-        // Tools expose a typed JSON-schema interface; wrap the raw string input under an "input" property.
-        var arguments = new JObject { ["input"] = input };
-        var result = await tool.InvokeAsync(arguments, cancellationToken).ConfigureAwait(false);
-        AppendTrace(result.IsError
-            ? $"Tool '{toolName}' failed: {result.Content}"
-            : $"Tool '{toolName}' executed successfully");
-        return result.Content;
+        // Preserve schema-shaped arguments: if the caller already produced a JSON object, pass it straight to
+        // the tool; otherwise wrap the raw string under "input" for simple single-parameter tools.
+        JObject arguments;
+        try
+        {
+            arguments = JToken.Parse(input) is JObject parsed ? parsed : new JObject { ["input"] = input };
+        }
+        catch (Newtonsoft.Json.JsonException)
+        {
+            arguments = new JObject { ["input"] = input };
+        }
+
+        try
+        {
+            var result = await tool.InvokeAsync(arguments, cancellationToken).ConfigureAwait(false);
+            AppendTrace(result.IsError
+                ? $"Tool '{toolName}' failed: {result.Content}"
+                : $"Tool '{toolName}' executed successfully");
+            return result.Content;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Keep the reasoning run alive when a single tool throws (the documented contract).
+            AppendTrace($"Tool '{toolName}' exception: {ex.Message}");
+            return $"Error: Tool '{toolName}' threw an exception: {ex.Message}";
+        }
     }
 
     /// <summary>

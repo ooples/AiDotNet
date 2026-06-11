@@ -164,9 +164,12 @@ public class AgentToolSchemaGenerator : IIncrementalGenerator
             var pType = p.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             var local = "__p_" + p.Name;
             var token = "__t_" + p.Name;
+            // When the argument is absent, fall back to the parameter's DECLARED default (e.g. int page = 1)
+            // rather than default(T) (which would force 0/null and silently override the method's intent).
+            var fallback = p.HasExplicitDefaultValue ? GetParameterDefaultLiteral(p, pType) : $"default({pType})";
             sb.AppendLine($"                        var {local} = args.TryGetValue({Verbatim(p.Name)}, out var {token}) && {token}.Type != global::Newtonsoft.Json.Linq.JTokenType.Null");
             sb.AppendLine($"                            ? {token}.ToObject<{pType}>()");
-            sb.AppendLine($"                            : default({pType});");
+            sb.AppendLine($"                            : {fallback};");
             callArgs.Add(local);
         }
 
@@ -268,6 +271,30 @@ public class AgentToolSchemaGenerator : IIncrementalGenerator
         return sb.ToString();
     }
 
+    // Emits the C# literal for a parameter's declared default value so the generated binder reproduces the
+    // method's optional-parameter semantics. Caller guarantees p.HasExplicitDefaultValue.
+    private static string GetParameterDefaultLiteral(IParameterSymbol p, string pType)
+    {
+        var value = p.ExplicitDefaultValue;
+        switch (value)
+        {
+            case null:
+                // Covers `string s = null`, nullable value types defaulting to null, etc.
+                return $"default({pType})";
+            case bool b:
+                return b ? "true" : "false";
+            case string s:
+                return Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatLiteral(s, quote: true);
+            case char c:
+                return Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatLiteral(c, quote: true);
+            default:
+                // Numeric default, or an enum (whose ExplicitDefaultValue is the underlying constant): emit the
+                // invariant numeric literal cast to the parameter type so suffixes/enum typing are correct.
+                var literal = System.Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture);
+                return $"({pType})({literal})";
+        }
+    }
+
     private static bool IsRequired(IParameterSymbol p, AttributeData? paramAttr)
     {
         if (paramAttr is not null)
@@ -280,6 +307,10 @@ public class AgentToolSchemaGenerator : IIncrementalGenerator
         }
 
         if (p.IsOptional || p.HasExplicitDefaultValue) return false;
+
+        // A nullable-annotated reference type (string?, MyDto?) is optional, just like a Nullable<T> value type.
+        if (p.NullableAnnotation == NullableAnnotation.Annotated) return false;
+
         return p.Type is not INamedTypeSymbol n || n.OriginalDefinition.SpecialType != SpecialType.System_Nullable_T;
     }
 
