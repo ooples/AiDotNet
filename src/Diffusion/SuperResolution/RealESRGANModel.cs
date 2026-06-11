@@ -212,7 +212,22 @@ public class RealESRGANModel<T> : LatentDiffusionModelBase<T>
     /// which streams predictor + VAE + conditioner per-tensor and
     /// accumulates length in <see cref="long"/>.
     /// </summary>
-    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount
+    {
+        get
+        {
+            // Trigger lazy shape resolution so the count reflects the arch-derived
+            // total (including the U-Net's top-level time-embedding MLPs and the
+            // VAE's encoder/decoder lazy state), not just the storage length of
+            // already-materialized layers. Callers that size a parameter buffer
+            // off ParameterCount and then pass it to SetParameters must see the
+            // SAME count SetParameters then validates against. Same lazy-init fix
+            // pattern as SDXLTurboModel + DDPMModel (this PR).
+            _unet.TriggerLazyShapeResolution();
+            _vae.TriggerLazyShapeResolution();
+            return _unet.ParameterCount + _vae.ParameterCount;
+        }
+    }
 
     /// <summary>
     /// Gets the upscale factor (4x).
@@ -396,6 +411,13 @@ public class RealESRGANModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
+        // Resolve lazy shape so the returned vector includes the U-Net's
+        // top-level time-embedding MLPs and the VAE's lazy state. Without this,
+        // GetParameters() returns a shorter-than-ParameterCount vector and the
+        // Clone roundtrip then mis-sizes the receiver. Same fix pattern as
+        // SDXLTurboModel and DDPMModel.
+        _unet.TriggerLazyShapeResolution();
+        _vae.TriggerLazyShapeResolution();
         var unetParams = _unet.GetParameters();
         var vaeParams = _vae.GetParameters();
 
@@ -417,6 +439,11 @@ public class RealESRGANModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        // See GetParameters: resolve lazy layers BEFORE reading ParameterCount
+        // so the length check below compares apples-to-apples with the
+        // arch-derived total.
+        _unet.TriggerLazyShapeResolution();
+        _vae.TriggerLazyShapeResolution();
         var unetCount = checked((int)_unet.ParameterCount);
         var vaeCount = checked((int)_vae.ParameterCount);
 
@@ -457,25 +484,19 @@ public class RealESRGANModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedUnet = new UNetNoisePredictor<T>(
-            inputChannels: INPUT_CHANNELS,
-            outputChannels: LATENT_CHANNELS,
-            baseChannels: BASE_CHANNELS,
-            channelMultipliers: [1, 2, 4],
-            numResBlocks: 2,
-            attentionResolutions: [4, 2],
-            contextDim: CROSS_ATTENTION_DIM);
-        clonedUnet.SetParameters(_unet.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2,
-            latentScaleFactor: 0.18215);
-        clonedVae.SetParameters(_vae.GetParameters());
-
+        // Delegate to the U-Net's and VAE's own Clone implementations, which
+        // resolve lazy shape inference on BOTH source and clone before copying
+        // weights. The previous "construct fresh + SetParameters(GetParameters())"
+        // dance re-hit the lazy-init bug: GetParameters() on the unresolved
+        // source under-counted the U-Net's top-level time-embedding DenseLayers,
+        // SetParameters on the fresh clone then either threw on the length
+        // mismatch or silently filled only the materialised slots — leaving the
+        // clone's MHA / lazy projections at fresh random init and producing
+        // different Predict outputs than the source (Clone_ShouldProduceIdenticalOutput).
+        // Same fix pattern as SDXLTurboModel.Clone (PR #1562) and PR #1555's
+        // ImprovedConsistencyModel.Clone (commit 7ab314796).
+        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
+        var clonedVae = (StandardVAE<T>)_vae.Clone();
         return new RealESRGANModel<T>(
             unet: clonedUnet,
             vae: clonedVae,
