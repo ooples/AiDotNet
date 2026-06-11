@@ -354,15 +354,33 @@ public class CCDM<T> : TimeSeriesFoundationModelBase<T>
             T sigmaT = _sigmas[t];
             T sigmaNext = _sigmas[t + 1];
 
-            // Build score network input: [x_t | condHidden | log(sigma)]
+            // Score-network input: hiddenDim-wide vector formed by summing
+            //   - x_t   (forecast-horizon zero-padded to hiddenDim)
+            //   - cond  (already hiddenDim — from _inputProjection)
+            //   - sigma_embedding  (log σ broadcast)
+            // This matches the standard diffusion-score-net pattern
+            // (Ho et al. 2020 §3.2 / Wen et al. 2023 §3.2 — "the time
+            // step is added to the residual stream via a positional
+            // embedding") and keeps the score-input width equal to the
+            // hiddenDim that the BatchNorm / Dense denoising layers were
+            // lazy-sized for. The previous score-input was the literal
+            // concatenation [x_t | condHidden | log σ] = forecastHorizon
+            // + hiddenDim + 1 wide, which fed a shape-mismatched tensor
+            // into the FIRST BatchNorm of the denoising stack (the score-
+            // network input projection wasn't wired up — _inputProjection
+            // was already consumed by the conditioning encoder above).
+            T logSigma = NumOps.FromDouble(Math.Log(Math.Max(1e-10, NumOps.ToDouble(sigmaT))));
+            var scoreInput = new Tensor<T>(new[] { 1, _hiddenDimension });
             int xtLen = Math.Min(xt.Length, outputLen);
+            for (int i = 0; i < xtLen && i < _hiddenDimension; i++)
+                scoreInput.Data.Span[i] = xt[i];
             int condLen = Math.Min(condHidden.Length, _hiddenDimension);
-            var scoreInput = new Tensor<T>(new[] { 1, xtLen + condLen + 1 });
-            for (int i = 0; i < xtLen; i++) scoreInput.Data.Span[i] = xt[i];
-            for (int i = 0; i < condLen; i++) scoreInput.Data.Span[xtLen + i] = condHidden[i];
-            scoreInput.Data.Span[xtLen + condLen] = NumOps.FromDouble(Math.Log(Math.Max(1e-10, NumOps.ToDouble(sigmaT))));
+            for (int i = 0; i < condLen; i++)
+                scoreInput.Data.Span[i] = NumOps.Add(scoreInput.Data.Span[i], condHidden[i]);
+            for (int i = 0; i < _hiddenDimension; i++)
+                scoreInput.Data.Span[i] = NumOps.Add(scoreInput.Data.Span[i], logSigma);
 
-            // Predict score: s_theta(x_t, sigma_t)
+            // Predict score: s_theta(x_t, sigma_t).
             var score = scoreInput;
             foreach (var layer in _denoisingLayers) score = layer.Forward(score);
             if (_outputProjection is not null) score = _outputProjection.Forward(score);
