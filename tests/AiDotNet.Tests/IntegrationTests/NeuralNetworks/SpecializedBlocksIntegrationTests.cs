@@ -165,12 +165,15 @@ public class SpecializedBlocksIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BottleneckBlock_ExpansionFactor_CorrectlyApplied()
     {
-        // Arrange - default expansion is 4
+        // Arrange - default expansion is 4. BottleneckBlock is parameterized by
+        // its base width (PyTorch torchvision Bottleneck(inplanes, planes): output
+        // = planes * 4); the input channel count is inferred from the forward
+        // input, so the ctor takes the base width, not (inChannels, outChannels).
         int inChannels = 64;
-        int outChannels = 32;
+        int outChannels = 32; // base width -> output = outChannels * 4 = 128
         int height = 8;
         int width = 8;
-        var block = new BottleneckBlock<float>(inChannels, outChannels);
+        var block = new BottleneckBlock<float>(outChannels);
         var input = CreateRandomTensor<float>([1, inChannels, height, width]);
 
         // Act
@@ -327,6 +330,13 @@ public class SpecializedBlocksIntegrationTests
         int height = 8;
         int width = 8;
         var block = new DenseBlock<float>(numLayers, growthRate);
+
+        // OutputChannels = inputChannels + numLayers * growthRate, but the input
+        // channel count is resolved from the first forward (DenseNet blocks take
+        // their input width from the preceding layer), so run one forward before
+        // reading the property — it reports -1 until then.
+        var input = CreateRandomTensor<float>([1, inputChannels, height, width]);
+        block.Forward(input);
 
         // Assert - verify property calculation
         Assert.Equal(inputChannels + numLayers * growthRate, block.OutputChannels);
