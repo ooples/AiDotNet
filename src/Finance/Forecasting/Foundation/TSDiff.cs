@@ -308,13 +308,26 @@ public class TSDiff<T> : TimeSeriesFoundationModelBase<T>
         // Iterative DDPM reverse process: t = T-1 ... 0
         for (int t = _numDiffusionSteps - 1; t >= 0; t--)
         {
-            // Build denoising input: [x_t | condHidden | timestep_embedding]
+            // Denoising input: hiddenDim-wide additive composition of x_t,
+            // conditioning, and the time embedding — same fix as CCDM (the
+            // raw [x_t | condHidden | t_embed] concatenation feeds a
+            // shape-mismatched tensor into the first BatchNorm of the
+            // residual stack, since _residualLayers were lazy-sized to
+            // _hiddenDimension by an earlier _inputProjection.Forward).
+            // Ho et al. 2020 §3.2 / Hatamizadeh et al. 2023 §3.2 add the
+            // time step to the residual stream via a positional embedding;
+            // we likewise sum x_t (zero-padded), condHidden, and the time
+            // embedding broadcast across all positions.
             int xtLen = Math.Min(xt.Length, outputLen);
             int condLen = Math.Min(condHidden.Length, _hiddenDimension);
-            var denoisingInput = new Tensor<T>(new[] { 1, xtLen + condLen + 1 });
-            for (int i = 0; i < xtLen; i++) denoisingInput.Data.Span[i] = xt[i];
-            for (int i = 0; i < condLen; i++) denoisingInput.Data.Span[xtLen + i] = condHidden[i];
-            denoisingInput.Data.Span[xtLen + condLen] = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));
+            T timeEmbed = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));
+            var denoisingInput = new Tensor<T>(new[] { 1, _hiddenDimension });
+            for (int i = 0; i < xtLen && i < _hiddenDimension; i++)
+                denoisingInput.Data.Span[i] = xt[i];
+            for (int i = 0; i < condLen; i++)
+                denoisingInput.Data.Span[i] = NumOps.Add(denoisingInput.Data.Span[i], condHidden[i]);
+            for (int i = 0; i < _hiddenDimension; i++)
+                denoisingInput.Data.Span[i] = NumOps.Add(denoisingInput.Data.Span[i], timeEmbed);
 
             // Predict conditioned noise estimate eps_cond
             var epsCond = denoisingInput;
@@ -327,10 +340,13 @@ public class TSDiff<T> : TimeSeriesFoundationModelBase<T>
             Tensor<T> epsGuided;
             if (Math.Abs(_guidanceScale - 1.0) > 1e-6)
             {
-                var uncondInput = new Tensor<T>(new[] { 1, xtLen + condLen + 1 });
-                for (int i = 0; i < xtLen; i++) uncondInput.Data.Span[i] = xt[i];
-                // Zero conditioning for unconditional estimate
-                uncondInput.Data.Span[xtLen + condLen] = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));
+                var uncondInput = new Tensor<T>(new[] { 1, _hiddenDimension });
+                for (int i = 0; i < xtLen && i < _hiddenDimension; i++) uncondInput.Data.Span[i] = xt[i];
+                // Skip the conditioning sum for the unconditional estimate;
+                // still add the time embedding so the score net knows where
+                // in the reverse diffusion it is.
+                for (int i = 0; i < _hiddenDimension; i++)
+                    uncondInput.Data.Span[i] = NumOps.Add(uncondInput.Data.Span[i], timeEmbed);
 
                 var epsUncond = uncondInput;
                 foreach (var layer in _residualLayers) epsUncond = layer.Forward(epsUncond);

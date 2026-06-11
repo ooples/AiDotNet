@@ -398,15 +398,22 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
         var condSlice = Engine.TensorSliceAxis(
             condFlat.Rank == 1 ? Engine.Reshape(condFlat, new[] { 1, condFlat.Length }) : condFlat,
             axis: 1, index: 0);
-        // Simpler path: build a [1, xtLen + condLen + 1]-shaped input by
-        // copying into a fresh tensor. The denoiser will run its
-        // tape-tracked Forward passes on this — that's what needs
-        // gradients, not the concat layout itself.
-        var denoisingInput = new Tensor<T>(new[] { 1, targetLen + condLen + 1 });
-        for (int i = 0; i < targetLen; i++) denoisingInput.Data.Span[i] = xt2d[0, i];
-        for (int i = 0; i < condLen; i++) denoisingInput.Data.Span[targetLen + i] = condHidden[i];
-        denoisingInput.Data.Span[targetLen + condLen] = NumOps.FromDouble(
-            Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));
+        // Build a hiddenDim-wide denoiser input by additively composing
+        //   - xt2d (targetLen values, zero-padded to hiddenDim)
+        //   - condHidden (already hiddenDim)
+        //   - time embedding (broadcast)
+        // matching ForwardNative's score-input layout. The previous concat
+        // [xt | condHidden | t_embed] was width = targetLen + hiddenDim + 1
+        // and shape-mismatched the first BatchNorm of _residualLayers
+        // (lazy-sized to hiddenDim by _inputProjection.Forward).
+        T timeEmbedTrain = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));
+        var denoisingInput = new Tensor<T>(new[] { 1, _hiddenDimension });
+        for (int i = 0; i < targetLen && i < _hiddenDimension; i++)
+            denoisingInput.Data.Span[i] = xt2d[0, i];
+        for (int i = 0; i < condLen; i++)
+            denoisingInput.Data.Span[i] = NumOps.Add(denoisingInput.Data.Span[i], condHidden[i]);
+        for (int i = 0; i < _hiddenDimension; i++)
+            denoisingInput.Data.Span[i] = NumOps.Add(denoisingInput.Data.Span[i], timeEmbedTrain);
 
         // 5. Predict noise via residual stack. _residualLayers[i]
         // .Forward is tape-aware, so gradients flow back through the
@@ -577,13 +584,21 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
         T eps10 = NumOps.FromDouble(1e-10);
         for (int t = _numDiffusionSteps - 1; t >= 0; t--)
         {
-            // Concatenate noisy sample with conditioning hidden state
+            // Denoising input — hiddenDim-additive composition (same fix
+            // as CCDM / TSDiff / TimeDiff). The raw [x_t | condHidden |
+            // t_embed] concatenation would shape-mismatch the first
+            // BatchNorm in _residualLayers, which was lazy-sized to
+            // _hiddenDimension by an earlier _inputProjection.Forward.
             int xtLen = Math.Min(xt.Length, outputLen);
             int condLen = Math.Min(condHidden.Length, _hiddenDimension);
-            var denoisingInput = new Tensor<T>(new[] { 1, xtLen + condLen + 1 });
-            for (int i = 0; i < xtLen; i++) denoisingInput.Data.Span[i] = xt[i];
-            for (int i = 0; i < condLen; i++) denoisingInput.Data.Span[xtLen + i] = condHidden[i];
-            denoisingInput.Data.Span[xtLen + condLen] = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));
+            T timeEmbed = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));
+            var denoisingInput = new Tensor<T>(new[] { 1, _hiddenDimension });
+            for (int i = 0; i < xtLen && i < _hiddenDimension; i++)
+                denoisingInput.Data.Span[i] = xt[i];
+            for (int i = 0; i < condLen; i++)
+                denoisingInput.Data.Span[i] = NumOps.Add(denoisingInput.Data.Span[i], condHidden[i]);
+            for (int i = 0; i < _hiddenDimension; i++)
+                denoisingInput.Data.Span[i] = NumOps.Add(denoisingInput.Data.Span[i], timeEmbed);
 
             // Predict noise through residual layers
             var eps = denoisingInput;

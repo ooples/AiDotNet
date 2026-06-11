@@ -360,12 +360,21 @@ public class TimeDiff<T> : TimeSeriesFoundationModelBase<T>
         T eps10 = NumOps.FromDouble(1e-10);
         for (int t = _diffusionSteps - 1; t >= 0; t--)
         {
+            // Denoising input — same hiddenDim-additive composition as CCDM
+            // / TSDiff (raw [x_t | condHidden | t_embed] concatenation would
+            // shape-mismatch the first BatchNorm in _transformerLayers,
+            // which was lazy-sized to _hiddenDimension by an earlier
+            // _inputProjection.Forward).
             int xtLen = Math.Min(xt.Length, outputLen);
             int condLen = Math.Min(condHidden.Length, _hiddenDimension);
-            var denoisingInput = new Tensor<T>(new[] { 1, xtLen + condLen + 1 });
-            for (int i = 0; i < xtLen; i++) denoisingInput.Data.Span[i] = xt[i];
-            for (int i = 0; i < condLen; i++) denoisingInput.Data.Span[xtLen + i] = condHidden[i];
-            denoisingInput.Data.Span[xtLen + condLen] = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _diffusionSteps - 1)));
+            T timeEmbed = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _diffusionSteps - 1)));
+            var denoisingInput = new Tensor<T>(new[] { 1, _hiddenDimension });
+            for (int i = 0; i < xtLen && i < _hiddenDimension; i++)
+                denoisingInput.Data.Span[i] = xt[i];
+            for (int i = 0; i < condLen; i++)
+                denoisingInput.Data.Span[i] = NumOps.Add(denoisingInput.Data.Span[i], condHidden[i]);
+            for (int i = 0; i < _hiddenDimension; i++)
+                denoisingInput.Data.Span[i] = NumOps.Add(denoisingInput.Data.Span[i], timeEmbed);
 
             var eps = denoisingInput;
             foreach (var layer in _transformerLayers) eps = layer.Forward(eps);
