@@ -1385,8 +1385,51 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             _clipTokenLength,
             LossFunction);
 
+        // Eager-init BOTH source and clone before snapshotting/setting
+        // parameters. The time-embedding MLPs, temporal/cross attention, and
+        // image-condition projection are all lazy (LazyDense/LazyMHA/
+        // LazyConv2D) and report ParameterCount=0 until their first forward.
+        //   * The clone needs resolution BEFORE SetParameters(), otherwise
+        //     every lazy slice is sized to 0 and the copied weights are
+        //     dropped, leaving the clone with fresh random weights.
+        //   * The source ALSO needs resolution BEFORE GetParameters(),
+        //     otherwise the snapshot under-counts the lazy layers and the
+        //     clone re-resolves (with a different seed) on its first Predict,
+        //     diverging from the original. Mirrors UNetNoisePredictor.Clone.
+        TriggerLazyShapeResolution();
+        clone.TriggerLazyShapeResolution();
         clone.SetParameters(GetParameters());
         return clone;
+    }
+
+    /// <summary>
+    /// Runs a single dummy forward through the network at the configured
+    /// spatial / frame size so every lazy layer (time-embedding MLPs,
+    /// temporal + cross attention, and the image-condition projection)
+    /// resolves its weight shapes. Used by <see cref="Clone"/> to make the
+    /// clone's layer parameter counts match the original's before
+    /// <see cref="SetParameters"/> copies weights across. Mirrors
+    /// UNetNoisePredictor.TriggerLazyShapeResolution.
+    /// </summary>
+    internal void TriggerLazyShapeResolution()
+    {
+        var dummy = new Tensor<T>(new[] { 1, _inputChannels, _numFrames, _inputHeight, _inputWidth });
+        Tensor<T>? dummyText = _contextDim > 0
+            ? new Tensor<T>(new[] { 1, _clipTokenLength, _contextDim })
+            : null;
+
+        if (_imageCondProjection != null)
+        {
+            // Resolve the image-condition projection too — image-to-video
+            // models (SVD) only ever forward through this path, so leaving it
+            // unresolved is the root cause of the clone divergence.
+            var dummyImage = new Tensor<T>(new[] { 1, _inputChannels, _inputHeight, _inputWidth });
+            _ = PredictNoiseWithImageCondition(dummy, timestep: 0, imageCondition: dummyImage, textConditioning: dummyText);
+        }
+        else
+        {
+            _ = PredictNoise(dummy, timestep: 0, conditioning: dummyText);
+        }
     }
 
     /// <inheritdoc />
