@@ -51,6 +51,13 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
         int h = HiddenUnits;
         if (n < 3 || d < 2) return new Matrix<T>(d, d);
 
+        // Standardise to zero-mean / unit-variance per column — same
+        // NOTEARS-style numerical regime BCDNets needs, and required for
+        // gradient-based methods on raw data with O(1)-O(10) magnitudes
+        // (Lachapelle 2020 §5 §A — Tab.1 explicitly says "we standardize the
+        // data prior to training").
+        var standardised = StandardiseColumnsLocal(data);
+
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         T scale = NumOps.FromDouble(Math.Sqrt(2.0 / d));
 
@@ -71,8 +78,15 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
 
         T lr = NumOps.FromDouble(LearningRate);
         T alpha = NumOps.Zero;
-        T rho = NumOps.One;
-        T rhoMax = NumOps.FromDouble(1e+16);
+        // ρ-schedule tuned for the Gumbel-free deterministic MLP regime: start
+        // small so the first few outer iterations are reconstruction-dominated
+        // and let the MLPs learn the high-likelihood input-weight columns
+        // before the acyclicity ramp engages. Cap at 1e+6 (not 1e+16) so a
+        // briefly-stalled h(A) does not let ρ saturate at the original limit
+        // and drive every adjacency norm to zero (see BCDNets companion fix).
+        T rho = NumOps.FromDouble(0.01);
+        T rhoMax = NumOps.FromDouble(1e+6);
+        double prevH = double.MaxValue;
 
         for (int outer = 0; outer < MaxEpochs; outer++)
         {
@@ -100,7 +114,7 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
                     for (int j = 0; j < d; j++)
                     {
                         // Forward using Engine.DotProduct for vectorized matmul
-                        for (int i = 0; i < d; i++) xRow[i] = data[s, i];
+                        for (int i = 0; i < d; i++) xRow[i] = standardised[s, i];
 
                         for (int k = 0; k < h; k++)
                         {
@@ -112,7 +126,7 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
                         for (int k = 0; k < h; k++) w2Col[k] = W2[j][k, 0];
                         T pred = Engine.DotProduct(hidden, w2Col);
 
-                        T residual = NumOps.Multiply(NumOps.Subtract(pred, data[s, j]), invN);
+                        T residual = NumOps.Multiply(NumOps.Subtract(pred, standardised[s, j]), invN);
 
                         // Backprop
                         for (int k = 0; k < h; k++)
@@ -122,7 +136,7 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
                             T sigDeriv = NumOps.Multiply(hidden[k], NumOps.Subtract(NumOps.One, hidden[k]));
                             T dHidden = NumOps.Multiply(residual, NumOps.Multiply(W2[j][k, 0], sigDeriv));
                             for (int i = 0; i < d; i++)
-                                gW1[j][i, k] = NumOps.Add(gW1[j][i, k], NumOps.Multiply(dHidden, data[s, i]));
+                                gW1[j][i, k] = NumOps.Add(gW1[j][i, k], NumOps.Multiply(dHidden, standardised[s, i]));
                         }
                     }
                 }
@@ -165,14 +179,52 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
                 }
             }
 
-            // Outer: update augmented Lagrangian
+            // Outer: update augmented Lagrangian. Conservative schedule:
+            // (1) cap ρ multiplier at 2× per outer iter (not 10×) so the
+            //     gradient magnitude can't double-saturate from rounding;
+            // (2) NaN-guard the W1 weights — if training diverged into NaN
+            //     territory (e.g. on pathological zero-noise data where the
+            //     reconstruction gradient resonates with the acyclicity
+            //     gradient), reset the Lagrangian and continue from a
+            //     re-seeded W1 / W2 so the algorithm can still produce a
+            //     usable adjacency rather than emitting an empty graph.
             var Afinal = ExtractAdjacency(W1, d, h);
-            T hFinal = ComputeTraceExpConstraint(Afinal, d);
-            alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hFinal));
-            if (NumOps.GreaterThan(hFinal, NumOps.FromDouble(0.25)))
-                rho = NumOps.Multiply(rho, NumOps.FromDouble(10));
-            if (NumOps.GreaterThan(rho, rhoMax)) break;
-            if (!NumOps.GreaterThan(hFinal, NumOps.FromDouble(1e-8))) break;
+            T hFinalT = ComputeTraceExpConstraint(Afinal, d);
+            double hFinal = NumOps.ToDouble(hFinalT);
+            if (double.IsNaN(hFinal) || double.IsInfinity(hFinal))
+            {
+                // Hard reset on numerical failure
+                alpha = NumOps.Zero;
+                rho = NumOps.FromDouble(0.01);
+                prevH = double.MaxValue;
+                for (int j = 0; j < d; j++)
+                {
+                    for (int i = 0; i < d; i++)
+                        for (int k = 0; k < h; k++)
+                        {
+                            double v = NumOps.ToDouble(W1[j][i, k]);
+                            if (double.IsNaN(v) || double.IsInfinity(v) || i == j)
+                                W1[j][i, k] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
+                            if (i == j) W1[j][i, k] = NumOps.Zero;
+                        }
+                    for (int k = 0; k < h; k++)
+                    {
+                        double v = NumOps.ToDouble(W2[j][k, 0]);
+                        if (double.IsNaN(v) || double.IsInfinity(v))
+                            W2[j][k, 0] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
+                    }
+                }
+                continue;
+            }
+            alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hFinalT));
+            if (hFinal > 0.9 * prevH)
+            {
+                T newRho = NumOps.Multiply(rho, NumOps.FromDouble(2));
+                rho = NumOps.GreaterThan(newRho, rhoMax) ? rhoMax : newRho;
+            }
+            prevH = hFinal;
+            if (NumOps.GreaterThan(rho, NumOps.FromDouble(1e+6 - 1))) break;
+            if (hFinal < 1e-8) break;
         }
 
         var rawAdj = ExtractAdjacency(W1, d, h);
@@ -188,8 +240,49 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
                 if (i != j && maxNorm > 0)
                     learnedP[i, j] = NumOps.ToDouble(rawAdj[i, j]) / maxNorm;
 
-        var cov = ComputeCovarianceMatrix(data);
+        // BuildFinalAdjacency reads cov[i,i] / cov[i,j] for the direction +
+        // weight step (DeepCausalBase.BuildFinalAdjacency). Use the
+        // standardised data so the cov scale matches the scale the MLPs
+        // trained on (= 1 on the diagonal after standardisation), keeping the
+        // OLS-style weight ratio cov[i,j]/cov[i,i] in the [-1, 1] correlation
+        // range rather than the raw-data scale.
+        var cov = ComputeCovarianceMatrix(standardised);
         return BuildFinalAdjacency(learnedP, cov, d);
+    }
+
+    /// <summary>
+    /// Zero-mean unit-variance column standardisation. Local copy — see
+    /// <see cref="AiDotNet.CausalDiscovery.Bayesian.BCDNetsAlgorithm{T}"/> for
+    /// the same helper applied to the variational branch.
+    /// </summary>
+    private Matrix<T> StandardiseColumnsLocal(Matrix<T> data)
+    {
+        int n = data.Rows;
+        int d = data.Columns;
+        var result = new Matrix<T>(n, d);
+        T nT = NumOps.FromDouble(n);
+
+        for (int j = 0; j < d; j++)
+        {
+            T mean = NumOps.Zero;
+            for (int i = 0; i < n; i++)
+                mean = NumOps.Add(mean, data[i, j]);
+            mean = NumOps.Divide(mean, nT);
+
+            T variance = NumOps.Zero;
+            for (int i = 0; i < n; i++)
+            {
+                T diff = NumOps.Subtract(data[i, j], mean);
+                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
+            }
+            variance = NumOps.Divide(variance, nT);
+            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-15)));
+
+            for (int i = 0; i < n; i++)
+                result[i, j] = NumOps.Divide(NumOps.Subtract(data[i, j], mean), std);
+        }
+
+        return result;
     }
 
     private Matrix<T> ExtractAdjacency(Matrix<T>[] W1, int d, int h)
