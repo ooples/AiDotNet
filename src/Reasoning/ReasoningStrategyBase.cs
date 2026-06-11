@@ -1,7 +1,10 @@
 using System.Diagnostics;
+using AiDotNet.Agentic.Models;
+using AiDotNet.Agentic.Tools;
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.Validation;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Reasoning;
 
@@ -47,7 +50,7 @@ namespace AiDotNet.Reasoning;
 public abstract class ReasoningStrategyBase<T> : IReasoningStrategy<T>
 {
     private readonly System.Text.StringBuilder _reasoningTrace;
-    private readonly List<ITool> _tools;
+    private readonly List<IAgentTool> _tools;
     private readonly object _traceLock = new object();
 
     /// <summary>
@@ -67,11 +70,11 @@ public abstract class ReasoningStrategyBase<T> : IReasoningStrategy<T>
     /// (calculator, reference books), and a notebook (the trace) to write down your thinking.
     /// </para>
     /// </remarks>
-    protected ReasoningStrategyBase(IChatModel<T> chatModel, IEnumerable<ITool>? tools = null)
+    protected ReasoningStrategyBase(IChatClient<T> chatModel, IEnumerable<IAgentTool>? tools = null)
     {
         Guard.NotNull(chatModel);
         ChatModel = chatModel;
-        _tools = tools?.ToList() ?? new List<ITool>();
+        _tools = tools?.ToList() ?? new List<IAgentTool>();
         _reasoningTrace = new System.Text.StringBuilder();
     }
 
@@ -83,7 +86,7 @@ public abstract class ReasoningStrategyBase<T> : IReasoningStrategy<T>
     /// It's protected so derived classes can use it, but not publicly accessible from outside.
     /// </para>
     /// </remarks>
-    protected IChatModel<T> ChatModel { get; }
+    protected IChatClient<T> ChatModel { get; }
 
     /// <summary>
     /// Gets the read-only list of tools available to this strategy.
@@ -93,7 +96,7 @@ public abstract class ReasoningStrategyBase<T> : IReasoningStrategy<T>
     /// that the reasoning strategy can use to help solve problems. Protected so derived classes can access them.
     /// </para>
     /// </remarks>
-    protected IReadOnlyList<ITool> Tools => _tools.AsReadOnly();
+    protected IReadOnlyList<IAgentTool> Tools => _tools.AsReadOnly();
 
     /// <summary>
     /// Gets the current reasoning trace.
@@ -253,7 +256,7 @@ public abstract class ReasoningStrategyBase<T> : IReasoningStrategy<T>
     /// Returns null if the tool doesn't exist, so always check before using!
     /// </para>
     /// </remarks>
-    protected ITool? FindTool(string toolName)
+    protected IAgentTool? FindTool(string toolName)
     {
         return _tools.FirstOrDefault(t =>
             t.Name.Equals(toolName, StringComparison.OrdinalIgnoreCase));
@@ -303,7 +306,7 @@ public abstract class ReasoningStrategyBase<T> : IReasoningStrategy<T>
     /// This keeps the reasoning process running even if one tool fails.
     /// </para>
     /// </remarks>
-    protected string ExecuteTool(string toolName, string input)
+    protected async Task<string> ExecuteToolAsync(string toolName, string input, CancellationToken cancellationToken = default)
     {
         var tool = FindTool(toolName);
         if (tool == null)
@@ -311,21 +314,35 @@ public abstract class ReasoningStrategyBase<T> : IReasoningStrategy<T>
             return $"Error: Tool '{toolName}' not found. Available tools: {string.Join(", ", _tools.Select(t => t.Name))}";
         }
 
+        // Preserve schema-shaped arguments: if the caller already produced a JSON object, pass it straight to
+        // the tool; otherwise wrap the raw string under "input" for simple single-parameter tools.
+        JObject arguments;
         try
         {
-            var result = tool.Execute(input);
-            AppendTrace($"Tool '{toolName}' executed successfully");
-            return result;
+            arguments = JToken.Parse(input) is JObject parsed ? parsed : new JObject { ["input"] = input };
+        }
+        catch (Newtonsoft.Json.JsonException)
+        {
+            arguments = new JObject { ["input"] = input };
+        }
+
+        try
+        {
+            var result = await tool.InvokeAsync(arguments, cancellationToken).ConfigureAwait(false);
+            AppendTrace(result.IsError
+                ? $"Tool '{toolName}' failed: {result.Content}"
+                : $"Tool '{toolName}' executed successfully");
+            return result.Content;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
-            // Rethrow critical exceptions
-            if (ex is OutOfMemoryException || ex is StackOverflowException)
-                throw;
-
-            var errorMsg = $"Error executing tool '{toolName}': {ex.Message}";
-            AppendTrace(errorMsg);
-            return errorMsg;
+            // Keep the reasoning run alive when a single tool throws (the documented contract).
+            AppendTrace($"Tool '{toolName}' exception: {ex.Message}");
+            return $"Error: Tool '{toolName}' threw an exception: {ex.Message}";
         }
     }
 

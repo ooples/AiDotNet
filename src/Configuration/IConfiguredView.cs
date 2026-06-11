@@ -53,7 +53,4 @@ internal interface IConfiguredView<T, TInput, TOutput>
 
     /// <summary>The license-key payload wired via <c>ConfigureLicenseKey</c>.</summary>
     AiDotNet.Models.AiDotNetLicenseKey? ConfiguredLicenseKey { get; }
-
-    /// <summary>The agent-assistance config wired via <c>ConfigureAgentAssistance</c>.</summary>
-    AiDotNet.Models.AgentConfiguration<T>? ConfiguredAgentAssistance { get; }
 }
