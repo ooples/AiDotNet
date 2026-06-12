@@ -107,6 +107,58 @@ public sealed class TrainingGroupsFacadeTests
     }
 
     [Fact]
+    public async Task Grouped_split_is_order_preserving_so_groups_reference_original_leading_rows()
+    {
+        // Rows 0..69 follow y = +2x + 1; rows 70..99 follow y = -2x + 1 (CONFLICTING slope).
+        // With training groups configured the split must be UNSHUFFLED: the training partition is
+        // exactly the leading 70 rows (pure +2x), so the net learns an increasing function. A
+        // shuffled split would mix conflicting-tail rows into training and the slope washes out —
+        // this is the property that lets LTR callers do leak-free temporal splits (sort by date,
+        // most recent dates land in val/test).
+        var x = new double[N];
+        var y = new double[N];
+        for (int i = 0; i < N; i++)
+        {
+            double xi = i / (double)N;
+            x[i] = xi;
+            y[i] = i < TrainRows ? (2.0 * xi) + 1.0 : (-2.0 * xi) + 1.0;
+        }
+
+        var xT = new Tensor<double>(new[] { N, 1 }, new Vector<double>(x));
+        var yT = new Tensor<double>(new[] { N }, new Vector<double>(y));
+
+        var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
+            .ConfigureModel(BuildNet())
+            .ConfigureDataLoader(DataLoaders.FromTensors(xT, yT))
+            .ConfigureOptimizer(new AdamOptimizer<double, Tensor<double>, Tensor<double>>(
+                model: null,
+                options: new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>> { MaxIterations = 250 }))
+            .ConfigureTrainingGroups(PartitionTrainingRows(groupSize: 10))
+            .BuildAsync();
+
+        // Probe within the training block's input range [0, 0.7): the function must be increasing
+        // (slope +2). If shuffled rows leaked the conflicting tail into training, the learned slope
+        // collapses toward 0 and this ordering breaks down.
+        var probes = new[] { 0.05, 0.2, 0.35, 0.5, 0.65 };
+        var preds = probes
+            .Select(p => result.Predict(new Tensor<double>(new[] { 1, 1 }, new Vector<double>(new[] { p })))[0])
+            .ToArray();
+
+        int rising = 0;
+        for (int i = 1; i < preds.Length; i++)
+        {
+            if (preds[i] > preds[i - 1])
+            {
+                rising++;
+            }
+        }
+
+        Assert.True(preds.Max() - preds.Min() > 0.3 && rising >= 3,
+            "Grouped training did not learn the leading block's +2x slope — the split is not order-preserving. " +
+            $"preds=[{string.Join(", ", preds.Select(v => v.ToString("F3")))}]");
+    }
+
+    [Fact]
     public async Task Out_of_range_group_index_throws_actionable_error()
     {
         var (x, y) = BuildLinearData();
@@ -122,7 +174,7 @@ public sealed class TrainingGroupsFacadeTests
                 .ConfigureTrainingGroups(badGroups)
                 .BuildAsync());
 
-        Assert.Contains("TRAINING rows", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("training partition", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]

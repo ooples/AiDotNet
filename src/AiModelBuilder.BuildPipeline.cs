@@ -1251,7 +1251,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             bool isTimeSeriesModel = _model is TimeSeries.TimeSeriesModelBase<T>
                 || _autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesForecasting
                 || _autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesAnomalyDetection;
-            bool shuffleBeforeSplit = !isTimeSeriesModel;
+            // ConfigureTrainingGroups indices are defined by the CALLER against original row order
+            // (e.g. one trading date's cross-section per group). A shuffled split would make it
+            // impossible to know which original rows landed in the training partition, so groups
+            // force an order-preserving split: training rows = the first floor(0.7·n) rows.
+            bool shuffleBeforeSplit = !isTimeSeriesModel && _trainingGroups is null;
             (XTrain, yTrain, XVal, yVal, XTest, yTest) = DataSplitter.Split<T, TInput, TOutput>(
                 preparedX, preparedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: shuffleBeforeSplit);
 
@@ -1907,9 +1911,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                         if (idx < 0 || idx >= groupedX.Shape[0])
                         {
                             throw new ArgumentOutOfRangeException(nameof(_trainingGroups),
-                                $"Training-group row index {idx} is outside the training set (0..{groupedX.Shape[0] - 1}). " +
-                                "Group indices refer to TRAINING rows AFTER the facade's internal split/shuffle — " +
-                                "for date-grouped data configure a time-series model or pre-split data so ordering is preserved.");
+                                $"Training-group row index {idx} is outside the training partition (0..{groupedX.Shape[0] - 1}). " +
+                                "With training groups configured the split is ORDER-PRESERVING (no shuffle): the training " +
+                                "partition is the first floor(0.7·n) rows of the loaded data in their original order, so " +
+                                "group indices must reference rows inside that leading block. Rows beyond it form the " +
+                                "validation/test partitions (for date-grouped data, sort rows by date ascending so the " +
+                                "held-out partitions are the most RECENT dates — a leak-free temporal split).");
                         }
                     }
                 }
