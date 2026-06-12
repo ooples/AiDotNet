@@ -20,7 +20,7 @@ namespace AiDotNet.Preprocessing;
 /// rank-1 ↔ <c>Matrix[n,1]</c>; <c>Tensor&lt;T&gt;</c> rank-2 <c>[n,k]</c> ↔ <c>Matrix[n,k]</c> (each
 /// output column scaled independently). Other output types are rejected at construction.</para>
 /// </remarks>
-public sealed class TargetStandardScaler<T, TOutput> : IDataTransformer<T, TOutput, TOutput>
+public class TargetStandardScaler<T, TOutput> : IDataTransformer<T, TOutput, TOutput>
 {
     private readonly StandardScaler<T> _scaler;
 
