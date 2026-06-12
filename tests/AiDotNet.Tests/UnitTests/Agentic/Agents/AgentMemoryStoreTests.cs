@@ -127,9 +127,11 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
 
             await augmented.RunAsync(new[] { ChatMessage.User("Which editor mode do I prefer?") });
 
-            // The recalled memory was injected as a system-context message before the user's question.
+            // The recalled memory was injected as USER-role context before the user's question —
+            // never as a system message, so a poisoned memory cannot override the real system prompt.
             var request = client.Requests[0];
-            Assert.Contains(request, m => m.Role == ChatRole.System && m.Text.Contains("dark mode"));
+            Assert.Contains(request, m => m.Role == ChatRole.User && m.Text.Contains("dark mode"));
+            Assert.DoesNotContain(request, m => m.Role == ChatRole.System && m.Text.Contains("dark mode"));
         }
 
         [Fact(Timeout = 60000)]
@@ -163,9 +165,10 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
             await threaded.RunAsync("conv", "What is my name?");
             await threaded.RunAsync("conv", "Do you remember my name?");
 
-            // Second turn sees both the long-term memory (name) and the prior turn (thread history).
+            // Second turn sees both the long-term memory (name, injected as lower-privilege
+            // user-role context) and the prior turn (thread history).
             var secondRequest = client.Requests[1];
-            Assert.Contains(secondRequest, m => m.Role == ChatRole.System && m.Text.Contains("Alice"));
+            Assert.Contains(secondRequest, m => m.Role == ChatRole.User && m.Text.Contains("Alice"));
             Assert.Contains(secondRequest, m => m.Role == ChatRole.User && m.Text == "What is my name?");
         }
 

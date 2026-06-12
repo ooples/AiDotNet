@@ -67,12 +67,16 @@ public sealed class McpClient
         }
 
         var descriptors = new List<McpToolDescriptor>(toolsArray.Count);
-        foreach (var entry in toolsArray)
+        for (var i = 0; i < toolsArray.Count; i++)
         {
+            var entry = toolsArray[i];
             var name = (string?)entry["name"];
+            // A nameless tool entry is a server contract violation — surface
+            // it as the documented McpException instead of silently dropping
+            // the tool and leaving the caller with a mysteriously short list.
             if (name is null || name.Trim().Length == 0)
             {
-                continue;
+                throw new McpException($"MCP 'tools/list' entry at index {i} is missing a valid 'name'.");
             }
 
             var description = (string?)entry["description"] ?? string.Empty;

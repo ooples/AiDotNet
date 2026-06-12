@@ -63,7 +63,10 @@ public sealed class MiddlewareAgentTool : IAgentTool
     {
         Guard.NotNull(arguments);
 
-        var context = new ToolInvocationContext(_inner.Name, arguments);
+        // Deep-clone the arguments: middleware may rewrite ctx.Arguments, and
+        // those rewrites must stay inside the pipeline rather than mutating
+        // the caller's original payload.
+        var context = new ToolInvocationContext(_inner.Name, (JObject)arguments.DeepClone());
 
         ToolPipelineDelegate pipeline = (ctx, ct) => _inner.InvokeAsync(ctx.Arguments, ct);
         for (var i = _middlewares.Count - 1; i >= 0; i--)

@@ -85,53 +85,86 @@ public sealed class GgufFile : INamedTensorSource
         }
 
         var count = checked((int)tensor.ElementCount);
-        var offset = checked((int)(_dataStart + (long)tensor.Offset));
         var result = new double[count];
 
         switch (tensor.GgmlType)
         {
             case GgufTensorInfo.TypeF32:
+            {
+                var offset = ValidateSpan(tensor, count, byteLength: (long)count * 4, blockSize: 1);
                 for (var i = 0; i < count; i++)
                 {
                     result[i] = BitConverter.ToSingle(_data, offset + (i * 4));
                 }
 
                 return result;
+            }
 
             case GgufTensorInfo.TypeF16:
+            {
+                var offset = ValidateSpan(tensor, count, byteLength: (long)count * 2, blockSize: 1);
                 for (var i = 0; i < count; i++)
                 {
                     result[i] = HalfToFloat(BitConverter.ToUInt16(_data, offset + (i * 2)));
                 }
 
                 return result;
+            }
 
             case GgufTensorInfo.TypeQ4_0:
-                DequantizeQ4_0(offset, count, result);
+                DequantizeQ4_0(ValidateBlockSpan(tensor, count, blockBytes: 18, GgufTensorInfo.QuantBlockSize), count, result);
                 return result;
 
             case GgufTensorInfo.TypeQ4_1:
-                DequantizeQ4_1(offset, count, result);
+                DequantizeQ4_1(ValidateBlockSpan(tensor, count, blockBytes: 20, GgufTensorInfo.QuantBlockSize), count, result);
                 return result;
 
             case GgufTensorInfo.TypeQ8_0:
-                DequantizeQ8_0(offset, count, result);
+                DequantizeQ8_0(ValidateBlockSpan(tensor, count, blockBytes: 34, GgufTensorInfo.QuantBlockSize), count, result);
                 return result;
 
             case GgufTensorInfo.TypeQ4_K:
-                DequantizeQ4_K(offset, count, result);
+                DequantizeQ4_K(ValidateBlockSpan(tensor, count, blockBytes: 144, GgufTensorInfo.SuperBlockSize), count, result);
                 return result;
 
             case GgufTensorInfo.TypeQ6_K:
-                DequantizeQ6_K(offset, count, result);
+                DequantizeQ6_K(ValidateBlockSpan(tensor, count, blockBytes: 210, GgufTensorInfo.SuperBlockSize), count, result);
                 return result;
 
             default:
                 throw new NotSupportedException(
                     $"Tensor '{name}' uses ggml type {tensor.GgmlType}; only F32/F16/Q4_0/Q4_1/Q8_0/Q4_K/Q6_K are " +
-                    "dequantized. Use GetRawBytes for raw access.");
+                    "dequantized.");
         }
     }
+
+    /// <summary>
+    /// Centralized span validation: every decode path goes through here (directly or via
+    /// <see cref="ValidateBlockSpan"/>) before touching <c>_data</c>, so a malformed GGUF directory can never
+    /// drive a read past the payload or silently decode a partially-filled tensor.
+    /// </summary>
+    /// <returns>The validated absolute offset of the tensor's bytes within <c>_data</c>.</returns>
+    private int ValidateSpan(GgufTensorInfo tensor, int count, long byteLength, int blockSize)
+    {
+        if (count % blockSize != 0)
+        {
+            throw new System.IO.InvalidDataException(
+                $"Tensor '{tensor.Name}' element count {count} is not aligned to its {blockSize}-value quantization block size.");
+        }
+
+        var offset = checked(_dataStart + (long)tensor.Offset);
+        if (offset < 0 || byteLength < 0 || offset > _data.Length - byteLength)
+        {
+            throw new System.IO.InvalidDataException(
+                $"Tensor '{tensor.Name}' points outside the GGUF payload.");
+        }
+
+        return checked((int)offset);
+    }
+
+    /// <summary>Validates a quantized tensor's block alignment and byte span, returning its absolute offset.</summary>
+    private int ValidateBlockSpan(GgufTensorInfo tensor, int count, int blockBytes, int blockSize) =>
+        ValidateSpan(tensor, count, byteLength: (long)(count / blockSize) * blockBytes, blockSize: blockSize);
 
     // Q4_0: per 32-value block = fp16 scale + 16 bytes of packed 4-bit quants; value = (nibble - 8) * scale.
     private void DequantizeQ4_0(int offset, int count, double[] result)

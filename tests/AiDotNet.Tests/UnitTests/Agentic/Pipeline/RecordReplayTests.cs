@@ -23,7 +23,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Pipeline
             Assert.Equal(1, realModel.CallCount);
 
             // Replay with NO fallback — must serve from the store without any model call.
-            var replay = new ReplayingChatClient<double>(store);
+            // Recordings are keyed per model, so pure playback names the recorded model.
+            var replay = new ReplayingChatClient<double>(store, modelId: realModel.ModelId);
             var replayed = await replay.GetResponseAsync(new[] { ChatMessage.User("question") });
             Assert.Equal("the recorded answer", replayed.Text);
             Assert.Equal(1, realModel.CallCount); // still 1 — replay did not touch the model
@@ -33,11 +34,11 @@ namespace AiDotNetTests.UnitTests.Agentic.Pipeline
         public async Task Replay_IsDeterministic_AcrossManyCalls()
         {
             var store = new InMemoryChatInteractionStore();
-            await new RecordingChatClient<double>(
-                ScriptedChatClient<double>.Sequence(ChatResponses.Text("stable")), store)
+            var model = ScriptedChatClient<double>.Sequence(ChatResponses.Text("stable"));
+            await new RecordingChatClient<double>(model, store)
                 .GetResponseAsync(new[] { ChatMessage.User("q") });
 
-            var replay = new ReplayingChatClient<double>(store);
+            var replay = new ReplayingChatClient<double>(store, modelId: model.ModelId);
             for (var i = 0; i < 5; i++)
             {
                 Assert.Equal("stable", (await replay.GetResponseAsync(new[] { ChatMessage.User("q") })).Text);

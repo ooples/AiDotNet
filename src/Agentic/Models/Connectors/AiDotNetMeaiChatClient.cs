@@ -106,7 +106,13 @@ public sealed class AiDotNetMeaiChatClient<T> : Meai.IChatClient
     /// <inheritdoc/>
     public void Dispose()
     {
-        // The wrapped AiDotNet client owns its own resources; nothing engine-side to release here.
+        // This wrapper is the MEAI-facing handle a host disposes — cascade to
+        // the wrapped client when it owns disposable resources (idempotent:
+        // IDisposable implementations tolerate repeated Dispose calls).
+        if (_inner is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
     }
 
     private static List<ChatMessage> ToAiMessages(IEnumerable<Meai.ChatMessage> messages)

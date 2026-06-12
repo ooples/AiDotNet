@@ -108,7 +108,7 @@ public static class AgenticServiceCollectionExtensions
             throw new ArgumentNullException(nameof(services));
         }
 
-        return services.AddSingleton(serviceProvider =>
+        services.AddSingleton(serviceProvider =>
         {
             var client = serviceProvider.GetRequiredService<IChatClient<T>>();
             var tools = serviceProvider.GetService<ToolCollection>();
@@ -116,5 +116,11 @@ public static class AgenticServiceCollectionExtensions
             configure?.Invoke(options);
             return new AgentExecutor<T>(client, tools, options);
         });
+
+        // Register the SAME singleton under IAgent<T> too, so consumers that
+        // resolve the abstraction (or enumerate IEnumerable<IAgent<T>>) see
+        // the executor instead of silently missing it.
+        return services.AddSingleton<IAgent<T>>(serviceProvider =>
+            serviceProvider.GetRequiredService<AgentExecutor<T>>());
     }
 }

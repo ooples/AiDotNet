@@ -68,6 +68,11 @@ public sealed class MambaCausalLanguageModel<T> : IIncrementalCausalLanguageMode
             input[new[] { 0, position, ValidateToken(tokenIds[position]) }] = One;
         }
 
+        // The full forward resets the underlying network, so any incremental
+        // cache primed earlier no longer matches the network's state —
+        // invalidate it rather than letting a later AppendToken continue from
+        // a stale sequence.
+        _state = null;
         _network.ResetState();
         var output = _network.Predict(input);
         return ExtractLastPositionLogits(output);
@@ -88,15 +93,21 @@ public sealed class MambaCausalLanguageModel<T> : IIncrementalCausalLanguageMode
             throw new ArgumentException("The prompt must contain at least one token.", nameof(promptTokenIds));
         }
 
+        // Drop any previous cache up front, and only publish the new state
+        // once the whole prompt has been processed — if a later token throws
+        // (e.g. out of vocabulary), AppendToken must not continue from a
+        // half-primed sequence.
+        _state = null;
         _network.ResetState();
         var state = _network.CreateStepState(batchSize: 1);
-        _state = state;
 
         Vector<T>? logits = null;
         for (var i = 0; i < promptTokenIds.Count; i++)
         {
             logits = StepOne(promptTokenIds[i], state);
         }
+
+        _state = state;
 
         // Non-null: the loop runs at least once because the prompt is non-empty.
         return logits ?? throw new InvalidOperationException("Prompt produced no logits.");

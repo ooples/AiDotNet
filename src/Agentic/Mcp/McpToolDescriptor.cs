@@ -13,6 +13,8 @@ namespace AiDotNet.Agentic.Mcp;
 /// </remarks>
 public sealed class McpToolDescriptor
 {
+    private readonly JObject _inputSchema;
+
     /// <summary>
     /// Initializes a new descriptor.
     /// </summary>
@@ -28,7 +30,10 @@ public sealed class McpToolDescriptor
         Guard.NotNull(inputSchema);
         Name = name;
         Description = description;
-        InputSchema = inputSchema;
+        // Snapshot the schema: JObject is mutable, and a descriptor must not
+        // change after construction just because the caller (or a consumer of
+        // InputSchema) edits the instance it handed in / got back.
+        _inputSchema = (JObject)inputSchema.DeepClone();
     }
 
     /// <summary>Gets the tool name.</summary>
@@ -37,6 +42,6 @@ public sealed class McpToolDescriptor
     /// <summary>Gets the tool description.</summary>
     public string Description { get; }
 
-    /// <summary>Gets the JSON-Schema describing the tool's arguments.</summary>
-    public JObject InputSchema { get; }
+    /// <summary>Gets a copy of the JSON-Schema describing the tool's arguments (mutating it does not affect the descriptor).</summary>
+    public JObject InputSchema => (JObject)_inputSchema.DeepClone();
 }

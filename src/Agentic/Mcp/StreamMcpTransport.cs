@@ -58,8 +58,21 @@ public sealed class StreamMcpTransport : IMcpTransport, IDisposable
 
             while (true)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                var line = await _reader.ReadLineAsync().ConfigureAwait(false);
+                // ReadLineAsync has no cancellation path of its own, and a
+                // stalled MCP peer would otherwise hang this call forever
+                // while it holds _gate (blocking every later caller). Race the
+                // read against a token-cancelled delay so cancellation always
+                // gets the caller out.
+                var readTask = _reader.ReadLineAsync();
+                var completed = await Task.WhenAny(
+                    readTask,
+                    Task.Delay(Timeout.Infinite, cancellationToken)).ConfigureAwait(false);
+                if (completed != readTask)
+                {
+                    throw new OperationCanceledException(cancellationToken);
+                }
+
+                var line = await readTask.ConfigureAwait(false);
                 if (line is null)
                 {
                     throw new McpException("MCP stream closed before a response was received.");

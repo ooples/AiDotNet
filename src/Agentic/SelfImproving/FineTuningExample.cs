@@ -18,10 +18,23 @@ public sealed class FineTuningExample
     /// <param name="completion">The (good) completion to learn.</param>
     /// <param name="reward">The reward the originating trajectory earned.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="prompt"/> or <paramref name="completion"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="prompt"/> or <paramref name="completion"/> is empty or whitespace.</exception>
     public FineTuningExample(string prompt, string completion, double reward)
     {
         Guard.NotNull(prompt);
         Guard.NotNull(completion);
+        // An empty prompt or completion is a degenerate training pair that a
+        // fine-tuning trainer would silently learn nothing (or noise) from.
+        if (string.IsNullOrWhiteSpace(prompt))
+        {
+            throw new ArgumentException("Prompt cannot be empty or whitespace.", nameof(prompt));
+        }
+
+        if (string.IsNullOrWhiteSpace(completion))
+        {
+            throw new ArgumentException("Completion cannot be empty or whitespace.", nameof(completion));
+        }
+
         Prompt = prompt;
         Completion = completion;
         Reward = reward;

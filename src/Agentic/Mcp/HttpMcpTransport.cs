@@ -18,17 +18,21 @@ namespace AiDotNet.Agentic.Mcp;
 /// a hosted server exactly as it does against an in-process one.
 /// </para>
 /// </remarks>
-public sealed class HttpMcpTransport : IMcpTransport
+public sealed class HttpMcpTransport : IMcpTransport, IDisposable
 {
     private readonly HttpClient _httpClient;
     private readonly string _endpoint;
+    private readonly bool _ownsHttpClient;
     private int _id;
 
     /// <summary>
     /// Initializes a new HTTP transport.
     /// </summary>
     /// <param name="endpoint">The MCP server URL.</param>
-    /// <param name="httpClient">Optional HTTP client (for testing or custom handlers/headers).</param>
+    /// <param name="httpClient">
+    /// Optional HTTP client (for testing or custom handlers/headers). When supplied, the caller retains
+    /// ownership and must dispose it; when omitted, the transport creates and owns its own client.
+    /// </param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoint"/> is <c>null</c>.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="endpoint"/> is empty/whitespace.</exception>
     public HttpMcpTransport(string endpoint, HttpClient? httpClient = null)
@@ -36,6 +40,18 @@ public sealed class HttpMcpTransport : IMcpTransport
         Guard.NotNullOrWhiteSpace(endpoint);
         _endpoint = endpoint;
         _httpClient = httpClient ?? new HttpClient();
+        // Only dispose what we created: a caller-supplied client may be shared
+        // with other transports/components.
+        _ownsHttpClient = httpClient is null;
+    }
+
+    /// <summary>Disposes the internally created <see cref="HttpClient"/> (caller-supplied clients are left alone).</summary>
+    public void Dispose()
+    {
+        if (_ownsHttpClient)
+        {
+            _httpClient.Dispose();
+        }
     }
 
     /// <inheritdoc/>

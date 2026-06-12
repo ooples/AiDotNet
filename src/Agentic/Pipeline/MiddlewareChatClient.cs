@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using AiDotNet.Agentic.Models;
 
 // Disambiguate from the legacy AiDotNet.PromptEngineering.Templates.ChatMessage (global using).
@@ -13,10 +14,11 @@ namespace AiDotNet.Agentic.Pipeline;
 /// <typeparam name="T">The numeric type of the wrapped client.</typeparam>
 /// <remarks>
 /// <para>
-/// Middleware apply to <see cref="GetResponseAsync"/> (the complete-response path), where pre/post processing
-/// and short-circuiting are well-defined. <see cref="GetStreamingResponseAsync"/> passes through to the inner
-/// client unchanged, since wrapping a token stream has different semantics; stream-aware middleware is a
-/// separate concern.
+/// Middleware semantics (pre/post processing, short-circuiting) are defined on the complete-response path.
+/// When middleware are configured, <see cref="GetStreamingResponseAsync"/> therefore runs the full pipeline
+/// and re-emits the final response as a stream — streaming callers get the exact same policy enforcement as
+/// non-streaming callers, at the cost of token-level incrementality. With no middleware configured, streaming
+/// passes through to the inner client natively.
 /// </para>
 /// <para><b>For Beginners:</b> Wrap your model client in this with a list of filters, and every
 /// (non-streaming) call flows through them in order before and after hitting the model — one place to add
@@ -76,9 +78,43 @@ public sealed class MiddlewareChatClient<T> : IChatClient<T>
     }
 
     /// <inheritdoc/>
-    public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+    public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
         IReadOnlyList<ChatMessage> messages,
         ChatOptions? options = null,
-        CancellationToken cancellationToken = default) =>
-        _inner.GetStreamingResponseAsync(messages, options, cancellationToken);
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        Guard.NotNull(messages);
+
+        if (_middlewares.Count == 0)
+        {
+            await foreach (var update in _inner.GetStreamingResponseAsync(messages, options, cancellationToken)
+                .ConfigureAwait(false))
+            {
+                yield return update;
+            }
+
+            yield break;
+        }
+
+        // Guardrails/logging/retry configured on this client MUST apply to
+        // streaming calls too — silently bypassing them would let the same
+        // wrapped client enforce policy on one path but not the other. Run the
+        // complete-response pipeline and re-emit the result as a stream.
+        var response = await GetResponseAsync(messages, options, cancellationToken).ConfigureAwait(false);
+        yield return new ChatResponseUpdate(role: ChatRole.Assistant);
+        if (response.Message.Text.Length > 0)
+        {
+            yield return ChatResponseUpdate.ForText(response.Message.Text);
+        }
+
+        var toolCalls = response.Message.ToolCalls;
+        for (var i = 0; i < toolCalls.Count; i++)
+        {
+            var call = toolCalls[i];
+            yield return ChatResponseUpdate.ForToolCall(
+                new StreamingToolCallUpdate(i, call.CallId, call.ToolName, call.ArgumentsJson));
+        }
+
+        yield return ChatResponseUpdate.ForFinish(response.FinishReason, response.Usage);
+    }
 }

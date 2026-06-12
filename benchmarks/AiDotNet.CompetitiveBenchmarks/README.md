@@ -44,8 +44,8 @@ dotnet run -c Release --project benchmarks/AiDotNet.CompetitiveBenchmarks -- --l
 ```
 
 If Python or `langgraph` is not installed, the runner prints setup instructions and reports only the AiDotNet
-number rather than failing. `langgraph_sidecar.py` can also be run standalone:
-`python langgraph_sidecar.py 2000`.
+number rather than failing. `langgraph_sidecar.py` can also be run standalone from the repo root:
+`python benchmarks/AiDotNet.CompetitiveBenchmarks/langgraph_sidecar.py 2000`.
 
 ## Notes
 

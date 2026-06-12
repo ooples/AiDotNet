@@ -24,7 +24,13 @@ public sealed class DenyListContentModerator : IContentModerator
     public DenyListContentModerator(IEnumerable<string> bannedTerms, bool caseInsensitive = true)
     {
         Guard.NotNull(bannedTerms);
-        _bannedTerms = bannedTerms.Where(t => t is not null && t.Length > 0).ToList();
+        // Trim and drop whitespace-only entries: a stray " " would otherwise
+        // become a near-global block. Dedup so the same term isn't scanned twice.
+        _bannedTerms = bannedTerms
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Select(t => t.Trim())
+            .Distinct(caseInsensitive ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+            .ToList();
         _comparison = caseInsensitive ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
     }
 
@@ -34,12 +40,41 @@ public sealed class DenyListContentModerator : IContentModerator
         Guard.NotNull(content);
         foreach (var term in _bannedTerms)
         {
-            if (content.IndexOf(term, _comparison) >= 0)
+            if (ContainsTerm(content, term, _comparison))
             {
                 return Task.FromResult(ModerationVerdict.Block($"Content contains a disallowed term: '{term}'."));
             }
         }
 
         return Task.FromResult(ModerationVerdict.Allow());
+    }
+
+    // Boundary-aware matching: the term must not be embedded inside a larger
+    // word, so a banned "ass" does not block "class". Boundaries are
+    // non-alphanumeric characters or the ends of the content, which also works
+    // for multi-word phrases (boundaries apply at the phrase's edges).
+    private static bool ContainsTerm(string content, string term, StringComparison comparison)
+    {
+        var searchFrom = 0;
+        while (searchFrom <= content.Length - term.Length)
+        {
+            var found = content.IndexOf(term, searchFrom, comparison);
+            if (found < 0)
+            {
+                return false;
+            }
+
+            var startsAtBoundary = found == 0 || !char.IsLetterOrDigit(content[found - 1]);
+            var endIndex = found + term.Length;
+            var endsAtBoundary = endIndex >= content.Length || !char.IsLetterOrDigit(content[endIndex]);
+            if (startsAtBoundary && endsAtBoundary)
+            {
+                return true;
+            }
+
+            searchFrom = found + 1;
+        }
+
+        return false;
     }
 }

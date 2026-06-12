@@ -68,7 +68,9 @@ public static class LoRAFineTuner
     /// <param name="cancellationToken">Token used to cancel training.</param>
     /// <returns>The trained model (the same instance).</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="model"/>, <paramref name="tokenizer"/>, or <paramref name="dataset"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="epochs"/> is not positive.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when <paramref name="vocabSize"/>, <paramref name="sequenceLength"/>, or <paramref name="epochs"/> is not positive.
+    /// </exception>
     public static NeuralNetworkBase<T> TrainTensorModelOnDataset<T>(
         NeuralNetworkBase<T> model,
         IGenerationTokenizer tokenizer,
@@ -81,6 +83,10 @@ public static class LoRAFineTuner
         Guard.NotNull(model);
         Guard.NotNull(tokenizer);
         Guard.NotNull(dataset);
+        // Reject invalid sizing here at the public boundary rather than
+        // letting it surface later as opaque tensor shape/conversion errors.
+        Guard.Positive(vocabSize);
+        Guard.Positive(sequenceLength);
         Guard.Positive(epochs);
 
         var data = TextTensorDatasetConverter.ToTensorData<T>(dataset, tokenizer, vocabSize, sequenceLength);

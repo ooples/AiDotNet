@@ -52,6 +52,14 @@ public static class AgentGraphNodeExtensions
         return graph.AddNode(name, async (state, cancellationToken) =>
         {
             var input = inputSelector(state);
+            // Fail at this boundary with the selector named, rather than deep
+            // inside ChatMessage.User / the agent with no hint of the cause.
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                throw new InvalidOperationException(
+                    $"The input selector for agent node '{name}' returned a null/empty user message.");
+            }
+
             var result = await agent.RunAsync(new[] { ChatMessage.User(input) }, cancellationToken).ConfigureAwait(false);
             return applyResult(state, result);
         });
@@ -85,6 +93,14 @@ public static class AgentGraphNodeExtensions
         return graph.AddNode(name, async (state, cancellationToken) =>
         {
             var messages = messagesSelector(state);
+            // Fail at this boundary with the selector named, rather than deep
+            // inside the agent with no hint of the cause.
+            if (messages is null || messages.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    $"The messages selector for agent node '{name}' returned a null/empty conversation.");
+            }
+
             var result = await agent.RunAsync(messages, cancellationToken).ConfigureAwait(false);
             return applyResult(state, result);
         });

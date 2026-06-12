@@ -38,6 +38,10 @@ public static class TextTensorDatasetConverter
     /// <returns>Supervised tensor data with one-hot input/target tensors of shape [1, L, vocab].</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="dataset"/> or <paramref name="tokenizer"/> is <c>null</c>.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="vocabSize"/> or <paramref name="sequenceLength"/> is not positive.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the tokenizer emits a token id outside <c>[0, vocabSize)</c> — i.e. the tokenizer and model
+    /// vocabulary do not match.
+    /// </exception>
     public static FineTuningData<T, Tensor<T>, Tensor<T>> ToTensorData<T>(
         FineTuningDataset dataset,
         IGenerationTokenizer tokenizer,
@@ -67,8 +71,11 @@ public static class TextTensorDatasetConverter
             var target = new Tensor<T>(new[] { 1, sequenceLength, vocabSize });
             for (var t = 0; t < sequenceLength; t++)
             {
-                var inputToken = ClampToken(t < tokens.Count ? tokens[t] : 0, vocabSize);
-                var targetToken = ClampToken(t + 1 < tokens.Count ? tokens[t + 1] : 0, vocabSize);
+                // Positions past the encoded text pad with token 0; real tokens
+                // are validated, never clamped — rewriting an out-of-range id
+                // would silently fabricate training data.
+                var inputToken = ValidateToken(t < tokens.Count ? tokens[t] : 0, vocabSize, e);
+                var targetToken = ValidateToken(t + 1 < tokens.Count ? tokens[t + 1] : 0, vocabSize, e);
                 input[new[] { 0, t, inputToken }] = one;
                 target[new[] { 0, t, targetToken }] = one;
             }
@@ -86,13 +93,16 @@ public static class TextTensorDatasetConverter
         };
     }
 
-    private static int ClampToken(int token, int vocabSize)
+    private static int ValidateToken(int token, int vocabSize, int exampleIndex)
     {
-        if (token < 0)
+        if (token < 0 || token >= vocabSize)
         {
-            return 0;
+            throw new InvalidOperationException(
+                $"Tokenizer emitted token id {token} for example {exampleIndex}, outside the model vocabulary " +
+                $"[0, {vocabSize}). The tokenizer and vocabSize do not match; fix the pairing instead of " +
+                "training on fabricated tokens.");
         }
 
-        return token >= vocabSize ? vocabSize - 1 : token;
+        return token;
     }
 }

@@ -49,6 +49,9 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
         [Fact(Timeout = 60000)]
         public async Task Q8_0_Dequantizes()
         {
+            // Yield first so xUnit's timeout guard is armed before any work runs.
+            await Task.Yield();
+
             // scale 0.5, all quants = 4 -> value 2.0
             var data = new byte[2 + 32];
             BitConverter.GetBytes(Half05).CopyTo(data, 0);
@@ -62,12 +65,13 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
 
             Assert.Equal(32, values.Length);
             Assert.All(values, v => Assert.Equal(2.0, v, 3));
-            await Task.CompletedTask;
         }
 
         [Fact(Timeout = 60000)]
         public async Task Q4_0_Dequantizes()
         {
+            await Task.Yield();
+
             // scale 0.5, every nibble = 9 -> (9-8)*0.5 = 0.5
             var data = new byte[2 + 16];
             BitConverter.GetBytes(Half05).CopyTo(data, 0);
@@ -81,12 +85,13 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
 
             Assert.Equal(32, values.Length);
             Assert.All(values, v => Assert.Equal(0.5, v, 3));
-            await Task.CompletedTask;
         }
 
         [Fact(Timeout = 60000)]
         public async Task Q4_1_Dequantizes_WithMin()
         {
+            await Task.Yield();
+
             // scale 0.5, min 1.0, every nibble = 2 -> 2*0.5 + 1.0 = 2.0
             var data = new byte[2 + 2 + 16];
             BitConverter.GetBytes(Half05).CopyTo(data, 0);
@@ -101,12 +106,13 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
 
             Assert.Equal(32, values.Length);
             Assert.All(values, v => Assert.Equal(2.0, v, 3));
-            await Task.CompletedTask;
         }
 
         [Fact(Timeout = 60000)]
         public async Task Q4_K_Dequantizes_SuperBlock()
         {
+            await Task.Yield();
+
             // d=1, dmin=1. scales encode all 8 sub-blocks to scale=2, min=1 (see get_scale_min_k4 packing):
             //   scales[0..3]=2 (j<4 scale), scales[4..7]=1 (j<4 min), scales[8..11]=0x12 (j>=4: low nibble 2 -> scale,
             //   high nibble 1 -> min; the 2 high bits come from scales[0..7]>>6 which are 0 here).
@@ -130,12 +136,13 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
             Assert.Equal(9.0, values[32], 3);
             Assert.Equal(5.0, values[1], 3);
             Assert.Equal(5.0, values[255], 3);
-            await Task.CompletedTask;
         }
 
         [Fact(Timeout = 60000)]
         public async Task Q6_K_Dequantizes_SuperBlock()
         {
+            await Task.Yield();
+
             // d=1. ql all 0x44 (both nibbles=4), qh all 0xAA (every 2-bit group=2) -> q6 = 4 | (2<<4) = 36;
             // value = d*scale*(q6-32) = scale*4. scales all 1 except scales[0]=2: with is=l/16, the first
             // 16 low-quant outputs (y[0..15]) use scales[0]=2 -> 8; everything else uses scale 1 -> 4.
@@ -155,12 +162,13 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
             Assert.Equal(4.0, values[16], 3);  // l=16, is=1 -> scales[1]=1
             Assert.Equal(4.0, values[32], 3);  // q2 group uses scales[2]=1
             Assert.Equal(4.0, values[255], 3);
-            await Task.CompletedTask;
         }
 
         [Fact(Timeout = 60000)]
         public async Task Q4_0_RoundTripsVaryingNibbles()
         {
+            await Task.Yield();
+
             // Distinct low/high nibbles to verify packing: byte 0x70 -> low=0, high=7.
             var data = new byte[2 + 16];
             BitConverter.GetBytes(Half05).CopyTo(data, 0);
@@ -176,7 +184,6 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
             Assert.Equal(-4.0, values[0], 3);
             Assert.Equal(-0.5, values[16], 3);
             Assert.Equal(0.0, values[1], 3);
-            await Task.CompletedTask;
         }
     }
 }

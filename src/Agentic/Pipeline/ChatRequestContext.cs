@@ -18,6 +18,8 @@ namespace AiDotNet.Agentic.Pipeline;
 /// </remarks>
 public sealed class ChatRequestContext
 {
+    private IReadOnlyList<ChatMessage> _messages;
+
     /// <summary>
     /// Initializes a new request context.
     /// </summary>
@@ -27,12 +29,24 @@ public sealed class ChatRequestContext
     public ChatRequestContext(IReadOnlyList<ChatMessage> messages, ChatOptions? options)
     {
         Guard.NotNull(messages);
-        Messages = messages;
+        _messages = messages;
         Options = options;
     }
 
-    /// <summary>Gets or sets the conversation to send (middleware may rewrite it).</summary>
-    public IReadOnlyList<ChatMessage> Messages { get; set; }
+    /// <summary>Gets or sets the conversation to send (middleware may rewrite it, but never to <c>null</c>).</summary>
+    /// <exception cref="ArgumentNullException">Thrown when set to <c>null</c>.</exception>
+    public IReadOnlyList<ChatMessage> Messages
+    {
+        get => _messages;
+        set
+        {
+            // The constructor establishes a non-null conversation; a middleware
+            // nulling it out would crash a later stage (or the inner client)
+            // far from the offending code — reject it at the boundary instead.
+            Guard.NotNull(value);
+            _messages = value;
+        }
+    }
 
     /// <summary>Gets or sets the per-call options (middleware may rewrite them).</summary>
     public ChatOptions? Options { get; set; }

@@ -36,49 +36,66 @@ public static class GgufReader
         using var stream = new MemoryStream(data, writable: false);
         using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: true);
 
-        if (stream.Length < 8 || reader.ReadUInt32() != Magic)
+        // The fixed header is 24 bytes (magic + version + tensor count +
+        // metadata count); anything shorter cannot be a GGUF file.
+        if (stream.Length < 24 || reader.ReadUInt32() != Magic)
         {
-            throw new InvalidDataException("Not a GGUF file (missing 'GGUF' magic).");
+            throw new InvalidDataException("Not a GGUF file (missing 'GGUF' magic or truncated header).");
         }
 
-        var version = reader.ReadUInt32();
-        var tensorCount = reader.ReadUInt64();
-        var metadataCount = reader.ReadUInt64();
-
-        var metadata = new Dictionary<string, object>(StringComparer.Ordinal);
-        for (ulong i = 0; i < metadataCount; i++)
+        try
         {
-            var key = ReadString(reader);
-            var valueType = reader.ReadUInt32();
-            metadata[key] = ReadValue(reader, valueType);
-        }
+            var version = reader.ReadUInt32();
+            var tensorCount = reader.ReadUInt64();
+            var metadataCount = reader.ReadUInt64();
 
-        var tensors = new List<GgufTensorInfo>(checked((int)tensorCount));
-        for (ulong i = 0; i < tensorCount; i++)
-        {
-            var name = ReadString(reader);
-            var dimCount = reader.ReadUInt32();
-            var dims = new long[dimCount];
-            for (var d = 0; d < dimCount; d++)
+            var metadata = new Dictionary<string, object>(StringComparer.Ordinal);
+            for (ulong i = 0; i < metadataCount; i++)
             {
-                dims[d] = checked((long)reader.ReadUInt64());
+                var key = ReadString(reader);
+                var valueType = reader.ReadUInt32();
+                metadata[key] = ReadValue(reader, valueType);
             }
 
-            var ggmlType = reader.ReadUInt32();
-            var offset = reader.ReadUInt64();
-            tensors.Add(new GgufTensorInfo(name, dims, ggmlType, offset));
-        }
+            var tensors = new List<GgufTensorInfo>(checked((int)tensorCount));
+            for (ulong i = 0; i < tensorCount; i++)
+            {
+                var name = ReadString(reader);
+                var dimCount = reader.ReadUInt32();
+                var dims = new long[dimCount];
+                for (var d = 0; d < dimCount; d++)
+                {
+                    dims[d] = checked((long)reader.ReadUInt64());
+                }
 
-        var alignment = metadata.TryGetValue("general.alignment", out var a) && a is uint au ? checked((int)au) : 32;
-        if (alignment <= 0)
+                var ggmlType = reader.ReadUInt32();
+                var offset = reader.ReadUInt64();
+                tensors.Add(new GgufTensorInfo(name, dims, ggmlType, offset));
+            }
+
+            var alignment = metadata.TryGetValue("general.alignment", out var a) && a is uint au ? checked((int)au) : 32;
+            if (alignment <= 0)
+            {
+                alignment = 32;
+            }
+
+            var position = stream.Position;
+            var dataStart = position % alignment == 0 ? position : position + (alignment - (position % alignment));
+
+            return new GgufFile(data, version, alignment, dataStart, metadata, tensors);
+        }
+        catch (EndOfStreamException ex)
         {
-            alignment = 32;
+            // A truncated file must fail with the documented InvalidDataException,
+            // not leak BinaryReader's EndOfStreamException.
+            throw new InvalidDataException("GGUF data is truncated: " + ex.Message);
         }
-
-        var position = stream.Position;
-        var dataStart = position % alignment == 0 ? position : position + (alignment - (position % alignment));
-
-        return new GgufFile(data, version, alignment, dataStart, metadata, tensors);
+        catch (OverflowException ex)
+        {
+            // Counts/lengths too large for the actual data are malformed input,
+            // not a caller arithmetic bug.
+            throw new InvalidDataException("GGUF data declares an impossibly large count or length: " + ex.Message);
+        }
     }
 
     /// <summary>
@@ -99,6 +116,14 @@ public static class GgufReader
     {
         var length = checked((int)reader.ReadUInt64());
         var bytes = reader.ReadBytes(length);
+        // ReadBytes returns a short array at end-of-stream instead of throwing;
+        // accepting it would silently decode partial metadata from a truncated file.
+        if (bytes.Length != length)
+        {
+            throw new EndOfStreamException(
+                $"Expected a {length}-byte string but only {bytes.Length} bytes remain.");
+        }
+
         return Encoding.UTF8.GetString(bytes);
     }
 

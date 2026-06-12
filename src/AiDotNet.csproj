@@ -124,7 +124,8 @@
 	       package's transitive dependency surface. -->
 	  <!-- SharpZipLib — bzip2 decompression for .tar.bz2 archives (LJSpeech) -->
 	  <PackageReference Include="SharpZipLib" />
-	  <PackageReference Include="StackExchange.Redis" />
+	  <!-- StackExchange.Redis lives only in the opt-in AiDotNet.Storage.Redis
+	       metapackage; the core package must not pull it transitively. -->
 	  <PackageReference Include="System.ValueTuple" />
 	  <PackageReference Include="TreeSitter.DotNet" />
 	  <PackageReference Include="FftSharp" />

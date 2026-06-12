@@ -38,6 +38,8 @@ public sealed class GgufTensorInfo
     /// <summary>The number of values per k-quant super-block (ggml QK_K).</summary>
     public const int SuperBlockSize = 256;
 
+    private readonly long _elementCount;
+
     /// <summary>
     /// Initializes a new tensor info.
     /// </summary>
@@ -46,14 +48,32 @@ public sealed class GgufTensorInfo
     /// <param name="ggmlType">The ggml type code.</param>
     /// <param name="offset">The byte offset within the tensor-data section.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="name"/> or <paramref name="dimensions"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any dimension is not positive.</exception>
+    /// <exception cref="OverflowException">Thrown when the dimension product exceeds <see cref="long.MaxValue"/>.</exception>
     public GgufTensorInfo(string name, IReadOnlyList<long> dimensions, uint ggmlType, ulong offset)
     {
         Guard.NotNull(name);
         Guard.NotNull(dimensions);
+        // Dimensions come straight from an untrusted file header: reject
+        // non-positive dims and compute the element count with overflow
+        // checking once, so a malformed header can never wrap ElementCount
+        // negative and poison downstream tensor-size calculations.
+        long elementCount = 1;
+        foreach (var dimension in dimensions)
+        {
+            if (dimension <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(dimensions), dimension, "Tensor dimensions must be positive.");
+            }
+
+            elementCount = checked(elementCount * dimension);
+        }
+
         Name = name;
         Dimensions = dimensions;
         GgmlType = ggmlType;
         Offset = offset;
+        _elementCount = elementCount;
     }
 
     /// <summary>Gets the tensor name.</summary>
@@ -68,18 +88,6 @@ public sealed class GgufTensorInfo
     /// <summary>Gets the byte offset of the tensor within the data section.</summary>
     public ulong Offset { get; }
 
-    /// <summary>Gets the total element count (product of <see cref="Dimensions"/>).</summary>
-    public long ElementCount
-    {
-        get
-        {
-            long count = 1;
-            foreach (var dimension in Dimensions)
-            {
-                count *= dimension;
-            }
-
-            return count;
-        }
-    }
+    /// <summary>Gets the total element count (product of <see cref="Dimensions"/>; validated at construction).</summary>
+    public long ElementCount => _elementCount;
 }

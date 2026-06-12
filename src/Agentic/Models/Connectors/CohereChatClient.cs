@@ -20,8 +20,9 @@ namespace AiDotNet.Agentic.Models.Connectors;
 /// <typeparam name="T">The numeric type shared across the agent stack.</typeparam>
 /// <remarks>
 /// <para>
-/// Streaming is a single-shot fallback (complete answer as one update). Tool-result messages are inlined into
-/// the history as user text; full Cohere tool-result round-tripping is a refinement.
+/// Streaming is a single-shot fallback (complete answer as one update). Tool calling round-trips in Cohere's
+/// native format: assistant tool-call turns carry <c>tool_calls</c> in the history, and tool results are sent
+/// as <c>tool_results</c> (promoted to the live request leg when they are the latest turn).
 /// </para>
 /// <para><b>For Beginners:</b> Same agent code, pointed at Cohere. The class rearranges the conversation into
 /// the layout Cohere expects (most recent message separate from the history) and translates the reply back.
@@ -123,7 +124,17 @@ public sealed class CohereChatClient<T> : ChatClientBase<T>
         var preamble = new StringBuilder();
         var history = new JArray();
         string message = string.Empty;
-        var lastUserIndex = LastIndexOfRole(messages, ChatRole.User);
+        JArray? liveToolResults = null;
+
+        // Cohere's tool_results entries are keyed by the originating call
+        // (name + parameters); the unified model keys results by call id, so
+        // record each assistant tool call as we walk the conversation.
+        var callIdToCall = new Dictionary<string, ToolCallContent>(StringComparer.Ordinal);
+
+        // The "live" leg of the request is the last non-system turn: a user
+        // turn becomes `message`; a tool-result turn becomes top-level
+        // `tool_results` (the second leg of Cohere tool calling).
+        var lastLiveIndex = LastNonSystemIndex(messages);
 
         for (var i = 0; i < messages.Count; i++)
         {
@@ -139,20 +150,33 @@ public sealed class CohereChatClient<T> : ChatClientBase<T>
                 continue;
             }
 
-            if (i == lastUserIndex)
+            if (current.Role == ChatRole.Assistant)
             {
-                message = current.Text;
-                continue;
+                foreach (var call in current.ToolCalls)
+                {
+                    callIdToCall[call.CallId] = call;
+                }
             }
 
-            history.Add(new JObject
+            if (i == lastLiveIndex)
             {
-                ["role"] = current.Role == ChatRole.Assistant ? "CHATBOT" : "USER",
-                ["message"] = current.Text,
-            });
+                if (current.Role == ChatRole.Tool)
+                {
+                    liveToolResults = BuildToolResults(current, callIdToCall);
+                    continue;
+                }
+
+                if (current.Role == ChatRole.User)
+                {
+                    message = current.Text;
+                    continue;
+                }
+            }
+
+            history.Add(BuildHistoryEntry(current, callIdToCall));
         }
 
-        if (message.Length == 0 && messages.Count > 0)
+        if (message.Length == 0 && liveToolResults is null && messages.Count > 0)
         {
             message = messages[messages.Count - 1].Text;
         }
@@ -162,6 +186,11 @@ public sealed class CohereChatClient<T> : ChatClientBase<T>
             ["model"] = ModelId,
             ["message"] = message,
         };
+
+        if (liveToolResults is { Count: > 0 })
+        {
+            payload["tool_results"] = liveToolResults;
+        }
 
         if (history.Count > 0)
         {
@@ -201,17 +230,125 @@ public sealed class CohereChatClient<T> : ChatClientBase<T>
         return payload;
     }
 
-    private static int LastIndexOfRole(IReadOnlyList<ChatMessage> messages, ChatRole role)
+    private static int LastNonSystemIndex(IReadOnlyList<ChatMessage> messages)
     {
         for (var i = messages.Count - 1; i >= 0; i--)
         {
-            if (messages[i].Role == role)
+            if (messages[i].Role != ChatRole.System)
             {
                 return i;
             }
         }
 
         return -1;
+    }
+
+    // History entry preserving native structure: assistant tool-call turns
+    // keep their tool_calls, and tool-result turns are TOOL entries — never
+    // flattened to plain USER text.
+    private static JObject BuildHistoryEntry(ChatMessage message, Dictionary<string, ToolCallContent> callIdToCall)
+    {
+        if (message.Role == ChatRole.Tool)
+        {
+            return new JObject
+            {
+                ["role"] = "TOOL",
+                ["tool_results"] = BuildToolResults(message, callIdToCall),
+            };
+        }
+
+        var entry = new JObject
+        {
+            ["role"] = message.Role == ChatRole.Assistant ? "CHATBOT" : "USER",
+            ["message"] = message.Text,
+        };
+
+        if (message.Role == ChatRole.Assistant)
+        {
+            var toolCalls = message.ToolCalls;
+            if (toolCalls.Count > 0)
+            {
+                var calls = new JArray();
+                foreach (var call in toolCalls)
+                {
+                    calls.Add(new JObject
+                    {
+                        ["name"] = call.ToolName,
+                        ["parameters"] = ParseParametersObject(call.ArgumentsJson),
+                    });
+                }
+
+                entry["tool_calls"] = calls;
+            }
+        }
+
+        return entry;
+    }
+
+    private static JArray BuildToolResults(ChatMessage message, Dictionary<string, ToolCallContent> callIdToCall)
+    {
+        var results = new JArray();
+        foreach (var content in message.Contents)
+        {
+            if (content is not ToolResultContent result)
+            {
+                continue;
+            }
+
+            var call = callIdToCall.TryGetValue(result.CallId, out var origin) ? origin : null;
+            results.Add(new JObject
+            {
+                ["call"] = new JObject
+                {
+                    ["name"] = call?.ToolName ?? result.CallId,
+                    ["parameters"] = call is null ? new JObject() : ParseParametersObject(call.ArgumentsJson),
+                },
+                ["outputs"] = new JArray { BuildOutputObject(result) },
+            });
+        }
+
+        return results;
+    }
+
+    private static JObject BuildOutputObject(ToolResultContent result)
+    {
+        JObject output;
+        try
+        {
+            output = JToken.Parse(result.Result) is JObject resultObject
+                ? new JObject(resultObject)
+                : new JObject { ["text"] = result.Result };
+        }
+        catch (JsonException)
+        {
+            // Plain-text tool output — Cohere outputs entries must be objects.
+            output = new JObject { ["text"] = result.Result };
+        }
+
+        if (result.IsError)
+        {
+            output["error"] = true;
+        }
+
+        return output;
+    }
+
+    private static JObject ParseParametersObject(string argumentsJson)
+    {
+        if (argumentsJson.Trim().Length == 0)
+        {
+            return new JObject();
+        }
+
+        try
+        {
+            return JObject.Parse(argumentsJson);
+        }
+        catch (JsonException)
+        {
+            // Preserve a non-object payload verbatim under a single key.
+            return new JObject { ["value"] = argumentsJson };
+        }
     }
 
     private static JArray BuildTools(IReadOnlyList<AiToolDefinition> tools)

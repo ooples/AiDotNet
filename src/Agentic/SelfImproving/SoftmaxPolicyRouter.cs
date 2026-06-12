@@ -33,6 +33,11 @@ public sealed class SoftmaxPolicyRouter<T> : IAgent<T>
     private readonly double _learningRate;
     private readonly Func<IReadOnlyList<ChatMessage>, string>? _contextKey;
     private readonly Random _random;
+    // Serializes access to the mutable policy state (_weights, _baseline,
+    // _baselineCount, _random): concurrent RunAsync/Update/LearnFrom calls
+    // would otherwise race on the nested dictionaries, corrupt the running
+    // baseline, and hit the (non-thread-safe) Random from multiple threads.
+    private readonly object _gate = new();
     private double _baseline;
     private int _baselineCount;
 
@@ -77,7 +82,9 @@ public sealed class SoftmaxPolicyRouter<T> : IAgent<T>
 
         _learningRate = learningRate;
         _contextKey = contextKey;
-        _random = seed is { } value ? new Random(value) : new Random();
+        _random = seed is { } value
+            ? RandomHelper.CreateSeededRandom(value)
+            : RandomHelper.CreateSecureRandom();
     }
 
     /// <inheritdoc/>
@@ -100,18 +107,23 @@ public sealed class SoftmaxPolicyRouter<T> : IAgent<T>
             return;
         }
 
-        _baselineCount++;
-        _baseline += (reward - _baseline) / _baselineCount;
-        var advantage = reward - _baseline;
-
+        // Compute the (potentially caller-supplied) context key outside the
+        // lock so external code never runs while the gate is held.
         var key = ContextKey(context);
-        var weights = WeightsFor(key);
-        var probabilities = Softmax(weights);
-
-        foreach (var candidate in _candidates.Keys)
+        lock (_gate)
         {
-            var indicator = string.Equals(candidate, agentName, StringComparison.Ordinal) ? 1.0 : 0.0;
-            weights[candidate] += _learningRate * advantage * (indicator - probabilities[candidate]);
+            _baselineCount++;
+            _baseline += (reward - _baseline) / _baselineCount;
+            var advantage = reward - _baseline;
+
+            var weights = WeightsFor(key);
+            var probabilities = Softmax(weights);
+
+            foreach (var candidate in _candidates.Keys)
+            {
+                var indicator = string.Equals(candidate, agentName, StringComparison.Ordinal) ? 1.0 : 0.0;
+                weights[candidate] += _learningRate * advantage * (indicator - probabilities[candidate]);
+            }
         }
     }
 
@@ -138,27 +150,35 @@ public sealed class SoftmaxPolicyRouter<T> : IAgent<T>
     public double ProbabilityOf(string agentName, IReadOnlyList<ChatMessage>? context = null)
     {
         Guard.NotNull(agentName);
-        var probabilities = Softmax(WeightsFor(ContextKey(context)));
-        return probabilities.TryGetValue(agentName, out var p) ? p : 0.0;
+        var key = ContextKey(context);
+        lock (_gate)
+        {
+            var probabilities = Softmax(WeightsFor(key));
+            return probabilities.TryGetValue(agentName, out var p) ? p : 0.0;
+        }
     }
 
     /// <summary>Returns the highest-probability agent for a context (deterministic, the exploit choice).</summary>
     /// <param name="context">The request context, or <c>null</c>.</param>
     public string SelectBestAgentName(IReadOnlyList<ChatMessage>? context = null)
     {
-        var weights = WeightsFor(ContextKey(context));
-        var best = _candidates.Keys.First();
-        var bestWeight = double.NegativeInfinity;
-        foreach (var candidate in _candidates.Keys)
+        var key = ContextKey(context);
+        lock (_gate)
         {
-            if (weights[candidate] > bestWeight)
+            var weights = WeightsFor(key);
+            var best = _candidates.Keys.First();
+            var bestWeight = double.NegativeInfinity;
+            foreach (var candidate in _candidates.Keys)
             {
-                bestWeight = weights[candidate];
-                best = candidate;
+                if (weights[candidate] > bestWeight)
+                {
+                    bestWeight = weights[candidate];
+                    best = candidate;
+                }
             }
-        }
 
-        return best;
+            return best;
+        }
     }
 
     /// <inheritdoc/>
@@ -171,19 +191,23 @@ public sealed class SoftmaxPolicyRouter<T> : IAgent<T>
 
     private string SampleAgentName(IReadOnlyList<ChatMessage> messages)
     {
-        var probabilities = Softmax(WeightsFor(ContextKey(messages)));
-        var threshold = _random.NextDouble();
-        var cumulative = 0.0;
-        foreach (var candidate in _candidates.Keys)
+        var key = ContextKey(messages);
+        lock (_gate)
         {
-            cumulative += probabilities[candidate];
-            if (threshold <= cumulative)
+            var probabilities = Softmax(WeightsFor(key));
+            var threshold = _random.NextDouble();
+            var cumulative = 0.0;
+            foreach (var candidate in _candidates.Keys)
             {
-                return candidate;
+                cumulative += probabilities[candidate];
+                if (threshold <= cumulative)
+                {
+                    return candidate;
+                }
             }
-        }
 
-        return _candidates.Keys.Last();
+            return _candidates.Keys.Last();
+        }
     }
 
     private string ContextKey(IReadOnlyList<ChatMessage>? context) =>

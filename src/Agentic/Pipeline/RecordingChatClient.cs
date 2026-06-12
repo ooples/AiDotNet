@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+using System.Text;
 using AiDotNet.Agentic.Models;
 
 // Disambiguate from the legacy AiDotNet.PromptEngineering.Templates.ChatMessage (global using).
@@ -14,6 +16,8 @@ namespace AiDotNet.Agentic.Pipeline;
 /// <remarks>
 /// <para><b>For Beginners:</b> A tape recorder around the model. It passes your request to the real model and
 /// quietly saves the answer keyed by the request, so you can play it back later without spending another call.
+/// Streaming calls are recorded too: the streamed pieces are reassembled into the final answer and saved when
+/// the stream finishes.
 /// </para>
 /// </remarks>
 public sealed class RecordingChatClient<T> : IChatClient<T>
@@ -45,16 +49,98 @@ public sealed class RecordingChatClient<T> : IChatClient<T>
         CancellationToken cancellationToken = default)
     {
         Guard.NotNull(messages);
+        // Capture the key BEFORE awaiting: if the caller mutates the message
+        // list or options while the request is in flight, the response must
+        // still be saved under the key of the request that was actually sent.
+        // The inner model's identity keeps recordings isolated when one store
+        // is shared across clients for different models.
+        var key = ChatInteractionKey.For(messages, options, _inner.ModelId);
         var response = await _inner.GetResponseAsync(messages, options, cancellationToken).ConfigureAwait(false);
-        _store.Save(ChatInteractionKey.For(messages, options), response);
+        _store.Save(key, response);
         return response;
     }
 
     /// <inheritdoc/>
-    public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+    public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
         IReadOnlyList<ChatMessage> messages,
         ChatOptions? options = null,
-        CancellationToken cancellationToken = default) =>
-        // Streaming passes through unrecorded; use GetResponseAsync to capture interactions.
-        _inner.GetStreamingResponseAsync(messages, options, cancellationToken);
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        Guard.NotNull(messages);
+        var key = ChatInteractionKey.For(messages, options, _inner.ModelId);
+
+        // Buffer the stream into a final ChatResponse so streaming callers are
+        // just as replayable as non-streaming ones.
+        var textBuilder = new StringBuilder();
+        var toolCalls = new SortedDictionary<int, ToolCallAccumulator>();
+        var finishReason = ChatFinishReason.Stop;
+        ChatUsage? usage = null;
+
+        await foreach (var update in _inner.GetStreamingResponseAsync(messages, options, cancellationToken)
+            .ConfigureAwait(false))
+        {
+            if (update.TextDelta is { } delta)
+            {
+                textBuilder.Append(delta);
+            }
+
+            if (update.ToolCall is { } toolCall)
+            {
+                if (!toolCalls.TryGetValue(toolCall.Index, out var accumulator))
+                {
+                    accumulator = new ToolCallAccumulator();
+                    toolCalls[toolCall.Index] = accumulator;
+                }
+
+                accumulator.CallId ??= toolCall.CallId;
+                accumulator.ToolName ??= toolCall.ToolName;
+                if (toolCall.ArgumentsJsonFragment is { } fragment)
+                {
+                    accumulator.Arguments.Append(fragment);
+                }
+            }
+
+            if (update.FinishReason is { } reason)
+            {
+                finishReason = reason;
+            }
+
+            if (update.Usage is { } reportedUsage)
+            {
+                usage = reportedUsage;
+            }
+
+            yield return update;
+        }
+
+        var contents = new List<AiContent>();
+        if (textBuilder.Length > 0)
+        {
+            contents.Add(new TextContent(textBuilder.ToString()));
+        }
+
+        foreach (var accumulator in toolCalls.Values)
+        {
+            if (accumulator.CallId is { } callId && accumulator.ToolName is { } toolName)
+            {
+                contents.Add(new ToolCallContent(callId, toolName, accumulator.Arguments.ToString()));
+            }
+        }
+
+        var response = new ChatResponse(
+            ChatMessage.Assistant(contents),
+            finishReason,
+            usage,
+            _inner.ModelId);
+        _store.Save(key, response);
+    }
+
+    private sealed class ToolCallAccumulator
+    {
+        public string? CallId { get; set; }
+
+        public string? ToolName { get; set; }
+
+        public StringBuilder Arguments { get; } = new();
+    }
 }

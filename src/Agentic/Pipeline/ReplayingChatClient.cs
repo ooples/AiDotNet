@@ -32,7 +32,11 @@ public sealed class ReplayingChatClient<T> : IChatClient<T>
     /// </summary>
     /// <param name="store">The store of recorded interactions.</param>
     /// <param name="fallback">Optional client called on a cache miss (its response is recorded). <c>null</c> throws on a miss.</param>
-    /// <param name="modelId">The model id to report. <c>null</c> uses the fallback's id or <c>"replay"</c>.</param>
+    /// <param name="modelId">
+    /// The model id to report <em>and</em> to look recordings up under. <c>null</c> uses the fallback's id or
+    /// <c>"replay"</c>. Recordings are keyed per model, so when replaying without a fallback, pass the model
+    /// id the recording client reported (its inner model's id) to match its entries.
+    /// </param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="store"/> is <c>null</c>.</exception>
     public ReplayingChatClient(IChatInteractionStore store, IChatClient<T>? fallback = null, string? modelId = null)
     {
@@ -52,7 +56,10 @@ public sealed class ReplayingChatClient<T> : IChatClient<T>
         CancellationToken cancellationToken = default)
     {
         Guard.NotNull(messages);
-        var key = ChatInteractionKey.For(messages, options);
+        // Fold the client's model identity into the key: a store shared across
+        // multiple ReplayingChatClient instances must never replay another
+        // model's recording for an identical prompt.
+        var key = ChatInteractionKey.For(messages, options, ModelId);
         if (_store.TryGet(key, out var recorded))
         {
             return recorded;
@@ -80,6 +87,17 @@ public sealed class ReplayingChatClient<T> : IChatClient<T>
         if (response.Message.Text.Length > 0)
         {
             yield return ChatResponseUpdate.ForText(response.Message.Text);
+        }
+
+        // Re-emit recorded tool calls too: flattening the stream to text-only
+        // would hide ToolCallContent from streaming consumers, making replay
+        // behave differently from the original model response.
+        var toolCalls = response.Message.ToolCalls;
+        for (var i = 0; i < toolCalls.Count; i++)
+        {
+            var call = toolCalls[i];
+            yield return ChatResponseUpdate.ForToolCall(
+                new StreamingToolCallUpdate(i, call.CallId, call.ToolName, call.ArgumentsJson));
         }
 
         yield return ChatResponseUpdate.ForFinish(response.FinishReason, response.Usage);

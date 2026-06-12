@@ -21,8 +21,8 @@ namespace AiDotNet.Agentic.Models.Connectors;
 /// <para>
 /// Streaming is provided as a single-shot fallback (it returns the complete answer as one update rather than
 /// incremental tokens; tool-call deltas are not streamed) — use <see cref="ChatClientBase{T}.GetResponseAsync"/>
-/// for native tool calling. Tool-result messages are forwarded as user content text; full Gemini
-/// <c>functionResponse</c> round-tripping is a refinement.
+/// for native tool calling. Tool calling round-trips in Gemini's native format: assistant tool-call turns are
+/// sent back as <c>functionCall</c> parts and tool results as <c>functionResponse</c> parts.
 /// </para>
 /// <para><b>For Beginners:</b> Same agent code, pointed at Google Gemini. This class quietly translates
 /// between AiDotNet's message format and Gemini's so everything else just works.
@@ -130,6 +130,11 @@ public sealed class GeminiChatClient<T> : ChatClientBase<T>
         var contents = new JArray();
         var systemParts = new JArray();
 
+        // Gemini's functionResponse payload is keyed by function NAME, while
+        // the unified model keys tool results by call id — walk the assistant
+        // tool-call turns first-to-last so each result can be mapped back.
+        var callIdToName = new Dictionary<string, string>(StringComparer.Ordinal);
+
         foreach (var message in messages)
         {
             switch (message.Role)
@@ -138,10 +143,16 @@ public sealed class GeminiChatClient<T> : ChatClientBase<T>
                     systemParts.Add(new JObject { ["text"] = message.Text });
                     break;
                 case ChatRole.Assistant:
-                    contents.Add(new JObject { ["role"] = "model", ["parts"] = TextParts(message.Text) });
+                    // Preserve structured tool calls as native functionCall
+                    // parts — flattening them to text would break the second
+                    // leg of tool calling (the model could not correlate the
+                    // functionResponse that follows).
+                    contents.Add(new JObject { ["role"] = "model", ["parts"] = BuildModelParts(message, callIdToName) });
+                    break;
+                case ChatRole.Tool:
+                    contents.Add(new JObject { ["role"] = "user", ["parts"] = BuildFunctionResponseParts(message, callIdToName) });
                     break;
                 default:
-                    // User and tool results are sent as user content (tool results inlined as text).
                     contents.Add(new JObject { ["role"] = "user", ["parts"] = TextParts(message.Text) });
                     break;
             }
@@ -169,6 +180,115 @@ public sealed class GeminiChatClient<T> : ChatClientBase<T>
     }
 
     private static JArray TextParts(string text) => new() { new JObject { ["text"] = text } };
+
+    // Assistant turn → model parts, preserving functionCall structure for tool-call turns.
+    private static JArray BuildModelParts(ChatMessage message, Dictionary<string, string> callIdToName)
+    {
+        var parts = new JArray();
+        foreach (var content in message.Contents)
+        {
+            switch (content)
+            {
+                case TextContent text when text.Text.Length > 0:
+                    parts.Add(new JObject { ["text"] = text.Text });
+                    break;
+                case ToolCallContent call:
+                    callIdToName[call.CallId] = call.ToolName;
+                    parts.Add(new JObject
+                    {
+                        ["functionCall"] = new JObject
+                        {
+                            ["name"] = call.ToolName,
+                            ["args"] = ParseArgumentsObject(call.ArgumentsJson),
+                        },
+                    });
+                    break;
+            }
+        }
+
+        if (parts.Count == 0)
+        {
+            parts.Add(new JObject { ["text"] = message.Text });
+        }
+
+        return parts;
+    }
+
+    // Tool-result turn → user parts carrying native functionResponse payloads.
+    private static JArray BuildFunctionResponseParts(ChatMessage message, Dictionary<string, string> callIdToName)
+    {
+        var parts = new JArray();
+        foreach (var content in message.Contents)
+        {
+            if (content is not ToolResultContent result)
+            {
+                continue;
+            }
+
+            var functionName = callIdToName.TryGetValue(result.CallId, out var name) ? name : result.CallId;
+            var responsePayload = ParseResultObject(result.Result);
+            if (result.IsError)
+            {
+                responsePayload["error"] = true;
+            }
+
+            parts.Add(new JObject
+            {
+                ["functionResponse"] = new JObject
+                {
+                    ["name"] = functionName,
+                    ["response"] = responsePayload,
+                },
+            });
+        }
+
+        if (parts.Count == 0)
+        {
+            // No structured result content — fall back to plain text so the
+            // turn is never silently dropped.
+            parts.Add(new JObject { ["text"] = message.Text });
+        }
+
+        return parts;
+    }
+
+    private static JObject ParseArgumentsObject(string argumentsJson)
+    {
+        if (argumentsJson.Trim().Length == 0)
+        {
+            return new JObject();
+        }
+
+        try
+        {
+            return JObject.Parse(argumentsJson);
+        }
+        catch (JsonException)
+        {
+            // The unified model carries arguments as the raw provider string;
+            // a non-object payload is preserved verbatim under a single key.
+            return new JObject { ["value"] = argumentsJson };
+        }
+    }
+
+    private static JObject ParseResultObject(string result)
+    {
+        try
+        {
+            if (JToken.Parse(result) is JObject resultObject)
+            {
+                return new JObject(resultObject);
+            }
+        }
+        catch (JsonException)
+        {
+            // Not JSON — wrap below.
+        }
+
+        // Gemini requires functionResponse.response to be an OBJECT; wrap
+        // scalar/text tool output the way Google's examples do.
+        return new JObject { ["content"] = result };
+    }
 
     private static JObject BuildGenerationConfig(ChatOptions options)
     {

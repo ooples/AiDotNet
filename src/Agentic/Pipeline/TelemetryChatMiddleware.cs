@@ -37,7 +37,12 @@ public sealed class TelemetryChatMiddleware : IChatMiddleware
         catch (System.Exception ex)
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            AgenticTelemetry.OperationCount.Add(1, new KeyValuePair<string, object?>("error", true));
+            // Tag failures with the same base dimensions as successes so
+            // per-operation dashboards count them in the same series.
+            AgenticTelemetry.OperationCount.Add(
+                1,
+                new KeyValuePair<string, object?>("gen_ai.operation.name", "chat"),
+                new KeyValuePair<string, object?>("error", true));
             throw;
         }
 

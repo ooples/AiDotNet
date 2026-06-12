@@ -47,10 +47,17 @@ public sealed class ContentSafetyMiddleware : IChatMiddleware
 
         if (_options.CheckInput)
         {
-            var input = LatestUserText(context.Messages);
-            if (input is { } text && text.Length > 0)
+            // Screen EVERY user turn, not just the latest: the model receives
+            // the full conversation, so a harmful earlier user message followed
+            // by a benign final turn must not slip past the guardrail.
+            foreach (var message in context.Messages)
             {
-                var verdict = await _moderator.CheckAsync(text, cancellationToken).ConfigureAwait(false);
+                if (message.Role != ChatRole.User || message.Text.Length == 0)
+                {
+                    continue;
+                }
+
+                var verdict = await _moderator.CheckAsync(message.Text, cancellationToken).ConfigureAwait(false);
                 if (!verdict.Allowed)
                 {
                     return Blocked(verdict.Reason);
@@ -83,18 +90,5 @@ public sealed class ContentSafetyMiddleware : IChatMiddleware
             ? message
             : ContentSafetyOptions.DefaultRefusalMessage;
         return new ChatResponse(ChatMessage.Assistant(refusal), ChatFinishReason.ContentFilter);
-    }
-
-    private static string? LatestUserText(IReadOnlyList<ChatMessage> messages)
-    {
-        for (var i = messages.Count - 1; i >= 0; i--)
-        {
-            if (messages[i].Role == ChatRole.User)
-            {
-                return messages[i].Text;
-            }
-        }
-
-        return null;
     }
 }

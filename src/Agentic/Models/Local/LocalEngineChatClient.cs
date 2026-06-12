@@ -22,9 +22,10 @@ namespace AiDotNet.Agentic.Models.Local;
 /// decodes incrementally and yields the new text on each step. Constrained decoding <em>is</em> supported via
 /// <see cref="LocalEngineOptions.Constraint"/> (an <see cref="ITokenConstraint"/> enforced at the logits, e.g.
 /// <see cref="AllowedTokenSetConstraint"/> / <see cref="FiniteStateTokenConstraint"/>). What this slice does
-/// not do: native tool-calling (any supplied tools are ignored), and auto-deriving a constraint from
-/// <see cref="ChatOptions.ResponseFormat"/> — set <see cref="LocalEngineOptions.Constraint"/> explicitly for
-/// guaranteed-structured output.
+/// not do: native tool-calling and auto-deriving a constraint from <see cref="ChatOptions.ResponseFormat"/> —
+/// requests that ask for either are rejected with <see cref="NotSupportedException"/> rather than silently
+/// returning plain text; set <see cref="LocalEngineOptions.Constraint"/> explicitly for guaranteed-structured
+/// output.
 /// </para>
 /// <para><b>For Beginners:</b> This is your own chatbot brain running on your machine. You hand it the
 /// conversation; it writes the reply one word-piece at a time until it decides it's done or hits the length
@@ -68,11 +69,16 @@ public sealed class LocalEngineChatClient<T> : IChatClient<T>
     /// <inheritdoc/>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="messages"/> is <c>null</c>.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="messages"/> is empty.</exception>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when <paramref name="options"/> requests tools or a non-text response format, which the local
+    /// engine does not implement.
+    /// </exception>
     public Task<ChatResponse> GetResponseAsync(
         IReadOnlyList<ChatMessage> messages,
         ChatOptions? options = null,
         CancellationToken cancellationToken = default)
     {
+        ValidateSupportedOptions(options);
         var promptIds = BuildPromptIds(messages);
         var maxTokens = ResolveMaxTokens(options);
         var stopSequences = ResolveStopSequences(options);
@@ -102,11 +108,16 @@ public sealed class LocalEngineChatClient<T> : IChatClient<T>
     }
 
     /// <inheritdoc/>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when <paramref name="options"/> requests tools or a non-text response format, which the local
+    /// engine does not implement.
+    /// </exception>
     public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
         IReadOnlyList<ChatMessage> messages,
         ChatOptions? options = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        ValidateSupportedOptions(options);
         await Task.CompletedTask.ConfigureAwait(false);
 
         var promptIds = BuildPromptIds(messages);
@@ -117,16 +128,50 @@ public sealed class LocalEngineChatClient<T> : IChatClient<T>
         yield return new ChatResponseUpdate(role: ChatRole.Assistant);
 
         var stopSequences = ResolveStopSequences(options);
-        var context = new List<int>(promptIds);
         var generated = new List<int>();
-        var previousText = string.Empty;
         var finishReason = ChatFinishReason.Length;
+
+        // Reuse the incremental (KV-cached) path when the model supports it —
+        // re-feeding the full prefix per token would make streaming quadratic
+        // in the reply length while non-streaming stays O(1) per token.
+        var incremental = _model as IIncrementalCausalLanguageModel<T>;
+        List<int>? fullContext = null;
+        Vector<T>? logits = null;
+        if (incremental is not null)
+        {
+            incremental.ResetCache();
+            logits = incremental.StartSequence(promptIds);
+        }
+        else
+        {
+            fullContext = new List<int>(promptIds);
+        }
+
+        // Incremental decode (HF TextStreamer pattern): only the tokens since
+        // the last newline boundary are re-decoded each step, instead of the
+        // entire generated buffer.
+        var cacheTokens = new List<int>();
+        var committedText = string.Empty;
+        var emittedLength = 0;
 
         for (var step = 0; step < maxTokens; step++)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var next = NextToken(context, generated, sampler, sampling);
+            int? next;
+            if (incremental is not null && logits is { } currentLogits)
+            {
+                next = PickToken(generated, currentLogits, sampler, sampling);
+            }
+            else if (fullContext is { } context)
+            {
+                next = NextToken(context, generated, sampler, sampling);
+            }
+            else
+            {
+                next = null;
+            }
+
             if (next is null || next.Value == _tokenizer.EosTokenId)
             {
                 finishReason = ChatFinishReason.Stop;
@@ -134,24 +179,66 @@ public sealed class LocalEngineChatClient<T> : IChatClient<T>
             }
 
             generated.Add(next.Value);
-            context.Add(next.Value);
+            fullContext?.Add(next.Value);
+            cacheTokens.Add(next.Value);
 
-            var fullText = TrimAtStopSequence(_tokenizer.Decode(generated), stopSequences);
-            if (fullText.Length > previousText.Length)
+            var cacheText = _tokenizer.Decode(cacheTokens);
+            var fullText = committedText + cacheText;
+
+            var trimmed = TrimAtStopSequence(fullText, stopSequences);
+            var stopHit = trimmed.Length < fullText.Length;
+            var emitTarget = stopHit ? trimmed : fullText;
+            if (emitTarget.Length > emittedLength)
             {
-                var delta = fullText.Substring(previousText.Length);
-                previousText = fullText;
-                yield return ChatResponseUpdate.ForText(delta);
+                yield return ChatResponseUpdate.ForText(emitTarget.Substring(emittedLength));
+                emittedLength = emitTarget.Length;
             }
 
-            if (stopSequences is not null && ContainsStopSequence(_tokenizer.Decode(generated), stopSequences))
+            if (stopHit)
             {
                 finishReason = ChatFinishReason.Stop;
                 break;
             }
+
+            // Commit at newline boundaries so the re-decoded window stays small.
+            if (cacheText.EndsWith("\n", StringComparison.Ordinal))
+            {
+                committedText = fullText;
+                cacheTokens.Clear();
+            }
+
+            if (incremental is not null)
+            {
+                logits = incremental.AppendToken(next.Value);
+            }
         }
 
         yield return ChatResponseUpdate.ForFinish(finishReason, new ChatUsage(promptIds.Count, generated.Count));
+    }
+
+    // Fail fast on capabilities the local engine does not implement — silently
+    // ignoring a tools/structured-output request would hand the caller plain
+    // text with no signal that their options were dropped.
+    private static void ValidateSupportedOptions(ChatOptions? options)
+    {
+        if (options is null)
+        {
+            return;
+        }
+
+        if (options.Tools is { Count: > 0 } && options.ToolChoice != ToolChoiceMode.None)
+        {
+            throw new NotSupportedException(
+                "The local engine does not implement native tool calling. Remove the tools from ChatOptions " +
+                "(or set ToolChoice to None) when targeting LocalEngineChatClient.");
+        }
+
+        if (options.ResponseFormat is { } format && format != ChatResponseFormatKind.Text)
+        {
+            throw new NotSupportedException(
+                $"The local engine does not implement the '{format}' response format. Use " +
+                "LocalEngineOptions.Constraint (e.g. a FiniteStateTokenConstraint) for guaranteed-structured output.");
+        }
     }
 
     private ChatFinishReason RunGeneration(

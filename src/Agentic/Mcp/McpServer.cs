@@ -102,7 +102,17 @@ public sealed class McpServer
             throw new McpException("MCP 'tools/call' requires a non-empty 'name'.");
         }
 
-        var arguments = parameters?["arguments"] as JObject ?? new JObject();
+        // Only a missing 'arguments' may default to {} — an array/string/number
+        // there is a malformed request, and coercing it to an empty bag would
+        // run the tool with default inputs the caller never asked for.
+        var argumentsToken = parameters?["arguments"];
+        var arguments = argumentsToken switch
+        {
+            null => new JObject(),
+            JObject argumentsObject => argumentsObject,
+            _ => throw new McpException(
+                $"MCP 'tools/call' requires 'arguments' to be an object; got {argumentsToken.Type}."),
+        };
         var call = new ToolCallContent("mcp-call", name, arguments.ToString(Newtonsoft.Json.Formatting.None));
         var result = await _tools.InvokeAsync(call, cancellationToken).ConfigureAwait(false);
 

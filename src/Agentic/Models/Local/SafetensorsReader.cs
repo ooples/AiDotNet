@@ -45,6 +45,57 @@ public static class SafetensorsReader
         }
 
         var headerJson = Encoding.UTF8.GetString(data, 8, checked((int)headerLength));
+        var dataStart = 8 + headerLength;
+        var tensors = ParseHeader(headerJson, data.Length - dataStart);
+        return new SafetensorsFile(data, dataStart, tensors);
+    }
+
+    /// <summary>
+    /// Parses a safetensors file from a stream.
+    /// </summary>
+    /// <param name="stream">The stream to read.</param>
+    /// <returns>The parsed file.</returns>
+    /// <remarks>
+    /// <para>
+    /// Seekable streams (e.g., a <see cref="FileStream"/> over a downloaded checkpoint) stay
+    /// <em>stream-backed</em>: only the header is materialized here, and tensor bytes are read on demand —
+    /// checkpoint-sized files are never copied wholesale into memory. The caller must keep the stream open
+    /// (and not reposition it concurrently) for the lifetime of the returned <see cref="SafetensorsFile"/>.
+    /// Non-seekable streams cannot support random tensor access and are buffered fully instead.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="stream"/> is <c>null</c>.</exception>
+    /// <exception cref="InvalidDataException">Thrown when the framing or header is malformed or truncated.</exception>
+    public static SafetensorsFile Read(Stream stream)
+    {
+        Guard.NotNull(stream);
+        if (!stream.CanSeek)
+        {
+            // Without seeking there is no way to serve random per-tensor reads
+            // later, so the only correct option is to buffer the payload.
+            using var memory = new MemoryStream();
+            stream.CopyTo(memory);
+            return Read(memory.ToArray());
+        }
+
+        var lengthBytes = new byte[8];
+        ReadExactly(stream, lengthBytes, lengthBytes.Length);
+        var headerLength = (long)BitConverter.ToUInt64(lengthBytes, 0);
+        if (headerLength < 0 || headerLength > stream.Length - 8)
+        {
+            throw new InvalidDataException("safetensors header length exceeds the data size.");
+        }
+
+        var headerBytes = new byte[checked((int)headerLength)];
+        ReadExactly(stream, headerBytes, headerBytes.Length);
+        var headerJson = Encoding.UTF8.GetString(headerBytes);
+        var dataStart = 8 + headerLength;
+        var tensors = ParseHeader(headerJson, stream.Length - dataStart);
+        return new SafetensorsFile(stream, dataStart, tensors);
+    }
+
+    private static List<SafetensorsTensor> ParseHeader(string headerJson, long payloadLength)
+    {
         JObject header;
         try
         {
@@ -55,17 +106,34 @@ public static class SafetensorsReader
             throw new InvalidDataException("safetensors header is not valid JSON: " + ex.Message);
         }
 
-        var dataStart = 8 + headerLength;
         var tensors = new List<SafetensorsTensor>();
         foreach (var property in header)
         {
-            if (property.Key == "__metadata__" || property.Value is not JObject entry)
+            if (property.Key == "__metadata__")
             {
                 continue;
             }
 
+            if (property.Value is not JObject entry)
+            {
+                throw new InvalidDataException($"Tensor '{property.Key}' has a non-object header entry.");
+            }
+
             var dtype = (string?)entry["dtype"] ?? throw new InvalidDataException($"Tensor '{property.Key}' is missing 'dtype'.");
-            var shape = (entry["shape"] as JArray)?.Select(t => (long)t).ToList() ?? new List<long>();
+
+            // A missing or non-array shape must not silently become a scalar:
+            // that would make an invalid header look like valid metadata.
+            if (entry["shape"] is not JArray shapeToken)
+            {
+                throw new InvalidDataException($"Tensor '{property.Key}' is missing a valid 'shape' array.");
+            }
+
+            var shape = shapeToken.Select(t => (long)t).ToList();
+            if (shape.Any(dimension => dimension < 0))
+            {
+                throw new InvalidDataException($"Tensor '{property.Key}' has a negative shape dimension.");
+            }
+
             if (entry["data_offsets"] is not JArray offsets || offsets.Count != 2)
             {
                 throw new InvalidDataException($"Tensor '{property.Key}' is missing valid 'data_offsets'.");
@@ -73,7 +141,7 @@ public static class SafetensorsReader
 
             var begin = (long)offsets[0];
             var end = (long)offsets[1];
-            if (begin < 0 || end < begin || dataStart + end > data.Length)
+            if (begin < 0 || end < begin || end > payloadLength)
             {
                 throw new InvalidDataException($"Tensor '{property.Key}' has out-of-range data offsets.");
             }
@@ -81,20 +149,22 @@ public static class SafetensorsReader
             tensors.Add(new SafetensorsTensor(property.Key, dtype, shape, begin, end));
         }
 
-        return new SafetensorsFile(data, dataStart, tensors);
+        return tensors;
     }
 
-    /// <summary>
-    /// Parses a safetensors file from a stream (fully read into memory).
-    /// </summary>
-    /// <param name="stream">The stream to read.</param>
-    /// <returns>The parsed file.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="stream"/> is <c>null</c>.</exception>
-    public static SafetensorsFile Read(Stream stream)
+    private static void ReadExactly(Stream stream, byte[] buffer, int count)
     {
-        Guard.NotNull(stream);
-        using var memory = new MemoryStream();
-        stream.CopyTo(memory);
-        return Read(memory.ToArray());
+        // Stream.ReadExactly is unavailable on net471 — loop until filled.
+        var read = 0;
+        while (read < count)
+        {
+            var n = stream.Read(buffer, read, count - read);
+            if (n <= 0)
+            {
+                throw new InvalidDataException("safetensors stream ended before the header was fully read.");
+            }
+
+            read += n;
+        }
     }
 }

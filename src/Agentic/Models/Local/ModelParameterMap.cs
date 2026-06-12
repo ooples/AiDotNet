@@ -8,7 +8,7 @@ namespace AiDotNet.Agentic.Models.Local;
 /// A named segment of a model's flat parameter vector: the parameters contributed by one layer, in the order
 /// the model lays them out.
 /// </summary>
-public sealed class ParameterSegment
+internal sealed class ParameterSegment
 {
     /// <summary>Initializes a new segment.</summary>
     /// <param name="name">The segment name (e.g. <c>blk.0</c>).</param>
@@ -56,7 +56,7 @@ public sealed class ParameterSegment
 /// counting offsets by hand.
 /// </para>
 /// </remarks>
-public static class ModelParameterMap
+internal static class ModelParameterMap
 {
     // Recognizable base names for common layer types; anything else falls back to a sanitized type name.
     private static readonly IReadOnlyDictionary<string, string> KnownNames = new Dictionary<string, string>(StringComparer.Ordinal)

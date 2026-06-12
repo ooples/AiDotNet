@@ -71,6 +71,9 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
         [Fact(Timeout = 60000)]
         public async Task ParsesHeader_Metadata_AndTensorDirectory()
         {
+            // Yield first so xUnit's timeout guard is armed before any work runs.
+            await Task.Yield();
+
             var file = GgufReader.Read(BuildGguf());
 
             Assert.Equal(3u, file.Version);
@@ -84,32 +87,33 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
             Assert.Equal(new long[] { 3 }, tensor.Dimensions.ToArray());
             Assert.Equal(GgufTensorInfo.TypeF32, tensor.GgmlType);
             Assert.Equal(3, tensor.ElementCount);
-
-            await Task.CompletedTask;
         }
 
         [Fact(Timeout = 60000)]
         public async Task ReadsF32TensorValues_RespectingAlignment()
         {
+            await Task.Yield();
+
             var file = GgufReader.Read(BuildGguf());
             Assert.Equal(new[] { 1.0, 2.0, 3.0 }, file.ReadAsDouble("weight"));
-            await Task.CompletedTask;
         }
 
         [Fact(Timeout = 60000)]
         public async Task ReadsFromStream()
         {
+            await Task.Yield();
+
             using var stream = new MemoryStream(BuildGguf());
             var file = GgufReader.Read(stream);
             Assert.Equal("test-model", file.GetMetadata("general.name"));
-            await Task.CompletedTask;
         }
 
         [Fact(Timeout = 60000)]
         public async Task BadMagic_Throws()
         {
+            await Task.Yield();
+
             Assert.Throws<InvalidDataException>(() => GgufReader.Read(new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 }));
-            await Task.CompletedTask;
         }
     }
 }

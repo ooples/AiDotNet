@@ -121,9 +121,13 @@ public sealed class SupervisorAgent<T> : IAgent<T>
         foreach (var worker in workers)
         {
             builder.Append("- ").Append(worker.Name);
-            if (worker.Description.Trim().Length > 0)
+            // IAgent<T>.Description is documented non-null, but a custom
+            // implementation may still return null — don't let one bad worker
+            // crash supervisor construction.
+            var description = worker.Description;
+            if (!string.IsNullOrWhiteSpace(description))
             {
-                builder.Append(": ").Append(worker.Description.Trim());
+                builder.Append(": ").Append(description.Trim());
             }
 
             builder.AppendLine();

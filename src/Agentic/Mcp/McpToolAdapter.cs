@@ -15,7 +15,7 @@ namespace AiDotNet.Agentic.Mcp;
 /// back.
 /// </para>
 /// </remarks>
-public sealed class McpToolAdapter : IAgentTool
+internal sealed class McpToolAdapter : IAgentTool
 {
     private readonly McpClient _client;
     private readonly McpToolDescriptor _descriptor;
