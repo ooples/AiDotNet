@@ -272,6 +272,18 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         }
 
         int batchSize = noise.Shape[0];
+        int latentDim = Generator.Architecture.InputSize - _numConditionClasses;
+        if (latentDim > 0 && noise.Shape[1] != latentDim)
+        {
+            throw new ArgumentException(
+                $"ConditionalGAN.Predict expects NOISE of latentDim = generator inputSize - numConditionClasses " +
+                $"= {Generator.Architecture.InputSize} - {_numConditionClasses} = {latentDim} features; got {noise.Shape[1]}. " +
+                "Condition features are appended internally (the generator architecture's inputSize is the FULL " +
+                "noise+condition width — see the parameterless ctor's 110 = 100 noise + 10 classes convention). " +
+                "To control the class, use GenerateConditional.",
+                nameof(input));
+        }
+
         var conditions = CreateOneHotCondition(batchSize, 0);
 
         var generatorInput = ConcatenateTensors(noise, conditions);
