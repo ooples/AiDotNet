@@ -839,6 +839,14 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 throw new ArgumentNullException($"inputs[{i}]", $"Input tensor at index {i} cannot be null.");
         }
 
+        // Resolve lazy shape state from the PRIMARY input before classifying the second input:
+        // the mask-vs-cross-attention heuristic and the masked/cross paths read _inputSize, which
+        // is the -1 sentinel until OnFirstForward fires. The single-input Forward resolves it, but
+        // this entry point never did — so valid cross-attention K/V was rejected as "ambiguous
+        // shape" (last dim compared against -1) and the masked path crashed reshaping to [.., -1].
+        // EnsureInitializedFromInput is idempotent (guarded by IsShapeResolved).
+        EnsureInitializedFromInput(inputs[0]);
+
         // Case 1: Standard self-attention with a single input
         if (inputs.Length == 1)
         {
