@@ -114,9 +114,13 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     // ========================================================================
 
     [Fact(Timeout = 120000)]
-    public async Task GRU_HiddenStateCarriesOver_SecondCallDiffersFromFirst()
+    public async Task GRU_StatelessForward_SecondCallMatchesFirst()
     {
         await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
+        // The library implements STANDARD non-streaming RNN semantics: every Forward starts from
+        // a zero initial hidden state (GRULayer documents this explicitly — it guarantees
+        // repeated-Predict determinism and Clone-after-training parity). The previous version of
+        // this test asserted the OPPOSITE (stateful carry-over), a contract the layer never had.
         var gru = new GRULayer<double>( hiddenSize: 3,
             activation: (IActivationFunction<double>?)null);
 
@@ -129,13 +133,10 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
 
         var output2 = gru.Forward(input);
 
-        bool differs = false;
         for (int i = 0; i < 3; i++)
         {
-            if (Math.Abs(output2[i] - o1vals[i]) > 1e-10)
-                differs = true;
+            Assert.Equal(o1vals[i], output2[i], 10);
         }
-        Assert.True(differs, "Second GRU forward with same input should differ due to hidden state");
     }
 
     [Fact(Timeout = 120000)]
