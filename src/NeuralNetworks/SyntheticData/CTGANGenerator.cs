@@ -80,7 +80,16 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly CTGANOptions<T> _options;
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    // SEPARATE optimizers for generator and discriminator. They MUST be distinct
+    // instances: AdamOptimizer keeps a single flat (_m,_v) moment buffer sized to
+    // the parameter count and resets the timestep whenever that count changes, so
+    // sharing one optimizer across the generator and discriminator (different
+    // param counts) wiped the moments every alternating Step and pinned bias
+    // correction at t=1 — the root cause of CTGAN diverging worse with more
+    // epochs. The golden GAN base (GenerativeAdversarialNetwork<T>) likewise keeps
+    // separate optimizers.
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _generatorOptimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _discriminatorOptimizer;
     private ILossFunction<T> _lossFunction;
 
     // Synthetic tabular data infrastructure
@@ -181,7 +190,22 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
     {
         _options = options ?? new CTGANOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
+        // WGAN-GP Adam configuration (Gulrajani et al. 2017 / Xu et al. 2019):
+        // β1=0.5, β2=0.9, no adaptive-LR mutation (the GP already regularizes the
+        // critic). Two independent instances so generator and discriminator
+        // moment estimates never cross-contaminate.
+        AdamOptimizer<T, Tensor<T>, Tensor<T>> MakeAdam() =>
+            new(this, new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = 0.5,
+                Beta2 = 0.9,
+                UseAdaptiveLearningRate = false,
+                UseAMSGrad = false,
+            });
+        _generatorOptimizer = optimizer ?? MakeAdam();
+        _discriminatorOptimizer = MakeAdam();
 
         int? seed = _options.Seed;
         _random = seed.HasValue
@@ -300,7 +324,7 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
 
     private void UpdateNetworkParameters()
     {
-        _optimizer.UpdateParameters(Layers);
+        _generatorOptimizer.UpdateParameters(Layers);
     }
 
     /// <inheritdoc />
@@ -618,7 +642,7 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
             discParams, grads, lossValue,
             realPacked, realPacked, ComputeForward, RecomputeLoss,
             parameterBuffer: null);
-        _optimizer.Step(context);
+        _discriminatorOptimizer.Step(context);
     }
 
     /// <summary>
@@ -682,7 +706,7 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
             genParams, grads, lossValue,
             genInput, genInput, ComputeForward, RecomputeLoss,
             parameterBuffer: null);
-        _optimizer.Step(context);
+        _generatorOptimizer.Step(context);
     }
 
     /// <summary>
@@ -1246,7 +1270,7 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
         return new CTGANGenerator<T>(
             Architecture,
             _options,
-            _optimizer,
+            _generatorOptimizer,
             _lossFunction);
     }
 
