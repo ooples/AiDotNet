@@ -293,6 +293,19 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// predictions back up for you — no manual inverse-transform needed. Regression only: never scale
     /// class labels.
     /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureTargetScaling(
+        AiDotNet.Preprocessing.PreprocessingPipeline<T, TOutput, TOutput>? pipeline = null)
+    {
+        if (pipeline is null)
+        {
+            pipeline = new AiDotNet.Preprocessing.PreprocessingPipeline<T, TOutput, TOutput>();
+            pipeline.Add(new AiDotNet.Preprocessing.TargetStandardScaler<T, TOutput>());
+        }
+
+        _targetPipeline = pipeline;
+        return this;
+    }
+
     /// <summary>
     /// Configures GROUPED training for ranking-style objectives: each inner list is a set of TRAINING row
     /// indices forming one coherent query group (e.g. one date's cross-section for a learning-to-rank
@@ -309,19 +322,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
 
         _trainingGroups = groups;
-        return this;
-    }
-
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureTargetScaling(
-        AiDotNet.Preprocessing.PreprocessingPipeline<T, TOutput, TOutput>? pipeline = null)
-    {
-        if (pipeline is null)
-        {
-            pipeline = new AiDotNet.Preprocessing.PreprocessingPipeline<T, TOutput, TOutput>();
-            pipeline.Add(new AiDotNet.Preprocessing.TargetStandardScaler<T, TOutput>());
-        }
-
-        _targetPipeline = pipeline;
         return this;
     }
 

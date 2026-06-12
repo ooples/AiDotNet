@@ -852,7 +852,7 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
                 { "DiscriminatorParameters", Discriminator.GetParameterCount() },
                 { "NumConditionClasses", _numConditionClasses }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

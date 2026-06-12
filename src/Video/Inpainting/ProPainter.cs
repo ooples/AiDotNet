@@ -905,7 +905,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
         return new ModelMetadata<T>
         {
             AdditionalInfo = additionalInfo,
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

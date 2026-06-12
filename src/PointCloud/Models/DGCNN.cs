@@ -502,7 +502,7 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
                 { "TotalLayers", Layers.Count },
                 { "TaskType", Architecture.TaskType.ToString() }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

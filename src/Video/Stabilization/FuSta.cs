@@ -172,7 +172,7 @@ public class FuSta<T> : VideoStabilizationBase<T>
                 { "NumResBlocks", _options.NumResBlocks },
                 { "NumHeads", _options.NumHeads }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

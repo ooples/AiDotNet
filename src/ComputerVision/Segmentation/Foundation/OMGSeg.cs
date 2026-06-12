@@ -418,7 +418,7 @@ public class OMGSeg<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
                 { "DecoderDim", _decoderDim }, { "UseNativeMode", _useNativeMode },
                 { "NumLayers", Layers.Count }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

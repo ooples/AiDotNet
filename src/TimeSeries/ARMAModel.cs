@@ -673,7 +673,7 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
                 { "MaxIterations", armaOptions.MaxIterations },
                 { "Tolerance", armaOptions.Tolerance }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
         return metadata;
     }

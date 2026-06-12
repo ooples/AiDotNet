@@ -1345,7 +1345,7 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
                 { "VocabularySize", _vocabularySize },
                 { "UseNativeMode", _useNativeMode }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

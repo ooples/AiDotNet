@@ -701,7 +701,7 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
                 { "TotalParameters", GetParameterCount() },
                 { "InputShape", string.Join(",", Architecture.GetInputShape()) }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
 
         return metadata;
