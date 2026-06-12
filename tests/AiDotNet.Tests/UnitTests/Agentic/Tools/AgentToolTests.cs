@@ -25,6 +25,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Tools
         [Fact(Timeout = 60000)]
         public async Task ForType_MapsPrimitivesAndEnumsAndCollections()
         {
+            await Task.Yield();
+
             Assert.Equal("string", (string)JsonSchemaGenerator.ForType(typeof(string))["type"]);
             Assert.Equal("integer", (string)JsonSchemaGenerator.ForType(typeof(int))["type"]);
             Assert.Equal("number", (string)JsonSchemaGenerator.ForType(typeof(double))["type"]);
@@ -57,6 +59,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Tools
         [Fact(Timeout = 60000)]
         public async Task ForParameters_MarksRequired_ExcludesCancellationToken_AppliesDescriptions()
         {
+            await Task.Yield();
+
             var addSchema = JsonSchemaGenerator.ForParameters(
                 ((Func<int, int, int>)Add).Method.GetParameters());
             Assert.Equal(new[] { "a", "b" }, ((JArray)addSchema["required"]).Select(t => (string)t).OrderBy(x => x));
@@ -87,6 +91,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Tools
         [Fact(Timeout = 60000)]
         public async Task DelegateTool_Sync_BindsArgsAndReturnsResult()
         {
+            await Task.Yield();
+
             var tool = new DelegateAgentTool("add", "adds", (Func<int, int, int>)Add);
             var result = await tool.InvokeAsync(JObject.Parse("{\"a\":2,\"b\":3}"));
 
@@ -97,6 +103,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Tools
         [Fact(Timeout = 60000)]
         public async Task DelegateTool_Async_AwaitsAndReturnsResult()
         {
+            await Task.Yield();
+
             var tool = new DelegateAgentTool("echo", "echoes", (Func<string, CancellationToken, Task<string>>)EchoAsync);
             var result = await tool.InvokeAsync(JObject.Parse("{\"text\":\"hi\"}"));
 
@@ -107,6 +115,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Tools
         [Fact(Timeout = 60000)]
         public async Task DelegateTool_UsesDefault_WhenArgMissing()
         {
+            await Task.Yield();
+
             var tool = new DelegateAgentTool("wd", "with default", (Func<int, int, int>)WithDefault);
             var result = await tool.InvokeAsync(JObject.Parse("{\"a\":5}"));
 
@@ -117,6 +127,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Tools
         [Fact(Timeout = 60000)]
         public async Task DelegateTool_MissingRequired_ReturnsError()
         {
+            await Task.Yield();
+
             var tool = new DelegateAgentTool("add", "adds", (Func<int, int, int>)Add);
             var result = await tool.InvokeAsync(JObject.Parse("{\"a\":2}"));
 
@@ -127,6 +139,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Tools
         [Fact(Timeout = 60000)]
         public async Task DelegateTool_BadArgConversion_ReturnsError()
         {
+            await Task.Yield();
+
             var tool = new DelegateAgentTool("add", "adds", (Func<int, int, int>)Add);
             var result = await tool.InvokeAsync(JObject.Parse("{\"a\":\"notanumber\",\"b\":3}"));
 
@@ -137,6 +151,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Tools
         [Fact(Timeout = 60000)]
         public async Task DelegateTool_ThrowingMethod_IsCaughtAsError()
         {
+            await Task.Yield();
+
             var tool = new DelegateAgentTool("boom", "throws", (Func<string>)Boom);
             var result = await tool.InvokeAsync(new JObject());
 
@@ -160,6 +176,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Tools
         [Fact(Timeout = 60000)]
         public async Task ScanInstance_DiscoversAnnotatedMethods_InstanceAndStatic()
         {
+            await Task.Yield();
+
             var tools = AgentToolFactory.ScanInstance(new SampleTools());
             var names = tools.Select(t => t.Name).ToArray();
 
@@ -175,6 +193,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Tools
         [Fact(Timeout = 60000)]
         public async Task ToolCollection_Add_Duplicate_Throws()
         {
+            await Task.Yield();
+
             var tools = new ToolCollection();
             tools.AddDelegate("add", "adds", (Func<int, int, int>)Add);
             Assert.Throws<ArgumentException>(() => tools.AddDelegate("add", "again", (Func<int, int, int>)Add));
@@ -183,6 +203,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Tools
         [Fact(Timeout = 60000)]
         public async Task ToolCollection_GetDefinitions_ReflectsRegisteredTools()
         {
+            await Task.Yield();
+
             var tools = new ToolCollection().AddFrom(new SampleTools());
             var defs = tools.GetDefinitions();
 
@@ -193,6 +215,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Tools
         [Fact(Timeout = 60000)]
         public async Task ToolCollection_InvokeToToolMessage_WrapsResult()
         {
+            await Task.Yield();
+
             var tools = new ToolCollection().AddDelegate("add", "adds", (Func<int, int, int>)Add);
 
             var call = new ToolCallContent("call_1", "add", "{\"a\":4,\"b\":6}");
@@ -208,6 +232,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Tools
         [Fact(Timeout = 60000)]
         public async Task ToolCollection_UnknownTool_ReturnsErrorMessage()
         {
+            await Task.Yield();
+
             var tools = new ToolCollection();
             var call = new ToolCallContent("call_1", "missing", "{}");
             var message = await tools.InvokeToToolMessageAsync(call);
@@ -220,6 +246,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Tools
         [Fact(Timeout = 60000)]
         public async Task ToolCollection_MalformedArgsJson_ReturnsError()
         {
+            await Task.Yield();
+
             var tools = new ToolCollection().AddDelegate("add", "adds", (Func<int, int, int>)Add);
             var call = new ToolCallContent("call_1", "add", "{not valid json");
             var result = await tools.InvokeAsync(call);

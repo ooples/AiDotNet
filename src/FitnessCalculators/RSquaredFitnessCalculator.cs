@@ -62,10 +62,10 @@ public class RSquaredFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBa
     ///   * Validation: A separate set of data used to tune the model (recommended)
     ///   * Test: A completely separate set of data used for final evaluation
     /// 
-    /// Note: We set "isHigherScoreBetter" to "false" in the base constructor, which might seem 
-    /// counterintuitive since higher R² values are actually better. This is because some optimization 
-    /// algorithms in the library are designed to minimize values. The calculator handles this internally 
-    /// so that optimization works correctly while still interpreting R² in the standard way (higher is better).
+    /// R² is a HIGHER-IS-BETTER metric, so "isHigherScoreBetter" is true. (It was previously
+    /// declared false on the claim that "the calculator handles this internally" — it did not:
+    /// GetFitnessScore returns the raw R², so every optimizer comparing via IsBetterFitness kept
+    /// the WORST iterate ever evaluated, typically the untrained baseline model.)
     /// 
     /// When to use this calculator:
     /// - When you want to know how much of the variation in your data your model explains
@@ -74,7 +74,7 @@ public class RSquaredFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBa
     /// - For regression problems (predicting continuous values)
     /// </para>
     /// </remarks>
-    public RSquaredFitnessCalculator(DataSetType dataSetType = DataSetType.Validation) : base(isHigherScoreBetter: false, dataSetType)
+    public RSquaredFitnessCalculator(DataSetType dataSetType = DataSetType.Validation) : base(isHigherScoreBetter: true, dataSetType)
     {
     }
 
@@ -97,9 +97,8 @@ public class RSquaredFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorBa
     /// 
     /// This method simply retrieves the pre-calculated R² value from the dataset's prediction statistics.
     /// 
-    /// Note: While higher R² values are better, some optimization algorithms in the library are designed
-    /// to minimize values. The calculator handles this internally so that optimization works correctly
-    /// while still interpreting R² in the standard way (higher is better).
+    /// Higher R² is better and the calculator declares exactly that — no internal negation exists
+    /// or is needed.
     /// </para>
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)

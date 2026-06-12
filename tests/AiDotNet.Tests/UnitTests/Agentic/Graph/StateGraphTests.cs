@@ -13,6 +13,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Graph
         [Fact(Timeout = 60000)]
         public async Task Linear_RunsNodesInOrder_AndThreadsState()
         {
+            await Task.Yield();
+
             var graph = new StateGraph<int>()
                 .AddNode("inc", s => s + 1)
                 .AddNode("double", s => s * 2)
@@ -28,6 +30,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Graph
         [Fact(Timeout = 60000)]
         public async Task ConditionalEdges_SupportCycles()
         {
+            await Task.Yield();
+
             var graph = new StateGraph<int>()
                 .AddNode("inc", s => s + 1)
                 .AddConditionalEdges("inc", s => s < 3 ? "inc" : StateGraph<int>.End)
@@ -41,6 +45,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Graph
         [Fact(Timeout = 60000)]
         public async Task Stream_EmitsUpdatePerNode_WithFinalState()
         {
+            await Task.Yield();
+
             var graph = new StateGraph<int>()
                 .AddNode("a", s => s + 1)
                 .AddNode("b", s => s + 10)
@@ -63,6 +69,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Graph
         [Fact(Timeout = 60000)]
         public async Task RecursionLimit_Throws_OnRunawayCycle()
         {
+            await Task.Yield();
+
             var graph = new StateGraph<int>()
                 .AddNode("loop", s => s + 1)
                 .AddConditionalEdges("loop", _ => "loop") // never terminates

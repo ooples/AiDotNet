@@ -339,6 +339,32 @@ internal partial class MambaBlock<T> : LayerBase<T>
         // Xavier for output projection
         InitializeTensor(_outputProjectionWeights);
         _outputProjectionBias.Fill(NumOps.Zero);
+
+        // Register ALL trainable parameters for tape-based autodiff at construction time. The tape training
+        // path (NeuralNetworkBase.Train -> TrainWithTape) collects registered parameters BEFORE the first
+        // UpdateParameters call, so registering here (not only inside UpdateParameters) is what lets the
+        // optimizer actually see and update this block's weights — otherwise CollectParameters finds nothing
+        // and every Train step is a silent no-op. _aLog and _dParam are learnable SSM parameters (Gu & Dao
+        // 2023) and MUST be registered too, or they would be excluded from gradient updates and make the
+        // registered-vs-flat parameter counts disagree.
+        RegisterTrainableParameters();
+    }
+
+    // Registers every trainable tensor with the autodiff/optimizer machinery. Called at init and re-called
+    // after UpdateParameters replaces tensor instances so the registry always points at the live tensors.
+    private void RegisterTrainableParameters()
+    {
+        RegisterTrainableParameter(_inputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_inputProjectionBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_convWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_convBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_xProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_dtProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_dtProjectionBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_aLog, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_dParam, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
     }
 
     private void InitializeTensor(Tensor<T> tensor)
@@ -682,17 +708,9 @@ internal partial class MambaBlock<T> : LayerBase<T>
         _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
         _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
 
-        // Register trainable parameters for tape-based autodiff
-        RegisterTrainableParameter(_inputProjectionWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_inputProjectionBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_convWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_convBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_xProjectionWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_dtProjectionWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_dtProjectionBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
-
+        // Re-register against the new tensor instances created by the updates above (TensorAdd returns new
+        // tensors), so the autodiff registry tracks the live weights — now including _aLog and _dParam.
+        RegisterTrainableParameters();
     }
 
     /// <inheritdoc />

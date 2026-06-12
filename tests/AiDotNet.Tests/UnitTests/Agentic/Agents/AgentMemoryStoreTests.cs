@@ -19,6 +19,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task InMemoryStore_RanksByLexicalOverlap()
         {
+            await Task.Yield();
+
             var store = new InMemoryAgentMemoryStore();
             await store.AddAsync("The project deadline is in June.");
             await store.AddAsync("The user prefers dark mode in the editor.");
@@ -38,6 +40,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task InMemoryStore_NoOverlap_ReturnsEmpty()
         {
+            await Task.Yield();
+
             var store = new InMemoryAgentMemoryStore();
             await store.AddAsync("Coffee is served in the break room.");
 
@@ -49,6 +53,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task InMemoryStore_RemoveAndGetAll()
         {
+            await Task.Yield();
+
             var store = new InMemoryAgentMemoryStore();
             var id = await store.AddAsync("Fact one.");
             await store.AddAsync("Fact two.");
@@ -66,6 +72,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task EmbeddingStore_RanksBySemanticSimilarity_NotWords()
         {
+            await Task.Yield();
+
             // The fake model maps synonyms to the same vector, so "due date" matches "deadline" by meaning.
             var model = new FakeEmbeddingModel(new Dictionary<string, double[]>
             {
@@ -89,6 +97,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task EmbeddingStore_RespectsTopK()
         {
+            await Task.Yield();
+
             var model = new FakeEmbeddingModel(new Dictionary<string, double[]>
             {
                 ["a"] = new[] { 1.0, 0.0 },
@@ -108,6 +118,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task EmbeddingStore_EmptyStore_ReturnsEmpty()
         {
+            await Task.Yield();
+
             var model = new FakeEmbeddingModel(new Dictionary<string, double[]> { ["q"] = new[] { 1.0 } });
             var store = new EmbeddingAgentMemoryStore<double>(model);
             Assert.Empty(await store.SearchAsync("q"));
@@ -118,6 +130,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task MemoryAugmentedAgent_InjectsRelevantMemoryAsContext()
         {
+            await Task.Yield();
+
             var store = new InMemoryAgentMemoryStore();
             await store.AddAsync("The user prefers dark mode in the editor.");
 
@@ -127,14 +141,18 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
 
             await augmented.RunAsync(new[] { ChatMessage.User("Which editor mode do I prefer?") });
 
-            // The recalled memory was injected as a system-context message before the user's question.
+            // The recalled memory was injected as USER-role context before the user's question —
+            // never as a system message, so a poisoned memory cannot override the real system prompt.
             var request = client.Requests[0];
-            Assert.Contains(request, m => m.Role == ChatRole.System && m.Text.Contains("dark mode"));
+            Assert.Contains(request, m => m.Role == ChatRole.User && m.Text.Contains("dark mode"));
+            Assert.DoesNotContain(request, m => m.Role == ChatRole.System && m.Text.Contains("dark mode"));
         }
 
         [Fact(Timeout = 60000)]
         public async Task MemoryAugmentedAgent_NoRelevantMemory_DoesNotInject()
         {
+            await Task.Yield();
+
             var store = new InMemoryAgentMemoryStore();
             await store.AddAsync("Coffee is served in the break room.");
 
@@ -150,6 +168,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task MemoryAugmentedAgent_ComposesWithThreadedAgent()
         {
+            await Task.Yield();
+
             // Long-term recall (across conversations) + short-term thread memory together.
             var store = new InMemoryAgentMemoryStore();
             await store.AddAsync("The user's name is Alice.");
@@ -163,9 +183,10 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
             await threaded.RunAsync("conv", "What is my name?");
             await threaded.RunAsync("conv", "Do you remember my name?");
 
-            // Second turn sees both the long-term memory (name) and the prior turn (thread history).
+            // Second turn sees both the long-term memory (name, injected as lower-privilege
+            // user-role context) and the prior turn (thread history).
             var secondRequest = client.Requests[1];
-            Assert.Contains(secondRequest, m => m.Role == ChatRole.System && m.Text.Contains("Alice"));
+            Assert.Contains(secondRequest, m => m.Role == ChatRole.User && m.Text.Contains("Alice"));
             Assert.Contains(secondRequest, m => m.Role == ChatRole.User && m.Text == "What is my name?");
         }
 

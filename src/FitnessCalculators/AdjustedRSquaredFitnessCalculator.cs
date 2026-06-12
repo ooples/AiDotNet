@@ -41,12 +41,13 @@ public class AdjustedRSquaredFitnessCalculator<T, TInput, TOutput> : FitnessCalc
     /// - Validation: A separate set of data used to tune the model (default and recommended)
     /// - Test: A completely separate set of data used for final evaluation
     /// 
-    /// We set "isHigherScoreBetter" to false because in AiDotNet, fitness scores are used for
-    /// optimization where lower values are considered better. This is just an internal convention -
-    /// you should still interpret Adjusted R-Squared in the normal way (higher is better).
+    /// Adjusted R² is a HIGHER-IS-BETTER metric, so "isHigherScoreBetter" is true. (It was
+    /// previously declared false on the claim of an internal lower-is-better convention — no such
+    /// negation existed: GetFitnessScore returns the raw Adjusted R², so optimizers comparing via
+    /// IsBetterFitness kept the WORST iterate ever evaluated.)
     /// </para>
     /// </remarks>
-    public AdjustedRSquaredFitnessCalculator(DataSetType dataSetType = DataSetType.Validation) : base(isHigherScoreBetter: false, dataSetType)
+    public AdjustedRSquaredFitnessCalculator(DataSetType dataSetType = DataSetType.Validation) : base(isHigherScoreBetter: true, dataSetType)
     {
     }
 

@@ -14,6 +14,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task RunAsync_EntryMemberAnswersDirectly_NoHandoff()
         {
+            await Task.Yield();
+
             var triage = new SwarmMember<double>(
                 "triage",
                 ScriptedChatClient<double>.Sequence(ChatResponses.Text("Handled it.")),
@@ -31,6 +33,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task RunAsync_HandoffTransfersControlToPeer_OverSharedHistory()
         {
+            await Task.Yield();
+
             // Triage immediately hands off to the specialist; the specialist answers.
             var triage = new SwarmMember<double>(
                 "triage",
@@ -64,6 +68,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task RunAsync_ActiveMemberExecutesItsOwnTools()
         {
+            await Task.Yield();
+
             var lookup = new RecordingTool("lookup", "Looks up a value.", _ => "found");
             var agentClient = new ScriptedChatClient<double>((callIndex, _) => callIndex == 0
                 ? ChatResponses.ToolCall("t1", "lookup", "{}")
@@ -86,6 +92,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task RunAsync_AdvertisesHandoffToolsForAllowedPeersOnly()
         {
+            await Task.Yield();
+
             var a = new SwarmMember<double>(
                 "a",
                 ScriptedChatClient<double>.Sequence(ChatResponses.Text("ok")),
@@ -107,6 +115,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task RunAsync_PingPongHandoffs_TerminateAtIterationCap()
         {
+            await Task.Yield();
+
             // Two members that always hand off to each other -> would loop forever without the cap.
             var ping = new SwarmMember<double>(
                 "ping",
@@ -127,31 +137,34 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task Constructor_UnknownEntryMember_Throws()
         {
+            await Task.Yield();
+
             var a = new SwarmMember<double>("a", ScriptedChatClient<double>.Sequence(ChatResponses.Text("x")));
             Assert.Throws<ArgumentException>(() =>
                 new Swarm<double>(new[] { a }, entryMemberName: "missing"));
-            await Task.CompletedTask;
         }
 
         [Fact(Timeout = 60000)]
         public async Task Constructor_HandoffToUnknownPeer_Throws()
         {
+            await Task.Yield();
+
             var a = new SwarmMember<double>("a",
                 ScriptedChatClient<double>.Sequence(ChatResponses.Text("x")),
                 handoffs: new[] { "ghost" });
             Assert.Throws<ArgumentException>(() =>
                 new Swarm<double>(new[] { a }, entryMemberName: "a"));
-            await Task.CompletedTask;
         }
 
         [Fact(Timeout = 60000)]
         public async Task Constructor_DuplicateMemberNames_Throws()
         {
+            await Task.Yield();
+
             var a1 = new SwarmMember<double>("dup", ScriptedChatClient<double>.Sequence(ChatResponses.Text("x")));
             var a2 = new SwarmMember<double>("dup", ScriptedChatClient<double>.Sequence(ChatResponses.Text("y")));
             Assert.Throws<ArgumentException>(() =>
                 new Swarm<double>(new[] { a1, a2 }, entryMemberName: "dup"));
-            await Task.CompletedTask;
         }
     }
 }

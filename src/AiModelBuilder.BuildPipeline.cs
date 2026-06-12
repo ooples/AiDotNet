@@ -472,6 +472,24 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// a class of bug that bites only when the loader's last batch
     /// happens to be unevenly-sized (review-comment #1265.hc8I).
     /// </remarks>
+    /// <summary>Gathers the given rows of a rank-1/rank-2 tensor into a new tensor (grouped training slices).</summary>
+    private static Tensor<T> GatherRows(Tensor<T> source, IReadOnlyList<int> rows)
+    {
+        int cols = source.Rank >= 2 ? source.Shape[1] : 1;
+        var data = new T[rows.Count * cols];
+        var span = source.Data.Span;
+        for (int r = 0; r < rows.Count; r++)
+        {
+            for (int c = 0; c < cols; c++)
+            {
+                data[(r * cols) + c] = span[(rows[r] * cols) + c];
+            }
+        }
+
+        var shape = source.Rank >= 2 ? new[] { rows.Count, cols } : new[] { rows.Count };
+        return new Tensor<T>(shape, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(data));
+    }
+
     private static bool TryStackTensorBatch(Tensor<T>[] samples, out Tensor<T>? stacked)
     {
         stacked = null;
@@ -1233,7 +1251,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             bool isTimeSeriesModel = _model is TimeSeries.TimeSeriesModelBase<T>
                 || _autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesForecasting
                 || _autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesAnomalyDetection;
-            bool shuffleBeforeSplit = !isTimeSeriesModel;
+            // ConfigureTrainingGroups indices are defined by the CALLER against original row order
+            // (e.g. one trading date's cross-section per group). A shuffled split would make it
+            // impossible to know which original rows landed in the training partition, so groups
+            // force an order-preserving split: training rows = the first floor(0.7·n) rows.
+            bool shuffleBeforeSplit = !isTimeSeriesModel && _trainingGroups is null;
             (XTrain, yTrain, XVal, yVal, XTest, yTest) = DataSplitter.Split<T, TInput, TOutput>(
                 preparedX, preparedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: shuffleBeforeSplit);
 
@@ -1873,8 +1895,65 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             // This is required for InitializeRandomSolution to access model.ParameterCount
             finalOptimizer.SetModel(model);
 
-            // Optimize the final model on the full training set
-            optimizationResult = finalOptimizer.Optimize(optimizationInputData);
+            if (_trainingGroups is not null
+                && model is NeuralNetworks.NeuralNetworkBase<T> groupedNet
+                && XTrain is Tensor<T> groupedX && yTrain is Tensor<T> groupedY)
+            {
+                // GROUPED training (ConfigureTrainingGroups): one fit per QUERY GROUP per epoch — the
+                // shape pairwise/listwise ranking losses require (pooled fits give the loss conflicting
+                // targets across groups and the net collapses to a constant). Epoch budget comes from the
+                // configured optimizer's MaxIterations, matching the facade's standard epoch source.
+                int groupedEpochs = finalOptimizer.GetOptions()?.MaxIterations ?? 100;
+                foreach (var group in _trainingGroups)
+                {
+                    foreach (var idx in group)
+                    {
+                        if (idx < 0 || idx >= groupedX.Shape[0])
+                        {
+                            throw new ArgumentOutOfRangeException(nameof(_trainingGroups),
+                                $"Training-group row index {idx} is outside the training partition (0..{groupedX.Shape[0] - 1}). " +
+                                "With training groups configured the split is ORDER-PRESERVING (no shuffle): the training " +
+                                "partition is the first floor(0.7·n) rows of the loaded data in their original order, so " +
+                                "group indices must reference rows inside that leading block. Rows beyond it form the " +
+                                "validation/test partitions (for date-grouped data, sort rows by date ascending so the " +
+                                "held-out partitions are the most RECENT dates — a leak-free temporal split).");
+                        }
+                    }
+                }
+
+                for (int epoch = 0; epoch < groupedEpochs; epoch++)
+                {
+                    foreach (var group in _trainingGroups)
+                    {
+                        if (group.Count == 0)
+                        {
+                            continue;
+                        }
+
+                        var groupX = GatherRows(groupedX, group);
+                        var groupY = GatherRows(groupedY, group);
+                        if (groupY.Rank == 1)
+                        {
+                            // Batch training produces [B, outputSize] predictions — promote rank-1
+                            // targets to a column [B, 1], exactly as TryStackTensorBatch does for
+                            // the streaming path's per-sample [1] targets.
+                            groupY = groupY.Reshape(new[] { groupY.Shape[0], 1 });
+                        }
+
+                        groupedNet.Train(groupX, groupY);
+                    }
+                }
+
+                optimizationResult = new OptimizationResult<T, TInput, TOutput>
+                {
+                    BestSolution = model,
+                };
+            }
+            else
+            {
+                // Optimize the final model on the full training set
+                optimizationResult = finalOptimizer.Optimize(optimizationInputData);
+            }
         }
 
         // ============================================================================

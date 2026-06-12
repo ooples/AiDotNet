@@ -88,9 +88,24 @@ public sealed class MemoryAugmentedAgent<T> : IAgent<T>
             return await _inner.RunAsync(messages, cancellationToken).ConfigureAwait(false);
         }
 
-        var contextMessage = ChatMessage.System(BuildMemoryBlock(relevant));
-        var augmented = new List<ChatMessage>(messages.Count + 1) { contextMessage };
-        augmented.AddRange(messages);
+        // Inject recalled memory as a USER-role message placed after any
+        // leading system messages: memory content is stored conversation data,
+        // and elevating it to system priority would let a poisoned memory
+        // (e.g. "ignore prior safety rules") override the app's real prompt.
+        var contextMessage = ChatMessage.User(BuildMemoryBlock(relevant));
+        var augmented = new List<ChatMessage>(messages.Count + 1);
+        var insertAt = 0;
+        while (insertAt < messages.Count && messages[insertAt].Role == ChatRole.System)
+        {
+            augmented.Add(messages[insertAt]);
+            insertAt++;
+        }
+
+        augmented.Add(contextMessage);
+        for (var i = insertAt; i < messages.Count; i++)
+        {
+            augmented.Add(messages[i]);
+        }
 
         return await _inner.RunAsync(augmented, cancellationToken).ConfigureAwait(false);
     }

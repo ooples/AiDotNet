@@ -49,6 +49,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Tools
         [Fact(Timeout = 60000)]
         public async Task GetStructuredResponse_DeserializesReply_AndAttachesSchema()
         {
+            await Task.Yield();
+
             var client = new JsonStubClient<double>("{\"Name\":\"Paris\",\"TempC\":18}");
 
             var weather = await client.GetStructuredResponseAsync<double, Weather>("Weather in Paris?");
@@ -68,6 +70,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Tools
         [Fact(Timeout = 60000)]
         public async Task GetStructuredResponse_Throws_OnUnparseableReply()
         {
+            await Task.Yield();
+
             var client = new JsonStubClient<double>("not json at all");
 
             await Assert.ThrowsAsync<System.InvalidOperationException>(

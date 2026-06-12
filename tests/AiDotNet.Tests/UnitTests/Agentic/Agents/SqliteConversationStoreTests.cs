@@ -20,6 +20,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task PersistsAndReloadsAcrossInstances()
         {
+            await Task.Yield();
+
             var path = Path.GetTempFileName();
             var connectionString = $"Data Source={path};Pooling=False";
             try
@@ -50,6 +52,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task ThreadsAreIsolated_AndClearRemovesOne()
         {
+            await Task.Yield();
+
             var path = Path.GetTempFileName();
             var connectionString = $"Data Source={path};Pooling=False";
             try
@@ -74,6 +78,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task UnknownThread_ReturnsEmpty()
         {
+            await Task.Yield();
+
             var path = Path.GetTempFileName();
             var connectionString = $"Data Source={path};Pooling=False";
             try

@@ -306,6 +306,25 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return this;
     }
 
+    /// <summary>
+    /// Configures GROUPED training for ranking-style objectives: each inner list is a set of TRAINING row
+    /// indices forming one coherent query group (e.g. one date's cross-section for a learning-to-rank
+    /// model). Per epoch the model trains once per GROUP slice instead of once on the pooled set —
+    /// pooled training gives pairwise/listwise ranking losses conflicting targets across groups (the same
+    /// features map to different within-group ranks on different dates), collapsing the net to a constant.
+    /// Neural models with Tensor inputs only; epochs come from the configured optimizer's MaxIterations.
+    /// </summary>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureTrainingGroups(IReadOnlyList<IReadOnlyList<int>> groups)
+    {
+        if (groups is null || groups.Count == 0)
+        {
+            throw new ArgumentException("At least one training group is required.", nameof(groups));
+        }
+
+        _trainingGroups = groups;
+        return this;
+    }
+
     public IAiModelBuilder<T, TInput, TOutput> ConfigureOptimizer(IOptimizer<T, TInput, TOutput> optimizationAlgorithm)
     {
         _trainingCore.ConfigureOptimizer(optimizationAlgorithm);

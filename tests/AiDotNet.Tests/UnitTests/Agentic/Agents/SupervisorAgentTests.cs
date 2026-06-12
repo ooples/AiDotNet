@@ -25,6 +25,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task RunAsync_RoutesToWorker_ThenComposesFinalAnswer()
         {
+            await Task.Yield();
+
             var math = FixedWorker("math", "5", "Solves arithmetic.");
 
             // Coordinator: call 0 hands off to math; call 1 produces the final answer.
@@ -48,6 +50,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task RunAsync_RoutesToCorrectWorker_AmongSeveral()
         {
+            await Task.Yield();
+
             var math = FixedWorker("math", "42", "Solves arithmetic.");
             var writer = FixedWorker("writer", "Once upon a time...", "Writes prose.");
 
@@ -69,6 +73,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task RunAsync_AdvertisesOneHandoffToolPerWorker()
         {
+            await Task.Yield();
+
             var a = FixedWorker("alpha", "a");
             var b = FixedWorker("beta", "b");
             var coordinator = ScriptedChatClient<double>.Sequence(ChatResponses.Text("done"));
@@ -86,6 +92,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task RunAsync_DefaultRoutingPrompt_ListsWorkers()
         {
+            await Task.Yield();
+
             var math = FixedWorker("math", "5", "Solves arithmetic.");
             var coordinator = ScriptedChatClient<double>.Sequence(ChatResponses.Text("done"));
 
@@ -101,6 +109,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task RunAsync_NestedSupervisors_Compose()
         {
+            await Task.Yield();
+
             // Leaf worker under a sub-supervisor.
             var leaf = FixedWorker("calculator", "120", "Computes factorials.");
             var subCoordinator = ScriptedChatClient<double>.Sequence(
@@ -127,10 +137,11 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task Constructor_NoWorkers_Throws()
         {
+            await Task.Yield();
+
             var coordinator = ScriptedChatClient<double>.Sequence(ChatResponses.Text("x"));
             Assert.Throws<ArgumentException>(() =>
                 new SupervisorAgent<double>(coordinator, Array.Empty<IAgent<double>>()));
-            await Task.CompletedTask;
         }
     }
 }
