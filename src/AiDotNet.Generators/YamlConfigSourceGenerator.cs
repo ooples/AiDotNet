@@ -1212,9 +1212,12 @@ internal static class YamlParamsHelper
                     c.IsImplicitlyDeclared &&
                     c.DeclaredAccessibility == Accessibility.Public);
 
-                // Skip nested types that aren't publicly accessible.
-                if (symbol.ContainingType is not null &&
-                    symbol.DeclaredAccessibility != Accessibility.Public)
+                // Skip types that aren't publicly accessible from generated code. This must check the
+                // FULL containment chain, not just nested types: top-level INTERNAL types in referenced
+                // assemblies (e.g. FormattedLogValues : IReadOnlyList<...> in Microsoft.Extensions.Logging)
+                // match broad BCL interfaces like IReadOnlyList<T> and would be emitted as typeof(...)
+                // references the generated registry cannot compile against (CS0122).
+                if (!IsEffectivelyPublic(symbol))
                 {
                     hasPublicCtor = false;
                     hasImplicitDefaultCtor = false;
@@ -1246,6 +1249,23 @@ internal static class YamlParamsHelper
             {
                 nestedType.Accept(this);
             }
+        }
+
+        /// <summary>
+        /// True when the type and every containing type is declared public — i.e. generated code in
+        /// another assembly can legally reference it via <c>typeof(...)</c>.
+        /// </summary>
+        private static bool IsEffectivelyPublic(INamedTypeSymbol symbol)
+        {
+            for (INamedTypeSymbol? current = symbol; current is not null; current = current.ContainingType)
+            {
+                if (current.DeclaredAccessibility != Accessibility.Public)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         /// <summary>
