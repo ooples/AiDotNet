@@ -1,0 +1,135 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Enums;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
+using Xunit;
+
+namespace AiDotNet.Tests.IntegrationTests;
+
+/// <summary>
+/// ConfigureTrainingGroups end-to-end: the facade's supervised path runs one model.Train call per
+/// query group per epoch instead of a single pooled fit — the shape learning-to-rank consumers need
+/// (one coherent cross-section, e.g. one trading date, per Train call). These tests prove (a) the
+/// grouped loop genuinely trains the network with row/target alignment preserved through the group
+/// slicing, and (b) malformed group indices fail loudly with an actionable message.
+/// </summary>
+[Collection("NonParallelIntegration")]
+public sealed class TrainingGroupsFacadeTests
+{
+    private const int N = 100;          // total rows fed to the loader
+    private const int TrainRows = 70;   // facade's internal split: 0.7 train
+
+    private static (Tensor<double> X, Tensor<double> Y) BuildLinearData()
+    {
+        // y = 2x + 1 — trivially learnable, but ONLY if the grouped slices keep each row paired
+        // with its own target. A row/target misalignment in GatherRows would destroy the fit.
+        var x = new double[N];
+        var y = new double[N];
+        for (int i = 0; i < N; i++)
+        {
+            double xi = i / (double)N;
+            x[i] = xi;
+            y[i] = (2.0 * xi) + 1.0;
+        }
+
+        return (
+            new Tensor<double>(new[] { N, 1 }, new Vector<double>(x)),
+            new Tensor<double>(new[] { N }, new Vector<double>(y)));
+    }
+
+    private static NeuralNetwork<double> BuildNet() => new(new NeuralNetworkArchitecture<double>(
+        inputType: InputType.OneDimensional,
+        taskType: NeuralNetworkTaskType.Regression,
+        complexity: NetworkComplexity.Simple,
+        inputSize: 1,
+        outputSize: 1));
+
+    private static IReadOnlyList<IReadOnlyList<int>> PartitionTrainingRows(int groupSize)
+    {
+        // Partition the TRAINING rows (post-split indices 0..TrainRows-1) into contiguous groups —
+        // each standing in for one date's cross-section.
+        var groups = new List<IReadOnlyList<int>>();
+        for (int start = 0; start < TrainRows; start += groupSize)
+        {
+            groups.Add(Enumerable.Range(start, Math.Min(groupSize, TrainRows - start)).ToArray());
+        }
+
+        return groups;
+    }
+
+    [Fact]
+    public async Task Grouped_training_learns_with_row_target_alignment_preserved()
+    {
+        var (x, y) = BuildLinearData();
+
+        var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
+            .ConfigureModel(BuildNet())
+            .ConfigureDataLoader(DataLoaders.FromTensors(x, y))
+            .ConfigureOptimizer(new AdamOptimizer<double, Tensor<double>, Tensor<double>>(
+                model: null,
+                options: new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>> { MaxIterations = 60 }))
+            .ConfigureTrainingGroups(PartitionTrainingRows(groupSize: 10))
+            .BuildAsync();
+
+        // Probe across the input range: a trained net must be (1) non-constant and (2) monotonic
+        // increasing on y = 2x + 1. An untrained/collapsed net fails (1); scrambled group slices
+        // (misaligned rows/targets) fail (2). Statistical invariants, not exact values — NN training
+        // is stochastic.
+        var probes = new[] { 0.1, 0.3, 0.5, 0.7, 0.9 };
+        var preds = new double[probes.Length];
+        for (int i = 0; i < probes.Length; i++)
+        {
+            var p = result.Predict(new Tensor<double>(new[] { 1, 1 }, new Vector<double>(new[] { probes[i] })));
+            preds[i] = p.Data.Span[0];
+        }
+
+        Assert.True(preds.Max() - preds.Min() > 0.3,
+            $"Net is near-constant over the input range — grouped loop did not train. preds=[{string.Join(", ", preds.Select(v => v.ToString("F3")))}]");
+
+        int rising = 0;
+        for (int i = 1; i < preds.Length; i++)
+        {
+            if (preds[i] > preds[i - 1])
+            {
+                rising++;
+            }
+        }
+
+        Assert.True(rising >= 3,
+            $"Predictions not increasing in x — row/target alignment broken in group slicing. preds=[{string.Join(", ", preds.Select(v => v.ToString("F3")))}]");
+    }
+
+    [Fact]
+    public async Task Out_of_range_group_index_throws_actionable_error()
+    {
+        var (x, y) = BuildLinearData();
+
+        // Index N is valid in the ORIGINAL data frame of reference but not in the post-split
+        // training set — exactly the mistake the message must explain.
+        var badGroups = new IReadOnlyList<int>[] { new[] { 0, 1, N } };
+
+        var ex = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
+                .ConfigureModel(BuildNet())
+                .ConfigureDataLoader(DataLoaders.FromTensors(x, y))
+                .ConfigureTrainingGroups(badGroups)
+                .BuildAsync());
+
+        Assert.Contains("TRAINING rows", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Empty_group_list_is_rejected_at_configuration_time()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
+                .ConfigureTrainingGroups(Array.Empty<IReadOnlyList<int>>()));
+    }
+}

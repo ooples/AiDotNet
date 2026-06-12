@@ -137,6 +137,12 @@ public interface IAiModelBuilder<T, TInput, TOutput>
         AiDotNet.Preprocessing.PreprocessingPipeline<T, TOutput, TOutput>? pipeline = null);
 
     /// <summary>
+    /// Configures GROUPED training (one fit per query group per epoch) for ranking-style objectives —
+    /// see the builder method for semantics. Neural models with Tensor inputs only.
+    /// </summary>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureTrainingGroups(IReadOnlyList<IReadOnlyList<int>> groups);
+
+    /// <summary>
     /// Configures the output postprocessing pipeline for the model using a fluent builder.
     /// </summary>
     /// <remarks>

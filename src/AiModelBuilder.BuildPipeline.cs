@@ -472,6 +472,24 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// a class of bug that bites only when the loader's last batch
     /// happens to be unevenly-sized (review-comment #1265.hc8I).
     /// </remarks>
+    /// <summary>Gathers the given rows of a rank-1/rank-2 tensor into a new tensor (grouped training slices).</summary>
+    private static Tensor<T> GatherRows(Tensor<T> source, IReadOnlyList<int> rows)
+    {
+        int cols = source.Rank >= 2 ? source.Shape[1] : 1;
+        var data = new T[rows.Count * cols];
+        var span = source.Data.Span;
+        for (int r = 0; r < rows.Count; r++)
+        {
+            for (int c = 0; c < cols; c++)
+            {
+                data[(r * cols) + c] = span[(rows[r] * cols) + c];
+            }
+        }
+
+        var shape = source.Rank >= 2 ? new[] { rows.Count, cols } : new[] { rows.Count };
+        return new Tensor<T>(shape, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(data));
+    }
+
     private static bool TryStackTensorBatch(Tensor<T>[] samples, out Tensor<T>? stacked)
     {
         stacked = null;
@@ -1873,8 +1891,62 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             // This is required for InitializeRandomSolution to access model.ParameterCount
             finalOptimizer.SetModel(model);
 
-            // Optimize the final model on the full training set
-            optimizationResult = finalOptimizer.Optimize(optimizationInputData);
+            if (_trainingGroups is not null
+                && model is NeuralNetworks.NeuralNetworkBase<T> groupedNet
+                && XTrain is Tensor<T> groupedX && yTrain is Tensor<T> groupedY)
+            {
+                // GROUPED training (ConfigureTrainingGroups): one fit per QUERY GROUP per epoch — the
+                // shape pairwise/listwise ranking losses require (pooled fits give the loss conflicting
+                // targets across groups and the net collapses to a constant). Epoch budget comes from the
+                // configured optimizer's MaxIterations, matching the facade's standard epoch source.
+                int groupedEpochs = finalOptimizer.GetOptions()?.MaxIterations ?? 100;
+                foreach (var group in _trainingGroups)
+                {
+                    foreach (var idx in group)
+                    {
+                        if (idx < 0 || idx >= groupedX.Shape[0])
+                        {
+                            throw new ArgumentOutOfRangeException(nameof(_trainingGroups),
+                                $"Training-group row index {idx} is outside the training set (0..{groupedX.Shape[0] - 1}). " +
+                                "Group indices refer to TRAINING rows AFTER the facade's internal split/shuffle — " +
+                                "for date-grouped data configure a time-series model or pre-split data so ordering is preserved.");
+                        }
+                    }
+                }
+
+                for (int epoch = 0; epoch < groupedEpochs; epoch++)
+                {
+                    foreach (var group in _trainingGroups)
+                    {
+                        if (group.Count == 0)
+                        {
+                            continue;
+                        }
+
+                        var groupX = GatherRows(groupedX, group);
+                        var groupY = GatherRows(groupedY, group);
+                        if (groupY.Rank == 1)
+                        {
+                            // Batch training produces [B, outputSize] predictions — promote rank-1
+                            // targets to a column [B, 1], exactly as TryStackTensorBatch does for
+                            // the streaming path's per-sample [1] targets.
+                            groupY = groupY.Reshape(new[] { groupY.Shape[0], 1 });
+                        }
+
+                        groupedNet.Train(groupX, groupY);
+                    }
+                }
+
+                optimizationResult = new OptimizationResult<T, TInput, TOutput>
+                {
+                    BestSolution = model,
+                };
+            }
+            else
+            {
+                // Optimize the final model on the full training set
+                optimizationResult = finalOptimizer.Optimize(optimizationInputData);
+            }
         }
 
         // ============================================================================
