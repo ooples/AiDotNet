@@ -86,6 +86,15 @@ public sealed class ThreadedAgent<T>
             throw new ArgumentException("At least one new message is required.", nameof(newMessages));
         }
 
+        // Validate individual elements at the boundary — mirrors the pattern
+        // in InMemoryConversationStore.AppendAsync so a null message fails
+        // here (with a clear message naming this method) rather than later
+        // inside the store with less context.
+        foreach (var message in newMessages)
+        {
+            Guard.NotNull(message);
+        }
+
         var history = await _store.GetAsync(threadId, cancellationToken).ConfigureAwait(false);
 
         var conversation = new List<ChatMessage>(history.Count + newMessages.Count);

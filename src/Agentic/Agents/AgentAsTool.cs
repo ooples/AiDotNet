@@ -27,7 +27,7 @@ namespace AiDotNet.Agentic.Agents;
 /// tool-calling machinery it would for a calculator or a web search.
 /// </para>
 /// </remarks>
-public sealed class AgentAsTool<T> : IAgentTool
+internal sealed class AgentAsTool<T> : IAgentTool
 {
     /// <summary>The conventional prefix applied to a wrapped agent's tool name.</summary>
     public const string DefaultNamePrefix = "transfer_to_";
@@ -84,7 +84,19 @@ public sealed class AgentAsTool<T> : IAgentTool
     public async Task<ToolInvocationResult> InvokeAsync(JObject arguments, CancellationToken cancellationToken = default)
     {
         Guard.NotNull(arguments);
-        var task = (string?)arguments["task"];
+        // Validate the token shape before reading — JObject's implicit
+        // cast to string returns null for any non-string token type and
+        // would otherwise mask "the model passed an object/number/null"
+        // as a generic missing-argument error.
+        if (!arguments.TryGetValue("task", out var taskToken)
+            || taskToken is null
+            || taskToken.Type == JTokenType.Null
+            || taskToken.Type != JTokenType.String)
+        {
+            return ToolInvocationResult.Error(
+                $"The '{Name}' handoff requires a non-empty 'task' string argument.");
+        }
+        var task = taskToken.Value<string>();
         if (task is null || task.Trim().Length == 0)
         {
             return ToolInvocationResult.Error(

@@ -46,12 +46,27 @@ public sealed class SwarmMember<T>
     {
         Guard.NotNullOrWhiteSpace(name);
         Guard.NotNull(client);
+
+        // Snapshot + validate the caller's handoffs list so a mutable list
+        // can't change behind Swarm's back after construction-time validation.
+        IReadOnlyList<string>? handoffSnapshot = null;
+        if (handoffs is not null)
+        {
+            var copy = new string[handoffs.Count];
+            for (var i = 0; i < handoffs.Count; i++)
+            {
+                Guard.NotNullOrWhiteSpace(handoffs[i]);
+                copy[i] = handoffs[i];
+            }
+            handoffSnapshot = copy;
+        }
+
         Name = name;
         Client = client;
         SystemPrompt = systemPrompt;
         Description = description ?? string.Empty;
         Tools = tools ?? new ToolCollection();
-        Handoffs = handoffs;
+        Handoffs = handoffSnapshot;
     }
 
     /// <summary>Gets the member's unique name.</summary>

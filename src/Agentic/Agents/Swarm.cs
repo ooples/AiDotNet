@@ -54,12 +54,25 @@ public sealed class Swarm<T> : IAgent<T>
         }
 
         _members = new Dictionary<string, SwarmMember<T>>(StringComparer.Ordinal);
+        // Track normalised handoff tool names too — two distinct member names
+        // can collapse to the same transfer key (e.g. "Search Docs" and
+        // "Search_Docs", or case-only variants). Without this, the later
+        // member silently overwrites the earlier one in BuildHandoffMap and
+        // some agents become unreachable.
+        var handoffToolNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var member in members)
         {
             Guard.NotNull(member);
             if (_members.ContainsKey(member.Name))
             {
                 throw new ArgumentException($"Duplicate swarm member name '{member.Name}'.", nameof(members));
+            }
+            var handoffToolName = ToolNaming.HandoffToolName(member.Name);
+            if (!handoffToolNames.Add(handoffToolName))
+            {
+                throw new ArgumentException(
+                    $"Swarm member '{member.Name}' collides with another member after handoff-name normalisation.",
+                    nameof(members));
             }
 
             _members.Add(member.Name, member);
@@ -134,11 +147,18 @@ public sealed class Swarm<T> : IAgent<T>
         }
 
         // The single shared conversation, excluding the per-turn system prompt (which reflects whichever
-        // member is currently active and is prepended fresh each turn).
+        // member is currently active and is prepended fresh each turn). Caller-supplied System messages
+        // are preserved separately and re-applied alongside the active member's prompt so any seeded
+        // global context (e.g. user-supplied policy / persona) survives the per-turn rebuild.
+        var callerSystemMessages = new List<ChatMessage>();
         var shared = new List<ChatMessage>(messages.Count + 8);
         foreach (var message in messages)
         {
-            if (message.Role != ChatRole.System)
+            if (message.Role == ChatRole.System)
+            {
+                callerSystemMessages.Add(message);
+            }
+            else
             {
                 shared.Add(message);
             }
@@ -159,7 +179,7 @@ public sealed class Swarm<T> : IAgent<T>
 
             var handoffTargets = BuildHandoffMap(active);
             var requestOptions = BuildRequestOptions(active, handoffTargets);
-            var requestMessages = BuildRequestMessages(active, shared);
+            var requestMessages = BuildRequestMessages(active, callerSystemMessages, shared);
 
             var response = await active.Client.GetResponseAsync(requestMessages, requestOptions, cancellationToken)
                 .ConfigureAwait(false);
@@ -281,10 +301,17 @@ public sealed class Swarm<T> : IAgent<T>
         };
     }
 
-    private static List<ChatMessage> BuildRequestMessages(SwarmMember<T> active, List<ChatMessage> shared)
+    private static List<ChatMessage> BuildRequestMessages(
+        SwarmMember<T> active,
+        List<ChatMessage> callerSystemMessages,
+        List<ChatMessage> shared)
     {
-        var requestMessages = new List<ChatMessage>(shared.Count + 1);
-        if (active.SystemPrompt is { } prompt && prompt.Trim().Length > 0)
+        var requestMessages = new List<ChatMessage>(callerSystemMessages.Count + shared.Count + 1);
+        // Caller-supplied system messages come first so any seeded global
+        // context (e.g. "You are operating under policy X") is in scope when
+        // the active member's prompt is read.
+        requestMessages.AddRange(callerSystemMessages);
+        if (active.SystemPrompt is { } prompt && !string.IsNullOrWhiteSpace(prompt))
         {
             requestMessages.Add(ChatMessage.System(prompt));
         }
