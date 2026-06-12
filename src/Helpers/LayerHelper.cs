@@ -20079,7 +20079,48 @@ public static class LayerHelper<T>
     /// <summary>
     /// Creates default layers for the SCNet (Sparse Compression Network) source separation model.
     /// </summary>
+    /// <param name="architecture">The neural network architecture configuration. Currently used only for the
+    /// Golden Pattern factory signature — SCNet's layer shapes are derived from its own option set, so the
+    /// architecture is not consulted internally.</param>
+    /// <param name="numClusters">Cluster compression dim (block width). Default: 64.</param>
+    /// <param name="compressionDim">Initial compression projection dim before clustering. Default: 128.</param>
+    /// <param name="numEncoderBlocks">Number of transformer encoder blocks. Default: 6.</param>
+    /// <param name="numDecoderBlocks">Number of transformer decoder blocks. Default: 6.</param>
+    /// <param name="numAttentionHeads">Requested number of attention heads per MHA block. May be rounded
+    /// down if it does not evenly divide <paramref name="numClusters"/> — see remarks. Default: 8.</param>
+    /// <param name="feedForwardDim">Width of each block's feed-forward inner Dense layer. Default: 1024.</param>
+    /// <param name="numStems">Number of source stems the network separates. Default: 4.</param>
+    /// <param name="numFreqBins">Number of STFT frequency bins consumed at the head and produced at
+    /// the tail. Default: 1025.</param>
+    /// <param name="dropoutRate">Dropout probability inserted after each block's final LayerNorm. Pass
+    /// 0 to skip inserting Dropout layers. Default: 0.0.</param>
+    /// <returns>The ordered sequence of layers that implement the SCNet (Chen et al. 2024) architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> SCNet is a source-separation network — given a mixed audio spectrogram with
+    /// several instruments playing together, it learns to output one spectrogram per instrument. Internally
+    /// it works like a Transformer: a stack of attention blocks reads the whole frequency context at once
+    /// and writes back per-source features. The "sparse compression" part of the name refers to the
+    /// cluster projection that squashes the wide frequency-bin axis down to a much narrower
+    /// <paramref name="numClusters"/> axis so the attention runs at a tractable cost.
+    /// </para>
+    /// <para>
+    /// All encoder/decoder blocks share a single <c>blockWidth = numClusters</c> because each block's
+    /// final <c>Dense(blockWidth, identity)</c> feeds straight into the next block's MHA — a width
+    /// mismatch there causes the MHA layer's lazy Q/K/V projections to size their weights independently
+    /// of the inbound tensor and the model crashes at first Forward. This factory therefore derives
+    /// <c>headDim</c> from <c>numClusters / effectiveHeads</c>.
+    /// </para>
+    /// <para>
+    /// <b>Head-count rounding:</b> if <paramref name="numAttentionHeads"/> does not evenly divide
+    /// <paramref name="numClusters"/>, the effective head count is rounded down until it does (down to a
+    /// floor of 1). For the common defaults (<c>numClusters=64</c>, <c>numAttentionHeads=8</c>) this leaves
+    /// the requested 8 heads in place. Callers that need a fixed head count should pick a
+    /// <paramref name="numClusters"/> that is an exact multiple of their desired head count.
+    /// </para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultSCNetLayers(
+        NeuralNetworkArchitecture<T> architecture,
         int numClusters = 64, int compressionDim = 128,
         int numEncoderBlocks = 6, int numDecoderBlocks = 6,
         int numAttentionHeads = 8, int feedForwardDim = 1024,

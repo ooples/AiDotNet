@@ -338,9 +338,14 @@ public class DiffEditModel<T> : LatentDiffusionModelBase<T>
     {
         // Delegate to sub-Clones — same lazy-init fix pattern as
         // SDXLTurboModel / RealESRGANModel / EDiffIModel / DDPMModel.
+        // Preserve outer configuration (architecture / options / scheduler) so
+        // custom diffusion settings round-trip through Clone (CodeRabbit PR #1562).
         var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
         var clonedVae = (StandardVAE<T>)_vae.Clone();
         return new DiffEditModel<T>(
+            architecture: Architecture,
+            options: (DiffusionModelOptions<T>)GetOptions(),
+            scheduler: Scheduler,
             unet: clonedUnet,
             vae: clonedVae,
             conditioner: _conditioner);

@@ -267,9 +267,14 @@ public class EDiffIModel<T> : LatentDiffusionModelBase<T>
         // SDXLTurboModel / RealESRGANModel / DDPMModel. The previous "construct
         // fresh + SetParameters(GetParameters())" dance under-counts the unresolved
         // source and leaves clone's lazy projections at fresh random init.
+        // Preserve outer configuration (architecture / options / scheduler) so
+        // custom diffusion settings round-trip through Clone (CodeRabbit PR #1562).
         var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
         var clonedVae = (StandardVAE<T>)_vae.Clone();
         return new EDiffIModel<T>(
+            architecture: Architecture,
+            options: (DiffusionModelOptions<T>)GetOptions(),
+            scheduler: Scheduler,
             unet: clonedUnet, vae: clonedVae, conditioner: _conditioner);
     }
 

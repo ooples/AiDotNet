@@ -194,6 +194,7 @@ public class SCNet<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
         if (!_useNativeMode) return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers);
         else Layers.AddRange(LayerHelper<T>.CreateDefaultSCNetLayers(
+            architecture: Architecture,
             numClusters: _options.NumClusters, compressionDim: _options.CompressionDim,
             numEncoderBlocks: _options.NumEncoderBlocks, numDecoderBlocks: _options.NumDecoderBlocks,
             numAttentionHeads: _options.NumAttentionHeads,
