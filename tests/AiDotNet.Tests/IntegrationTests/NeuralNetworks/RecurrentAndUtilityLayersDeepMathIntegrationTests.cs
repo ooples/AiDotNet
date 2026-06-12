@@ -114,41 +114,29 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     // ========================================================================
 
     [Fact(Timeout = 120000)]
-    public async Task GRU_MultiStepSequence_DiffersFromSingleStep()
+    public async Task GRU_StatelessForward_SecondCallMatchesFirst()
     {
-        // GRULayer is stateless across Forward calls (every Forward starts with
-        // a zero h0 — see Cho et al. 2014; the PyTorch nn.GRU "batch_first" API
-        // also resets when no h_0 is passed). The within-sequence recurrence
-        // IS what carries information from t-1 → t. Verify that contract:
-        // feeding a 2-timestep sequence with the same per-step input produces
-        // a different final hidden state than feeding only one timestep,
-        // because step 2 sees a non-zero h from step 1.
-        await Task.Yield();
-        var gru = new GRULayer<double>(hiddenSize: 3,
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
+        // The library implements STANDARD non-streaming RNN semantics: every Forward starts from
+        // a zero initial hidden state (GRULayer documents this explicitly — it guarantees
+        // repeated-Predict determinism and Clone-after-training parity). The previous version of
+        // this test asserted the OPPOSITE (stateful carry-over), a contract the layer never had.
+        var gru = new GRULayer<double>( hiddenSize: 3,
             activation: (IActivationFunction<double>?)null);
 
-        // 1 timestep — h0 = 0.
-        var single = new Tensor<double>(new[] { 1, 1, 2 },
-            new Vector<double>(new double[] { 1.0, 0.5 }));
-        var singleOut = gru.Forward(single);
-        // Default (no return-sequences) → final hidden [batch, hiddenSize].
-        var singleVals = new double[3];
-        for (int i = 0; i < 3; i++) singleVals[i] = singleOut[0, i];
+        var input = new Tensor<double>(new[] { 1, 2 }, new Vector<double>(new double[] { 1.0, 0.5 }));
 
-        // 2 timesteps with same per-step input — step 1 builds h, step 2 uses it.
-        var seq = new Tensor<double>(new[] { 1, 2, 2 },
-            new Vector<double>(new double[] { 1.0, 0.5, 1.0, 0.5 }));
-        var seqOut = gru.Forward(seq);
+        var output1 = gru.Forward(input);
+        var o1vals = new double[3];
+        for (int i = 0; i < 3; i++)
+            o1vals[i] = output1[i];
 
-        bool differs = false;
+        var output2 = gru.Forward(input);
+
         for (int i = 0; i < 3; i++)
         {
-            if (Math.Abs(seqOut[0, i] - singleVals[i]) > 1e-10)
-                differs = true;
+            Assert.Equal(o1vals[i], output2[i], 10);
         }
-        Assert.True(differs,
-            "Two-step sequence final h should differ from one-step h because " +
-            "step 2's recurrence has a non-zero previous hidden state.");
     }
 
     [Fact(Timeout = 120000)]

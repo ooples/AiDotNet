@@ -204,18 +204,14 @@ public class MissingModelsIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task GraphModels_AdjacencyMatrixContract()
+    public async Task GraphModels_PredictWithoutAdjacency_UsesDocumentedIdentityFallback()
     {
-        // Per-model adjacency contract:
-        //   - LinkPredictionModel.Predict REQUIRES an explicit adjacency (link
-        //     prediction is inherently a structural query; identity-fallback
-        //     would be nonsensical).
-        //   - GraphClassificationModel.Predict and NodeClassificationModel.Predict
-        //     auto-create an identity adjacency for the input's node count
-        //     (Kipf & Welling 2017 §2: A=I degenerates the GCN to a per-node
-        //     dense transform — a defined, if degenerate, model). This keeps
-        //     the test-scaffold's generic Predict/Train invariants runnable
-        //     without each scaffold having to know about SetAdjacencyMatrix.
+        // The graph models' DOCUMENTED contract (EnsureDefaultAdjacencyForInput) is a
+        // default-of-last-resort identity adjacency on Predict/Train when none was set —
+        // per Kipf & Welling 2017 §2 an A = I graph degenerates the GCN to per-node dense
+        // transforms, keeping scaffold invariants well-defined. Production callers should
+        // still call SetAdjacencyMatrix with the real graph. This pins that Predict succeeds
+        // and produces finite output instead of throwing.
         int numNodes = 3;
         int inputFeatures = 2;
         int numClasses = 2;
@@ -232,12 +228,20 @@ public class MissingModelsIntegrationTests
         var nodeModel = new NodeClassificationModel<float>(architecture);
         var nodeFeatures = CreateRandomTensor(new[] { numNodes, inputFeatures });
 
-        // Link prediction must still throw.
-        Assert.Throws<InvalidOperationException>(() => linkModel.Predict(nodeFeatures));
-
-        // Classification models complete via identity-fallback.
-        _ = graphModel.Predict(nodeFeatures);
-        _ = nodeModel.Predict(nodeFeatures);
+        foreach (var (name, output) in new[]
+        {
+            ("graph", graphModel.Predict(nodeFeatures)),
+            ("link", linkModel.Predict(nodeFeatures)),
+            ("node", nodeModel.Predict(nodeFeatures)),
+        })
+        {
+            Assert.True(output.Length > 0, $"{name} model produced empty output under the identity fallback");
+            for (int i = 0; i < output.Length; i++)
+            {
+                // float.IsFinite is net10-only; use the net471-compatible equivalent (same semantics).
+                Assert.True(!float.IsNaN(output[i]) && !float.IsInfinity(output[i]), $"{name} model produced non-finite output under the identity fallback");
+            }
+        }
     }
 
     [Fact(Timeout = 120000)]

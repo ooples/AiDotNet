@@ -77,7 +77,15 @@ public class FalconMambaLanguageModel<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         FalconMambaOptions? options = null)
         : base(architecture,
-            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.TextGeneration))
+            // The LM head (DenseLayer(vocabSize, activation: null) in
+            // CreateFalconMambaLayers) emits RAW LOGITS, so the default loss
+            // must be the logits-domain cross-entropy (log_softmax + NLL,
+            // PyTorch nn.CrossEntropyLoss semantics). The TextGeneration
+            // default (CategoricalCrossEntropyLoss) requires PROBABILITY
+            // inputs — applied to logits it clamps them into [1e-7, 1] and
+            // optimizes a broken objective whose gradient pushes every
+            // in-range logit toward 1, which diverges training.
+            lossFunction ?? new LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new FalconMambaOptions();
         Options = _options;
