@@ -87,7 +87,13 @@ public sealed class SqliteConversationStore : IConversationStore
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
+#if NETFRAMEWORK
+        // .NET Framework's DbTransaction has no CommitAsync (that overload is
+        // netstandard2.1 / .NET Core 3.0+); commit synchronously there.
+        transaction.Commit();
+#else
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+#endif
     }
 
     /// <inheritdoc/>

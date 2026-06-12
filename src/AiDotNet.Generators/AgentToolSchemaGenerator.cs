@@ -344,7 +344,13 @@ public class AgentToolSchemaGenerator : IIncrementalGenerator
             ? n.TypeArguments[0]
             : type;
 
-    private static string TypeSchemaJson(ITypeSymbol type)
+    // Mirrors the runtime JsonSchemaGenerator.ForType recursion budget so the two paths agree.
+    private const int MaxSchemaDepth = 6;
+
+    private static string TypeSchemaJson(ITypeSymbol type) =>
+        TypeSchemaJson(type, new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default), 0);
+
+    private static string TypeSchemaJson(ITypeSymbol type, HashSet<ITypeSymbol> visiting, int depth)
     {
         if (type.TypeKind == TypeKind.Enum)
         {
@@ -390,20 +396,89 @@ public class AgentToolSchemaGenerator : IIncrementalGenerator
 
         if (type is IArrayTypeSymbol array)
         {
-            return $"{{\"type\":\"array\",\"items\":{TypeSchemaJson(Unwrap(array.ElementType))}}}";
+            var items = depth >= MaxSchemaDepth ? "{}" : TypeSchemaJson(Unwrap(array.ElementType), visiting, depth + 1);
+            return $"{{\"type\":\"array\",\"items\":{items}}}";
         }
 
         if (TryGetDictionaryValueType(type, out var valueType))
         {
-            return $"{{\"type\":\"object\",\"additionalProperties\":{TypeSchemaJson(Unwrap(valueType))}}}";
+            var additional = depth >= MaxSchemaDepth ? "{}" : TypeSchemaJson(Unwrap(valueType), visiting, depth + 1);
+            return $"{{\"type\":\"object\",\"additionalProperties\":{additional}}}";
         }
 
         if (TryGetEnumerableElementType(type, out var elementType))
         {
-            return $"{{\"type\":\"array\",\"items\":{TypeSchemaJson(Unwrap(elementType))}}}";
+            var items = depth >= MaxSchemaDepth ? "{}" : TypeSchemaJson(Unwrap(elementType), visiting, depth + 1);
+            return $"{{\"type\":\"array\",\"items\":{items}}}";
         }
 
-        return "{\"type\":\"object\"}";
+        // Complex object: expand public readable instance properties into a full object schema,
+        // guarding against cycles and runaway depth. This mirrors the runtime
+        // JsonSchemaGenerator.ForType so the compile-time CreateAgentTools() path emits the same
+        // nested-object detail (properties + required) as AgentToolFactory.ScanInstance(), instead
+        // of the bare {"type":"object"} that strips all DTO structure from the model's view.
+        if (depth >= MaxSchemaDepth || !visiting.Add(type))
+        {
+            return "{\"type\":\"object\"}";
+        }
+
+        var props = new List<string>();
+        var required = new List<string>();
+        foreach (var property in EnumeratePublicReadableProperties(type))
+        {
+            props.Add($"{JsonString(property.Name)}:{TypeSchemaJson(Unwrap(property.Type), visiting, depth + 1)}");
+            if (IsRequiredProperty(property))
+            {
+                required.Add(JsonString(property.Name));
+            }
+        }
+
+        visiting.Remove(type);
+
+        if (props.Count == 0)
+        {
+            return "{\"type\":\"object\"}";
+        }
+
+        var objectSchema = $"{{\"type\":\"object\",\"properties\":{{{string.Join(",", props)}}}";
+        if (required.Count > 0)
+        {
+            objectSchema += $",\"required\":[{string.Join(",", required)}]";
+        }
+        return objectSchema + "}";
+    }
+
+    // Public readable instance properties, walking base types (derived first wins on name clash).
+    private static IEnumerable<IPropertySymbol> EnumeratePublicReadableProperties(ITypeSymbol type)
+    {
+        var seen = new HashSet<string>();
+        for (var t = type; t is not null && t.SpecialType != SpecialType.System_Object; t = t.BaseType)
+        {
+            foreach (var member in t.GetMembers().OfType<IPropertySymbol>())
+            {
+                if (member.DeclaredAccessibility != Accessibility.Public) continue;
+                if (member.IsStatic || member.IsIndexer || member.GetMethod is null) continue;
+                if (seen.Add(member.Name)) yield return member;
+            }
+        }
+    }
+
+    // Mirrors JsonSchemaGenerator.IsRequiredProperty: Nullable&lt;T&gt; → optional; non-nullable
+    // value type → required; reference type required only when explicitly non-nullable.
+    private static bool IsRequiredProperty(IPropertySymbol property)
+    {
+        if (property.Type is INamedTypeSymbol named &&
+            named.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
+        {
+            return false;
+        }
+
+        if (property.Type.IsValueType)
+        {
+            return true;
+        }
+
+        return property.NullableAnnotation == NullableAnnotation.NotAnnotated;
     }
 
     private static bool TryGetDictionaryValueType(ITypeSymbol type, out ITypeSymbol valueType)
