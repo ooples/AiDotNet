@@ -238,7 +238,8 @@ public class MissingModelsIntegrationTests
             Assert.True(output.Length > 0, $"{name} model produced empty output under the identity fallback");
             for (int i = 0; i < output.Length; i++)
             {
-                Assert.True(float.IsFinite(output[i]), $"{name} model produced non-finite output under the identity fallback");
+                // float.IsFinite is net10-only; use the net471-compatible equivalent (same semantics).
+                Assert.True(!float.IsNaN(output[i]) && !float.IsInfinity(output[i]), $"{name} model produced non-finite output under the identity fallback");
             }
         }
     }
