@@ -289,7 +289,7 @@ public class PointTransformerV3<T> : NeuralNetworkBase<T>, ISemanticSegmentation
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "PointTransformerV3" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "ModelSize", _modelSize.ToString() }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
-        ModelData = this.Serialize()
+        ModelData = SerializeForMetadata()
     };
 
     /// <summary>

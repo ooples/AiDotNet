@@ -1544,7 +1544,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
                 { "BestGenomeConnections", bestGenome.Connections.Count },
                 { "BestGenomeEnabledConnections", bestGenome.Connections.Count(c => c.IsEnabled) }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

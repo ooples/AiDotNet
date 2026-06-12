@@ -1796,7 +1796,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
                 { "VocabularySize", _vocabularySize },
                 { "UseNativeMode", _useNativeMode }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

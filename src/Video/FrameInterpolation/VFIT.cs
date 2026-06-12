@@ -194,7 +194,7 @@ public class VFIT<T> : FrameInterpolationBase<T>
                 { "NumHeads", _options.NumHeads },
                 { "Complexity", _options.NumTemporalLayers * _options.NumSpatialLayers }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

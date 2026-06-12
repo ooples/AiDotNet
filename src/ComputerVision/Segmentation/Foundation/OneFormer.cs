@@ -413,7 +413,7 @@ public class OneFormer<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
                 { "ModelSize", _modelSize.ToString() }, { "DecoderDim", _decoderDim },
                 { "DropRate", _dropRate }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

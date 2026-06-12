@@ -382,7 +382,7 @@ public class SAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
             { "NumLayers", Layers.Count },
             { "EncoderLayerEnd", _encoderLayerEnd }
         },
-        ModelData = this.Serialize()
+        ModelData = SerializeForMetadata()
     };
 
     /// <summary>

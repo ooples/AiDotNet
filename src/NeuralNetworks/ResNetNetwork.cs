@@ -586,7 +586,7 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
                 { "NumWeightLayers", _configuration.NumWeightLayers },
                 { "ZeroInitResidual", _configuration.ZeroInitResidual }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

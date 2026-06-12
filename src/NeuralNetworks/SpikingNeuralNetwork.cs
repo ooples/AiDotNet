@@ -1187,7 +1187,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                 { "OutputSize", Architecture.OutputSize },
                 { "HiddenLayerSizes", Architecture.GetHiddenLayerSizes() }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

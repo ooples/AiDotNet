@@ -721,6 +721,23 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// which can save significant time for complex models trained on large datasets.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Serializes the model for embedding in <c>ModelMetadata.ModelData</c>, degrading to an EMPTY payload
+    /// when persistence is not licensed — GetModelMetadata() is a descriptive call (invoked by the facade
+    /// result constructor on every build) and must not require a license; explicit saves still enforce it.
+    /// </summary>
+    protected byte[] SerializeForMetadata()
+    {
+        try
+        {
+            return this.Serialize();
+        }
+        catch (AiDotNet.Exceptions.LicenseRequiredException)
+        {
+            return [];
+        }
+    }
+
     public virtual byte[] Serialize()
     {
         ModelPersistenceGuard.EnforceBeforeSerialize();

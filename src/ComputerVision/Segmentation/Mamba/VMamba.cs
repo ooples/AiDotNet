@@ -296,7 +296,7 @@ public class VMamba<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "VMamba" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "ModelSize", _modelSize.ToString() }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
-        ModelData = this.Serialize()
+        ModelData = SerializeForMetadata()
     };
 
     /// <summary>

@@ -674,7 +674,7 @@ public class GMFlow<T> : OpticalFlowBase<T>
             { "InputWidth", _width },
             { "NumTransformerLayers", _numTransformerLayers }
         },
-        ModelData = this.Serialize()
+        ModelData = SerializeForMetadata()
     };
 
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)

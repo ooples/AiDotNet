@@ -8636,6 +8636,27 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// - Implementing feature selection techniques
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Serializes the model for embedding in <c>ModelMetadata.ModelData</c>, degrading to an EMPTY payload
+    /// when model persistence is not licensed. GetModelMetadata() is a descriptive/inspection call invoked
+    /// by <c>AiModelResult</c>'s constructor on every facade build — before this guard, the embedded
+    /// <c>this.Serialize()</c> made BUILDING any neural model through the facade throw
+    /// <see cref="AiDotNet.Exceptions.LicenseRequiredException"/> without a license, contradicting the
+    /// stated policy that training and inference remain fully available. Explicit saves
+    /// (<c>SaveModel</c>/<c>Serialize</c>) still enforce the license as before.
+    /// </summary>
+    protected byte[] SerializeForMetadata()
+    {
+        try
+        {
+            return this.Serialize();
+        }
+        catch (AiDotNet.Exceptions.LicenseRequiredException)
+        {
+            return [];
+        }
+    }
+
     public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
         if (featureIndices == null)

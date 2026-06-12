@@ -718,7 +718,7 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
                 { "ExogenousVariables", arimaxOptions.ExogenousVariables },
                 { "DecompositionType", arimaxOptions.DecompositionType }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
 
         return metadata;

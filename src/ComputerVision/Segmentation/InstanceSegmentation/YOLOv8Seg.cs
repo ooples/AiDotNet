@@ -349,7 +349,7 @@ public class YOLOv8Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
             { "UseNativeMode", _useNativeMode },
             { "NumLayers", Layers.Count }
         },
-        ModelData = this.Serialize()
+        ModelData = SerializeForMetadata()
     };
 
     /// <summary>
