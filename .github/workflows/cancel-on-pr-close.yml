@@ -20,6 +20,57 @@ permissions:
   actions: write
 
 jobs:
+  # ── Server-side eviction (the runner-proof path) ──────────────────────────
+  # GitHub evaluates a job's `concurrency` group AT QUEUE TIME, the moment the
+  # run is created — BEFORE any runner is assigned. Entering a heavy workflow's
+  # group with cancel-in-progress: true therefore cancels its in-flight run
+  # immediately and server-side, even while this job itself sits queued.
+  #
+  # This is the fix for the saturation deadlock: the API-sweep job below needs
+  # a runner, and when the pool is saturated by the very runs it must cancel,
+  # it queues BEHIND them and fires ~45 minutes too late. The eviction jobs'
+  # side effect needs no runner at all; their bodies are no-ops.
+  #
+  # Group keys must mirror the heavy workflows' own `concurrency.group`
+  # expressions exactly, evaluated in this (pull_request: closed) context:
+  #   - sonarcloud.yml:  build-${{ github.event.pull_request.number || github.ref }}
+  #   - ci-website.yml:  ci-website-${{ github.head_ref }}
+  #   - codacy.yml:      codacy-${{ github.ref }}  (refs/pull/N/merge on PR events)
+  evict-build-group:
+    name: Evict Build & SonarCloud concurrency group
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    concurrency:
+      group: build-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - run: echo "Evicted concurrency group build-${{ github.event.pull_request.number }} (cancellation happened server-side at queue time)."
+
+  evict-ci-website-group:
+    name: Evict ci-website concurrency group
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    concurrency:
+      group: ci-website-${{ github.event.pull_request.head.ref }}
+      cancel-in-progress: true
+    steps:
+      - run: echo "Evicted concurrency group ci-website-${{ github.event.pull_request.head.ref }}."
+
+  evict-codacy-group:
+    name: Evict codacy concurrency group
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    concurrency:
+      group: codacy-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - run: echo "Evicted concurrency group codacy-${{ github.ref }}."
+
+  # ── API sweep (defense-in-depth) ──────────────────────────────────────────
+  # Catches workflows whose group keys can't be reproduced here (group strings
+  # embedding ${{ github.workflow }} evaluate to THIS workflow's name in this
+  # context) plus queued-but-not-started runs. May fire late under saturation —
+  # the eviction jobs above already killed the long runs by then.
   cancel:
     name: Cancel orphaned PR runs
     runs-on: ubuntu-latest
