@@ -167,35 +167,19 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
             SetSpiralIndices(defaultIndices);
         }
 
-        // Run a dummy eval-mode Forward so lazy layers materialise their
-        // parameter shapes (SpiralConv / BatchNorm / Dense are all lazy under
-        // the default options). Without this, ParameterCount reads 0 until
-        // first real Predict — direct GetParameters / Clone roundtrips can't
-        // see anything to copy.
-        TriggerLazyShapeResolution();
-    }
-
-    private void TriggerLazyShapeResolution()
-    {
-        bool wasTraining = IsTrainingMode;
-        SetTrainingMode(false);
-        try
-        {
-            int numVertices = _options.NumVertices > 0 ? _options.NumVertices : 64;
-            var dummy = new Tensor<T>([numVertices, _options.InputFeatures]);
-            _ = Forward(dummy);
-        }
-        finally
-        {
-            SetTrainingMode(wasTraining);
-            // Forward materialized lazy SpiralConv / BatchNorm / Dense weights,
-            // but TryAutoEnableWeightStreaming had already cached ParameterCount
-            // at 0 during base-ctor EnsureArchitectureInitialized. Invalidate
-            // so the test-time ParameterCount getter recomputes the now-true
-            // total across all layers (same pattern Predict's first-forward
-            // hook uses for above-threshold lazy networks).
-            InvalidateParameterCountCache();
-        }
+        // NOTE: SpiralNet's layers stay LAZY until the first real
+        // Forward/Predict — by design. SpiralNet accepts both rank-2
+        // [V, C] and rank-3 [B, V, C] inputs, and rank-sensitive layers
+        // (BatchNormalization picks its channel axis from input rank,
+        // GlobalPooling requires rank-3+) must bind to the rank the
+        // caller actually uses. Any ctor-time materialization — dummy
+        // Forward or per-layer ResolveFromShape walk — has to guess a
+        // rank, and a wrong guess silently mis-sizes BatchNorm's
+        // gamma/runningStats so later real Predicts collapse to
+        // input-independent output (broke ScaledInput / DifferentInputs
+        // on CI). Callers that need ParameterCount before training run a
+        // warm-up Predict first — the documented pattern in
+        // SpiralNetTests.Parameters_ShouldBeNonEmpty.
     }
 
     /// <summary>

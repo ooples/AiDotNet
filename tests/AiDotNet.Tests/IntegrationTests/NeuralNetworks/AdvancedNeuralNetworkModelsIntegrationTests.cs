@@ -4114,11 +4114,19 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SpiralNet_GetParameterCount_ReturnsPositiveValue()
     {
-        // Arrange
+        // Arrange. SpiralNet's layers are lazy by design: SpiralConv / BatchNorm /
+        // GlobalPooling bind their shapes to the rank of the first real input
+        // (rank-2 [V, C] or rank-3 [B, V, C]), so ParameterCount reads 0 until a
+        // warm-up Predict materializes the weights — the documented pattern in
+        // SpiralNetTests.Parameters_ShouldBeNonEmpty. Ctor-time materialization
+        // was tried and reverted: it must guess an input rank, and a wrong guess
+        // mis-sizes BatchNorm so real Predicts collapse to constant output.
         var spiralNet = new SpiralNet<float>();
+        var warmupInput = CreateRandomTensor([64, 3]);
 
         // Act
-        int parameterCount = (int)spiralNet.ParameterCount;
+        spiralNet.Predict(warmupInput);
+        long parameterCount = spiralNet.ParameterCount;
 
         // Assert
         Assert.True(parameterCount > 0, $"SpiralNet parameter count should be > 0, got {parameterCount}");
