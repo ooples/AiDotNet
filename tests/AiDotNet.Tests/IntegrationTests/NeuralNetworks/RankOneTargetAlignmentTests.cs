@@ -81,7 +81,8 @@ public class RankOneTargetAlignmentTests
         var preds = new[] { -1.0, -0.5, 0.0, 0.5, 1.0 }
             .Select(p => result.Predict(new Tensor<double>(new[] { 1, 1 }, new Vector<double>(new[] { p })))[0])
             .ToArray();
-        Assert.True(preds.All(double.IsFinite), "non-finite predictions after rank-1 target training");
+        // double.IsFinite is net10-only; use the net471-compatible equivalent (same semantics).
+        Assert.True(preds.All(p => !double.IsNaN(p) && !double.IsInfinity(p)), "non-finite predictions after rank-1 target training");
         Assert.True(preds.Max() - preds.Min() > 1e-6 || Math.Abs(baseline) < 1e-9,
             "model unchanged by training on rank-1 targets");
     }
