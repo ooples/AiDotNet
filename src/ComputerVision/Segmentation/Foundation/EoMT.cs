@@ -421,7 +421,7 @@ public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
                 { "EmbedDim", _embedDim }, { "DecoderDim", _decoderDim },
                 { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

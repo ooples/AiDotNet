@@ -1292,7 +1292,7 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
                 { "GeneratorLayerCount", Layers.Count },
                 { "GeneratorLayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

@@ -945,7 +945,7 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
                 { "AR Parameters", _arParameters },
                 { "MA Parameters", _maParameters }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
 
         return metaData;

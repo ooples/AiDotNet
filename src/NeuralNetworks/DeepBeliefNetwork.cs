@@ -707,7 +707,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
                 { "LearningRate", Convert.ToDouble(_learningRate) },
                 { "BatchSize", _batchSize }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

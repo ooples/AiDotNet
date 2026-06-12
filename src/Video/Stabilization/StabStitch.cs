@@ -168,7 +168,7 @@ public class StabStitch<T> : VideoStabilizationBase<T>
                 { "MeshGridRows", _options.MeshGridRows },
                 { "MeshGridCols", _options.MeshGridCols }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

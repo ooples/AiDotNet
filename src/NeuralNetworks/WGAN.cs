@@ -634,7 +634,7 @@ public class WGAN<T> : NeuralNetworkBase<T>
                 { "WeightClipValue", _weightClipValue },
                 { "CriticIterations", _criticIterations }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

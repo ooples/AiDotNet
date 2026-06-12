@@ -910,7 +910,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
                 { "ParameterCount", GetParameterCount() },
                 { "ActivationTypes", string.Join(", ", GetActivationTypes()) }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

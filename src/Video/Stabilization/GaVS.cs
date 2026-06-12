@@ -170,7 +170,7 @@ public class GaVS<T> : VideoStabilizationBase<T>
                 { "GazeHiddenDim", _options.GazeHiddenDim },
                 { "SmoothingWindow", _options.SmoothingWindow }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

@@ -330,7 +330,7 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
                 { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() },
                 { "NumberOfQubits", _numQubits }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

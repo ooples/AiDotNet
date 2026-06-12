@@ -979,7 +979,7 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
                 { "LossFunction", LossFunction.GetType().Name },
                 { "Optimizer", _optimizer.GetType().Name }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

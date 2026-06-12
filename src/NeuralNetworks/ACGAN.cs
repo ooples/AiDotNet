@@ -728,7 +728,7 @@ public class ACGAN<T> : NeuralNetworkBase<T>
                 { "DiscriminatorParameters", Discriminator.GetParameterCount() },
                 { "NumClasses", _numClasses }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

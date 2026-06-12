@@ -1714,7 +1714,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
                 { "DiscriminatorArchitecture", Discriminator.GetModelMetadata() },
                 { "OptimizationType", "Adam" }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

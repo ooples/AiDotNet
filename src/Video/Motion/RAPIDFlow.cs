@@ -455,7 +455,7 @@ public class RAPIDFlow<T> : OpticalFlowBase<T>
                 { "Level3Channels", Level3Channels },
                 { "NumRefinementIterations", _numRefinementIterations }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

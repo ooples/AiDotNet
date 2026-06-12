@@ -440,7 +440,7 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
                 { "TaskType", Architecture.TaskType.ToString() },
                 { "ParameterCount", GetParameterCount() }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

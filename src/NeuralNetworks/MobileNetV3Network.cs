@@ -282,7 +282,7 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
                 { "LayerCount", Layers.Count },
                 { "ParameterCount", GetParameterCount() }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 
