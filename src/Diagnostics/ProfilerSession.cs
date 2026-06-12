@@ -147,20 +147,33 @@ public class ProfilerSession
     /// <param name="name">Operation name.</param>
     /// <param name="duration">Duration of the operation.</param>
     /// <param name="parentName">Optional parent operation name for hierarchy.</param>
-    internal void RecordTiming(string name, TimeSpan duration, string? parentName = null)
+    /// <returns>
+    /// <c>true</c> when the sample was recorded; <c>false</c> when the session is
+    /// disabled, the sample was dropped by the sampling rate, or the operation
+    /// limit was hit. Callers recording companion data for the same operation
+    /// (e.g. the allocation delta in <see cref="ProfilerSessionTimer.Stop"/>)
+    /// must honor this so a sampled-out operation records NOTHING — otherwise
+    /// the allocation entry alone makes <see cref="OperationCount"/> non-zero
+    /// at SamplingRate 0.
+    /// </returns>
+    internal bool RecordTiming(string name, TimeSpan duration, string? parentName = null)
     {
-        if (!_enabled) return;
+        if (!_enabled) return false;
 
-        // Apply sampling rate (using thread-safe RandomHelper from AiDotNet.Tensors)
-        if (_config.SamplingRate < 1.0 && RandomHelper.ThreadSafeRandom.NextDouble() > _config.SamplingRate)
+        // Apply sampling rate (using thread-safe RandomHelper from AiDotNet.Tensors).
+        // Record with probability == SamplingRate: drop when draw >= rate, so
+        // rate 0.0 records nothing even when NextDouble() returns exactly 0.0
+        // (seeded legacy System.Random can yield 0.0, and ThreadSafeRandom's
+        // counter-derived per-thread seeds make that draw reproducible).
+        if (_config.SamplingRate < 1.0 && RandomHelper.ThreadSafeRandom.NextDouble() >= _config.SamplingRate)
         {
-            return;
+            return false;
         }
 
         // Check max operations limit
         if (_entries.Count >= _config.MaxOperations && !_entries.ContainsKey(name))
         {
-            return;
+            return false;
         }
 
         var entry = _entries.GetOrAdd(name, _ => new ProfilerSessionEntry(name, _config.ReservoirSize));
@@ -170,6 +183,8 @@ public class ProfilerSession
         {
             entry.AddParent(parentName);
         }
+
+        return true;
     }
 
     /// <summary>
@@ -498,7 +513,7 @@ public class ProfilerSessionTimer : IDisposable
         _stopped = true;
 
         _stopwatch.Stop();
-        _session.RecordTiming(_name, _stopwatch.Elapsed, _parentName);
+        bool sampled = _session.RecordTiming(_name, _stopwatch.Elapsed, _parentName);
 
         // AiDotNet#1355: emit memory-allocation delta when tracking is on
         // and the platform exposed a baseline at scope entry. The negative
@@ -517,7 +532,12 @@ public class ProfilerSessionTimer : IDisposable
         // can publish wildly wrong numbers (or negative deltas). The
         // timing measurement still records correctly because Stopwatch
         // is wall-clock and thread-agnostic.
-        if (_allocBytesAtStart >= 0
+        // Honor the sampling decision: when RecordTiming dropped this
+        // operation, record no companion allocation either — a lone
+        // allocation entry would make OperationCount non-zero even at
+        // SamplingRate 0.
+        if (sampled
+            && _allocBytesAtStart >= 0
             && Environment.CurrentManagedThreadId == _threadIdAtStart)
         {
             long allocBytesAtEnd = TryGetThreadAllocatedBytes();
