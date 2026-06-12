@@ -61,6 +61,17 @@ internal static class CodeTransformerLayerFactory
                 dropoutRate: architecture.DropoutRate,
                 ffnActivation: new GELUActivation<T>()));
         }
+
+        // Final LayerNorm after the Pre-LN encoder stack (GPT-2 / Pre-LN standard;
+        // BERT applies it before the output head too). TransformerEncoderBlock is
+        // Pre-LN — each sublayer adds to the residual stream WITHOUT normalizing it
+        // — so the residual magnitude grows with depth and, as training enlarges
+        // the sublayer outputs, with iterations. Without a final LayerNorm the
+        // unnormalized residual feeds the output projection and the logits (and the
+        // training loss) blow up: diagnosed activations growing ~400x over 100
+        // iterations to NaN while the weights stayed bounded (max ~1.0). This LN
+        // bounds the output and keeps training stable.
+        layers.Add(new LayerNormalizationLayer<T>(architecture.ModelDimension));
     }
 
     internal static void AddDecoderBlocks<T>(IList<ILayer<T>> layers, CodeSynthesisArchitecture<T> architecture)
