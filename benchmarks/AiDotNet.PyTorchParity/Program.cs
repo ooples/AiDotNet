@@ -645,13 +645,25 @@ internal static class AiDotNetProbe
 
 internal static class RunEnvironmentProbe
 {
+    // ThreadCount is a SNAPSHOT taken at probe time, not a stable environment
+    // characteristic — the .NET process can spin worker threads up/down across
+    // captures. ProcessorCount is the stable concurrency metric; ThreadCount is
+    // here only so report readers can see how parallel the runtime actually was
+    // at that moment.
+    //
+    // GcConcurrent is hard-coded false to match the explicit
+    // <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection> in
+    // AiDotNet.PyTorchParity.csproj. .NET exposes no public runtime API to
+    // query this directly; GCSettings.LatencyMode is a different axis
+    // (latency-target, not concurrent/non-concurrent) so the prior
+    // LatencyMode != Batch check did not actually reflect the configured value.
     public static RunEnvironment Capture() => new(
         Os: System.Runtime.InteropServices.RuntimeInformation.OSDescription,
         Cpu: System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString(),
         ProcessorCount: System.Environment.ProcessorCount,
         ThreadCount: Process.GetCurrentProcess().Threads.Count,
         GcServer: System.Runtime.GCSettings.IsServerGC,
-        GcConcurrent: System.Runtime.GCSettings.LatencyMode != System.Runtime.GCLatencyMode.Batch,
+        GcConcurrent: false,
         EngineDevice: AiDotNet.Tensors.Engines.AiDotNetEngine.Current.GetType().Name);
 }
 
