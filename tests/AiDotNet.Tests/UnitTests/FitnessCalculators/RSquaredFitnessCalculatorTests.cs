@@ -131,36 +131,33 @@ public class RSquaredFitnessCalculatorTests
     }
 
     [Fact(Timeout = 60000)]
-    public async Task IsHigherScoreBetter_ReturnsFalse()
+    public async Task IsHigherScoreBetter_ReturnsTrue()
     {
         // Arrange
         var calculator = new RSquaredFitnessCalculator<double, Vector<double>, Vector<double>>();
 
         // Act & Assert
-        // The calculator sets IsHigherScoreBetter to false because some optimization algorithms
-        // in the library are designed to minimize values. This allows the optimizer to work
-        // correctly while the calculator still interprets R² in the standard way (higher is better).
-        Assert.False(calculator.IsHigherScoreBetter);
+        // R² is a higher-is-better metric and GetFitnessScore returns the RAW R² (no negation).
+        // The previous false declaration made every optimizer's best-solution selection keep the
+        // WORST iterate (typically the untrained baseline) — see FitnessDirectionRegressionTests.
+        Assert.True(calculator.IsHigherScoreBetter);
     }
 
     [Fact(Timeout = 60000)]
-    public async Task IsBetterFitness_WithLowerScore_ReturnsTrue()
+    public async Task IsBetterFitness_WithLowerScore_ReturnsFalse()
     {
         // Arrange
         var calculator = new RSquaredFitnessCalculator<double, Vector<double>, Vector<double>>();
 
-        // Act
-        // Since IsHigherScoreBetter is false (for optimizer compatibility), IsBetterFitness
-        // considers lower values as "better" internally. This allows minimization-based
-        // optimizers to work correctly with R² without special handling.
+        // Act — a lower R² is a worse fit and must NOT be considered better.
         var result = calculator.IsBetterFitness(0.5, 0.8);
 
         // Assert
-        Assert.True(result);
+        Assert.False(result);
     }
 
     [Fact(Timeout = 60000)]
-    public async Task IsBetterFitness_WithHigherScore_ReturnsFalse()
+    public async Task IsBetterFitness_WithHigherScore_ReturnsTrue()
     {
         // Arrange
         var calculator = new RSquaredFitnessCalculator<double, Vector<double>, Vector<double>>();
@@ -169,7 +166,7 @@ public class RSquaredFitnessCalculatorTests
         var result = calculator.IsBetterFitness(0.9, 0.6);
 
         // Assert
-        Assert.False(result);
+        Assert.True(result);
     }
 
     [Fact(Timeout = 60000)]
