@@ -17,10 +17,18 @@ public sealed class PromptEvalCase
     /// <param name="input">The user input to send the agent.</param>
     /// <param name="expected">The expected answer (used by the default substring scorer).</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="input"/> or <paramref name="expected"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="expected"/> is empty or whitespace.</exception>
     public PromptEvalCase(string input, string expected)
     {
         Guard.NotNull(input);
         Guard.NotNull(expected);
+        // A blank expected answer would make the default substring scorer
+        // pass every response, silently corrupting prompt-optimization scores.
+        if (string.IsNullOrWhiteSpace(expected))
+        {
+            throw new ArgumentException("Expected answer must be non-empty.", nameof(expected));
+        }
+
         Input = input;
         Expected = expected;
     }

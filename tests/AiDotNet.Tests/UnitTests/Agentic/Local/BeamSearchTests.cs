@@ -29,6 +29,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
         [Fact(Timeout = 60000)]
         public async Task Greedy_TakesLocallyBestToken()
         {
+            await Task.Yield();
+
             var engine = new LocalEngineChatClient<double>(BuildModel(), BuildTokenizer(), options: new LocalEngineOptions
             {
                 Sampling = new LocalSamplingOptions { Temperature = 0.0 }, // greedy, beam width 1
@@ -42,6 +44,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
         [Fact(Timeout = 60000)]
         public async Task BeamSearch_FindsHigherProbabilitySequence()
         {
+            await Task.Yield();
+
             var engine = new LocalEngineChatClient<double>(BuildModel(), BuildTokenizer(), options: new LocalEngineOptions
             {
                 BeamWidth = 2,
@@ -57,6 +61,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
         [Fact(Timeout = 60000)]
         public async Task BeamSearch_RespectsConstraint()
         {
+            await Task.Yield();
+
             // Force the grammar A -> B -> (terminal) even though the model would prefer other paths.
             var constraint = new FiniteStateTokenConstraint(
                 start: new[] { 1 },

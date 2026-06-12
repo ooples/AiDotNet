@@ -89,19 +89,29 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
     {
         private readonly Func<JObject, string> _implementation;
 
-        public RecordingTool(string name, string description, Func<JObject, string> implementation)
+        public RecordingTool(
+            string name,
+            string description,
+            Func<JObject, string> implementation,
+            JObject? parametersSchema = null)
         {
             Name = name ?? throw new ArgumentNullException(nameof(name));
             Description = description ?? throw new ArgumentNullException(nameof(description));
             _implementation = implementation ?? throw new ArgumentNullException(nameof(implementation));
+            // Tests that assert on advertised schemas can supply a concrete
+            // one; the empty object schema remains the parameter-less default.
+            ParametersSchema = parametersSchema ?? new JObject
+            {
+                ["type"] = "object",
+                ["properties"] = new JObject(),
+            };
         }
 
         public string Name { get; }
 
         public string Description { get; }
 
-        public JObject ParametersSchema { get; } =
-            new JObject { ["type"] = "object", ["properties"] = new JObject() };
+        public JObject ParametersSchema { get; }
 
         public List<JObject> Invocations { get; } = new();
 

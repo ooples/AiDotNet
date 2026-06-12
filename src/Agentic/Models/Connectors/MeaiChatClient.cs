@@ -15,11 +15,11 @@ namespace AiDotNet.Agentic.Models.Connectors;
 /// <typeparam name="T">The numeric type used across the AiDotNet ecosystem.</typeparam>
 /// <remarks>
 /// <para>
-/// This bridges the two ecosystems for the common text + sampling + streaming path. Native tool calling
-/// through this adapter is not yet supported (Microsoft.Extensions.AI models tools as executable
-/// <c>AIFunction</c>s rather than schema-only definitions); passing tools throws
-/// <see cref="NotSupportedException"/>. Use the first-party connectors
-/// (<see cref="OpenAIChatClient{T}"/>, <see cref="AnthropicChatClient{T}"/>) for tool calling.
+/// This bridges the two ecosystems for text, sampling, streaming, <em>and tool calling</em>. AiDotNet tool
+/// definitions are passed to the MEAI model as schema-only function declarations (via <see cref="MeaiInterop"/>);
+/// tool calls the model requests come back as AiDotNet <see cref="ToolCallContent"/> with the finish reason set
+/// to <see cref="ChatFinishReason.ToolCalls"/>, and the AiDotNet agent loop executes them — MEAI never invokes
+/// the tool itself. Tool results are replayed back to the model as MEAI function-result content.
 /// </para>
 /// <para><b>For Beginners:</b> Microsoft.Extensions.AI is .NET's shared interface for talking to chat
 /// models. This adapter lets you take any model that speaks that interface and use it anywhere AiDotNet
@@ -58,8 +58,40 @@ public sealed class MeaiChatClient<T> : IChatClient<T>
 
         var response = await _inner.GetResponseAsync(meaiMessages, meaiOptions, cancellationToken).ConfigureAwait(false);
 
-        var assistant = ChatMessage.Assistant(response.Text ?? string.Empty);
-        return new ChatResponse(assistant, MapFinishReason(response.FinishReason), MapUsage(response.Usage), response.ModelId ?? ModelId);
+        var assistant = BuildAssistantMessage(response);
+        var finish = assistant.ToolCalls.Count > 0 && response.FinishReason is null
+            ? ChatFinishReason.ToolCalls
+            : MeaiInterop.FromMeaiFinishReason(response.FinishReason);
+        return new ChatResponse(assistant, finish, MeaiInterop.FromMeaiUsage(response.Usage), response.ModelId ?? ModelId);
+    }
+
+    // Collects assistant text and any tool calls the MEAI model emitted into a single AiDotNet message.
+    private static ChatMessage BuildAssistantMessage(Meai.ChatResponse response)
+    {
+        var contents = new List<AiContent>();
+        foreach (var message in response.Messages)
+        {
+            foreach (var content in message.Contents)
+            {
+                if (content is Meai.FunctionCallContent call)
+                {
+                    contents.Add(new ToolCallContent(call.CallId, call.Name, MeaiInterop.ArgumentsToJson(call.Arguments)));
+                }
+            }
+        }
+
+        var text = response.Text;
+        if (!string.IsNullOrEmpty(text))
+        {
+            contents.Insert(0, new TextContent(text));
+        }
+
+        if (contents.Count == 0)
+        {
+            contents.Add(new TextContent(string.Empty));
+        }
+
+        return ChatMessage.Assistant(contents);
     }
 
     /// <inheritdoc/>
@@ -91,7 +123,7 @@ public sealed class MeaiChatClient<T> : IChatClient<T>
 
             if (update.FinishReason is { } reason)
             {
-                finishReason = MapFinishReason(reason);
+                finishReason = MeaiInterop.FromMeaiFinishReason(reason);
             }
         }
 
@@ -104,16 +136,12 @@ public sealed class MeaiChatClient<T> : IChatClient<T>
         foreach (var message in messages)
         {
             // Fail fast at the boundary rather than letting a null message
-            // crash with NullReferenceException inside .Contents access below.
+            // crash with NullReferenceException inside the interop mapping
+            // (preserves the null-guard review fix that landed on master before
+            // this branch replaced the text-only path with the full bridge).
             Guard.NotNull(message);
 
-            if (message.Contents.Any(c => c is ToolCallContent || c is ToolResultContent || c is ImageContent))
-            {
-                throw new NotSupportedException(
-                    "MeaiChatClient currently supports text content only. Use the first-party connectors for tool calls or images.");
-            }
-
-            result.Add(new Meai.ChatMessage(MapRole(message.Role), message.Text));
+            result.Add(MeaiInterop.ToMeaiMessage(message));
         }
 
         return result;
@@ -126,12 +154,6 @@ public sealed class MeaiChatClient<T> : IChatClient<T>
             return null;
         }
 
-        if (options.Tools is { Count: > 0 })
-        {
-            throw new NotSupportedException(
-                "Tool calling through MeaiChatClient is not yet supported. Use the first-party connectors for tools.");
-        }
-
         var meai = new Meai.ChatOptions();
         if (options.Temperature is { } temperature) meai.Temperature = (float)temperature;
         if (options.MaxOutputTokens is { } maxTokens) meai.MaxOutputTokens = maxTokens;
@@ -139,46 +161,22 @@ public sealed class MeaiChatClient<T> : IChatClient<T>
         if (options.TopK is { } topK) meai.TopK = topK;
         if (options.Seed is { } seed) meai.Seed = seed;
         if (options.StopSequences is { Count: > 0 } stops) meai.StopSequences = stops.ToList();
+
+        if (options.Tools is { Count: > 0 } tools)
+        {
+            meai.Tools = MeaiInterop.ToMeaiTools(tools);
+            meai.ToolMode = ToMeaiToolMode(options.ToolChoice, options.RequiredToolName);
+        }
+
         return meai;
     }
 
-    private static Meai.ChatRole MapRole(ChatRole role) => role switch
+    private static Meai.ChatToolMode ToMeaiToolMode(ToolChoiceMode? choice, string? requiredToolName) => choice switch
     {
-        ChatRole.System => Meai.ChatRole.System,
-        ChatRole.User => Meai.ChatRole.User,
-        ChatRole.Assistant => Meai.ChatRole.Assistant,
-        ChatRole.Tool => Meai.ChatRole.Tool,
-        _ => Meai.ChatRole.User
+        ToolChoiceMode.None => Meai.ChatToolMode.None,
+        ToolChoiceMode.Required => requiredToolName is { Length: > 0 }
+            ? Meai.ChatToolMode.RequireSpecific(requiredToolName)
+            : Meai.ChatToolMode.RequireAny,
+        _ => Meai.ChatToolMode.Auto
     };
-
-    private static ChatFinishReason MapFinishReason(Meai.ChatFinishReason? reason)
-    {
-        if (reason is null)
-        {
-            return ChatFinishReason.Stop;
-        }
-
-        var value = reason.Value;
-        if (value == Meai.ChatFinishReason.Stop) return ChatFinishReason.Stop;
-        if (value == Meai.ChatFinishReason.Length) return ChatFinishReason.Length;
-        if (value == Meai.ChatFinishReason.ToolCalls) return ChatFinishReason.ToolCalls;
-        if (value == Meai.ChatFinishReason.ContentFilter) return ChatFinishReason.ContentFilter;
-        return ChatFinishReason.Unknown;
-    }
-
-    private static ChatUsage? MapUsage(Meai.UsageDetails? usage)
-    {
-        if (usage is null)
-        {
-            return null;
-        }
-
-        var input = ClampToInt(usage.InputTokenCount ?? 0);
-        var output = ClampToInt(usage.OutputTokenCount ?? 0);
-        return new ChatUsage(input, output);
-    }
-
-    // Token counts are long? in MEAI; clamp (don't overflow-cast) into ChatUsage's int range.
-    private static int ClampToInt(long value) =>
-        value < 0 ? 0 : (value > int.MaxValue ? int.MaxValue : (int)value);
 }

@@ -355,8 +355,28 @@ public partial class Mamba2Block<T> : LayerBase<T>
         _normGamma.Fill(NumOps.One);
         _normBeta.Fill(NumOps.Zero);
 
+        // Register ALL trainable parameters at construction so the tape training path collects them before
+        // the first UpdateParameters call — otherwise the projection weights (registered only inside
+        // UpdateParameters previously) are never tape-tracked and every Train step silently no-ops on them.
+        RegisterTrainableParameters();
+    }
+
+    // Registers every trainable tensor (matching GetParameters' set) with the autodiff/optimizer machinery.
+    // Called at init and re-called after UpdateParameters swaps in new tensor instances.
+    private void RegisterTrainableParameters()
+    {
+        RegisterTrainableParameter(_inputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_inputProjectionBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_convWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_convBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_bProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_cProjectionWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_aLog, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_dtProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_dtProjectionBias, PersistentTensorRole.Biases);
         RegisterTrainableParameter(_dParam, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
         RegisterTrainableParameter(_normGamma, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_normBeta, PersistentTensorRole.Biases);
     }
@@ -931,18 +951,9 @@ public partial class Mamba2Block<T> : LayerBase<T>
         _normGamma = Engine.TensorAdd(_normGamma, Engine.TensorMultiplyScalar(_normGammaGradient!, negLR));
         _normBeta = Engine.TensorAdd(_normBeta, Engine.TensorMultiplyScalar(_normBetaGradient!, negLR));
 
-        // Register trainable parameters for tape-based autodiff
-        RegisterTrainableParameter(_inputProjectionWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_inputProjectionBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_convWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_convBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_bProjectionWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_cProjectionWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_dtProjectionWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_dtProjectionBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
-
+        // Re-register against the new tensor instances created above so the autodiff registry tracks the
+        // live weights (now the full parameter set, matching GetParameters).
+        RegisterTrainableParameters();
     }
 
     /// <inheritdoc />

@@ -28,7 +28,24 @@ public sealed class AgentMemory
         Guard.NotNullOrWhiteSpace(content);
         Id = id;
         Content = content;
-        Metadata = metadata;
+        // Snapshot the metadata: IReadOnlyDictionary only constrains this
+        // reference — the caller may still hold a mutable Dictionary, and a
+        // stored memory must not change after construction. (Manual copy:
+        // Dictionary's IEnumerable<KeyValuePair> ctor is unavailable on net471.)
+        if (metadata is null)
+        {
+            Metadata = null;
+        }
+        else
+        {
+            var copy = new Dictionary<string, string>(metadata.Count, StringComparer.Ordinal);
+            foreach (var pair in metadata)
+            {
+                copy[pair.Key] = pair.Value;
+            }
+
+            Metadata = new System.Collections.ObjectModel.ReadOnlyDictionary<string, string>(copy);
+        }
     }
 
     /// <summary>Gets the stable, unique identifier for this memory.</summary>

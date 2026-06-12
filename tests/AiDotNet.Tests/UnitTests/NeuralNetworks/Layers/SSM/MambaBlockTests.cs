@@ -50,6 +50,105 @@ public class MambaBlockTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task S6Scan_CarriedState_MatchesFullScan()
+    {
+        // Localizes the bug: a full seqLen=2 scan must equal two seqLen=1 scans carrying the hidden state.
+        await Task.CompletedTask;
+        int inner = 4;
+        int state = 3;
+        var rng = new Random(7);
+
+        Tensor<double> Rand(int[] shape, double scale = 1.0)
+        {
+            var t = new Tensor<double>(shape);
+            for (int i = 0; i < t.Length; i++) t[i] = (rng.NextDouble() * 2 - 1) * scale;
+            return t;
+        }
+
+        var x = Rand(new[] { 1, 2, inner });
+        var delta = Rand(new[] { 1, 2, inner }, 0.5); // softplus output is positive; keep modest
+        for (int i = 0; i < delta.Length; i++) delta[i] = System.Math.Abs(delta[i]) + 0.1;
+        var aLog = Rand(new[] { inner, state }, 0.5);
+        var b = Rand(new[] { 1, 2, state });
+        var c = Rand(new[] { 1, 2, state });
+        var d = Rand(new[] { inner });
+
+        var (fullOut, _) = S6Scan<double>.SequentialScanForward(x, delta, aLog, b, c, d, 1, 2, inner, state);
+
+        Tensor<double> Slice(Tensor<double> src, int t, int dim2)
+        {
+            var s = new Tensor<double>(new[] { 1, 1, dim2 });
+            for (int j = 0; j < dim2; j++) s[new[] { 0, 0, j }] = src[new[] { 0, t, j }];
+            return s;
+        }
+
+        var (out0, h0) = S6Scan<double>.SequentialScanForward(
+            Slice(x, 0, inner), Slice(delta, 0, inner), aLog, Slice(b, 0, state), Slice(c, 0, state), d, 1, 1, inner, state);
+        var carried = h0.GetSliceAlongDimension(1, 1).Clone(); // [1, inner, state]
+        var (out1, _) = S6Scan<double>.SequentialScanForward(
+            Slice(x, 1, inner), Slice(delta, 1, inner), aLog, Slice(b, 1, state), Slice(c, 1, state), d, 1, 1, inner, state, carried);
+
+        for (int j = 0; j < inner; j++)
+        {
+            double e0 = fullOut[new[] { 0, 0, j }];
+            double a0 = out0[new[] { 0, 0, j }];
+            Assert.True(System.Math.Abs(e0 - a0) < 1e-12, $"t=0 scan mismatch d={j}: {e0:G12} vs {a0:G12}");
+            double e1 = fullOut[new[] { 0, 1, j }];
+            double a1 = out1[new[] { 0, 0, j }];
+            Assert.True(System.Math.Abs(e1 - a1) < 1e-12, $"t=1 carried scan mismatch d={j}: {e1:G12} vs {a1:G12}");
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Step_Incremental_MatchesForward_SingleBlock()
+    {
+        // Isolated block-level check: per-token Step (carrying conv window + SSM hidden state) must
+        // reproduce the full-sequence Forward exactly, with no surrounding layers in play.
+        await Task.CompletedTask;
+        int seqLen = 5;
+        int modelDim = 16;
+        int stateDim = 8;
+
+        var block = new MambaBlock<double>(seqLen, modelDim, stateDim, expandFactor: 2);
+
+        var p = block.GetParameters();
+        var rng = new Random(123);
+        for (int i = 0; i < p.Length; i++)
+        {
+            p[i] = (rng.NextDouble() * 2 - 1) * 0.3;
+        }
+        block.SetParameters(p);
+
+        var input = new Tensor<double>(new[] { 1, seqLen, modelDim });
+        var rng2 = new Random(321);
+        for (int i = 0; i < input.Length; i++)
+        {
+            input[i] = rng2.NextDouble() * 2 - 1;
+        }
+
+        var full = block.Forward(input); // [1, seqLen, modelDim]
+
+        var state = block.CreateStepState(1);
+        for (int t = 0; t < seqLen; t++)
+        {
+            var token = new Tensor<double>(new[] { 1, 1, modelDim });
+            for (int d = 0; d < modelDim; d++)
+            {
+                token[new[] { 0, 0, d }] = input[new[] { 0, t, d }];
+            }
+
+            var stepOut = block.Step(token, state); // [1, 1, modelDim]
+            for (int d = 0; d < modelDim; d++)
+            {
+                double e = full[new[] { 0, t, d }];
+                double a = stepOut[new[] { 0, 0, d }];
+                Assert.True(System.Math.Abs(e - a) < 1e-9,
+                    $"Single-block Step diverged from Forward at t={t}, d={d}: {e:G9} vs {a:G9}");
+            }
+        }
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task Constructor_ThrowsWhenModelDimensionNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>

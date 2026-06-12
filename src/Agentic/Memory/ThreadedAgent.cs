@@ -73,7 +73,10 @@ public sealed class ThreadedAgent<T>
     /// <param name="cancellationToken">Token used to cancel the run.</param>
     /// <returns>A task producing the inner agent's <see cref="AgentRunResult"/> for this turn.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="newMessages"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="threadId"/> is empty/whitespace or <paramref name="newMessages"/> is empty.</exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="threadId"/> is empty/whitespace, <paramref name="newMessages"/> is empty,
+    /// or any new message is not a <see cref="ChatRole.User"/> turn.
+    /// </exception>
     public async Task<AgentRunResult> RunAsync(
         string threadId,
         IReadOnlyList<ChatMessage> newMessages,
@@ -89,10 +92,20 @@ public sealed class ThreadedAgent<T>
         // Validate individual elements at the boundary — mirrors the pattern
         // in InMemoryConversationStore.AppendAsync so a null message fails
         // here (with a clear message naming this method) rather than later
-        // inside the store with less context.
+        // inside the store with less context. The durable thread is documented
+        // as the clean user/assistant dialogue, so inbound system/tool/
+        // assistant messages are rejected up front: persisting them verbatim
+        // would replay them on every future turn and corrupt the thread.
         foreach (var message in newMessages)
         {
             Guard.NotNull(message);
+            if (message.Role != ChatRole.User)
+            {
+                throw new ArgumentException(
+                    $"Thread messages must be user turns; got a {message.Role} message. System prompts and " +
+                    "tool exchanges belong to the inner agent's run, not the durable conversation.",
+                    nameof(newMessages));
+            }
         }
 
         var history = await _store.GetAsync(threadId, cancellationToken).ConfigureAwait(false);

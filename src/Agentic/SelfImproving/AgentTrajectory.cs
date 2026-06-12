@@ -52,12 +52,34 @@ public sealed class AgentTrajectory
         Guard.NotNull(finalText);
         Id = id;
         AgentName = agentName;
-        Messages = messages;
+        // Snapshot caller-owned collections: a captured trajectory is
+        // historical data for evaluation/self-improvement, and must not be
+        // rewritten by later mutations of the caller's list/dictionary.
+        var messageCopy = new ChatMessage[messages.Count];
+        for (var i = 0; i < messages.Count; i++)
+        {
+            messageCopy[i] = messages[i];
+        }
+        Messages = Array.AsReadOnly(messageCopy);
         FinalText = finalText;
         Iterations = iterations;
         Usage = usage;
         Reward = reward;
-        Metadata = metadata;
+        if (metadata is null)
+        {
+            Metadata = null;
+        }
+        else
+        {
+            // Manual copy: Dictionary's IEnumerable<KeyValuePair> constructor
+            // is not available on net471.
+            var metadataCopy = new Dictionary<string, string>(metadata.Count);
+            foreach (var pair in metadata)
+            {
+                metadataCopy[pair.Key] = pair.Value;
+            }
+            Metadata = new System.Collections.ObjectModel.ReadOnlyDictionary<string, string>(metadataCopy);
+        }
     }
 
     /// <summary>Gets the unique id for this trajectory.</summary>

@@ -16,6 +16,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
         [Fact(Timeout = 60000)]
         public async Task Sampler_Greedy_RespectsAllowedSet()
         {
+            await Task.Yield();
+
             var sampler = new TokenSampler<double>();
             // Index 3 has the highest logit, but it is excluded by the allowed set.
             var logits = new Vector<double>(new[] { 0.1, 0.5, 0.2, 0.9 });
@@ -23,12 +25,13 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
             var id = sampler.Sample(logits, new LocalSamplingOptions { Temperature = 0.0 }, new[] { 0, 1, 2 });
 
             Assert.Equal(1, id); // best among {0,1,2}
-            await Task.CompletedTask;
         }
 
         [Fact(Timeout = 60000)]
         public async Task Sampler_Sampling_NeverEmitsDisallowedToken()
         {
+            await Task.Yield();
+
             var sampler = new TokenSampler<double>(seed: 5);
             var logits = new Vector<double>(new[] { 5.0, 0.1, 5.0, 0.1 });
             var allowed = new[] { 1, 3 };
@@ -38,8 +41,6 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
                 var id = sampler.Sample(logits, new LocalSamplingOptions { Temperature = 1.0 }, allowed);
                 Assert.Contains(id, allowed);
             }
-
-            await Task.CompletedTask;
         }
 
         // ---- FiniteStateTokenConstraint forces structure ----
@@ -47,6 +48,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
         [Fact(Timeout = 60000)]
         public async Task FiniteStateConstraint_ForcesExactSequence_RegardlessOfModel()
         {
+            await Task.Yield();
+
             var tokenizer = new MapTokenizer(
                 eos: 0,
                 ("{", 1), ("\"ok\"", 2), ("}", 3), ("garbage", 4));
@@ -80,6 +83,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
         [Fact(Timeout = 60000)]
         public async Task AllowedTokenSetConstraint_RestrictsWholeOutput()
         {
+            await Task.Yield();
+
             var tokenizer = new MapTokenizer(eos: 0, ("a", 1), ("b", 2), ("c", 3));
             var model = new BiasedModel(tokenizer.VocabularySize, preferredToken: 3); // wants "c"
             var constraint = new AllowedTokenSetConstraint(new[] { 1, 2 }); // only a or b allowed
@@ -102,6 +107,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
         [Fact(Timeout = 60000)]
         public async Task StopSequence_HaltsGeneration_AndTrimsOutput()
         {
+            await Task.Yield();
+
             var tokenizer = new MapTokenizer(eos: 0, ("hello", 1), ("STOP", 2), ("world", 3));
             // Model emits: hello, STOP, world, ... (never EOS on its own within the budget).
             var model = new ScriptedModel(tokenizer.VocabularySize, new[] { 1, 2, 3, 3, 3 });

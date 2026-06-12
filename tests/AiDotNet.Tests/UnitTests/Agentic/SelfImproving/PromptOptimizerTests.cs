@@ -36,6 +36,8 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
         [Fact(Timeout = 60000)]
         public async Task Optimizer_SelectsBestPrompt()
         {
+            await Task.Yield();
+
             var optimizer = new PromptOptimizer<double>();
 
             var result = await optimizer.OptimizeAsync(new[] { "vague", "calc" }, Factory, Cases);
@@ -52,6 +54,8 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
         [Fact(Timeout = 60000)]
         public async Task Optimizer_UsesCustomScorer()
         {
+            await Task.Yield();
+
             // Custom scorer rewards shorter answers; "calc" yields "4"/"6" vs "vague"'s long sentence.
             var optimizer = new PromptOptimizer<double>((run, _) => 1.0 / (1 + run.FinalText.Length));
 
@@ -63,6 +67,8 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
         [Fact(Timeout = 60000)]
         public async Task Optimizer_SingleCandidate_ReturnsIt()
         {
+            await Task.Yield();
+
             var optimizer = new PromptOptimizer<double>();
             var result = await optimizer.OptimizeAsync(new[] { "calc" }, Factory, Cases);
             Assert.Equal("calc", result.BestPrompt);
@@ -72,6 +78,8 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
         [Fact(Timeout = 60000)]
         public async Task Optimizer_RejectsEmptyInputs()
         {
+            await Task.Yield();
+
             var optimizer = new PromptOptimizer<double>();
             await Assert.ThrowsAsync<ArgumentException>(() =>
                 optimizer.OptimizeAsync(Array.Empty<string>(), Factory, Cases));

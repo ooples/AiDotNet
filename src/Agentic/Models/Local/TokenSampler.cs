@@ -28,10 +28,17 @@ public sealed class TokenSampler<T>
     /// <summary>
     /// Initializes a new sampler.
     /// </summary>
-    /// <param name="seed">Optional RNG seed for reproducibility. <c>null</c> uses a non-deterministic seed.</param>
+    /// <param name="seed">
+    /// Optional RNG seed for reproducibility. <c>null</c> uses a non-deterministic seed. This is where
+    /// <see cref="LocalSamplingOptions.Seed"/> takes effect: the generation lifecycle constructs one sampler
+    /// per request from that option (see <c>LocalEngineChatClient</c>), giving one RNG per request — seeding
+    /// per <see cref="Sample"/> call instead would repeat the same draw at every token position.
+    /// </param>
     public TokenSampler(int? seed = null)
     {
-        _random = seed is { } value ? new Random(value) : new Random();
+        _random = seed is { } value
+            ? RandomHelper.CreateSeededRandom(value)
+            : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>
@@ -39,14 +46,21 @@ public sealed class TokenSampler<T>
     /// (constrained decoding).
     /// </summary>
     /// <param name="logits">The next-token logits (length = vocabulary size). Must be non-empty.</param>
-    /// <param name="options">The sampling settings. <c>null</c> uses defaults (temperature 1.0, no filters).</param>
+    /// <param name="options">
+    /// The sampling settings. <c>null</c> uses defaults (temperature 1.0, no filters).
+    /// <see cref="LocalSamplingOptions.Seed"/> is intentionally not read here — it is consumed once per
+    /// request when the sampler is constructed (see the constructor remarks).
+    /// </param>
     /// <param name="allowedTokenIds">
     /// When non-null, sampling is restricted to these token ids (others are excluded). Must be non-empty when
     /// provided. <c>null</c> means all tokens are eligible.
     /// </param>
     /// <returns>The chosen token id (an index into <paramref name="logits"/>).</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="logits"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="logits"/> or <paramref name="allowedTokenIds"/> is empty.</exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="logits"/> is empty, or when <paramref name="allowedTokenIds"/> is empty or
+    /// contains no id inside the vocabulary range.
+    /// </exception>
     public int Sample(Vector<T> logits, LocalSamplingOptions? options = null, IReadOnlyCollection<int>? allowedTokenIds = null)
     {
         Guard.NotNull(logits);
@@ -169,12 +183,25 @@ public sealed class TokenSampler<T>
         }
 
         var mask = new bool[count];
+        var anyValid = false;
         foreach (var id in allowedTokenIds)
         {
             if (id >= 0 && id < count)
             {
                 mask[id] = true;
+                anyValid = true;
             }
+        }
+
+        // An all-false mask would leave sampling with zero candidates (and
+        // greedy mode with a different, inconsistent fallback) — a constraint
+        // that excludes the entire vocabulary is a caller error, not a
+        // distribution to sample from.
+        if (!anyValid)
+        {
+            throw new ArgumentException(
+                "The allowed token set must contain at least one id inside the vocabulary range.",
+                nameof(allowedTokenIds));
         }
 
         return mask;
@@ -198,7 +225,8 @@ public sealed class TokenSampler<T>
             }
         }
 
-        // If the allowed set referenced only out-of-range ids, fall back to the global argmax.
+        // BuildAllowedMask guarantees at least one allowed id, so bestIndex is
+        // always set; the guard is purely defensive.
         return bestIndex >= 0 ? bestIndex : 0;
     }
 }

@@ -22,6 +22,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Graph
         [Fact(Timeout = 60000)]
         public async Task CheckpointedRun_Completes_AndRecordsHistory()
         {
+            await Task.Yield();
+
             var graph = BuildGraph();
             var cp = new InMemoryGraphCheckpointer<int>();
 
@@ -40,6 +42,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Graph
         [Fact(Timeout = 60000)]
         public async Task Resume_PicksUpFromLatestCheckpoint_SkippingEarlierNodes()
         {
+            await Task.Yield();
+
             var graph = BuildGraph();
             var cp = new InMemoryGraphCheckpointer<int>();
 
@@ -54,6 +58,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Graph
         [Fact(Timeout = 60000)]
         public async Task ReinvokingCompletedThread_ReturnsFinalState_WithoutRerunning()
         {
+            await Task.Yield();
+
             var graph = BuildGraph();
             var cp = new InMemoryGraphCheckpointer<int>();
 
@@ -65,6 +71,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Graph
         [Fact(Timeout = 60000)]
         public async Task TimeTravel_ResumeFromEarlierCheckpoint_Replays()
         {
+            await Task.Yield();
+
             var graph = BuildGraph();
             var cp = new InMemoryGraphCheckpointer<int>();
             await graph.InvokeAsync(0, cp, "t4"); // history: t4-0(a,0), t4-1(b,1), t4-2(End,11)
@@ -77,6 +85,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Graph
         [Fact(Timeout = 60000)]
         public async Task ResumeFrom_UnknownCheckpoint_Throws()
         {
+            await Task.Yield();
+
             var graph = BuildGraph();
             var cp = new InMemoryGraphCheckpointer<int>();
             await Assert.ThrowsAsync<InvalidOperationException>(

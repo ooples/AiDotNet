@@ -32,7 +32,15 @@ public sealed class AgentRunResult
         string? agentName)
     {
         FinalText = finalText;
-        Messages = messages;
+        // Snapshot the transcript: callers typically pass the live, mutable
+        // transcript list, and a historical result must not be rewritten by
+        // later mutations of that list (replay/debugging integrity).
+        var copy = new ChatMessage[messages.Count];
+        for (var i = 0; i < messages.Count; i++)
+        {
+            copy[i] = messages[i];
+        }
+        Messages = Array.AsReadOnly(copy);
         Iterations = iterations;
         Completed = completed;
         Usage = usage;

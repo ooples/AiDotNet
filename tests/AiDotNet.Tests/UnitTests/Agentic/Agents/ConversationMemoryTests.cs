@@ -17,6 +17,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task ThreadedAgent_RemembersPriorTurns_WithinAThread()
         {
+            await Task.Yield();
+
             var client = ScriptedChatClient<double>.Sequence(
                 ChatResponses.Text("Hi there."),
                 ChatResponses.Text("I remember."));
@@ -44,6 +46,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task ThreadedAgent_IsolatesSeparateThreads()
         {
+            await Task.Yield();
+
             var client = ScriptedChatClient<double>.Sequence(ChatResponses.Text("ok"));
             var threaded = new ThreadedAgent<double>(new AgentExecutor<double>(client), new InMemoryConversationStore());
 
@@ -59,6 +63,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task ThreadedAgent_EmptyThreadId_Throws()
         {
+            await Task.Yield();
+
             var threaded = new ThreadedAgent<double>(
                 new AgentExecutor<double>(ScriptedChatClient<double>.Sequence(ChatResponses.Text("ok"))),
                 new InMemoryConversationStore());
@@ -71,6 +77,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task InMemoryStore_AppendGetListClear_RoundTrips()
         {
+            await Task.Yield();
+
             var store = new InMemoryConversationStore();
             await store.AppendAsync("t", new[] { ChatMessage.User("a"), ChatMessage.Assistant("b") });
             await store.AppendAsync("t", new[] { ChatMessage.User("c") });
@@ -88,6 +96,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task InMemoryStore_UnknownThread_ReturnsEmpty()
         {
+            await Task.Yield();
+
             var store = new InMemoryConversationStore();
             Assert.Empty(await store.GetAsync("nope"));
         }
@@ -97,6 +107,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task JsonFileStore_PersistsAcrossInstances()
         {
+            await Task.Yield();
+
             var path = Path.GetTempFileName();
             try
             {
@@ -124,6 +136,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task JsonFileStore_ThreadedAgent_SurvivesNewStoreInstance()
         {
+            await Task.Yield();
+
             var path = Path.GetTempFileName();
             try
             {
@@ -152,6 +166,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task JsonFileStore_Clear_RemovesThread()
         {
+            await Task.Yield();
+
             var path = Path.GetTempFileName();
             try
             {

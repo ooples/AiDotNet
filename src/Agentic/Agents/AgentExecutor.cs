@@ -90,6 +90,25 @@ public sealed class AgentExecutor<T> : IAgent<T>
 
         transcript.AddRange(messages);
 
+        // Validate forwarded sampling options at this boundary: they come from
+        // public configuration, and NaN/infinite/negative temperatures or
+        // non-positive token caps would otherwise fail downstream in
+        // provider-specific (and far less diagnosable) ways.
+        if (_options.Temperature is { } temperature &&
+            (double.IsNaN(temperature) || double.IsInfinity(temperature) || temperature < 0))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(AgentExecutorOptions.Temperature), temperature,
+                "Temperature must be a finite, non-negative value.");
+        }
+
+        if (_options.MaxOutputTokens is { } maxOutputTokens && maxOutputTokens <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(AgentExecutorOptions.MaxOutputTokens), maxOutputTokens,
+                "MaxOutputTokens must be positive.");
+        }
+
         var hasTools = _tools.Count > 0;
         var requestOptions = new ChatOptions
         {
@@ -124,6 +143,21 @@ public sealed class AgentExecutor<T> : IAgent<T>
 
             var toolCalls = response.Message.ToolCalls;
             var wantsTools = response.FinishReason == ChatFinishReason.ToolCalls || toolCalls.Count > 0;
+
+            // The model asked for tool use that cannot be honored (no tools are
+            // registered, or the response advertised ToolCalls with an empty
+            // list). Falling through to Finished would mark the run successful
+            // even though no final answer was produced and no tool ever ran —
+            // report it as a stopped (incomplete) run instead.
+            if (wantsTools && (!hasTools || toolCalls.Count == 0))
+            {
+                return AgentRunResult.Stopped(
+                    response.Message.Text,
+                    transcript,
+                    iteration,
+                    sawUsage ? new ChatUsage(inputTokens, outputTokens) : null,
+                    Name);
+            }
 
             if (hasTools && wantsTools && toolCalls.Count > 0)
             {

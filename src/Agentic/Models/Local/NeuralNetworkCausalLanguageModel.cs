@@ -38,6 +38,11 @@ public sealed class NeuralNetworkCausalLanguageModel<T> : ICausalLanguageModel<T
     private readonly NeuralNetworkBase<T> _network;
     private readonly int _maxContextTokens;
 
+    // ResetState() + Predict() mutate shared network state (recurrent models
+    // carry hidden state between the two calls); interleaved concurrent
+    // requests through one adapter instance would corrupt each other's logits.
+    private readonly object _sync = new();
+
     /// <summary>
     /// Initializes a new adapter over a network language model.
     /// </summary>
@@ -89,8 +94,13 @@ public sealed class NeuralNetworkCausalLanguageModel<T> : ICausalLanguageModel<T
             input[new[] { 0, position, id }] = One;
         }
 
-        _network.ResetState();
-        var output = _network.Predict(input);
+        Tensor<T> output;
+        lock (_sync)
+        {
+            _network.ResetState();
+            output = _network.Predict(input);
+        }
+
         return ExtractLastPositionLogits(output);
     }
 

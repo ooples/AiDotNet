@@ -21,6 +21,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Models
         [Fact(Timeout = 60000)]
         public async Task System_User_Assistant_Factories_SetRoleAndText()
         {
+            await Task.Yield();
+
             Assert.Equal(ChatRole.System, ChatMessage.System("s").Role);
             Assert.Equal(ChatRole.User, ChatMessage.User("u").Role);
             Assert.Equal(ChatRole.Assistant, ChatMessage.Assistant("a").Role);
@@ -30,6 +32,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Models
         [Fact(Timeout = 60000)]
         public async Task Text_ConcatenatesOnlyTextParts_IgnoringNonText()
         {
+            await Task.Yield();
+
             var msg = new ChatMessage(ChatRole.Assistant, new AiContent[]
             {
                 new TextContent("Hello "),
@@ -43,6 +47,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Models
         [Fact(Timeout = 60000)]
         public async Task ToolCalls_ExtractsOnlyToolCallParts()
         {
+            await Task.Yield();
+
             var msg = ChatMessage.Assistant(new AiContent[]
             {
                 new TextContent("let me check"),
@@ -58,6 +64,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Models
         [Fact(Timeout = 60000)]
         public async Task Tool_Factory_ProducesToolRoleWithResultContent()
         {
+            await Task.Yield();
+
             var msg = ChatMessage.Tool("call_1", "18C", isError: false);
 
             Assert.Equal(ChatRole.Tool, msg.Role);
@@ -70,6 +78,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Models
         [Fact(Timeout = 60000)]
         public async Task ChatMessage_Guards_NullContents_AndNullElements()
         {
+            await Task.Yield();
+
             Assert.Throws<ArgumentNullException>(() =>
                 new ChatMessage(ChatRole.User, (IReadOnlyList<AiContent>)null));
 
@@ -82,12 +92,16 @@ namespace AiDotNetTests.UnitTests.Agentic.Models
         [Fact(Timeout = 60000)]
         public async Task TextContent_Guards_Null()
         {
+            await Task.Yield();
+
             Assert.Throws<ArgumentNullException>(() => new TextContent(null));
         }
 
         [Fact(Timeout = 60000)]
         public async Task ImageContent_FromBytes_And_FromUri_SetExpectedState()
         {
+            await Task.Yield();
+
             var bytes = new byte[] { 1, 2, 3 };
             var fromBytes = ImageContent.FromBytes(bytes, ImageMediaType.Png);
             Assert.True(fromBytes.HasData);
@@ -112,6 +126,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Models
         [Fact(Timeout = 60000)]
         public async Task ToolCallContent_DefaultsEmptyArguments_AndGuards()
         {
+            await Task.Yield();
+
             Assert.Equal("{}", new ToolCallContent("id", "tool").ArgumentsJson);
             Assert.Equal("{}", new ToolCallContent("id", "tool", "   ").ArgumentsJson);
             Assert.Throws<ArgumentException>(() => new ToolCallContent("  ", "tool"));
@@ -121,6 +137,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Models
         [Fact(Timeout = 60000)]
         public async Task ToolResultContent_TracksErrorFlag()
         {
+            await Task.Yield();
+
             Assert.True(new ToolResultContent("id", "boom", isError: true).IsError);
             Assert.False(new ToolResultContent("id", "ok").IsError);
         }
@@ -130,6 +148,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Models
         [Fact(Timeout = 60000)]
         public async Task AiToolDefinition_DefaultsToEmptyObjectSchema()
         {
+            await Task.Yield();
+
             var def = new AiToolDefinition("get_weather", "Gets the weather");
             Assert.Equal("object", (string)def.ParametersSchema["type"]);
             Assert.NotNull(def.ParametersSchema["properties"]);
@@ -143,6 +163,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Models
         [Fact(Timeout = 60000)]
         public async Task ChatUsage_TotalIsSum_AndGuardsNegative()
         {
+            await Task.Yield();
+
             Assert.Equal(30, new ChatUsage(10, 20).TotalTokens);
             Assert.Throws<ArgumentOutOfRangeException>(() => new ChatUsage(-1, 0));
             Assert.Throws<ArgumentOutOfRangeException>(() => new ChatUsage(0, -1));
@@ -151,6 +173,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Models
         [Fact(Timeout = 60000)]
         public async Task ChatResponse_TextShortcut_AndGuardsNullMessage()
         {
+            await Task.Yield();
+
             var resp = new ChatResponse(ChatMessage.Assistant("hi"), ChatFinishReason.Stop, new ChatUsage(1, 1), "m");
             Assert.Equal("hi", resp.Text);
             Assert.Equal(ChatFinishReason.Stop, resp.FinishReason);
@@ -161,6 +185,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Models
         [Fact(Timeout = 60000)]
         public async Task ChatResponseUpdate_Factories_SetExpectedFields()
         {
+            await Task.Yield();
+
             Assert.Equal("hi", ChatResponseUpdate.ForText("hi").TextDelta);
 
             var tc = ChatResponseUpdate.ForToolCall(new StreamingToolCallUpdate(0, "id", "tool", "{"));
@@ -179,6 +205,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Models
         [Fact(Timeout = 60000)]
         public async Task FakeChatClient_NonStreaming_ReturnsResponse()
         {
+            await Task.Yield();
+
             IChatClient<double> client = new FakeChatClient<double>();
             var resp = await client.GetResponseAsync(new[] { ChatMessage.User("hi") });
 
@@ -191,6 +219,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Models
         [Fact(Timeout = 60000)]
         public async Task FakeChatClient_Streaming_ReconstructsTextAndFinishes()
         {
+            await Task.Yield();
+
             IChatClient<double> client = new FakeChatClient<double>();
 
             var text = new System.Text.StringBuilder();

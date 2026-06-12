@@ -74,13 +74,17 @@ public sealed class PromptOptimizer<T>
         foreach (var prompt in candidatePrompts)
         {
             Guard.NotNull(prompt);
-            var agent = agentFactory(prompt);
-            Guard.NotNull(agent);
 
             var sum = 0.0;
             foreach (var evalCase in cases)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                // Build a fresh agent per eval case: a stateful agent (memory,
+                // threaded history) would otherwise carry context between
+                // cases and the candidate scores would no longer be
+                // independent evaluations.
+                var agent = agentFactory(prompt);
+                Guard.NotNull(agent);
                 var result = await agent.RunAsync(new[] { ChatMessage.User(evalCase.Input) }, cancellationToken)
                     .ConfigureAwait(false);
                 sum += _scorer(result, evalCase);
