@@ -1446,13 +1446,36 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <returns>A structured benchmark report.</returns>
     /// <remarks>
     /// <para>
+    /// Forwarding overload for callers that don't supply a chat client (suites
+    /// such as classification / regression metrics don't need one). Delegates
+    /// to the full overload below with <c>chatClient: null</c>.
+    /// </para>
+    /// </remarks>
+    public Task<BenchmarkReport> EvaluateBenchmarksAsync(
+        BenchmarkingOptions? options = null,
+        CancellationToken cancellationToken = default)
+        => EvaluateBenchmarksAsync(options, chatClient: null, cancellationToken);
+
+    /// <summary>
+    /// Runs benchmark suites against this model using the unified benchmark runner,
+    /// with an optional chat client for reasoning / generative benchmark suites.
+    /// </summary>
+    /// <param name="options">Benchmarking options (suites, sample size, failure policy).</param>
+    /// <param name="chatClient">Chat client used by reasoning / generative suites. <c>null</c>
+    /// is valid for non-generative suites (classification / regression metrics); reasoning
+    /// suites that need text generation will reject a null chat client up front in
+    /// <see cref="BenchmarkRunner"/>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A structured benchmark report.</returns>
+    /// <remarks>
+    /// <para>
     /// This method is facade-first: users select benchmark suites via enums and receive a structured report.
     /// It avoids requiring users to manually wire up benchmark implementations.
     /// </para>
     /// </remarks>
     public async Task<BenchmarkReport> EvaluateBenchmarksAsync(
-        BenchmarkingOptions? options = null,
-        IChatClient<T>? chatClient = null,
+        BenchmarkingOptions? options,
+        IChatClient<T>? chatClient,
         CancellationToken cancellationToken = default)
     {
         var effectiveOptions = options ?? new BenchmarkingOptions();

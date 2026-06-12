@@ -27,6 +27,12 @@ namespace AiDotNet.Storage.Sqlite;
 public sealed class SqliteConversationStore : IConversationStore
 {
     private readonly string _connectionString;
+    // Per connection-string, remember that the schema has been created so we
+    // don't pay the CREATE-TABLE-IF-NOT-EXISTS round trip on every operation.
+    // SQLite handles concurrent CREATE IF NOT EXISTS safely, but skipping the
+    // repeated DDL is a free win once we've initialised.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _schemaInitialised
+        = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Initializes a new store over the given SQLite connection string. The schema is created automatically
@@ -81,7 +87,7 @@ public sealed class SqliteConversationStore : IConversationStore
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        transaction.Commit();
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -145,8 +151,14 @@ public sealed class SqliteConversationStore : IConversationStore
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task EnsureSchemaAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    private async Task EnsureSchemaAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
+        // Fast path: already initialised for this connection string.
+        if (_schemaInitialised.ContainsKey(_connectionString))
+        {
+            return;
+        }
+
         using var command = connection.CreateCommand();
         command.CommandText =
             "CREATE TABLE IF NOT EXISTS Conversations (" +
@@ -156,9 +168,22 @@ public sealed class SqliteConversationStore : IConversationStore
             "Text TEXT NOT NULL);" +
             "CREATE INDEX IF NOT EXISTS IX_Conversations_ThreadId ON Conversations (ThreadId, Seq);";
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        _schemaInitialised[_connectionString] = true;
     }
 
-    private static ChatRole ParseRole(string role) => (ChatRole)Enum.Parse(typeof(ChatRole), role);
+    private static ChatRole ParseRole(string role)
+    {
+        // Defensive parse — a database row with a role string that no longer
+        // matches the current enum (schema evolution, manual edit) gives a
+        // descriptive InvalidOperationException naming the offending value
+        // instead of the raw ArgumentException from Enum.Parse.
+        if (Enum.TryParse<ChatRole>(role, out var result))
+        {
+            return result;
+        }
+        throw new InvalidOperationException(
+            $"Invalid role value in database: '{role}'.");
+    }
 
     private static void ValidateThreadId(string threadId)
     {

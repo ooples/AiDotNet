@@ -55,8 +55,12 @@ public sealed class AgentAsTool<T> : IAgentTool
     /// <inheritdoc/>
     public string Description { get; }
 
-    /// <inheritdoc/>
-    public JObject ParametersSchema { get; } = new()
+    // Shared parameter schema — identical for every AgentAsTool<T> handoff,
+    // so we keep one instance per process instead of allocating a fresh
+    // JObject per tool. (Note: callers must not mutate the returned object;
+    // ToDefinition just hands it to AiToolDefinition which treats it as
+    // opaque metadata.)
+    private static readonly JObject SharedParametersSchema = new()
     {
         ["type"] = "object",
         ["properties"] = new JObject
@@ -69,6 +73,9 @@ public sealed class AgentAsTool<T> : IAgentTool
         },
         ["required"] = new JArray("task")
     };
+
+    /// <inheritdoc/>
+    public JObject ParametersSchema => SharedParametersSchema;
 
     /// <inheritdoc/>
     public AiToolDefinition ToDefinition() => new(Name, Description, ParametersSchema);

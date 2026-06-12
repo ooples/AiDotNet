@@ -48,7 +48,9 @@ public sealed class AgentExecutor<T> : IAgent<T>
 
     /// <inheritdoc/>
     public string Name =>
-        _options.Name is { } name && name.Trim().Length > 0 ? name : "agent";
+        // Pattern-match form so the compiler narrows nullability on net471
+        // (string.IsNullOrWhiteSpace lacks [NotNullWhen(false)] there).
+        _options.Name is { } name && !string.IsNullOrWhiteSpace(name) ? name : "agent";
 
     /// <inheritdoc/>
     public string Description => _options.Description ?? string.Empty;

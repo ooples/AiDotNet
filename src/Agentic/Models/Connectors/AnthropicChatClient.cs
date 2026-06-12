@@ -57,6 +57,17 @@ public sealed class AnthropicChatClient<T> : ChatClientBase<T>
         ValidateApiKey(apiKey);
         Guard.NotNullOrWhiteSpace(modelName);
         Guard.NotNullOrWhiteSpace(anthropicVersion);
+        if (endpoint is not null)
+        {
+            // Fail fast on a malformed custom endpoint instead of waiting for
+            // the first request to blow up with an opaque HttpRequestException.
+            Guard.NotNullOrWhiteSpace(endpoint);
+            if (!Uri.TryCreate(endpoint, UriKind.Absolute, out _))
+            {
+                throw new ArgumentException(
+                    "Endpoint must be an absolute URI.", nameof(endpoint));
+            }
+        }
         _apiKey = apiKey;
         _endpoint = endpoint ?? "https://api.anthropic.com/v1/messages";
         _anthropicVersion = anthropicVersion;
@@ -395,13 +406,24 @@ public sealed class AnthropicChatClient<T> : ChatClientBase<T>
 
     private static JObject ParseArguments(string argumentsJson)
     {
+        // Silently substituting {} on parse failure would let us execute a
+        // tool with wrong/default arguments and hide a provider-side defect.
+        // Surface the failure with a typed exception that names the bad input.
+        Guard.NotNullOrWhiteSpace(argumentsJson);
         try
         {
-            return JObject.Parse(argumentsJson);
+            var token = JToken.Parse(argumentsJson);
+            if (token is JObject obj)
+            {
+                return obj;
+            }
+
+            throw new JsonException("Tool arguments must be a JSON object.");
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
-            return new JObject();
+            throw new ArgumentException(
+                "Invalid tool arguments JSON.", nameof(argumentsJson), ex);
         }
     }
 

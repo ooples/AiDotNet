@@ -103,6 +103,10 @@ public sealed class MeaiChatClient<T> : IChatClient<T>
         var result = new List<Meai.ChatMessage>(messages.Count);
         foreach (var message in messages)
         {
+            // Fail fast at the boundary rather than letting a null message
+            // crash with NullReferenceException inside .Contents access below.
+            Guard.NotNull(message);
+
             if (message.Contents.Any(c => c is ToolCallContent || c is ToolResultContent || c is ImageContent))
             {
                 throw new NotSupportedException(

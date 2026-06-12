@@ -91,8 +91,12 @@ public sealed class Swarm<T> : IAgent<T>
         _entryMemberName = entryMemberName;
         _options = options ?? new SwarmOptions();
 
-        Name = _options.Name is { } name && name.Trim().Length > 0 ? name : "swarm";
-        Description = _options.Description is { } description && description.Trim().Length > 0
+        // Pattern-match form so the compiler narrows nullability on net471
+        // (string.IsNullOrWhiteSpace lacks [NotNullWhen(false)] there).
+        Name = _options.Name is { } name && !string.IsNullOrWhiteSpace(name)
+            ? name
+            : "swarm";
+        Description = _options.Description is { } description && !string.IsNullOrWhiteSpace(description)
             ? description
             : "A peer-to-peer team of agents that transfer control over a shared conversation.";
     }
@@ -233,8 +237,16 @@ public sealed class Swarm<T> : IAgent<T>
 
     private Dictionary<string, string> BuildHandoffMap(SwarmMember<T> active)
     {
-        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var allowed = active.Handoffs ?? _members.Keys.Where(n => !string.Equals(n, active.Name, StringComparison.Ordinal)).ToList();
+        // Use Ordinal everywhere so the map comparer matches the equality
+        // semantics used to skip `active` (line 244). The previous mix
+        // (map = OrdinalIgnoreCase, peer-skip = Ordinal) could keep a
+        // case-variant duplicate of the active agent under a tool key.
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        // Materialise the fallback only when Handoffs is null. Iterating
+        // _members.Keys directly avoids the per-call LINQ + ToList()
+        // allocation for the common "no explicit handoff list" case; the
+        // peer-skip inside the loop takes care of dropping the active member.
+        var allowed = (IEnumerable<string>?)active.Handoffs ?? _members.Keys;
         foreach (var peer in allowed)
         {
             if (string.Equals(peer, active.Name, StringComparison.Ordinal))

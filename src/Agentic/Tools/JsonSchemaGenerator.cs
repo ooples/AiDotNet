@@ -21,7 +21,7 @@ namespace AiDotNet.Agentic.Tools;
 /// string <c>city</c> and an optional integer <c>days</c>.
 /// </para>
 /// </remarks>
-public static class JsonSchemaGenerator
+internal static class JsonSchemaGenerator
 {
     private const int MaxDepth = 6;
 
