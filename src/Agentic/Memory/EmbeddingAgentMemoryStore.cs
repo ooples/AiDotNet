@@ -51,6 +51,10 @@ public sealed class EmbeddingAgentMemoryStore<T> : IAgentMemoryStore
         CancellationToken cancellationToken = default)
     {
         Guard.NotNullOrWhiteSpace(content);
+        // IEmbeddingModel<T>.EmbedAsync currently has no CancellationToken
+        // overload, so we honour the token by checking it BEFORE the call —
+        // a cancelled caller skips the embedding work entirely.
+        cancellationToken.ThrowIfCancellationRequested();
         var id = Guid.NewGuid().ToString("N");
         var memory = new AgentMemory(id, content, metadata);
         var vector = await _embeddingModel.EmbedAsync(content).ConfigureAwait(false);
@@ -83,6 +87,9 @@ public sealed class EmbeddingAgentMemoryStore<T> : IAgentMemoryStore
             return new List<ScoredMemory>();
         }
 
+        // Honour cancellation before the embed call (no token overload on
+        // IEmbeddingModel<T>.EmbedAsync yet — same pattern as AddAsync above).
+        cancellationToken.ThrowIfCancellationRequested();
         var queryVector = await _embeddingModel.EmbedAsync(query).ConfigureAwait(false);
 
         var scored = new List<ScoredMemory>(snapshot.Count);
@@ -102,6 +109,7 @@ public sealed class EmbeddingAgentMemoryStore<T> : IAgentMemoryStore
     /// <inheritdoc/>
     public Task<IReadOnlyList<AgentMemory>> GetAllAsync(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         lock (_gate)
         {
             IReadOnlyList<AgentMemory> all = _entries.Select(e => e.Memory).ToList();
@@ -113,6 +121,7 @@ public sealed class EmbeddingAgentMemoryStore<T> : IAgentMemoryStore
     public Task RemoveAsync(string id, CancellationToken cancellationToken = default)
     {
         Guard.NotNullOrWhiteSpace(id);
+        cancellationToken.ThrowIfCancellationRequested();
 
         lock (_gate)
         {

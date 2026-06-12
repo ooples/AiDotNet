@@ -59,12 +59,16 @@ public sealed class SupervisorAgent<T> : IAgent<T>
             tools.Add(new AgentAsTool<T>(worker));
         }
 
-        Name = settings.Name is { } name && name.Trim().Length > 0 ? name : "supervisor";
-        Description = settings.Description is { } description && description.Trim().Length > 0
+        // string.IsNullOrWhiteSpace lacks the [NotNullWhen(false)] annotation
+        // on net471, so the negated form doesn't narrow nullability — keep the
+        // pattern match (which does narrow) and only swap the body for the
+        // CodeRabbit readability improvement.
+        Name = settings.Name is { } name && !string.IsNullOrWhiteSpace(name) ? name : "supervisor";
+        Description = settings.Description is { } description && !string.IsNullOrWhiteSpace(description)
             ? description
             : "Coordinates a team of specialized agents to accomplish a task.";
 
-        var systemPrompt = settings.SystemPrompt is { } prompt && prompt.Trim().Length > 0
+        var systemPrompt = settings.SystemPrompt is { } prompt && !string.IsNullOrWhiteSpace(prompt)
             ? prompt
             : BuildDefaultRoutingPrompt(workers);
 

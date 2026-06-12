@@ -25,6 +25,7 @@ public sealed class InMemoryConversationStore : IConversationStore
     {
         Guard.NotNullOrWhiteSpace(threadId);
         Guard.NotNull(messages);
+        cancellationToken.ThrowIfCancellationRequested();
 
         lock (_gate)
         {
@@ -48,6 +49,7 @@ public sealed class InMemoryConversationStore : IConversationStore
     public Task<IReadOnlyList<ChatMessage>> GetAsync(string threadId, CancellationToken cancellationToken = default)
     {
         Guard.NotNullOrWhiteSpace(threadId);
+        cancellationToken.ThrowIfCancellationRequested();
 
         lock (_gate)
         {
@@ -61,6 +63,7 @@ public sealed class InMemoryConversationStore : IConversationStore
     /// <inheritdoc/>
     public Task<IReadOnlyList<string>> ListThreadsAsync(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         lock (_gate)
         {
             IReadOnlyList<string> ids = new List<string>(_threads.Keys);
@@ -72,6 +75,7 @@ public sealed class InMemoryConversationStore : IConversationStore
     public Task ClearAsync(string threadId, CancellationToken cancellationToken = default)
     {
         Guard.NotNullOrWhiteSpace(threadId);
+        cancellationToken.ThrowIfCancellationRequested();
 
         lock (_gate)
         {

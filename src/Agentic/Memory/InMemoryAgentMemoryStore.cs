@@ -25,6 +25,7 @@ public sealed class InMemoryAgentMemoryStore : IAgentMemoryStore
         CancellationToken cancellationToken = default)
     {
         Guard.NotNullOrWhiteSpace(content);
+        cancellationToken.ThrowIfCancellationRequested();
         var id = Guid.NewGuid().ToString("N");
         var memory = new AgentMemory(id, content, metadata);
 
@@ -44,6 +45,7 @@ public sealed class InMemoryAgentMemoryStore : IAgentMemoryStore
     {
         Guard.NotNullOrWhiteSpace(query);
         Guard.Positive(topK);
+        cancellationToken.ThrowIfCancellationRequested();
 
         var queryTerms = Tokenize(query);
         if (queryTerms.Count == 0)
@@ -91,6 +93,7 @@ public sealed class InMemoryAgentMemoryStore : IAgentMemoryStore
     /// <inheritdoc/>
     public Task<IReadOnlyList<AgentMemory>> GetAllAsync(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         lock (_gate)
         {
             IReadOnlyList<AgentMemory> all = new List<AgentMemory>(_memories);
@@ -102,6 +105,7 @@ public sealed class InMemoryAgentMemoryStore : IAgentMemoryStore
     public Task RemoveAsync(string id, CancellationToken cancellationToken = default)
     {
         Guard.NotNullOrWhiteSpace(id);
+        cancellationToken.ThrowIfCancellationRequested();
 
         lock (_gate)
         {
