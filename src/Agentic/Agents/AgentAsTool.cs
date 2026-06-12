@@ -27,7 +27,7 @@ namespace AiDotNet.Agentic.Agents;
 /// tool-calling machinery it would for a calculator or a web search.
 /// </para>
 /// </remarks>
-internal sealed class AgentAsTool<T> : IAgentTool
+public sealed class AgentAsTool<T> : IAgentTool
 {
     /// <summary>The conventional prefix applied to a wrapped agent's tool name.</summary>
     public const string DefaultNamePrefix = "transfer_to_";
