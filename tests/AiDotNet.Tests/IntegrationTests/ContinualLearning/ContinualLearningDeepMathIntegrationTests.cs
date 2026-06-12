@@ -853,9 +853,15 @@ public class ContinualLearningDeepMathIntegrationTests
     }
 
     /// <summary>
-    /// Mock model for continual learning tests.
+    /// Mock model for continual learning tests. IParameterizable and
+    /// IGradientComputable are declared explicitly because IFullModel no
+    /// longer extends them — the CL strategies resolve both capabilities
+    /// at runtime via InterfaceGuard, which throws for models that only
+    /// declare IFullModel.
     /// </summary>
-    private class CLMockModel : IFullModel<double, Tensor<double>, Tensor<double>>
+    private class CLMockModel : IFullModel<double, Tensor<double>, Tensor<double>>,
+        IParameterizable<double, Tensor<double>, Tensor<double>>,
+        IGradientComputable<double, Tensor<double>, Tensor<double>>
     {
         private Vector<double> _parameters;
         private List<int> _activeFeatures;
