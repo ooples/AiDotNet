@@ -477,7 +477,7 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
                 { "NumWeightLayers", _configuration.NumWeightLayers },
                 { "DropoutRate", _configuration.DropoutRate }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

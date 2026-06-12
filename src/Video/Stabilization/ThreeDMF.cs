@@ -168,7 +168,7 @@ public class ThreeDMF<T> : VideoStabilizationBase<T>
                 { "NumMotionIters", _options.NumMotionIters },
                 { "NumResBlocks", _options.NumResBlocks }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

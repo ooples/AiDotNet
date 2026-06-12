@@ -229,7 +229,7 @@ public class BSVD<T> : VideoDenoisingBase<T>
                 { "BufferDim", _options.BufferDim },
                 { "NumLevels", _options.NumLevels }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

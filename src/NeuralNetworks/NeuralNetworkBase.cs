@@ -3363,15 +3363,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 var prediction = ForwardForTraining(xChunk);
 
                 // Align target to prediction shape — same policy as TrainWithTape.
-                var alignedTarget = yChunk;
-                if (prediction.Rank > yChunk.Rank && prediction.Shape[0] == 1 && prediction.Length == yChunk.Length)
-                {
-                    alignedTarget = Engine.Reshape(yChunk, prediction._shape);
-                }
-                else if (yChunk.Rank > prediction.Rank && yChunk.Shape[0] == 1 && yChunk.Length == prediction.Length)
-                {
-                    alignedTarget = Engine.Reshape(yChunk, prediction._shape);
-                }
+                var alignedTarget = AlignTargetToOutputShape(prediction, yChunk);
 
                 var lossTensor = loss.ComputeTapeLoss(prediction, alignedTarget);
                 T chunkLoss = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
@@ -6269,14 +6261,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // GradientFlow_ShouldBeNonZeroAndFinite). Reshaping `expected` instead
             // keeps `output` tape-connected end-to-end. Use the internal _shape field
             // (zero-alloc) rather than Shape.ToArray().
-            if (output.Rank > expected.Rank && output.Shape[0] == 1 && output.Length == expected.Length)
-            {
-                expected = Engine.Reshape(expected, output._shape);
-            }
-            else if (expected.Rank > output.Rank && expected.Shape[0] == 1 && expected.Length == output.Length)
-            {
-                expected = Engine.Reshape(expected, output._shape);
-            }
+            expected = AlignTargetToOutputShape(output, expected);
 
             var lossTensor = loss.ComputeTapeLoss(output, expected);
 
@@ -8636,6 +8621,71 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// - Implementing feature selection techniques
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Serializes the model for embedding in <c>ModelMetadata.ModelData</c>, degrading to an EMPTY payload
+    /// when model persistence is not licensed. GetModelMetadata() is a descriptive/inspection call invoked
+    /// by <c>AiModelResult</c>'s constructor on every facade build — before this guard, the embedded
+    /// <c>this.Serialize()</c> made BUILDING any neural model through the facade throw
+    /// <see cref="AiDotNet.Exceptions.LicenseRequiredException"/> without a license, contradicting the
+    /// stated policy that training and inference remain fully available. Explicit saves
+    /// (<c>SaveModel</c>/<c>Serialize</c>) still enforce the license as before.
+    /// </summary>
+    /// <summary>
+    /// Aligns a training target's shape to the network output before the loss computation.
+    /// Reshapes the TARGET (a leaf tensor not on the tape) rather than the output (which IS on the
+    /// tape — see the gradient-chain note in TrainWithTape). Handles, in order:
+    /// (1) leading singleton batch dims (legacy policy: [1, ...] vs [...]), and
+    /// (2) rank-off-by-one trailing singletons — the industry-standard rank-1 regression target
+    ///     ([B] vs output [B, 1], or [B, S] vs [B, S, 1], and the symmetric [B, 1] target vs [B]
+    ///     output). Without this, regression losses crash in TensorSubtract on the most common
+    ///     target shape every other ML stack accepts (sklearn y=(n,), PyTorch broadcasting).
+    /// Only fires when element counts match and the extra dimension is exactly 1, so integer
+    /// class-index targets against [B, C&gt;1] logits are never touched (the loss one-hots those).
+    /// </summary>
+    private Tensor<T> AlignTargetToOutputShape(Tensor<T> output, Tensor<T> expected)
+    {
+        if (output.Rank == expected.Rank || output.Length != expected.Length)
+        {
+            return expected;
+        }
+
+        // Legacy leading-singleton policy.
+        if (output.Rank > expected.Rank && output.Shape[0] == 1)
+        {
+            return Engine.Reshape(expected, output._shape);
+        }
+
+        if (expected.Rank > output.Rank && expected.Shape[0] == 1)
+        {
+            return Engine.Reshape(expected, output._shape);
+        }
+
+        // Rank-off-by-one trailing singleton: [B] target vs [B,1] output (or [B,1] vs [B]).
+        if (output.Rank == expected.Rank + 1 && output.Shape[output.Rank - 1] == 1)
+        {
+            return Engine.Reshape(expected, output._shape);
+        }
+
+        if (expected.Rank == output.Rank + 1 && expected.Shape[expected.Rank - 1] == 1)
+        {
+            return Engine.Reshape(expected, output._shape);
+        }
+
+        return expected;
+    }
+
+    protected byte[] SerializeForMetadata()
+    {
+        try
+        {
+            return this.Serialize();
+        }
+        catch (AiDotNet.Exceptions.LicenseRequiredException)
+        {
+            return [];
+        }
+    }
+
     public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
         if (featureIndices == null)
@@ -9416,9 +9466,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 "layer implementing ITrainableLayer<T> with registered parameters.");
         }
 
+        // Align rank-off-by-one regression targets ([B] vs [B,1]) BEFORE the loss: classification
+        // index targets are handled inside the loss (EnsureTargetMatchesPredicted one-hots them),
+        // but regression losses subtract tensors directly and crash on the industry-standard
+        // rank-1 target shape. AlignTargetToOutputShape only fires on a trailing singleton, so
+        // class-index targets against [B, C>1] logits are untouched.
+        target = AlignTargetToOutputShape(prediction, target);
+
         // Compute loss via the user's configured loss function.
-        // Shape matching (integer → one-hot, singleton reshape) is handled
-        // inside each loss function's ComputeTapeLoss via EnsureTargetMatchesPredicted.
+        // Integer-class → one-hot matching is handled inside each loss function's
+        // ComputeTapeLoss via EnsureTargetMatchesPredicted.
         var resolved = lossFunction ?? LossFunction;
         Tensor<T> lossTensor;
         if (resolved is LossFunctions.LossFunctionBase<T> tapeLoss)

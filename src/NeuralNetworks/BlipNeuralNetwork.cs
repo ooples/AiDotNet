@@ -1873,7 +1873,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
                 { "ParameterCount", ParameterCount },
                 { "UseNativeMode", _useNativeMode }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

@@ -961,7 +961,7 @@ public class RIFE<T> : FrameInterpolationBase<T>
         return new ModelMetadata<T>
         {
             AdditionalInfo = additionalInfo,
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

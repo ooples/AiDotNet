@@ -378,7 +378,7 @@ public class VisionMambaModel<T> : NeuralNetworkBase<T>
                 { "NumPatches", _numPatches },
                 { "LayerCount", Layers.Count }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

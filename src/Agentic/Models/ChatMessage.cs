@@ -28,6 +28,15 @@ public sealed class ChatMessage
     public ChatMessage(ChatRole role, IReadOnlyList<AiContent> contents, string? authorName = null)
     {
         Guard.NotNull(contents);
+        if (contents.Count == 0)
+        {
+            // The type contract is "one or more content parts" — reject the
+            // empty list at the boundary so downstream connectors don't see
+            // invalid messages.
+            throw new ArgumentException(
+                "At least one content part is required.", nameof(contents));
+        }
+
         var copy = new List<AiContent>(contents.Count);
         foreach (var part in contents)
         {

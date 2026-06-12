@@ -810,7 +810,7 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
             { "InputHeight", _height },
             { "InputWidth", _width }
         },
-        ModelData = this.Serialize()
+        ModelData = SerializeForMetadata()
     };
 
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)

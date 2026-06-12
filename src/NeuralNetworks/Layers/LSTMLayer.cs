@@ -1135,12 +1135,28 @@ public partial class LSTMLayer<T> : LayerBase<T>
         // returns an empty output with zeroed final states, but the fused path's
         // CopyLastTimestepHidden would slice at (seq - 1) = -1.
         if (timeSteps > 0
-            && !IsTrainingMode
             && typeof(T) == typeof(float)
             && Engine is AiDotNet.Tensors.Engines.CpuEngine cpuEngForFused
             && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
         {
-            var fusedOutput = TryFusedLstmForward(cpuEngForFused, input3D, batchSize, timeSteps);
+            // Inference takes the cached manual stack (allocation-free, detached).
+            // Training builds the stacked wIh/wHh/bias via TAPE-CONNECTED Concat so
+            // gradients flow back to the per-gate trainable weights, and the fused
+            // tape-aware LstmSequenceForward records a single BPTT node in place of the
+            // per-timestep loop's hundreds of nodes (ooples/AiDotNet#1566). The training
+            // branch requires an AiDotNet.Tensors with tape-aware LstmSequenceForward
+            // (ooples/AiDotNet.Tensors#587); on an older package the primitive throws
+            // under a tape — caught below so the per-step path still runs.
+            Tensor<T>? fusedOutput = null;
+            if (IsTrainingMode)
+            {
+                try { fusedOutput = TryFusedLstmForwardTraining(cpuEngForFused, input3D, batchSize, timeSteps); }
+                catch (InvalidOperationException) { fusedOutput = null; }
+            }
+            else
+            {
+                fusedOutput = TryFusedLstmForward(cpuEngForFused, input3D, batchSize, timeSteps);
+            }
             if (fusedOutput is not null)
             {
                 // Stash the last hidden state so the public LastHiddenState
@@ -1367,6 +1383,47 @@ public partial class LSTMLayer<T> : LayerBase<T>
         var resultF = cpuEng.LstmSequenceForward(
             inputF, h0: null, c0: null, wIh, wHh, bIh, bHh: null, returnSequences: true);
         return (Tensor<T>)(object)resultF;
+    }
+
+    /// <summary>
+    /// Training counterpart of <see cref="TryFusedLstmForward"/>. Builds the stacked
+    /// wIh/wHh/bias from the per-gate trainable weights via TAPE-CONNECTED
+    /// <see cref="IEngine.Concat"/> (gate order i, f, c=g, o along the row axis, matching
+    /// the inference stack), so the fused op's gradients flow back through the concat to
+    /// the per-gate parameters. The inference helper packs into fresh detached tensors,
+    /// which would strand those gradients — so training MUST use this differentiable
+    /// stack. Initial state is zero (h0 = c0 = null), matching the per-step loop.
+    /// </summary>
+    private Tensor<T>? TryFusedLstmForwardTraining(
+        AiDotNet.Tensors.Engines.CpuEngine cpuEng,
+        Tensor<T> input3D,
+        int batchSize,
+        int timeSteps)
+    {
+        var inputF = (Tensor<float>)(object)input3D;
+
+        var wIh = Engine.Concat(new[] { _weightsIi, _weightsFi, _weightsCi, _weightsOi }, 0);
+        var wHh = Engine.Concat(new[] { _weightsIh, _weightsFh, _weightsCh, _weightsOh }, 0);
+        var bIh = Engine.Concat(new[] { _biasI, _biasF, _biasC, _biasO }, 0);
+
+        var resultF = cpuEng.LstmSequenceForward(
+            inputF, h0: null, c0: null,
+            (Tensor<float>)(object)wIh, (Tensor<float>)(object)wHh,
+            (Tensor<float>)(object)bIh, bHh: null, returnSequences: true);
+
+        // Robustness across AiDotNet.Tensors versions: the fused training node only
+        // records on a package WITH tape-aware LstmSequenceForward (#587). On an older
+        // package the primitive runs the inference path under the tape and returns an
+        // UN-connected output (GradFn == null) — using it would silently strand the LSTM
+        // weight gradients. Detect that and fall back to the per-timestep loop, which
+        // records correctly. (On #587+ the output carries the fused BPTT node.)
+        var result = (Tensor<T>)(object)resultF;
+        if (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            && result.GradFn is null)
+        {
+            return null;
+        }
+        return result;
     }
 
     /// <summary>

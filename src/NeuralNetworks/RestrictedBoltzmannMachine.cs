@@ -1233,7 +1233,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
                 { "LearningRate", Convert.ToDouble(_learningRate) },
                 { "CDSteps", _cdSteps }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

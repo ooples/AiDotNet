@@ -44,6 +44,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Connectors
         [Fact(Timeout = 60000)]
         public async Task GetResponse_ParsesText_ToolCalls_FinishReason_Usage()
         {
+            await Task.Yield();
+
             const string responseBody = @"{
                 ""model"": ""gpt-4o-2024"",
                 ""choices"": [{
@@ -85,6 +87,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Connectors
         [Fact(Timeout = 60000)]
         public async Task GetResponse_MapsRequiredToolChoice_AndJsonSchemaFormat()
         {
+            await Task.Yield();
+
             const string responseBody = @"{""choices"":[{""message"":{""content"":""{}""},""finish_reason"":""stop""}]}";
             var client = ClientWith(responseBody, out var handler);
 
@@ -107,6 +111,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Connectors
         [Fact(Timeout = 60000)]
         public async Task GetStreamingResponse_ReconstructsText_FinishReason_Usage()
         {
+            await Task.Yield();
+
             var sse = string.Join("\n", new[]
             {
                 "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}",
@@ -137,6 +143,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Connectors
         [Fact(Timeout = 60000)]
         public async Task GenerateTextAsync_Extension_ReturnsAssistantText()
         {
+            await Task.Yield();
+
             const string responseBody = @"{""choices"":[{""message"":{""content"":""42""},""finish_reason"":""stop""}]}";
             var client = ClientWith(responseBody, out _);
 

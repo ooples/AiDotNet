@@ -176,6 +176,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         = new AiDotNet.Configuration.AiModelObservability();
 
     private PreprocessingPipeline<T, TInput, TInput>? _preprocessingPipeline;
+    private PreprocessingPipeline<T, TOutput, TOutput>? _targetPipeline;
+    private IReadOnlyList<IReadOnlyList<int>>? _trainingGroups;
     private PostprocessingPipeline<T, TOutput, TOutput>? _postprocessingPipeline;
 
     /// <summary>

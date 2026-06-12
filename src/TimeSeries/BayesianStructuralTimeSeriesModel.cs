@@ -1390,7 +1390,7 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
                 { "RidgeParameter", bstsOptions.RidgeParameter },
                 { "RegressionDecompositionType", bstsOptions.RegressionDecompositionType.ToString() }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
         return metadata;
     }

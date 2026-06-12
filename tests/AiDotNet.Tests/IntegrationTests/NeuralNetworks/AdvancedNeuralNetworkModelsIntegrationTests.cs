@@ -1786,7 +1786,10 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             numConditionClasses: 10,
             InputType.OneDimensional);
 
-        var noiseInput = CreateRandomTensor([32]);
+        // The generator architecture's inputSize (32) is the FULL noise+condition width — Predict
+        // takes the NOISE only (latentDim = 32 - 10 = 22) and appends the one-hot condition
+        // internally (same convention as the parameterless ctor's 110 = 100 noise + 10 classes).
+        var noiseInput = CreateRandomTensor([22]);
 
         // Act
         var output = cgan.Predict(noiseInput);

@@ -180,7 +180,7 @@ public class UDVD<T> : VideoDenoisingBase<T>
                 { "NumResBlocks", _options.NumResBlocks },
                 { "TemporalBufferSize", _options.TemporalBufferSize }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

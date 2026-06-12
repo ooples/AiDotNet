@@ -1184,7 +1184,7 @@ public class FILM<T> : FrameInterpolationBase<T>
                 { "InputWidth", _width },
                 { "NumScales", _numScales }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

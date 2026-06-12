@@ -494,7 +494,7 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
                 { "DropoutRate", _options.DropoutRate },
                 { "LayerCount", Layers.Count }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

@@ -39,6 +39,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Connectors
         [Fact(Timeout = 60000)]
         public async Task GetResponse_ParsesTextAndToolUse_MapsStopReasonAndUsage()
         {
+            await Task.Yield();
+
             const string responseBody = @"{
                 ""model"": ""claude-3-5-sonnet-20241022"",
                 ""content"": [
@@ -73,6 +75,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Connectors
         [Fact(Timeout = 60000)]
         public async Task GetStreamingResponse_ReconstructsTextFinishAndUsage()
         {
+            await Task.Yield();
+
             var sse = string.Join("\n", new[]
             {
                 "event: message_start",
