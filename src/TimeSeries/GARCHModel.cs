@@ -1048,7 +1048,7 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
                 { "GARCHOrder", _garchOptions.GARCHOrder },
                 { "UseMeanModel", _meanModel != null },
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
         return metadata;
     }

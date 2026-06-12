@@ -164,12 +164,37 @@ public class AgentToolSchemaGenerator : IIncrementalGenerator
             var pType = p.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             var local = "__p_" + p.Name;
             var token = "__t_" + p.Name;
-            // When the argument is absent, fall back to the parameter's DECLARED default (e.g. int page = 1)
-            // rather than default(T) (which would force 0/null and silently override the method's intent).
-            var fallback = p.HasExplicitDefaultValue ? GetParameterDefaultLiteral(p, pType) : $"default({pType})";
+
+            // Three-way binding, parity with DelegateAgentTool and the schema's
+            // own `required` set (IsRequired):
+            //  - if the parameter has an explicit declared default, use it
+            //    (preserves method intent like `int limit = 10`);
+            //  - else if the parameter is required (non-nullable value type OR
+            //    non-nullable reference type OR an explicit [AgentToolParameter(
+            //    Required = true)]), treat a missing argument as an error rather
+            //    than silently binding to `default(T)` (0 / false / null), which
+            //    would both change semantics and contradict the generated schema;
+            //  - else allow null (nullable reference / Nullable<T>).
+            // Reuse IsRequired so the binder can never disagree with the schema.
+            var paramAttr = p.GetAttributes().FirstOrDefault(a =>
+                a.AttributeClass?.Name == ParamAttribute &&
+                a.AttributeClass.ContainingNamespace?.ToDisplayString() == ToolsNamespace);
+            string missingHandler;
+            if (p.HasExplicitDefaultValue)
+            {
+                missingHandler = GetParameterDefaultLiteral(p, pType);
+            }
+            else if (IsRequired(p, paramAttr))
+            {
+                missingHandler = $"throw new global::System.ArgumentException(\"Missing required parameter '{p.Name}'.\", {Verbatim(p.Name)})";
+            }
+            else
+            {
+                missingHandler = $"default({pType})";
+            }
             sb.AppendLine($"                        var {local} = args.TryGetValue({Verbatim(p.Name)}, out var {token}) && {token}.Type != global::Newtonsoft.Json.Linq.JTokenType.Null");
             sb.AppendLine($"                            ? {token}.ToObject<{pType}>()");
-            sb.AppendLine($"                            : {fallback};");
+            sb.AppendLine($"                            : {missingHandler};");
             callArgs.Add(local);
         }
 
@@ -319,7 +344,13 @@ public class AgentToolSchemaGenerator : IIncrementalGenerator
             ? n.TypeArguments[0]
             : type;
 
-    private static string TypeSchemaJson(ITypeSymbol type)
+    // Mirrors the runtime JsonSchemaGenerator.ForType recursion budget so the two paths agree.
+    private const int MaxSchemaDepth = 6;
+
+    private static string TypeSchemaJson(ITypeSymbol type) =>
+        TypeSchemaJson(type, new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default), 0);
+
+    private static string TypeSchemaJson(ITypeSymbol type, HashSet<ITypeSymbol> visiting, int depth)
     {
         if (type.TypeKind == TypeKind.Enum)
         {
@@ -365,20 +396,89 @@ public class AgentToolSchemaGenerator : IIncrementalGenerator
 
         if (type is IArrayTypeSymbol array)
         {
-            return $"{{\"type\":\"array\",\"items\":{TypeSchemaJson(Unwrap(array.ElementType))}}}";
+            var items = depth >= MaxSchemaDepth ? "{}" : TypeSchemaJson(Unwrap(array.ElementType), visiting, depth + 1);
+            return $"{{\"type\":\"array\",\"items\":{items}}}";
         }
 
         if (TryGetDictionaryValueType(type, out var valueType))
         {
-            return $"{{\"type\":\"object\",\"additionalProperties\":{TypeSchemaJson(Unwrap(valueType))}}}";
+            var additional = depth >= MaxSchemaDepth ? "{}" : TypeSchemaJson(Unwrap(valueType), visiting, depth + 1);
+            return $"{{\"type\":\"object\",\"additionalProperties\":{additional}}}";
         }
 
         if (TryGetEnumerableElementType(type, out var elementType))
         {
-            return $"{{\"type\":\"array\",\"items\":{TypeSchemaJson(Unwrap(elementType))}}}";
+            var items = depth >= MaxSchemaDepth ? "{}" : TypeSchemaJson(Unwrap(elementType), visiting, depth + 1);
+            return $"{{\"type\":\"array\",\"items\":{items}}}";
         }
 
-        return "{\"type\":\"object\"}";
+        // Complex object: expand public readable instance properties into a full object schema,
+        // guarding against cycles and runaway depth. This mirrors the runtime
+        // JsonSchemaGenerator.ForType so the compile-time CreateAgentTools() path emits the same
+        // nested-object detail (properties + required) as AgentToolFactory.ScanInstance(), instead
+        // of the bare {"type":"object"} that strips all DTO structure from the model's view.
+        if (depth >= MaxSchemaDepth || !visiting.Add(type))
+        {
+            return "{\"type\":\"object\"}";
+        }
+
+        var props = new List<string>();
+        var required = new List<string>();
+        foreach (var property in EnumeratePublicReadableProperties(type))
+        {
+            props.Add($"{JsonString(property.Name)}:{TypeSchemaJson(Unwrap(property.Type), visiting, depth + 1)}");
+            if (IsRequiredProperty(property))
+            {
+                required.Add(JsonString(property.Name));
+            }
+        }
+
+        visiting.Remove(type);
+
+        if (props.Count == 0)
+        {
+            return "{\"type\":\"object\"}";
+        }
+
+        var objectSchema = $"{{\"type\":\"object\",\"properties\":{{{string.Join(",", props)}}}";
+        if (required.Count > 0)
+        {
+            objectSchema += $",\"required\":[{string.Join(",", required)}]";
+        }
+        return objectSchema + "}";
+    }
+
+    // Public readable instance properties, walking base types (derived first wins on name clash).
+    private static IEnumerable<IPropertySymbol> EnumeratePublicReadableProperties(ITypeSymbol type)
+    {
+        var seen = new HashSet<string>();
+        for (var t = type; t is not null && t.SpecialType != SpecialType.System_Object; t = t.BaseType)
+        {
+            foreach (var member in t.GetMembers().OfType<IPropertySymbol>())
+            {
+                if (member.DeclaredAccessibility != Accessibility.Public) continue;
+                if (member.IsStatic || member.IsIndexer || member.GetMethod is null) continue;
+                if (seen.Add(member.Name)) yield return member;
+            }
+        }
+    }
+
+    // Mirrors JsonSchemaGenerator.IsRequiredProperty: Nullable&lt;T&gt; → optional; non-nullable
+    // value type → required; reference type required only when explicitly non-nullable.
+    private static bool IsRequiredProperty(IPropertySymbol property)
+    {
+        if (property.Type is INamedTypeSymbol named &&
+            named.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
+        {
+            return false;
+        }
+
+        if (property.Type.IsValueType)
+        {
+            return true;
+        }
+
+        return property.NullableAnnotation == NullableAnnotation.NotAnnotated;
     }
 
     private static bool TryGetDictionaryValueType(ITypeSymbol type, out ITypeSymbol valueType)

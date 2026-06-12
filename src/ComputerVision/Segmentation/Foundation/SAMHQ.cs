@@ -429,7 +429,7 @@ public class SAMHQ<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
                 { "ModelSize", _modelSize.ToString() }, { "DecoderDim", _decoderDim },
                 { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

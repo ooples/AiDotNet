@@ -994,7 +994,7 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
                 { "Epochs", _epochs },
                 { "LearningRate", Convert.ToDouble(_learningRate) }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

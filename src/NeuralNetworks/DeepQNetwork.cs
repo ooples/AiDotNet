@@ -753,7 +753,7 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
                 { "ExplorationRate", Convert.ToDouble(_epsilon) },
                 { "ReplayBufferSize", _replayBuffer.Count }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

@@ -601,7 +601,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
                 { "TotalParameters", ParameterCount },
                 { "HiddenLayerSizes", Architecture.GetHiddenLayerSizes() }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

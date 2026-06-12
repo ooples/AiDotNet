@@ -655,7 +655,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
                 { "GradientPenaltyCoefficient", _gradientPenaltyCoefficient },
                 { "CriticIterations", _criticIterations }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

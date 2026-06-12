@@ -1710,7 +1710,7 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
                 { "SupportedModalities", _supportedModalities.Select(m => m.ToString()).ToList() },
                 { "UseNativeMode", _useNativeMode }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

@@ -1646,7 +1646,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
                 { "Regularization", Convert.ToDouble(_regularization) },
                 { "WarmupPeriod", _warmupPeriod }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

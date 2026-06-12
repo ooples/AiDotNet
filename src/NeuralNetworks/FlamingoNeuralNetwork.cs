@@ -1153,7 +1153,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
                 { "ParameterCount", ParameterCount },
                 { "TaskType", Architecture.TaskType.ToString() }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

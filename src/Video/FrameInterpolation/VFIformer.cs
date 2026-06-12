@@ -198,7 +198,7 @@ public class VFIformer<T> : FrameInterpolationBase<T>
                 { "NumDeformablePoints", _options.NumDeformablePoints },
                 { "Complexity", _options.NumEncoderLayers * _options.NumDecoderLayers }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

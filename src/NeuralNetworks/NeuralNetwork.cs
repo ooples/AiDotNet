@@ -387,7 +387,7 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
                 { "HiddenLayerSizes", Architecture.GetHiddenLayerSizes() },
                 { "TaskType", Architecture.TaskType.ToString() }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

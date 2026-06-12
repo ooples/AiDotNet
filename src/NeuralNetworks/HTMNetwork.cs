@@ -705,7 +705,7 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
                 { "LayerCount", Layers.Count },
                 { "TotalParameters", GetParameterCount() }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

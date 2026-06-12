@@ -246,17 +246,37 @@ public class GraphLayersIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task GraphConvolutionalLayer_WithoutAdjacencyMatrix_ThrowsException()
+    public async Task GraphConvolutionalLayer_WithoutAdjacencyMatrix_DefaultsToIdentity()
     {
-        // Arrange
+        // The layer's DOCUMENTED contract (EnsureDenseAdjacencyForInput) is a default-of-last-resort
+        // IDENTITY adjacency when none is set: per Kipf & Welling 2017 §2, with A = I the GCN layer
+        // degenerates to a per-node dense transform — well-defined for scaffold invariant checks.
+        // Production callers should still SetAdjacencyMatrix with the real graph. This test pins
+        // that the fallback IS exactly A = I by comparing against an explicit identity.
         int inputFeatures = 8;
         int outputFeatures = 16;
+        int numNodes = 5;
 
-        var layer = new GraphConvolutionalLayer<float>(inputFeatures, outputFeatures, (IActivationFunction<float>?)null);
-        var nodeFeatures = CreateNodeFeatures(5, inputFeatures);
+        var implicitLayer = new GraphConvolutionalLayer<float>(inputFeatures, outputFeatures, (IActivationFunction<float>?)null);
+        var nodeFeatures = CreateNodeFeatures(numNodes, inputFeatures);
+        var implicitOut = implicitLayer.Forward(nodeFeatures);
 
-        // Act & Assert
-        Assert.Throws<InvalidOperationException>(() => layer.Forward(nodeFeatures));
+        var explicitLayer = new GraphConvolutionalLayer<float>(inputFeatures, outputFeatures, (IActivationFunction<float>?)null);
+        explicitLayer.SetParameters(implicitLayer.GetParameters()); // identical weights
+        var identity = new Tensor<float>(new[] { numNodes, numNodes });
+        for (int i = 0; i < numNodes; i++)
+        {
+            identity[i, i] = 1.0f;
+        }
+
+        explicitLayer.SetAdjacencyMatrix(identity);
+        var explicitOut = explicitLayer.Forward(nodeFeatures);
+
+        Assert.Equal(implicitOut.Shape.ToArray(), explicitOut.Shape.ToArray());
+        for (int i = 0; i < implicitOut.Length; i++)
+        {
+            Assert.Equal(explicitOut[i], implicitOut[i], 5);
+        }
     }
 
     [Fact(Timeout = 120000)]

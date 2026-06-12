@@ -39,6 +39,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Graph
         [Fact(Timeout = 60000)]
         public async Task JsonFileCheckpointer_PersistsAcrossInstances()
         {
+            await Task.Yield();
+
             var path = Path.GetTempFileName();
             try
             {
@@ -61,6 +63,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Graph
         [Fact(Timeout = 60000)]
         public async Task SqliteCheckpointer_PersistsAcrossInstances()
         {
+            await Task.Yield();
+
             var path = Path.GetTempFileName();
             var connectionString = $"Data Source={path};Pooling=False";
             try

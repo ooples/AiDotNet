@@ -21,6 +21,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Graph
         [Fact(Timeout = 60000)]
         public async Task RunAsync_PausesBeforeInterruptNode_ThenResumesToCompletion()
         {
+            await Task.Yield();
+
             var graph = BuildApprovalGraph();
             var cp = new InMemoryGraphCheckpointer<int>();
 
@@ -37,6 +39,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Graph
         [Fact(Timeout = 60000)]
         public async Task RunAsync_AppliesHumanEdit_OnResume()
         {
+            await Task.Yield();
+
             var graph = BuildApprovalGraph();
             var cp = new InMemoryGraphCheckpointer<int>();
 
@@ -52,6 +56,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Graph
         [Fact(Timeout = 60000)]
         public async Task RunAsync_CanInterruptBeforeEntryNode()
         {
+            await Task.Yield();
+
             var graph = new StateGraph<int>()
                 .AddNode("start", s => s + 1)
                 .AddEdge("start", StateGraph<int>.End)
@@ -73,6 +79,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Graph
         [Fact(Timeout = 60000)]
         public async Task InvokeAsync_RunsStraightThrough_IgnoringInterrupts()
         {
+            await Task.Yield();
+
             var graph = BuildApprovalGraph();
             var result = await graph.InvokeAsync(1); // plain run, no checkpointer
             Assert.Equal(20, result); // (1 + 1) * 10 — did not pause

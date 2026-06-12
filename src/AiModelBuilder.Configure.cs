@@ -281,6 +281,50 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// It's like having someone adjust the knobs on a radio to get the clearest signal.
     /// The optimizer tries different settings and keeps the ones that work best.
     /// </remarks>
+    /// <summary>
+    /// Configures TARGET (label) scaling for regression: the targets are scaled (default: z-score via
+    /// <see cref="AiDotNet.Preprocessing.TargetStandardScaler{T,TOutput}"/>) before training — fit on the
+    /// TRAINING split only — and <c>Predict</c> automatically inverse-transforms model outputs back to the
+    /// ORIGINAL target units. Pass a custom pipeline to control the transformation.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> If your target is, say, a price in the hundreds while your features are
+    /// scaled to ~1, gradient training struggles. This scales the target down for training and scales
+    /// predictions back up for you — no manual inverse-transform needed. Regression only: never scale
+    /// class labels.
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureTargetScaling(
+        AiDotNet.Preprocessing.PreprocessingPipeline<T, TOutput, TOutput>? pipeline = null)
+    {
+        if (pipeline is null)
+        {
+            pipeline = new AiDotNet.Preprocessing.PreprocessingPipeline<T, TOutput, TOutput>();
+            pipeline.Add(new AiDotNet.Preprocessing.TargetStandardScaler<T, TOutput>());
+        }
+
+        _targetPipeline = pipeline;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures GROUPED training for ranking-style objectives: each inner list is a set of TRAINING row
+    /// indices forming one coherent query group (e.g. one date's cross-section for a learning-to-rank
+    /// model). Per epoch the model trains once per GROUP slice instead of once on the pooled set —
+    /// pooled training gives pairwise/listwise ranking losses conflicting targets across groups (the same
+    /// features map to different within-group ranks on different dates), collapsing the net to a constant.
+    /// Neural models with Tensor inputs only; epochs come from the configured optimizer's MaxIterations.
+    /// </summary>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureTrainingGroups(IReadOnlyList<IReadOnlyList<int>> groups)
+    {
+        if (groups is null || groups.Count == 0)
+        {
+            throw new ArgumentException("At least one training group is required.", nameof(groups));
+        }
+
+        _trainingGroups = groups;
+        return this;
+    }
+
     public IAiModelBuilder<T, TInput, TOutput> ConfigureOptimizer(IOptimizer<T, TInput, TOutput> optimizationAlgorithm)
     {
         _trainingCore.ConfigureOptimizer(optimizationAlgorithm);

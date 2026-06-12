@@ -1264,7 +1264,7 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         metadata.AdditionalInfo["StateSize"] = GetStateSize();
 
         // Include serialized model data
-        metadata.ModelData = this.Serialize();
+        metadata.ModelData = SerializeForMetadata();
 
         return metadata;
     }

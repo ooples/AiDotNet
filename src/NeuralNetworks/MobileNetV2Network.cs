@@ -360,7 +360,7 @@ public class MobileNetV2Network<T> : NeuralNetworkBase<T>
                 { "LayerCount", Layers.Count },
                 { "ParameterCount", GetParameterCount() }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

@@ -737,15 +737,18 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     {
         // Engine-accelerated batch normalization inference:
         // output = input * scale_broadcast + shift_broadcast
-        // Reshape scale/shift to [1, C, 1, 1, ...] for broadcasting across batch and spatial dims.
+        // The channel axis MUST mirror OnFirstForward's resolution rule (Ioffe & Szegedy 2015 §3):
+        //   rank 1 [F] / rank 3 [C, H, W] (unbatched image) — channels in axis 0
+        //   rank 2 [B, F] / rank >= 4 [B, C, H, W, ...]     — channels in axis 1
+        // Hardcoding axis 1 here broke unbatched rank-3 inputs: scale reshaped to [1, C, 1]
+        // against input [C, H, W] — "Tensors with shapes [64, 32, 32] and [1, 64, 1] cannot
+        // be broadcast" (surfaced by DenseNetNetwork.Predict on a [3, 32, 32] image).
         int rank = input.Shape.Length;
+        int channelAxis = rank == 1 || rank == 3 ? 0 : 1;
 
-        // Build broadcast shape: [1, C, 1, 1, ...]
         var broadcastShape = new int[rank];
-        broadcastShape[0] = 1;           // batch
-        broadcastShape[1] = scale.Length; // channels
-        for (int d = 2; d < rank; d++)
-            broadcastShape[d] = 1;       // spatial
+        for (int d = 0; d < rank; d++)
+            broadcastShape[d] = d == channelAxis ? scale.Length : 1;
 
         var scaleReshaped = Engine.Reshape(scale, broadcastShape);
         var shiftReshaped = Engine.Reshape(shift, broadcastShape);

@@ -232,7 +232,7 @@ public class SKFlow<T> : OpticalFlowBase<T>
                 { "NumFeatures", _numFeatures },
                 { "NumLayers", _numLayers }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

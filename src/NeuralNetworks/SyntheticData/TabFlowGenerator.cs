@@ -716,7 +716,7 @@ public class TabFlowGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
                 { "LayerCount", Layers.Count },
                 { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

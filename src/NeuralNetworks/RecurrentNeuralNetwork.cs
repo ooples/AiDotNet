@@ -374,7 +374,7 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
                 { "InputShape", Architecture.GetInputShape() },
                 { "OutputShape", Architecture.GetOutputShape() },
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
 
         return metadata;
