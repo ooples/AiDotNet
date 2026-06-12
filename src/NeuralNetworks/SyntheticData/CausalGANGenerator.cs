@@ -97,7 +97,9 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly CausalGANOptions<T> _options;
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    // Separate G/D optimizers (see CTGANGenerator for the divergence rationale).
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _generatorOptimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _discriminatorOptimizer;
     private ILossFunction<T> _lossFunction;
 
     // Synthetic tabular data infrastructure
@@ -171,7 +173,17 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
     {
         _options = options ?? new CausalGANOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        AdamOptimizer<T, Tensor<T>, Tensor<T>> MakeAdam() =>
+            new(this, new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = 0.5,
+                Beta2 = 0.9,
+                UseAdaptiveLearningRate = false,
+                UseAMSGrad = false,
+            });
+        _generatorOptimizer = optimizer ?? MakeAdam();
+        _discriminatorOptimizer = MakeAdam();
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
@@ -626,7 +638,7 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
             discParams, grads, lossValue,
             realBatch, realBatch, ComputeForward, RecomputeLoss,
             parameterBuffer: null);
-        _optimizer.Step(context);
+        _discriminatorOptimizer.Step(context);
     }
 
     /// <summary>
@@ -668,7 +680,7 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
             genParams, grads, lossValue,
             noiseBatch, noiseBatch, ComputeForward, RecomputeLoss,
             parameterBuffer: null);
-        _optimizer.Step(context);
+        _generatorOptimizer.Step(context);
     }
 
     private (Tensor<T> realBatch, Tensor<T> fakeBatch) BuildRealAndFakeBatches(
@@ -1260,7 +1272,7 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
         return new CausalGANGenerator<T>(
             Architecture,
             _options,
-            _optimizer,
+            _generatorOptimizer,
             _lossFunction);
     }
 
