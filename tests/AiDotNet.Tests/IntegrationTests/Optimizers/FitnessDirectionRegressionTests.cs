@@ -51,8 +51,10 @@ public class FitnessDirectionRegressionTests
     public async Task Facade_optimizer_returns_an_improved_iterate_not_the_baseline()
     {
         // y = 0.5x on pre-scaled inputs: trivially learnable. Under the inverted comparator the
-        // build returns the UNTRAINED baseline (random slope, ~50% chance anti-correlated); with
-        // the fix the returned model must track the target's increasing relationship.
+        // build returns the UNTRAINED baseline; with the fix it must return a model that beats the
+        // captured pre-training baseline on MSE. (Asserting on prediction-shape was brittle across
+        // architectures — tiny ReLU nets can converge to lopsided fits that are still vastly better
+        // than the baseline. MSE-vs-baseline is the exact invariant the bug violated.)
         const int n = 100;
         var x = new double[n];
         var y = new double[n];
@@ -62,13 +64,25 @@ public class FitnessDirectionRegressionTests
             y[i] = 0.5 * x[i];
         }
 
+        var net = new NeuralNetwork<double>(new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Simple,
+            inputSize: 1,
+            outputSize: 1));
+
+        var probes = new[] { -1.5, -0.75, 0.0, 0.75, 1.5 };
+        var targets = probes.Select(p => 0.5 * p).ToArray();
+
+        double Mse(Func<double, double> f) =>
+            probes.Select((p, i) => Math.Pow(f(p) - targets[i], 2)).Average();
+
+        // Capture the untrained baseline's error BEFORE training mutates the instance.
+        double baselineMse = Mse(p => net.Predict(
+            new Tensor<double>(new[] { 1, 1 }, new Vector<double>(new[] { p })))[0]);
+
         var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
-            .ConfigureModel(new NeuralNetwork<double>(new NeuralNetworkArchitecture<double>(
-                inputType: InputType.OneDimensional,
-                taskType: NeuralNetworkTaskType.Regression,
-                complexity: NetworkComplexity.Simple,
-                inputSize: 1,
-                outputSize: 1)))
+            .ConfigureModel(net)
             .ConfigureDataLoader(DataLoaders.FromTensors(
                 new Tensor<double>(new[] { n, 1 }, new Vector<double>(x)),
                 new Tensor<double>(new[] { n, 1 }, new Vector<double>(y))))
@@ -77,26 +91,14 @@ public class FitnessDirectionRegressionTests
                 options: new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>> { MaxIterations = 250 }))
             .BuildAsync();
 
-        var probes = new[] { -1.5, -0.75, 0.0, 0.75, 1.5 };
-        var preds = probes
-            .Select(p => result.Predict(new Tensor<double>(new[] { 1, 1 }, new Vector<double>(new[] { p })))[0])
-            .ToArray();
+        double resultMse = Mse(p => result.Predict(
+            new Tensor<double>(new[] { 1, 1 }, new Vector<double>(new[] { p })))[0]);
 
-        int rising = 0;
-        for (int i = 1; i < preds.Length; i++)
-        {
-            if (preds[i] > preds[i - 1])
-            {
-                rising++;
-            }
-        }
-
-        // The inverted comparator returns the baseline (random sign — frequently DECREASING).
-        // A correctly-selected trained model must be increasing overall and non-trivial. (rising >= 2,
-        // not 4: tiny ReLU nets legitimately saturate flat on part of the range while still fitting
-        // the other side — the bug signature is a DECREASING/flat-everywhere baseline.)
-        Assert.True(rising >= 2 && preds[4] > preds[0] && preds[4] - preds[0] > 0.2,
-            "Optimizer returned a non-improved (baseline-like) model — best-solution selection direction regressed. " +
-            $"preds=[{string.Join(", ", preds.Select(v => v.ToString("F3")))}]");
+        // The inverted comparator freezes the baseline in as "best" → resultMse == baselineMse.
+        // A correct selection returns an iterate with materially lower error (or the baseline was
+        // already essentially perfect, which a random init never is on this target).
+        Assert.True(resultMse < (baselineMse * 0.8) || resultMse < 0.02,
+            $"Optimizer did not return an improved iterate: baselineMse={baselineMse:F4}, resultMse={resultMse:F4} " +
+            "— best-solution selection direction regressed (kept the pre-training baseline).");
     }
 }
