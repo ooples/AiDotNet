@@ -56,10 +56,154 @@ internal static class ACEStepNanDiag
         for (int i = 0; i < warm.Rank; i++) targetDims[i] = warm.Shape[i];
         var target = RandomTensor(targetDims, rng);
 
+        // ACE_PURE_TRAIN=1: skip the mid-loop ComputeGradients probe — that
+        // call is itself a tape pass and may be the state-poisoner; the real
+        // CI test only calls Train.
+        bool pureTrain = Environment.GetEnvironmentVariable("ACE_PURE_TRAIN") == "1";
+
+        // ACE_SKIP_PARAM_BUFFER=1: disable the TrainWithTape ParameterBuffer
+        // view-swap via the same private flags the foundation-scale skip path
+        // sets, to cleanly attribute the zero-forward corruption to the
+        // buffer/view machinery vs the tape-mode layer forward.
+        if (Environment.GetEnvironmentVariable("ACE_SKIP_PARAM_BUFFER") == "1")
+        {
+            var t = typeof(NeuralNetworkBase<double>);
+            var skipField = t.GetField("_skipParameterBuffer",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            var verField = t.GetField("_skipParameterBufferVersion",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            var structVerField = t.GetField("_layerStructureVersion",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (skipField is not null && verField is not null && structVerField is not null)
+            {
+                skipField.SetValue(model, true);
+                verField.SetValue(model, structVerField.GetValue(model));
+                Console.WriteLine("ParameterBuffer swap disabled via reflection.");
+            }
+            else
+            {
+                Console.WriteLine("WARNING: could not find skip fields; buffer swap still active.");
+            }
+        }
+
+        // L2 norm of the first Dense layer's first trainable tensor — the
+        // value the next tape forward will actually read through the layer
+        // field (post-swap this is a ParameterBuffer view).
+        double FirstWeightL2()
+        {
+            foreach (var layer in model.Layers)
+            {
+                if (layer is AiDotNet.Interfaces.ITrainableLayer<double> t)
+                {
+                    var ps = t.GetTrainableParameters();
+                    if (ps.Count == 0) continue;
+                    double s = 0;
+                    var w = ps[0];
+                    for (int i = 0; i < w.Length; i++) { double v = w[i]; if (!double.IsNaN(v) && !double.IsInfinity(v)) s += v * v; }
+                    return Math.Sqrt(s);
+                }
+            }
+            return -1;
+        }
+
         for (int iter = 1; iter <= 10; iter++)
         {
+            Console.WriteLine($"iter {iter}: PRE-Train  firstWeight L2={FirstWeightL2():G8}");
             model.Train(input, target);
+            Console.WriteLine($"iter {iter}: POST-Train firstWeight L2={FirstWeightL2():G8}");
             Console.WriteLine($"iter {iter}: LastLoss={model.GetLastLoss()}");
+
+            // ACE_TAPE_WALK=1: after each Train, replicate TrainWithTape's
+            // forward conditions (training mode + active GradientTape) and
+            // walk the layers manually, printing the first layer whose
+            // output collapses — pinpoints WHERE the tape-mode forward
+            // diverges from the eager one.
+            if (Environment.GetEnvironmentVariable("ACE_TAPE_WALK") == "1")
+            {
+                model.SetTrainingMode(true);
+                try
+                {
+                    using var walkTape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<double>();
+                    var cur = input;
+                    int li = 0;
+                    foreach (var layer in model.Layers)
+                    {
+                        cur = layer.Forward(cur);
+                        double l2 = 0; int bad = 0;
+                        for (int i = 0; i < cur.Length; i++)
+                        {
+                            double v = cur[i];
+                            if (double.IsNaN(v) || double.IsInfinity(v)) bad++;
+                            else l2 += v * v;
+                        }
+                        l2 = Math.Sqrt(l2);
+                        if (l2 < 1e-12 || bad > 0 || li >= model.Layers.Count - 2)
+                            Console.WriteLine($"iter {iter}: tape-walk layer {li} ({layer.GetType().Name}): outL2={l2:G6}, nonFinite={bad}");
+                        if (bad > 0 && li == 0)
+                        {
+                            // First NaN at the very first layer: dump positions and
+                            // check the layer's FIELD-based parameter export for NaN.
+                            var positions = new List<int>();
+                            for (int i = 0; i < cur.Length && positions.Count < 20; i++)
+                                if (double.IsNaN(cur[i]) || double.IsInfinity(cur[i])) positions.Add(i);
+                            Console.WriteLine($"iter {iter}: layer0 NaN cells: {string.Join(",", positions)}");
+                            var fieldParams = layer.GetParameters();
+                            int fpBad = 0;
+                            for (int i = 0; i < fieldParams.Length; i++)
+                                if (double.IsNaN(fieldParams[i]) || double.IsInfinity(fieldParams[i])) fpBad++;
+                            Console.WriteLine($"iter {iter}: layer0 GetParameters nonFinite={fpBad}/{fieldParams.Length}");
+
+                            // Manually recompute the first NaN cell: GetParameters layout
+                            // for DenseLayer is [inputSize*outputSize weights..., biases].
+                            // out[row, col] = sum_k input[row,k] * W[k,col] + b[col].
+                            int cell = positions[0];
+                            const int outSize = 64, inSize = 44100;
+                            int row = cell / outSize, col = cell % outSize;
+                            double acc = 0;
+                            for (int kk = 0; kk < inSize; kk++)
+                                acc += input[row * inSize + kk] * fieldParams[kk * outSize + col];
+                            acc += fieldParams[inSize * outSize + col];
+                            var gelu = new AiDotNet.ActivationFunctions.GELUActivation<double>();
+                            double act = gelu.Activate(acc);
+                            Console.WriteLine($"iter {iter}: cell {cell} (r{row},c{col}) naive preAct={acc:G8}, scalarGELU={act:G8}, tapeValue={cur[cell]}");
+                            break;
+                        }
+                        if (l2 < 1e-12 && bad == 0) break;
+                        li++;
+                    }
+                }
+                finally { model.SetTrainingMode(false); }
+            }
+
+            if (pureTrain)
+            {
+                int badLayerIdx = 0;
+                bool anyBad = false;
+                foreach (var layer in model.Layers)
+                {
+                    var p = layer.GetParameters();
+                    for (int i = 0; i < p.Length; i++)
+                        if (double.IsNaN(p[i]) || double.IsInfinity(p[i])) { anyBad = true; break; }
+                    if (anyBad)
+                    {
+                        Console.WriteLine($"iter {iter}: PARAMS non-finite first in layer {badLayerIdx} ({layer.GetType().Name})");
+                        break;
+                    }
+                    badLayerIdx++;
+                }
+                var outNow = model.Predict(input);
+                double maxNow = 0;
+                int badNow = 0;
+                for (int i = 0; i < outNow.Length; i++)
+                {
+                    double v = outNow[i];
+                    if (double.IsNaN(v) || double.IsInfinity(v)) badNow++;
+                    else if (Math.Abs(v) > maxNow) maxNow = Math.Abs(v);
+                }
+                Console.WriteLine($"iter {iter}: eager Predict max|x|={maxNow:G6}, nonFinite={badNow}");
+                if (anyBad) break;
+                continue;
+            }
 
             // 0) Gradient health for the NEXT step: compute (without applying)
             //    and report per-layer non-finite counts + max |g| so the layer
