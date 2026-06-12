@@ -101,6 +101,13 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
     private int _packedInputDim;
     private Random _random;
 
+    // Generated-output offsets of each categorical column's softmax block, in
+    // categorical-column order — the SAME order the conditional vector lays out its
+    // category blocks. Used to align the generator's output categorical
+    // distributions with the conditional one-hot so the §4.3 conditional
+    // cross-entropy loss can be computed. (offset, width) per categorical column.
+    private readonly List<(int Offset, int Width)> _catOutputBlocks = new();
+
     // Generator batch normalization layers (auxiliary, always created to match Layers)
     private readonly List<BatchNormalizationLayer<T>> _genBNLayers = new();
 
@@ -372,6 +379,7 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
         _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
         _transformer.Fit(data, _columns);
         _dataWidth = _transformer.TransformedWidth;
+        BuildCategoricalOutputBlocks();
 
         // Step 2: Fit the data sampler
         _sampler = new CTGANDataSampler<T>(_random);
@@ -427,6 +435,7 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
             _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
             _transformer.Fit(data, _columns);
             _dataWidth = _transformer.TransformedWidth;
+            BuildCategoricalOutputBlocks();
 
             _sampler = new CTGANDataSampler<T>(_random);
             _sampler.Fit(data, _columns);
@@ -653,6 +662,67 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
     /// frozen forward, so generator parameters get gradients via the critic
     /// but the critic itself does not update on this step.
     /// </summary>
+    /// <summary>
+    /// Records the generated-output offset + width of each categorical column's
+    /// softmax block, in categorical-column order (the order the conditional vector
+    /// uses), so <see cref="ConditionalCrossEntropy"/> can align them.
+    /// </summary>
+    private void BuildCategoricalOutputBlocks()
+    {
+        _catOutputBlocks.Clear();
+        if (_transformer is null) return;
+        for (int col = 0; col < _columns.Count; col++)
+        {
+            var info = _transformer.GetTransformInfo(col);
+            if (!info.IsContinuous)
+                _catOutputBlocks.Add((info.StartOffset, info.Width));
+        }
+    }
+
+    /// <summary>
+    /// Samples a batch of conditional vectors together with their masks (Xu 2019
+    /// §4.3). Returns ([N, condWidth] one-hot conditions, [N, condWidth] masks that
+    /// are 1 over the selected column's block). Both are tape constants.
+    /// </summary>
+    private (Tensor<T> Cond, Tensor<T> Mask) SampleCondMaskBatch(int batchSize)
+    {
+        var cond = new Tensor<T>([batchSize, _condWidth]);
+        var mask = new Tensor<T>([batchSize, _condWidth]);
+        if (_sampler is null || _condWidth == 0) return (cond, mask);
+        for (int b = 0; b < batchSize; b++)
+        {
+            var (cv, mv, _, _, _) = _sampler.SampleCondVecWithMask();
+            for (int j = 0; j < _condWidth; j++) { cond[b, j] = cv[j]; mask[b, j] = mv[j]; }
+        }
+        return (cond, mask);
+    }
+
+    /// <summary>
+    /// Conditional generator loss term (Xu 2019 §4.3): cross-entropy between the
+    /// conditional one-hot and the generator's output distribution for the
+    /// conditioned discrete column, masked to that column. With a one-hot condition
+    /// inside the masked block this reduces to -log p(selected category), averaged
+    /// over the batch — the term that forces the generator to actually honour the
+    /// conditional vector instead of ignoring it.
+    /// </summary>
+    private Tensor<T> ConditionalCrossEntropy(Tensor<T> fakeActivated, Tensor<T> condBatch, Tensor<T> maskBatch)
+    {
+        int batch = fakeActivated.Shape[0];
+        // Gather the generator's categorical softmax blocks in categorical-column
+        // order → [batch, condWidth], aligning with the conditional-vector layout.
+        var blocks = new List<Tensor<T>>(_catOutputBlocks.Count);
+        foreach (var (offset, width) in _catOutputBlocks)
+            blocks.Add(Engine.TensorSlice(fakeActivated, [0, offset], [batch, width]));
+        var alignedGen = blocks.Count == 1 ? blocks[0] : Engine.TensorConcatenate(blocks.ToArray(), axis: 1);
+
+        // CE = -mean_b sum_j mask*cond*log(alignedGen + eps).
+        var logp = Engine.TensorLog(Engine.TensorAddScalar(alignedGen, NumOps.FromDouble(1e-8)));
+        var masked = Engine.TensorMultiply(Engine.TensorMultiply(maskBatch, condBatch), logp);
+        var perRow = Engine.ReduceSum(masked, [1], keepDims: false);     // [batch]
+        var meanCe = Engine.ReduceMean(perRow, [0], keepDims: false);     // scalar
+        return Engine.TensorNegate(meanCe);
+    }
+
     private void TrainGeneratorStepBatched(Matrix<T> transformedData, int numPacks)
     {
         if (_sampler is null) return;
@@ -669,9 +739,10 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
         int singleDim = _dataWidth + _condWidth;
         int genInputDim = _options.EmbeddingDimension + _condWidth;
 
-        // Build the conditional generator input batch [numPacks * pacSize, genInputDim].
+        // Build the conditional generator input batch [numPacks * pacSize, genInputDim],
+        // capturing the mask so the conditional cross-entropy term can be computed.
         var noiseBatch = GenerateNoiseBatchTensor(numPacks * pacSize);
-        var condBatch = SampleConditionalBatchTensor(numPacks * pacSize);
+        var (condBatch, maskBatch) = SampleCondMaskBatch(numPacks * pacSize);
         var genInput = Engine.TensorConcatenate([noiseBatch, condBatch], axis: 1);
 
         // Forward through generator → produces [numPacks * pacSize, dataWidth].
@@ -686,8 +757,13 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
         var fakeScores = DiscriminatorForwardBatched(fakePacked, isTraining: false);
         var allAxes = Enumerable.Range(0, fakeScores.Shape.Length).ToArray();
         var avgFake = Engine.ReduceMean(fakeScores, allAxes, keepDims: false);
-        // Generator minimizes -E[D(G(z, c))].
+        // Generator loss = -E[D(G(z, c))] + conditional cross-entropy (Xu 2019 §4.3).
         var lossTensor = Engine.TensorNegate(avgFake);
+        if (_condWidth > 0 && _catOutputBlocks.Count > 0)
+        {
+            var ce = ConditionalCrossEntropy(fakeActivated, condBatch, maskBatch);
+            lossTensor = Engine.TensorAdd(lossTensor, ce);
+        }
 
         var grads = tape.ComputeGradients(lossTensor, genParams);
         T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
