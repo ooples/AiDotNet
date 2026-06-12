@@ -1849,7 +1849,7 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
                 { "SeasonalAmplitude", _seasonal.Length > 0 ? Convert.ToDouble(NumOps.Subtract(_seasonal.Max(), _seasonal.Min())) : 0.0 },
                 { "IrregularStdDev", _irregular.Length > 0 ? Convert.ToDouble(_irregular.StandardDeviation()) : 0.0 }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
 
         return metadata;

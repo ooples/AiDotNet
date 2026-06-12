@@ -565,7 +565,7 @@ public class ARModel<T> : TimeSeriesModelBase<T>
                 { "MaxIterations", arOptions.MaxIterations },
                 { "Tolerance", arOptions.Tolerance }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
         return metadata;
     }

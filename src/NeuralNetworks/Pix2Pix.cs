@@ -700,7 +700,7 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
                 { "DiscriminatorParameters", Discriminator.GetParameterCount() },
                 { "L1Lambda", NumOps.ToDouble(_l1Lambda) }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

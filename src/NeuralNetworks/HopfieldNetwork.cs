@@ -625,7 +625,7 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
                 { "Size", _size },
                 { "WeightMatrixShape", $"{_weights.Rows}x{_weights.Columns}" }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

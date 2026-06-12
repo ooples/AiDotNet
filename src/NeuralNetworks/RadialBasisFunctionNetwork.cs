@@ -468,7 +468,7 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
                 { "OutputSize", _outputSize },
                 { "RadialBasisFunction", _radialBasisFunction.GetType().Name }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
 
         return metadata;

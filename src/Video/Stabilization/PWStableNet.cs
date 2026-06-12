@@ -168,7 +168,7 @@ public class PWStableNet<T> : VideoStabilizationBase<T>
                 { "GridSize", _options.GridSize },
                 { "NumResBlocks", _options.NumResBlocks }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

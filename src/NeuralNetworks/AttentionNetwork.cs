@@ -381,7 +381,7 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
                 { "InputShape", new[] { _sequenceLength, _embeddingSize } },
                 { "OutputShape", Layers[Layers.Count - 1].GetOutputShape() }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

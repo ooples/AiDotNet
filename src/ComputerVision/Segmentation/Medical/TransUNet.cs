@@ -315,7 +315,7 @@ public class TransUNet<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "TransUNet" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "ModelSize", _modelSize.ToString() }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
-        ModelData = this.Serialize()
+        ModelData = SerializeForMetadata()
     };
 
     /// <summary>

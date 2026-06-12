@@ -55,6 +55,11 @@ public sealed class ImageContent : AiContent
     public static ImageContent FromBytes(byte[] data, ImageMediaType mediaType)
     {
         Guard.NotNull(data);
+        if (data.Length == 0)
+        {
+            throw new ArgumentException(
+                "Image data cannot be empty.", nameof(data));
+        }
         return new ImageContent(data, uri: null, mediaType);
     }
 
@@ -69,6 +74,15 @@ public sealed class ImageContent : AiContent
     public static ImageContent FromUri(string uri, ImageMediaType? mediaType = null)
     {
         Guard.NotNullOrWhiteSpace(uri);
-        return new ImageContent(data: null, uri, mediaType);
+        // Fully-qualify System.Uri because this class also has a `Uri` member.
+        // Restrict to http(s): this value is later serialized as a provider-fetched
+        // URL, so file:/mailto:/etc. must be rejected at the boundary, not late.
+        if (!System.Uri.TryCreate(uri, UriKind.Absolute, out var parsed)
+            || (parsed.Scheme != System.Uri.UriSchemeHttp && parsed.Scheme != System.Uri.UriSchemeHttps))
+        {
+            throw new ArgumentException(
+                "Image URI must be an absolute http(s) URI.", nameof(uri));
+        }
+        return new ImageContent(data: null, parsed.ToString(), mediaType);
     }
 }

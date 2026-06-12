@@ -880,7 +880,7 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
                 { "EncoderLayers", Layers.Take(Layers.Count / 2).Select(l => l.GetType().Name).ToArray() },
                 { "DecoderLayers", Layers.Skip(Layers.Count / 2).Select(l => l.GetType().Name).ToArray() }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

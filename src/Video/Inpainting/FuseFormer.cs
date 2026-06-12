@@ -180,7 +180,7 @@ public class FuseFormer<T> : VideoInpaintingBase<T>
                 { "NumHeads", _options.NumHeads },
                 { "PatchSize", _options.PatchSize }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

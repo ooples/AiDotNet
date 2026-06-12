@@ -180,7 +180,7 @@ public class STTN<T> : VideoInpaintingBase<T>
                 { "NumHeads", _options.NumHeads },
                 { "NumScales", _options.NumScales }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

@@ -201,7 +201,7 @@ public class XVFI<T> : FrameInterpolationBase<T>
                 { "UseComplementaryFlow", _options.UseComplementaryFlow },
                 { "Complexity", _options.NumPyramidLevels * _options.NumResBlocks }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

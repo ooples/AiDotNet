@@ -3129,29 +3129,36 @@ public static class LayerHelper<T>
         // Determine hidden layer sizes based on network complexity
         List<int> hiddenLayerSizes = new List<int>();
 
+        // Floor every hidden width at MinHiddenWidth: for low-dimensional tabular inputs the
+        // unfloored formulas produce width-1/2 hidden layers, which are DEGENERATE — with a width-2
+        // ReLU hidden layer the init has a large probability of every path being dead over the whole
+        // input range (e.g. both second-layer weights negative), at which point no weight receives a
+        // gradient and only the output bias trains: the network is permanently a constant function.
+        const int MinHiddenWidth = 8;
+
         switch (architecture.Complexity)
         {
             case NetworkComplexity.Simple:
                 // One hidden layer with size between input and output
-                hiddenLayerSizes.Add((inputSize + outputSize) / 2);
+                hiddenLayerSizes.Add(Math.Max(MinHiddenWidth, (inputSize + outputSize) / 2));
                 break;
 
             case NetworkComplexity.Medium:
                 // Two hidden layers
-                hiddenLayerSizes.Add(inputSize * 2);
-                hiddenLayerSizes.Add(inputSize);
+                hiddenLayerSizes.Add(Math.Max(MinHiddenWidth, inputSize * 2));
+                hiddenLayerSizes.Add(Math.Max(MinHiddenWidth, inputSize));
                 break;
 
             case NetworkComplexity.Deep:
                 // Three hidden layers
-                hiddenLayerSizes.Add(inputSize * 2);
-                hiddenLayerSizes.Add(inputSize * 2);
-                hiddenLayerSizes.Add(inputSize);
+                hiddenLayerSizes.Add(Math.Max(MinHiddenWidth, inputSize * 2));
+                hiddenLayerSizes.Add(Math.Max(MinHiddenWidth, inputSize * 2));
+                hiddenLayerSizes.Add(Math.Max(MinHiddenWidth, inputSize));
                 break;
 
             default:
                 // Default to one hidden layer
-                hiddenLayerSizes.Add(inputSize);
+                hiddenLayerSizes.Add(Math.Max(MinHiddenWidth, inputSize));
                 break;
         }
 

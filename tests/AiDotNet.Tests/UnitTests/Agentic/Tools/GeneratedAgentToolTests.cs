@@ -31,6 +31,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Tools
         [Fact(Timeout = 60000)]
         public async Task Generated_CreateAgentTools_ProducesSchemaAndInvokes()
         {
+            await Task.Yield();
+
             var host = new GeneratedToolHost();
 
             // CreateAgentTools is the source-generated extension method.

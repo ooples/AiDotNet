@@ -203,6 +203,9 @@ public class RWKV7LanguageModelTests
     public async Task Block_RecurrentState_PopulatedAfterForward()
     {
         var block = new RWKV7Block<float>(4, 16, 2);
+        // Recurrent streaming state is an inference-mode concept (it is read back only when !IsTrainingMode);
+        // training forwards intentionally do not carry state per-sequence.
+        block.SetTrainingMode(false);
         var input = CreateRandomTensor(new[] { 1, 4, 16 });
         block.Forward(input);
 
@@ -214,11 +217,13 @@ public class RWKV7LanguageModelTests
     public async Task Block_ResetState_ClearsRecurrentState()
     {
         var block = new RWKV7Block<float>(4, 16, 2);
+        block.SetTrainingMode(false);
         var input = CreateRandomTensor(new[] { 1, 4, 16 });
         block.Forward(input);
+        Assert.NotNull(block.GetRecurrentState()); // populated by the inference forward...
 
         block.ResetState();
-        Assert.Null(block.GetRecurrentState());
+        Assert.Null(block.GetRecurrentState());    // ...and cleared by ResetState.
         Assert.Null(block.GetPreviousToken());
     }
 

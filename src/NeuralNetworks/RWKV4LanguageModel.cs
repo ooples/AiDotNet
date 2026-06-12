@@ -210,7 +210,7 @@ public class RWKV4LanguageModel<T> : NeuralNetworkBase<T>
                 { "TotalParameters", ParameterCount },
                 { "LayerCount", Layers.Count }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

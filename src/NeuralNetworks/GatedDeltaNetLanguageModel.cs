@@ -145,7 +145,7 @@ public class GatedDeltaNetLanguageModel<T> : NeuralNetworkBase<T>
                 { "MaxSeqLength", _maxSeqLength },
                 { "LayerCount", Layers.Count }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

@@ -777,7 +777,7 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
                 { "TotalEpochs", _totalEpochs },
                 { "CurrentEpoch", _currentEpoch }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

@@ -575,7 +575,7 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
                 { "TotalLayers", Layers.Count },
                 { "TaskType", Architecture.TaskType.ToString() }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 
