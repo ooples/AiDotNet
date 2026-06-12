@@ -164,12 +164,32 @@ public class AgentToolSchemaGenerator : IIncrementalGenerator
             var pType = p.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             var local = "__p_" + p.Name;
             var token = "__t_" + p.Name;
-            // When the argument is absent, fall back to the parameter's DECLARED default (e.g. int page = 1)
-            // rather than default(T) (which would force 0/null and silently override the method's intent).
-            var fallback = p.HasExplicitDefaultValue ? GetParameterDefaultLiteral(p, pType) : $"default({pType})";
+
+            // Three-way binding, parity with DelegateAgentTool:
+            //  - if the parameter has an explicit declared default, use it
+            //    (preserves method intent like `int limit = 10`);
+            //  - else if the parameter is a non-nullable value type, treat
+            //    a missing argument as an error rather than silently binding
+            //    to `default(T)` (0 / false), which would change semantics;
+            //  - else allow null (reference / Nullable<T>).
+            bool isValueType = p.Type.IsValueType
+                && p.Type.OriginalDefinition?.SpecialType != SpecialType.System_Nullable_T;
+            string missingHandler;
+            if (p.HasExplicitDefaultValue)
+            {
+                missingHandler = GetParameterDefaultLiteral(p, pType);
+            }
+            else if (isValueType)
+            {
+                missingHandler = $"throw new global::System.ArgumentException(\"Missing required parameter '{p.Name}'.\", {Verbatim(p.Name)})";
+            }
+            else
+            {
+                missingHandler = $"default({pType})";
+            }
             sb.AppendLine($"                        var {local} = args.TryGetValue({Verbatim(p.Name)}, out var {token}) && {token}.Type != global::Newtonsoft.Json.Linq.JTokenType.Null");
             sb.AppendLine($"                            ? {token}.ToObject<{pType}>()");
-            sb.AppendLine($"                            : {fallback};");
+            sb.AppendLine($"                            : {missingHandler};");
             callArgs.Add(local);
         }
 
