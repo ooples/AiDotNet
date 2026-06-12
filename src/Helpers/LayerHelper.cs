@@ -1354,6 +1354,7 @@ public static class LayerHelper<T>
     {
         var inputShape = architecture.GetInputShape();
         int inputSize = inputShape.Length > 0 ? inputShape.Aggregate(1, (a, b) => a * b) : architecture.CalculatedInputSize;
+        int rootInputSize = inputSize;
         int[] layerSizes = architecture.GetLayerSizes();
 
         // If no layers specified, create a default symmetric autoencoder architecture
@@ -1369,20 +1370,27 @@ public static class LayerHelper<T>
 
         int middleIndex = layerSizes.Length / 2;
 
+        // Build the layer chain into a list, then chain-resolve from the architecture's known
+        // input size before yielding — same eager contract as CreateDefaultNeuralNetworkLayers.
+        // Lazy DenseLayers have unresolved input shapes until resolution, so without this the
+        // Autoencoder's EncodedSize (read from the middle layer's input shape at construction)
+        // was permanently 0 and ParameterCount was 0 until the first Forward.
+        var layers = new List<ILayer<T>>();
+
         // Encoder layers
         for (int i = 0; i < middleIndex; i++)
         {
             int outputSize = layerSizes[i + 1];
-            yield return new DenseLayer<T>(outputSize, new ReLUActivation<T>() as IActivationFunction<T>);
+            layers.Add(new DenseLayer<T>(outputSize, new ReLUActivation<T>() as IActivationFunction<T>));
 
             if (i < middleIndex - 1)
             {
-                yield return new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>);
+                layers.Add(new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>));
             }
             else
             {
                 // Use linear activation for the encoded layer
-                yield return new ActivationLayer<T>(new IdentityActivation<T>() as IActivationFunction<T>);
+                layers.Add(new ActivationLayer<T>(new IdentityActivation<T>() as IActivationFunction<T>));
             }
 
             inputSize = outputSize;
@@ -1392,20 +1400,23 @@ public static class LayerHelper<T>
         for (int i = middleIndex; i < layerSizes.Length - 1; i++)
         {
             int outputSize = layerSizes[i + 1];
-            yield return new DenseLayer<T>(outputSize, new ReLUActivation<T>() as IActivationFunction<T>);
+            layers.Add(new DenseLayer<T>(outputSize, new ReLUActivation<T>() as IActivationFunction<T>));
 
             if (i < layerSizes.Length - 2)
             {
-                yield return new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>);
+                layers.Add(new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>));
             }
             else
             {
                 // Use sigmoid activation for the output layer to constrain values between 0 and 1
-                yield return new ActivationLayer<T>(new SigmoidActivation<T>() as IActivationFunction<T>);
+                layers.Add(new ActivationLayer<T>(new SigmoidActivation<T>() as IActivationFunction<T>));
             }
 
             inputSize = outputSize;
         }
+
+        ChainResolveLazyLayers(layers, new[] { rootInputSize });
+        foreach (var layer in layers) yield return layer;
     }
 
     /// <summary>
