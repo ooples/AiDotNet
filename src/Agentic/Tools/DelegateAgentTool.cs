@@ -37,6 +37,23 @@ public sealed class DelegateAgentTool : AgentToolBase
     public DelegateAgentTool(string name, string description, MethodInfo method, object? target = null)
         : base(name, description, BuildSchema(method))
     {
+        Guard.NotNull(method);
+        // Reject inconsistent method/target pairings up front so configuration
+        // errors fail at registration rather than at first invocation deep
+        // inside _method.Invoke.
+        if (!method.IsStatic && target is null)
+        {
+            throw new ArgumentNullException(nameof(target),
+                $"Instance method '{method.Name}' requires a non-null target.");
+        }
+        if (target is not null
+            && method.DeclaringType is { } decl
+            && !decl.IsAssignableFrom(target.GetType()))
+        {
+            throw new ArgumentException(
+                $"Target of type '{target.GetType()}' cannot invoke method '{method.Name}' " +
+                $"declared on '{decl}'.", nameof(target));
+        }
         _method = method;
         _target = target;
     }
@@ -87,8 +104,14 @@ public sealed class DelegateAgentTool : AgentToolBase
             {
                 callArgs[i] = parameter.DefaultValue;
             }
-            else if (!parameter.ParameterType.IsValueType || Nullable.GetUnderlyingType(parameter.ParameterType) is not null)
+            else if (Nullable.GetUnderlyingType(parameter.ParameterType) is not null)
             {
+                callArgs[i] = null;
+            }
+            else if (!parameter.ParameterType.IsValueType && IsNullableAnnotated(parameter))
+            {
+                // Reference type that is explicitly annotated as nullable in the
+                // method signature (`string? city`) — allow null.
                 callArgs[i] = null;
             }
             else
@@ -152,5 +175,35 @@ public sealed class DelegateAgentTool : AgentToolBase
         }
 
         return returnValue;
+    }
+
+    // True when the parameter's reference type is explicitly nullable
+    // (`string?`). On targets that ship NullabilityInfoContext (net10) we
+    // read the C# 8 nullability annotation; on older TFMs the annotation
+    // metadata isn't queryable, so we fall back to permissive (the prior
+    // behaviour) rather than guess wrong and break legitimate callers.
+    private static bool IsNullableAnnotated(ParameterInfo parameter)
+    {
+#if NET10_0_OR_GREATER || NET8_0_OR_GREATER || NET6_0_OR_GREATER
+        try
+        {
+            var ctx = new System.Reflection.NullabilityInfoContext();
+            var info = ctx.Create(parameter);
+            return info.ReadState == System.Reflection.NullabilityState.Nullable
+                   || info.WriteState == System.Reflection.NullabilityState.Nullable;
+        }
+        catch
+        {
+            // NullabilityInfoContext can throw on certain runtime contexts
+            // (e.g. trimmed assemblies without annotation metadata) — be
+            // conservative and fall back to "allow null" so existing callers
+            // don't suddenly start failing.
+            return true;
+        }
+#else
+        // net471: no NullabilityInfoContext. Preserve the historical
+        // permissive behaviour — treat every reference type as nullable.
+        return true;
+#endif
     }
 }
