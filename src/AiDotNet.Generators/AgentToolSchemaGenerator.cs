@@ -165,21 +165,26 @@ public class AgentToolSchemaGenerator : IIncrementalGenerator
             var local = "__p_" + p.Name;
             var token = "__t_" + p.Name;
 
-            // Three-way binding, parity with DelegateAgentTool:
+            // Three-way binding, parity with DelegateAgentTool and the schema's
+            // own `required` set (IsRequired):
             //  - if the parameter has an explicit declared default, use it
             //    (preserves method intent like `int limit = 10`);
-            //  - else if the parameter is a non-nullable value type, treat
-            //    a missing argument as an error rather than silently binding
-            //    to `default(T)` (0 / false), which would change semantics;
-            //  - else allow null (reference / Nullable<T>).
-            bool isValueType = p.Type.IsValueType
-                && p.Type.OriginalDefinition?.SpecialType != SpecialType.System_Nullable_T;
+            //  - else if the parameter is required (non-nullable value type OR
+            //    non-nullable reference type OR an explicit [AgentToolParameter(
+            //    Required = true)]), treat a missing argument as an error rather
+            //    than silently binding to `default(T)` (0 / false / null), which
+            //    would both change semantics and contradict the generated schema;
+            //  - else allow null (nullable reference / Nullable<T>).
+            // Reuse IsRequired so the binder can never disagree with the schema.
+            var paramAttr = p.GetAttributes().FirstOrDefault(a =>
+                a.AttributeClass?.Name == ParamAttribute &&
+                a.AttributeClass.ContainingNamespace?.ToDisplayString() == ToolsNamespace);
             string missingHandler;
             if (p.HasExplicitDefaultValue)
             {
                 missingHandler = GetParameterDefaultLiteral(p, pType);
             }
-            else if (isValueType)
+            else if (IsRequired(p, paramAttr))
             {
                 missingHandler = $"throw new global::System.ArgumentException(\"Missing required parameter '{p.Name}'.\", {Verbatim(p.Name)})";
             }

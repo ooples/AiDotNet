@@ -1457,6 +1457,20 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         => EvaluateBenchmarksAsync(options, chatClient: null, cancellationToken);
 
     /// <summary>
+    /// Forwarding overload for callers that supply only a chat client (reasoning /
+    /// generative suites with default options). Delegates to the full overload with
+    /// <c>options: null</c>. Restores the <c>EvaluateBenchmarksAsync(chatClient: ...)</c>
+    /// facade for back-compat.
+    /// </summary>
+    /// <param name="chatClient">Chat client used by reasoning / generative suites.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A structured benchmark report.</returns>
+    public Task<BenchmarkReport> EvaluateBenchmarksAsync(
+        IChatClient<T>? chatClient,
+        CancellationToken cancellationToken = default)
+        => EvaluateBenchmarksAsync(options: null, chatClient, cancellationToken);
+
+    /// <summary>
     /// Runs benchmark suites against this model using the unified benchmark runner,
     /// with an optional chat client for reasoning / generative benchmark suites.
     /// </summary>

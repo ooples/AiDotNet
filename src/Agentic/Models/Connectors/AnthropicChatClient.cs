@@ -62,11 +62,15 @@ public sealed class AnthropicChatClient<T> : ChatClientBase<T>
             // Fail fast on a malformed custom endpoint instead of waiting for
             // the first request to blow up with an opaque HttpRequestException.
             Guard.NotNullOrWhiteSpace(endpoint);
-            if (!Uri.TryCreate(endpoint, UriKind.Absolute, out _))
+            // Restrict to http(s): UriKind.Absolute alone still accepts file:/ftp:/etc.,
+            // which would survive construction and fail opaquely on the first request.
+            if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var parsed)
+                || (parsed.Scheme != Uri.UriSchemeHttp && parsed.Scheme != Uri.UriSchemeHttps))
             {
                 throw new ArgumentException(
-                    "Endpoint must be an absolute URI.", nameof(endpoint));
+                    "Endpoint must be an absolute http(s) URI.", nameof(endpoint));
             }
+            endpoint = parsed.ToString();
         }
         _apiKey = apiKey;
         _endpoint = endpoint ?? "https://api.anthropic.com/v1/messages";

@@ -58,7 +58,9 @@ public sealed class SwarmMember<T>
                 Guard.NotNullOrWhiteSpace(handoffs[i]);
                 copy[i] = handoffs[i];
             }
-            handoffSnapshot = copy;
+            // Wrap in a read-only view so a caller can't downcast Handoffs back to
+            // string[] and mutate routes after construction-time validation.
+            handoffSnapshot = Array.AsReadOnly(copy);
         }
 
         Name = name;
