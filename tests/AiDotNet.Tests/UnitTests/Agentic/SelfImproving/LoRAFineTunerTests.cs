@@ -41,6 +41,8 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
         [Fact(Timeout = 60000)]
         public async Task Converter_MapsPromptsToInputs_CompletionsToOutputs_RewardsToWeights()
         {
+            await Task.Yield();
+
             var data = FineTuningDataConverter.ToSupervisedData<double>(Dataset());
 
             Assert.Equal(2, data.Count);
@@ -49,12 +51,13 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
             Assert.Contains("6", data.Outputs);
             Assert.Contains(data.Inputs, i => i.Contains("2+2?"));
             Assert.Equal(new[] { 1.0, 0.8 }, data.SampleWeights);
-            await Task.CompletedTask;
         }
 
         [Fact(Timeout = 60000)]
         public async Task Runner_ConvertsAndInvokesFineTuner()
         {
+            await Task.Yield();
+
             var tuner = new RecordingFineTuner();
             var model = new StubStringModel();
 
@@ -69,6 +72,8 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
         [Fact(Timeout = 180000)]
         public async Task TensorBridge_EndToEnd_ReducesLoss_OnRealMamba()
         {
+            await Task.Yield();
+
             // End-to-end CPU-verifiable self-improvement: tokenize a reward-filtered dataset into next-token
             // tensor supervision and actually fine-tune a real (tiny) Mamba model. Training must reduce the
             // dataset loss — proving the loop runs, not just that the bridge forwards data.

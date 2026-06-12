@@ -70,6 +70,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
         [Fact(Timeout = 120000)]
         public async Task Adapter_NextTokenLogits_ReturnsVocabWidthLogits()
         {
+            await Task.Yield();
+
             await PinCpuAsync(() =>
             {
                 var lm = new NeuralNetworkCausalLanguageModel<double>(BuildTinyModel(), Vocab, maxContextTokens: MaxSeq);
@@ -89,6 +91,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
         [Fact(Timeout = 120000)]
         public async Task IncrementalAdapter_KvCache_MatchesFullRefeed_OverRealMamba()
         {
+            await Task.Yield();
+
             await PinCpuAsync(() =>
             {
                 // A 2-layer model so the per-block KV-cache state threads through more than one block.
@@ -140,6 +144,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
         [Fact(Timeout = 120000)]
         public async Task Engine_GeneratesEndToEnd_OverRealNetwork()
         {
+            await Task.Yield();
+
             await PinCpuAsync(async () =>
             {
                 var lm = new NeuralNetworkCausalLanguageModel<double>(BuildTinyModel(), Vocab, maxContextTokens: MaxSeq);
@@ -162,6 +168,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
         [Fact(Timeout = 120000)]
         public async Task Engine_StreamingOverRealNetwork_TerminatesWithFinish()
         {
+            await Task.Yield();
+
             await PinCpuAsync(async () =>
             {
                 var lm = new NeuralNetworkCausalLanguageModel<double>(BuildTinyModel(), Vocab, maxContextTokens: MaxSeq);

@@ -40,6 +40,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Mcp
         [Fact(Timeout = 60000)]
         public async Task Http_WrapsRequest_AndUnwrapsResult()
         {
+            await Task.Yield();
+
             const string response = @"{""jsonrpc"":""2.0"",""id"":1,""result"":{""tools"":[
                 {""name"":""echo"",""description"":""E"",""inputSchema"":{""type"":""object""}}]}}";
             var handler = new StubHandler(response);
@@ -61,6 +63,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Mcp
         [Fact(Timeout = 60000)]
         public async Task Http_JsonRpcError_ThrowsMcpException()
         {
+            await Task.Yield();
+
             const string response = @"{""jsonrpc"":""2.0"",""id"":1,""error"":{""code"":-32601,""message"":""Method not found""}}";
             var transport = new HttpMcpTransport("https://mcp.example/rpc", new HttpClient(new StubHandler(response)));
 
@@ -73,6 +77,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Mcp
         [Fact(Timeout = 60000)]
         public async Task Stream_WritesJsonLine_AndReadsMatchingResponse()
         {
+            await Task.Yield();
+
             const string responseLine = @"{""jsonrpc"":""2.0"",""id"":1,""result"":{""value"":42}}";
             var writer = new StringWriter();
             var reader = new StringReader(responseLine + "\n");
@@ -91,6 +97,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Mcp
         [Fact(Timeout = 60000)]
         public async Task Stream_SkipsNotifications_UntilMatchingId()
         {
+            await Task.Yield();
+
             // A notification (no id) and a mismatched response precede the real response.
             var lines = string.Join("\n", new[]
             {
@@ -108,6 +116,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Mcp
         [Fact(Timeout = 60000)]
         public async Task Stream_ClosedBeforeResponse_Throws()
         {
+            await Task.Yield();
+
             using var transport = new StreamMcpTransport(new StringReader(""), new StringWriter());
             await Assert.ThrowsAsync<McpException>(() => transport.SendRequestAsync("ping", null));
         }

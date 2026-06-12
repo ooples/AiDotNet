@@ -41,6 +41,8 @@ public class MambaLanguageModelTests
     [Fact(Timeout = 120000)]
     public async Task Constructor_ValidParameters_CreatesModel()
     {
+        await Task.Yield();
+
         var model = new MambaLanguageModel<float>(
             CreateArch(),
             vocabSize: 100, modelDimension: 32, numLayers: 2, stateDimension: 8);
@@ -54,6 +56,8 @@ public class MambaLanguageModelTests
     [Fact(Timeout = 120000)]
     public async Task Constructor_ThrowsWhenVocabSizeNotPositive()
     {
+        await Task.Yield();
+
         Assert.Throws<ArgumentException>(() =>
             new MambaLanguageModel<float>(CreateArch(1), vocabSize: 0));
     }
@@ -61,6 +65,8 @@ public class MambaLanguageModelTests
     [Fact(Timeout = 120000)]
     public async Task Constructor_ThrowsWhenModelDimensionNotPositive()
     {
+        await Task.Yield();
+
         Assert.Throws<ArgumentException>(() =>
             new MambaLanguageModel<float>(CreateArch(), vocabSize: 100, modelDimension: 0));
     }
@@ -68,6 +74,8 @@ public class MambaLanguageModelTests
     [Fact(Timeout = 120000)]
     public async Task Constructor_ThrowsWhenNumLayersNotPositive()
     {
+        await Task.Yield();
+
         Assert.Throws<ArgumentException>(() =>
             new MambaLanguageModel<float>(CreateArch(), vocabSize: 100, numLayers: 0));
     }
@@ -75,6 +83,8 @@ public class MambaLanguageModelTests
     [Fact(Timeout = 120000)]
     public async Task Constructor_ThrowsWhenStateDimensionNotPositive()
     {
+        await Task.Yield();
+
         Assert.Throws<ArgumentException>(() =>
             new MambaLanguageModel<float>(CreateArch(), vocabSize: 100, stateDimension: 0));
     }
@@ -82,6 +92,8 @@ public class MambaLanguageModelTests
     [Fact(Timeout = 120000)]
     public async Task Predict_3D_ProducesCorrectOutputShape()
     {
+        await Task.Yield();
+
         int batchSize = 2;
         int seqLen = 4;
         int vocabSize = 50;
@@ -101,6 +113,8 @@ public class MambaLanguageModelTests
     [Fact(Timeout = 120000)]
     public async Task Predict_2D_ProducesCorrectOutputShape()
     {
+        await Task.Yield();
+
         int seqLen = 4;
         int vocabSize = 50;
         int modelDim = 32;
@@ -121,6 +135,8 @@ public class MambaLanguageModelTests
     [Fact(Timeout = 120000)]
     public async Task Train_ForwardBackwardUpdate_NoErrors()
     {
+        await Task.Yield();
+
         int seqLen = 4;
         int vocabSize = 30;
         int modelDim = 16;
@@ -144,6 +160,8 @@ public class MambaLanguageModelTests
     [Fact(Timeout = 120000)]
     public async Task GetParameters_SetParameters_RoundTrip()
     {
+        await Task.Yield();
+
         var model = new MambaLanguageModel<float>(
             CreateArch(50),
             50, 32, numLayers: 2, stateDimension: 8, maxSeqLength: 4);
@@ -165,6 +183,8 @@ public class MambaLanguageModelTests
     [Fact(Timeout = 120000)]
     public async Task SetParameters_ThrowsOnWrongLength()
     {
+        await Task.Yield();
+
         var model = new MambaLanguageModel<float>(
             CreateArch(50), 50, 32, 2, 8, maxSeqLength: 4);
         Assert.Throws<ArgumentException>(() => model.SetParameters(new Vector<float>(10)));
@@ -173,6 +193,8 @@ public class MambaLanguageModelTests
     [Fact(Timeout = 120000)]
     public async Task Predict_DeterministicWithSameParameters()
     {
+        await Task.Yield();
+
         int seqLen = 4;
         int vocabSize = 30;
         int modelDim = 16;
@@ -202,6 +224,8 @@ public class MambaLanguageModelTests
     [Fact(Timeout = 120000)]
     public async Task ResetState_AllowsReuse()
     {
+        await Task.Yield();
+
         var model = new MambaLanguageModel<float>(
             CreateArch(30), 30, 16, 2, 4, maxSeqLength: 4);
         var input = CreateOneHotInput(1, 4, 30);
@@ -217,6 +241,8 @@ public class MambaLanguageModelTests
     [Fact(Timeout = 120000)]
     public async Task SupportsTraining_ReturnsTrue()
     {
+        await Task.Yield();
+
         var model = new MambaLanguageModel<float>(
             CreateArch(30), 30, 16, 2, 4, maxSeqLength: 4);
         Assert.True(model.SupportsTraining);
@@ -225,6 +251,8 @@ public class MambaLanguageModelTests
     [Fact(Timeout = 120000)]
     public async Task GetModelMetadata_ContainsExpectedKeys()
     {
+        await Task.Yield();
+
         var model = new MambaLanguageModel<float>(
             CreateArch(100), 100, 64, 4, 16, maxSeqLength: 32);
         var metadata = model.GetModelMetadata();
@@ -242,6 +270,8 @@ public class MambaLanguageModelTests
     [Fact(Timeout = 120000)]
     public async Task Predict_Double_ProducesValidOutput()
     {
+        await Task.Yield();
+
         int seqLen = 4;
         int vocabSize = 30;
 
@@ -259,6 +289,8 @@ public class MambaLanguageModelTests
     [Fact(Timeout = 120000)]
     public async Task MultiLayerModel_ProducesNonTrivialOutput()
     {
+        await Task.Yield();
+
         int seqLen = 4;
         int vocabSize = 20;
         int modelDim = 16;
@@ -287,11 +319,12 @@ public class MambaLanguageModelTests
     [Fact(Timeout = 120000)]
     public async Task Step_Incremental_MatchesFullSequenceForward()
     {
+        await Task.Yield();
+
         // The KV-cache fast path (per-token Step) must be mathematically equivalent to the parallel
         // full-sequence selective scan (Gu & Dao 2023): feeding tokens one at a time while carrying the
         // recurrent state must reproduce Predict's logits at every position. seqLen > conv kernel (4)
         // ensures the causal-conv window is fully exercised.
-        await Task.CompletedTask;
         int seqLen = 5;
         int vocabSize = 12;
         int modelDim = 16;
@@ -326,8 +359,9 @@ public class MambaLanguageModelTests
     [Fact(Timeout = 120000)]
     public async Task Step_Incremental_MatchesFullSequenceForward_MultiLayer()
     {
+        await Task.Yield();
+
         // Same equivalence guarantee with more blocks, confirming per-block state threads correctly.
-        await Task.CompletedTask;
         int seqLen = 6;
         int vocabSize = 10;
         int modelDim = 16;
@@ -358,10 +392,11 @@ public class MambaLanguageModelTests
     [Fact(Timeout = 120000)]
     public async Task Training_ChangesParameters_AndReducesLoss()
     {
+        await Task.Yield();
+
         // Learning invariant: training must actually move parameters and reduce loss. This guards the
         // regression where MambaBlock registered its trainable parameters only inside UpdateParameters
         // (never reached by the tape path) and omitted _aLog/_dParam — making every Train() a silent no-op.
-        await Task.CompletedTask;
         var priorEngine = AiDotNetEngine.Current;
         AiDotNetEngine.Current = new CpuEngine();
         try

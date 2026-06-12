@@ -34,6 +34,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
         [Fact(Timeout = 120000)]
         public async Task ImportsConcatenatedNamedTensors_IntoModelParameters()
         {
+            await Task.Yield();
+
             var model = TinyModel();
             var count = (int)model.ParameterCount;
 
@@ -51,12 +53,13 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
             Assert.Equal(count, parameters.Length);
             Assert.Equal(0.25, parameters[0], 6);
             Assert.Equal(0.75, parameters[count - 1], 6);
-            await Task.CompletedTask;
         }
 
         [Fact(Timeout = 120000)]
         public async Task ParameterMap_NamesSegments_ByArchitecture()
         {
+            await Task.Yield();
+
             // Mamba stack: EmbeddingLayer + MambaBlock x2 + LayerNorm + Dense head.
             var arch = new NeuralNetworkArchitecture<double>(
                 InputType.OneDimensional, NeuralNetworkTaskType.TextGeneration, inputSize: 12, outputSize: 12);
@@ -77,12 +80,13 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
             }
 
             Assert.Equal((int)model.ParameterCount, offset);
-            await Task.CompletedTask;
         }
 
         [Fact(Timeout = 120000)]
         public async Task ImportByName_RoundTrips_ExportedWeights()
         {
+            await Task.Yield();
+
             // Export a trained-ish model's weights by name, then import them by name into a freshly-initialized
             // model of the same architecture: the parameter vectors must match exactly. This proves the map's
             // ordering reconstructs the flat parameter vector.
@@ -114,8 +118,6 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
             {
                 Assert.Equal(perturbed[i], targetParams[i], 9);
             }
-
-            await Task.CompletedTask;
         }
 
         private static MambaLanguageModel<double> TwoLayerModel()
@@ -128,6 +130,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
         [Fact(Timeout = 120000)]
         public async Task LengthMismatch_Throws()
         {
+            await Task.Yield();
+
             var model = TinyModel();
             var source = new DictionaryTensorSource(new Dictionary<string, double[]>
             {
@@ -136,12 +140,13 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
 
             Assert.Throws<InvalidOperationException>(() =>
                 WeightImporter.ImportInto(model, new[] { "only" }, source));
-            await Task.CompletedTask;
         }
 
         [Fact(Timeout = 60000)]
         public async Task SafetensorsFile_IsANamedTensorSource()
         {
+            await Task.Yield();
+
             // The readers implement INamedTensorSource, so a loaded file is directly importable.
             var data = new byte[8];
             BitConverter.GetBytes(1.0).CopyTo(data, 0);
@@ -155,7 +160,6 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
             INamedTensorSource source = SafetensorsReader.Read(buffer);
             Assert.Contains("w", source.TensorNames);
             Assert.Equal(new[] { 1.0 }, source.ReadAsDouble("w"));
-            await Task.CompletedTask;
         }
     }
 }

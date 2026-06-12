@@ -32,8 +32,11 @@ internal static class LangGraphSidecarRunner
         if (langGraph is { } meanUs)
         {
             Console.WriteLine($"  LangGraph StateGraph   : {meanUs:F3} µs/turn");
-            var ratio = meanUs / aiDotNetMeanUs;
-            Console.WriteLine($"\n  AiDotNet is {ratio:F2}x {(ratio >= 1 ? "faster" : "slower")} on this scenario.");
+            // Always express the ratio as the larger-over-smaller multiple:
+            // "0.50x slower" would be misleading in exactly the case that matters.
+            var aiDotNetIsFaster = aiDotNetMeanUs <= meanUs;
+            var ratio = aiDotNetIsFaster ? meanUs / aiDotNetMeanUs : aiDotNetMeanUs / meanUs;
+            Console.WriteLine($"\n  AiDotNet is {ratio:F2}x {(aiDotNetIsFaster ? "faster" : "slower")} on this scenario.");
         }
     }
 
@@ -84,8 +87,28 @@ internal static class LangGraphSidecarRunner
                     continue;
                 }
 
-                var output = process.StandardOutput.ReadToEnd();
-                process.WaitForExit();
+                // Drain BOTH streams asynchronously (a full stderr pipe would
+                // deadlock a synchronous read) and bound the wait so a wedged
+                // Python process cannot hang the benchmark forever.
+                var stdoutTask = process.StandardOutput.ReadToEndAsync();
+                var stderrTask = process.StandardError.ReadToEndAsync();
+                if (!process.WaitForExit(120000))
+                {
+                    try
+                    {
+                        process.Kill();
+                    }
+                    catch (Exception)
+                    {
+                        // Already exited between the wait and the kill.
+                    }
+
+                    Console.WriteLine("  LangGraph              : skipped (sidecar timed out after 120s).");
+                    return null;
+                }
+
+                var output = stdoutTask.GetAwaiter().GetResult();
+                var errorOutput = stderrTask.GetAwaiter().GetResult();
 
                 var meanUs = ParseMeanMicroseconds(output);
                 if (meanUs is null)
@@ -93,6 +116,10 @@ internal static class LangGraphSidecarRunner
                     Console.WriteLine(
                         "  LangGraph              : skipped (langgraph not installed in the Python environment). " +
                         "Install with: pip install langgraph");
+                    if (errorOutput.Trim().Length > 0)
+                    {
+                        Console.WriteLine($"    sidecar stderr: {errorOutput.Trim()}");
+                    }
                 }
 
                 return meanUs;

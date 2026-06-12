@@ -15,6 +15,8 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
         [Fact(Timeout = 60000)]
         public async Task ParsesPlainNumberScore()
         {
+            await Task.Yield();
+
             var judge = ScriptedChatClient<double>.Sequence(ChatResponses.Text("0.8"));
             var evaluator = new ChatClientTrajectoryEvaluator<double>(judge);
 
@@ -26,6 +28,8 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
         [Fact(Timeout = 60000)]
         public async Task ExtractsNumberFromProse()
         {
+            await Task.Yield();
+
             var judge = ScriptedChatClient<double>.Sequence(ChatResponses.Text("I rate this 0.95 out of 1."));
             var evaluator = new ChatClientTrajectoryEvaluator<double>(judge);
 
@@ -35,6 +39,8 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
         [Fact(Timeout = 60000)]
         public async Task ClampsOutOfRangeAndHandlesNonNumeric()
         {
+            await Task.Yield();
+
             var high = new ChatClientTrajectoryEvaluator<double>(ScriptedChatClient<double>.Sequence(ChatResponses.Text("5")));
             Assert.Equal(1.0, await high.EvaluateAsync(Trajectory("x")));
 
@@ -48,6 +54,8 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
         [Fact(Timeout = 60000)]
         public async Task IntegratesWithEvaluationRunner()
         {
+            await Task.Yield();
+
             // The LLM judge plugs into the same runner as any ITrajectoryEvaluator.
             var judge = ScriptedChatClient<double>.Sequence(ChatResponses.Text("1.0"));
             var runner = new TrajectoryEvaluationRunner(new ChatClientTrajectoryEvaluator<double>(judge));

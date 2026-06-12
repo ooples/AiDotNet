@@ -24,8 +24,14 @@ public partial class MambaLanguageModel<T>
     /// </summary>
     /// <param name="batchSize">The batch size used during stepping (typically 1). Default 1.</param>
     /// <returns>A new <see cref="MambaModelState{T}"/>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="batchSize"/> is not positive.</exception>
     public MambaModelState<T> CreateStepState(int batchSize = 1)
     {
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "Batch size must be positive.");
+        }
+
         var blockStates = new List<MambaStepState<T>>();
         foreach (var layer in Layers)
         {
@@ -46,8 +52,48 @@ public partial class MambaLanguageModel<T>
     /// <param name="tokenInput">The single-token input, shape [batch, 1, vocab] (one-hot or embeddings).</param>
     /// <param name="state">The decoding state from <see cref="CreateStepState"/>, advanced in place.</param>
     /// <returns>The next-token logits for this position, shape [batch, 1, vocab].</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="tokenInput"/> or <paramref name="state"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="tokenInput"/> is not single-token rank-3, or when <paramref name="state"/>
+    /// does not carry one block state per Mamba block (e.g. it came from a different model).
+    /// </exception>
     public Tensor<T> Step(Tensor<T> tokenInput, MambaModelState<T> state)
     {
+        // Reject contract violations up front: a null/mismatched state or a
+        // multi-token input would otherwise surface as NullReference/IndexOutOfRange
+        // deep inside generation with no hint of the cause.
+        if (tokenInput is null)
+        {
+            throw new ArgumentNullException(nameof(tokenInput));
+        }
+
+        if (state is null)
+        {
+            throw new ArgumentNullException(nameof(state));
+        }
+
+        if (tokenInput.Shape.Length != 3 || tokenInput.Shape[1] != 1)
+        {
+            throw new ArgumentException(
+                "tokenInput must be a single token of shape [batch, 1, vocab].", nameof(tokenInput));
+        }
+
+        var expectedBlockStates = 0;
+        foreach (var layer in Layers)
+        {
+            if (layer is MambaBlock<T>)
+            {
+                expectedBlockStates++;
+            }
+        }
+
+        if (state.BlockStates.Count != expectedBlockStates)
+        {
+            throw new ArgumentException(
+                $"The decoding state carries {state.BlockStates.Count} block states but this model has " +
+                $"{expectedBlockStates} Mamba blocks; use CreateStepState() from the same model.", nameof(state));
+        }
+
         SetTrainingMode(false);
         var x = tokenInput;
         var blockIndex = 0;

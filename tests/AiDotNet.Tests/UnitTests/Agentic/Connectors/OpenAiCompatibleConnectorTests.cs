@@ -39,6 +39,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Connectors
         [Fact(Timeout = 60000)]
         public async Task Ollama_UsesLocalEndpoint_AndParsesOpenAiResponse()
         {
+            await Task.Yield();
+
             var handler = new CapturingHandler(OpenAiStyleResponse);
             var client = new OllamaChatClient<double>("llama3.1", httpClient: new HttpClient(handler));
 
@@ -54,6 +56,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Connectors
         [Fact(Timeout = 60000)]
         public async Task Mistral_UsesMistralEndpoint_WithBearerKey()
         {
+            await Task.Yield();
+
             var handler = new CapturingHandler(OpenAiStyleResponse);
             var client = new MistralChatClient<double>("secret-key", "mistral-large-latest", httpClient: new HttpClient(handler));
 
@@ -67,6 +71,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Connectors
         [Fact(Timeout = 60000)]
         public async Task Connectors_AreDropInIChatClients()
         {
+            await Task.Yield();
+
             // Both expose the uniform IChatClient<T> surface the rest of the stack depends on.
             IChatClient<double> ollama = new OllamaChatClient<double>("llama3.1", httpClient: new HttpClient(new CapturingHandler(OpenAiStyleResponse)));
             IChatClient<double> mistral = new MistralChatClient<double>("k", httpClient: new HttpClient(new CapturingHandler(OpenAiStyleResponse)));
@@ -78,6 +84,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Connectors
         [Fact(Timeout = 60000)]
         public async Task CustomEndpoint_Override_IsHonored()
         {
+            await Task.Yield();
+
             var handler = new CapturingHandler(OpenAiStyleResponse);
             var client = new OllamaChatClient<double>("llama3.1", endpoint: "http://remote-host:11434/v1/chat/completions",
                 httpClient: new HttpClient(handler));

@@ -39,6 +39,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Connectors
         [Fact(Timeout = 60000)]
         public async Task Gemini_ParsesText_FinishReason_Usage()
         {
+            await Task.Yield();
+
             const string response = @"{
                 ""candidates"": [{
                     ""content"": { ""parts"": [{ ""text"": ""Hello from Gemini"" }], ""role"": ""model"" },
@@ -64,6 +66,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Connectors
         [Fact(Timeout = 60000)]
         public async Task Gemini_ParsesFunctionCall()
         {
+            await Task.Yield();
+
             const string response = @"{
                 ""candidates"": [{
                     ""content"": { ""parts"": [{ ""functionCall"": { ""name"": ""get_weather"", ""args"": { ""city"": ""Paris"" } } }] }
@@ -85,6 +89,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Connectors
         [Fact(Timeout = 60000)]
         public async Task Cohere_ParsesText_FinishReason_Usage_AndShapesHistory()
         {
+            await Task.Yield();
+
             const string response = @"{
                 ""text"": ""Hello from Cohere"",
                 ""finish_reason"": ""COMPLETE"",
@@ -115,6 +121,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Connectors
         [Fact(Timeout = 60000)]
         public async Task Cohere_ParsesToolCalls()
         {
+            await Task.Yield();
+
             const string response = @"{
                 ""text"": """",
                 ""tool_calls"": [{ ""name"": ""lookup"", ""parameters"": { ""id"": 7 } }],
@@ -132,6 +140,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Connectors
         [Fact(Timeout = 60000)]
         public async Task BothAreDropInIChatClients()
         {
+            await Task.Yield();
+
             const string gemini = @"{ ""candidates"": [{ ""content"": { ""parts"": [{ ""text"": ""g"" }] }, ""finishReason"": ""STOP"" }] }";
             const string cohere = @"{ ""text"": ""c"", ""finish_reason"": ""COMPLETE"" }";
             IChatClient<double> g = new GeminiChatClient<double>("k", httpClient: new HttpClient(new CapturingHandler(gemini)));

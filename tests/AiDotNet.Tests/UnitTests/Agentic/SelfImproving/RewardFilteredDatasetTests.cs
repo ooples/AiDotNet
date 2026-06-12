@@ -18,6 +18,8 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
         [Fact(Timeout = 60000)]
         public async Task Builder_KeepsOnlyHighRewardRuns()
         {
+            await Task.Yield();
+
             var builder = new RewardFilteredDatasetBuilder(minReward: 0.5);
             var dataset = builder.Build(new[]
             {
@@ -33,12 +35,13 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
             var first = dataset.Examples.Single(e => e.Completion == "4");
             Assert.Contains("2+2?", first.Prompt);   // prompt holds the input context
             Assert.DoesNotContain("4", first.Prompt); // completion is excluded from the prompt
-            await Task.CompletedTask;
         }
 
         [Fact(Timeout = 60000)]
         public async Task Builder_SkipsUngradedAndDegenerateRuns()
         {
+            await Task.Yield();
+
             var ungraded = new AgentTrajectory("u", "agent",
                 new List<ChatMessage> { ChatMessage.User("q"), ChatMessage.Assistant("a") }, "a", 1);
             // reward is null -> skipped
@@ -48,12 +51,13 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
             var dataset = new RewardFilteredDatasetBuilder(0.5).Build(new[] { ungraded, tooShort });
 
             Assert.Empty(dataset.Examples);
-            await Task.CompletedTask;
         }
 
         [Fact(Timeout = 60000)]
         public async Task Builder_ThresholdControlsInclusion()
         {
+            await Task.Yield();
+
             var runs = new[]
             {
                 Run("1", "q1", "a1", 0.3),
@@ -64,7 +68,6 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
             Assert.Equal(3, new RewardFilteredDatasetBuilder(0.0).Build(runs).Count);
             Assert.Equal(2, new RewardFilteredDatasetBuilder(0.5).Build(runs).Count);
             Assert.Equal(1, new RewardFilteredDatasetBuilder(0.85).Build(runs).Count);
-            await Task.CompletedTask;
         }
     }
 }

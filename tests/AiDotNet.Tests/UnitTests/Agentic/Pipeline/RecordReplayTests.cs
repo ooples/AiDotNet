@@ -12,6 +12,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Pipeline
         [Fact(Timeout = 60000)]
         public async Task Record_ThenReplay_ReturnsSameResponse_WithoutCallingModel()
         {
+            await Task.Yield();
+
             var store = new InMemoryChatInteractionStore();
 
             // Record once against the real (scripted) model.
@@ -33,6 +35,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Pipeline
         [Fact(Timeout = 60000)]
         public async Task Replay_IsDeterministic_AcrossManyCalls()
         {
+            await Task.Yield();
+
             var store = new InMemoryChatInteractionStore();
             var model = ScriptedChatClient<double>.Sequence(ChatResponses.Text("stable"));
             await new RecordingChatClient<double>(model, store)
@@ -48,6 +52,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Pipeline
         [Fact(Timeout = 60000)]
         public async Task Replay_Miss_WithoutFallback_Throws()
         {
+            await Task.Yield();
+
             var replay = new ReplayingChatClient<double>(new InMemoryChatInteractionStore());
             await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 replay.GetResponseAsync(new[] { ChatMessage.User("never recorded") }));
@@ -56,6 +62,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Pipeline
         [Fact(Timeout = 60000)]
         public async Task Replay_Miss_WithFallback_CallsModelOnceThenCaches()
         {
+            await Task.Yield();
+
             var store = new InMemoryChatInteractionStore();
             var model = ScriptedChatClient<double>.Sequence(ChatResponses.Text("from model"));
             var replay = new ReplayingChatClient<double>(store, fallback: model);
@@ -71,6 +79,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Pipeline
         [Fact(Timeout = 60000)]
         public async Task Key_DistinguishesRequests()
         {
+            await Task.Yield();
+
             var a = ChatInteractionKey.For(new[] { ChatMessage.User("hello") }, null);
             var sameAsA = ChatInteractionKey.For(new[] { ChatMessage.User("hello") }, null);
             var differentMessage = ChatInteractionKey.For(new[] { ChatMessage.User("goodbye") }, null);
@@ -80,7 +90,6 @@ namespace AiDotNetTests.UnitTests.Agentic.Pipeline
             Assert.Equal(a, sameAsA);
             Assert.NotEqual(a, differentMessage);
             Assert.NotEqual(a, differentOptions);
-            await Task.CompletedTask;
         }
     }
 }

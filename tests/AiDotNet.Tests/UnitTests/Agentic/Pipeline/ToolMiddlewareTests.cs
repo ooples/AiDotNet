@@ -19,6 +19,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Pipeline
         [Fact(Timeout = 60000)]
         public async Task ApprovalMiddleware_AllowsApprovedCall()
         {
+            await Task.Yield();
+
             var tool = Tool();
             var wrapped = new MiddlewareAgentTool(tool, new IToolMiddleware[]
             {
@@ -35,6 +37,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Pipeline
         [Fact(Timeout = 60000)]
         public async Task ApprovalMiddleware_DeniesUnapprovedCall_WithoutRunningTool()
         {
+            await Task.Yield();
+
             var tool = Tool();
             var wrapped = new MiddlewareAgentTool(tool, new IToolMiddleware[]
             {
@@ -51,6 +55,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Pipeline
         [Fact(Timeout = 60000)]
         public async Task Middleware_RunsInOrder_AndCanRewriteArguments()
         {
+            await Task.Yield();
+
             var order = new List<string>();
             var tool = Tool();
             var wrapped = new MiddlewareAgentTool(tool, new IToolMiddleware[]
@@ -78,16 +84,19 @@ namespace AiDotNetTests.UnitTests.Agentic.Pipeline
         [Fact(Timeout = 60000)]
         public async Task WrappedTool_KeepsInnerIdentity()
         {
+            await Task.Yield();
+
             var wrapped = new MiddlewareAgentTool(Tool(), new IToolMiddleware[] { new ApprovalToolMiddleware(_ => true) });
             Assert.Equal("act", wrapped.Name);
             Assert.Equal("Performs an action.", wrapped.Description);
             Assert.Equal("act", wrapped.ToDefinition().Name);
-            await Task.CompletedTask;
         }
 
         [Fact(Timeout = 60000)]
         public async Task IntegratesWithAgentExecutor_ApprovalBlocksToolMidLoop()
         {
+            await Task.Yield();
+
             // The model calls "act"; an approval gate denies it; the model then answers with the deny result.
             var tool = Tool();
             var gated = new MiddlewareAgentTool(tool, new IToolMiddleware[]

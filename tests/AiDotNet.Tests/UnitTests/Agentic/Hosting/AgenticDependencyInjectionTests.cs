@@ -17,6 +17,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Hosting
         [Fact(Timeout = 60000)]
         public async Task AddAgentExecutor_ResolvesAgent_BuiltFromRegisteredClientAndTools()
         {
+            await Task.Yield();
+
             var services = new ServiceCollection();
             services.AddAgentChatClient<double>(ScriptedChatClient<double>.Sequence(ChatResponses.Text("ok")));
             services.AddAgentTools(tools => tools.Add(new RecordingTool("noop", "Does nothing.", _ => "done")));
@@ -33,6 +35,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Hosting
         [Fact(Timeout = 60000)]
         public async Task AddAgentExecutor_WorksWithoutTools()
         {
+            await Task.Yield();
+
             var services = new ServiceCollection();
             services.AddAgentChatClient<double>(ScriptedChatClient<double>.Sequence(ChatResponses.Text("hi")));
             services.AddAgentExecutor<double>();
@@ -46,6 +50,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Hosting
         [Fact(Timeout = 60000)]
         public async Task AddAgentChatClient_Factory_IsResolved()
         {
+            await Task.Yield();
+
             var services = new ServiceCollection();
             services.AddAgentChatClient<double>(_ => ScriptedChatClient<double>.Sequence(ChatResponses.Text("factory")));
             services.AddAgentExecutor<double>();
@@ -61,11 +67,12 @@ namespace AiDotNetTests.UnitTests.Agentic.Hosting
         [Fact(Timeout = 60000)]
         public async Task Extensions_GuardNullArguments()
         {
+            await Task.Yield();
+
             var services = new ServiceCollection();
             Assert.Throws<ArgumentNullException>(() =>
                 services.AddAgentChatClient<double>((IChatClient<double>)null));
             Assert.Throws<ArgumentNullException>(() => services.AddAgentTools(null));
-            await Task.CompletedTask;
         }
     }
 }

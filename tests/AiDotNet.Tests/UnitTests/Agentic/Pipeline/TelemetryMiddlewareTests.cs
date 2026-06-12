@@ -10,11 +10,24 @@ using Xunit;
 
 namespace AiDotNetTests.UnitTests.Agentic.Pipeline
 {
+    /// <summary>
+    /// Serializes the telemetry tests: the process-wide ActivitySource/Meter
+    /// listeners would otherwise capture spans and metric points emitted by
+    /// unrelated tests running in parallel, making Assert.Single flaky.
+    /// </summary>
+    [CollectionDefinition("AgenticTelemetry", DisableParallelization = true)]
+    public sealed class AgenticTelemetryCollection
+    {
+    }
+
+    [Collection("AgenticTelemetry")]
     public class TelemetryMiddlewareTests
     {
         [Fact(Timeout = 60000)]
         public async Task EmitsGenAiSpan_WithFinishReasonAndUsageTags()
         {
+            await Task.Yield();
+
             var spans = new List<Activity>();
             using var listener = new ActivityListener
             {
@@ -40,6 +53,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Pipeline
         [Fact(Timeout = 60000)]
         public async Task EmitsOperationCountMetric()
         {
+            await Task.Yield();
+
             var counts = new List<long>();
             using var meterListener = new MeterListener
             {
@@ -67,6 +82,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Pipeline
         [Fact(Timeout = 60000)]
         public async Task NoListener_StillReturnsResponse()
         {
+            await Task.Yield();
+
             // With no telemetry collector attached, the middleware is a transparent pass-through.
             var inner = ScriptedChatClient<double>.Sequence(ChatResponses.Text("passthrough"));
             var client = new MiddlewareChatClient<double>(inner, new IChatMiddleware[] { new TelemetryChatMiddleware() });

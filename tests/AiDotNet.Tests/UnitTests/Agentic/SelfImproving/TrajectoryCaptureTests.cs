@@ -20,6 +20,8 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
         [Fact(Timeout = 60000)]
         public async Task TracingAgent_RecordsEachRun()
         {
+            await Task.Yield();
+
             var store = new InMemoryTrajectoryStore();
             var traced = new TracingAgent<double>(Agent("writer", "Hello."), store);
 
@@ -38,6 +40,8 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
         [Fact(Timeout = 60000)]
         public async Task TracingAgent_AccumulatesAcrossRuns_AndIsQueryable()
         {
+            await Task.Yield();
+
             var store = new InMemoryTrajectoryStore();
             await new TracingAgent<double>(Agent("a", "one"), store).RunAsync(new[] { ChatMessage.User("x") });
             await new TracingAgent<double>(Agent("b", "two"), store).RunAsync(new[] { ChatMessage.User("y") });
@@ -52,6 +56,8 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
         [Fact(Timeout = 60000)]
         public async Task TracingAgent_AttachesMetadata()
         {
+            await Task.Yield();
+
             var store = new InMemoryTrajectoryStore();
             var metadata = new Dictionary<string, string> { ["experiment"] = "exp-1" };
             var traced = new TracingAgent<double>(Agent("a", "ok"), store, metadata);
@@ -66,6 +72,8 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
         [Fact(Timeout = 60000)]
         public async Task Store_GetById_And_RewardAnnotation()
         {
+            await Task.Yield();
+
             var store = new InMemoryTrajectoryStore();
             var traced = new TracingAgent<double>(Agent("a", "answer"), store);
             await traced.RunAsync(new[] { ChatMessage.User("x") });
@@ -84,6 +92,8 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
         [Fact(Timeout = 60000)]
         public async Task Store_Clear_Empties()
         {
+            await Task.Yield();
+
             var store = new InMemoryTrajectoryStore();
             await new TracingAgent<double>(Agent("a", "ok"), store).RunAsync(new[] { ChatMessage.User("x") });
             await store.ClearAsync();

@@ -73,6 +73,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Connectors
         [Fact(Timeout = 60000)]
         public async Task WrapsMeaiClient_MapsResponseTextFinishAndUsage()
         {
+            await Task.Yield();
+
             IChatClient<double> client = new MeaiChatClient<double>(new FakeMeaiClient(), "fake-meai-model");
 
             var response = await client.GetResponseAsync(new[] { ChatMessage.User("hi") });
@@ -86,6 +88,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Connectors
         [Fact(Timeout = 60000)]
         public async Task Streaming_ReconstructsText()
         {
+            await Task.Yield();
+
             IChatClient<double> client = new MeaiChatClient<double>(new FakeMeaiClient());
 
             var text = new System.Text.StringBuilder();
@@ -100,6 +104,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Connectors
         [Fact(Timeout = 60000)]
         public async Task Inbound_PassesToolsThrough_AndSurfacesToolCalls()
         {
+            await Task.Yield();
+
             var fake = new FakeMeaiClient();
             IChatClient<double> client = new MeaiChatClient<double>(fake);
             var options = new ChatOptions
@@ -128,6 +134,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Connectors
         [Fact(Timeout = 60000)]
         public async Task Inbound_ReplaysToolResults_AsMeaiFunctionResults()
         {
+            await Task.Yield();
+
             var fake = new FakeMeaiClient();
             IChatClient<double> client = new MeaiChatClient<double>(fake);
 
@@ -187,7 +195,6 @@ namespace AiDotNetTests.UnitTests.Agentic.Connectors
                 ChatOptions? options = null,
                 [EnumeratorCancellation] CancellationToken cancellationToken = default)
             {
-                await Task.CompletedTask;
                 yield return ChatResponseUpdate.ForText("hi ");
                 yield return ChatResponseUpdate.ForText("there");
                 yield return ChatResponseUpdate.ForFinish(ChatFinishReason.Stop);
@@ -215,6 +222,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Connectors
         [Fact(Timeout = 60000)]
         public async Task Outbound_MapsTextFinishAndUsage()
         {
+            await Task.Yield();
+
             Meai.IChatClient meai = new FakeAgenticClient().AsMeaiChatClient();
 
             var response = await meai.GetResponseAsync(new[] { new Meai.ChatMessage(Meai.ChatRole.User, "hi") });
@@ -227,6 +236,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Connectors
         [Fact(Timeout = 60000)]
         public async Task Outbound_Streaming_ReconstructsText()
         {
+            await Task.Yield();
+
             Meai.IChatClient meai = new FakeAgenticClient().AsMeaiChatClient();
 
             var text = new System.Text.StringBuilder();
@@ -241,6 +252,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Connectors
         [Fact(Timeout = 60000)]
         public async Task Outbound_PassesToolsThrough_AndEmitsFunctionCall()
         {
+            await Task.Yield();
+
             var fake = new FakeAgenticClient();
             Meai.IChatClient meai = fake.AsMeaiChatClient();
             var options = new Meai.ChatOptions
@@ -269,6 +282,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Connectors
         [Fact(Timeout = 60000)]
         public async Task RoundTrip_AgenticToMeaiAndBack_PreservesText()
         {
+            await Task.Yield();
+
             // AiDotNet client -> expose as MEAI -> wrap that back as AiDotNet: text must survive both hops.
             Meai.IChatClient asMeai = new FakeAgenticClient().AsMeaiChatClient();
             IChatClient<double> roundTripped = asMeai.AsAgenticChatClient<double>("round-trip");

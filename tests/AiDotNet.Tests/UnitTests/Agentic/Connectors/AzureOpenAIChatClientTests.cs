@@ -33,6 +33,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Connectors
         [Fact(Timeout = 60000)]
         public async Task UsesDeploymentEndpoint_AndApiKeyHeader_NotBearer()
         {
+            await Task.Yield();
+
             const string responseBody = @"{""choices"":[{""message"":{""content"":""ok""},""finish_reason"":""stop""}]}";
             var handler = new CapturingHandler(responseBody);
             var client = new AzureOpenAIChatClient<double>(

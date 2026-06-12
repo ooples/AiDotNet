@@ -64,6 +64,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Mcp
         [Fact(Timeout = 60000)]
         public async Task ListTools_ReturnsServerToolDescriptors()
         {
+            await Task.Yield();
+
             var client = new McpClient(new FakeMcpTransport());
             var tools = await client.ListToolsAsync();
 
@@ -76,6 +78,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Mcp
         [Fact(Timeout = 60000)]
         public async Task CallTool_ForwardsArguments_AndReturnsResult()
         {
+            await Task.Yield();
+
             var transport = new FakeMcpTransport();
             var client = new McpClient(transport);
 
@@ -89,6 +93,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Mcp
         [Fact(Timeout = 60000)]
         public async Task GetTools_ExposesMcpToolsAsAgentTools()
         {
+            await Task.Yield();
+
             var client = new McpClient(new FakeMcpTransport());
             var tools = await client.GetToolsAsync();
 
@@ -100,6 +106,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Mcp
         [Fact(Timeout = 60000)]
         public async Task Initialize_PerformsHandshake()
         {
+            await Task.Yield();
+
             var transport = new FakeMcpTransport();
             var client = new McpClient(transport);
 
@@ -112,6 +120,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Mcp
         [Fact(Timeout = 60000)]
         public async Task McpTool_IsCallableThroughAgentExecutor()
         {
+            await Task.Yield();
+
             // An MCP server tool, used by a normal agent: the model calls "echo", the call goes to the server,
             // and the result flows back into the loop.
             var mcpTools = await new McpClient(new FakeMcpTransport()).GetToolsAsync();

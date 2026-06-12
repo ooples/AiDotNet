@@ -22,6 +22,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Mcp
         [Fact(Timeout = 60000)]
         public async Task Server_ListsRegisteredTools()
         {
+            await Task.Yield();
+
             var server = new McpServer(ToolsWith(out _));
 
             var result = await server.HandleRequestAsync("tools/list", null);
@@ -36,6 +38,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Mcp
         [Fact(Timeout = 60000)]
         public async Task Server_CallsToolAndReturnsContent()
         {
+            await Task.Yield();
+
             var server = new McpServer(ToolsWith(out var tool));
 
             var parameters = new JObject
@@ -53,6 +57,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Mcp
         [Fact(Timeout = 60000)]
         public async Task Server_Initialize_ReportsCapabilities()
         {
+            await Task.Yield();
+
             var server = new McpServer(ToolsWith(out _), serverName: "my-server");
             var result = await server.HandleRequestAsync("initialize", null);
 
@@ -63,6 +69,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Mcp
         [Fact(Timeout = 60000)]
         public async Task ClientServer_RoundTrip_OverInMemoryTransport()
         {
+            await Task.Yield();
+
             // Wire AiDotNet's MCP client to AiDotNet's MCP server with no network: the client lists and calls
             // the server's tools end-to-end.
             var server = new McpServer(ToolsWith(out var tool));
@@ -79,6 +87,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Mcp
         [Fact(Timeout = 60000)]
         public async Task AgentExecutor_UsesServerToolsViaClient_EndToEnd()
         {
+            await Task.Yield();
+
             // Full loop: an agent's model calls a tool that is actually served by an MCP server in-process.
             var server = new McpServer(ToolsWith(out var tool));
             var mcpTools = await new McpClient(new InMemoryMcpTransport(server)).GetToolsAsync();

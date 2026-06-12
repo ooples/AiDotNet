@@ -35,6 +35,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
         [Fact(Timeout = 60000)]
         public async Task Engine_UsesIncrementalPath_FeedingOneTokenAtATime()
         {
+            await Task.Yield();
+
             var model = new IncrementalProbe();
             var engine = new LocalEngineChatClient<double>(model, BuildTokenizer(), options: new LocalEngineOptions
             {
@@ -56,6 +58,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
         [Fact(Timeout = 60000)]
         public async Task IncrementalAndFullRefeed_ProduceIdenticalOutput()
         {
+            await Task.Yield();
+
             var tokenizer = BuildTokenizer();
             var sampling = new LocalSamplingOptions { Temperature = 0.0 };
 

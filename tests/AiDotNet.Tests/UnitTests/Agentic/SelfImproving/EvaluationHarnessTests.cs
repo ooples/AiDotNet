@@ -15,6 +15,8 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
         [Fact(Timeout = 60000)]
         public async Task Runner_ScoresTrajectories_AndAnnotatesReward()
         {
+            await Task.Yield();
+
             var t1 = Trajectory("1", "42");
             var t2 = Trajectory("2", "wrong");
             // Exact-match grader against the known answer "42".
@@ -34,6 +36,8 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
         [Fact(Timeout = 60000)]
         public async Task Report_PassRate_UsesThreshold()
         {
+            await Task.Yield();
+
             var trajectories = new[]
             {
                 Trajectory("1", "a"),
@@ -55,6 +59,8 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
         [Fact(Timeout = 60000)]
         public async Task Runner_EvaluatesWholeStore()
         {
+            await Task.Yield();
+
             var store = new InMemoryTrajectoryStore();
             await store.AddAsync(Trajectory("1", "good"));
             await store.AddAsync(Trajectory("2", "good"));
@@ -76,6 +82,8 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
         [Fact(Timeout = 60000)]
         public async Task Runner_EmptySet_ReturnsZeroReport()
         {
+            await Task.Yield();
+
             var runner = new TrajectoryEvaluationRunner(new DelegateTrajectoryEvaluator(_ => 1.0));
             var report = await runner.EvaluateAsync(Array.Empty<AgentTrajectory>());
             Assert.Equal(0, report.Count);

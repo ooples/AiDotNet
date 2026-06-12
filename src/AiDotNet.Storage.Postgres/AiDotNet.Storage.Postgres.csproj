@@ -4,7 +4,9 @@
     <!--
       Opt-in PostgreSQL backend for AiDotNet. Carries the Npgsql dependency so the
       core package stays free of it. Provides PostgresGraphCheckpointer for durable,
-      cross-process graph checkpointing. Matches the core package's TFM set.
+      cross-process graph checkpointing. net10.0 only: modern Npgsql does not ship
+      a net471-compatible target, so this package intentionally supports a subset
+      of the core package's TFMs.
     -->
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

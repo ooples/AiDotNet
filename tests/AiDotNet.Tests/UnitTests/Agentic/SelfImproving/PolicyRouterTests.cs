@@ -19,6 +19,8 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
         [Fact(Timeout = 60000)]
         public async Task Policy_ShiftsProbabilityTowardHigherRewardAgent()
         {
+            await Task.Yield();
+
             var router = new SoftmaxPolicyRouter<double>(new IAgent<double>[] { Agent("good"), Agent("bad") }, learningRate: 0.5);
 
             // Repeated REINFORCE updates: "good" earns 1.0, "bad" earns 0.0.
@@ -30,21 +32,23 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
 
             Assert.True(router.ProbabilityOf("good") > 0.8);
             Assert.Equal("good", router.SelectBestAgentName());
-            await Task.CompletedTask;
         }
 
         [Fact(Timeout = 60000)]
         public async Task UntrainedPolicy_IsUniform()
         {
+            await Task.Yield();
+
             var router = new SoftmaxPolicyRouter<double>(new IAgent<double>[] { Agent("a"), Agent("b") });
             Assert.Equal(0.5, router.ProbabilityOf("a"), 6);
             Assert.Equal(0.5, router.ProbabilityOf("b"), 6);
-            await Task.CompletedTask;
         }
 
         [Fact(Timeout = 60000)]
         public async Task LearnsFromTrajectories_AndRunsChosenAgent()
         {
+            await Task.Yield();
+
             var router = new SoftmaxPolicyRouter<double>(new IAgent<double>[] { Agent("good"), Agent("bad") }, seed: 1);
             var trajectories = new List<AgentTrajectory>();
             for (var i = 0; i < 30; i++)
@@ -68,6 +72,8 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
         [Fact(Timeout = 60000)]
         public async Task LearnsPerContext()
         {
+            await Task.Yield();
+
             var router = new SoftmaxPolicyRouter<double>(
                 new IAgent<double>[] { Agent("math"), Agent("writer") },
                 learningRate: 0.5,
@@ -83,16 +89,16 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
 
             Assert.Equal("math", router.SelectBestAgentName(new[] { ChatMessage.User("math integrate") }));
             Assert.Equal("writer", router.SelectBestAgentName(new[] { ChatMessage.User("prose poem") }));
-            await Task.CompletedTask;
         }
 
         [Fact(Timeout = 60000)]
         public async Task Constructor_Guards()
         {
+            await Task.Yield();
+
             Assert.Throws<ArgumentException>(() => new SoftmaxPolicyRouter<double>(Array.Empty<IAgent<double>>()));
             Assert.Throws<ArgumentOutOfRangeException>(() =>
                 new SoftmaxPolicyRouter<double>(new IAgent<double>[] { Agent("a") }, learningRate: 0));
-            await Task.CompletedTask;
         }
     }
 }

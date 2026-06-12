@@ -39,7 +39,16 @@ def build_app():
 
 
 def main() -> None:
-    iterations = int(sys.argv[1]) if len(sys.argv) > 1 else 2000
+    try:
+        iterations = int(sys.argv[1]) if len(sys.argv) > 1 else 2000
+    except ValueError:
+        print(json.dumps({"status": "invalid_arguments", "error": "iterations must be an integer"}))
+        sys.exit(2)
+
+    if iterations <= 0:
+        print(json.dumps({"status": "invalid_arguments", "error": "iterations must be > 0"}))
+        sys.exit(2)
+
     app = build_app()
 
     request = {"input": "What is 2 + 3?", "output": ""}

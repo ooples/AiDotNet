@@ -23,6 +23,12 @@ public sealed class PostgresGraphCheckpointer<TState> : IGraphCheckpointer<TStat
 {
     private readonly string _connectionString;
 
+    // Schema DDL runs once per checkpointer instance, not on every open: the
+    // CREATE TABLE/INDEX IF NOT EXISTS round trips and catalog locks would
+    // otherwise sit on the hot path of every save and lookup.
+    private readonly SemaphoreSlim _schemaGate = new(1, 1);
+    private volatile bool _schemaReady;
+
     /// <summary>
     /// Initializes the checkpointer with a Postgres connection string.
     /// </summary>
@@ -48,9 +54,14 @@ public sealed class PostgresGraphCheckpointer<TState> : IGraphCheckpointer<TStat
 
         using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         using var command = connection.CreateCommand();
+        // Idempotent write: a retry after a transient failure must update the
+        // same logical checkpoint, not insert a duplicate row that GetHistory
+        // would then return twice.
         command.CommandText =
             "INSERT INTO graph_checkpoints (thread_id, checkpoint_id, step, next_node, state_json) " +
-            "VALUES (@thread_id, @checkpoint_id, @step, @next_node, @state_json);";
+            "VALUES (@thread_id, @checkpoint_id, @step, @next_node, @state_json) " +
+            "ON CONFLICT (thread_id, checkpoint_id) DO UPDATE SET " +
+            "step = EXCLUDED.step, next_node = EXCLUDED.next_node, state_json = EXCLUDED.state_json;";
         command.Parameters.AddWithValue("thread_id", checkpoint.ThreadId);
         command.Parameters.AddWithValue("checkpoint_id", checkpoint.CheckpointId);
         command.Parameters.AddWithValue("step", checkpoint.Step);
@@ -149,19 +160,44 @@ public sealed class PostgresGraphCheckpointer<TState> : IGraphCheckpointer<TStat
     {
         var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-
-        using var command = connection.CreateCommand();
-        command.CommandText =
-            "CREATE TABLE IF NOT EXISTS graph_checkpoints (" +
-            "seq BIGSERIAL PRIMARY KEY, " +
-            "thread_id TEXT NOT NULL, " +
-            "checkpoint_id TEXT NOT NULL, " +
-            "step INTEGER NOT NULL, " +
-            "next_node TEXT NOT NULL, " +
-            "state_json TEXT NOT NULL);" +
-            "CREATE INDEX IF NOT EXISTS ix_graph_checkpoints_thread ON graph_checkpoints (thread_id, seq);";
-        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-
+        await EnsureSchemaAsync(connection, cancellationToken).ConfigureAwait(false);
         return connection;
+    }
+
+    private async Task EnsureSchemaAsync(NpgsqlConnection connection, CancellationToken cancellationToken)
+    {
+        if (_schemaReady)
+        {
+            return;
+        }
+
+        await _schemaGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (_schemaReady)
+            {
+                return;
+            }
+
+            using var command = connection.CreateCommand();
+            command.CommandText =
+                "CREATE TABLE IF NOT EXISTS graph_checkpoints (" +
+                "seq BIGSERIAL PRIMARY KEY, " +
+                "thread_id TEXT NOT NULL, " +
+                "checkpoint_id TEXT NOT NULL, " +
+                "step INTEGER NOT NULL, " +
+                "next_node TEXT NOT NULL, " +
+                "state_json TEXT NOT NULL);" +
+                "CREATE INDEX IF NOT EXISTS ix_graph_checkpoints_thread ON graph_checkpoints (thread_id, seq);" +
+                // Backs the idempotent ON CONFLICT upsert in SaveAsync.
+                "CREATE UNIQUE INDEX IF NOT EXISTS ux_graph_checkpoints_thread_checkpoint " +
+                "ON graph_checkpoints (thread_id, checkpoint_id);";
+            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            _schemaReady = true;
+        }
+        finally
+        {
+            _schemaGate.Release();
+        }
     }
 }

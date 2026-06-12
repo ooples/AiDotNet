@@ -579,10 +579,22 @@ public partial class RWKV7Block<T> : LayerBase<T>
         // documented recurrence (off-tape; inference only):
         //   S_t[di,vi] = sigmoid(A_t)[di]*S_{t-1}[di,vi] + (sigmoid(B_t)[di]*K_t[di])*V_t[vi]
         // seeded from the prior state (`state`) so token-by-token streaming accumulates correctly.
-        _recurrentState = IsTrainingMode
-            ? null
-            : ComputeFinalWkvState(state, Aall, Ball, Kall, Vall, batchSize, seqLen);
-        _prevToken = seqLen > 0 ? x.GetSliceAlongDimension(seqLen - 1, 1) : xPrev;
+        if (IsTrainingMode)
+        {
+            // Training sequences are independent — clear ALL carried state,
+            // including the token-shift caches. Leaving _prevToken /
+            // _prevChannelToken live would mix the first inference token with
+            // the last training token if the block is reused for streaming
+            // without an explicit ResetState().
+            _recurrentState = null;
+            _prevToken = null;
+            _prevChannelToken = null;
+        }
+        else
+        {
+            _recurrentState = ComputeFinalWkvState(state, Aall, Ball, Kall, Vall, batchSize, seqLen);
+            _prevToken = seqLen > 0 ? x.GetSliceAlongDimension(seqLen - 1, 1) : xPrev;
+        }
 
         // Cache for backward
         _cachedWkvOut = allWkv;
@@ -685,7 +697,13 @@ public partial class RWKV7Block<T> : LayerBase<T>
         var vProj = Engine.TensorMatMul(kSiLU, _channelValueWeights); // [bsl, modelDim]
         var y = Engine.TensorMultiply(rGate, vProj); // [bsl, modelDim]
 
-        if (seqLen > 0) _prevChannelToken = x.GetSliceAlongDimension(seqLen - 1, 1);
+        // Carry the channel token-shift cache only for the inference streaming
+        // contract; in training the sequences are independent and a live cache
+        // would leak the last training token into a later inference call.
+        if (!IsTrainingMode && seqLen > 0)
+        {
+            _prevChannelToken = x.GetSliceAlongDimension(seqLen - 1, 1);
+        }
 
         return Engine.Reshape(y, new[] { batchSize, seqLen, _modelDimension });
     }

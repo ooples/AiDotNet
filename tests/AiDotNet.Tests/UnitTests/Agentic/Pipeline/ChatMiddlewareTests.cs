@@ -13,6 +13,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Pipeline
         [Fact(Timeout = 60000)]
         public async Task Pipeline_RunsMiddlewareInRegistrationOrder()
         {
+            await Task.Yield();
+
             var order = new List<string>();
             var inner = ScriptedChatClient<double>.Sequence(ChatResponses.Text("ok"));
 
@@ -40,6 +42,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Pipeline
         [Fact(Timeout = 60000)]
         public async Task Middleware_CanRewriteRequest()
         {
+            await Task.Yield();
+
             var inner = ScriptedChatClient<double>.Sequence(ChatResponses.Text("ok"));
             // Middleware prepends a system message the inner client then sees.
             var inject = new DelegateChatMiddleware((ctx, next, ct) =>
@@ -61,6 +65,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Pipeline
         [Fact(Timeout = 60000)]
         public async Task Middleware_CanShortCircuit_WithoutCallingModel()
         {
+            await Task.Yield();
+
             var inner = ScriptedChatClient<double>.Sequence(ChatResponses.Text("from model"));
             // A cache/guard that answers without hitting the model.
             var shortCircuit = new DelegateChatMiddleware((ctx, next, ct) =>
@@ -76,6 +82,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Pipeline
         [Fact(Timeout = 60000)]
         public async Task Middleware_CanPostProcessResponse_AndShareState()
         {
+            await Task.Yield();
+
             var inner = ScriptedChatClient<double>.Sequence(ChatResponses.Text("hello"));
             var post = new DelegateChatMiddleware(async (ctx, next, ct) =>
             {
@@ -93,6 +101,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Pipeline
         [Fact(Timeout = 60000)]
         public async Task NoMiddleware_DelegatesToInner()
         {
+            await Task.Yield();
+
             var inner = ScriptedChatClient<double>.Sequence(ChatResponses.Text("passthrough"));
             var client = new MiddlewareChatClient<double>(inner, new List<IChatMiddleware>());
 

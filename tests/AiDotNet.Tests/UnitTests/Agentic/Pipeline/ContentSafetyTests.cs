@@ -16,6 +16,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Pipeline
         [Fact(Timeout = 60000)]
         public async Task BlocksDisallowedInput_WithoutCallingModel()
         {
+            await Task.Yield();
+
             var inner = ScriptedChatClient<double>.Sequence(ChatResponses.Text("should not run"));
             var client = Guarded(inner, new DenyListContentModerator(new[] { "bomb" }));
 
@@ -28,6 +30,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Pipeline
         [Fact(Timeout = 60000)]
         public async Task BlocksDisallowedOutput_AfterModelCall()
         {
+            await Task.Yield();
+
             var inner = ScriptedChatClient<double>.Sequence(ChatResponses.Text("here is the forbidden secret"));
             var client = Guarded(inner, new DenyListContentModerator(new[] { "forbidden" }));
 
@@ -41,6 +45,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Pipeline
         [Fact(Timeout = 60000)]
         public async Task AllowsCleanContent_BothSides()
         {
+            await Task.Yield();
+
             var inner = ScriptedChatClient<double>.Sequence(ChatResponses.Text("a friendly answer"));
             var client = Guarded(inner, new DenyListContentModerator(new[] { "bomb" }));
 
@@ -53,6 +59,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Pipeline
         [Fact(Timeout = 60000)]
         public async Task ThrowOnViolation_RaisesException()
         {
+            await Task.Yield();
+
             var inner = ScriptedChatClient<double>.Sequence(ChatResponses.Text("ok"));
             var client = Guarded(inner, new DenyListContentModerator(new[] { "bomb" }),
                 new ContentSafetyOptions { ThrowOnViolation = true });
@@ -64,6 +72,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Pipeline
         [Fact(Timeout = 60000)]
         public async Task CustomRefusalMessage_IsReturned()
         {
+            await Task.Yield();
+
             var inner = ScriptedChatClient<double>.Sequence(ChatResponses.Text("ok"));
             var client = Guarded(inner, new DenyListContentModerator(new[] { "bomb" }),
                 new ContentSafetyOptions { RefusalMessage = "Nope." });
@@ -76,6 +86,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Pipeline
         [Fact(Timeout = 60000)]
         public async Task OutputCheckDisabled_AllowsModelOutput()
         {
+            await Task.Yield();
+
             var inner = ScriptedChatClient<double>.Sequence(ChatResponses.Text("forbidden content"));
             var client = Guarded(inner, new DenyListContentModerator(new[] { "forbidden" }),
                 new ContentSafetyOptions { CheckOutput = false });

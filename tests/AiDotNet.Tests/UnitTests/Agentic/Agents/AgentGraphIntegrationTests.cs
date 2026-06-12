@@ -23,6 +23,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task TwoAgentNodes_RunInSequence_OverTypedState()
         {
+            await Task.Yield();
+
             var graph = new StateGraph<FlowState>();
             graph.AddAgentNode("research", Agent("researcher", "facts about cats"),
                 state => "Research: " + state.Topic,
@@ -44,6 +46,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task ConditionalEdge_RoutesBetweenAgentNodes()
         {
+            await Task.Yield();
+
             var graph = new StateGraph<FlowState>();
             graph.AddAgentNode("classify", Agent("classifier", "cats"),
                 state => state.Topic,
@@ -69,6 +73,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task SupervisorAgent_AsAGraphNode()
         {
+            await Task.Yield();
+
             // A whole supervisor team is a single graph node.
             var worker = Agent("calc", "42");
             var coordinator = ScriptedChatClient<double>.Sequence(

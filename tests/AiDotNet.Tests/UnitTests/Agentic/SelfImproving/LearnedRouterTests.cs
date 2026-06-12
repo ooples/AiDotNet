@@ -23,6 +23,8 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
         [Fact(Timeout = 60000)]
         public async Task Router_RoutesToHighestRewardAgent_AfterLearning()
         {
+            await Task.Yield();
+
             var good = Agent("good");
             var bad = Agent("bad");
             var router = new LearnedAgentRouter<double>(new IAgent<double>[] { good, bad });
@@ -43,6 +45,8 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
         [Fact(Timeout = 60000)]
         public async Task Router_ExploresUnseenCandidateFirst()
         {
+            await Task.Yield();
+
             var seen = Agent("seen");
             var unseen = Agent("unseen");
             var router = new LearnedAgentRouter<double>(new IAgent<double>[] { seen, unseen });
@@ -51,12 +55,13 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
             router.LearnFrom(new[] { Graded("seen", 1.0) });
 
             Assert.Equal("unseen", router.SelectAgentName(new[] { ChatMessage.User("x") }));
-            await Task.CompletedTask;
         }
 
         [Fact(Timeout = 60000)]
         public async Task Router_LearnsPerContext()
         {
+            await Task.Yield();
+
             var mathExpert = Agent("math");
             var writer = Agent("writer");
             // Context key = the first word of the latest user message.
@@ -72,12 +77,13 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
 
             Assert.Equal("math", router.SelectAgentName(new[] { ChatMessage.User("math integrate x") }));
             Assert.Equal("writer", router.SelectAgentName(new[] { ChatMessage.User("prose a story") }));
-            await Task.CompletedTask;
         }
 
         [Fact(Timeout = 60000)]
         public async Task Router_ClosedLoop_ImprovesWithTracing()
         {
+            await Task.Yield();
+
             // Seed the policy so it already prefers "good", then route — demonstrating the policy drives runs.
             var router = new LearnedAgentRouter<double>(new IAgent<double>[] { Agent("good"), Agent("bad") });
             router.LearnFrom(new[] { Graded("good", 1.0), Graded("bad", 0.0) });
@@ -95,10 +101,11 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
         [Fact(Timeout = 60000)]
         public async Task Constructor_RejectsEmptyAndDuplicates()
         {
+            await Task.Yield();
+
             Assert.Throws<ArgumentException>(() => new LearnedAgentRouter<double>(Array.Empty<IAgent<double>>()));
             Assert.Throws<ArgumentException>(() =>
                 new LearnedAgentRouter<double>(new IAgent<double>[] { Agent("dup"), Agent("dup") }));
-            await Task.CompletedTask;
         }
     }
 }
