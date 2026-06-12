@@ -32,6 +32,8 @@ class Program
         ["fused-min-repro"]     = FusedPropagationMinRepro.Run,
         ["grafprint-divergence"] = GraFPrintFusedDivergence.Run,
         ["bn-fused-grad-diff"]  = BnFusedGradDiff.Run,
+        ["acestep-nan-diag"]    = ACEStepNanDiag.Run,
+        ["ace-tail-min-repro"]  = AceTailMinRepro.Run,
     };
 
     static async Task Main(string[] args)
