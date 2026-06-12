@@ -128,6 +128,15 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigurePostprocessing(IDataTransformer<T, TOutput, TOutput> transformer);
 
     /// <summary>
+    /// Configures TARGET (label) scaling for regression: targets are scaled before training (fit on the
+    /// TRAINING split only; default z-score via <c>TargetStandardScaler</c>) and <c>Predict</c>
+    /// automatically inverse-transforms outputs back to the ORIGINAL target units. Regression only —
+    /// never scale class labels.
+    /// </summary>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureTargetScaling(
+        AiDotNet.Preprocessing.PreprocessingPipeline<T, TOutput, TOutput>? pipeline = null);
+
+    /// <summary>
     /// Configures the output postprocessing pipeline for the model using a fluent builder.
     /// </summary>
     /// <remarks>
