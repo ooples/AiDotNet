@@ -17,7 +17,7 @@ namespace AiDotNet.Agentic.Models.Local;
 /// assistant is about to speak — so the model fills in the assistant's reply.
 /// </para>
 /// </remarks>
-public sealed class ChatMlPromptTemplate : IChatPromptTemplate
+internal sealed class ChatMlPromptTemplate : IChatPromptTemplate
 {
     /// <inheritdoc/>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="messages"/> is <c>null</c>.</exception>
@@ -47,6 +47,8 @@ public sealed class ChatMlPromptTemplate : IChatPromptTemplate
         ChatRole.User => "user",
         ChatRole.Assistant => "assistant",
         ChatRole.Tool => "tool",
-        _ => "user"
+        // A new ChatRole must force an explicit template decision — silently
+        // remapping it to "user" would rewrite prompt semantics.
+        _ => throw new ArgumentOutOfRangeException(nameof(role), role, "Unsupported chat role for the ChatML template."),
     };
 }

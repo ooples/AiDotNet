@@ -12,6 +12,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Graph
         [Fact(Timeout = 60000)]
         public async Task Subgraph_RunsAsSingleStep()
         {
+            await Task.Yield();
+
             var inner = new StateGraph<int>()
                 .AddNode("plus1", s => s + 1)
                 .AddEdge("plus1", StateGraph<int>.End)
@@ -32,6 +34,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Graph
         [Fact(Timeout = 60000)]
         public async Task RewardGatedEdges_LoopUntilThresholdMet()
         {
+            await Task.Yield();
+
             var graph = new StateGraph<int>()
                 .AddNode("work", s => s + 1)
                 .AddRewardGatedEdges("work", reward: s => s, threshold: 3, ifMeetsThreshold: StateGraph<int>.End, ifBelowThreshold: "work")
@@ -44,6 +48,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Graph
         [Fact(Timeout = 60000)]
         public async Task Replay_ReproducesRecordedTrajectory_WithoutExecuting()
         {
+            await Task.Yield();
+
             var graph = new StateGraph<int>()
                 .AddNode("a", s => s + 1)
                 .AddNode("b", s => s + 10)

@@ -16,6 +16,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task RunAsync_PlainAnswer_ReturnsTextInOneIteration()
         {
+            await Task.Yield();
+
             var client = ScriptedChatClient<double>.Sequence(ChatResponses.Text("The answer is 42."));
             var agent = new AgentExecutor<double>(client);
 
@@ -30,6 +32,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task RunAsync_ToolCall_RunsToolThenFeedsResultBack()
         {
+            await Task.Yield();
+
             var tool = new RecordingTool("add", "Adds two numbers.", args =>
             {
                 var a = (int)args["a"];
@@ -63,6 +67,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task RunAsync_SystemPrompt_IsPrependedToTheConversation()
         {
+            await Task.Yield();
+
             var client = ScriptedChatClient<double>.Sequence(ChatResponses.Text("ok"));
             var options = new AgentExecutorOptions { SystemPrompt = "You are a pirate." };
             var agent = new AgentExecutor<double>(client, tools: null, options);
@@ -78,6 +84,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task RunAsync_NoTools_DoesNotAdvertiseToolsToTheModel()
         {
+            await Task.Yield();
+
             var client = ScriptedChatClient<double>.Sequence(ChatResponses.Text("ok"));
             var agent = new AgentExecutor<double>(client);
 
@@ -92,6 +100,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task RunAsync_WithTools_AdvertisesToolsAndAutoChoice()
         {
+            await Task.Yield();
+
             var tools = new ToolCollection().Add(new RecordingTool("noop", "Does nothing.", _ => "done"));
             var client = ScriptedChatClient<double>.Sequence(ChatResponses.Text("ok"));
             var agent = new AgentExecutor<double>(client, tools);
@@ -108,6 +118,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task RunAsync_HitsIterationCap_StopsWithCompletedFalse()
         {
+            await Task.Yield();
+
             var tools = new ToolCollection().Add(new RecordingTool("loop", "Loops forever.", _ => "again"));
             // The model always asks for the tool again, never producing a final answer.
             var client = new ScriptedChatClient<double>((_, _) =>
@@ -125,6 +137,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task RunAsync_AggregatesUsageAcrossCalls()
         {
+            await Task.Yield();
+
             var tools = new ToolCollection().Add(new RecordingTool("add", "Adds.", _ => "5"));
             var client = ScriptedChatClient<double>.Sequence(
                 ChatResponses.ToolCall("call-1", "add", "{}", new ChatUsage(10, 4)),
@@ -142,6 +156,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task RunAsync_EmptyConversation_Throws()
         {
+            await Task.Yield();
+
             var client = ScriptedChatClient<double>.Sequence(ChatResponses.Text("ok"));
             var agent = new AgentExecutor<double>(client);
 
@@ -152,13 +168,16 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         [Fact(Timeout = 60000)]
         public async Task Constructor_NullClient_Throws()
         {
+            await Task.Yield();
+
             Assert.Throws<ArgumentNullException>(() => new AgentExecutor<double>(client: null));
-            await Task.CompletedTask;
         }
 
         [Fact(Timeout = 60000)]
         public async Task RunAsync_ExposesNameAndDescriptionFromOptions()
         {
+            await Task.Yield();
+
             var client = ScriptedChatClient<double>.Sequence(ChatResponses.Text("ok"));
             var options = new AgentExecutorOptions { Name = "researcher", Description = "Finds facts." };
             var agent = new AgentExecutor<double>(client, tools: null, options);

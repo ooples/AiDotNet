@@ -37,13 +37,26 @@ public sealed class FiniteStateTokenConstraint : ITokenConstraint
     {
         Guard.NotNull(start);
         Guard.NotNull(transitions);
-        _start = new List<int>(start);
-        if (_start.Count == 0)
+        var startCopy = new List<int>(start);
+        if (startCopy.Count == 0)
         {
             throw new ArgumentException("At least one start token id is required.", nameof(start));
         }
 
-        _transitions = transitions;
+        _start = startCopy.AsReadOnly();
+
+        // Freeze the grammar: the caller may still hold mutable collections
+        // behind these read-only interfaces, and a constraint whose allowed
+        // sets change mid-generation would silently alter decoding behavior.
+        var transitionsCopy = new Dictionary<int, IReadOnlyCollection<int>>(transitions.Count);
+        foreach (var pair in transitions)
+        {
+            transitionsCopy[pair.Key] = pair.Value is null
+                ? Array.Empty<int>()
+                : new List<int>(pair.Value).AsReadOnly();
+        }
+
+        _transitions = transitionsCopy;
     }
 
     /// <inheritdoc/>

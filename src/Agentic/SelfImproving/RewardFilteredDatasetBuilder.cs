@@ -31,8 +31,16 @@ public sealed class RewardFilteredDatasetBuilder
     /// Initializes a new builder.
     /// </summary>
     /// <param name="minReward">The minimum reward a trajectory must have to be included. Default 0.5.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="minReward"/> is NaN or infinite.</exception>
     public RewardFilteredDatasetBuilder(double minReward = 0.5)
     {
+        // double.IsFinite is unavailable on net471 — spell out both halves.
+        if (double.IsNaN(minReward) || double.IsInfinity(minReward))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(minReward), minReward, "Minimum reward must be a finite number.");
+        }
+
         _minReward = minReward;
     }
 
@@ -50,7 +58,13 @@ public sealed class RewardFilteredDatasetBuilder
         var examples = new List<FineTuningExample>();
         foreach (var trajectory in trajectories)
         {
-            if (trajectory.Reward is not { } reward || reward < _minReward)
+            // NaN compares false against the threshold, so `reward < _minReward`
+            // alone would let malformed (non-finite) rewards through and poison
+            // the dataset — require a finite grade explicitly.
+            if (trajectory.Reward is not { } reward
+                || double.IsNaN(reward)
+                || double.IsInfinity(reward)
+                || reward < _minReward)
             {
                 continue;
             }
@@ -60,7 +74,15 @@ public sealed class RewardFilteredDatasetBuilder
                 continue;
             }
 
-            examples.Add(new FineTuningExample(RenderPrompt(trajectory.Messages), trajectory.FinalText, reward));
+            var prompt = RenderPrompt(trajectory.Messages);
+            if (string.IsNullOrWhiteSpace(prompt))
+            {
+                // No usable prompt context — a degenerate pair would be
+                // rejected by FineTuningExample anyway.
+                continue;
+            }
+
+            examples.Add(new FineTuningExample(prompt, trajectory.FinalText, reward));
         }
 
         return new FineTuningDataset(examples);

@@ -11,7 +11,7 @@ namespace AiDotNet.Agentic.Models.Local;
 /// </remarks>
 public sealed class AllowedTokenSetConstraint : ITokenConstraint
 {
-    private readonly HashSet<int> _allowed;
+    private readonly IReadOnlyCollection<int> _allowed;
 
     /// <summary>
     /// Initializes a new constraint permitting only the given token ids.
@@ -22,11 +22,18 @@ public sealed class AllowedTokenSetConstraint : ITokenConstraint
     public AllowedTokenSetConstraint(IEnumerable<int> allowedTokenIds)
     {
         Guard.NotNull(allowedTokenIds);
-        _allowed = new HashSet<int>(allowedTokenIds);
-        if (_allowed.Count == 0)
+        // Dedup via HashSet, then freeze: returning the mutable backing set
+        // would let a caller cast it back and silently change decoding
+        // behavior mid-generation.
+        var deduplicated = new HashSet<int>(allowedTokenIds);
+        if (deduplicated.Count == 0)
         {
             throw new ArgumentException("At least one allowed token id is required.", nameof(allowedTokenIds));
         }
+
+        var frozen = new int[deduplicated.Count];
+        deduplicated.CopyTo(frozen);
+        _allowed = Array.AsReadOnly(frozen);
     }
 
     /// <inheritdoc/>

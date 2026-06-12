@@ -17,11 +17,23 @@ public sealed class FineTuningDataset
     /// </summary>
     /// <param name="examples">The fine-tuning examples.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="examples"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="examples"/> contains a <c>null</c> entry.</exception>
     public FineTuningDataset(IReadOnlyList<FineTuningExample> examples)
     {
         Guard.NotNull(examples);
-        Examples = examples;
-        MeanReward = examples.Count == 0 ? 0.0 : examples.Average(e => e.Reward);
+        // Snapshot the caller's list: MeanReward is computed once here, so a
+        // later mutation of a live List<> would silently desynchronize
+        // Count/Examples from the reported mean. Null entries are rejected
+        // now rather than failing later with a less precise exception.
+        var snapshot = new FineTuningExample[examples.Count];
+        for (var i = 0; i < examples.Count; i++)
+        {
+            snapshot[i] = examples[i] ?? throw new ArgumentException(
+                $"Example at index {i} cannot be null.", nameof(examples));
+        }
+
+        Examples = Array.AsReadOnly(snapshot);
+        MeanReward = snapshot.Length == 0 ? 0.0 : snapshot.Average(e => e.Reward);
     }
 
     /// <summary>Gets the fine-tuning examples.</summary>

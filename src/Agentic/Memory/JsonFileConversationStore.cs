@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using AiDotNet.Agentic.Models;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
@@ -30,7 +31,16 @@ public sealed class JsonFileConversationStore : IConversationStore
         Converters = { new StringEnumConverter() }
     };
 
-    private readonly object _gate = new();
+    // One gate per canonical file path, shared process-wide: every operation
+    // is a load-modify-rewrite of the whole file, so two store instances
+    // pointed at the same path must serialize against EACH OTHER — an
+    // instance-scoped lock would let the last writer silently drop the other
+    // instance's update. Case-insensitive keying over-locks (never
+    // under-locks) on case-sensitive file systems, which is the safe side.
+    private static readonly ConcurrentDictionary<string, object> Gates =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly object _gate;
     private readonly string _filePath;
 
     /// <summary>
@@ -49,6 +59,7 @@ public sealed class JsonFileConversationStore : IConversationStore
         // (callers may legitimately persist conversations anywhere they have
         // write access).
         _filePath = Path.GetFullPath(filePath);
+        _gate = Gates.GetOrAdd(_filePath, _ => new object());
     }
 
     /// <inheritdoc/>

@@ -27,7 +27,7 @@ namespace AiDotNet.Agentic.Agents;
 /// tool-calling machinery it would for a calculator or a web search.
 /// </para>
 /// </remarks>
-public sealed class AgentAsTool<T> : IAgentTool
+internal sealed class AgentAsTool<T> : IAgentTool
 {
     /// <summary>The conventional prefix applied to a wrapped agent's tool name.</summary>
     public const string DefaultNamePrefix = "transfer_to_";
@@ -45,7 +45,10 @@ public sealed class AgentAsTool<T> : IAgentTool
         Guard.NotNull(agent);
         _agent = agent;
         var prefix = namePrefix ?? DefaultNamePrefix;
-        Name = prefix + ToolNaming.Sanitize(_agent.Name);
+        // Sanitize the COMPOSED name, not just the agent part: a caller-supplied
+        // prefix like "transfer to " carries provider-invalid characters that
+        // downstream chat/tool APIs reject.
+        Name = ToolNaming.Sanitize(prefix + _agent.Name);
         Description = BuildDescription(_agent);
     }
 

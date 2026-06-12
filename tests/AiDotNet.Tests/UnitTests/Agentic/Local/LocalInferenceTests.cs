@@ -17,18 +17,21 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
         [Fact(Timeout = 60000)]
         public async Task Sampler_Greedy_PicksArgMax()
         {
+            await Task.Yield();
+
             var sampler = new TokenSampler<double>();
             var logits = new Vector<double>(new[] { 0.1, 0.9, 0.3, 0.2 });
 
             var id = sampler.Sample(logits, new LocalSamplingOptions { Temperature = 0.0 });
 
             Assert.Equal(1, id);
-            await Task.CompletedTask;
         }
 
         [Fact(Timeout = 60000)]
         public async Task Sampler_SameSeed_IsReproducible()
         {
+            await Task.Yield();
+
             var logits = new Vector<double>(new[] { 1.0, 1.0, 1.0, 1.0 });
             var options = new LocalSamplingOptions { Temperature = 1.0 };
 
@@ -44,6 +47,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
         [Fact(Timeout = 60000)]
         public async Task Sampler_TopK1_AlwaysSelectsTopToken()
         {
+            await Task.Yield();
+
             var sampler = new TokenSampler<double>(seed: 7);
             var logits = new Vector<double>(new[] { 0.2, 5.0, 0.1 }); // index 1 dominates
             var options = new LocalSamplingOptions { Temperature = 1.0, TopK = 1 };
@@ -52,13 +57,13 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
             {
                 Assert.Equal(1, sampler.Sample(logits, options));
             }
-
-            await Task.CompletedTask;
         }
 
         [Fact(Timeout = 60000)]
         public async Task Sampler_TinyTopP_RestrictsToMostLikely()
         {
+            await Task.Yield();
+
             var sampler = new TokenSampler<double>(seed: 7);
             var logits = new Vector<double>(new[] { 0.1, 5.0, 0.2 });
             // A tiny nucleus keeps only the single most-likely token.
@@ -68,8 +73,6 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
             {
                 Assert.Equal(1, sampler.Sample(logits, options));
             }
-
-            await Task.CompletedTask;
         }
 
         // ---- ChatMlPromptTemplate ----
@@ -77,6 +80,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
         [Fact(Timeout = 60000)]
         public async Task Template_RendersRoles_AndOpensAssistantTurn()
         {
+            await Task.Yield();
+
             var template = new ChatMlPromptTemplate();
             var prompt = template.Render(new[]
             {
@@ -87,7 +92,6 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
             Assert.Contains("<|system|>\nbe brief\n", prompt);
             Assert.Contains("<|user|>\nhi\n", prompt);
             Assert.EndsWith("<|assistant|>\n", prompt);
-            await Task.CompletedTask;
         }
 
         // ---- LocalEngineChatClient ----
@@ -95,6 +99,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
         [Fact(Timeout = 60000)]
         public async Task Engine_GreedyGeneration_DecodesExpectedText_AndStopsOnEos()
         {
+            await Task.Yield();
+
             var tokenizer = new WordTokenizer("hello", "world");
             // Emit "hello" (1), "world" (2), then EOS (0).
             var model = new ScriptedCausalModel(tokenizer.VocabularySize, new[] { 1, 2, 0 });
@@ -113,6 +119,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
         [Fact(Timeout = 60000)]
         public async Task Engine_HitsTokenLimit_ReportsLength()
         {
+            await Task.Yield();
+
             var tokenizer = new WordTokenizer("again");
             // Always emits the non-EOS token "again" (1), never stopping on its own.
             var model = new ScriptedCausalModel(tokenizer.VocabularySize, new[] { 1 }, repeatLast: true);
@@ -128,6 +136,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
         [Fact(Timeout = 60000)]
         public async Task Engine_Streaming_DeltasReconstructFullText()
         {
+            await Task.Yield();
+
             var tokenizer = new WordTokenizer("alpha", "beta", "gamma");
             var model = new ScriptedCausalModel(tokenizer.VocabularySize, new[] { 1, 2, 3, 0 });
             var engine = new LocalEngineChatClient<double>(model, tokenizer);
@@ -155,6 +165,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
         [Fact(Timeout = 60000)]
         public async Task Engine_IsDropInForAgentExecutor()
         {
+            await Task.Yield();
+
             var tokenizer = new WordTokenizer("done", "later");
             var model = new ScriptedCausalModel(tokenizer.VocabularySize, new[] { 1, 0 });
             // AgentExecutor does not specify a temperature, so make the engine greedy by default for a

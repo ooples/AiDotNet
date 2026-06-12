@@ -15,11 +15,20 @@ public sealed class InMemoryTrajectoryStore : ITrajectoryStore
     private readonly List<AgentTrajectory> _trajectories = new();
 
     /// <inheritdoc/>
+    /// <exception cref="ArgumentException">Thrown when a trajectory with the same id is already stored.</exception>
     public Task<string> AddAsync(AgentTrajectory trajectory, CancellationToken cancellationToken = default)
     {
         Guard.NotNull(trajectory);
         lock (_gate)
         {
+            // GetAsync(id) implies a unique key; silently accepting a duplicate
+            // id would make lookups and reward annotation nondeterministic.
+            if (_trajectories.Any(t => string.Equals(t.Id, trajectory.Id, StringComparison.Ordinal)))
+            {
+                throw new ArgumentException(
+                    $"A trajectory with id '{trajectory.Id}' already exists.", nameof(trajectory));
+            }
+
             _trajectories.Add(trajectory);
         }
 
@@ -53,11 +62,17 @@ public sealed class InMemoryTrajectoryStore : ITrajectoryStore
         CancellationToken cancellationToken = default)
     {
         Guard.NotNull(predicate);
+        // Snapshot under the lock, filter outside it: the predicate is
+        // caller-supplied code and must not be able to block every
+        // add/get/clear on the store (or deadlock by re-entering it).
+        List<AgentTrajectory> snapshot;
         lock (_gate)
         {
-            IReadOnlyList<AgentTrajectory> matches = _trajectories.Where(predicate).ToList();
-            return Task.FromResult(matches);
+            snapshot = new List<AgentTrajectory>(_trajectories);
         }
+
+        IReadOnlyList<AgentTrajectory> matches = snapshot.Where(predicate).ToList();
+        return Task.FromResult(matches);
     }
 
     /// <inheritdoc/>

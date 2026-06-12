@@ -24,6 +24,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Graph
         [Fact(Timeout = 60000)]
         public async Task FanOut_MapsBranchesAndReduces()
         {
+            await Task.Yield();
+
             var graph = BuildSquareSumGraph();
             Assert.Equal(14, await graph.InvokeAsync(3)); // 1 + 4 + 9
         }
@@ -31,6 +33,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Graph
         [Fact(Timeout = 60000)]
         public async Task FanOut_RespectsParallelismCap_StillCorrect()
         {
+            await Task.Yield();
+
             var graph = BuildSquareSumGraph(maxParallelism: 2);
             Assert.Equal(30, await graph.InvokeAsync(4)); // 1 + 4 + 9 + 16
         }
@@ -38,6 +42,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Graph
         [Fact(Timeout = 60000)]
         public async Task FanOut_EmptyItemSet_ReducesOverNothing()
         {
+            await Task.Yield();
+
             var graph = BuildSquareSumGraph();
             Assert.Equal(0, await graph.InvokeAsync(0)); // no items -> Sum() == 0
         }
@@ -45,6 +51,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Graph
         [Fact(Timeout = 60000)]
         public async Task FanOut_ComposesWithOtherNodes()
         {
+            await Task.Yield();
+
             var graph = new StateGraph<int>()
                 .AddNode("seed", s => s + 2) // 1 -> 3
                 .AddFanOutNode<int, int>(

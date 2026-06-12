@@ -67,7 +67,21 @@ public sealed class TracingAgent<T> : IAgent<T>
             reward: null,
             _metadata);
 
-        await _store.AddAsync(trajectory, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await _store.AddAsync(trajectory, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Cancellation is the caller's signal, not a capture failure — honor it.
+            throw;
+        }
+        catch (Exception)
+        {
+            // Documented contract: capture failures never affect the run. The
+            // store is best-effort observability plumbing; a failing logbook
+            // must not turn into a hard dependency for every agent call.
+        }
 
         return result;
     }
