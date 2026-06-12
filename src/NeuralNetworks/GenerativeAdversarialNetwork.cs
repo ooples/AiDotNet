@@ -1735,11 +1735,20 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     {
         var activations = new Dictionary<string, Tensor<T>>();
 
+        // Generator activations
         var current = input;
         for (int i = 0; i < Generator.Layers.Count; i++)
         {
             current = Generator.Layers[i].Forward(current);
             activations[$"Generator_Layer_{i}_{Generator.Layers[i].GetType().Name}"] = current.Clone();
+        }
+
+        // Discriminator activations (fed with generator output)
+        var discInput = current;
+        for (int i = 0; i < Discriminator.Layers.Count; i++)
+        {
+            discInput = Discriminator.Layers[i].Forward(discInput);
+            activations[$"Discriminator_Layer_{i}_{Discriminator.Layers[i].GetType().Name}"] = discInput.Clone();
         }
 
         return activations;

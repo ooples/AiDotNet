@@ -324,6 +324,10 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
             {
                 int numEdges = output.Shape[0];
                 int channels = output.Shape[1];
+
+                if (numEdges == 0)
+                    throw new ArgumentException("Cannot pool over empty edge dimension (0 edges).");
+
                 var pooled = new Tensor<T>(new int[] { channels });
 
                 // Initialize with first edge's values
@@ -411,19 +415,24 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
     /// <inheritdoc />
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        bool wasTraining = IsTrainingMode;
+
         // Disable training mode on all layers (disables dropout)
         foreach (var layer in Layers)
             layer.SetTrainingMode(false);
         IsTrainingMode = false;
 
-        var output = Forward(input);
-
-        // Re-enable training mode
-        foreach (var layer in Layers)
-            layer.SetTrainingMode(true);
-        IsTrainingMode = true;
-
-        return output;
+        try
+        {
+            return Forward(input);
+        }
+        finally
+        {
+            // Restore prior training state even if Forward throws
+            foreach (var layer in Layers)
+                layer.SetTrainingMode(wasTraining);
+            IsTrainingMode = wasTraining;
+        }
     }
 
     /// <summary>
