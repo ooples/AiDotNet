@@ -99,20 +99,22 @@ public class SpecializedBlocksIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BottleneckBlock_ForwardPass_ProducesValidOutput()
     {
-        // Arrange - Bottleneck uses 1x1 -> 3x3 -> 1x1 pattern with expansion
+        // Arrange - Bottleneck uses 1x1 -> 3x3 -> 1x1 pattern with expansion. The ctor is
+        // (baseChannels, stride): input channels resolve lazily on first Forward, and output
+        // channels = baseChannels * Expansion(4). Passing (in, out) here set stride=64.
         int inChannels = 64;
-        int outChannels = 64;
+        int baseChannels = 64;
         int height = 8;
         int width = 8;
-        var block = new BottleneckBlock<float>(inChannels, outChannels);
+        var block = new BottleneckBlock<float>(baseChannels);
         var input = CreateRandomTensor<float>([2, inChannels, height, width]);
 
         // Act
         var output = block.Forward(input);
 
-        // Assert - output channels = outChannels * expansion (4)
+        // Assert - output channels = baseChannels * expansion (4)
         Assert.Equal(2, output.Shape[0]); // batch
-        Assert.Equal(outChannels * 4, output.Shape[1]); // channels * expansion
+        Assert.Equal(baseChannels * 4, output.Shape[1]); // channels * expansion
         Assert.Equal(height, output.Shape[2]);
         Assert.Equal(width, output.Shape[3]);
         Assert.False(ContainsNaN(output));
@@ -165,22 +167,22 @@ public class SpecializedBlocksIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BottleneckBlock_ExpansionFactor_CorrectlyApplied()
     {
-        // Arrange - default expansion is 4. BottleneckBlock is parameterized by
-        // its base width (PyTorch torchvision Bottleneck(inplanes, planes): output
-        // = planes * 4); the input channel count is inferred from the forward
-        // input, so the ctor takes the base width, not (inChannels, outChannels).
+        // Arrange - default expansion is 4. BottleneckBlock is parameterized by its base
+        // width (PyTorch torchvision Bottleneck(inplanes, planes): output = planes * 4); the
+        // ctor signature is (baseChannels, stride) and input channels resolve LAZILY on first
+        // Forward, so passing (inChannels, outChannels) would mis-bind outChannels to stride.
         int inChannels = 64;
-        int outChannels = 32; // base width -> output = outChannels * 4 = 128
+        int baseChannels = 32; // base width -> output = baseChannels * 4 = 128
         int height = 8;
         int width = 8;
-        var block = new BottleneckBlock<float>(outChannels);
+        var block = new BottleneckBlock<float>(baseChannels);
         var input = CreateRandomTensor<float>([1, inChannels, height, width]);
 
         // Act
         var output = block.Forward(input);
 
-        // Assert - output channels should be outChannels * 4
-        Assert.Equal(outChannels * 4, output.Shape[1]); // 32 * 4 = 128
+        // Assert - output channels should be baseChannels * 4
+        Assert.Equal(baseChannels * 4, output.Shape[1]); // 32 * 4 = 128
     }
 
     #endregion
@@ -331,12 +333,12 @@ public class SpecializedBlocksIntegrationTests
         int width = 8;
         var block = new DenseBlock<float>(numLayers, growthRate);
 
-        // OutputChannels = inputChannels + numLayers * growthRate, but the input
-        // channel count is resolved from the first forward (DenseNet blocks take
-        // their input width from the preceding layer), so run one forward before
-        // reading the property — it reports -1 until then.
-        var input = CreateRandomTensor<float>([1, inputChannels, height, width]);
-        block.Forward(input);
+        // OutputChannels = inputChannels + numLayers * growthRate, but the input channel
+        // count resolves LAZILY on first Forward (DenseNet blocks take their input width from
+        // the preceding layer), so OutputChannels reports the documented -1 sentinel until
+        // then — assert that, then drive one forward so the property has its inputs.
+        Assert.Equal(-1, block.OutputChannels);
+        block.Forward(CreateRandomTensor<float>([1, inputChannels, height, width]));
 
         // Assert - verify property calculation
         Assert.Equal(inputChannels + numLayers * growthRate, block.OutputChannels);

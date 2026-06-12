@@ -89,6 +89,12 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly LinkPredictionDecoder _decoderType;
     private Tensor<T>? _cachedAdjacencyMatrix;
+    // Tracks whether _cachedAdjacencyMatrix came from EnsureDefaultAdjacencyForInput
+    // (auto-inferred identity) vs an explicit SetAdjacencyMatrix call. Explicit
+    // matrices are sticky — caller knows the graph; auto-inferred ones must be
+    // regenerated whenever the input node count changes (same contract as
+    // GraphClassificationModel / NodeClassificationModel).
+    private bool _usesFallbackAdjacency;
     private Tensor<T>? _nodeEmbeddings;
 
     /// <summary>
@@ -228,6 +234,7 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
     public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
     {
         _cachedAdjacencyMatrix = adjacencyMatrix;
+        _usesFallbackAdjacency = false;
 
         foreach (var layer in Layers)
         {
@@ -236,6 +243,35 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
                 graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
             }
         }
+    }
+
+    /// <summary>
+    /// Default-of-last-resort adjacency: when no explicit matrix was set, fall back to the
+    /// IDENTITY graph so scaffold invariants stay well-defined — per Kipf &amp; Welling 2017 §2,
+    /// with <c>A = I</c> the GCN encoder degenerates to a per-node dense transform. Production
+    /// callers SHOULD still call <see cref="SetAdjacencyMatrix"/> with the real graph structure.
+    /// Brings this model in line with the documented contract its siblings
+    /// (GraphClassificationModel / NodeClassificationModel) already implement.
+    /// </summary>
+    private void EnsureDefaultAdjacencyForInput(Tensor<T> input)
+    {
+        if (input.Rank < 1) return; // can't infer; let Forward throw with a clear shape error
+        int numNodes = input.Shape[0];
+
+        // Explicit matrices (from SetAdjacencyMatrix) are sticky. Auto-inferred ones must be
+        // regenerated when the input node count changes — otherwise the first inferred identity
+        // becomes stuck model state for a later differently-sized graph.
+        if (_cachedAdjacencyMatrix is not null
+            && (!_usesFallbackAdjacency || _cachedAdjacencyMatrix.Shape[0] == numNodes))
+        {
+            return;
+        }
+
+        var identity = new Tensor<T>(new[] { numNodes, numNodes });
+        for (int i = 0; i < numNodes; i++)
+            identity[i, i] = NumOps.One;
+        SetAdjacencyMatrix(identity);
+        _usesFallbackAdjacency = true;
     }
 
     /// <summary>
@@ -599,11 +635,7 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
     /// <returns>The node embeddings tensor.</returns>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (_cachedAdjacencyMatrix is null)
-        {
-            throw new InvalidOperationException(
-                "Adjacency matrix must be set using SetAdjacencyMatrix before calling Predict.");
-        }
+        EnsureDefaultAdjacencyForInput(input);
 
         foreach (var layer in Layers)
         {
@@ -620,11 +652,7 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
     /// <param name="expectedOutput">The expected output (edge scores).</param>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (_cachedAdjacencyMatrix is null)
-        {
-            throw new InvalidOperationException(
-                "Adjacency matrix must be set using SetAdjacencyMatrix before calling Train.");
-        }
+        EnsureDefaultAdjacencyForInput(input);
 
         foreach (var layer in Layers)
         {
