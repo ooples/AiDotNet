@@ -100,20 +100,19 @@ public class FitnessCalculatorsIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task RSquaredFitnessCalculator_IsHigherScoreBetter_ReturnsFalse()
+    public async Task RSquaredFitnessCalculator_IsHigherScoreBetter_ReturnsTrue()
     {
-        // Note: R² fitness calculator uses isHigherScoreBetter=false for optimization compatibility
+        // R² is higher-is-better; the calculator returns the raw R² with no internal negation.
         var calculator = new RSquaredFitnessCalculator<double, Matrix<double>, Vector<double>>();
-        Assert.False(calculator.IsHigherScoreBetter);
+        Assert.True(calculator.IsHigherScoreBetter);
     }
 
     [Fact(Timeout = 120000)]
-    public async Task RSquaredFitnessCalculator_IsBetterFitness_LowerIsBetter()
+    public async Task RSquaredFitnessCalculator_IsBetterFitness_HigherIsBetter()
     {
-        // Note: For optimization consistency, all fitness calculators use lower-is-better comparison
         var calculator = new RSquaredFitnessCalculator<double, Matrix<double>, Vector<double>>();
-        Assert.True(calculator.IsBetterFitness(0.1, 0.5));
-        Assert.False(calculator.IsBetterFitness(0.5, 0.1));
+        Assert.False(calculator.IsBetterFitness(0.1, 0.5));
+        Assert.True(calculator.IsBetterFitness(0.5, 0.1));
     }
 
     #endregion
@@ -128,20 +127,19 @@ public class FitnessCalculatorsIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task AdjustedRSquaredFitnessCalculator_IsHigherScoreBetter_ReturnsFalse()
+    public async Task AdjustedRSquaredFitnessCalculator_IsHigherScoreBetter_ReturnsTrue()
     {
-        // Note: Adjusted R² fitness calculator uses isHigherScoreBetter=false for optimization compatibility
+        // Adjusted R² is higher-is-better; no internal negation exists.
         var calculator = new AdjustedRSquaredFitnessCalculator<double, Matrix<double>, Vector<double>>();
-        Assert.False(calculator.IsHigherScoreBetter);
+        Assert.True(calculator.IsHigherScoreBetter);
     }
 
     [Fact(Timeout = 120000)]
-    public async Task AdjustedRSquaredFitnessCalculator_IsBetterFitness_LowerIsBetter()
+    public async Task AdjustedRSquaredFitnessCalculator_IsBetterFitness_HigherIsBetter()
     {
-        // Note: For optimization consistency, all fitness calculators use lower-is-better comparison
         var calculator = new AdjustedRSquaredFitnessCalculator<double, Matrix<double>, Vector<double>>();
-        Assert.True(calculator.IsBetterFitness(0.1, 0.5));
-        Assert.False(calculator.IsBetterFitness(0.5, 0.1));
+        Assert.False(calculator.IsBetterFitness(0.1, 0.5));
+        Assert.True(calculator.IsBetterFitness(0.5, 0.1));
     }
 
     #endregion
