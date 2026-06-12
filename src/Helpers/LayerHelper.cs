@@ -21796,40 +21796,64 @@ public static class LayerHelper<T>
     }
 
     /// <summary>Creates default layers for ACE-Step accelerated music generation.</summary>
+    /// <param name="latentDim">Per-token latent channel dim the score network emits. Default 128.</param>
+    /// <param name="uNetDim">Diffusion-transformer hidden (embedding) dim. Default 512.</param>
+    /// <param name="numUNetLayers">Number of Pre-LN transformer blocks. Default 4.</param>
+    /// <param name="textEncoderDim">Reserved for text-conditioning wiring (unused on the
+    /// unconditional path the model-family scaffold exercises). Default 768.</param>
+    /// <param name="dropoutRate">Dropout applied inside each transformer block. Default 0.</param>
+    /// <param name="inputChannels">Raw-audio channel count fed to the compression stem
+    /// (ACEStepOptions.NumChannels — 2 for stereo). Default 2.</param>
     public static IEnumerable<ILayer<T>> CreateDefaultACEStepLayers(
         int latentDim = 128, int uNetDim = 512, int numUNetLayers = 4,
-        int textEncoderDim = 768, double dropoutRate = 0.0)
+        int textEncoderDim = 768, double dropoutRate = 0.0, int inputChannels = 2)
     {
-        IActivationFunction<T> geluActivation = new GELUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-        // Text conditioning encoder
-        yield return new DenseLayer<T>(uNetDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>();
-        // U-Net encoder path with cross-attention conditioning
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // ACE-Step (Chen et al. 2024) runs a diffusion transformer in a COMPRESSED latent
+        // space produced by a deep-compression audio autoencoder — NOT on the raw waveform.
+        // The previous scaffold fed a [B, C, 44100]-sample clip straight into a
+        // Dense(uNetDim) projection, which (a) created a [44100, uNetDim] = 22.5M-param layer
+        // whose weights + Adam moments OOM'd CI during compiled training, and (b) left the
+        // "transformer" attending over only the C audio channels as a degenerate 2-token
+        // sequence. Replace it with a strided Conv1D compression stem that lifts channels
+        // (inputChannels -> uNetDim) while downsampling the time axis ~256x, so the
+        // transformer attends over a compact, meaningful latent-frame sequence at a tractable
+        // parameter/memory cost (the whole stem is < 1M params). Conv1D's contract is rank-3
+        // [B, C, T]; the eager-init ctor (inputChannels known at each stage) pre-allocates
+        // weights so Clone-via-serialize round-trips exactly (no lazy ParameterCount drift).
+        // Three stride-8 convs => 512x time compression (44100 -> ~87 latent frames).
+        // The strides are deliberately front-loaded (the FIRST conv collapses the full
+        // 44100-sample axis to ~5513 in one step) because the per-step cost of an im2col
+        // Conv1D scales with its INPUT length, and that first/second layer dominates the
+        // forward+backward wall-clock over a training loop. A smaller-stride stem
+        // (e.g. four stride-4 layers) keeps ~11k- and ~2.7k-length intermediates resident
+        // and roughly doubles the conv cost per step, which pushed the 250-step
+        // MoreData_ShouldNotDegrade loop past its 120 s budget. Larger kernels keep the
+        // receptive field wide enough that the aggressive stride doesn't alias.
+        int c1 = System.Math.Max(1, uNetDim / 4);
+        int c2 = System.Math.Max(1, uNetDim / 2);
+        yield return new Conv1DLayer<T>(inputChannels, c1, kernelSize: 15, dilation: 1, stride: 8, padding: 7, geluActivation);
+        yield return new Conv1DLayer<T>(c1, c2, kernelSize: 9, dilation: 1, stride: 8, padding: 4, geluActivation);
+        yield return new Conv1DLayer<T>(c2, uNetDim, kernelSize: 9, dilation: 1, stride: 8, padding: 4, geluActivation);
+
+        // [B, uNetDim, T'] -> [B, T', uNetDim] so the transformer attends over time with the
+        // channel axis as the embedding dim. TransposeLayer permutes the LOGICAL (non-batch)
+        // axes, so swapping [C, T] -> [T, C] is permutation [1, 0].
+        yield return new TransposeLayer<T>(new[] { 1, 0 });
+
+        // Diffusion transformer: Pre-LN residual encoder blocks (Xiong et al. 2020 ordering,
+        // Vaswani 2017 §3.1 residual/FFN design). The residual skip connections are what stop
+        // the per-token signal washing out through depth — a residual-free self-attention
+        // stack mode-collapses to an input-independent constant output (issue #1380, and the
+        // exact DifferentInputs_AfterTraining collapse this model hit). 4x FFN inner dim.
+        int numHeads = 8;
+        while (numHeads > 1 && uNetDim % numHeads != 0) numHeads--;
         for (int i = 0; i < numUNetLayers; i++)
-        {
-            // Self-attention
-            yield return new MultiHeadAttentionLayer<T>(8, (uNetDim) / (8));
-            yield return new LayerNormalizationLayer<T>();
-            // Cross-attention for text conditioning
-            yield return new MultiHeadAttentionLayer<T>(8, (uNetDim) / (8));
-            yield return new LayerNormalizationLayer<T>();
-            // Feed-forward
-            yield return new DenseLayer<T>(uNetDim * 4, geluActivation);
-            yield return new DenseLayer<T>(uNetDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-        }
-        // U-Net decoder path with cross-attention conditioning
-        for (int i = 0; i < numUNetLayers; i++)
-        {
-            yield return new MultiHeadAttentionLayer<T>(8, (uNetDim) / (8));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(uNetDim * 4, geluActivation);
-            yield return new DenseLayer<T>(uNetDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-        }
-        // Latent output
+            yield return new TransformerEncoderBlock<T>(uNetDim, numHeads, uNetDim * 4, dropoutRate);
+
+        // Project each latent-frame token to the latent channel dim — the score-network
+        // output ACE-Step's consistency objective is trained against.
         yield return new DenseLayer<T>(latentDim, (IActivationFunction<T>?)null);
     }
 

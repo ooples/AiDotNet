@@ -188,7 +188,7 @@ public class ACEStep<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         else Layers.AddRange(LayerHelper<T>.CreateDefaultACEStepLayers(
             latentDim: _options.LatentDim, uNetDim: _options.UNetDim,
             numUNetLayers: _options.NumUNetLayers, textEncoderDim: _options.TextEncoderDim,
-            dropoutRate: _options.DropoutRate));
+            dropoutRate: _options.DropoutRate, inputChannels: _options.NumChannels));
     }
 
     public override Tensor<T> Predict(Tensor<T> input)

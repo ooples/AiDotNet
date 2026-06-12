@@ -7123,6 +7123,31 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 return false;
             }
 
+            // Out-of-memory in the committed compiled plan: the model is too large
+            // (or the host too pressured) to keep the fused plan's buffers + Adam
+            // moments resident. This is precisely what the memory-bounded streaming
+            // training path exists for — degrade to it rather than aborting the run.
+            // TrainWithTapeStreaming drives optimizer-in-backward with topological-min
+            // gradient release (tape.ComputeGradientsStreaming) and an 8-bit Adam
+            // (StreamingAdam8Bit) that maintains its OWN moment state, so the
+            // "the compiled plan's Adam moments can't be transferred" obstruction
+            // that forces the throw below does NOT apply here — streaming simply
+            // continues training under its own optimizer. Pin StreamingTraining =
+            // ForceOn so every subsequent step in this run also takes the streaming
+            // path (a single moment-state reset at the switchover, then stable),
+            // and disable the OOMing fused plan so it is never re-engaged. This
+            // mirrors the IsGpuTransientFailure graceful-degradation policy above:
+            // a one-time trajectory perturbation is far better than crashing.
+            if (fallbackEx is OutOfMemoryException)
+            {
+                _fusedTrainingDisabled = true;
+                _fusedTrainingCommitted = false;
+                StreamingTraining = StreamingTrainingMode.ForceOn;
+                InvalidateParameterCountCache();
+                TrainWithTapeStreaming(input, expected);
+                return true; // step handled via the streaming path
+            }
+
             var rootCauseSuffix = fallbackEx is not null
                 ? $" Root-cause exception (caught in CompiledTapeTrainingStep): " +
                   $"{fallbackEx.GetType().FullName}: {fallbackEx.Message}"
