@@ -102,7 +102,10 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
             Assert.Equal(new[] { "token_embd.0", "blk.0", "blk.1", "norm.0", "output.0" }, exported.Keys.ToArray());
 
             var target = TwoLayerModel();
-            var tensorSource = new DictionaryTensorSource(new Dictionary<string, double[]>(exported));
+            // ToDictionary (not new Dictionary<>(exported)): net471's Dictionary<,> has no
+            // ctor taking IReadOnlyDictionary (that overload is .NET Core+), so the copy-ctor
+            // form fails to compile there. ToDictionary materializes the same map on all TFMs.
+            var tensorSource = new DictionaryTensorSource(exported.ToDictionary(kv => kv.Key, kv => kv.Value));
             WeightImporter.ImportByName(target, tensorSource);
 
             var targetParams = target.GetParameters();
