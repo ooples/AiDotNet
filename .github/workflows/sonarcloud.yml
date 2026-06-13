@@ -243,10 +243,46 @@ jobs:
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.AutoML|FullyQualifiedName~UnitTests.Data|FullyQualifiedName~UnitTests.Diagnostics)'
-          - name: Unit - 03 Diffusion/Encoding
+          - name: Unit - 03a Diffusion Core/Schedulers/Encoding
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.Diffusion|FullyQualifiedName~UnitTests.Encoding)'
+            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.Encoding|FullyQualifiedName~UnitTests.Diffusion.AudioProcessingTests|FullyQualifiedName~UnitTests.Diffusion.MemoryManagementTests|FullyQualifiedName~UnitTests.Diffusion.SchedulerTests|FullyQualifiedName~UnitTests.Diffusion.Conditioning|FullyQualifiedName~UnitTests.Diffusion.Schedulers)'
+          - name: Unit - 03b Diffusion Models Control/DDPM/Preprocessor
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&(FullyQualifiedName~ControlModelContractTests|FullyQualifiedName~DDPMModelTests|FullyQualifiedName~PreprocessorContractTests)'
+          - name: Unit - 03c1 Diffusion Contracts A-C
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&(FullyQualifiedName~DiffusionModelContractTests.A|FullyQualifiedName~DiffusionModelContractTests.B|FullyQualifiedName~DiffusionModelContractTests.C)'
+          - name: Unit - 03c2 Diffusion Contracts D-I
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&(FullyQualifiedName~DiffusionModelContractTests.D|FullyQualifiedName~DiffusionModelContractTests.E|FullyQualifiedName~DiffusionModelContractTests.F|FullyQualifiedName~DiffusionModelContractTests.G|FullyQualifiedName~DiffusionModelContractTests.H|FullyQualifiedName~DiffusionModelContractTests.I)'
+          - name: Unit - 03c3 Diffusion Contracts J-R
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&(FullyQualifiedName~DiffusionModelContractTests.J|FullyQualifiedName~DiffusionModelContractTests.K|FullyQualifiedName~DiffusionModelContractTests.L|FullyQualifiedName~DiffusionModelContractTests.M|FullyQualifiedName~DiffusionModelContractTests.N|FullyQualifiedName~DiffusionModelContractTests.O|FullyQualifiedName~DiffusionModelContractTests.P|FullyQualifiedName~DiffusionModelContractTests.Q|FullyQualifiedName~DiffusionModelContractTests.R)'
+          - name: Unit - 03c4 Diffusion Contracts S
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&FullyQualifiedName~DiffusionModelContractTests.S'
+          - name: Unit - 03c5 Diffusion Contracts T-Z
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&(FullyQualifiedName~DiffusionModelContractTests.T|FullyQualifiedName~DiffusionModelContractTests.U|FullyQualifiedName~DiffusionModelContractTests.V|FullyQualifiedName~DiffusionModelContractTests.W|FullyQualifiedName~DiffusionModelContractTests.X|FullyQualifiedName~DiffusionModelContractTests.Y|FullyQualifiedName~DiffusionModelContractTests.Z)'
+          - name: Unit - 03c6 Editing Contracts A-I
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&(FullyQualifiedName~EditingModelContractTests.A|FullyQualifiedName~EditingModelContractTests.B|FullyQualifiedName~EditingModelContractTests.C|FullyQualifiedName~EditingModelContractTests.D|FullyQualifiedName~EditingModelContractTests.E|FullyQualifiedName~EditingModelContractTests.F|FullyQualifiedName~EditingModelContractTests.G|FullyQualifiedName~EditingModelContractTests.H|FullyQualifiedName~EditingModelContractTests.I)'
+          - name: Unit - 03c7 Editing Contracts J-Z
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&(FullyQualifiedName~EditingModelContractTests.J|FullyQualifiedName~EditingModelContractTests.K|FullyQualifiedName~EditingModelContractTests.L|FullyQualifiedName~EditingModelContractTests.M|FullyQualifiedName~EditingModelContractTests.N|FullyQualifiedName~EditingModelContractTests.O|FullyQualifiedName~EditingModelContractTests.P|FullyQualifiedName~EditingModelContractTests.Q|FullyQualifiedName~EditingModelContractTests.R|FullyQualifiedName~EditingModelContractTests.S|FullyQualifiedName~EditingModelContractTests.T|FullyQualifiedName~EditingModelContractTests.U|FullyQualifiedName~EditingModelContractTests.V|FullyQualifiedName~EditingModelContractTests.W|FullyQualifiedName~EditingModelContractTests.X|FullyQualifiedName~EditingModelContractTests.Y|FullyQualifiedName~EditingModelContractTests.Z)'
+          - name: Unit - 03d Diffusion Models FastGen/Conditioner
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&(FullyQualifiedName~FastGenContractTests|FullyQualifiedName~NewConditionerContractTests)'
           - name: Unit - 04 Feature/Fit/Fitness/Genetics
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -267,19 +303,19 @@ jobs:
           - name: Unit - 08a NN-Classic (ResNet/VGG/DenseNet)
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~ResNetNetworkTests|FullyQualifiedName~VGGNetworkTests|FullyQualifiedName~DenseNetTests)'
+            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.NeuralNetworks&(FullyQualifiedName~ResNetNetworkTests|FullyQualifiedName~VGGNetworkTests|FullyQualifiedName~DenseNetTests)'
           - name: Unit - 08b NN-Efficient (MobileNet/EfficientNet)
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~MobileNetTests|FullyQualifiedName~EfficientNetTests)'
+            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.NeuralNetworks&(FullyQualifiedName~MobileNetTests|FullyQualifiedName~EfficientNetTests)'
           - name: Unit - 08c NN-VLM (Blip/Blip2/Clip)
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~BlipNeuralNetworkTests|FullyQualifiedName~Blip2NeuralNetworkTests|FullyQualifiedName~ClipNeuralNetworkTests)'
+            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.NeuralNetworks&(FullyQualifiedName~BlipNeuralNetworkTests|FullyQualifiedName~Blip2NeuralNetworkTests|FullyQualifiedName~ClipNeuralNetworkTests)'
           - name: Unit - 08d NN-Adapters/Other
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~LoRAAdapterTests|FullyQualifiedName~LoRALayerTests|FullyQualifiedName~VBLoRAAdapterTests|FullyQualifiedName~AdvancedAlgebraNetworkTests|FullyQualifiedName~MixtureOfExpertsNeuralNetworkTests)'
+            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.NeuralNetworks&(FullyQualifiedName~LoRAAdapterTests|FullyQualifiedName~LoRALayerTests|FullyQualifiedName~VBLoRAAdapterTests|FullyQualifiedName~AdvancedAlgebraNetworkTests|FullyQualifiedName~MixtureOfExpertsNeuralNetworkTests)'
           # 'Unit - 08e NN-Remaining (catch-all)' removed: it was a duplicate
           # of `ModelFamily - NeuralNetworks A-L` + `M-Z` (same
           # ModelFamilyTests.NeuralNetworks scope, only excluding 5 unit-test
@@ -375,21 +411,38 @@ jobs:
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: 'FullyQualifiedName~ModelFamilyTests.Regression'
-          # NeuralNetworks (85 model classes) split A-L / M-Z by model-class first
-          # letter — these instantiate ResNet/VGG/DenseNet/transformer-scale models
-          # (multi-GB each) and OOM'd as one shard even serialized.
+          # NeuralNetworks (85 model classes) split by model-class first letter.
+          # These instantiate ResNet/VGG/DenseNet/transformer-scale models
+          # (multi-GB each) and OOM'd as larger shards even serialized.
           - name: ModelFamily - NeuralNetworks A-L
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.NeuralNetworks&
               (FullyQualifiedName~NeuralNetworks.A|FullyQualifiedName~NeuralNetworks.B|FullyQualifiedName~NeuralNetworks.C|FullyQualifiedName~NeuralNetworks.D|FullyQualifiedName~NeuralNetworks.E|FullyQualifiedName~NeuralNetworks.F|FullyQualifiedName~NeuralNetworks.G|FullyQualifiedName~NeuralNetworks.H|FullyQualifiedName~NeuralNetworks.I|FullyQualifiedName~NeuralNetworks.J|FullyQualifiedName~NeuralNetworks.K|FullyQualifiedName~NeuralNetworks.L)
-          - name: ModelFamily - NeuralNetworks M-Z
+          - name: ModelFamily - NeuralNetworks M-N
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.NeuralNetworks&
-              (FullyQualifiedName~NeuralNetworks.M|FullyQualifiedName~NeuralNetworks.N|FullyQualifiedName~NeuralNetworks.O|FullyQualifiedName~NeuralNetworks.P|FullyQualifiedName~NeuralNetworks.Q|FullyQualifiedName~NeuralNetworks.R|FullyQualifiedName~NeuralNetworks.S|FullyQualifiedName~NeuralNetworks.T|FullyQualifiedName~NeuralNetworks.U|FullyQualifiedName~NeuralNetworks.V|FullyQualifiedName~NeuralNetworks.W|FullyQualifiedName~NeuralNetworks.X|FullyQualifiedName~NeuralNetworks.Y|FullyQualifiedName~NeuralNetworks.Z)
+              (FullyQualifiedName~NeuralNetworks.M|FullyQualifiedName~NeuralNetworks.N)
+          - name: ModelFamily - NeuralNetworks O-R
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.NeuralNetworks&
+              (FullyQualifiedName~NeuralNetworks.O|FullyQualifiedName~NeuralNetworks.P|FullyQualifiedName~NeuralNetworks.Q|FullyQualifiedName~NeuralNetworks.R)
+          - name: ModelFamily - NeuralNetworks S
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.NeuralNetworks&FullyQualifiedName~NeuralNetworks.S
+          - name: ModelFamily - NeuralNetworks T-Z
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.NeuralNetworks&
+              (FullyQualifiedName~NeuralNetworks.T|FullyQualifiedName~NeuralNetworks.U|FullyQualifiedName~NeuralNetworks.V|FullyQualifiedName~NeuralNetworks.W|FullyQualifiedName~NeuralNetworks.X|FullyQualifiedName~NeuralNetworks.Y|FullyQualifiedName~NeuralNetworks.Z)
           - name: ModelFamily - TimeSeries/Activation/Loss
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -400,8 +453,8 @@ jobs:
           # 16 GB ubuntu-latest runner; model-class sharding limits each shard to a
           # letter range so per-runner cumulative model/tensor footprint stays
           # bounded. Was 3 shards (~80 models each) — still OOM'd even serialized
-          # (footprint, not parallelism), so split finer to 6 (~30-50 models each).
-          # 'S' is a shard on its own: 49 models, the single heaviest letter.
+          # (footprint, not parallelism), so split finer to 9 shards. 'S' is the
+          # single heaviest letter and is split by class prefix.
           - name: ModelFamily - Diffusion A-C
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -426,11 +479,29 @@ jobs:
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Diffusion&
               (FullyQualifiedName~Diffusion.N|FullyQualifiedName~Diffusion.O|FullyQualifiedName~Diffusion.P|FullyQualifiedName~Diffusion.Q|FullyQualifiedName~Diffusion.R)
-          - name: ModelFamily - Diffusion S
+          - name: ModelFamily - Diffusion SA-SD
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
-              FullyQualifiedName~ModelFamilyTests.Diffusion&FullyQualifiedName~Diffusion.S
+              FullyQualifiedName~ModelFamilyTests.Diffusion&
+              (FullyQualifiedName~Diffusion.SA|FullyQualifiedName~Diffusion.SC|FullyQualifiedName~Diffusion.SD)
+          - name: ModelFamily - Diffusion SE-SP
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Diffusion&
+              (FullyQualifiedName~Diffusion.Se|FullyQualifiedName~Diffusion.Sh|FullyQualifiedName~Diffusion.Si|FullyQualifiedName~Diffusion.Sk|FullyQualifiedName~Diffusion.Sn|FullyQualifiedName~Diffusion.So|FullyQualifiedName~Diffusion.Sp)
+          - name: ModelFamily - Diffusion Stable
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Diffusion&FullyQualifiedName~Diffusion.Stable
+          - name: ModelFamily - Diffusion Step-Sync
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Diffusion&
+              (FullyQualifiedName~Diffusion.Step|FullyQualifiedName~Diffusion.Stitch|FullyQualifiedName~Diffusion.Streaming|FullyQualifiedName~Diffusion.Sty|FullyQualifiedName~Diffusion.SUPIR|FullyQualifiedName~Diffusion.Swift|FullyQualifiedName~Diffusion.Sync)
           - name: ModelFamily - Diffusion T-Z
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -495,7 +566,11 @@ jobs:
           - name: Integration N-O
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~AiDotNet.Tests.IntegrationTests.N|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.O)'
+            # AdvancedNeuralNetworkModelsIntegrationTests contains legacy model
+            # smoke tests for models now owned by ModelFamily.NeuralNetworks.
+            # Keep its integration-only models in this shard, but do not run
+            # duplicate model-family invariants a second time under Integration.
+            filter: 'Category!=GPU&Category!=Stress&Category!=ModelFamilyDuplicate&(FullyQualifiedName~AiDotNet.Tests.IntegrationTests.N|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.O)'
           - name: Integration P-Q
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -543,8 +618,8 @@ jobs:
       - name: Free runner disk space
         # ubuntu-latest images ship with Android SDK, .NET preinstalls, Haskell, CodeQL,
         # PowerShell, Boost, and ~14GB of unused tooling. Tests on the largest shards
-        # (Diffusion A-C/D-I/J-M/N-R/S/T-Z, Generated Layers A-M/N-Z,
-        # ModelFamily-NN A-L/M-Z) generate
+        # (Diffusion A-C/D-I/J-M/N-R/S-prefix/T-Z, Unit-03 diffusion,
+        # Generated Layers A-M/N-Z, ModelFamily-NN) generate
         # enough coverage + dump output to fill the runner volume mid-run, killing the
         # job with `IOException: No space left on device`. Drop the heaviest preinstalls
         # before tests start. ~25-30 GB freed.
@@ -602,9 +677,9 @@ jobs:
           $results = Join-Path "TestResults" $sanitizedShardName
           New-Item -Path $results -ItemType Directory -Force | Out-Null
 
-          # Pre-test resource snapshot. Cancelled-runner shards (Diffusion S /
-          # Diffusion T-Z, ModelFamily-NN A-L/M-Z, Generated Layers A-M/N-Z,
-          # Unit-03 Diffusion)
+          # Pre-test resource snapshot. Cancelled-runner shards (Diffusion
+          # S-prefix / T-Z, Unit-03 diffusion, ModelFamily-NN,
+          # Generated Layers A-M/N-Z)
           # die with `The runner has received a shutdown signal` 2-6 min into
           # test execution. The dotnet test step exits before producing TRX
           # output so we have no idea what was running at OOM time. Dump
@@ -621,8 +696,9 @@ jobs:
           # Per-shard parallelism control. The streaming + Server GC
           # changes earlier in this PR helped most shards stop cancelling,
           # but the heaviest model-family shards (Diffusion A-C / D-I / J-M /
-          # N-R / S / T-Z, Generated Layers A-M/N-Z, ModelFamily-NeuralNetworks
-          # A-L/M-Z, Unit-03 Diffusion) still trip OOM with 4 parallel BERT-class
+          # N-R / S-prefix / T-Z, Generated Layers A-M/N-Z,
+          # Unit-03 diffusion, ModelFamily-NeuralNetworks) still trip OOM
+          # with 4 parallel BERT-class
           # model loads in flight on a 16 GB ubuntu-latest runner. Per-iter
           # peak memory ≈ 880 MB weights + 1.76 GB Adam state per slot;
           # 4 slots × 2.6 GB + dotnet/xUnit overhead overruns the envelope.
@@ -637,14 +713,29 @@ jobs:
             'ModelFamily - Diffusion D-I',
             'ModelFamily - Diffusion J-M',
             'ModelFamily - Diffusion N-R',
-            'ModelFamily - Diffusion S',
+            'ModelFamily - Diffusion SA-SD',
+            'ModelFamily - Diffusion SE-SP',
+            'ModelFamily - Diffusion Stable',
+            'ModelFamily - Diffusion Step-Sync',
             'ModelFamily - Diffusion T-Z',
             'ModelFamily - Generated Layers A-M',
             'ModelFamily - Generated Layers N-Z',
             'ModelFamily - NeuralNetworks A-L',
-            'ModelFamily - NeuralNetworks M-Z',
+            'ModelFamily - NeuralNetworks M-N',
+            'ModelFamily - NeuralNetworks O-R',
+            'ModelFamily - NeuralNetworks S',
+            'ModelFamily - NeuralNetworks T-Z',
             'ModelFamily - Code/Forecast/Segment/Survival',
-            'Unit - 03 Diffusion/Encoding',
+            'Unit - 03a Diffusion Core/Schedulers/Encoding',
+            'Unit - 03b Diffusion Models Control/DDPM/Preprocessor',
+            'Unit - 03c1 Diffusion Contracts A-C',
+            'Unit - 03c2 Diffusion Contracts D-I',
+            'Unit - 03c3 Diffusion Contracts J-R',
+            'Unit - 03c4 Diffusion Contracts S',
+            'Unit - 03c5 Diffusion Contracts T-Z',
+            'Unit - 03c6 Editing Contracts A-I',
+            'Unit - 03c7 Editing Contracts J-Z',
+            'Unit - 03d Diffusion Models FastGen/Conditioner',
             # Integration shards that instantiate paper-scale models (Document AI,
             # Finance, ComputerVision, NeuralNetworks, Diffusion, Video, MetaLearning,
             # etc.) — serialize like the ModelFamily shards to stay under the runner
@@ -662,7 +753,8 @@ jobs:
             'TopLevel - Audio/Onnx/Tokenization'
           )
           $serializeShard = $heavyShards -contains $shardName
-          Write-Host "Running shard '$shardName' (serialized: $serializeShard)"
+          $collectCoverage = -not $serializeShard
+          Write-Host "Running shard '$shardName' (serialized: $serializeShard; coverage: $collectCoverage)"
 
           # Build the argument list as a PowerShell array so the `--`
           # separator and the runner args reach `dotnet test` as distinct
@@ -674,9 +766,23 @@ jobs:
             '-c', 'Release',
             '--framework', '${{ matrix.shard.framework }}',
             '--no-build', '--no-restore',
-            '--filter', '${{ matrix.shard.filter }}',
-            '--collect:XPlat Code Coverage',
-            '--settings', 'coverlet.runsettings',
+            '--filter', '${{ matrix.shard.filter }}'
+          )
+          if ($collectCoverage) {
+            $dotnetArgs += @(
+              '--collect:XPlat Code Coverage',
+              '--settings', 'coverlet.runsettings'
+            )
+          } else {
+            # Coverage collection instruments every loaded assembly and keeps
+            # extra per-test state in the VSTest process. On these serialized
+            # big-model shards that overhead is the remaining memory multiplier
+            # after xUnit parallelism and Server GC were disabled, so run them
+            # as correctness-only shards and collect coverage from the lighter
+            # matrix entries.
+            Write-Host "Heavy shard: XPlat Code Coverage disabled to keep the runner under its memory envelope"
+          }
+          $dotnetArgs += @(
             '--logger', 'trx;LogFileName=test-results.trx',
             '--logger', 'console;verbosity=normal',
             '--results-directory', $results,

@@ -2,6 +2,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -105,6 +106,7 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
     private readonly int _imageSize;
     private readonly int _numClasses;
     private readonly AttentionType _attentionType;
+    private bool _usesTokenizedNativePath;
 
     #endregion
 
@@ -190,6 +192,10 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
             throw new ArgumentOutOfRangeException(nameof(embedDim), "Embedding dimension must be at least 1.");
         if (numLayers < 1)
             throw new ArgumentOutOfRangeException(nameof(numLayers), "Number of layers must be at least 1.");
+        if (numHeads < 1)
+            throw new ArgumentOutOfRangeException(nameof(numHeads), "Number of heads must be at least 1.");
+        if (embedDim % numHeads != 0)
+            throw new ArgumentException("Embedding dimension must be divisible by the number of attention heads.", nameof(numHeads));
         if (patchSize < 1)
             throw new ArgumentOutOfRangeException(nameof(patchSize), "Patch size must be at least 1.");
         if (numClasses < 1)
@@ -290,8 +296,7 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
     /// <returns>List of (classIndex, probability) pairs sorted by probability.</returns>
     public List<(int ClassIndex, double Probability)> GetTopKPredictions(Tensor<T> videoFrames, int topK = 5)
     {
-        var logits = Classify(videoFrames);
-        var probabilities = Softmax(logits);
+        var probabilities = Classify(videoFrames);
 
         var results = new List<(int, double)>();
         for (int i = 0; i < probabilities.Length; i++)
@@ -312,11 +317,10 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
         if (videoFrames is null)
             throw new ArgumentNullException(nameof(videoFrames));
 
-        // Process through all layers except the final classification head
-        var result = videoFrames;
+        var result = PrepareNativeInput(videoFrames, out var frameCount);
         for (int i = 0; i < Layers.Count - 1; i++)
         {
-            result = Layers[i].Forward(result);
+            result = ForwardLayer(result, Layers[i], frameCount);
         }
         return result;
     }
@@ -327,13 +331,24 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
 
     private Tensor<T> Forward(Tensor<T> input)
     {
-        var result = input;
+        var logits = ForwardNativeLogits(input);
+        return Softmax(logits);
+    }
+
+    private Tensor<T> ForwardNativeLogits(Tensor<T> input)
+    {
+        var result = PrepareNativeInput(input, out var frameCount);
         foreach (var layer in Layers)
         {
-            result = layer.Forward(result);
+            result = ForwardLayer(result, layer, frameCount);
         }
         return result;
     }
+
+    private Tensor<T> ForwardLayer(Tensor<T> input, ILayer<T> layer, int frameCount)
+        => layer is TimeSformerBlockLayer<T> timeSformerBlock
+            ? timeSformerBlock.Forward(input, frameCount)
+            : layer.Forward(input);
 
     private Tensor<T> PredictOnnx(Tensor<T> input)
     {
@@ -401,6 +416,34 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            throw new InvalidOperationException("Training is not supported in ONNX mode.");
+
+        EnsureLayerRandomSeedsWired();
+        return ForwardNativeLogits(input);
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode || !_usesTokenizedNativePath)
+            return base.GetNamedLayerActivations(input);
+
+        var activations = new Dictionary<string, Tensor<T>>();
+        var current = PrepareNativeInput(input, out var frameCount);
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            current = ForwardLayer(current, Layers[i], frameCount);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
+    }
+
+    /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode)
@@ -432,6 +475,7 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
+            _usesTokenizedNativePath = false;
         }
         else
         {
@@ -444,10 +488,121 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
                 inputHeight: inputHeight,
                 inputWidth: inputWidth,
                 embedDim: _embedDim,
+                numHeads: _numHeads,
                 numLayers: _numLayers,
+                numFrames: _numFrames,
                 patchSize: _patchSize,
-                numClasses: _numClasses));
+                numClasses: _numClasses,
+                useJointSpaceTimeAttention: _attentionType == AttentionType.JointSpaceTime));
+            _usesTokenizedNativePath = true;
         }
+    }
+
+    private Tensor<T> PrepareNativeInput(Tensor<T> input, out int frameCount)
+    {
+        if (!_usesTokenizedNativePath)
+        {
+            frameCount = _numFrames;
+            return input;
+        }
+
+        return TokenizeVideo(input, out frameCount);
+    }
+
+    private Tensor<T> TokenizeVideo(Tensor<T> input, out int frameCount)
+    {
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
+
+        int batch;
+        int frames;
+        int channels;
+        int height;
+        int width;
+        bool hasBatch;
+
+        switch (input.Rank)
+        {
+            case 5:
+                batch = input.Shape[0];
+                frames = input.Shape[1];
+                channels = input.Shape[2];
+                height = input.Shape[3];
+                width = input.Shape[4];
+                hasBatch = true;
+                break;
+            case 4:
+                batch = 1;
+                frames = input.Shape[0];
+                channels = input.Shape[1];
+                height = input.Shape[2];
+                width = input.Shape[3];
+                hasBatch = false;
+                break;
+            case 3:
+                batch = 1;
+                frames = 1;
+                channels = input.Shape[0];
+                height = input.Shape[1];
+                width = input.Shape[2];
+                hasBatch = false;
+                break;
+            default:
+                throw new ArgumentException(
+                    "TimeSformer native mode expects [B,T,C,H,W], [T,C,H,W], or [C,H,W] input.",
+                    nameof(input));
+        }
+
+        if (batch <= 0 || frames <= 0 || channels <= 0 || height <= 0 || width <= 0)
+            throw new ArgumentException("TimeSformer input dimensions must all be positive.", nameof(input));
+
+        int patch = Math.Min(_patchSize, Math.Min(height, width));
+        patch = Math.Max(1, patch);
+        int patchRows = Math.Max(1, height / patch);
+        int patchCols = Math.Max(1, width / patch);
+        int spatialPatches = patchRows * patchCols;
+        int patchDim = channels * patch * patch;
+        int tokensPerSample = frames * spatialPatches;
+        var tokens = new Tensor<T>([batch, tokensPerSample, patchDim]);
+
+        var source = input.Data.Span;
+        var destination = tokens.Data.Span;
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int f = 0; f < frames; f++)
+            {
+                for (int py = 0; py < patchRows; py++)
+                {
+                    for (int px = 0; px < patchCols; px++)
+                    {
+                        int tokenIndex = f * spatialPatches + py * patchCols + px;
+                        int feature = 0;
+                        for (int c = 0; c < channels; c++)
+                        {
+                            for (int y = 0; y < patch; y++)
+                            {
+                                int sourceY = py * patch + y;
+                                for (int x = 0; x < patch; x++)
+                                {
+                                    int sourceX = px * patch + x;
+                                    int sourceIndex = hasBatch
+                                        ? (((b * frames + f) * channels + c) * height + sourceY) * width + sourceX
+                                        : input.Rank == 4
+                                            ? (((f * channels + c) * height + sourceY) * width + sourceX)
+                                            : ((c * height + sourceY) * width + sourceX);
+                                    int destIndex = (b * tokensPerSample + tokenIndex) * patchDim + feature++;
+                                    destination[destIndex] = source[sourceIndex];
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        frameCount = frames;
+        return tokens;
     }
 
     #endregion
@@ -544,15 +699,16 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
     {
         return new TimeSformer<T>(
             Architecture,
-            _numClasses,
-            _optimizer,
-            _lossFunction,
-            _embedDim,
-            _numHeads,
-            _numLayers,
-            _numFrames,
-            _patchSize,
-            _attentionType);
+            numClasses: _numClasses,
+            optimizer: null,
+            lossFunction: _lossFunction,
+            embedDim: _embedDim,
+            numHeads: _numHeads,
+            numLayers: _numLayers,
+            numFrames: _numFrames,
+            patchSize: _patchSize,
+            attentionType: _attentionType,
+            options: _options);
     }
 
     #endregion

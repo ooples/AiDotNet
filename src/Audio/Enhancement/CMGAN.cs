@@ -330,6 +330,12 @@ public class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
     private Tensor<T> ApplyMask(Tensor<T> stft, Tensor<T> mask)
     {
+        // Vectorised mask application: Engine.TensorMultiply is SIMD when
+        // shapes match. Fall back to the prior min-length scalar loop only
+        // for the (rare) mismatched-shape path.
+        if (stft.Length == mask.Length && stft._shape.SequenceEqual(mask._shape))
+            return Engine.TensorMultiply(stft, mask);
+
         var result = new Tensor<T>(stft._shape);
         for (int i = 0; i < Math.Min(stft.Length, mask.Length); i++)
             result[i] = NumOps.Multiply(stft[i], mask[i]);

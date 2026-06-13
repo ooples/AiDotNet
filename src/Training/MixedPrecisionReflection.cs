@@ -32,6 +32,7 @@ internal static class MixedPrecisionReflection
     private static Type? _scalerType;
     private static Type? _configType;
     private static MethodInfo? _traceMethod;
+    private static int _traceParameterCount;
     private static MethodInfo? _stepMethod;
     private static MethodInfo? _stepAdamMethod;
     private static MethodInfo? _computeGradientsMethod;
@@ -101,12 +102,33 @@ internal static class MixedPrecisionReflection
         if (planType is null) return;
 
         // Cache the method handles we'll dispatch through.
+        // Tensors 0.92.x exposed Trace(Func<Tensor<float>>); current builds
+        // expose Trace(Func<Tensor<float>>, IEngine) so callers can pin the
+        // compilation engine. Bind both to keep AiDotNet compatible across the
+        // published package range.
         _traceMethod = planType.GetMethod(
             "Trace",
             BindingFlags.Public | BindingFlags.Static,
             binder: null,
             types: new[] { typeof(Func<Tensor<float>>) },
             modifiers: null);
+        _traceParameterCount = _traceMethod is null ? 0 : 1;
+        if (_traceMethod is null)
+        {
+            Type? engineType = Type.GetType(
+                "AiDotNet.Tensors.Engines.IEngine, AiDotNet.Tensors",
+                throwOnError: false);
+            if (engineType is not null)
+            {
+                _traceMethod = planType.GetMethod(
+                    "Trace",
+                    BindingFlags.Public | BindingFlags.Static,
+                    binder: null,
+                    types: new[] { typeof(Func<Tensor<float>>), engineType },
+                    modifiers: null);
+                _traceParameterCount = _traceMethod is null ? 0 : 2;
+            }
+        }
 
         _stepMethod = planType.GetMethod(
             "Step",
@@ -157,7 +179,9 @@ internal static class MixedPrecisionReflection
         if (!IsAvailable) return null;
         MethodInfo? trace = _traceMethod;
         if (trace is null) return null;
-        return trace.Invoke(null, new object[] { forwardAndLoss });
+        return _traceParameterCount == 2
+            ? trace.Invoke(null, new object?[] { forwardAndLoss, null })
+            : trace.Invoke(null, new object[] { forwardAndLoss });
     }
 
     /// <summary>Replay an SGD step against a previously-traced plan; returns the loss.</summary>

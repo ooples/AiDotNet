@@ -166,6 +166,20 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
                     defaultIndices[v, s] = (v + s) % numVertices;
             SetSpiralIndices(defaultIndices);
         }
+
+        // NOTE: SpiralNet's layers stay LAZY until the first real
+        // Forward/Predict — by design. SpiralNet accepts both rank-2
+        // [V, C] and rank-3 [B, V, C] inputs, and rank-sensitive layers
+        // (BatchNormalization picks its channel axis from input rank,
+        // GlobalPooling requires rank-3+) must bind to the rank the
+        // caller actually uses. Any ctor-time materialization — dummy
+        // Forward or per-layer ResolveFromShape walk — has to guess a
+        // rank, and a wrong guess silently mis-sizes BatchNorm's
+        // gamma/runningStats so later real Predicts collapse to
+        // input-independent output (broke ScaledInput / DifferentInputs
+        // on CI). Callers that need ParameterCount before training run a
+        // warm-up Predict first — the documented pattern in
+        // SpiralNetTests.Parameters_ShouldBeNonEmpty.
     }
 
     /// <summary>

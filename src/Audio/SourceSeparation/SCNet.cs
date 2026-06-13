@@ -11,7 +11,7 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.Audio.SourceSeparation;
 
 /// <summary>
-/// SCNet (Sparse Compression Network) for music source separation (Chen et al., 2024).
+/// SCNet (Sparse Compression Network) for music source separation (Tong et al., 2024).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
@@ -41,7 +41,7 @@ namespace AiDotNet.Audio.SourceSeparation;
 [ModelTask(ModelTask.SourceSeparation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("SCNet: Sparse Compression Network for Music Source Separation", "https://doi.org/10.48550/arXiv.2401.13276", Year = 2024, Authors = "Jiaqi Chen, Weijin Song, Hehe Fan, Yi Yang")]
+[ResearchPaper("SCNet: Sparse Compression Network for Music Source Separation", "https://doi.org/10.48550/arXiv.2401.13276", Year = 2024, Authors = "Weinan Tong, Jiaxu Zhu, Jun Chen, Shiyin Kang, Tao Jiang, Yang Li, Zhiyong Wu, Helen Meng")]
 public class SCNet<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
 {
     #region Fields
@@ -61,7 +61,7 @@ public class SCNet<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
     public SCNet(NeuralNetworkArchitecture<T> architecture, string modelPath, SCNetOptions? options = null)
         : base(architecture)
     {
-        _options = options ?? new SCNetOptions();
+        _options = options is null ? new SCNetOptions() : new SCNetOptions(options);
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         _options.ModelPath = modelPath;
@@ -76,9 +76,9 @@ public class SCNet<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture)
     {
-        _options = options ?? new SCNetOptions();
+        _options = options is null ? new SCNetOptions() : new SCNetOptions(options);
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
         base.SampleRate = _options.SampleRate;
         int nFft = NextPowerOfTwo(_options.FftSize);
         _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _options.HopLength,
@@ -167,8 +167,20 @@ public class SCNet<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
         foreach (var kvp in separationResult.Sources)
         {
             double vol = sourceVolumes.TryGetValue(kvp.Key, out var v) ? v : 1.0;
-            for (int i = 0; i < kvp.Value.Length; i++)
-                output[i] = NumOps.Add(output[i], NumOps.FromDouble(NumOps.ToDouble(kvp.Value[i]) * vol));
+            // Engine.TensorMultiplyScalar + TensorAdd fast path when the
+            // source matches output shape (the common case); scalar
+            // min-length fallback covers shorter-source mixes.
+            if (kvp.Value.Length == output.Length && kvp.Value.Rank == output.Rank)
+            {
+                var scaled = Engine.TensorMultiplyScalar(kvp.Value, NumOps.FromDouble(vol));
+                output = Engine.TensorAdd(output, scaled);
+            }
+            else
+            {
+                T volT = NumOps.FromDouble(vol);
+                for (int i = 0; i < kvp.Value.Length && i < output.Length; i++)
+                    output[i] = NumOps.Add(output[i], NumOps.Multiply(kvp.Value[i], volT));
+            }
         }
         return output;
     }
@@ -182,9 +194,10 @@ public class SCNet<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
         if (!_useNativeMode) return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers);
         else Layers.AddRange(LayerHelper<T>.CreateDefaultSCNetLayers(
+            architecture: Architecture,
             numClusters: _options.NumClusters, compressionDim: _options.CompressionDim,
             numEncoderBlocks: _options.NumEncoderBlocks, numDecoderBlocks: _options.NumDecoderBlocks,
-            attentionDim: _options.AttentionDim, numAttentionHeads: _options.NumAttentionHeads,
+            numAttentionHeads: _options.NumAttentionHeads,
             feedForwardDim: _options.FeedForwardDim, numStems: _options.NumStems,
             numFreqBins: _options.NumFreqBins, dropoutRate: _options.DropoutRate));
     }
@@ -193,13 +206,87 @@ public class SCNet<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+
+        return ForwardNative(input);
+    }
+
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
+
+        EnsureLayerRandomSeedsWired();
+        return ForwardNative(input);
+    }
+
+    private Tensor<T> ForwardNative(Tensor<T> input)
+    {
+        // SCNet (Tong et al. 2024) uses standard Transformer encoder/decoder
+        // blocks. Each block is MHA → LN → FFN(Dense+ReLU+Dense) → LN, and
+        // standard Transformer practice (Vaswani 2017 §3.1) puts a residual
+        // around the MHA sub-layer AND another around the FFN sub-layer.
+        // The previous straight-sequential forward dropped both residuals,
+        // so the per-block MHA output projection (with He init) attenuated
+        // the signal by ~1/√d per layer; 12 blocks (6 enc + 6 dec) decayed
+        // the input by ~10^-7 — exactly the symptom flagged by
+        // ScaledInput_ShouldChangeOutput / DifferentInputs_ShouldProduceDifferentOutputs.
+        //
+        // Detect block boundaries by layer type and add residuals there.
+        // Layer order from CreateDefaultSCNetLayers:
+        //   [stem] Dense, LN, Dense, LN          ← keep straight
+        //   per block: MHA, LN, Dense(FFN1), Dense(FFN2), LN, [Dropout]
+        //   [tail] Dense, Dense                  ← keep straight
+        Tensor<T> c = input;
+        Tensor<T>? attnResidual = null;
+        Tensor<T>? ffnResidual = null;
+        int sinceMha = -1; // -1: not in a block; 0..n: positions past MHA
+        for (int li = 0; li < Layers.Count; li++)
+        {
+            var layer = Layers[li];
+            // Start of MHA sub-layer in a block — capture the input as the attn residual.
+            if (layer is AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>)
+            {
+                attnResidual = c;
+                c = layer.Forward(c);
+                sinceMha = 0;
+                continue;
+            }
+            if (sinceMha >= 0)
+            {
+                sinceMha++;
+                if (sinceMha == 1)
+                {
+                    // After MHA → LN: add the attn residual to the LN output
+                    // (post-LN residual; Vaswani 2017's original block).
+                    c = layer.Forward(c);
+                    if (attnResidual is not null && c.Length == attnResidual.Length)
+                        c = Engine.TensorAdd(c, attnResidual);
+                    // Now capture this as the FFN input for the FFN residual.
+                    ffnResidual = c;
+                    continue;
+                }
+                if (sinceMha == 4 && ffnResidual is not null)
+                {
+                    // After MHA → LN → FFN1 → FFN2 → LN (= sinceMha 4):
+                    // add the FFN residual to the LN output, ending the block.
+                    c = layer.Forward(c);
+                    if (c.Length == ffnResidual.Length)
+                        c = Engine.TensorAdd(c, ffnResidual);
+                    attnResidual = null;
+                    ffnResidual = null;
+                    sinceMha = -1;
+                    continue;
+                }
+            }
+            c = layer.Forward(c);
+        }
+        return c;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
         if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true); try { TrainWithTape(input, expected); } finally { SetTrainingMode(false); }
+        SetTrainingMode(true); try { TrainWithTape(input, expected, _optimizer); } finally { SetTrainingMode(false); }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
@@ -216,7 +303,7 @@ public class SCNet<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
         var m = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "SCNet-Native" : "SCNet-ONNX",
-            Description = "SCNet Sparse Compression Network (Chen et al., 2024)",
+            Description = "SCNet Sparse Compression Network (Tong et al., 2024)",
             Complexity = _options.NumEncoderBlocks + _options.NumDecoderBlocks
         };
         m.AdditionalInfo["NumClusters"] = _options.NumClusters.ToString();
@@ -230,9 +317,10 @@ public class SCNet<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
         w.Write(_options.SampleRate); w.Write(_options.FftSize); w.Write(_options.HopLength); w.Write(_options.NumFreqBins);
         w.Write(_options.NumClusters); w.Write(_options.CompressionDim);
         w.Write(_options.NumEncoderBlocks); w.Write(_options.NumDecoderBlocks);
-        w.Write(_options.AttentionDim); w.Write(_options.NumAttentionHeads);
+        w.Write(_options.NumAttentionHeads);
         w.Write(_options.NumStems); w.Write(_options.DropoutRate);
         w.Write(_options.Sources.Length); foreach (var s in _options.Sources) w.Write(s);
+        w.Write(_options.LearningRate); w.Write(_options.WeightDecay);
     }
 
     protected override void DeserializeNetworkSpecificData(BinaryReader r)
@@ -241,13 +329,16 @@ public class SCNet<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
         _options.SampleRate = r.ReadInt32(); _options.FftSize = r.ReadInt32(); _options.HopLength = r.ReadInt32(); _options.NumFreqBins = r.ReadInt32();
         _options.NumClusters = r.ReadInt32(); _options.CompressionDim = r.ReadInt32();
         _options.NumEncoderBlocks = r.ReadInt32(); _options.NumDecoderBlocks = r.ReadInt32();
-        _options.AttentionDim = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32();
+        _options.NumAttentionHeads = r.ReadInt32();
         _options.NumStems = r.ReadInt32(); _options.DropoutRate = r.ReadDouble();
         int n = r.ReadInt32(); _options.Sources = new string[n]; for (int i = 0; i < n; i++) _options.Sources[i] = r.ReadString();
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
+        if (r.BaseStream.Position < r.BaseStream.Length) _options.LearningRate = r.ReadDouble();
+        if (r.BaseStream.Position < r.BaseStream.Length) _options.WeightDecay = r.ReadDouble();
+        if (_useNativeMode) _optimizer = CreateDefaultOptimizer();
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new SCNet<T>(Architecture, _options);
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new SCNet<T>(Architecture, new SCNetOptions(_options));
 
     #endregion
 
@@ -297,6 +388,13 @@ public class SCNet<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
         v |= v >> 16;
         return v + 1;
     }
+
+    private AdamOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+        => new(this, new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = _options.LearningRate,
+            UseAdaptiveLearningRate = false
+        });
 
     #endregion
 

@@ -76,6 +76,21 @@ public abstract class FrameInterpolationBase<T> : VideoNeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Frame-interpolation models consume two RGB frames concatenated
+    /// channel-wise — 2 × Architecture.InputDepth = 6 channels — but
+    /// Architecture.InputDepth itself reports the SINGLE-FRAME count (3)
+    /// so it matches the architecture's per-frame metadata. Returning null
+    /// suppresses the base class's ResolveLazyLayerShapes pre-walk, which
+    /// would size the first lazy ConvolutionalLayer for depth 3 and then
+    /// every real Train()/Predict() with the [1, 6, H, W] concat would
+    /// fail with "Expected input depth 3, but got 6". Same root-cause fix
+    /// as UFM / RAPIDFlow (optical flow — the sibling 2-frame-concat
+    /// family) and MisGAN / AutoDiffTabGenerator / GOGGLE / MGTSD. Layers
+    /// resolve from the real concatenated input on first Forward instead.
+    /// </summary>
+    protected override int[]? TryGetArchitectureInputShape() => null;
+
+    /// <summary>
     /// Interpolates a single intermediate frame between two input frames at the given timestep.
     /// </summary>
     /// <param name="frame0">First frame [channels, height, width].</param>

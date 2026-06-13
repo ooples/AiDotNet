@@ -853,7 +853,11 @@ public class ContinualLearningDeepMathIntegrationTests
     }
 
     /// <summary>
-    /// Mock model for continual learning tests.
+    /// Mock model for continual learning tests. IParameterizable and
+    /// IGradientComputable are declared explicitly because IFullModel no
+    /// longer extends them — the CL strategies resolve both capabilities
+    /// at runtime via InterfaceGuard, which throws for models that only
+    /// declare IFullModel.
     /// </summary>
     // Implements IParameterizable explicitly: the interface-segregation refactor
     // moved GetParameters/SetParameters/ParameterCount/WithParameters off IFullModel
@@ -861,9 +865,13 @@ public class ContinualLearningDeepMathIntegrationTests
     // InterfaceGuard.Parameterizable (EWC's Fisher matrix and SI's importance are
     // computed OVER the model's parameters). The mock already implements every
     // IParameterizable member below; it just needs to declare the interface so the
-    // runtime `model is IParameterizable<...>` check succeeds.
+    // runtime `model is IParameterizable<...>` check succeeds. IGradientComputable
+    // is declared for the same reason — the mock implements ComputeGradients/
+    // ApplyGradients, and the gradient-based CL paths resolve it via
+    // InterfaceGuard.GradientComputable.
     private class CLMockModel : IFullModel<double, Tensor<double>, Tensor<double>>,
-        IParameterizable<double, Tensor<double>, Tensor<double>>
+        IParameterizable<double, Tensor<double>, Tensor<double>>,
+        IGradientComputable<double, Tensor<double>, Tensor<double>>
     {
         private Vector<double> _parameters;
         private List<int> _activeFeatures;

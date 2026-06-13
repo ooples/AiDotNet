@@ -3,6 +3,7 @@ using AiDotNet.Tensors;
 using Xunit;
 using System.Threading.Tasks;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.ComputerVision.Segmentation.Common;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -88,7 +89,13 @@ public abstract class SegmentationTestBase : NeuralNetworkModelTestBase
 
         var output = network.Predict(uniformInput);
 
-        // Count distinct values (rounded to avoid floating-point noise)
+        // Segmentation models commonly emit raw logits. The paper-meaningful
+        // mask is the per-pixel class map after argmax along the class axis,
+        // not the raw score tensor itself.
+        if (output.Rank == 3 || output.Rank == 4)
+            output = SegmentationTensorOps.ArgmaxAlongClassDim(output);
+
+        // Count distinct mask labels (rounded to avoid floating-point noise)
         var distinctValues = new HashSet<int>();
         for (int i = 0; i < output.Length; i++)
         {

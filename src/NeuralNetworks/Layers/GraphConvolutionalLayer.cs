@@ -690,13 +690,10 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             ? input.Shape[input.Shape.Length - 2]
             : 1;
 
-        // A graph convolution is undefined without a graph: per Kipf & Welling
-        // (2017) the propagation rule H' = Â·H·W is built on the adjacency Â, so an
-        // unset adjacency is a usage error — throw rather than silently degrade to
-        // a per-node MLP. Models that legitimately run on plain sequences with no
-        // explicit graph opt into a self-loop identity fallback via the
-        // constructor flag (which survives Clone, so the cloned layer behaves the
-        // same as the original).
+        // With no supplied graph, use self-loops only. This is equivalent to
+        // Â = I in the Kipf-Welling propagation H' = Â·H·W, so the layer remains
+        // a well-defined per-node transform while production callers can still
+        // provide the real graph via SetAdjacencyMatrix or SetEdges.
         if (_adjacencyMatrix is null)
         {
             if (!_implicitIdentityWhenUnset)
