@@ -243,10 +243,40 @@ jobs:
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.AutoML|FullyQualifiedName~UnitTests.Data|FullyQualifiedName~UnitTests.Diagnostics)'
-          - name: Unit - 03 Diffusion/Encoding
+          # Unit - 03 (Diffusion/Encoding) split into 4 shards. The diffusion
+          # *ContractTests classes call GetParameters/ParameterCount/Clone on every
+          # diffusion model, each of which must allocate the model's full weight
+          # vector — minutes of wall-time per foundation-scale model. As one shard
+          # the contract tests alone ran 25 min+ and blew the 45 min job timeout.
+          # 03a = non-contract diffusion (DDPM, audio, conditioning, streaming) +
+          # Encoding; 03b/c/d = the per-model contract tests split by model-name
+          # first letter (the model is the method-name prefix, e.g.
+          # DiffusionModelContractTests.SoraModel_...), mirroring the ModelFamily -
+          # Diffusion letter split. All four are serialized (see $heavyShards).
+          - name: Unit - 03a Diffusion Core/Encoding
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.Diffusion|FullyQualifiedName~UnitTests.Encoding)'
+            filter: >-
+              Category!=GPU&Category!=Stress&
+              ((FullyQualifiedName~UnitTests.Diffusion&FullyQualifiedName!~ContractTests)|FullyQualifiedName~UnitTests.Encoding)
+          - name: Unit - 03b Diffusion Contract A-F
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion&
+              (FullyQualifiedName~ContractTests.A|FullyQualifiedName~ContractTests.B|FullyQualifiedName~ContractTests.C|FullyQualifiedName~ContractTests.D|FullyQualifiedName~ContractTests.E|FullyQualifiedName~ContractTests.F)
+          - name: Unit - 03c Diffusion Contract G-R
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion&
+              (FullyQualifiedName~ContractTests.G|FullyQualifiedName~ContractTests.H|FullyQualifiedName~ContractTests.I|FullyQualifiedName~ContractTests.J|FullyQualifiedName~ContractTests.K|FullyQualifiedName~ContractTests.L|FullyQualifiedName~ContractTests.M|FullyQualifiedName~ContractTests.N|FullyQualifiedName~ContractTests.O|FullyQualifiedName~ContractTests.P|FullyQualifiedName~ContractTests.Q|FullyQualifiedName~ContractTests.R)
+          - name: Unit - 03d Diffusion Contract S-Z
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion&
+              (FullyQualifiedName~ContractTests.S|FullyQualifiedName~ContractTests.T|FullyQualifiedName~ContractTests.U|FullyQualifiedName~ContractTests.V|FullyQualifiedName~ContractTests.W|FullyQualifiedName~ContractTests.X|FullyQualifiedName~ContractTests.Y|FullyQualifiedName~ContractTests.Z)
           - name: Unit - 04 Feature/Fit/Fitness/Genetics
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -644,7 +674,10 @@ jobs:
             'ModelFamily - NeuralNetworks A-L',
             'ModelFamily - NeuralNetworks M-Z',
             'ModelFamily - Code/Forecast/Segment/Survival',
-            'Unit - 03 Diffusion/Encoding',
+            'Unit - 03a Diffusion Core/Encoding',
+            'Unit - 03b Diffusion Contract A-F',
+            'Unit - 03c Diffusion Contract G-R',
+            'Unit - 03d Diffusion Contract S-Z',
             # Integration shards that instantiate paper-scale models (Document AI,
             # Finance, ComputerVision, NeuralNetworks, Diffusion, Video, MetaLearning,
             # etc.) — serialize like the ModelFamily shards to stay under the runner
