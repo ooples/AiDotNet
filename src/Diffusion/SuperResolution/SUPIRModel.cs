@@ -193,7 +193,16 @@ public class SUPIRModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount
+    {
+        get
+        {
+            // Lazy-init fix pattern (SDXLTurbo/DDPM/RealESRGAN/EDiffI/DiffEdit).
+            _unet.TriggerLazyShapeResolution();
+            _vae.TriggerLazyShapeResolution();
+            return _unet.ParameterCount + _vae.ParameterCount;
+        }
+    }
 
     #endregion
 
@@ -374,6 +383,9 @@ public class SUPIRModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
+        // Lazy-init fix pattern (SDXLTurbo/DDPM/RealESRGAN/EDiffI/DiffEdit).
+        _unet.TriggerLazyShapeResolution();
+        _vae.TriggerLazyShapeResolution();
         var unetParams = _unet.GetParameters();
         var vaeParams = _vae.GetParameters();
 
@@ -395,6 +407,8 @@ public class SUPIRModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        _unet.TriggerLazyShapeResolution();
+        _vae.TriggerLazyShapeResolution();
         var unetCount = checked((int)_unet.ParameterCount);
         var vaeCount = checked((int)_vae.ParameterCount);
 
@@ -435,26 +449,16 @@ public class SUPIRModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedUnet = new UNetNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS,
-            outputChannels: LATENT_CHANNELS,
-            baseChannels: BASE_CHANNELS,
-            channelMultipliers: [1, 2, 4],
-            numResBlocks: 2,
-            attentionResolutions: [4, 2],
-            contextDim: CROSS_ATTENTION_DIM);
-        clonedUnet.SetParameters(_unet.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2,
-            latentScaleFactor: SDXL_VAE_SCALE_FACTOR);
-        clonedVae.SetParameters(_vae.GetParameters());
-
+        // Delegate to sub-Clones — same lazy-init fix pattern as
+        // SDXLTurbo / RealESRGAN / EDiffI / DiffEdit / DDPM.
+        // Preserve outer configuration (architecture / options / scheduler) so
+        // custom diffusion settings round-trip through Clone (CodeRabbit PR #1562).
+        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
+        var clonedVae = (StandardVAE<T>)_vae.Clone();
         return new SUPIRModel<T>(
+            architecture: Architecture,
+            options: (DiffusionModelOptions<T>)GetOptions(),
+            scheduler: Scheduler,
             unet: clonedUnet,
             vae: clonedVae,
             conditioner: _conditioner);

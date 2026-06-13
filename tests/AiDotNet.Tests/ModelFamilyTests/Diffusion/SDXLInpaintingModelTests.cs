@@ -1,5 +1,9 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Diffusion.ImageEditing;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
+using AiDotNet.Enums;
+using AiDotNet.Models.Options;
 using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
@@ -13,9 +17,12 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 /// baseChannels=128 channelMultipliers=[1,2,4,4]) is too large for FP64 on a
 /// 16 GB CI host — <c>SDXLInpaintingModel&lt;double&gt;</c> OOMs in the 1.28 B-element
 /// kernel allocation during <c>UNetNoisePredictor.CreateDefaultEncoderBlocks</c>
-/// (verified via testconsole/SdxlMemProfile). The same model at FP32 fits in
-/// ≈3.8 GB managed heap and completes one Predict() in ≈38 s, well within the
-/// 120 s per-test timeout.
+/// (verified via testconsole/SdxlMemProfile). Even at FP32, the paper-scale
+/// default is too slow for every model-family invariant because tests such as
+/// determinism and input scaling run multiple <c>Predict</c> calls. This scaffold
+/// keeps the defining SDXL-inpainting contracts (9-channel inpainting UNet,
+/// 4-channel latents, scaled-linear 1000-step training schedule, 2048-dim SDXL
+/// text context shape) while reducing width/resolution for CPU-bound invariants.
 /// </summary>
 /// <remarks>
 /// FP32 is also the production-canonical numeric type for diffusion-model
@@ -31,10 +38,46 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 /// </remarks>
 public class SDXLInpaintingModelTests : DiffusionModelTestBase<float>
 {
-    // SD-based latent diffusion: 4 channels, 64x64 latent (512x512 images / 8x VAE).
-    protected override int[] InputShape => [1, 4, 64, 64];
-    protected override int[] OutputShape => [1, 4, 64, 64];
+    // SDXL inpainting denoises 4-channel latents. The UNet itself receives
+    // 9 channels internally: latent + mask + masked-image latent.
+    protected override int[] InputShape => [1, 4, 32, 32];
+    protected override int[] OutputShape => [1, 4, 32, 32];
+    protected override int TrainingIterations => 2;
 
     protected override IDiffusionModel<float> CreateModel()
-        => new SDXLInpaintingModel<float>(seed: 42);
+    {
+        var unet = new UNetNoisePredictor<float>(
+            inputChannels: 9,
+            outputChannels: 4,
+            baseChannels: 32,
+            channelMultipliers: [1, 2, 4],
+            numResBlocks: 1,
+            attentionResolutions: [1, 2],
+            contextDim: 2048,
+            numHeads: 4,
+            inputHeight: 32,
+            seed: 42);
+
+        var vae = new StandardVAE<float>(
+            inputChannels: 3,
+            latentChannels: 4,
+            baseChannels: 32,
+            channelMultipliers: [1, 2, 4],
+            numResBlocksPerLevel: 1,
+            latentScaleFactor: 0.13025,
+            seed: 42);
+
+        return new SDXLInpaintingModel<float>(
+            options: new DiffusionModelOptions<float>
+            {
+                TrainTimesteps = 1000,
+                BetaStart = 0.00085,
+                BetaEnd = 0.012,
+                BetaSchedule = BetaSchedule.ScaledLinear,
+                DefaultInferenceSteps = 1
+            },
+            predictor: unet,
+            vae: vae,
+            seed: 42);
+    }
 }

@@ -245,15 +245,8 @@ public class TripoSRModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedTransformer = new DiTNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS, hiddenSize: HIDDEN_DIM,
-            numLayers: NUM_LAYERS, numHeads: NUM_HEADS,
-            patchSize: 1, contextDim: CONTEXT_DIM);
-        clonedTransformer.SetParameters(_transformer.GetParameters());
-        return new TripoSRModel<T>(transformer: clonedTransformer,
-            vae: new StandardVAE<T>(inputChannels: 3, latentChannels: LATENT_CHANNELS,
-                baseChannels: 128, channelMultipliers: new[] { 1, 2, 4, 4 },
-                numResBlocksPerLevel: 2, latentScaleFactor: 0.18215),
+        return new TripoSRModel<T>(transformer: (DiTNoisePredictor<T>)_transformer.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner, defaultPointCount: DefaultPointCount);
     }
 

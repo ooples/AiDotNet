@@ -198,35 +198,60 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
                 Architecture, _embeddingDimension, _numTransformerLayers));
         }
 
-        // Distribute layers to internal fields
+        BindLayerFieldsFromLayers();
+    }
+
+    [System.Diagnostics.CodeAnalysis.MemberNotNull(
+        nameof(_textEncoder), nameof(_imageEncoder), nameof(_audioEncoder), nameof(_videoEncoder),
+        nameof(_transformerLayers), nameof(_crossModalAttention),
+        nameof(_textDecoder), nameof(_imageDecoder), nameof(_audioDecoder), nameof(_videoDecoder),
+        nameof(_fusionLayer), nameof(_classificationHead), nameof(_generationHead))]
+    private void BindLayerFieldsFromLayers()
+    {
+        int expectedLayerCount = 4 + _numTransformerLayers + 4 + 4 + 3;
+        if (Layers.Count < expectedLayerCount)
+        {
+            throw new InvalidDataException(
+                $"UnifiedMultimodalNetwork expected at least {expectedLayerCount} layers, found {Layers.Count}.");
+        }
+
+        TLayer RequireLayer<TLayer>(int index, string role)
+            where TLayer : class, ILayer<T>
+        {
+            if (Layers[index] is TLayer layer)
+                return layer;
+
+            throw new InvalidDataException(
+                $"UnifiedMultimodalNetwork layer {index} for {role} must be {typeof(TLayer).Name}, found {Layers[index].GetType().Name}.");
+        }
+
         int idx = 0;
 
-        // 4 modality encoders
-        _textEncoder = (DenseLayer<T>)Layers[idx++];
-        _imageEncoder = (DenseLayer<T>)Layers[idx++];
-        _audioEncoder = (DenseLayer<T>)Layers[idx++];
-        _videoEncoder = (DenseLayer<T>)Layers[idx++];
+        _textEncoder = RequireLayer<DenseLayer<T>>(idx++, "text encoder");
+        _imageEncoder = RequireLayer<DenseLayer<T>>(idx++, "image encoder");
+        _audioEncoder = RequireLayer<DenseLayer<T>>(idx++, "audio encoder");
+        _videoEncoder = RequireLayer<DenseLayer<T>>(idx++, "video encoder");
 
-        // Unified transformer layers
         _transformerLayers = new MultiHeadAttentionLayer<T>[_numTransformerLayers];
         for (int i = 0; i < _numTransformerLayers; i++)
-            _transformerLayers[i] = (MultiHeadAttentionLayer<T>)Layers[idx++];
+        {
+            _transformerLayers[i] = RequireLayer<MultiHeadAttentionLayer<T>>(idx++, $"transformer layer {i}");
+        }
 
-        // Cross-modal attention (4 layers)
         _crossModalAttention = new MultiHeadAttentionLayer<T>[4];
         for (int i = 0; i < 4; i++)
-            _crossModalAttention[i] = (MultiHeadAttentionLayer<T>)Layers[idx++];
+        {
+            _crossModalAttention[i] = RequireLayer<MultiHeadAttentionLayer<T>>(idx++, $"cross-modal attention {i}");
+        }
 
-        // 4 modality decoders
-        _textDecoder = (DenseLayer<T>)Layers[idx++];
-        _imageDecoder = (DenseLayer<T>)Layers[idx++];
-        _audioDecoder = (DenseLayer<T>)Layers[idx++];
-        _videoDecoder = (DenseLayer<T>)Layers[idx++];
+        _textDecoder = RequireLayer<DenseLayer<T>>(idx++, "text decoder");
+        _imageDecoder = RequireLayer<DenseLayer<T>>(idx++, "image decoder");
+        _audioDecoder = RequireLayer<DenseLayer<T>>(idx++, "audio decoder");
+        _videoDecoder = RequireLayer<DenseLayer<T>>(idx++, "video decoder");
 
-        // Fusion and output heads
-        _fusionLayer = (DenseLayer<T>)Layers[idx++];
-        _classificationHead = (DenseLayer<T>)Layers[idx++];
-        _generationHead = (DenseLayer<T>)Layers[idx++];
+        _fusionLayer = RequireLayer<DenseLayer<T>>(idx++, "fusion layer");
+        _classificationHead = RequireLayer<DenseLayer<T>>(idx++, "classification head");
+        _generationHead = RequireLayer<DenseLayer<T>>(idx++, "generation head");
     }
 
     #endregion
@@ -1056,14 +1081,38 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         Tensor<T> transformed = encoded.Rank == 2
             ? encoded.Reshape(new[] { encoded.Shape[0], 1, encoded.Shape[1] })
             : encoded;
+        // Apply transformer layers with residual connections. Standard
+        // Transformer block (Vaswani et al. 2017 §3.1) is `x' = x + MHA(x)`,
+        // not `x' = MHA(x)`. Without the residual, signal magnitude decays
+        // through each attention layer by the attention/output-projection
+        // weight scaling (~1/√d_model per layer), so a 12-layer stack on a
+        // randomly-initialised model attenuates input by ~10^-15 — exactly
+        // the symptom flagged by ScaledInput_ShouldChangeOutput.
         foreach (var layer in _transformerLayers)
         {
-            transformed = layer.Forward(transformed);
+            var attended = layer.Forward(transformed);
+            // Engine.TensorAdd is the vectorized residual add. Skip when
+            // shapes don't match (e.g. an internal projection layer changes
+            // the rank/dims) — the eval-mode forward stays straight in
+            // that case.
+            transformed = ShapesMatch(transformed, attended)
+                ? Engine.TensorAdd(transformed, attended)
+                : attended;
         }
         var pooled = transformed.Rank == 3
             ? transformed.Reshape(new[] { transformed.Shape[0], transformed.Shape[2] })
             : transformed;
         return _classificationHead.Forward(pooled);
+    }
+
+    /// <summary>True iff the two tensors are element-wise broadcastable
+    /// without any reshape (same rank, same dim values).</summary>
+    private static bool ShapesMatch(Tensor<T> a, Tensor<T> b)
+    {
+        if (a.Shape.Length != b.Shape.Length || a.Length != b.Length) return false;
+        for (int i = 0; i < a.Shape.Length; i++)
+            if (a.Shape[i] != b.Shape[i]) return false;
+        return true;
     }
 
     /// <inheritdoc/>
@@ -1104,7 +1153,13 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
             : encoded;
         foreach (var layer in _transformerLayers)
         {
-            transformed = layer.Forward(transformed);
+            var attended = layer.Forward(transformed);
+            // Engine.TensorAdd keeps the residual addition on the gradient tape
+            // — without this the backward pass through the residual branch is
+            // detached and the encoder receives only the attention-path
+            // gradient (which alone is too weak to compete with the diagonal
+            // gradient through MHA's output projection).
+            transformed = Engine.TensorAdd(transformed, attended);
         }
         var pooled = transformed.Rank == 3
             ? Engine.Reshape(transformed, new[] { transformed.Shape[0], transformed.Shape[2] })
@@ -1135,7 +1190,23 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
             Name = "UnifiedMultimodalNetwork",
             FeatureCount = _embeddingDimension,
             Complexity = _numTransformerLayers * 4,
-            Description = "Unified multimodal network for any-to-any modality generation"
+            Description = "Unified multimodal network for any-to-any modality generation",
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                // Golden-pattern required keys (neural-network metadata contract):
+                // ModelType, Architecture, InputShape, OutputShape, ParameterCount.
+                { "ModelType", nameof(UnifiedMultimodalNetwork<T>) },
+                { "Architecture", $"UnifiedMultimodalNetwork ({_numTransformerLayers} transformer layers, embeddingDim={_embeddingDimension}, maxSeq={_maxSequenceLength})" },
+                { "InputShape", Architecture.GetInputShape() },
+                { "OutputShape", Architecture.GetOutputShape() },
+                { "NetworkType", "UnifiedMultimodalNetwork" },
+                { "EmbeddingDimension", _embeddingDimension },
+                { "MaxSequenceLength", _maxSequenceLength },
+                { "NumTransformerLayers", _numTransformerLayers },
+                { "LayerCount", Layers.Count },
+                { "ParameterCount", GetParameterCount() }
+            },
+            ModelData = this.Serialize()
         };
     }
 
@@ -1150,9 +1221,19 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
+        int embeddingDimension = reader.ReadInt32();
+        int maxSequenceLength = reader.ReadInt32();
+        int numTransformerLayers = reader.ReadInt32();
+
+        if (embeddingDimension != _embeddingDimension ||
+            maxSequenceLength != _maxSequenceLength ||
+            numTransformerLayers != _numTransformerLayers)
+        {
+            throw new InvalidDataException(
+                "Serialized UnifiedMultimodalNetwork configuration does not match the target instance.");
+        }
+
+        BindLayerFieldsFromLayers();
     }
 
     /// <inheritdoc/>
@@ -1297,16 +1378,7 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
     /// <inheritdoc/>
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
-        var copy = new UnifiedMultimodalNetwork<T>(
-            Architecture,
-            _embeddingDimension,
-            _maxSequenceLength,
-            _numTransformerLayers,
-            _optimizer,
-            _lossFunction);
-
-        copy.SetParameters(GetParameters());
-        return copy;
+        return base.DeepCopy();
     }
 
     #endregion

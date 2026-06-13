@@ -287,6 +287,9 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
 
         try
         {
+            var beforeParameters = GetParameters();
+            double beforeLoss = ComputeMeasuredLoss(input, expectedOutput);
+
             // Use the tape-based training path like other networks. The previous
             // imperative implementation ran Predict() and then called the
             // optimizer's UpdateParameters(Layers), which dispatched to each
@@ -295,11 +298,119 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
             // but none of that happens here, so every training call failed
             // with "Backward pass must be called before updating parameters."
             _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-            TrainWithTape(input, expectedOutput, _trainOptimizer);
+
+            // Predict() exposes measured probabilities via Born's rule
+            // (probability = amplitude^2). The layer-chain tape trains raw
+            // real amplitudes, so map probability-space targets back to
+            // amplitudes before the supervised step.
+            var amplitudeTarget = ConvertMeasurementTargetToAmplitudeTarget(expectedOutput);
+            TrainWithTape(input, amplitudeTarget, _trainOptimizer);
+
+            AcceptMeasuredLossStepOrBacktrack(input, expectedOutput, beforeParameters, beforeLoss);
         }
         finally
         {
             SetTrainingMode(false);
+        }
+    }
+
+    private Tensor<T> ConvertMeasurementTargetToAmplitudeTarget(Tensor<T> target)
+    {
+        var transformed = new Tensor<T>(target._shape);
+
+        for (int i = 0; i < target.Length; i++)
+        {
+            var value = target[i];
+            if (NumOps.LessThan(value, NumOps.Zero))
+            {
+                value = NumOps.Zero;
+            }
+
+            transformed[i] = NumOps.Sqrt(value);
+        }
+
+        return transformed;
+    }
+
+    private void AcceptMeasuredLossStepOrBacktrack(
+        Tensor<T> input,
+        Tensor<T> expectedOutput,
+        Vector<T> beforeParameters,
+        double beforeLoss)
+    {
+        const double acceptanceTolerance = 1e-8;
+
+        double proposedLoss = ComputeMeasuredLoss(input, expectedOutput);
+        if (!double.IsNaN(proposedLoss) && proposedLoss <= beforeLoss + acceptanceTolerance)
+        {
+            return;
+        }
+
+        var proposedParameters = GetParameters();
+
+        // Backtracking line search over the proposed surrogate-gradient update.
+        // Quantum measurement is nonlinear in the underlying amplitudes, so an
+        // otherwise valid surrogate step can overshoot the measured objective.
+        for (double stepScale = 0.5; stepScale >= 1.0 / 1_048_576.0; stepScale *= 0.5)
+        {
+            SetParameters(InterpolateParameters(beforeParameters, proposedParameters, stepScale));
+            double candidateLoss = ComputeMeasuredLoss(input, expectedOutput);
+            if (!double.IsNaN(candidateLoss) && candidateLoss <= beforeLoss + acceptanceTolerance)
+            {
+                return;
+            }
+        }
+
+        SetParameters(beforeParameters);
+    }
+
+    private Vector<T> InterpolateParameters(Vector<T> start, Vector<T> end, double stepScale)
+    {
+        var result = new Vector<T>(start.Length);
+        var scale = NumOps.FromDouble(stepScale);
+
+        for (int i = 0; i < start.Length; i++)
+        {
+            result[i] = NumOps.Add(
+                start[i],
+                NumOps.Multiply(NumOps.Subtract(end[i], start[i]), scale));
+        }
+
+        return result;
+    }
+
+    private double ComputeMeasuredLoss(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining)
+        {
+            SetTrainingMode(false);
+        }
+
+        try
+        {
+            var prediction = Predict(input);
+            int length = Math.Min(prediction.Length, expectedOutput.Length);
+            if (length == 0)
+            {
+                return double.NaN;
+            }
+
+            double sum = 0.0;
+            for (int i = 0; i < length; i++)
+            {
+                double diff = NumOps.ToDouble(prediction[i]) - NumOps.ToDouble(expectedOutput[i]);
+                sum += diff * diff;
+            }
+
+            return sum / length;
+        }
+        finally
+        {
+            if (wasTraining)
+            {
+                SetTrainingMode(true);
+            }
         }
     }
 

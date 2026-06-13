@@ -1,8 +1,12 @@
 using AiDotNet.ComputerVision.Segmentation.Medical;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.ModelFamilyTests.Base;
+using Xunit;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Segmentation;
 
@@ -53,4 +57,106 @@ public class SwinUNETRTests : SegmentationTestBase
     /// internally inside Train.
     /// </summary>
     protected override int[] OutputShape => new[] { NumClasses, Height, Width };
+
+    public override async Task Training_ShouldReduceLoss()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        using var network = CreateNetwork();
+        var input = CreateRandomTensor(InputShape, rng);
+        var target = CreateClassIndexMask();
+
+        double initialLoss = CrossEntropy(network.Predict(input), target);
+
+        for (int i = 0; i < TrainingIterations * 3; i++)
+            network.Train(input, target);
+
+        double finalLoss = CrossEntropy(network.Predict(input), target);
+
+        Assert.True(finalLoss <= initialLoss + TrainingLossReductionTolerance,
+            $"SwinUNETR cross-entropy did not decrease: initial={initialLoss:F6}, final={finalLoss:F6}.");
+    }
+
+    public override async Task LossStrictlyDecreasesOnMemorizationTask()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        using var network = CreateNetwork();
+        var input = CreateRandomTensor(InputShape, rng);
+        var target = CreateClassIndexMask();
+
+        network.Train(input, target);
+        double lossStep1 = ConvertToDouble(network.GetLastLoss());
+
+        int followOnSteps = Math.Max(0, MemorizationTaskIterations - 1);
+        for (int s = 0; s < followOnSteps; s++)
+            network.Train(input, target);
+        double lossFinal = ConvertToDouble(network.GetLastLoss());
+
+        Assert.False(double.IsNaN(lossStep1) || double.IsInfinity(lossStep1),
+            $"Loss after step 1 is non-finite: {lossStep1}");
+        Assert.False(double.IsNaN(lossFinal) || double.IsInfinity(lossFinal),
+            $"Loss after step {MemorizationTaskIterations} is non-finite: {lossFinal}");
+        Assert.True(lossFinal < lossStep1 * MemorizationTaskLossThreshold,
+            $"SwinUNETR CE loss did NOT strictly decrease on memorization task: step 1={lossStep1:F6}, step {MemorizationTaskIterations}={lossFinal:F6}.");
+    }
+
+    public override async Task MoreData_ShouldNotDegrade()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng1 = ModelTestHelpers.CreateSeededRandom(42);
+        var rng2 = ModelTestHelpers.CreateSeededRandom(42);
+
+        var network1 = CreateNetwork();
+        var input = CreateRandomTensor(InputShape, rng1);
+        var target = CreateClassIndexMask();
+        var input2 = CreateRandomTensor(InputShape, rng2);
+        var target2 = CreateClassIndexMask();
+
+        try { network1.Predict(input); }
+        catch (InvalidOperationException) { }
+
+        INeuralNetworkModel<double> network2 = network1 is NeuralNetworkBase<double> nn1
+            ? (INeuralNetworkModel<double>)nn1.Clone()
+            : (INeuralNetworkModel<double>)network1.Clone();
+
+        int shortIters = MoreDataShortIterations;
+        int longIters = MoreDataLongIterations;
+        Assert.True(shortIters > 0, $"{nameof(MoreDataShortIterations)} must be > 0; got {shortIters}.");
+        Assert.True(longIters >= shortIters,
+            $"{nameof(MoreDataLongIterations)} ({longIters}) must be >= {nameof(MoreDataShortIterations)} ({shortIters}).");
+
+        for (int i = 0; i < shortIters; i++)
+            network1.Train(input, target);
+        double lossShort = CrossEntropy(network1.Predict(input), target);
+
+        for (int i = 0; i < longIters; i++)
+            network2.Train(input2, target2);
+        double lossLong = CrossEntropy(network2.Predict(input2), target2);
+
+        Assert.False(double.IsNaN(lossShort) || double.IsNaN(lossLong),
+            $"Loss became NaN during training: short={lossShort}, long={lossLong}.");
+        Assert.False(double.IsInfinity(lossShort) || double.IsInfinity(lossLong),
+            $"Loss became infinite during training: short={lossShort}, long={lossLong}.");
+        Assert.True(lossLong <= lossShort + MoreDataTolerance,
+            $"{longIters} iterations CE loss ({lossLong:F6}) > {shortIters} iterations CE loss ({lossShort:F6}).");
+    }
+
+    private static Tensor<double> CreateClassIndexMask()
+    {
+        var mask = new Tensor<double>(new[] { Height, Width });
+        for (int i = 0; i < mask.Length; i++)
+            mask[i] = 0.0;
+
+        return mask;
+    }
+
+    private static double CrossEntropy(Tensor<double> logits, Tensor<double> target)
+    {
+        var loss = new CrossEntropyWithLogitsLoss<double>().ComputeTapeLoss(logits, target);
+        return loss.Data.Span[0];
+    }
 }
