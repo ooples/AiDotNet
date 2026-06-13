@@ -160,14 +160,20 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         SiameseNetworkOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _options = options ?? new SiameseNetworkOptions();
         Options = _options;
-        // Use CNN for 2D/3D input (images), FFNN for 1D input (features)
+        if (_options.EmbeddingSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "Siamese embedding size must be positive.");
+
+        var embeddingArchitecture = CreateEmbeddingArchitecture(architecture, _options.EmbeddingSize);
+
+        // Use CNN for 2D/3D input (images), FFNN for 1D input (features).
+        // The shared tower is an embedding function, not the final binary
+        // classifier. The parent Siamese model owns the sigmoid similarity
+        // head below, matching the Koch et al. one-shot Siamese design.
         _subnetwork = architecture.InputType == Enums.InputType.OneDimensional
-            ? (NeuralNetworkBase<T>)new FeedForwardNeuralNetwork<T>(architecture)
-            : new ConvolutionalNeuralNetwork<T>(architecture);
-        int embeddingSize = architecture.GetOutputShape()[0];
+            ? (NeuralNetworkBase<T>)new FeedForwardNeuralNetwork<T>(embeddingArchitecture)
+            : new ConvolutionalNeuralNetwork<T>(embeddingArchitecture);
         _outputLayer = new DenseLayer<T>(1, new SigmoidActivation<T>() as IActivationFunction<T>);
 
         // Initialize NumOps-based fields
@@ -190,6 +196,31 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         // Has to run AFTER _subnetwork and _outputLayer are assigned
         // because InitializeLayers reads them.
         InitializeLayers();
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+    }
+
+    private static NeuralNetworkArchitecture<T> CreateEmbeddingArchitecture(
+        NeuralNetworkArchitecture<T> architecture,
+        int embeddingSize)
+    {
+        if (architecture.Layers.Count > 0)
+            return architecture;
+
+        var embeddingArchitecture = new NeuralNetworkArchitecture<T>(
+            inputType: architecture.InputType,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            complexity: architecture.Complexity,
+            inputSize: architecture.InputSize,
+            inputHeight: architecture.InputHeight,
+            inputWidth: architecture.InputWidth,
+            inputDepth: architecture.InputDepth,
+            outputSize: embeddingSize,
+            shouldReturnFullSequence: architecture.ShouldReturnFullSequence,
+            imageEmbeddingDim: architecture.ImageEmbeddingDim,
+            textEmbeddingDim: architecture.TextEmbeddingDim,
+            inputFrames: architecture.InputFrames);
+        embeddingArchitecture.RandomSeed = architecture.RandomSeed;
+        return embeddingArchitecture;
     }
 
     /// <summary>
@@ -640,8 +671,8 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     {
         // Deserialize the subnetwork
         _subnetwork = Architecture.InputType == Enums.InputType.OneDimensional
-            ? (NeuralNetworkBase<T>)new FeedForwardNeuralNetwork<T>(Architecture)
-            : new ConvolutionalNeuralNetwork<T>(Architecture);
+            ? (NeuralNetworkBase<T>)new FeedForwardNeuralNetwork<T>(CreateEmbeddingArchitecture(Architecture, _options.EmbeddingSize))
+            : new ConvolutionalNeuralNetwork<T>(CreateEmbeddingArchitecture(Architecture, _options.EmbeddingSize));
         var subNetworkCount = reader.ReadInt32();
         _subnetwork.Deserialize(reader.ReadBytes(subNetworkCount));
 
@@ -655,7 +686,6 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Initialize the output layer with the correct dimensions
-        int embeddingSize = Architecture.GetOutputShape()[0];
         _outputLayer = new DenseLayer<T>(1, new SigmoidActivation<T>() as IActivationFunction<T>);
         _outputLayer.SetParameters(outputLayerParams);
 
@@ -696,7 +726,7 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         {
             AdditionalInfo = new Dictionary<string, object>
             {
-                { "EmbeddingSize", Architecture.GetOutputShape()[0] },
+                { "EmbeddingSize", _options.EmbeddingSize },
                 { "SubnetworkType", _subnetwork.GetType().Name },
                 { "TotalParameters", GetParameterCount() },
                 { "InputShape", string.Join(",", Architecture.GetInputShape()) }
