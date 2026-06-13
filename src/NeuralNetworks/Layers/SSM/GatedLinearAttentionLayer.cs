@@ -89,6 +89,12 @@ internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
 
     private Tensor<T> _outputBias;
 
+    // Fixed (non-trainable) unit-gamma / zero-beta for the residual-block output LayerNorm.
+    // Allocated once and reused so the hot forward path doesn't re-allocate them per step.
+    private Tensor<T> _residualNormGamma;
+    private Tensor<T> _residualNormBeta;
+    private const double ResidualNormEpsilon = 1e-5;
+
     // Cached values
     private Tensor<T>? _lastInput;
     private Tensor<T>? _lastOutput;
@@ -187,6 +193,8 @@ internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
         _gateBias = new Tensor<T>([totalDim]);
         _outputWeights = new Tensor<T>([totalDim, modelDimension]);
         _outputBias = new Tensor<T>([modelDimension]);
+        _residualNormGamma = new Tensor<T>([modelDimension]);
+        _residualNormBeta = new Tensor<T>([modelDimension]);
 
         InitializeParameters();
     }
@@ -200,6 +208,8 @@ internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
         _gateBias.Fill(NumOps.Zero);
         InitializeTensor(_outputWeights);
         _outputBias.Fill(NumOps.Zero);
+        _residualNormGamma.Fill(NumOps.One);
+        _residualNormBeta.Fill(NumOps.Zero);
     }
 
     private void InitializeTensor(Tensor<T> tensor)
@@ -315,12 +325,9 @@ internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
         // extra trainable tensors) keeps the per-layer signal at unit scale so the stacked
         // blocks don't collapse the activations to zero gradient. Mirrors the xLSTM /
         // recurrence-block fix.
-        {
-            var resGamma = new Tensor<T>(new[] { _modelDimension });
-            var resBeta = new Tensor<T>(new[] { _modelDimension });
-            for (int j = 0; j < _modelDimension; j++) { resGamma[j] = NumOps.One; resBeta[j] = NumOps.Zero; }
-            output3D = Engine.LayerNorm(Engine.TensorAdd(output3D, input3D), resGamma, resBeta, 1e-5, out _, out _);
-        }
+        output3D = Engine.LayerNorm(
+            Engine.TensorAdd(output3D, input3D),
+            _residualNormGamma, _residualNormBeta, ResidualNormEpsilon, out _, out _);
 
         var result = ApplyActivation(output3D);
         _lastOutput = result;
