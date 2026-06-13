@@ -1000,7 +1000,10 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
 
         Assert.NotNull(clone);
         Assert.NotSame(model, clone);
-        Assert.Equal(model.ParameterCount, (int)clone.ParameterCount);
+        // ParameterCount is long: WanVideo-14B reports ~15.2 B params, far past
+        // int.MaxValue, so the comparison must stay in long arithmetic (a prior
+        // (int) cast overflowed and made the assertion meaningless at this scale).
+        Assert.Equal(model.ParameterCount, clone.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]

@@ -448,7 +448,17 @@ public class WanVideoModel<T> : VideoDiffusionModelBase<T>
             numHeads: numHeads,
             patchSize: PATCH_SIZE,
             contextDim: CONTEXT_DIM);
-        clonedDit.SetParameters(_dit.GetParameters());
+        // Copy weights only when the source has actually materialized them.
+        // For a never-forwarded model (the common case for foundation-scale
+        // configs like WanVideo-14B ≈ 15 B params) the freshly-constructed
+        // clonedDit is already an equivalent lazy copy — its parameters are
+        // fully determined by the shared config — so we skip the copy entirely.
+        // This avoids the flat-Vector<T> round-trip, which is both
+        // int.MaxValue-bounded (15 B > 2.1 B) and far larger than host RAM.
+        // When the source IS resolved, CopyParametersFrom does a per-layer
+        // copy (each layer < int.MaxValue) rather than one flat aggregate.
+        if (_dit.AreLayersInitialized)
+            clonedDit.CopyParametersFrom(_dit);
 
         return new WanVideoModel<T>(
             dit: clonedDit,

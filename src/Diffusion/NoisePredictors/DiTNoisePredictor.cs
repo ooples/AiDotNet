@@ -182,6 +182,20 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     private readonly object _initLock = new();
 
     /// <summary>
+    /// Whether this predictor's lazy weight tensors have been materialized yet
+    /// (i.e. a forward pass, <see cref="GetParameters"/>, or
+    /// <see cref="SetParameters"/> has run). While <c>false</c> the predictor
+    /// holds no resident weights — its parameters are fully determined by its
+    /// construction config — so a clone can be produced by re-running the same
+    /// construction rather than copying a flat parameter vector. That matters
+    /// for foundation-scale configs (e.g. WanVideo-14B ≈ 15 B params) where the
+    /// flat <see cref="Vector{T}"/> copy path is both int.MaxValue-bounded and
+    /// far larger than host RAM. Callers that need a true deep copy of resolved
+    /// weights use <see cref="CopyParametersFrom"/> instead.
+    /// </summary>
+    public bool AreLayersInitialized => _layersInitialized;
+
+    /// <summary>
     /// Position embeddings (learnable).
     /// </summary>
     private Tensor<T>? _posEmbed;
