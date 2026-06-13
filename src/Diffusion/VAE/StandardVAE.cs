@@ -150,6 +150,13 @@ public class StandardVAE<T> : VAEModelBase<T>
     private Tensor<T>? _cachedLogVar;
 
     /// <summary>
+    /// True once this VAE has runtime state that a clone must preserve.
+    /// Constructor-time lazy/eager placeholders do not force default scaffold
+    /// clones to materialize the full paper-scale VAE.
+    /// </summary>
+    private bool _preserveMaterializedParameters;
+
+    /// <summary>
     /// Input channels (3 for RGB).
     /// </summary>
     private readonly int _inputChannels;
@@ -369,6 +376,7 @@ public class StandardVAE<T> : VAEModelBase<T>
     /// <inheritdoc />
     public override Tensor<T> Encode(Tensor<T> image, bool sampleMode = true)
     {
+        _preserveMaterializedParameters = true;
         var (mean, logVar) = EncodeWithDistribution(image);
 
         if (sampleMode)
@@ -419,6 +427,7 @@ public class StandardVAE<T> : VAEModelBase<T>
     /// <inheritdoc />
     public override Tensor<T> Decode(Tensor<T> latent)
     {
+        _preserveMaterializedParameters = true;
         if (_postQuantConv == null || _outputConv == null)
         {
             throw new InvalidOperationException("Decoder layers not initialized.");
@@ -563,8 +572,57 @@ public class StandardVAE<T> : VAEModelBase<T>
     }
 
     /// <inheritdoc />
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        foreach (var layer in EnumerateAllLayers())
+        {
+            foreach (var parameter in EnumerateMaterializedParameters(layer))
+                yield return parameter;
+        }
+    }
+
+    private IEnumerable<ILayer<T>?> EnumerateAllLayers()
+    {
+        yield return _inputConv;
+
+        foreach (var layer in _encoderLayers)
+            yield return layer;
+
+        yield return _meanConv;
+        yield return _logVarConv;
+        yield return _quantConv;
+        yield return _postQuantConv;
+
+        foreach (var layer in _decoderLayers)
+            yield return layer;
+
+        yield return _outputConv;
+    }
+
+    private static IEnumerable<Tensor<T>> EnumerateMaterializedParameters(ILayer<T>? layer)
+    {
+        if (layer is null) yield break;
+
+        if (layer is ITrainableLayer<T> trainable)
+        {
+            foreach (var parameter in trainable.GetTrainableParameters())
+            {
+                if (parameter is null || parameter.Length == 0) continue;
+                yield return parameter;
+            }
+        }
+
+        foreach (var subLayer in layer.GetSubLayers())
+        {
+            foreach (var parameter in EnumerateMaterializedParameters(subLayer))
+                yield return parameter;
+        }
+    }
+
+    /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        _preserveMaterializedParameters = true;
         TriggerLazyShapeResolution();
 
         var index = 0;
@@ -617,29 +675,68 @@ public class StandardVAE<T> : VAEModelBase<T>
             latentScaleFactor: _latentScaleFactor,
             lossFunction: LossFunction);
 
-        // Eager-init BOTH source and clone before snapshotting/setting
-        // parameters. PyTorch-style lazy shape inference makes every internal
-        // layer's ParameterCount = 0 until its first forward, so:
-        //
-        //   * The source needs resolution BEFORE GetParameters(), otherwise
-        //     a freshly constructed StandardVAE snapshots zero-length slices
-        //     and returns an empty vector (the same bug the destination side
-        //     would hit, just at the read end).
-        //
-        //   * The clone needs resolution BEFORE SetParameters(), otherwise
-        //     SetLayerParameters sizes every slice to 0 and writes nothing,
-        //     leaving the clone with fresh random weights instead of the
-        //     original's learned weights.
-        //
-        // Same fix pattern as UNetNoisePredictor.Clone; surfaces in
-        // Clone_ShouldProduceIdenticalOutput as a numerical-divergence
-        // failure (original and clone Predict produce different values from
-        // the SAME input).
-        TriggerLazyShapeResolution();
-        var parameters = GetParameters();
-        clone.TriggerLazyShapeResolution();
-        clone.SetParameters(parameters);
+        // Keep untouched default VAEs structural. Already-materialized eager
+        // tensors are still copied, but lazy tensors are resolved only after
+        // Encode/Decode or SetParameters has established runtime weight state.
+        if (_preserveMaterializedParameters)
+        {
+            TriggerLazyShapeResolution();
+            var parameters = GetParameters();
+            clone.TriggerLazyShapeResolution();
+            clone.SetParameters(parameters);
+        }
+        else
+        {
+            CopyMaterializedParametersTo(clone);
+        }
         return clone;
+    }
+
+    private void CopyMaterializedParametersTo(StandardVAE<T> clone)
+    {
+        using var source = EnumerateMaterializedModelParameters().GetEnumerator();
+        using var target = clone.EnumerateMaterializedModelParameters().GetEnumerator();
+
+        while (source.MoveNext())
+        {
+            if (!target.MoveNext())
+            {
+                throw new InvalidOperationException(
+                    "Clone has fewer materialized tensors than the source VAE. " +
+                    "Architectures may differ or a lazy tensor was materialized without " +
+                    "marking runtime state.");
+            }
+
+            CopyTensorData(source.Current, target.Current);
+        }
+
+        if (target.MoveNext())
+        {
+            throw new InvalidOperationException(
+                "Clone has more materialized tensors than the source VAE. " +
+                "Architectures may differ.");
+        }
+    }
+
+    private IEnumerable<Tensor<T>> EnumerateMaterializedModelParameters()
+    {
+        foreach (var layer in EnumerateAllLayers())
+        {
+            foreach (var parameter in EnumerateMaterializedParameters(layer))
+                yield return parameter;
+        }
+    }
+
+    private static void CopyTensorData(Tensor<T> source, Tensor<T> target)
+    {
+        if (source.Length != target.Length)
+        {
+            throw new InvalidOperationException(
+                $"Cannot copy tensor with {source.Length} elements into tensor " +
+                $"with {target.Length} elements.");
+        }
+
+        source.Data.Span.CopyTo(target.Data.Span);
     }
 
     /// <summary>

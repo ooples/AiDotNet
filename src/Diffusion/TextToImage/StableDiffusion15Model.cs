@@ -606,9 +606,9 @@ public class StableDiffusion15Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        EnsureParameterShapesResolved();
-
-        // Use the UNet's and VAE's own Clone methods to preserve actual architecture
+        // Delegate to submodule clones so default lazy paper-scale scaffolds stay
+        // lazy. Materialized/trained submodules are responsible for preserving
+        // their own weights.
         var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
         var clonedVae = (StandardVAE<T>)_vae.Clone();
 

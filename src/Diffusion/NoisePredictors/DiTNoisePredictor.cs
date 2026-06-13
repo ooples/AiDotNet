@@ -816,8 +816,10 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         var kReshaped = ReshapeForHeads(k, batch, condSeqLen, _numHeads, headDim);
         var vReshaped = ReshapeForHeads(v, batch, condSeqLen, _numHeads, headDim);
 
-        // Compute attention scores: Q * K^T using batched matmul [batch*heads, seqLen, condSeqLen]
-        var kTransposed = Engine.TensorTranspose<T>(kReshaped);
+        // Compute attention scores: Q * K^T using batched matmul.
+        // K is batched [batch*heads, condSeqLen, headDim], so transpose only
+        // the last two dimensions to [batch*heads, headDim, condSeqLen].
+        var kTransposed = Engine.TensorPermute(kReshaped, new[] { 0, 2, 1 });
         var scores = Engine.TensorBatchMatMul<T>(qReshaped, kTransposed);
 
         // Scale scores
@@ -1281,34 +1283,42 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     public override bool SupportsCrossAttention => true;
 
     /// <summary>
-    /// Streams DiT's trainable weights per-layer, yielding from
-    /// <c>_patchEmbed</c>, the time-embedding MLPs, the AdaLN modulation
-    /// projection, every transformer block's sub-layers, and the final
-    /// norm + projection. Per-tensor streaming dodges the foundation-scale
-    /// buffer-allocation path in <see cref="GetParameters"/> that overflows
-    /// when total parameter count gets close to (or above) int.MaxValue —
-    /// each chunk is a single layer's parameter vector, well within the
-    /// per-tensor int contract documented in
-    /// <see cref="IParameterizable{T,TInput,TOutput}.ParameterCount"/>.
+    /// Streams DiT's materialized trainable tensors directly from each layer,
+    /// matching the PyTorch <c>nn.Module.parameters()</c> contract: yielded
+    /// tensors are the same objects used by forward/training, not flat copies.
+    /// Lazy paper-scale defaults may report a structural
+    /// <see cref="ParameterCount"/> before their tensors have been allocated;
+    /// in that state this iterator yields only already-materialized tensors
+    /// instead of forcing a multi-billion-parameter allocation.
     /// </summary>
     public override IEnumerable<Tensor<T>> GetParameterChunks()
     {
-        // Mirror ParameterCount's enumeration exactly — including
-        // EnsureLayersInitialized() to materialize lazy layers — so
-        // sum-of-chunks always equals ParameterCount.
         EnsureLayersInitialized();
 
         foreach (var layer in EnumerateAllLayers())
         {
-            if (layer is null) continue;
-            int len = layer.ParameterCount > int.MaxValue
-                ? throw new InvalidOperationException(
-                    $"Layer '{layer.GetType().Name}' has {layer.ParameterCount} parameters, " +
-                    $"exceeding int.MaxValue. Single-layer chunks must fit in int per the " +
-                    $"Vector.Length contract.")
-                : (int)layer.ParameterCount;
-            if (len == 0) continue;
-            yield return new Tensor<T>(new[] { len }, layer.GetParameters());
+            foreach (var parameter in EnumerateMaterializedParameters(layer))
+                yield return parameter;
+        }
+    }
+
+    private static IEnumerable<Tensor<T>> EnumerateMaterializedParameters(ILayer<T>? layer)
+    {
+        if (layer is null) yield break;
+
+        if (layer is ITrainableLayer<T> trainable)
+        {
+            foreach (var parameter in trainable.GetTrainableParameters())
+            {
+                if (parameter is null || parameter.Length == 0) continue;
+                yield return parameter;
+            }
+        }
+
+        foreach (var subLayer in layer.GetSubLayers())
+        {
+            foreach (var parameter in EnumerateMaterializedParameters(subLayer))
+                yield return parameter;
         }
     }
 
