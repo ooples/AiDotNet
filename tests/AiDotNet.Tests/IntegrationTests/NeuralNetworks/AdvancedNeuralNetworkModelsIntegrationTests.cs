@@ -4066,6 +4066,24 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "MeshCNN output should have elements");
     }
 
+    [Fact]
+    public void MeshCNN_Predict_EmptyEdges_ThrowsClearError()
+    {
+        // Arrange - valid adjacency, but an empty-mesh (0-edge) input. Without the
+        // guard the [0, features] input reshapes to a degenerate [1, 0, channels]
+        // tensor that fails downstream in pooling with an opaque error.
+        int maxAdjacent = 4;
+        var meshCnn = new MeshCNN<float>(numClasses: 4, inputFeatures: 5);
+        var edgeAdjacency = new int[4, maxAdjacent];
+        meshCnn.SetEdgeAdjacency(edgeAdjacency);
+
+        var emptyInput = CreateRandomTensor([0, 5]);
+
+        // Act + Assert - fails fast with a clear, actionable message.
+        var ex = Assert.Throws<ArgumentException>(() => meshCnn.Predict(emptyInput));
+        Assert.Contains("0 edges", ex.Message);
+    }
+
     [Fact(Timeout = 120000)]
     public async Task MeshCNN_GetParameterCount_ReturnsPositiveValue()
     {
