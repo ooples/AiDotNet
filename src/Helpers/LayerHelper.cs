@@ -31248,7 +31248,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
             yield return new ExtendedLSTMLayer<T>(maxSeqLength, modelDimension, numHeads);
         yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(vocabSize, (IActivationFunction<T>?)null);
+        yield return new DenseLayer<T>(vocabSize, new SoftmaxActivation<T>() as IActivationFunction<T>);  // probabilities: CategoricalCrossEntropyLoss expects them (from_logits=false); matches GetDefaultOutputActivation(TextGeneration)=Softmax
     }
 
     /// <summary>
@@ -31266,7 +31266,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
             yield return new GatedLinearAttentionLayer<T>(maxSeqLength, modelDimension, numHeads);
         yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(vocabSize, (IActivationFunction<T>?)null);
+        yield return new DenseLayer<T>(vocabSize, new SoftmaxActivation<T>() as IActivationFunction<T>);  // probabilities: CategoricalCrossEntropyLoss expects them (from_logits=false); matches GetDefaultOutputActivation(TextGeneration)=Softmax
     }
 
     /// <summary>
@@ -31284,7 +31284,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
             yield return new GatedDeltaNetLayer<T>(maxSeqLength, modelDimension, numHeads);
         yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(vocabSize, (IActivationFunction<T>?)null);
+        yield return new DenseLayer<T>(vocabSize, new SoftmaxActivation<T>() as IActivationFunction<T>);  // probabilities: CategoricalCrossEntropyLoss expects them (from_logits=false); matches GetDefaultOutputActivation(TextGeneration)=Softmax
     }
 
     /// <summary>
@@ -31301,7 +31301,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
             yield return new RealGatedLinearRecurrenceLayer<T>(maxSeqLength, modelDimension);
         yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(vocabSize, (IActivationFunction<T>?)null);
+        yield return new DenseLayer<T>(vocabSize, new SoftmaxActivation<T>() as IActivationFunction<T>);  // probabilities: CategoricalCrossEntropyLoss expects them (from_logits=false); matches GetDefaultOutputActivation(TextGeneration)=Softmax
     }
 
     /// <summary>
@@ -31318,7 +31318,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
             yield return new RealGatedLinearRecurrenceLayer<T>(maxSeqLength, modelDimension);
         yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(vocabSize, (IActivationFunction<T>?)null);
+        yield return new DenseLayer<T>(vocabSize, new SoftmaxActivation<T>() as IActivationFunction<T>);  // probabilities: CategoricalCrossEntropyLoss expects them (from_logits=false); matches GetDefaultOutputActivation(TextGeneration)=Softmax
     }
 
     /// <summary>
@@ -31335,7 +31335,7 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
             yield return new RealGatedLinearRecurrenceLayer<T>(maxSeqLength, modelDimension);
         yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(vocabSize, (IActivationFunction<T>?)null);
+        yield return new DenseLayer<T>(vocabSize, new SoftmaxActivation<T>() as IActivationFunction<T>);  // probabilities: CategoricalCrossEntropyLoss expects them (from_logits=false); matches GetDefaultOutputActivation(TextGeneration)=Softmax
     }
 
     /// <summary>

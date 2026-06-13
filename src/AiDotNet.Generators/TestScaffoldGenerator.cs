@@ -1925,13 +1925,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     $"{sizeExpr})";
 
+                // Paper-scale language models (Griffin/Hawk/RecurrentGemma) default to
+                // VocabSize=256000 (De et al. 2024), giving a [modelDim, 256000] head and
+                // [256000, modelDim] embedding = ~130M fp64 params whose per-step Adam update
+                // + dense embedding gradient push a single Train() to ~1 s. That is a paper-
+                // FAITHFUL default, not a unit-test scale: at 256000 the 100-step
+                // LossStrictlyDecreases / 200-step MoreData invariants overrun their timeouts.
+                // Construct the TEST instance at a small vocab so the FULL-strength
+                // invariants (every iteration, every assertion) run — testing correctness at
+                // a runnable scale, exactly as transformer unit tests use d_model=64 rather
+                // than the paper's thousands. The ctor's vocabSize parameter is the only
+                // thing scaled; modelDim/numLayers/the recurrence all stay paper-faithful.
+                string vocabArg = IsPaperScaleLanguageModel(model.ClassName)
+                    ? ", vocabSize: 4096" : "";
+
                 if (model.TypeParameterCount == 0)
                 {
-                    constructorExpr = $"new {typeName}({archExpr})";
+                    constructorExpr = $"new {typeName}({archExpr}{vocabArg})";
                 }
                 else if (model.TypeParameterCount == 1)
                 {
-                    constructorExpr = $"new {typeName}<double>({archExpr})";
+                    constructorExpr = $"new {typeName}<double>({archExpr}{vocabArg})";
                 }
                 else if (model.TypeParameterCount == 2)
                 {
