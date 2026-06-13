@@ -69,6 +69,78 @@ public static class DataSplitter
             "Supported: (Matrix<T>, Vector<T>) or (Tensor<T>, Tensor<T>).");
     }
 
+    /// <summary>
+    /// Computes train/validation/test partition sizes that always sum to
+    /// <paramref name="totalSamples"/> and never leave a requested partition empty
+    /// when the data can afford it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The split ratios are fractions, so multiplying them by a
+    /// small row count and rounding down (<c>floor</c>) can accidentally produce a
+    /// partition with zero rows — for example one row at 70/15/15 rounds to
+    /// "0 train, 0 validation, 1 test", and any fewer than seven rows leaves the
+    /// validation set empty. An empty <i>training</i> set is the worst case: the model
+    /// never trains and its layers stay at their random initial values. This method
+    /// guarantees a usable split by giving training priority and then handing each
+    /// other requested partition at least one row once there are enough rows to go
+    /// around, reclaiming those rows from the largest partition so the totals still
+    /// add up. For datasets large enough that <c>floor</c> already fills every
+    /// partition, the result is identical to the plain ratio split.
+    /// </para>
+    /// </remarks>
+    private static (int trainSize, int validationSize, int testSize) ComputeSplitSizes(
+        int totalSamples, double trainRatio, double validationRatio)
+    {
+        if (totalSamples <= 0)
+        {
+            return (0, 0, 0);
+        }
+
+        bool wantValidation = validationRatio > 0.0;
+        bool wantTest = (1.0 - trainRatio - validationRatio) > 0.0;
+        int wantedPartitions = 1 + (wantValidation ? 1 : 0) + (wantTest ? 1 : 0);
+
+        // Fewer rows than requested partitions (1 or 2 rows): training takes
+        // priority — a model cannot learn from an empty set — then test, then
+        // validation gets whatever (if anything) is left.
+        if (totalSamples < wantedPartitions)
+        {
+            int tinyTrain = 1;
+            int tinyTest = (wantTest && totalSamples >= 2) ? 1 : 0;
+            return (tinyTrain, totalSamples - tinyTrain - tinyTest, tinyTest);
+        }
+
+        int trainSize = (int)(totalSamples * trainRatio);
+        int validationSize = (int)(totalSamples * validationRatio);
+        int testSize = totalSamples - trainSize - validationSize;
+
+        // Integer floor() can still starve a single partition to zero even when the
+        // data could afford it. Promote each starved-but-requested partition to one
+        // row, reclaiming it from the larger of the other two so the totals still sum
+        // to totalSamples and the dominant (training) share is preferred on ties.
+        if (trainSize < 1)
+        {
+            if (validationSize >= testSize) { validationSize--; }
+            else { testSize--; }
+            trainSize++;
+        }
+        if (wantValidation && validationSize < 1)
+        {
+            if (trainSize > testSize) { trainSize--; }
+            else { testSize--; }
+            validationSize++;
+        }
+        if (wantTest && testSize < 1)
+        {
+            if (trainSize > validationSize) { trainSize--; }
+            else { validationSize--; }
+            testSize++;
+        }
+
+        return (trainSize, validationSize, testSize);
+    }
+
     private static (Matrix<T> XTrain, Vector<T> yTrain, Matrix<T> XVal, Vector<T> yVal, Matrix<T> XTest, Vector<T> yTest)
         SplitMatrix<T>(
             Matrix<T> X,
@@ -79,9 +151,7 @@ public static class DataSplitter
             int randomSeed)
     {
         int totalSamples = X.Rows;
-        int trainSize = (int)(totalSamples * trainRatio);
-        int validationSize = (int)(totalSamples * validationRatio);
-        int testSize = totalSamples - trainSize - validationSize;
+        var (trainSize, validationSize, testSize) = ComputeSplitSizes(totalSamples, trainRatio, validationRatio);
 
         var indices = Enumerable.Range(0, totalSamples).ToList();
         if (shuffle)
@@ -132,9 +202,7 @@ public static class DataSplitter
             int randomSeed)
     {
         int totalSamples = X.Shape[0];
-        int trainSize = (int)(totalSamples * trainRatio);
-        int validationSize = (int)(totalSamples * validationRatio);
-        int testSize = totalSamples - trainSize - validationSize;
+        var (trainSize, validationSize, testSize) = ComputeSplitSizes(totalSamples, trainRatio, validationRatio);
 
         var indices = Enumerable.Range(0, totalSamples).ToList();
         if (shuffle)
