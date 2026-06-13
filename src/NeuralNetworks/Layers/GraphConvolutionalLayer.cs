@@ -197,10 +197,13 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     private bool _useSparseAggregation = false;
 
     // When true, a Forward with no adjacency set falls back to a self-loop
-    // identity adjacency. With A = I, the Kipf-Welling propagation rule
-    // degenerates to a per-node linear transform, which is the safest graph
-    // identity for synthetic probes and callers that do not have edges yet.
-    private readonly bool _implicitIdentityWhenUnset;
+    // identity adjacency instead of throwing. Off by default (a graph conv is
+    // undefined without a graph, Kipf & Welling 2017); models that legitimately
+    // run on plain sequences without an explicit graph (e.g. GraphCodeBERT on a
+    // token stream with no data-flow edges) opt in. DeserializationHelper
+    // reconstructs cloned/round-tripped graph layers with this enabled so a
+    // model whose adjacency is only set at runtime survives serialization.
+    private bool _implicitIdentityWhenUnset;
 
     /// <summary>
     /// Stores the gradients for the weights calculated during the backward pass.
@@ -348,7 +351,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </para>
     /// </remarks>
     public GraphConvolutionalLayer(int inputFeatures, int outputFeatures, IActivationFunction<T>? activationFunction = null,
-        bool implicitIdentityWhenUnset = true)
+        bool implicitIdentityWhenUnset = false)
         : base([inputFeatures], [outputFeatures], activationFunction ?? new IdentityActivation<T>())
     {
         if (inputFeatures <= 0)
@@ -410,7 +413,6 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             throw new ArgumentOutOfRangeException(nameof(outputFeatures), "Output features must be positive.");
         }
 
-        _implicitIdentityWhenUnset = true;
         InputFeatures = inputFeatures;
         OutputFeatures = outputFeatures;
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
@@ -520,6 +522,17 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// In a molecule, it would show which atoms are bonded to each other.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Post-construction equivalent of the <c>implicitIdentityWhenUnset</c> ctor flag: enables the
+    /// self-loops-only (identity) tolerance for callers that constructed the layer strictly but later
+    /// need the scaffold / clone / deserialize tolerance. The default remains strict (throw on a
+    /// missing graph); this is an explicit opt-in, never a silent default.
+    /// </summary>
+    public void EnableImplicitIdentityAdjacency()
+    {
+        _implicitIdentityWhenUnset = true;
+    }
+
     public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
     {
         // Check if we need to re-extract edges (new matrix or first time)

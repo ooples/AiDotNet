@@ -1061,6 +1061,15 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Until the gate weights are actually allocated (_isInitialized), the real input
+        // width is authoritative. A stale _inputSize — copied by Clone (or a parameter-load
+        // that recorded a width without allocating the matching gate weights) — would
+        // otherwise drive EnsureInitialized, which runs BEFORE OnFirstForward, to allocate
+        // [_hiddenSize, staleWidth] gate weights, and the per-timestep matmul then fails
+        // against the actual input width (ooples/AiDotNet#1589: LSTM-CRF predict path threw
+        // "Matrix dimensions incompatible: [B,realWidth] x [4*hidden,staleWidth]").
+        if (!_isInitialized && input.Shape.Length >= 1)
+            _inputSize = input.Shape[input.Shape.Length - 1];
         // Resolve _inputSize from input.Shape[^1] and allocate weights on first call.
         // Idempotent — gated by _isInitialized.
         EnsureInitializedFromInput(input);
@@ -2431,10 +2440,18 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        if (!_isInitialized || _inputSize <= 0)
+        // The parameter vector's length is authoritative for the gate-weight layout. Re-infer
+        // _inputSize from it whenever the layer hasn't resolved a width yet OR the current
+        // _inputSize disagrees with the vector (e.g. a clone copied a stale width without
+        // allocating the matching gate weights — ooples/AiDotNet#1589: LSTM-CRF Clone tests
+        // threw "Expected 91600 parameters, but got 80400" because the clone's LSTM carried
+        // _inputSize=128 while the source params encode input=100).
+        int expectedForCurrent = _inputSize > 0
+            ? 4 * (_hiddenSize * _inputSize) + 4 * (_hiddenSize * _hiddenSize) + 4 * _hiddenSize
+            : -1;
+        if (!_isInitialized || _inputSize <= 0 || parameters.Length != expectedForCurrent)
         {
-            // Lazy LSTM with no resolved input width — try to recover by inferring
-            // _inputSize from parameters.Length. The flat layout is:
+            // Recover by inferring _inputSize from parameters.Length. The flat layout is:
             //   4 * (hidden*input) + 4 * (hidden*hidden) + 4 * hidden
             // → input = (params - 4*hidden*hidden - 4*hidden) / (4*hidden)
             int hidden4 = 4 * _hiddenSize;
@@ -2445,13 +2462,12 @@ public partial class LSTMLayer<T> : LayerBase<T>
                 if (inferredInput > 0)
                 {
                     _inputSize = inferredInput;
-                    // Allocate weight tensors now (we know hiddenSize and inferredInput),
-                    // but DO NOT call ResolveFromShape with a synthetic shape — that would
-                    // bake a fake rank-2 [1, inferredInput] into InputShape/OutputShape and
-                    // override the real rank-3 [B, T, F] sequence shape on the first
-                    // actual Forward(...). Leaving _isInitialized true (set inside
-                    // EnsureInitialized) but IsShapeResolved false defers shape resolution
-                    // to OnFirstForward, which receives the real input tensor.
+                    // Force EnsureInitialized to (re)allocate the gate weights at the inferred
+                    // width — without clearing the flag it would early-return and leave stale
+                    // [_hiddenSize, oldWidth] weights that the copy loop below then overflows.
+                    // IsShapeResolved stays false so OnFirstForward still binds the real rank-3
+                    // [B, T, F] sequence shape on the first actual Forward(...).
+                    _isInitialized = false;
                     EnsureInitialized();
                 }
                 else
