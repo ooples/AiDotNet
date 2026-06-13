@@ -48,6 +48,23 @@ public class FTTransformerClassifierTests
         return x;
     }
 
+    // Linearly-separable dataset: class = i % NumClasses, with the class encoded in
+    // the features (feature[cls] = 1, others 0) + tiny deterministic jitter.
+    private static (Tensor<double> x, int[] y) MakeSeparable(int n, int seed)
+    {
+        var rng = new Random(seed);
+        var x = new Tensor<double>([n, NumNumerical]);
+        var y = new int[n];
+        for (int i = 0; i < n; i++)
+        {
+            int cls = i % NumClasses;
+            y[i] = cls;
+            for (int f = 0; f < NumNumerical; f++)
+                x[i, f] = (f == cls ? 1.0 : 0.0) + 0.01 * (rng.NextDouble() - 0.5);
+        }
+        return (x, y);
+    }
+
     [Fact]
     public void SaveLoad_RoundTrip_PreservesParametersAndPredictions()
     {
@@ -80,5 +97,33 @@ public class FTTransformerClassifierTests
         for (int i = 0; i < pOrig.Length; i++)
             Assert.True(Math.Abs(pOrig[i] - pLoaded[i]) < 1e-9,
                 $"Loaded model probability[{i}]={pLoaded[i]} != original {pOrig[i]} — save/load not faithful.");
+    }
+
+    [Fact]
+    public void Train_ReducesCrossEntropy_OnSeparableData_AndStaysFinite()
+    {
+        // The classifier train path: TrainStep runs a tape-tracked forward +
+        // softmax cross-entropy, backprops to every weight (tokenizer + transformer
+        // + head), and applies SGD. On a separable task the loss must drop and stay
+        // finite. (Previously TrainStep had no backward and threw on UpdateParameters.)
+        var model = NewModel();
+        var (x, y) = MakeSeparable(9, seed: 2);
+
+        double firstLoss = Convert.ToDouble(model.TrainStep(x, y, learningRate: 0.05));
+        double lastLoss = firstLoss;
+        for (int step = 0; step < 60; step++)
+        {
+            lastLoss = Convert.ToDouble(model.TrainStep(x, y, learningRate: 0.05));
+            Assert.False(double.IsNaN(lastLoss), $"Loss NaN at step {step} — training diverged.");
+            Assert.False(double.IsInfinity(lastLoss), $"Loss Inf at step {step} — training diverged.");
+        }
+
+        Assert.True(lastLoss < firstLoss,
+            $"Cross-entropy did not decrease (first={firstLoss:F4}, last={lastLoss:F4}) — classifier train path broken.");
+
+        var p = model.GetParameters();
+        for (int i = 0; i < p.Length; i++)
+            Assert.False(double.IsNaN(p[i]) || double.IsInfinity(p[i]),
+                $"Parameter[{i}] non-finite after training.");
     }
 }
