@@ -1896,6 +1896,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         inputSize1D = GetForecastingPaperContextLength(model.ClassName);
                     }
 
+                    // Sequence-labeling NER models (LSTM-CRF family) are language-domain, so the
+                    // generic branch above picks inputSize1D=128 — but the NER InputShape override
+                    // below feeds [seqLen, EmbeddingDimension] with EmbeddingDimension=100. The
+                    // architecture's inputSize MUST equal that embedding width, otherwise the
+                    // lazy BiLSTM resolves its gate weights to 128 during ResolveLazyLayerShapes
+                    // (the architecture-driven warm-up) and the real 100-wide forward then throws
+                    // "Matrix dimensions incompatible". Keep this in lockstep with the NER
+                    // InputShape feature dim emitted in EmitSequenceLabelingNEROverrides.
+                    if (family == TestFamily.SequenceLabelingNER)
+                    {
+                        inputSize1D = 100;
+                    }
+
                     inputTypeExpr = "AiDotNet.Enums.InputType.OneDimensional";
                     sizeExpr = $"inputSize: {inputSize1D}, outputSize: 4";
                 }
