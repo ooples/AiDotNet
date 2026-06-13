@@ -405,7 +405,13 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
     /// </summary>
     public override void SetParameters(Vector<T> parameters)
     {
-        int baseCount = (int)(base.ParameterCount - _classificationHead.ParameterCount);
+        // GetParameters concatenates [base.GetParameters() (= base.ParameterCount)][head].
+        // base.ParameterCount is the explicit-base call (backbone only, WITHOUT the head),
+        // so the base slice is exactly base.ParameterCount. The previous
+        // `base.ParameterCount - head.ParameterCount` under-counted the base by the head
+        // size, leaving the head to read trailing base params — corrupting both halves
+        // (the save/load round-trip then failed).
+        int baseCount = checked((int)base.ParameterCount);
         var baseParams = new Vector<T>(baseCount);
         for (int i = 0; i < baseCount; i++)
         {
