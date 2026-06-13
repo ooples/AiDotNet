@@ -198,7 +198,7 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
 
         Assert.NotNull(clone);
         Assert.NotSame(model, clone);
-        Assert.Equal(model.ParameterCount, (int)clone.ParameterCount);
+        Assert.Equal(model.ParameterCount, clone.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
@@ -1000,7 +1000,7 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
 
         Assert.NotNull(clone);
         Assert.NotSame(model, clone);
-        Assert.Equal(model.ParameterCount, (int)clone.ParameterCount);
+        Assert.Equal(model.ParameterCount, clone.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
@@ -1158,15 +1158,27 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
     }
 
     [Fact(Timeout = 120000)]
-    public async Task UdioModel_SetParameters_DoesNotThrow()
+    public async Task UdioModel_HasPaperScaleChunkedParameters()
     {
+        await Task.Yield();
         var model = new UdioModel<double>();
 
-        var parameters = model.GetParameters();
-        model.SetParameters(parameters);
+        Assert.True(model.ParameterCount > int.MaxValue,
+            "Udio's paper-scale DiT backbone should report a foundation-scale parameter count.");
 
-        var retrievedParams = model.GetParameters();
-        Assert.Equal(parameters.Length, retrievedParams.Length);
+        long chunkSum = 0;
+        int chunkCount = 0;
+        foreach (var chunk in model.GetParameterChunks())
+        {
+            chunkSum += chunk.Length;
+            chunkCount++;
+
+            if (chunkSum > int.MaxValue) break;
+        }
+
+        Assert.True(chunkCount > 0, "Chunked walk should yield at least one tensor.");
+        Assert.True(chunkSum > int.MaxValue,
+            "Chunked parameter walk should cross the flat Vector<T> int32 ceiling without materializing one aggregate buffer.");
     }
 
     [Fact(Timeout = 120000)]

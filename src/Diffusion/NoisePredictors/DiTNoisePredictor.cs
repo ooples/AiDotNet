@@ -1151,6 +1151,66 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         target.SetParameters(source.GetParameters());
     }
 
+    private IEnumerable<ILayer<T>?> EnumerateAllLayers()
+    {
+        yield return _patchEmbed;
+        yield return _timeEmbed1;
+        yield return _timeEmbed2;
+        yield return _labelEmbed;
+        yield return _adaln_modulation;
+        foreach (var block in _blocks)
+        {
+            yield return block.Norm1;
+            yield return block.Attention;
+            yield return block.Norm2;
+            yield return block.MLP1;
+            yield return block.MLP2;
+            yield return block.AdaLNModulation;
+            yield return block.CrossAttnNorm;
+            yield return block.CrossAttnQ;
+            yield return block.CrossAttnK;
+            yield return block.CrossAttnV;
+            yield return block.CrossAttnOut;
+        }
+        yield return _finalNorm;
+        yield return _outputProj;
+    }
+
+    private bool HasMaterializedParameters()
+    {
+        if (!_layersInitialized) return false;
+
+        foreach (var layer in EnumerateAllLayers())
+        {
+            if (HasMaterializedParameters(layer))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool HasMaterializedParameters(ILayer<T>? layer)
+    {
+        if (layer is null) return false;
+
+        if (layer is ITrainableLayer<T> trainable)
+        {
+            foreach (var parameter in trainable.GetTrainableParameters())
+            {
+                if (parameter.Length > 0)
+                    return true;
+            }
+        }
+
+        foreach (var subLayer in layer.GetSubLayers())
+        {
+            if (HasMaterializedParameters(subLayer))
+                return true;
+        }
+
+        return false;
+    }
+
     /// <inheritdoc />
     public override long ParameterCount
     {
@@ -1204,8 +1264,10 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             mlpRatio: _mlpRatio,
             latentSpatialSize: _latentSpatialSize);
 
-        // Preserve trained weights
-        clone.SetParameters(GetParameters());
+        // Preserve trained/materialized weights without forcing a foundation-scale
+        // default constructor to allocate and copy billions of random parameters.
+        if (HasMaterializedParameters())
+            clone.CopyParametersFrom(this);
         return clone;
     }
 
@@ -1235,31 +1297,6 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         // EnsureLayersInitialized() to materialize lazy layers — so
         // sum-of-chunks always equals ParameterCount.
         EnsureLayersInitialized();
-
-        IEnumerable<ILayer<T>?> EnumerateAllLayers()
-        {
-            yield return _patchEmbed;
-            yield return _timeEmbed1;
-            yield return _timeEmbed2;
-            yield return _labelEmbed;
-            yield return _adaln_modulation;
-            foreach (var block in _blocks)
-            {
-                yield return block.Norm1;
-                yield return block.Attention;
-                yield return block.Norm2;
-                yield return block.MLP1;
-                yield return block.MLP2;
-                yield return block.AdaLNModulation;
-                yield return block.CrossAttnNorm;
-                yield return block.CrossAttnQ;
-                yield return block.CrossAttnK;
-                yield return block.CrossAttnV;
-                yield return block.CrossAttnOut;
-            }
-            yield return _finalNorm;
-            yield return _outputProj;
-        }
 
         foreach (var layer in EnumerateAllLayers())
         {

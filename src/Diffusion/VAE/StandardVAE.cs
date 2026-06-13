@@ -526,6 +526,8 @@ public class StandardVAE<T> : VAEModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
+        TriggerLazyShapeResolution();
+
         var parameters = new List<T>();
 
         AddLayerParameters(parameters, _inputConv);
@@ -563,6 +565,8 @@ public class StandardVAE<T> : VAEModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        TriggerLazyShapeResolution();
+
         var index = 0;
 
         SetLayerParameters(_inputConv, parameters, ref index);
