@@ -213,14 +213,7 @@ public class StableDiffusion15Model<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => SD15_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override long ParameterCount
-    {
-        get
-        {
-            EnsureParameterShapesResolved();
-            return _unet.ParameterCount + _vae.ParameterCount;
-        }
-    }
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the cross-attention dimension (768 for SD 1.5, matching CLIP ViT-L/14).
