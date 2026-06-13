@@ -70,7 +70,12 @@ public class HawkLanguageModel<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         HawkOptions? options = null)
         : base(architecture,
-            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
+            // Hawk is a language model: its training objective is next-token cross-entropy.
+            // Deriving the loss from architecture.TaskType picked up whatever the caller set
+            // (e.g. Regression -> MSE), and MSE against a softmax probability vector barely
+            // moves (the [0,1/V] outputs can't reach a continuous target), so training never
+            // reduced the loss. Pin TextGeneration cross-entropy like every other LM here.
+            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.TextGeneration))
     {
         _options = options ?? new HawkOptions();
         Options = _options;

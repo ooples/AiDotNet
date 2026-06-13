@@ -125,6 +125,11 @@ public abstract class TimeSeriesModelTestBase
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
+        // Non-forecasting models (anomaly detectors whose Predict returns ±1 labels, spectral
+        // analysers returning frequencies) have no forecast of the target to score, so an R²
+        // against the series is meaningless for them — the same gate the other five forecasting
+        // invariants here already apply; R² simply omitted it.
+        if (!IsForecastingModel) return;
         // Stationary models (MA) cannot capture trends — skip this test for them
         if (!CanCaptureTrend) return;
 

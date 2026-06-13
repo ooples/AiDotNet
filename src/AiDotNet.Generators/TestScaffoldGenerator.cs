@@ -1896,6 +1896,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         inputSize1D = GetForecastingPaperContextLength(model.ClassName);
                     }
 
+                    // Sequence-labeling NER models (LSTM-CRF family) are language-domain, so the
+                    // generic branch above picks inputSize1D=128 — but the NER InputShape override
+                    // below feeds [seqLen, EmbeddingDimension] with EmbeddingDimension=100. The
+                    // architecture's inputSize MUST equal that embedding width, otherwise the
+                    // lazy BiLSTM resolves its gate weights to 128 during ResolveLazyLayerShapes
+                    // (the architecture-driven warm-up) and the real 100-wide forward then throws
+                    // "Matrix dimensions incompatible". Keep this in lockstep with the NER
+                    // InputShape feature dim emitted in EmitSequenceLabelingNEROverrides.
+                    if (family == TestFamily.SequenceLabelingNER)
+                    {
+                        inputSize1D = 100;
+                    }
+
                     inputTypeExpr = "AiDotNet.Enums.InputType.OneDimensional";
                     sizeExpr = $"inputSize: {inputSize1D}, outputSize: 4";
                 }
@@ -1912,13 +1925,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     $"{sizeExpr})";
 
+                // Paper-scale language models (Griffin/Hawk/RecurrentGemma) default to
+                // VocabSize=256000 (De et al. 2024), giving a [modelDim, 256000] head and
+                // [256000, modelDim] embedding = ~130M fp64 params whose per-step Adam update
+                // + dense embedding gradient push a single Train() to ~1 s. That is a paper-
+                // FAITHFUL default, not a unit-test scale: at 256000 the 100-step
+                // LossStrictlyDecreases / 200-step MoreData invariants overrun their timeouts.
+                // Construct the TEST instance at a small vocab so the FULL-strength
+                // invariants (every iteration, every assertion) run — testing correctness at
+                // a runnable scale, exactly as transformer unit tests use d_model=64 rather
+                // than the paper's thousands. The ctor's vocabSize parameter is the only
+                // thing scaled; modelDim/numLayers/the recurrence all stay paper-faithful.
+                string vocabArg = IsPaperScaleLanguageModel(model.ClassName)
+                    ? ", vocabSize: 4096" : "";
+
                 if (model.TypeParameterCount == 0)
                 {
-                    constructorExpr = $"new {typeName}({archExpr})";
+                    constructorExpr = $"new {typeName}({archExpr}{vocabArg})";
                 }
                 else if (model.TypeParameterCount == 1)
                 {
-                    constructorExpr = $"new {typeName}<double>({archExpr})";
+                    constructorExpr = $"new {typeName}<double>({archExpr}{vocabArg})";
                 }
                 else if (model.TypeParameterCount == 2)
                 {
@@ -1976,6 +2003,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine($"public class {testClassName} : {baseClassName}");
         sb.AppendLine("{");
+
+        // Time-series ANOMALY DETECTORS (AnomalyDetectorBase) are time-series models, so they
+        // correctly land in the TimeSeries family — but they implement the IAnomalyDetector
+        // contract: Predict returns anomaly LABELS (-1/+1), not a forecast of the target
+        // (enforced by IAnomalyDetector<T>.Predict and the *PredictClassifiesAnomalyCorrectly*
+        // integration tests). A forecast-R²/trend/equivariance invariant therefore CANNOT apply
+        // to them — it would compare ±1 labels against the value series. Flag them
+        // non-forecasting so those invariants skip; the model's real forecasting core is still
+        // exercised through its anomaly-scoring tests and its Forecast() method. The remaining
+        // TimeSeries invariants (finite/deterministic/shape/clone/metadata/params) still run.
+        if (family == TestFamily.TimeSeries && model.ExtendsAnomalyDetectorBase)
+        {
+            sb.AppendLine("    protected override bool IsForecastingModel => false;");
+        }
 
         // Override InputShape/OutputShape for domain-appropriate test data.
         // Vision/Video/3D models need [C, H, W]; default is [1, 4].
