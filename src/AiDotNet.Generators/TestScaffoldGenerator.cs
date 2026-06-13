@@ -1940,6 +1940,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             factoryBody = $"        => {constructorExpr};";
         }
 
+        if (family == TestFamily.GraphNN)
+        {
+            // Graph models require explicit structure (strict PyTorch-Geometric contract); the scaffold
+            // opts them into implicit self-loops-only adjacency, the test equivalent of supplying an
+            // edge_index. Keeps the generic invariants runnable without a silent model-level default.
+            factoryBody = $"        => WireSyntheticGraph({constructorExpr});";
+        }
+
         var baseClassName = GetBaseClassName(family);
         var factoryMethodName = GetFactoryMethodName(family);
         var returnTypeCode = GetReturnTypeCode(family);

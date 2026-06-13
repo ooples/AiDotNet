@@ -13,6 +13,18 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class GraphNNModelTestBase : NeuralNetworkModelTestBase
 {
+    /// <summary>Opts a graph model into implicit self-loops-only adjacency (the model-level analogue
+    /// of GraphConvolutionalLayer's implicitIdentityWhenUnset flag), so the generic invariant tests
+    /// run under the strict graph contract — the scaffold equivalent of a PyG test supplying an
+    /// edge_index. No-op for models without the method. Matches the numerics of the previous
+    /// model-level default, so this moves no model-family tests.</summary>
+    protected TModel WireSyntheticGraph<TModel>(TModel model)
+    {
+        typeof(TModel).GetMethod("EnableImplicitIdentityAdjacency", System.Type.EmptyTypes)
+            ?.Invoke(model, null);
+        return model;
+    }
+
     // =====================================================
     // GRAPH INVARIANT: Self-Loops Should Not Cause Numerical Issues
     // A diagonal-heavy adjacency matrix (self-loops) is common in graph
