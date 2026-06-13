@@ -1216,7 +1216,23 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         // contracts (the whole DDPM parameter-management test cluster).
         if (_lazyShapesResolved) return;
         _lazyShapesResolved = true;
-        var dummy = new Tensor<T>(new[] { 1, _inputChannels, _inputHeight, _inputHeight });
+
+        // Resolve at the SMALLEST valid spatial size, not the model's native
+        // _inputHeight. Weight shapes are channel-based (conv kernels
+        // [outC,inC,kH,kW], dense [in,out], attention [embed,embed]) and are
+        // INDEPENDENT of spatial H/W — but the forward compute (conv/attention)
+        // scales with H×W. On a foundation-scale UNet a native-resolution
+        // resolve forward costs minutes purely to allocate weights; resolving at
+        // the minimum spatial extent that still survives every downsampling
+        // stage (2^stages, doubled so the bottleneck stays >= 2) allocates the
+        // identical weight tensors with trivial compute. Cap at _inputHeight so
+        // models whose native size is already small aren't enlarged.
+        int numDownsamples = System.Math.Max(0, _channelMultipliers.Length - 1);
+        int safeSpatial = System.Math.Max(2, (1 << numDownsamples) * 2);
+        int resolveSpatial = System.Math.Min(_inputHeight, safeSpatial);
+        if (resolveSpatial < 1) resolveSpatial = _inputHeight;
+
+        var dummy = new Tensor<T>(new[] { 1, _inputChannels, resolveSpatial, resolveSpatial });
         Tensor<T>? dummyCtx = _contextDim > 0
             ? new Tensor<T>(new[] { 1, 1, _contextDim })
             : null;
