@@ -123,8 +123,16 @@ public class IGCIAlgorithm<T> : FunctionalBase<T>
             y[i] = NumOps.ToDouble(data[i, col2]);
         }
 
-        var ux = Uniformize(x);
-        var uy = Uniformize(y);
+        // Affine min-max rescale to [0, 1] — the "uniform reference measure" of
+        // the IGCI slope estimator (Daniusis et al. 2010 / Janzing et al. 2012,
+        // estimator Ĉ_X→Y rescales both variables' RANGE to [0,1] and averages
+        // log-slopes between x-sorted neighbors). The previous code applied a
+        // RANK transform to both sides, which collapses every deterministic
+        // monotone relationship to the identity map (the ranks of x and f(x)
+        // coincide): all slopes become 1, every log-slope is 0, and the score
+        // was exactly 0 for ANY monotone data — IGCI could never orient an edge.
+        var ux = MinMaxRescale(x);
+        var uy = MinMaxRescale(y);
 
         // Sort by uniformized X to compute slopes dy/dx
         var indices = Enumerable.Range(0, n).ToArray();
@@ -160,33 +168,31 @@ public class IGCIAlgorithm<T> : FunctionalBase<T>
     }
 
     /// <summary>
-    /// Uniformizes a vector to [0,1] via rank transform (empirical CDF).
+    /// Affinely rescales a vector to [0,1] (the IGCI uniform reference measure:
+    /// the variable's RANGE is normalized, preserving the shape of the function
+    /// between the variables, unlike a rank transform which destroys it).
     /// </summary>
-    private static double[] Uniformize(double[] values)
+    private static double[] MinMaxRescale(double[] values)
     {
         int n = values.Length;
         var result = new double[n];
 
-        // Compute ranks with average rank for ties
-        var sorted = new int[n];
-        for (int i = 0; i < n; i++) sorted[i] = i;
-        Array.Sort(sorted, (a, b) => values[a].CompareTo(values[b]));
-
-        int rank = 0;
-        while (rank < n)
+        double min = double.PositiveInfinity, max = double.NegativeInfinity;
+        for (int i = 0; i < n; i++)
         {
-            // Find the end of the tie group
-            int tieEnd = rank + 1;
-            while (tieEnd < n && Math.Abs(values[sorted[tieEnd]] - values[sorted[rank]]) < 1e-15)
-                tieEnd++;
-
-            // Assign average rank to all tied values
-            double avgRank = (rank + tieEnd - 1) / 2.0;
-            for (int k = rank; k < tieEnd; k++)
-                result[sorted[k]] = (avgRank + 0.5) / n;
-
-            rank = tieEnd;
+            if (values[i] < min) min = values[i];
+            if (values[i] > max) max = values[i];
         }
+
+        double range = max - min;
+        if (range < 1e-15)
+        {
+            // Constant variable: map everything to 0 (no slope information).
+            return result;
+        }
+
+        for (int i = 0; i < n; i++)
+            result[i] = (values[i] - min) / range;
 
         return result;
     }

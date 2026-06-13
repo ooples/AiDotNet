@@ -168,4 +168,27 @@ public class RecurrentTransformerLazyShapeTests
         var dec = new TransformerDecoderLayer<double>(numHeads: 4, feedForwardDim: 64);
         dec.ClearGradients();
     }
+
+    [Fact]
+    public void LazyLSTM_SetParameters_ReinfersWidth_WhenVectorDisagreesWithStaleInputSize()
+    {
+        // #1589: an LSTM whose _inputSize was resolved to one width (12) but is then handed a
+        // parameter vector encoding a DIFFERENT width (10) — the pattern Clone hits when it
+        // copies a stale width without allocating the matching gate weights — must RE-INFER the
+        // width from the vector instead of throwing "Expected X parameters, but got Y".
+        var src = new LSTMLayer<double>(hiddenSize: 8);
+        src.Forward(new Tensor<double>(new[] { 1, 3, 10 })); // resolves _inputSize = 10
+        var srcParams = src.GetParameters();                 // sized for input width 10
+
+        var target = new LSTMLayer<double>(hiddenSize: 8);
+        target.Forward(new Tensor<double>(new[] { 1, 3, 12 })); // resolves _inputSize = 12 (stale vs srcParams)
+
+        // Must not throw: re-infer width 10 from the 10-width vector and re-allocate gates.
+        target.SetParameters(srcParams);
+
+        // A subsequent forward at the inferred (10) width must succeed end-to-end.
+        var output = target.Forward(new Tensor<double>(new[] { 1, 3, 10 }));
+        Assert.Equal(3, output.Shape.Length);
+        Assert.Equal(8, output.Shape[output.Shape.Length - 1]);
+    }
 }

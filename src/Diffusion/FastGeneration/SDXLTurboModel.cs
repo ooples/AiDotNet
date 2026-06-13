@@ -112,6 +112,17 @@ public class SDXLTurboModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
+        // Materialize the UNet's top-level time-embedding DenseLayers (and any
+        // similarly-lazy sublayers of the VAE) before reading. The per-ResBlock
+        // probe-Forward in DiffusionResBlock's ctor materialises the weights
+        // INSIDE each block, but the top-level _timeEmbedMlp1/2 on the UNet
+        // are only resolved when PredictNoise runs. Without these triggers,
+        // GetParameters() returns a vector shorter than ParameterCount and
+        // SetParameters' length check throws on roundtrip (see
+        // SDXLTurboModel_GetSetParameters_RoundTrips). Both triggers are
+        // idempotent — first call resolves, subsequent calls are no-ops.
+        _predictor.TriggerLazyShapeResolution();
+        _vae.TriggerLazyShapeResolution();
         var pp = _predictor.GetParameters();
         var vp = _vae.GetParameters();
         var combined = new Vector<T>(pp.Length + vp.Length);
@@ -123,6 +134,12 @@ public class SDXLTurboModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        // See GetParameters: resolve lazy layers BEFORE reading ParameterCount
+        // so the length check compares apples-to-apples against the
+        // architecturally-derived parameter count (which already includes the
+        // top-level time-embedding MLPs).
+        _predictor.TriggerLazyShapeResolution();
+        _vae.TriggerLazyShapeResolution();
         int pc = checked((int)_predictor.ParameterCount);
         int vc = checked((int)_vae.ParameterCount);
         long expectedTotal = (long)pc + vc;
@@ -141,9 +158,24 @@ public class SDXLTurboModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new SDXLTurboModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
-        return clone;
+        // Delegate to the predictor/VAE's own Clone implementations, which
+        // resolve their internal lazy shape inference on BOTH source and clone
+        // before copying weights. Constructing a fresh SDXLTurboModel here and
+        // calling SetParameters(GetParameters()) re-hits the lazy-init bug:
+        // GetParameters() on the unresolved source under-counts the UNet's
+        // top-level time-embedding DenseLayer params, while the fresh clone's
+        // SetParameters checks parameters.Length against the resolved
+        // (arch-derived) ParameterCount and throws — surfaced as
+        // SDXLTurboModel_GetSetParameters_RoundTrips / Clone_CreatesIndependentCopy
+        // failures in the Unit-03 Diffusion/Encoding shard. Same fix pattern
+        // as ImprovedConsistencyModel.Clone (commit 7ab314796, PR #1555).
+        var predictorClone = (UNetNoisePredictor<T>)_predictor.Clone();
+        var vaeClone = (StandardVAE<T>)_vae.Clone();
+        return new SDXLTurboModel<T>(
+            predictor: predictorClone,
+            vae: vaeClone,
+            conditioner: _conditioner,
+            seed: RandomGenerator.Next());
     }
 
     /// <inheritdoc />

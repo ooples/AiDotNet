@@ -920,6 +920,17 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         //      LeakyReLU is the canonical case).
         //   2. The layer's own ScalarActivation (when no override).
         int fanIn = InputDepth * KernelSize * KernelSize;
+        int fanOut = OutputDepth * KernelSize * KernelSize;
+        if (InitializationStrategy is not null && !InitializationStrategy.IsLazy)
+        {
+            var strategy = RandomSeed.HasValue && InitializationStrategy is InitializationStrategyBase<T> strategyBase
+                ? strategyBase.WithSeededRandom(RandomHelper.CreateSeededRandom(RandomSeed.Value))
+                : InitializationStrategy;
+            strategy.InitializeWeights(_kernels, fanIn, fanOut);
+            strategy.InitializeBiases(_biases);
+            return;
+        }
+
         var gainActivation = _nonlinearityForInit ?? ScalarActivation;
         double bound = KaimingInitHelper.UniformBoundFor(fanIn, gainActivation);
 

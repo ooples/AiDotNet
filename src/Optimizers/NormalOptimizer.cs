@@ -29,6 +29,16 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// </summary>
     private GeneticAlgorithmOptimizerOptions<T, TInput, TOutput> _normalOptions;
     private int _configuredMinFeatures;
+    // Effective upper bound for the adaptive feature-selection range. Equals the
+    // user-configured MaximumFeatures when explicitly set; otherwise totalFeatures
+    // (set inside Optimize once XTrain is known). The adaptive update at
+    // UpdateFeatureSelectionParameters previously used `_normalOptions.MaximumFeatures`
+    // directly, which is 0 by default and made the "else" branch produce
+    // MinimumFeatures = -1 via `_normalOptions.MaximumFeatures - 1 = -1`. That negative
+    // bound then propagated through RandomlySelectFeatures, letting the optimizer pick
+    // 1- or 2-feature subsets of a 4-feature dataset and silently breaking Lasso/ENet
+    // builder roundtrips (Integration R).
+    private int _configuredMaxFeatures;
 
     /// <summary>
     /// Initializes a new instance of the NormalOptimizer class.
@@ -84,8 +94,15 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
             Options.MaximumFeatures = totalFeatures;
         if (Options.MinimumFeatures <= 0)
             Options.MinimumFeatures = Math.Max(1, totalFeatures);
-        // Store the configured minimum so adaptive updates don't go below it
+        // Store the configured bounds so adaptive updates don't drift past them.
+        // Capture them AFTER the default-fill above so the adaptive caps reflect
+        // the actual operating range (totalFeatures), not the user's pre-default
+        // zero. Without this, UpdateFeatureSelectionParameters' "else" branch
+        // wrote `MinimumFeatures = Math.Min(..., _normalOptions.MaximumFeatures - 1)`
+        // which is -1 when the user didn't configure a max, and that negative
+        // value cascaded into RandomlySelectFeatures' min/max as a 1..(N-1) range.
         _configuredMinFeatures = Options.MinimumFeatures;
+        _configuredMaxFeatures = Options.MaximumFeatures;
 
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>
         {
@@ -205,12 +222,18 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
         if (FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
         {
             Options.MinimumFeatures = Math.Max(_configuredMinFeatures, Options.MinimumFeatures - 1);
-            Options.MaximumFeatures = Math.Min(Options.MaximumFeatures + 1, _normalOptions.MaximumFeatures);
+            Options.MaximumFeatures = Math.Min(Options.MaximumFeatures + 1, _configuredMaxFeatures);
         }
         else
         {
-            Options.MinimumFeatures = Math.Min(Options.MinimumFeatures + 1, _normalOptions.MaximumFeatures - 1);
-            Options.MaximumFeatures = Math.Max(Options.MaximumFeatures - 1, Options.MinimumFeatures + 1);
+            // Cap by _configuredMaxFeatures (not _normalOptions.MaximumFeatures): the
+            // latter is the raw user-configured value which is 0 when no feature search
+            // was requested, and `0 - 1 = -1` then makes the next-iteration RandomlySelectFeatures
+            // pick 1..(N-1)-feature subsets that destroy closed-form regression fits.
+            // _configuredMaxFeatures captured the effective bound (totalFeatures by default)
+            // after the Optimize-entry defaulting, so the adaptive range never escapes it.
+            Options.MinimumFeatures = Math.Min(Options.MinimumFeatures + 1, _configuredMaxFeatures);
+            Options.MaximumFeatures = Math.Max(Options.MaximumFeatures - 1, Options.MinimumFeatures);
         }
     }
 

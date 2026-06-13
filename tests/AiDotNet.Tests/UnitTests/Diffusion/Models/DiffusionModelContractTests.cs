@@ -1,13 +1,16 @@
 using AiDotNet.Diffusion.TextToImage;
 using AiDotNet.Diffusion.ImageEditing;
+using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.Video;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Diffusion.ThreeD;
 using AiDotNet.Diffusion.Control;
 using AiDotNet.Diffusion.SuperResolution;
 using AiDotNet.Diffusion.FastGeneration;
+using AiDotNet.Diffusion.VAE;
 using AiDotNet.Interfaces;
 using Xunit;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Diffusion.Models;
@@ -154,39 +157,155 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
     #region IParameterizable Contract Tests
 
     [Fact(Timeout = 120000)]
-    public async Task StableDiffusion15Model_GetParameters_ReturnsNonEmptyVector()
+    public async Task StableDiffusion15Model_HasLazyParameterContract()
     {
+        await Task.Yield();
         var model = new StableDiffusion15Model<double>();
 
-        var parameters = model.GetParameters();
+        Assert.True(model.ParameterCount > 0, "Parameters should not be empty");
 
-        Assert.True(parameters.Length > 0, "Parameters should not be empty");
+        long inspectedElements = 0;
+        int inspectedChunks = 0;
+        foreach (var chunk in model.GetParameterChunks())
+        {
+            Assert.True(chunk.Length > 0);
+            inspectedElements += chunk.Length;
+            inspectedChunks++;
+            if (inspectedChunks == 4) break;
+        }
+
+        Assert.True(inspectedElements <= model.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
-    public async Task StableDiffusion15Model_ParameterCount_MatchesGetParametersLength()
+    public async Task StableDiffusion15Model_ParameterCount_RemainsValidAcrossChunkEnumeration()
     {
+        await Task.Yield();
         var model = new StableDiffusion15Model<double>();
+        var before = model.ParameterCount;
 
-        var parameters = model.GetParameters();
+        int inspectedChunks = 0;
+        foreach (var chunk in model.GetParameterChunks())
+        {
+            Assert.True(chunk.Length > 0);
+            inspectedChunks++;
+            if (inspectedChunks == 4) break;
+        }
 
-        Assert.Equal(model.ParameterCount, parameters.Length);
+        Assert.True(model.ParameterCount >= before);
     }
 
     [Fact(Timeout = 120000)]
-    public async Task StableDiffusion15Model_SetParameters_DoesNotThrow()
+    public async Task StableDiffusion15Model_Clone_PreservesLazyParameterCount()
     {
+        await Task.Yield();
         var model = new StableDiffusion15Model<double>();
+        var clone = model.Clone();
+
+        Assert.Equal(model.ParameterCount, clone.ParameterCount);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task StableDiffusion15Model_MaterializedSmallModel_FlatParametersRoundTrip()
+    {
+        await Task.Yield();
+        var model = CreateTinyStableDiffusion15Model();
 
         var parameters = model.GetParameters();
+
+        Assert.True(parameters.Length > 0, "Materialized tiny SD 1.5 stack should expose flat parameters.");
+        Assert.Equal(parameters.Length, model.ParameterCount);
+
         model.SetParameters(parameters);
 
-        // Verify parameters were set by getting them again
-        var retrievedParams = model.GetParameters();
-        Assert.Equal(parameters.Length, retrievedParams.Length);
+        var retrieved = model.GetParameters();
+        Assert.Equal(parameters.Length, retrieved.Length);
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            Assert.Equal(parameters[i], retrieved[i]);
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task StableDiffusion15Model_MaterializedSmallModel_CloneCopiesIndependentParameters()
+    {
+        await Task.Yield();
+        var model = CreateTinyStableDiffusion15Model();
+        var parameters = model.GetParameters();
+
+        var clone = model.Clone();
+        var cloneParameters = clone.GetParameters();
+
+        Assert.Equal(parameters.Length, cloneParameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            Assert.Equal(parameters[i], cloneParameters[i]);
+        }
+
+        var modifiedCloneParameters = new Vector<double>(cloneParameters.Length);
+        for (int i = 0; i < cloneParameters.Length; i++)
+        {
+            modifiedCloneParameters[i] = cloneParameters[i];
+        }
+        modifiedCloneParameters[0] += 1.0;
+
+        clone.SetParameters(modifiedCloneParameters);
+
+        Assert.Equal(parameters[0], model.GetParameters()[0]);
+        Assert.Equal(modifiedCloneParameters[0], clone.GetParameters()[0]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DiTNoisePredictor_MaterializedSmallModel_ChunksMatchParameterCount()
+    {
+        await Task.Yield();
+        var predictor = new DiTNoisePredictor<double>(
+            inputChannels: 4,
+            hiddenSize: 16,
+            numLayers: 1,
+            numHeads: 4,
+            patchSize: 2,
+            contextDim: 8,
+            mlpRatio: 2.0,
+            latentSpatialSize: 4);
+
+        var noisySample = new Tensor<double>([1, 4, 4, 4]);
+        var conditioning = new Tensor<double>([1, 1, 8]);
+
+        _ = predictor.PredictNoise(noisySample, timestep: 0, conditioning);
+
+        var chunks = predictor.GetParameterChunks().ToList();
+        Assert.NotEmpty(chunks);
+        Assert.All(chunks, chunk => Assert.True(chunk.Length > 0));
+        Assert.Equal(predictor.ParameterCount, chunks.Sum(chunk => (long)chunk.Length));
     }
 
     #endregion
+
+    private static StableDiffusion15Model<double> CreateTinyStableDiffusion15Model()
+    {
+        var unet = new UNetNoisePredictor<double>(
+            inputChannels: 4,
+            outputChannels: 4,
+            baseChannels: 8,
+            channelMultipliers: [1],
+            numResBlocks: 1,
+            attentionResolutions: [],
+            contextDim: 0,
+            numHeads: 1,
+            inputHeight: 8);
+
+        var vae = new StandardVAE<double>(
+            inputChannels: 3,
+            latentChannels: 4,
+            baseChannels: 8,
+            channelMultipliers: [1],
+            numResBlocksPerLevel: 1);
+
+        return new StableDiffusion15Model<double>(
+            unet: unet,
+            vae: vae);
+    }
 
     #region IDiffusionModel Contract Tests
 
@@ -198,7 +317,7 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
 
         Assert.NotNull(clone);
         Assert.NotSame(model, clone);
-        Assert.Equal(model.ParameterCount, (int)clone.ParameterCount);
+        Assert.Equal(model.ParameterCount, clone.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
@@ -1000,7 +1119,7 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
 
         Assert.NotNull(clone);
         Assert.NotSame(model, clone);
-        Assert.Equal(model.ParameterCount, (int)clone.ParameterCount);
+        Assert.Equal(model.ParameterCount, clone.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
@@ -1109,9 +1228,9 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
     /// <item>The model constructs with paper-faithful component types
     ///   (DiTNoisePredictor + TemporalVAE).</item>
     /// <item><see cref="IParameterizable{T,TInput,TOutput}.ParameterCount"/>
-    ///   matches the sum of per-tensor lengths from
-    ///   <c>GetParameterChunks()</c> as a <see cref="long"/>, with no
-    ///   overflow.</item>
+    ///   remains a structural <see cref="long"/> for lazy paper-scale
+    ///   defaults, while <c>GetParameterChunks()</c> can be enumerated
+    ///   without forcing flat materialization.</item>
     /// </list>
     /// </summary>
     [Fact(Timeout = 120000)]
@@ -1130,43 +1249,50 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
         Assert.IsType<AiDotNet.Diffusion.VAE.TemporalVAE<double>>(model.VAE);
 
         // #1237: ParameterCount is now long. Sora's paper config (DiT-XL/2
-        // with HiddenDim 3072 × 48 layers) reports ~5.4 B parameters in the
-        // paper; even the test build's smaller config reports >1 B in the
-        // aggregate. Walking the chunked API confirms the long return type
-        // works structurally — we yield at least one tensor and the
-        // running sum survives past the int.MaxValue threshold without
-        // overflow. Exact reconciliation against ParameterCount is blocked
-        // on per-layer GetParameterChunks (follow-up to #1237 — without
-        // it, the flat-aggregate path each layer's GetParameters() takes
-        // is O(model size) per layer, making the walk O(layers × params)
-        // on foundation-scale architectures and timing the test out).
+        // with HiddenDim 3072 x 48 layers) reports ~5.4 B parameters in the
+        // paper. The default constructor is intentionally lazy, so the
+        // structural count can be paper-scale while GetParameterChunks()
+        // yields only tensors that have actually materialized. That mirrors
+        // PyTorch LazyModule behavior better than forcing a CI runner to walk
+        // billions of double values just to prove the count type.
         Assert.True(model.ParameterCount > 0,
             "Sora's ParameterCount should be positive (foundation-scale ~5.4 B per the paper).");
 
-        long chunkSum = 0;
-        int chunkCount = 0;
+        long inspectedElements = 0;
+        int inspectedChunks = 0;
         foreach (var chunk in model.GetParameterChunks())
         {
-            chunkSum += chunk.Length;
-            chunkCount++;
-            // Stop once we've proved the long accumulator survives the
-            // int.MaxValue boundary; the test's contract is "no overflow",
-            // not "exact match".
-            if (chunkSum > int.MaxValue) break;
+            Assert.True(chunk.Length > 0);
+            inspectedElements += chunk.Length;
+            inspectedChunks++;
+            if (inspectedChunks == 4) break;
         }
-        Assert.True(chunkCount > 0, "Chunked walk should yield at least one tensor.");
+        Assert.True(inspectedChunks > 0, "Chunked walk should yield at least one materialized tensor.");
+        Assert.True(inspectedElements <= model.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
-    public async Task UdioModel_SetParameters_DoesNotThrow()
+    public async Task UdioModel_HasPaperScaleLazyParameterContract()
     {
+        await Task.Yield();
         var model = new UdioModel<double>();
 
-        var parameters = model.GetParameters();
-        model.SetParameters(parameters);
+        Assert.True(model.ParameterCount > int.MaxValue,
+            "Udio's paper-scale DiT backbone should report a foundation-scale parameter count.");
 
-        var retrievedParams = model.GetParameters();
-        Assert.Equal(parameters.Length, retrievedParams.Length);
+        long inspectedElements = 0;
+        int inspectedChunks = 0;
+        foreach (var chunk in model.GetParameterChunks())
+        {
+            Assert.True(chunk.Length > 0);
+            inspectedElements += chunk.Length;
+            inspectedChunks++;
+            if (inspectedChunks == 4) break;
+        }
+
+        Assert.True(inspectedChunks > 0, "Chunked walk should yield at least one materialized tensor.");
+        Assert.True(inspectedElements <= model.ParameterCount,
+            "Chunk enumeration must stay bounded and must not force a flat paper-scale buffer.");
     }
 
     [Fact(Timeout = 120000)]

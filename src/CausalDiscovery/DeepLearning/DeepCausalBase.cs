@@ -134,13 +134,22 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
     protected Matrix<T> BuildFinalAdjacency(double[,] learnedP, Matrix<T> cov, int d)
     {
         var result = new Matrix<T>(d, d);
+
+        // Threshold scales with d only when uniform attention (= 1/d) crowds
+        // a fixed 0.3 floor. For d ≤ 3 keep the historical 0.3 floor —
+        // 1/d > 0.3 already, so the discrimination floor is "above uniform"
+        // by margin regardless. For d ≥ 4 require uniform + 0.15 margin so
+        // an algorithm that just spreads attention near uniform doesn't
+        // cross the bar.
+        double scaleAwareThreshold = d <= 3 ? 0.3 : Math.Max(1.0 / d + 0.15, 0.3);
+
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
             {
                 if (i == j) continue;
 
                 // Only add edge if learned probability exceeds threshold
-                if (learnedP[i, j] < 0.3) continue;
+                if (learnedP[i, j] < scaleAwareThreshold) continue;
 
                 // Direction: edge i→j only if P[i,j] > P[j,i]
                 // For ties, only process the (i,j) pair where i < j to avoid 2-cycles.

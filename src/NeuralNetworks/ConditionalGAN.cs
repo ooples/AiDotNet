@@ -81,8 +81,8 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     /// </remarks>
     private int _numConditionClasses;
 
-    // Store original (pre-conditioning) architectures for CreateNewInstance()
-    // to avoid double-conditioning the discriminator.
+    // Store the generator's full [noise | condition] architecture and the
+    // discriminator's pre-conditioning architecture for CreateNewInstance().
     private NeuralNetworkArchitecture<T>? _originalGeneratorArchitecture;
     private NeuralNetworkArchitecture<T>? _originalDiscriminatorArchitecture;
 
@@ -90,20 +90,27 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     /// Creates the combined ConditionalGAN architecture with correct dimension handling.
     /// </summary>
     /// <remarks>
-    /// The generator architecture is returned unchanged. The condition vector is concatenated
-    /// with the noise at runtime in GenerateConditional(), not by modifying the architecture.
-    /// This preserves compatibility with the base CNN requirements for 3D input.
+    /// The supplied generator architecture already describes the full
+    /// <c>[noise | condition]</c> input width. The public Predict/Train APIs
+    /// accept noise-only tensors and append the condition vector at runtime,
+    /// so expanding the architecture here would count the condition features
+    /// twice.
     /// </remarks>
     private static NeuralNetworkArchitecture<T> CreateConditionalGeneratorArchitecture(
         NeuralNetworkArchitecture<T> generatorArchitecture,
         int numConditionClasses)
     {
-        // Return the generator architecture unchanged. The condition concatenation
-        // is handled at runtime in GenerateConditional() and TrainStep(), not by
-        // modifying the architecture dimensions. This avoids conflicts between
-        // inputSize and dimension parameters for ThreeDimensional input types.
-        // numConditionClasses is part of the factory contract but only used at runtime
-        // in GenerateConditional()/TrainStep() for condition concatenation, not here.
+        if (generatorArchitecture.InputSize > 0
+            && generatorArchitecture.InputHeight <= 0
+            && generatorArchitecture.InputWidth <= 0
+            && generatorArchitecture.InputSize <= numConditionClasses)
+        {
+            throw new ArgumentException(
+                "ConditionalGAN generatorArchitecture.InputSize must be the full noise+condition width " +
+                "and therefore exceed numConditionClasses for flat generators.",
+                nameof(generatorArchitecture));
+        }
+
         return generatorArchitecture;
     }
 
@@ -168,7 +175,7 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     /// <summary>
     /// Initializes a new instance of the <see cref="ConditionalGAN{T}"/> class.
     /// </summary>
-    /// <param name="generatorArchitecture">The neural network architecture for the generator.</param>
+    /// <param name="generatorArchitecture">The neural network architecture for the generator. Its input width is the full noise+condition width.</param>
     /// <param name="discriminatorArchitecture">The neural network architecture for the discriminator.</param>
     /// <param name="numConditionClasses">The number of conditioning classes/categories.</param>
     /// <param name="inputType">The type of input the cGAN will process.</param>
@@ -216,7 +223,9 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         _options = options ?? new ConditionalGANOptions();
         Options = _options;
 
-        // Store original architectures before conditioning was applied
+        // The generator is already full-width; the discriminator is stored
+        // before conditioning is applied so clone/deserialize does not expand
+        // it a second time.
         _originalGeneratorArchitecture = generatorArchitecture;
         _originalDiscriminatorArchitecture = discriminatorArchitecture;
 
@@ -881,9 +890,10 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         base.DeserializeNetworkSpecificData(reader);
         _numConditionClasses = reader.ReadInt32();
 
-        // Reconstruct original (pre-conditioning) architectures from the current
-        // (already-conditioned) ones by subtracting the condition dimensions.
-        // This prevents double-conditioning in CreateNewInstance().
+        // The generator architecture is already the full [noise | condition]
+        // width. Reconstruct only the original discriminator architecture by
+        // subtracting the condition dimensions so CreateNewInstance() does not
+        // expand it a second time.
         _originalGeneratorArchitecture = Generator.Architecture;
 
         var discArch = Discriminator.Architecture;
@@ -909,10 +919,10 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        // Use the ORIGINAL (pre-conditioning) architectures to avoid double-conditioning.
-        // CreateConditionalDiscriminatorArchitecture is called again by the constructor,
-        // so passing the already-conditioned Discriminator.Architecture would add
-        // numConditionClasses to the input size a second time.
+        // Use the stored architectures to avoid double-conditioning. The
+        // generator is stored at its full [noise | condition] width, while the
+        // discriminator is stored before conditioning because its helper expands
+        // it again in the constructor.
         return new ConditionalGAN<T>(
             _originalGeneratorArchitecture ?? Generator.Architecture,
             _originalDiscriminatorArchitecture ?? Discriminator.Architecture,

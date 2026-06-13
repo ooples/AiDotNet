@@ -398,11 +398,12 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task FullyConnectedLayer_ParameterCount()
     {
-        // FC layer resolving inputSize=3 with outputSize=2 has 3*2 + 2 = 8 parameters. The ctor
-        // takes only outputSize (input size resolves LAZILY on first Forward, like Keras build()),
-        // so the count is only meaningful after shape resolution.
-        var layer = new FullyConnectedLayer<double>(2, (IActivationFunction<double>?)null);
-        layer.Forward(new Tensor<double>(new[] { 1, 3 }, new Vector<double>(new double[] { 1.0, 2.0, 3.0 })));
+        // FC layer with inputSize=3, outputSize=2 should have 3*2 + 2 = 8 parameters.
+        // Use the eager (inputSize, outputSize) ctor (PyTorch nn.Linear convention,
+        // added in this PR) so the weight tensor is allocated immediately; the
+        // output-only ctor stays lazy and reports 0 weight params until its first
+        // forward resolves inputSize.
+        var layer = new FullyConnectedLayer<double>(3, 2, (IActivationFunction<double>?)null);
         Assert.Equal(8, (int)layer.ParameterCount);
     }
 
