@@ -1008,6 +1008,11 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     private int CalculateParameterCount()
     {
+        // Resolve lazy layer shapes so the count matches GetParameters().Length even
+        // pre-forward (lazy layers otherwise report their architectural count here but
+        // an empty GetParameters() vector — the source of the count-equality failures).
+        TriggerLazyShapeResolution();
+
         // Walk the same layers GetParameters walks and sum their actual ParameterCount.
         // Must match GetParameters().Length exactly — the previous "approximate" formula
         // diverged from the real count and broke contract tests asserting equality.
@@ -1039,6 +1044,10 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
+        // Resolve lazy layer shapes so the returned vector matches ParameterCount
+        // even before the first real forward (otherwise lazy layers contribute 0).
+        TriggerLazyShapeResolution();
+
         // Collect all sublayer parameter vectors first (each layer allocates its own)
         var layerParams = new List<Vector<T>>();
         int totalCount = 0;
@@ -1089,6 +1098,11 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        // Resolve lazy layer shapes first so each layer's slice is sized to its
+        // real ParameterCount; otherwise lazy layers size to 0 and the incoming
+        // values are silently dropped (the SetParameters/GetParameters round-trip bug).
+        TriggerLazyShapeResolution();
+
         var index = 0;
 
         SetLayerParameters(_inputConv, parameters, ref index);
@@ -1187,8 +1201,21 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// manually (instead of delegating to <see cref="Clone"/>) can
     /// force lazy shape resolution on both sides too.
     /// </summary>
+    private bool _lazyShapesResolved;
+
     internal void TriggerLazyShapeResolution()
     {
+        // Idempotent: a single dummy forward resolves every lazy layer's weight
+        // shapes; shapes never change afterwards (SetParameters overwrites values,
+        // not shapes), so cache it. The guard is set BEFORE the forward so any
+        // re-entrant parameter access during resolution short-circuits instead of
+        // recursing. Without this, GetParameters / SetParameters / ParameterCount
+        // disagreed before the first real forward — the lazy layers reported their
+        // architectural ParameterCount but an empty GetParameters() vector — which
+        // broke the parameter round-trip, count-equality, Clone, and SaveState
+        // contracts (the whole DDPM parameter-management test cluster).
+        if (_lazyShapesResolved) return;
+        _lazyShapesResolved = true;
         var dummy = new Tensor<T>(new[] { 1, _inputChannels, _inputHeight, _inputHeight });
         Tensor<T>? dummyCtx = _contextDim > 0
             ? new Tensor<T>(new[] { 1, 1, _contextDim })

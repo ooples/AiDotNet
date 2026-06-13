@@ -182,6 +182,20 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     private readonly object _initLock = new();
 
     /// <summary>
+    /// Whether this predictor's lazy weight tensors have been materialized yet
+    /// (i.e. a forward pass, <see cref="GetParameters"/>, or
+    /// <see cref="SetParameters"/> has run). While <c>false</c> the predictor
+    /// holds no resident weights — its parameters are fully determined by its
+    /// construction config — so a clone can be produced by re-running the same
+    /// construction rather than copying a flat parameter vector. That matters
+    /// for foundation-scale configs (e.g. WanVideo-14B ≈ 15 B params) where the
+    /// flat <see cref="Vector{T}"/> copy path is both int.MaxValue-bounded and
+    /// far larger than host RAM. Callers that need a true deep copy of resolved
+    /// weights use <see cref="CopyParametersFrom"/> instead.
+    /// </summary>
+    public bool AreLayersInitialized => _layersInitialized;
+
+    /// <summary>
     /// Position embeddings (learnable).
     /// </summary>
     private Tensor<T>? _posEmbed;
@@ -473,21 +487,33 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
         EnsureLayersInitialized();
+        // Engage transparent weight streaming for foundation-scale predictors
+        // BEFORE the forward resolves lazy weights, so they allocate through the
+        // disk-backed pool. No-op below threshold or when the registry is busy.
+        MaybeEngageWeightStreaming();
         _lastInput = noisySample;
 
         // Get timestep embedding
         var timeEmbed = GetTimestepEmbedding(timestep);
         timeEmbed = ProjectTimeEmbedding(timeEmbed);
 
-        return Forward(noisySample, timeEmbed, conditioning);
+        var result = Forward(noisySample, timeEmbed, conditioning);
+        // Drop the now-resolved weights to the pool; from the next forward on the
+        // denoising loop runs against a bounded resident set (auto-rehydrate +
+        // owner-drop). No-op unless streaming engaged above.
+        RegisterResolvedStreamingWeights();
+        return result;
     }
 
     /// <inheritdoc />
     public override Tensor<T> PredictNoiseWithEmbedding(Tensor<T> noisySample, Tensor<T> timeEmbedding, Tensor<T>? conditioning = null)
     {
         EnsureLayersInitialized();
+        MaybeEngageWeightStreaming();
         _lastInput = noisySample;
-        return Forward(noisySample, timeEmbedding, conditioning);
+        var result = Forward(noisySample, timeEmbedding, conditioning);
+        RegisterResolvedStreamingWeights();
+        return result;
     }
 
     /// <summary>
