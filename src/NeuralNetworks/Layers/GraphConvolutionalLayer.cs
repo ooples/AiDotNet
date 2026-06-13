@@ -203,7 +203,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     // token stream with no data-flow edges) opt in. DeserializationHelper
     // reconstructs cloned/round-tripped graph layers with this enabled so a
     // model whose adjacency is only set at runtime survives serialization.
-    private readonly bool _implicitIdentityWhenUnset;
+    private bool _implicitIdentityWhenUnset;
 
     /// <summary>
     /// Stores the gradients for the weights calculated during the backward pass.
@@ -522,6 +522,17 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// In a molecule, it would show which atoms are bonded to each other.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Post-construction equivalent of the <c>implicitIdentityWhenUnset</c> ctor flag: enables the
+    /// self-loops-only (identity) tolerance for callers that constructed the layer strictly but later
+    /// need the scaffold / clone / deserialize tolerance. The default remains strict (throw on a
+    /// missing graph); this is an explicit opt-in, never a silent default.
+    /// </summary>
+    public void EnableImplicitIdentityAdjacency()
+    {
+        _implicitIdentityWhenUnset = true;
+    }
+
     public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
     {
         // Check if we need to re-extract edges (new matrix or first time)
