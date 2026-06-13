@@ -2004,6 +2004,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine($"public class {testClassName} : {baseClassName}");
         sb.AppendLine("{");
 
+        // Time-series ANOMALY DETECTORS (AnomalyDetectorBase) are time-series models, so they
+        // correctly land in the TimeSeries family — but they implement the IAnomalyDetector
+        // contract: Predict returns anomaly LABELS (-1/+1), not a forecast of the target
+        // (enforced by IAnomalyDetector<T>.Predict and the *PredictClassifiesAnomalyCorrectly*
+        // integration tests). A forecast-R²/trend/equivariance invariant therefore CANNOT apply
+        // to them — it would compare ±1 labels against the value series. Flag them
+        // non-forecasting so those invariants skip; the model's real forecasting core is still
+        // exercised through its anomaly-scoring tests and its Forecast() method. The remaining
+        // TimeSeries invariants (finite/deterministic/shape/clone/metadata/params) still run.
+        if (family == TestFamily.TimeSeries && model.ExtendsAnomalyDetectorBase)
+        {
+            sb.AppendLine("    protected override bool IsForecastingModel => false;");
+        }
+
         // Override InputShape/OutputShape for domain-appropriate test data.
         // Vision/Video/3D models need [C, H, W]; default is [1, 4].
         // Enum ordinals: General=0, Vision=1, Language=2, Audio=3, Video=4.
