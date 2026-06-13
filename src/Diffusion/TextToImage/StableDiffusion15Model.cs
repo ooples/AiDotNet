@@ -191,6 +191,11 @@ public class StableDiffusion15Model<T> : LatentDiffusionModelBase<T>
     /// </remarks>
     private readonly IConditioningModule<T>? _conditioner;
 
+    /// <summary>
+    /// Tracks whether lazy UNet/VAE parameter shapes have been materialized.
+    /// </summary>
+    private bool _parameterShapesResolved;
+
     #endregion
 
     #region Properties (ILatentDiffusionModel overrides)
@@ -208,7 +213,14 @@ public class StableDiffusion15Model<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => SD15_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount
+    {
+        get
+        {
+            EnsureParameterShapesResolved();
+            return _unet.ParameterCount + _vae.ParameterCount;
+        }
+    }
 
     /// <summary>
     /// Gets the cross-attention dimension (768 for SD 1.5, matching CLIP ViT-L/14).
@@ -534,6 +546,8 @@ public class StableDiffusion15Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
+        EnsureParameterShapesResolved();
+
         var unetParams = _unet.GetParameters();
         var vaeParams = _vae.GetParameters();
 
@@ -556,6 +570,8 @@ public class StableDiffusion15Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        EnsureParameterShapesResolved();
+
         // Use actual parameter counts from GetParameters to match what was returned
         var unetCount = checked((int)_unet.ParameterCount);
         var vaeCount = checked((int)_vae.ParameterCount);
@@ -597,6 +613,8 @@ public class StableDiffusion15Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
+        EnsureParameterShapesResolved();
+
         // Use the UNet's and VAE's own Clone methods to preserve actual architecture
         var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
         var clonedVae = (StandardVAE<T>)_vae.Clone();
@@ -605,6 +623,21 @@ public class StableDiffusion15Model<T> : LatentDiffusionModelBase<T>
             unet: clonedUnet,
             vae: clonedVae,
             conditioner: _conditioner);
+    }
+
+    /// <summary>
+    /// Materializes lazy submodule weights before state-dict style operations.
+    /// </summary>
+    private void EnsureParameterShapesResolved()
+    {
+        if (_parameterShapesResolved)
+        {
+            return;
+        }
+
+        _unet.TriggerLazyShapeResolution();
+        _vae.TriggerLazyShapeResolution();
+        _parameterShapesResolved = true;
     }
 
     #endregion
