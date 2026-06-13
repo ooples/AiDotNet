@@ -166,8 +166,11 @@ public class FlashAttentionLayerTransformerTrainingIssue1346Tests
         target[0, 3] = 1.0f;
 
         // Resolve lazy layer shapes (probeDense's inputSize) with one forward, then snapshot.
+        // Capture the baseline loss on the same pass so we can assert it strictly decreases.
         model.SetTrainingMode(false);
-        model.Predict(input);
+        var lossFn = new CategoricalCrossEntropyLoss<float>();
+        var yBefore = model.Predict(input);
+        float lossBefore = Convert.ToSingle(lossFn.CalculateLoss(yBefore.ToVector(), target.ToVector()));
         float[] dense0 = probeDense.GetParameters().ToArray();
 
         model.SetTrainingMode(true);
@@ -189,8 +192,18 @@ public class FlashAttentionLayerTransformerTrainingIssue1346Tests
         float dv = MaxAbsDelta(faLayer.GetValueWeights().AsSpan(), v0);
         float doo = MaxAbsDelta(faLayer.GetOutputWeights().AsSpan(), o0);
         float dDense = MaxAbsDelta(probeDense.GetParameters().ToArray(), dense0);
+        var yAfter = model.Predict(input);
+        float lossAfter = Convert.ToSingle(lossFn.CalculateLoss(yAfter.ToVector(), target.ToVector()));
         Assert.True(dq > 1e-6f && dk > 1e-6f && dv > 1e-6f && doo > 1e-6f,
             $"All FA projections must change during training (gradient-free in #1346). dQ={dq} dK={dk} dV={dv} dO={doo} | probeDense(control)={dDense}");
+        // Control path: a plain DenseLayer in the same stack must also move — proves the
+        // training path itself is live, not just the FA arm.
+        Assert.True(dDense > 1e-6f,
+            $"Control DenseLayer must also update during training. Δ={dDense}");
+        // The whole point of #1346: with the gradient reaching the FA layer the loss must
+        // actually drop. Pre-fix it froze at -log(1e-7) = 16.118.
+        Assert.True(lossAfter < lossBefore,
+            $"Training loss must strictly decrease. before={lossBefore}, after={lossAfter}");
     }
 
     private static float MaxAbsDelta(System.ReadOnlySpan<float> current, float[] initial)
