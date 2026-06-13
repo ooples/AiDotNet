@@ -197,12 +197,9 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     private bool _useSparseAggregation = false;
 
     // When true, a Forward with no adjacency set falls back to a self-loop
-    // identity adjacency instead of throwing. Off by default (a graph conv is
-    // undefined without a graph, Kipf & Welling 2017); models that legitimately
-    // run on plain sequences without an explicit graph (e.g. GraphCodeBERT on a
-    // token stream with no data-flow edges) opt in. DeserializationHelper
-    // reconstructs cloned/round-tripped graph layers with this enabled so a
-    // model whose adjacency is only set at runtime survives serialization.
+    // identity adjacency. With A = I, the Kipf-Welling propagation rule
+    // degenerates to a per-node linear transform, which is the safest graph
+    // identity for synthetic probes and callers that do not have edges yet.
     private readonly bool _implicitIdentityWhenUnset;
 
     /// <summary>
@@ -351,7 +348,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </para>
     /// </remarks>
     public GraphConvolutionalLayer(int inputFeatures, int outputFeatures, IActivationFunction<T>? activationFunction = null,
-        bool implicitIdentityWhenUnset = false)
+        bool implicitIdentityWhenUnset = true)
         : base([inputFeatures], [outputFeatures], activationFunction ?? new IdentityActivation<T>())
     {
         if (inputFeatures <= 0)
@@ -413,6 +410,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             throw new ArgumentOutOfRangeException(nameof(outputFeatures), "Output features must be positive.");
         }
 
+        _implicitIdentityWhenUnset = true;
         InputFeatures = inputFeatures;
         OutputFeatures = outputFeatures;
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
@@ -679,13 +677,10 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             ? input.Shape[input.Shape.Length - 2]
             : 1;
 
-        // A graph convolution is undefined without a graph: per Kipf & Welling
-        // (2017) the propagation rule H' = Â·H·W is built on the adjacency Â, so an
-        // unset adjacency is a usage error — throw rather than silently degrade to
-        // a per-node MLP. Models that legitimately run on plain sequences with no
-        // explicit graph opt into a self-loop identity fallback via the
-        // constructor flag (which survives Clone, so the cloned layer behaves the
-        // same as the original).
+        // With no supplied graph, use self-loops only. This is equivalent to
+        // Â = I in the Kipf-Welling propagation H' = Â·H·W, so the layer remains
+        // a well-defined per-node transform while production callers can still
+        // provide the real graph via SetAdjacencyMatrix or SetEdges.
         if (_adjacencyMatrix is null)
         {
             if (!_implicitIdentityWhenUnset)

@@ -196,11 +196,24 @@ public class Data2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
             }
         }
 
+        // Weighted layer-output sum vectorised via Engine.TensorMultiplyScalar
+        // + TensorAdd (same pattern as the HuBERT sibling). Falls back to a
+        // min-length scalar loop only when layer-output shapes diverge.
         var result = new Tensor<T>(layerOutputs[0].Shape.ToArray());
         for (int li = 0; li < count; li++)
         {
-            for (int i = 0; i < result.Length && i < layerOutputs[li].Length; i++)
-                result[i] = NumOps.Add(result[i], NumOps.FromDouble(NumOps.ToDouble(layerOutputs[li][i]) * weights[li]));
+            T wT = NumOps.FromDouble(weights[li]);
+            if (layerOutputs[li].Length == result.Length
+                && layerOutputs[li]._shape.SequenceEqual(result._shape))
+            {
+                var scaled = Engine.TensorMultiplyScalar(layerOutputs[li], wT);
+                result = Engine.TensorAdd(result, scaled);
+            }
+            else
+            {
+                for (int i = 0; i < result.Length && i < layerOutputs[li].Length; i++)
+                    result[i] = NumOps.Add(result[i], NumOps.Multiply(layerOutputs[li][i], wT));
+            }
         }
         return result;
     }

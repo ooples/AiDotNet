@@ -130,7 +130,21 @@ public class MelBandRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparat
     {
         int len = 0; foreach (var s in sep.Sources.Values) if (s.Length > len) len = s.Length;
         var o = new Tensor<T>([len]);
-        foreach (var kvp in sep.Sources) { double v = vols.TryGetValue(kvp.Key, out var vol) ? vol : 1.0; for (int i = 0; i < kvp.Value.Length; i++) o[i] = NumOps.Add(o[i], NumOps.FromDouble(NumOps.ToDouble(kvp.Value[i]) * v)); }
+        foreach (var kvp in sep.Sources)
+        {
+            double v = vols.TryGetValue(kvp.Key, out var vol) ? vol : 1.0;
+            if (kvp.Value.Length == o.Length && kvp.Value.Rank == o.Rank)
+            {
+                var scaled = Engine.TensorMultiplyScalar(kvp.Value, NumOps.FromDouble(v));
+                o = Engine.TensorAdd(o, scaled);
+            }
+            else
+            {
+                T vT = NumOps.FromDouble(v);
+                for (int i = 0; i < kvp.Value.Length && i < o.Length; i++)
+                    o[i] = NumOps.Add(o[i], NumOps.Multiply(kvp.Value[i], vT));
+            }
+        }
         return o;
     }
 

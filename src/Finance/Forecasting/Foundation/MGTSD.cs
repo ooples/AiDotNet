@@ -146,23 +146,15 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        // Paper-faithful AdamW with lr=1e-4 per Fan et al. ICLR 2024
-        // ("MG-TSD: Multi-Granularity Time-Series Diffusion"
-        // arXiv:2403.05751). The framework default `AdamOptimizer` at
-        // lr=1e-3 oscillates around the loss minimum on the single-batch
-        // memorization probe — the gradient never decays to zero on a
-        // constant batch so a momentum-based step keeps bouncing the
-        // params around the minimum, producing the "loss(200 iters) >
-        // loss(50 iters)" failure pattern in MoreData_ShouldNotDegrade.
-        // AdamW with the paper's lr=1e-4 + weight decay 1e-4 keeps the
-        // step size in the regime the architecture was tuned for.
-        // Callers passing their own optimizer (production training with
-        // cosine decay) override this default. Same fix as SwinUNETR.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        // Fan et al. ICLR 2024 report Adam with a fixed 1e-5 learning rate
+        // for MG-TSD. Keep the native default on that paper scale: the larger
+        // framework Adam/AdamW defaults overstep the single-batch diffusion
+        // probe and produce the "loss(200 iters) > loss(50 iters)" pattern.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = 1e-4,
-                WeightDecay = 1e-4
+                InitialLearningRate = 1e-5,
+                UseAdaptiveBetas = false
             });
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
@@ -421,15 +413,12 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
     /// made the whole training-test family throw broadcast errors (issue #1464).
     /// </remarks>
     /// <summary>
-    /// Route the base class's TrainWithTape path through the
-    /// constructor's AdamW (lr=1e-4, weight decay 1e-4) rather than the
-    /// framework default Adam (lr=1e-3). The default Adam oscillates
-    /// around the loss minimum on a single-batch memorization probe —
-    /// gradient never goes to zero on a constant batch, momentum step
-    /// keeps bouncing the params around the minimum, "loss(200 iters) >
-    /// loss(50 iters)" pattern in MoreData_ShouldNotDegrade. AdamW lr=1e-4
-    /// matches Fan et al. ICLR 2024 ("MG-TSD: Multi-Granularity
-    /// Time-Series Diffusion"). Without this override, the
+    /// Route the base class's TrainWithTape path through the constructor's
+    /// paper-aligned Adam optimizer (fixed lr=1e-5) rather than the framework
+    /// default Adam (lr=1e-3). The default optimizer oversteps this
+    /// diffusion denoiser on single-batch probes, producing the
+    /// "loss(200 iters) > loss(50 iters)" pattern in
+    /// MoreData_ShouldNotDegrade. Without this override, the
     /// `_optimizer = ...` field assignment in the ctor would only be
     /// observable through direct field access; the base class's TrainWithTape
     /// path resolves its optimizer through GetOrCreateBaseOptimizer, which
@@ -517,12 +506,17 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
         var span = denoisingInput.Data.Span;
         var x0 = _trainX0;
         var noise = _trainNoise;
-        for (int i = 0; i < segLen; i++)
+        // Vectorised x_t = √ᾱ_t·x_0 + √(1-ᾱ_t)·ε for the first segLen slots.
+        // x0 and noise are both [1, _forecastHorizon == segLen] by ForwardForTraining's
+        // construction, so the lengths match and Engine.TensorAdd /
+        // TensorMultiplyScalar take the SIMD path (guidance segment stays zero
+        // during training so we don't need it in the pack).
+        if (x0 is not null && noise is not null && x0.Length == segLen && noise.Length == segLen)
         {
-            // x_t = √ᾱ_t·x_0 + √(1-ᾱ_t)·ε  (guidance segment stays zero during training).
-            T x0i = (x0 is not null && i < x0.Length) ? x0[i] : NumOps.Zero;
-            T ei = (noise is not null && i < noise.Length) ? noise[i] : NumOps.Zero;
-            span[i] = NumOps.Add(NumOps.Multiply(sqrtAbar, x0i), NumOps.Multiply(sqrtOneMinus, ei));
+            var scaledX0 = Engine.TensorMultiplyScalar(x0, sqrtAbar);
+            var scaledNoise = Engine.TensorMultiplyScalar(noise, sqrtOneMinus);
+            var xtSeg = Engine.TensorAdd(scaledX0, scaledNoise);
+            xtSeg.Data.Span.Slice(0, segLen).CopyTo(span.Slice(0, segLen));
         }
         condHidden.Data.Span.Slice(0, condLen).CopyTo(span.Slice(segLen, condLen));
         span[segLen + condLen + segLen] = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _diffusionSteps - 1)));
@@ -716,12 +710,38 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
                 T coefXt = NumOps.Divide(NumOps.Multiply(NumOps.Sqrt(alphaT), oneMinusAbarPrev), oneMinusAbarT);
                 T sigmaT = t > 0 ? NumOps.Sqrt(NumOps.Divide(NumOps.Multiply(betaT, oneMinusAbarPrev), oneMinusAbarT)) : NumOps.Zero;
 
-                for (int i = 0; i < granLen && i < xt.Length; i++)
+                // Vectorised posterior step:
+                //   mean = coefX0·x̂_0 + coefXt·x_t
+                //   x_{t-1} = mean + σ_t·z   (z = 0 when t = 0)
+                // Build the mean as Engine.TensorAdd(scaled_x0, scaled_xt) so
+                // the per-element multiply/add runs in SIMD instead of a
+                // per-position NumOps chain. Noise sampling is inherently
+                // per-element, but we collect z once into a tensor and add
+                // it via TensorAdd + TensorMultiplyScalar — same SIMD path.
+                int len = Math.Min(granLen, xt.Length);
+                if (len > 0)
                 {
-                    T x0i = i < x0Pred.Length ? x0Pred[i] : NumOps.Zero;
-                    T meanT = NumOps.Add(NumOps.Multiply(coefX0, x0i), NumOps.Multiply(coefXt, xt[i]));
-                    T z = t > 0 ? SampleStandardNormal(rand) : NumOps.Zero;
-                    xt.Data.Span[i] = NumOps.Add(meanT, NumOps.Multiply(sigmaT, z));
+                    var x0Aligned = x0Pred.Length >= len
+                        ? Engine.TensorNarrow(
+                            x0Pred.Rank == 2 ? x0Pred : Engine.Reshape(x0Pred, new[] { 1, x0Pred.Length }),
+                            dim: x0Pred.Rank == 2 ? 1 : 0, start: 0, length: len)
+                        : x0Pred;
+                    var xtAligned = Engine.TensorNarrow(
+                        xt.Rank == 2 ? xt : Engine.Reshape(xt, new[] { 1, xt.Length }),
+                        dim: xt.Rank == 2 ? 1 : 0, start: 0, length: len);
+                    var scaledX0 = Engine.TensorMultiplyScalar(x0Aligned, coefX0);
+                    var scaledXt = Engine.TensorMultiplyScalar(xtAligned, coefXt);
+                    var meanTensor = Engine.TensorAdd(scaledX0, scaledXt);
+                    Tensor<T> next = meanTensor;
+                    if (t > 0)
+                    {
+                        var zData = new T[len];
+                        for (int i = 0; i < len; i++) zData[i] = SampleStandardNormal(rand);
+                        var z = new Tensor<T>(meanTensor._shape, new Vector<T>(zData));
+                        var scaledZ = Engine.TensorMultiplyScalar(z, sigmaT);
+                        next = Engine.TensorAdd(meanTensor, scaledZ);
+                    }
+                    next.Data.Span.Slice(0, len).CopyTo(xt.Data.Span.Slice(0, len));
                 }
             }
 
