@@ -1230,8 +1230,33 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             mlpRatio: _mlpRatio,
             latentSpatialSize: _latentSpatialSize);
 
-        // Preserve trained weights
-        clone.SetParameters(GetParameters());
+        // Preserve trained weights. The DiT's projection layers are LazyDense — they only
+        // ALLOCATE their weight tensors on the first forward, not in EnsureLayersInitialized.
+        // A fresh clone therefore has the layer STRUCTURE but unallocated weights, so neither
+        // SetParameters(GetParameters()) nor a per-layer copy can fill them; the clone would
+        // re-initialize those tensors with a fresh RNG on its first real forward and diverge
+        // from the source (observed: ~50k fewer materialized params, divergent Predict).
+        //
+        // Run one throwaway forward at the canonical input shape to materialize EVERY weight
+        // tensor (the layer weight dims are fixed by config, so the probe's spatial size is
+        // irrelevant; null conditioning matches the unconditional path so the cross-attention
+        // projections stay lazy exactly as on the source). Then copy the source's trained
+        // values per-layer. Only meaningful once the source itself has materialized weights.
+        if (_layersInitialized)
+        {
+            var probe = new Tensor<T>(new[] { 1, _inputChannels, _latentSpatialSize, _latentSpatialSize });
+            clone.PredictNoise(probe, timestep: 0, conditioning: null);
+            clone.CopyParametersFrom(this);
+            // The probe forward traced a compiled plan over the clone's random init; drop it so
+            // the next real forward re-traces against the copied weights.
+            clone.InvalidateCompiledPlans();
+        }
+        else
+        {
+            // Source never forwarded: nothing materialized to copy. The flat round-trip is a
+            // no-op here, and both predictors are fully determined by their shared config.
+            clone.SetParameters(GetParameters());
+        }
         return clone;
     }
 
