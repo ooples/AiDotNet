@@ -216,6 +216,15 @@ public partial class GRULayer<T> : LayerBase<T>
     private readonly bool _returnSequences;
 
     /// <summary>
+    /// When true, the hidden state carries over between successive Forward calls
+    /// (Keras-style <c>stateful=True</c>) instead of resetting to zeros each call.
+    /// Default false = the standard stateless contract (PyTorch nn.GRU's h0=zeros),
+    /// which keeps Clone-after-training parity and repeated-Predict determinism.
+    /// Call <see cref="ResetState"/> to clear the carried hidden state.
+    /// </summary>
+    private readonly bool _stateful;
+
+    /// <summary>
     /// The computation engine (CPU or GPU) for vectorized operations.
     /// </summary>
 
@@ -471,7 +480,8 @@ public partial class GRULayer<T> : LayerBase<T>
     public GRULayer(int hiddenSize,
                     bool returnSequences = false,
                     IActivationFunction<T>? activation = null,
-                    IActivationFunction<T>? recurrentActivation = null)
+                    IActivationFunction<T>? recurrentActivation = null,
+                    bool stateful = false)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, hiddenSize }, activation ?? new TanhActivation<T>())
     {
         if (hiddenSize <= 0)
@@ -480,6 +490,7 @@ public partial class GRULayer<T> : LayerBase<T>
         _hiddenSize = hiddenSize;
         _inputSize = -1;
         _returnSequences = returnSequences;
+        _stateful = stateful;
         _activation = activation ?? new TanhActivation<T>();
         _recurrentActivation = recurrentActivation ?? new SigmoidActivation<T>();
 
@@ -502,7 +513,8 @@ public partial class GRULayer<T> : LayerBase<T>
     public GRULayer(int hiddenSize,
                     IVectorActivationFunction<T> vectorActivation,
                     bool returnSequences = false,
-                    IVectorActivationFunction<T>? vectorRecurrentActivation = null)
+                    IVectorActivationFunction<T>? vectorRecurrentActivation = null,
+                    bool stateful = false)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, hiddenSize }, vectorActivation)
     {
         if (hiddenSize <= 0)
@@ -511,6 +523,7 @@ public partial class GRULayer<T> : LayerBase<T>
         _hiddenSize = hiddenSize;
         _inputSize = -1;
         _returnSequences = returnSequences;
+        _stateful = stateful;
         _vectorActivation = vectorActivation;
         _vectorRecurrentActivation = vectorRecurrentActivation ?? new SigmoidActivation<T>();
 
@@ -889,7 +902,17 @@ public partial class GRULayer<T> : LayerBase<T>
         // repeated-Predict determinism. Reset to a zero hidden state at the start of
         // every pass (TensorAllocator.Rent returns zero-initialized, engine-managed
         // storage — the same call the original first-pass init used).
-        _lastHiddenState = TensorAllocator.Rent<T>([batchSize, _hiddenSize]);
+        //
+        // When _stateful is set (Keras-style stateful=True), the hidden state is
+        // instead carried over from the previous Forward call — reset only on the
+        // first call (null) or when the batch size changes — and is cleared
+        // explicitly via ResetState().
+        if (!_stateful
+            || _lastHiddenState is null
+            || _lastHiddenState.Shape[0] != batchSize)
+        {
+            _lastHiddenState = TensorAllocator.Rent<T>([batchSize, _hiddenSize]);
+        }
 
         // Initialize list to store all hidden states if returning sequences
         if (_returnSequences)

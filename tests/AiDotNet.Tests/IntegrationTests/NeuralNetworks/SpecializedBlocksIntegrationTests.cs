@@ -167,10 +167,12 @@ public class SpecializedBlocksIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BottleneckBlock_ExpansionFactor_CorrectlyApplied()
     {
-        // Arrange - default expansion is 4. Ctor is (baseChannels, stride) — input channels
-        // resolve lazily on first Forward; passing (in, out) here set stride=32.
+        // Arrange - default expansion is 4. BottleneckBlock is parameterized by its base
+        // width (PyTorch torchvision Bottleneck(inplanes, planes): output = planes * 4); the
+        // ctor signature is (baseChannels, stride) and input channels resolve LAZILY on first
+        // Forward, so passing (inChannels, outChannels) would mis-bind outChannels to stride.
         int inChannels = 64;
-        int baseChannels = 32;
+        int baseChannels = 32; // base width -> output = baseChannels * 4 = 128
         int height = 8;
         int width = 8;
         var block = new BottleneckBlock<float>(baseChannels);
@@ -331,8 +333,10 @@ public class SpecializedBlocksIntegrationTests
         int width = 8;
         var block = new DenseBlock<float>(numLayers, growthRate);
 
-        // Input channels resolve LAZILY on first Forward (OutputChannels is the documented -1
-        // sentinel until then) — drive one forward so the property has its inputs.
+        // OutputChannels = inputChannels + numLayers * growthRate, but the input channel
+        // count resolves LAZILY on first Forward (DenseNet blocks take their input width from
+        // the preceding layer), so OutputChannels reports the documented -1 sentinel until
+        // then — assert that, then drive one forward so the property has its inputs.
         Assert.Equal(-1, block.OutputChannels);
         block.Forward(CreateRandomTensor<float>([1, inputChannels, height, width]));
 

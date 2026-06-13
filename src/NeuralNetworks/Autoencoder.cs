@@ -293,9 +293,21 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             Layers.AddRange(LayerHelper<T>.CreateDefaultAutoEncoderLayers(Architecture));
         }
 
-        // EncodedSize = latent dimension = input width of the first decoder layer.
-        // Decode() starts at Layers[Count/2], so its input shape is the latent handoff.
-        EncodedSize = Layers[Layers.Count / 2].GetInputShape()[0];
+        // EncodedSize = latent dimension = the bottleneck (narrowest) width in the
+        // encoder→decoder stack. A Dense layer's OUTPUT width is concrete at
+        // construction, whereas the middle layer's INPUT shape (the latent handoff)
+        // is only resolved on the first forward — reading it here left EncodedSize
+        // at -1 for the default lazy layer stack. The autoencoder bottleneck is the
+        // narrowest layer by construction, so take the smallest positive layer
+        // output width.
+        int latent = int.MaxValue;
+        foreach (var layer in Layers)
+        {
+            var outShape = layer.GetOutputShape();
+            if (outShape is not null && outShape.Length > 0 && outShape[0] > 0)
+                latent = Math.Min(latent, outShape[0]);
+        }
+        EncodedSize = latent == int.MaxValue ? 0 : latent;
     }
 
     /// <summary>

@@ -616,6 +616,18 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
         {
             current = layer.Forward(current);
         }
+        // Mirror ForwardNativeForTraining's rank bridge: a per-position mixture
+        // head emerges as rank-3 [B, seqLen, numMixtures*3]. Average the
+        // per-position predictive distributions across the sequence axis to a
+        // per-batch mixture summary (paper-faithful pooling, same as the encoder
+        // training path) BEFORE extracting point predictions. Without this the
+        // decoder-only path returned the raw [B, seqLen, numMixtures*3] head and
+        // the MSE training loss threw a shape mismatch against the
+        // [B, forecastHorizon, 1] target (e.g. [1,8,30] vs [1,4,1]).
+        if (current.Rank == 3)
+        {
+            current = Engine.ReduceMean(current, axes: new[] { 1 }, keepDims: false);
+        }
         if (current.Rank == 2)
         {
             current = ExtractPointPredictionsTapeSafe(current, _forecastHorizon);

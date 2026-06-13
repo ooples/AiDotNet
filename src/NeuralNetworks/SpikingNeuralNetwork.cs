@@ -546,6 +546,43 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // The DEFAULT topology (LayerHelper.CreateDefaultSpikingLayers) is a
+        // single composite SpikingNetworkCore + ActivationLayer. The core is a
+        // BPTT-unrolled surrogate-gradient SNN built entirely from Engine ops
+        // (straight-through Heaviside with a fast-sigmoid surrogate — Neftci,
+        // Mostafa & Zenke 2019 §III), so it is tape-differentiable end-to-end
+        // and trains through the standard tape path.
+        //
+        // The spike-history delta rule below assumes a MULTI-LAYER topology
+        // where the readout layer has a recorded pre-synaptic spike train
+        // (history[outputLayerIndex − 1]). With the composite core the first
+        // trainable layer IS index 0, so the update loop's `layerIndex > 0`
+        // guard never admitted any layer — Train silently updated NOTHING
+        // (Training_ShouldChangeParameters / GradientFlow_* failed with
+        // "parameters did not change"). Route the composite topology through
+        // TrainWithTape; the legacy loop remains for custom SpikingLayer
+        // stacks supplied via Architecture.Layers.
+        int firstTrainable = Layers.Count - 1;
+        while (firstTrainable > 0 && !Layers[firstTrainable].SupportsTraining)
+        {
+            firstTrainable--;
+        }
+
+        if (firstTrainable == 0)
+        {
+            SetTrainingMode(true);
+            try
+            {
+                TrainWithTape(input, expectedOutput, _options.ReadoutLearningRate);
+            }
+            finally
+            {
+                SetTrainingMode(false);
+            }
+
+            return;
+        }
+
         // Reset network state
         ResetState();
 

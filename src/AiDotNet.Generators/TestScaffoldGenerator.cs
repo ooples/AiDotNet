@@ -157,6 +157,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // ModelFamilyTests/NeuralNetworks supply the ctor args explicitly.
         "AdversarialImageEvaluator",
         "ODISE",
+
+        // GraphCodeBERT (Guo et al. 2021): its parameterless ctor builds the
+        // CodeSynthesisArchitecture DEFAULTS — BERT-base scale (6 layers, 512 dim,
+        // 512 seq, 50000 vocab). The 512->50000 output projection alone is ~25M
+        // params with a ~205 MB output tensor per forward, and the training
+        // invariants run ~250 train steps, overflowing the 120s budget. (CodeBERT
+        // avoids this because its ctor takes CodeSynthesisArchitecture, so the
+        // generator emits a placeholder and the manual CodeBERTTests supplies a
+        // small smoke config.) The manual GraphCodeBERTTests scaffold in
+        // ModelFamilyTests/CodeModel runs the same architecture shape at smoke
+        // scale (2 layers, 64 dim, 32 seq, 128 vocab, UseDataFlow=true).
+        "GraphCodeBERT",
     };
 
     // Attribute metadata names

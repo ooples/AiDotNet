@@ -82,26 +82,71 @@ public class BCDNetsAlgorithm<T> : BayesianCausalBase<T>
         var mu = new Matrix<T>(d, d);      // weight means
         var logvar = new Matrix<T>(d, d);  // log-variance of weights
 
-        // Initialize mu from OLS and Z from absolute OLS weight magnitude
-        // This biases the search toward edges with strong statistical signal
+        // Initialize mu from OLS; initialize Z DIRECTION-AWARE per pair.
+        //
+        // The previous init turned BOTH directions of every correlated pair ON
+        // (any |OLS slope| > 0.2 → logit +1), so the optimization started from a
+        // dense graph of symmetric 2-cycles. The acyclicity penalty then pruned
+        // directions essentially arbitrarily and the posterior routinely settled
+        // on a REVERSED or spurious DAG (Markov-equivalent fits the covariance,
+        // so the reconstruction term cannot recover the orientation once the
+        // wrong basin is entered).
+        //
+        // For the linear-Gaussian equal-variance SEMs this variational sketch
+        // models, the causal direction is identifiable by the smaller
+        // conditional residual variance (Peters & Bühlmann 2014, the
+        // identifiability result the NOTEARS family builds on):
+        //   resVar(j|i) = cov[j,j] − cov[i,j]²/cov[i,i]   for i → j.
+        // Initialize only the lower-residual direction of each pair ON so the
+        // optimizer starts inside the true-DAG basin; the reverse logit starts
+        // OFF and can still be revived by the reconstruction gradient if the
+        // data disagrees.
         T eps = NumOps.FromDouble(1e-10);
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
             {
                 if (i == j) continue;
                 if (NumOps.GreaterThan(cov[i, i], eps))
-                {
                     mu[i, j] = NumOps.Divide(cov[i, j], cov[i, i]);
-                    // Initialize edge logit from OLS strength: strong regression → positive logit
-                    double olsWeight = Math.Abs(NumOps.ToDouble(mu[i, j]));
-                    Z[i, j] = NumOps.FromDouble(olsWeight > 0.2 ? 1.0 : -1.0);
-                }
+                Z[i, j] = NumOps.FromDouble(-1.0);
                 logvar[i, j] = NumOps.FromDouble(-4); // small initial variance
             }
 
-        // Augmented Lagrangian for acyclicity
+        for (int i = 0; i < d; i++)
+            for (int j = i + 1; j < d; j++)
+            {
+                double vi = NumOps.ToDouble(cov[i, i]);
+                double vj = NumOps.ToDouble(cov[j, j]);
+                double cij = NumOps.ToDouble(cov[i, j]);
+                if (vi < 1e-10 || vj < 1e-10) continue;
+
+                double olsIJ = Math.Abs(cij / vi);
+                double olsJI = Math.Abs(cij / vj);
+                if (Math.Max(olsIJ, olsJI) <= 0.2) continue; // no signal in either direction
+
+                double resJgivenI = vj - cij * cij / vi; // residual of i → j
+                double resIgivenJ = vi - cij * cij / vj; // residual of j → i
+                if (resJgivenI <= resIgivenJ)
+                    Z[i, j] = NumOps.FromDouble(1.0);
+                else
+                    Z[j, i] = NumOps.FromDouble(1.0);
+            }
+
+        // Augmented Lagrangian for acyclicity. Per the NOTEARS scheme BCD-Nets
+        // builds on (Zheng et al. 2018 §3.2; Cundy et al. 2021 §4), the duals are
+        // updated on an OUTER loop after an inner optimization with FIXED
+        // (alpha, rho): alpha <- alpha + rho*h once per round, and rho is
+        // escalated only when h fails to shrink by the relative factor 0.25
+        // versus the previous round (h_new > 0.25 * h_prev). The previous code
+        // performed the dual ascent after EVERY gradient step against an
+        // ABSOLUTE h > 0.25 test, so rho exploded 10x per step to 1e16 within
+        // ~16 steps and the acyclicity term symmetrically annihilated every
+        // edge logit before the reconstruction term could orient the graph —
+        // the discovered structure was always empty.
         T alpha = NumOps.Zero;
         T rho = NumOps.One;
+        double hPrev = double.PositiveInfinity;
+        int innerSteps = Math.Max(1, Math.Min(25, NumSamples));
 
         for (int iter = 0; iter < NumSamples; iter++)
         {
@@ -191,24 +236,53 @@ public class BCDNetsAlgorithm<T> : BayesianCausalBase<T>
                     gradZ[i, j] = NumOps.Multiply(totalEdgeGrad, sigDeriv);
                 }
 
-            // Apply gradients
+            // Apply gradients. Z is clamped to [-4, 4]: during the early phase the
+            // acyclicity penalty pushes EVERY logit down roughly symmetrically
+            // (all 2-cycles violate the constraint), and an unclamped Z saturates
+            // so deep that sigmoid'(Z/tau) ≈ 0 freezes ALL edge gradients — the
+            // reconstruction term can then never pull the true edges back and the
+            // posterior collapses to the empty graph. Clamping keeps the gate
+            // responsive (standard logit clamping for Gumbel-sigmoid relaxations)
+            // while sigmoid(±4) ≈ 0.018/0.982 still saturates the edge decision.
             for (int i = 0; i < d; i++)
                 for (int j = 0; j < d; j++)
                 {
                     if (i == j) continue;
                     Z[i, j] = NumOps.Subtract(Z[i, j], NumOps.Multiply(lr, gradZ[i, j]));
+                    double zClamped = Math.Max(-4.0, Math.Min(4.0, NumOps.ToDouble(Z[i, j])));
+                    Z[i, j] = NumOps.FromDouble(zClamped);
                     mu[i, j] = NumOps.Subtract(mu[i, j], NumOps.Multiply(lr, gradMu[i, j]));
                     logvar[i, j] = NumOps.Subtract(logvar[i, j],
                         NumOps.Multiply(NumOps.FromDouble(_learningRate * 0.1), gradLogvar[i, j]));
                 }
 
-            // Update augmented Lagrangian with NOTEARS h(P) = tr(exp(P∘P)) - d
-            alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hValCurrent));
-            T rhoMaxT = NumOps.FromDouble(RhoMax);
-            if (NumOps.GreaterThan(hValCurrent, NumOps.FromDouble(RhoIncreaseThreshold)))
+            // Dual ascent once per OUTER round (every innerSteps gradient steps),
+            // per the NOTEARS / BCD-Nets augmented-Lagrangian schedule:
+            //   alpha <- alpha + rho * h
+            //   rho   <- 10 * rho   only if h did not shrink to <= 0.25 * h_prev
+            if ((iter + 1) % innerSteps == 0)
             {
-                T newRho = NumOps.Multiply(rho, NumOps.FromDouble(RhoMultiplier));
-                rho = NumOps.GreaterThan(newRho, rhoMaxT) ? rhoMaxT : newRho;
+                double hNow = NumOps.ToDouble(hValCurrent);
+
+                // Dual ascent only while the acyclicity constraint is genuinely
+                // violated. Once h ≈ 0 (the edge probabilities form a DAG) the
+                // multiplier must stop growing — alpha += rho·h is ~0 anyway, but
+                // skipping the rho-stall check prevents a needless rho escalation
+                // from numerical jitter around zero.
+                if (hNow > 1e-8)
+                {
+                    alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hValCurrent));
+
+                    T rhoMaxT = NumOps.FromDouble(RhoMax);
+                    if (!double.IsPositiveInfinity(hPrev)
+                        && hNow > RhoIncreaseThreshold * hPrev)
+                    {
+                        T newRho = NumOps.Multiply(rho, NumOps.FromDouble(RhoMultiplier));
+                        rho = NumOps.GreaterThan(newRho, rhoMaxT) ? rhoMaxT : newRho;
+                    }
+                }
+
+                hPrev = hNow;
             }
         }
 

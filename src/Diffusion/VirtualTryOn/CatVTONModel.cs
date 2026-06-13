@@ -111,8 +111,18 @@ public class CatVTONModel<T> : LatentDiffusionModelBase<T>
 
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new CatVTONModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
+        // Delegate to the predictor/VAE's own Clone implementations (mirrors
+        // RealESRGAN / SeedEdit3 / ImprovedConsistencyModel, PR #1555/#1565).
+        // The previous body constructed a fresh CatVTONModel — which rebuilds
+        // the DEFAULT SD-1.5-scale predictor/VAE — and then SetParameters with
+        // this model's weights: for a model constructed with custom-sized
+        // components the parameter counts differ and SetParameters throws, and
+        // even at default scale the fresh components re-hit the lazy-init
+        // divergence bug.
+        var clone = new CatVTONModel<T>(
+            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner, seed: RandomGenerator.Next());
         return clone;
     }
 

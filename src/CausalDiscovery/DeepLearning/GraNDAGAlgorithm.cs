@@ -73,6 +73,7 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
         T alpha = NumOps.Zero;
         T rho = NumOps.One;
         T rhoMax = NumOps.FromDouble(1e+16);
+        double hPrev = double.PositiveInfinity;
 
         for (int outer = 0; outer < MaxEpochs; outer++)
         {
@@ -130,7 +131,22 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
                 // Acyclicity gradient on adjacency A[i,j] = ||W1[j][:,i]||_2
                 var A = ExtractAdjacency(W1, d, h);
                 T hVal = ComputeTraceExpConstraint(A, d);
-                T augCoeff = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
+
+                // Numerical stabilization. Unlike BCD-Nets' clamped edge logits,
+                // GraN-DAG's raw MLP weights are unbounded: when the dual ratchet
+                // raises rho while h plateaus (20 inner steps cannot always drive
+                // h down), alpha + rho*h reaches ~1e17, the penalty gradient blows
+                // the weights up, tr(exp(A.A)) overflows and every weight goes
+                // NaN — the learned adjacency was NaN at EVERY learning rate.
+                // Clamp the augmented coefficient (the constraint force stays
+                // strong but finite) and bail to the last finite state if h has
+                // already gone non-finite. Reference implementations of
+                // NOTEARS-family solvers apply the same guards.
+                double hD = NumOps.ToDouble(hVal);
+                if (double.IsNaN(hD) || double.IsInfinity(hD)) break;
+                double augD = NumOps.ToDouble(alpha) + NumOps.ToDouble(rho) * hD;
+                if (augD > 1e+6) augD = 1e+6;
+                T augCoeff = NumOps.FromDouble(augD);
 
                 // Chain rule: dh/dW1 via dh/dA * dA/dW1
                 var (_, hGrad) = ComputeExpGradient(A, d);
@@ -150,14 +166,29 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
                         }
                     }
 
-                // Update
+                // Update with per-element gradient clipping (|g| <= 10): bounds
+                // the per-step weight change to 10*lr so a transiently large
+                // acyclicity force cannot launch the unbounded MLP weights into
+                // the exp-overflow regime (see the stabilization note above).
+                T clipHi = NumOps.FromDouble(10.0);
+                T clipLo = NumOps.FromDouble(-10.0);
                 for (int j = 0; j < d; j++)
                 {
                     for (int i = 0; i < d; i++)
                         for (int k = 0; k < h; k++)
-                            W1[j][i, k] = NumOps.Subtract(W1[j][i, k], NumOps.Multiply(lr, gW1[j][i, k]));
+                        {
+                            T g = gW1[j][i, k];
+                            if (NumOps.GreaterThan(g, clipHi)) g = clipHi;
+                            else if (NumOps.GreaterThan(clipLo, g)) g = clipLo;
+                            W1[j][i, k] = NumOps.Subtract(W1[j][i, k], NumOps.Multiply(lr, g));
+                        }
                     for (int k = 0; k < h; k++)
-                        W2[j][k, 0] = NumOps.Subtract(W2[j][k, 0], NumOps.Multiply(lr, gW2[j][k, 0]));
+                    {
+                        T g = gW2[j][k, 0];
+                        if (NumOps.GreaterThan(g, clipHi)) g = clipHi;
+                        else if (NumOps.GreaterThan(clipLo, g)) g = clipLo;
+                        W2[j][k, 0] = NumOps.Subtract(W2[j][k, 0], NumOps.Multiply(lr, g));
+                    }
 
                     // Zero diagonal
                     for (int k = 0; k < h; k++)
@@ -165,14 +196,27 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
                 }
             }
 
-            // Outer: update augmented Lagrangian
+            // Outer: update augmented Lagrangian per the NOTEARS dual schedule
+            // GraN-DAG adopts (Lachapelle et al. 2020 §3.2 / Zheng et al. 2018):
+            // rho is escalated only when h fails to SHRINK by the relative factor
+            // 0.25 versus the previous outer round. The previous code compared h
+            // against an ABSOLUTE 0.25, so with any nontrivial initial h the
+            // penalty multiplied 10x every epoch up to 1e16 and annihilated every
+            // path norm — the learned adjacency collapsed to all-zeros and no
+            // edges could ever be reported.
             var Afinal = ExtractAdjacency(W1, d, h);
             T hFinal = ComputeTraceExpConstraint(Afinal, d);
-            alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hFinal));
-            if (NumOps.GreaterThan(hFinal, NumOps.FromDouble(0.25)))
-                rho = NumOps.Multiply(rho, NumOps.FromDouble(10));
+            double hNow = NumOps.ToDouble(hFinal);
+            if (double.IsNaN(hNow) || double.IsInfinity(hNow)) break;
+            if (hNow > 1e-8)
+            {
+                alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hFinal));
+                if (!double.IsPositiveInfinity(hPrev) && hNow > 0.25 * hPrev)
+                    rho = NumOps.Multiply(rho, NumOps.FromDouble(10));
+            }
+            hPrev = hNow;
             if (NumOps.GreaterThan(rho, rhoMax)) break;
-            if (!NumOps.GreaterThan(hFinal, NumOps.FromDouble(1e-8))) break;
+            if (hNow <= 1e-8) break;
         }
 
         var rawAdj = ExtractAdjacency(W1, d, h);
@@ -182,6 +226,7 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
             for (int j = 0; j < d; j++)
                 if (i != j)
                     maxNorm = Math.Max(maxNorm, NumOps.ToDouble(rawAdj[i, j]));
+
         var learnedP = new double[d, d];
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)

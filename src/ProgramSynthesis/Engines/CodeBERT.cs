@@ -90,7 +90,22 @@ public class CodeBERT<T> : CodeModelBase<T>
         ITokenizer? tokenizer = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), tokenizer)
     {
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // AdamW (Loshchilov & Hutter 2019) at lr=1e-5 with weight decay 0.01 (the low end of
+        // the BERT fine-tuning range, Devlin 2018 App. A.3) —
+        // the standard BERT / RoBERTa optimizer (Devlin 2018; Liu 2019). With the
+        // final LayerNorm bounding the residual stream the gross blow-up is gone,
+        // but plain Adam still let the weights (and the loss) slowly drift up on
+        // longer runs. Decoupled weight decay regularizes the weights so training
+        // stays stable, and AMSGrad keeps the effective step shrinking near
+        // convergence.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-5,
+                WeightDecay = 0.01,
+                UseAMSGrad = true
+            });
         InitializeLayersCore();
     }
 
