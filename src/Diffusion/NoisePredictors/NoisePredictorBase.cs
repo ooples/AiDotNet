@@ -364,7 +364,10 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
 
     #region Transparent Weight Streaming (Tensors #602 / issue #430)
 
-    private bool _streamingEngaged;
+    // 0 = not engaged, 1 = engaged. Int (not bool) so the engage transition can be claimed
+    // atomically via Interlocked.CompareExchange — concurrent callers on the same instance
+    // then can't both reconfigure the process-global WeightRegistry.
+    private int _streamingEngaged;
 
     /// <summary>
     /// Parameter-count threshold above which <see cref="MaybeEngageWeightStreaming"/>
@@ -410,13 +413,18 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// </summary>
     protected void MaybeEngageWeightStreaming()
     {
-        if (_streamingEngaged) return;
+        if (System.Threading.Volatile.Read(ref _streamingEngaged) != 0) return;
 
         long threshold = StreamingThresholdOverride ?? DefaultStreamingThresholdParams;
         if (ParameterCount <= threshold) return;
 
         // Don't reconfigure (or clobber) a registry another model is using.
         if (WeightRegistry.GetStreamingReport().RegisteredEntryCount > 0) return;
+
+        // Atomically claim engagement: if a concurrent call on this same instance already
+        // won the race, that thread owns the WeightRegistry.Configure below and this one
+        // returns (runs resident) rather than reconfiguring the process-global registry.
+        if (System.Threading.Interlocked.CompareExchange(ref _streamingEngaged, 1, 0) != 0) return;
 
         WeightRegistry.Configure(new GpuOffloadOptions
         {
@@ -431,8 +439,6 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         {
             if (layer is LayerBase<T> lb) lb.UseStreamingAllocator = true;
         }
-
-        _streamingEngaged = true;
     }
 
     /// <summary>
@@ -444,7 +450,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// </summary>
     protected void RegisterResolvedStreamingWeights()
     {
-        if (!_streamingEngaged) return;
+        if (System.Threading.Volatile.Read(ref _streamingEngaged) == 0) return;
 
         foreach (var layer in ReflectInstanceLayers(this))
         {

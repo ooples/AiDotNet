@@ -159,6 +159,14 @@ public class WanVideoModel<T> : VideoDiffusionModelBase<T>
     private DiTNoisePredictor<T> _dit;
 
     /// <summary>
+    /// True when <see cref="_dit"/> was supplied by the caller rather than built from the
+    /// variant defaults. A caller-injected predictor can carry a configuration that differs
+    /// from the variant, so Clone() must copy it directly instead of reconstructing from
+    /// <see cref="_variant"/> (which would silently diverge).
+    /// </summary>
+    private bool _ditWasInjected;
+
+    /// <summary>
     /// The WanVAE (causal 3D VAE) for temporally compressed video encoding/decoding.
     /// </summary>
     private TemporalVAE<T> _temporalVAE;
@@ -338,6 +346,7 @@ public class WanVideoModel<T> : VideoDiffusionModelBase<T>
     {
         var (hiddenDim, numLayers, numHeads) = GetVariantConfig(_variant);
 
+        _ditWasInjected = dit is not null;
         _dit = dit ?? new DiTNoisePredictor<T>(
             inputChannels: LATENT_CHANNELS,
             hiddenSize: hiddenDim,
@@ -441,24 +450,36 @@ public class WanVideoModel<T> : VideoDiffusionModelBase<T>
     {
         var (hiddenDim, numLayers, numHeads) = GetVariantConfig(_variant);
 
-        var clonedDit = new DiTNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS,
-            hiddenSize: hiddenDim,
-            numLayers: numLayers,
-            numHeads: numHeads,
-            patchSize: PATCH_SIZE,
-            contextDim: CONTEXT_DIM);
-        // Copy weights only when the source has actually materialized them.
-        // For a never-forwarded model (the common case for foundation-scale
-        // configs like WanVideo-14B ≈ 15 B params) the freshly-constructed
-        // clonedDit is already an equivalent lazy copy — its parameters are
-        // fully determined by the shared config — so we skip the copy entirely.
-        // This avoids the flat-Vector<T> round-trip, which is both
-        // int.MaxValue-bounded (15 B > 2.1 B) and far larger than host RAM.
-        // When the source IS resolved, CopyParametersFrom does a per-layer
-        // copy (each layer < int.MaxValue) rather than one flat aggregate.
-        if (_dit.AreLayersInitialized)
-            clonedDit.CopyParametersFrom(_dit);
+        DiTNoisePredictor<T> clonedDit;
+        if (_ditWasInjected)
+        {
+            // A caller-injected predictor may differ in configuration from the variant
+            // defaults, so reconstructing from _variant could silently produce a
+            // structurally-different clone. Clone the actual predictor instead — its own
+            // Clone() preserves both config and (materialized) weights.
+            clonedDit = (DiTNoisePredictor<T>)_dit.Clone();
+        }
+        else
+        {
+            clonedDit = new DiTNoisePredictor<T>(
+                inputChannels: LATENT_CHANNELS,
+                hiddenSize: hiddenDim,
+                numLayers: numLayers,
+                numHeads: numHeads,
+                patchSize: PATCH_SIZE,
+                contextDim: CONTEXT_DIM);
+            // Copy weights only when the source has actually materialized them.
+            // For a never-forwarded model (the common case for foundation-scale
+            // configs like WanVideo-14B ≈ 15 B params) the freshly-constructed
+            // clonedDit is already an equivalent lazy copy — its parameters are
+            // fully determined by the shared config — so we skip the copy entirely.
+            // This avoids the flat-Vector<T> round-trip, which is both
+            // int.MaxValue-bounded (15 B > 2.1 B) and far larger than host RAM.
+            // When the source IS resolved, CopyParametersFrom does a per-layer
+            // copy (each layer < int.MaxValue) rather than one flat aggregate.
+            if (_dit.AreLayersInitialized)
+                clonedDit.CopyParametersFrom(_dit);
+        }
 
         return new WanVideoModel<T>(
             dit: clonedDit,
