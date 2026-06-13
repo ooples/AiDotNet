@@ -1526,6 +1526,7 @@ public partial class GRULayer<T> : LayerBase<T>
     internal override Dictionary<string, string> GetMetadata()
     {
         var metadata = base.GetMetadata();
+        metadata["HiddenSize"] = _hiddenSize.ToString();
         metadata["ReturnSequences"] = _returnSequences.ToString();
         return metadata;
     }
@@ -1559,40 +1560,8 @@ public partial class GRULayer<T> : LayerBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        // Lazy ctor: if shape isn't resolved (placeholder W/U/b tensors
-        // with Length 0), infer inputSize from the param vector. Layout:
-        //   3*W[hiddenSize, inputSize] + 3*U[hiddenSize, hiddenSize] + 3*b[hiddenSize]
-        //   = 3*hiddenSize*(inputSize + hiddenSize + 1)
-        // → inputSize = total/(3*hiddenSize) - hiddenSize - 1.
-        if (!IsShapeResolved && _hiddenSize > 0)
-        {
-            int divisor = 3 * _hiddenSize;
-            if (parameters.Length % divisor == 0)
-            {
-                int candidateInput = parameters.Length / divisor - _hiddenSize - 1;
-                if (candidateInput > 0)
-                {
-                    // The divisibility check alone can pass for malformed
-                    // vectors that happen to land on a multiple of
-                    // 3*hiddenSize but don't actually correspond to any
-                    // valid (inputSize, hiddenSize) GRU layout. Reverify
-                    // the round-trip count exactly so we reject those
-                    // before they corrupt the resolved shape.
-                    long expectedCount = (long)_hiddenSize * candidateInput * 3 +
-                                         (long)_hiddenSize * _hiddenSize * 3 +
-                                         (long)_hiddenSize * 3;
-                    if (expectedCount != parameters.Length)
-                    {
-                        throw new ArgumentException(
-                            $"Parameter vector length {parameters.Length} does not match GRU layout " +
-                            $"for inferred inputSize={candidateInput}, hiddenSize={_hiddenSize} " +
-                            $"(expected {expectedCount}).",
-                            nameof(parameters));
-                    }
-                    ResolveFromShape(new[] { candidateInput });
-                }
-            }
-        }
+        MaterializeParameterStorageFor(parameters.Length);
+
         // Bulk copy from parameter vector into tensor storage — avoids per-element SetFlat calls
         int idx = 0;
         parameters.Slice(idx, _Wz.Length).AsSpan().CopyTo(_Wz.Data.Span); idx += _Wz.Length;
@@ -1604,6 +1573,104 @@ public partial class GRULayer<T> : LayerBase<T>
         parameters.Slice(idx, _bz.Length).AsSpan().CopyTo(_bz.Data.Span); idx += _bz.Length;
         parameters.Slice(idx, _br.Length).AsSpan().CopyTo(_br.Data.Span); idx += _br.Length;
         parameters.Slice(idx, _bh.Length).AsSpan().CopyTo(_bh.Data.Span);
+    }
+
+    private void MaterializeParameterStorageFor(int parameterLength)
+    {
+        int expectedLength = CheckedParameterCountFor(_inputSize);
+        bool storageMatches =
+            _inputSize > 0 &&
+            expectedLength == parameterLength &&
+            _Wz.Length == _hiddenSize * _inputSize &&
+            _Wr.Length == _hiddenSize * _inputSize &&
+            _Wh.Length == _hiddenSize * _inputSize &&
+            _Uz.Length == _hiddenSize * _hiddenSize &&
+            _Ur.Length == _hiddenSize * _hiddenSize &&
+            _Uh.Length == _hiddenSize * _hiddenSize &&
+            _bz.Length == _hiddenSize &&
+            _br.Length == _hiddenSize &&
+            _bh.Length == _hiddenSize;
+
+        if (storageMatches)
+            return;
+
+        int inferredInputSize = InferInputSizeFromParameterLength(parameterLength);
+        ReplaceParameterStorage(inferredInputSize);
+    }
+
+    private int InferInputSizeFromParameterLength(int parameterLength)
+    {
+        if (_hiddenSize <= 0)
+        {
+            throw new ArgumentException(
+                $"Cannot load GRU parameters with invalid hiddenSize={_hiddenSize}.",
+                nameof(parameterLength));
+        }
+
+        int divisor = 3 * _hiddenSize;
+        if (parameterLength <= 0 || parameterLength % divisor != 0)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length {parameterLength} does not match a GRU layout for hiddenSize={_hiddenSize}. " +
+                $"Expected 3 * hiddenSize * (inputSize + hiddenSize + 1) parameters.",
+                nameof(parameterLength));
+        }
+
+        int inputSize = parameterLength / divisor - _hiddenSize - 1;
+        if (inputSize <= 0 || CheckedParameterCountFor(inputSize) != parameterLength)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length {parameterLength} does not describe a valid GRU inputSize for hiddenSize={_hiddenSize}.",
+                nameof(parameterLength));
+        }
+
+        return inputSize;
+    }
+
+    private int CheckedParameterCountFor(int inputSize)
+    {
+        if (inputSize <= 0 || _hiddenSize <= 0)
+            return 0;
+
+        long count = (long)_hiddenSize * inputSize * 3 +
+                     (long)_hiddenSize * _hiddenSize * 3 +
+                     (long)_hiddenSize * 3;
+        if (count > int.MaxValue)
+        {
+            throw new InvalidOperationException(
+                $"GRU parameter count {count} exceeds the maximum supported vector length.");
+        }
+
+        return (int)count;
+    }
+
+    private void ReplaceParameterStorage(int inputSize)
+    {
+        ClearRegisteredParameters();
+
+        _inputSize = inputSize;
+        _Wz = AllocateLazyWeight([_hiddenSize, _inputSize]);
+        _Wr = AllocateLazyWeight([_hiddenSize, _inputSize]);
+        _Wh = AllocateLazyWeight([_hiddenSize, _inputSize]);
+        _Uz = AllocateLazyWeight([_hiddenSize, _hiddenSize]);
+        _Ur = AllocateLazyWeight([_hiddenSize, _hiddenSize]);
+        _Uh = AllocateLazyWeight([_hiddenSize, _hiddenSize]);
+        _bz = AllocateLazyWeight([_hiddenSize]);
+        _br = AllocateLazyWeight([_hiddenSize]);
+        _bh = AllocateLazyWeight([_hiddenSize]);
+
+        RegisterTrainableParameter(_Wz, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Wr, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Wh, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Uz, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Ur, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Uh, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bz, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_br, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_bh, PersistentTensorRole.Biases);
+
+        _isInitialized = true;
+        InvalidateGpuStackedWeights();
     }
 
     public override Vector<T> GetParameterGradients()

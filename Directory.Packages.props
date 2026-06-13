@@ -148,7 +148,9 @@
          .Data accessor (the buffer path SelfAttentionLayer.Forward uses) — a
          paged-out weight read via .Memory previously Sliced empty storage and
          threw. Required by the DiT transparent-streaming engagement in this repo
-         (DiTWeightStreamingTests). Native packages coreleased in lockstep at 0.95.1. -->
+         (DiTWeightStreamingTests). This PR requires the 0.95.x streaming APIs, so it
+         supersedes master's 0.94.2 bump; the 0.95.x release line must carry forward
+         0.94.2's prepacked-B cache-validation fix. Native packages coreleased at 0.95.1. -->
     <PackageVersion Include="AiDotNet.Tensors" Version="0.95.1" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.95.1" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.95.1" />

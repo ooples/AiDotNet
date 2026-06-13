@@ -1,6 +1,10 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tests.ModelFamilyTests.Base;
+using AiDotNet.Tensors.Helpers;
+using System.Threading.Tasks;
+using Xunit;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
@@ -35,4 +39,37 @@ public class ConditionalGANTests : GANModelTestBase
 
     protected override INeuralNetworkModel<double> CreateNetwork()
         => new ConditionalGAN<double>();
+
+    [Fact(Timeout = 120000)]
+    public async Task CustomFullWidthGeneratorArchitecture_AcceptsNoiseOnlyPredictInput()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var generatorArchitecture = new NeuralNetworkArchitecture<double>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.Generative,
+            NetworkComplexity.Simple,
+            inputSize: 32,
+            outputSize: 64);
+
+        var discriminatorArchitecture = new NeuralNetworkArchitecture<double>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.BinaryClassification,
+            NetworkComplexity.Simple,
+            inputSize: 64,
+            outputSize: 1);
+
+        using var cgan = new ConditionalGAN<double>(
+            generatorArchitecture,
+            discriminatorArchitecture,
+            numConditionClasses: 10,
+            InputType.OneDimensional);
+
+        Assert.Equal(32, cgan.Generator.Architecture.InputSize);
+
+        var noiseOnlyInput = CreateRandomTensor([1, 22], new Random(42));
+        var output = cgan.Predict(noiseOnlyInput);
+
+        Assert.Equal(64, output.Length);
+    }
 }

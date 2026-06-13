@@ -114,6 +114,14 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     private Tensor<T>? _lastOutput;
 
     /// <summary>
+    /// True once this instance has runtime weight state that a clone must
+    /// preserve. Constructor-time eager placeholders do not count: default
+    /// paper-scale scaffolds should clone structurally until a caller forwards
+    /// data or assigns parameters.
+    /// </summary>
+    private bool _preserveMaterializedParameters;
+
+    /// <summary>
     /// Number of input channels.
     /// </summary>
     private readonly int _inputChannels;
@@ -442,6 +450,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
+        _preserveMaterializedParameters = true;
         _lastInput = noisySample;
 
         // Compute timestep embedding (already cached per-timestep in the base class).
@@ -573,6 +582,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Tensor<T> PredictNoiseWithEmbedding(Tensor<T> noisySample, Tensor<T> timeEmbedding, Tensor<T>? conditioning = null)
     {
+        _preserveMaterializedParameters = true;
         _lastInput = noisySample;
 
         // Project time embedding
@@ -1096,12 +1106,79 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     /// <inheritdoc />
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        foreach (var layer in EnumerateAllLayers())
+        {
+            foreach (var parameter in EnumerateMaterializedParameters(layer))
+                yield return parameter;
+        }
+    }
+
+    private IEnumerable<ILayer<T>?> EnumerateAllLayers()
+    {
+        yield return _inputConv;
+        yield return _timeEmbedMlp1;
+        yield return _timeEmbedMlp2;
+
+        foreach (var block in _encoderBlocks)
+        {
+            foreach (var layer in EnumerateBlockLayers(block))
+                yield return layer;
+        }
+
+        foreach (var block in _middleBlocks)
+        {
+            foreach (var layer in EnumerateBlockLayers(block))
+                yield return layer;
+        }
+
+        foreach (var block in _decoderBlocks)
+        {
+            foreach (var layer in EnumerateBlockLayers(block))
+                yield return layer;
+        }
+
+        yield return _outputConv;
+    }
+
+    private static IEnumerable<ILayer<T>?> EnumerateBlockLayers(UNetBlock block)
+    {
+        yield return block.ResBlock;
+        yield return block.AttentionBlock;
+        yield return block.CrossAttentionBlock;
+        yield return block.Downsample;
+        yield return block.Upsample;
+    }
+
+    private static IEnumerable<Tensor<T>> EnumerateMaterializedParameters(ILayer<T>? layer)
+    {
+        if (layer is null) yield break;
+
+        if (layer is ITrainableLayer<T> trainable)
+        {
+            foreach (var parameter in trainable.GetTrainableParameters())
+            {
+                if (parameter is null || parameter.Length == 0) continue;
+                yield return parameter;
+            }
+        }
+
+        foreach (var subLayer in layer.GetSubLayers())
+        {
+            foreach (var parameter in EnumerateMaterializedParameters(subLayer))
+                yield return parameter;
+        }
+    }
+
+    /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
         // Resolve lazy layer shapes first so each layer's slice is sized to its
         // real ParameterCount; otherwise lazy layers size to 0 and the incoming
         // values are silently dropped (the SetParameters/GetParameters round-trip bug).
         TriggerLazyShapeResolution();
+        _preserveMaterializedParameters = true;
 
         var index = 0;
 
@@ -1167,28 +1244,67 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             inputHeight: _inputHeight,
             lossFunction: LossFunction);
 
-        // Eager-init BOTH source and clone before snapshotting/setting
-        // parameters. PyTorch-style lazy shape inference makes the
-        // DenseLayer time-embedding MLPs report ParameterCount=0 (live
-        // arch-derived) vs GetParameters().Length=0 (lazy storage)
-        // until their first forward.
-        //
-        //   * The clone needs resolution BEFORE SetParameters(),
-        //     otherwise SetLayerParameters sizes every slice to 0 and
-        //     writes nothing, leaving the clone with fresh random
-        //     weights.
-        //
-        //   * The source ALSO needs resolution BEFORE GetParameters(),
-        //     otherwise the snapshot vector under-counts the time-
-        //     embedding MLP params. Downstream diffusion-model
-        //     SetParameters checks (ImprovedConsistencyModel etc.) compare
-        //     parameters.Length to the resolved clone's ParameterCount
-        //     and throw — surfacing as Clone_CreatesIndependentCopy
-        //     failures.
-        TriggerLazyShapeResolution();
-        clone.TriggerLazyShapeResolution();
-        clone.SetParameters(GetParameters());
+        // Keep default paper-scale lazy constructors lazy. Already-materialized
+        // eager tensors are still copied, but lazy tensors are resolved only
+        // after a forward pass or explicit SetParameters has established
+        // runtime weight state.
+        if (_preserveMaterializedParameters)
+        {
+            clone.TriggerLazyShapeResolution();
+            clone.SetParameters(GetParameters());
+        }
+        else
+        {
+            CopyMaterializedParametersTo(clone);
+        }
         return clone;
+    }
+
+    private void CopyMaterializedParametersTo(UNetNoisePredictor<T> clone)
+    {
+        using var source = EnumerateMaterializedModelParameters().GetEnumerator();
+        using var target = clone.EnumerateMaterializedModelParameters().GetEnumerator();
+
+        while (source.MoveNext())
+        {
+            if (!target.MoveNext())
+            {
+                throw new InvalidOperationException(
+                    "Clone has fewer materialized tensors than the source U-Net. " +
+                    "Architectures may differ or a lazy tensor was materialized without " +
+                    "marking runtime state.");
+            }
+
+            CopyTensorData(source.Current, target.Current);
+        }
+
+        if (target.MoveNext())
+        {
+            throw new InvalidOperationException(
+                "Clone has more materialized tensors than the source U-Net. " +
+                "Architectures may differ.");
+        }
+    }
+
+    private IEnumerable<Tensor<T>> EnumerateMaterializedModelParameters()
+    {
+        foreach (var layer in EnumerateAllLayers())
+        {
+            foreach (var parameter in EnumerateMaterializedParameters(layer))
+                yield return parameter;
+        }
+    }
+
+    private static void CopyTensorData(Tensor<T> source, Tensor<T> target)
+    {
+        if (source.Length != target.Length)
+        {
+            throw new InvalidOperationException(
+                $"Cannot copy tensor with {source.Length} elements into tensor " +
+                $"with {target.Length} elements.");
+        }
+
+        source.Data.Span.CopyTo(target.Data.Span);
     }
 
     /// <summary>

@@ -148,10 +148,10 @@ public class SpecializedBlocksIntegrationTests
     {
         // Arrange
         int inChannels = 64;
-        int outChannels = 64;
+        int baseChannels = 64;
         int height = 8;
         int width = 8;
-        var original = new BottleneckBlock<float>(inChannels, outChannels);
+        var original = new BottleneckBlock<float>(baseChannels);
         var input = CreateRandomTensor<float>([2, inChannels, height, width]);
         var originalOutput = original.Forward(input);
 
@@ -325,7 +325,9 @@ public class SpecializedBlocksIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DenseBlock_OutputChannels_CorrectlyCalculated()
     {
-        // Arrange
+        // Arrange - DenseBlock ctor only takes numLayers + growthRate; the
+        // inputChannels component of OutputChannels resolves from the first
+        // input.Shape (see DenseBlock.OnFirstForward).
         int inputChannels = 32;
         int numLayers = 6;
         int growthRate = 16;
@@ -333,14 +335,13 @@ public class SpecializedBlocksIntegrationTests
         int width = 8;
         var block = new DenseBlock<float>(numLayers, growthRate);
 
-        // OutputChannels = inputChannels + numLayers * growthRate, but the input channel
-        // count resolves LAZILY on first Forward (DenseNet blocks take their input width from
-        // the preceding layer), so OutputChannels reports the documented -1 sentinel until
-        // then — assert that, then drive one forward so the property has its inputs.
+        // OutputChannels reports the documented lazy sentinel until the first
+        // Forward reveals the input channel count.
         Assert.Equal(-1, block.OutputChannels);
-        block.Forward(CreateRandomTensor<float>([1, inputChannels, height, width]));
+        var input = CreateRandomTensor<float>([1, inputChannels, height, width]);
+        block.Forward(input);
 
-        // Assert - verify property calculation
+        // Assert - DenseNet concatenates the input with each layer's growth-rate output.
         Assert.Equal(inputChannels + numLayers * growthRate, block.OutputChannels);
         Assert.Equal(numLayers, block.NumLayers);
         Assert.Equal(growthRate, block.GrowthRate);

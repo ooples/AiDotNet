@@ -62,7 +62,11 @@ public class DiffusionExtendedIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task StableDiffusion15Model_Construction()
     {
-        var model = new StableDiffusion15Model<double>();
+        // FP32: see KandinskyModel_Construction below for the rationale and
+        // commit 1c21d67f9 for the upstream ModelFamily migration of the same
+        // model. SD15 paper-faithful defaults OOM standalone at FP64 on a
+        // 16 GB CI host.
+        var model = new StableDiffusion15Model<float>();
         Assert.NotNull(model);
     }
 
@@ -90,14 +94,21 @@ public class DiffusionExtendedIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task StableCascadeModel_Construction()
     {
-        var model = new StableCascadeModel<double>();
+        // FP32: same rationale as SD15 above (commit 1c21d67f9). StableCascade
+        // (Stage C prior + Stage B decoder + Stage A VQGAN) is on the
+        // standalone-OOM list at FP64 and additionally surfaced as a local
+        // OOM once KandinskyModel's FP32 fix freed up its share of memory
+        // (memory-pressure shift).
+        var model = new StableCascadeModel<float>();
         Assert.NotNull(model);
     }
 
     [Fact(Timeout = 120000)]
     public async Task DallE2Model_Construction()
     {
-        var model = new DallE2Model<double>();
+        // FP32: same rationale (commit 1c21d67f9). DALL·E 2's paper-faithful
+        // ~3.5B-param decoder is on the standalone-OOM-at-FP64 list.
+        var model = new DallE2Model<float>();
         Assert.NotNull(model);
     }
 
@@ -111,14 +122,20 @@ public class DiffusionExtendedIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DeepFloydIFModel_Construction()
     {
-        var model = new DeepFloydIFModel<double>();
+        // FP32: same rationale (commit 1c21d67f9). DeepFloyd IF's 3-stage
+        // cascade (~4B params total) is on the standalone-OOM-at-FP64 list.
+        var model = new DeepFloydIFModel<float>();
         Assert.NotNull(model);
     }
 
     [Fact(Timeout = 120000)]
     public async Task ImagenModel_Construction()
     {
-        var model = new ImagenModel<double>();
+        // FP32: same rationale (commit 1c21d67f9). Imagen's base UNet +
+        // super-resolution UNet is on the standalone-OOM-at-FP64 list and
+        // additionally surfaced as a local OOM after Kandinsky's FP32 fix
+        // freed its memory share (memory-pressure shift).
+        var model = new ImagenModel<float>();
         Assert.NotNull(model);
     }
 
@@ -132,7 +149,21 @@ public class DiffusionExtendedIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task KandinskyModel_Construction()
     {
-        var model = new KandinskyModel<double>();
+        // FP32 (not FP64) for the same reason as the ModelFamily KandinskyModelTests
+        // migrated in commit 1c21d67f9 (`test(diffusion): migrate 12 paper-scale
+        // diffusion tests to FP32`): Kandinsky 3.0's paper-faithful defaults
+        // (prior + decoder UNets + MoVQ-GAN VAE) instantiate ~16 GB of weight
+        // tensors at FP64, which OOMs the CI runner — confirmed locally:
+        // `new KandinskyModel<double>()` throws OutOfMemoryException at
+        // ConvolutionalLayer.EnsureInitialized while constructing the decoder
+        // UNet's level-3 ResBlocks, while `new KandinskyModel<float>()` succeeds
+        // in ~45s on the same machine. FP32 is the production-canonical
+        // precision for SD/Kandinsky paper checkpoints (FP32 master / FP16
+        // working). The other Construction smoke tests in this file currently
+        // fit at FP64 in CI's specific scheduling — they're left at <double>
+        // until CI demonstrates they too need migration, so the surface area
+        // of this fix matches the actual CI failure exactly.
+        var model = new KandinskyModel<float>();
         Assert.NotNull(model);
     }
 
@@ -357,7 +388,13 @@ public class DiffusionExtendedIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task MusicGenModel_Construction()
     {
-        var model = new MusicGenModel<double>();
+        // FP32: same rationale as the diffusion family above. MusicGen wasn't
+        // on commit 1c21d67f9's standalone-OOM list — that probe covered only
+        // the diffusion / VAE families — but the local sweep after Kandinsky
+        // FP32 surfaced it as an OOM in the shared diffusion-shard process at
+        // FP64. Migrating to FP32 brings it under the same memory budget as
+        // the other paper-scale models in this file.
+        var model = new MusicGenModel<float>();
         Assert.NotNull(model);
     }
 

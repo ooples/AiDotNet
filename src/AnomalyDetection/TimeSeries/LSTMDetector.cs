@@ -1,8 +1,9 @@
-using AiDotNet.Tensors.Engines;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.AnomalyDetection.TimeSeries;
@@ -18,28 +19,22 @@ namespace AiDotNet.AnomalyDetection.TimeSeries;
 /// significantly from the predicted value.
 /// </para>
 /// <para>
-/// The algorithm works by:
-/// 1. Train LSTM to predict next value in sequence
-/// 2. For each point, compute prediction error
-/// 3. High prediction errors indicate anomalies
+/// The algorithm follows the prediction-based formulation of Malhotra et al. (2015) and
+/// Hundman et al. (2018, NASA telemanom):
+/// 1. Train an LSTM to FORECAST the next value of the series.
+/// 2. For each point, compute the forecast error.
+/// 3. High forecast errors indicate anomalies.
 /// </para>
 /// <para>
-/// <b>When to use:</b>
-/// - Time series data with temporal dependencies
-/// - When patterns have long-term dependencies
-/// - Sequential anomaly detection
+/// Because the core of the detector IS a forecasting LSTM, the model also exposes a normal
+/// forecasting surface: <see cref="Train(Matrix{T}, Vector{T})"/> learns a target series and
+/// <see cref="Predict"/> returns one-step-ahead forecasts. The recurrent core runs on the
+/// shared tensor Engine (tape-based BPTT) rather than a hand-rolled scalar loop.
 /// </para>
 /// <para>
-/// <b>Industry Standard Defaults:</b>
-/// - Hidden dimensions: 64
-/// - Sequence length: 10
-/// - Epochs: 50
-/// - Learning rate: 0.001
-/// - Contamination: 0.1 (10%)
-/// </para>
-/// <para>
-/// Reference: Hochreiter, S. and Schmidhuber, J. (1997).
-/// "Long Short-Term Memory." Neural Computation.
+/// Reference: Malhotra et al. (2015), "Long Short Term Memory Networks for Anomaly Detection
+/// in Time Series"; Hundman et al. (2018), "Detecting Spacecraft Anomalies Using LSTMs and
+/// Nonparametric Dynamic Thresholding"; Hochreiter &amp; Schmidhuber (1997), "Long Short-Term Memory".
 /// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
@@ -58,42 +53,30 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
     private readonly int _epochs;
     private readonly double _learningRate;
 
-    // LSTM weights (simplified single layer)
-    // Gates: forget (f), input (i), cell (c), output (o)
-    private Matrix<T>? _Wf; // Forget gate
-    private Matrix<T>? _Wi; // Input gate
-    private Matrix<T>? _Wc; // Cell gate
-    private Matrix<T>? _Wo; // Output gate
-    private Vector<T>? _bf;
-    private Vector<T>? _bi;
-    private Vector<T>? _bc;
-    private Vector<T>? _bo;
-
-    // Output layer
-    private Matrix<T>? _Wy;
-    private Vector<T>? _by;
-
+    // Engine-backed forecasting core: LSTM (returns the full hidden sequence) -> Dense
+    // projection back to the feature dimension. Trained via the standard tape-based
+    // NeuralNetworkBase.Train path (CpuEngine.LstmSequenceForward + autograd), not a
+    // hand-rolled scalar BPTT loop.
+    private NeuralNetwork<T>? _forecaster;
     private int _inputDim;
 
-    // Normalization parameters
+    // The normalized training series and the normalization parameters, kept so Predict can
+    // produce in-sample one-step-ahead forecasts and score new data against the learned model.
+    private Matrix<T>? _normalizedSeries;
     private Vector<T>? _dataMeans;
     private Vector<T>? _dataStds;
 
-    /// <summary>
-    /// Gets the hidden dimensions.
-    /// </summary>
+    /// <summary>Gets the hidden dimension of the LSTM.</summary>
     public int HiddenDim => _hiddenDim;
 
-    /// <summary>
-    /// Gets the sequence length.
-    /// </summary>
+    /// <summary>Gets the sequence/window length.</summary>
     public int SeqLength => _seqLength;
 
     /// <summary>
     /// Creates a new LSTM anomaly detector.
     /// </summary>
-    /// <param name="hiddenDim">Dimensions of LSTM hidden state. Default is 64.</param>
-    /// <param name="seqLength">Length of input sequences. Default is 10.</param>
+    /// <param name="hiddenDim">Dimension of the LSTM hidden state. Default is 64.</param>
+    /// <param name="seqLength">Length of the input window. Default is 10.</param>
     /// <param name="epochs">Number of training epochs. Default is 50.</param>
     /// <param name="learningRate">Learning rate. Default is 0.001.</param>
     /// <param name="contamination">Expected proportion of anomalies. Default is 0.1 (10%).</param>
@@ -103,28 +86,17 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
         : base(contamination, randomSeed)
     {
         if (hiddenDim < 1)
-        {
             throw new ArgumentOutOfRangeException(nameof(hiddenDim),
                 "Hidden dimensions must be at least 1. Recommended is 64.");
-        }
-
         if (seqLength < 1)
-        {
             throw new ArgumentOutOfRangeException(nameof(seqLength),
                 "Sequence length must be at least 1. Recommended is 10.");
-        }
-
         if (epochs < 1)
-        {
             throw new ArgumentOutOfRangeException(nameof(epochs),
                 "Epochs must be at least 1. Recommended is 50.");
-        }
-
         if (learningRate <= 0)
-        {
             throw new ArgumentOutOfRangeException(nameof(learningRate),
                 "Learning rate must be positive. Recommended is 0.001.");
-        }
 
         _hiddenDim = hiddenDim;
         _seqLength = seqLength;
@@ -141,38 +113,224 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
         _inputDim = X.Columns;
 
         if (n < _seqLength + 1)
-        {
             throw new ArgumentException(
                 $"Not enough samples for sequence length {_seqLength}. Need at least {_seqLength + 1} samples.",
                 nameof(X));
-        }
-
         if (_inputDim < 1)
-        {
-            throw new ArgumentException(
-                "Input must have at least 1 feature.",
-                nameof(X));
-        }
+            throw new ArgumentException("Input must have at least 1 feature.", nameof(X));
 
-        // Normalize data
         var (normalizedData, means, stds) = NormalizeData(X);
         _dataMeans = means;
         _dataStds = stds;
+        _normalizedSeries = normalizedData;
 
-        // Initialize weights
-        InitializeWeights();
+        TrainForecaster(normalizedData);
 
-        // Create sequences
-        var (sequences, targets) = CreateSequences(normalizedData);
-
-        // Train
-        Train(sequences, targets);
-
-        // Calculate scores for training data
         var trainingScores = ScoreAnomaliesInternal(X);
         SetThresholdFromContamination(trainingScores);
 
         _isFitted = true;
+    }
+
+    /// <summary>
+    /// Returns one-step-ahead forecasts of the learned series in the ORIGINAL (denormalized)
+    /// scale — the model's underlying prediction surface (Malhotra et al. 2015; Hundman et al.
+    /// 2018). <see cref="Predict"/> follows the <c>IAnomalyDetector</c> contract and returns
+    /// anomaly LABELS (−1/+1); use this method when you want the raw forecast the anomaly score
+    /// is derived from.
+    /// </summary>
+    /// <param name="steps">Number of leading series positions to forecast.</param>
+    public Vector<T> Forecast(int steps)
+    {
+        EnsureFitted();
+        if (steps < 1) throw new ArgumentOutOfRangeException(nameof(steps), "steps must be at least 1.");
+        return ForecastInSample(steps);
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> ScoreAnomalies(Matrix<T> X)
+    {
+        EnsureFitted();
+        return ScoreAnomaliesInternal(X);
+    }
+
+    // ---- Engine-backed forecasting core -------------------------------------------------
+
+    private void TrainForecaster(Matrix<T> normalizedSeries)
+    {
+        int n = normalizedSeries.Rows;
+
+        // LSTM (full-sequence) -> Dense projection back to the feature width. The Dense head
+        // is linear (Identity): forecasting is a regression onto the continuous next value.
+        var architecture = new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: _inputDim,
+            outputSize: _inputDim,
+            layers: new List<ILayer<T>>
+            {
+                new LSTMLayer<T>(_hiddenDim),
+                new DenseLayer<T>(_inputDim, new IdentityActivation<T>() as IActivationFunction<T>)
+            });
+
+        _forecaster = new NeuralNetwork<T>(architecture);
+
+        // Sliding-window teacher forcing, batched. Each window is an independent length-
+        // _seqLength sequence (the LSTM resets its state per batch element), with the same
+        // window shifted one step ahead as the target, so the last position of each window
+        // learns to forecast the value that follows it. Stacking every window into one
+        // [numWindows, seqLength, feat] batch gives the full per-window gradient signal in a
+        // single tape pass per epoch — many more effective updates than a single
+        // full-sequence step, without thousands of Train() calls.
+        int numWindows = n - _seqLength;
+        var inputTensor = new Tensor<T>(new[] { numWindows, _seqLength, _inputDim });
+        var targetTensor = new Tensor<T>(new[] { numWindows, _seqLength, _inputDim });
+        for (int w = 0; w < numWindows; w++)
+        {
+            for (int t = 0; t < _seqLength; t++)
+            {
+                for (int j = 0; j < _inputDim; j++)
+                {
+                    inputTensor[new[] { w, t, j }] = normalizedSeries[w + t, j];
+                    targetTensor[new[] { w, t, j }] = normalizedSeries[w + t + 1, j];
+                }
+            }
+        }
+
+        for (int epoch = 0; epoch < _epochs; epoch++)
+            _forecaster.Train(inputTensor, targetTensor);
+    }
+
+    /// <summary>
+    /// Runs every length-_seqLength window of the stored series through the forecaster and
+    /// returns the last-position forecast of each window: <c>windowForecast[w]</c> is the
+    /// (normalized) prediction of series position <c>w + _seqLength</c>.
+    /// </summary>
+    private Tensor<T>? PredictWindows()
+    {
+        var series = _normalizedSeries;
+        if (_forecaster is null || series is null) return null;
+        int n = series.Rows;
+        int numWindows = n - _seqLength;
+        if (numWindows < 1) return null;
+
+        var batch = new Tensor<T>(new[] { numWindows, _seqLength, _inputDim });
+        for (int w = 0; w < numWindows; w++)
+            for (int t = 0; t < _seqLength; t++)
+                for (int j = 0; j < _inputDim; j++)
+                    batch[new[] { w, t, j }] = series[w + t, j];
+
+        return _forecaster.Predict(batch);
+    }
+
+    /// <summary>
+    /// One-step-ahead in-sample forecasts (denormalized), feature 0, padded/continued to
+    /// <paramref name="steps"/> positions. Position 0 has no history so it returns the actual
+    /// first value; position t (t&gt;=1) is the model's forecast of the learned series at t.
+    /// </summary>
+    private Vector<T> ForecastInSample(int steps)
+    {
+        var series = _normalizedSeries;
+        var means = _dataMeans;
+        var stds = _dataStds;
+        if (_forecaster is null || series is null || means is null || stds is null)
+            return new Vector<T>(steps);
+
+        int n = series.Rows;
+        int numWindows = n - _seqLength;
+        var windowForecasts = PredictWindows();
+
+        var result = new Vector<T>(steps);
+        for (int p = 0; p < steps; p++)
+        {
+            T normValue;
+            if (p < _seqLength || windowForecasts is null)
+            {
+                // No full window of history yet — the actual value is the best available
+                // estimate (a 0-error warm-up, the standard one-step-ahead convention).
+                normValue = series[Math.Min(p, n - 1), 0];
+            }
+            else if (p - _seqLength < numWindows)
+            {
+                // windowForecasts[p - _seqLength, last] forecasts series position p.
+                normValue = windowForecasts[new[] { p - _seqLength, _seqLength - 1, 0 }];
+            }
+            else
+            {
+                // Beyond the learned horizon: hold the final window's forecast.
+                normValue = windowForecasts[new[] { numWindows - 1, _seqLength - 1, 0 }];
+            }
+
+            // Denormalize feature 0 back to the original scale.
+            result[p] = NumOps.Add(NumOps.Multiply(normValue, stds[0]), means[0]);
+        }
+
+        return result;
+    }
+
+    private Vector<T> ScoreAnomaliesInternal(Matrix<T> X)
+    {
+        ValidateInput(X);
+
+        if (X.Columns != _inputDim)
+            throw new ArgumentException(
+                $"Input has {X.Columns} features but model was trained with {_inputDim} features.",
+                nameof(X));
+
+        var means = _dataMeans;
+        var stds = _dataStds;
+        if (_forecaster is null || means is null || stds is null)
+            throw new InvalidOperationException("Model not properly fitted.");
+
+        int n = X.Rows;
+
+        // Normalize the incoming data with the learned statistics.
+        var normalized = new Matrix<T>(n, _inputDim);
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < _inputDim; j++)
+                normalized[i, j] = NumOps.Divide(NumOps.Subtract(X[i, j], means[j]), stds[j]);
+
+        // Forecast each position i (>= _seqLength) from its preceding window and batch the
+        // whole set of windows into one Predict() call. windowOut[w, last] predicts position
+        // w + _seqLength.
+        int numWindows = n - _seqLength;
+        Tensor<T>? windowOut = null;
+        if (numWindows >= 1)
+        {
+            var batch = new Tensor<T>(new[] { numWindows, _seqLength, _inputDim });
+            for (int w = 0; w < numWindows; w++)
+                for (int t = 0; t < _seqLength; t++)
+                    for (int j = 0; j < _inputDim; j++)
+                        batch[new[] { w, t, j }] = normalized[w + t, j];
+            windowOut = _forecaster.Predict(batch);
+        }
+
+        var scores = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+        {
+            T score = NumOps.Zero;
+            if (i < _seqLength || windowOut is null)
+            {
+                // Insufficient history: score by distance from the (normalized) mean.
+                for (int j = 0; j < _inputDim; j++)
+                {
+                    T val = normalized[i, j];
+                    score = NumOps.Add(score, NumOps.Multiply(val, val));
+                }
+            }
+            else
+            {
+                // Squared forecast error: ||normalized[i] - forecast(i)||^2.
+                for (int j = 0; j < _inputDim; j++)
+                {
+                    T diff = NumOps.Subtract(normalized[i, j], windowOut[new[] { i - _seqLength, _seqLength - 1, j }]);
+                    score = NumOps.Add(score, NumOps.Multiply(diff, diff));
+                }
+            }
+            scores[i] = score;
+        }
+
+        return scores;
     }
 
     private (Matrix<T> normalized, Vector<T> means, Vector<T> stds) NormalizeData(Matrix<T> data)
@@ -187,9 +345,7 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = NumOps.Zero;
             for (int i = 0; i < n; i++)
-            {
                 sum = NumOps.Add(sum, data[i, j]);
-            }
             means[j] = NumOps.Divide(sum, NumOps.FromDouble(n));
 
             T variance = NumOps.Zero;
@@ -206,627 +362,9 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
 
         var normalized = new Matrix<T>(n, d);
         for (int i = 0; i < n; i++)
-        {
             for (int j = 0; j < d; j++)
-            {
-                T diff = NumOps.Subtract(data[i, j], means[j]);
-                normalized[i, j] = NumOps.Divide(diff, stds[j]);
-            }
-        }
+                normalized[i, j] = NumOps.Divide(NumOps.Subtract(data[i, j], means[j]), stds[j]);
 
         return (normalized, means, stds);
-    }
-
-    private void InitializeWeights()
-    {
-        int inputSize = _inputDim + _hiddenDim; // Input + previous hidden state
-        double scale = Math.Sqrt(2.0 / inputSize);
-        double scaleOut = Math.Sqrt(2.0 / _hiddenDim);
-
-        _Wf = InitializeMatrix(inputSize, _hiddenDim, scale);
-        _Wi = InitializeMatrix(inputSize, _hiddenDim, scale);
-        _Wc = InitializeMatrix(inputSize, _hiddenDim, scale);
-        _Wo = InitializeMatrix(inputSize, _hiddenDim, scale);
-
-        _bf = new Vector<T>(_hiddenDim);
-        _bi = new Vector<T>(_hiddenDim);
-        _bc = new Vector<T>(_hiddenDim);
-        _bo = new Vector<T>(_hiddenDim);
-
-        // Initialize forget gate bias to 1 (helps with gradient flow)
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            _bf[i] = NumOps.One;
-            _bi[i] = NumOps.Zero;
-            _bc[i] = NumOps.Zero;
-            _bo[i] = NumOps.Zero;
-        }
-
-        _Wy = InitializeMatrix(_hiddenDim, _inputDim, scaleOut);
-        _by = new Vector<T>(_inputDim);
-        for (int i = 0; i < _inputDim; i++)
-        {
-            _by[i] = NumOps.Zero;
-        }
-    }
-
-    private Matrix<T> InitializeMatrix(int rows, int cols, double scale)
-    {
-        var matrix = new Matrix<T>(rows, cols);
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                double u1 = 1.0 - _random.NextDouble();
-                double u2 = 1.0 - _random.NextDouble();
-                double val = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2) * scale;
-                matrix[i, j] = NumOps.FromDouble(val);
-            }
-        }
-        return matrix;
-    }
-
-    private (Vector<T>[][] sequences, Vector<T>[] targets) CreateSequences(Matrix<T> data)
-    {
-        int n = data.Rows - _seqLength;
-        var sequences = new Vector<T>[n][];
-        var targets = new Vector<T>[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            sequences[i] = new Vector<T>[_seqLength];
-            for (int t = 0; t < _seqLength; t++)
-            {
-                sequences[i][t] = data.GetRow(i + t);
-            }
-            targets[i] = data.GetRow(i + _seqLength);
-        }
-
-        return (sequences, targets);
-    }
-
-    private void Train(Vector<T>[][] sequences, Vector<T>[] targets)
-    {
-        // Capture nullable fields for proper null checking
-        var Wf = _Wf;
-        var Wi = _Wi;
-        var Wc = _Wc;
-        var Wo = _Wo;
-        var bf = _bf;
-        var bi = _bi;
-        var bc = _bc;
-        var bo = _bo;
-        var Wy = _Wy;
-        var by = _by;
-
-        if (Wf == null || Wi == null || Wc == null || Wo == null ||
-            bf == null || bi == null || bc == null || bo == null ||
-            Wy == null || by == null)
-        {
-            throw new InvalidOperationException("Weights not initialized.");
-        }
-
-        int n = sequences.Length;
-        int batchSize = Math.Min(32, n);
-        int inputSize = _inputDim + _hiddenDim;
-
-        for (int epoch = 0; epoch < _epochs; epoch++)
-        {
-            var indices = Enumerable.Range(0, n).OrderBy(_ => _random.NextDouble()).ToArray();
-
-            for (int batch = 0; batch < n; batch += batchSize)
-            {
-                int actualBatchSize = Math.Min(batchSize, n - batch);
-
-                // Initialize gradient accumulators (using double for intermediate computation during backprop)
-                var dWf = new double[inputSize, _hiddenDim];
-                var dWi = new double[inputSize, _hiddenDim];
-                var dWc = new double[inputSize, _hiddenDim];
-                var dWo = new double[inputSize, _hiddenDim];
-                var dbf = new double[_hiddenDim];
-                var dbi = new double[_hiddenDim];
-                var dbc = new double[_hiddenDim];
-                var dbo = new double[_hiddenDim];
-                var dWy = new double[_hiddenDim, _inputDim];
-                var dby = new double[_inputDim];
-
-                for (int b = 0; b < actualBatchSize; b++)
-                {
-                    int idx = indices[batch + b];
-                    var seq = sequences[idx];
-                    var target = targets[idx];
-
-                    // Forward pass with caching all intermediate values
-                    var (prediction, hStates, cStates, fGates, iGates, cCandidates, oGates, concats) =
-                        ForwardWithCache(seq);
-
-                    // Compute output layer gradient
-                    var dOutput = new Vector<T>(_inputDim);
-                    for (int j = 0; j < _inputDim; j++)
-                    {
-                        T diff = NumOps.Subtract(prediction[j], target[j]);
-                        dOutput[j] = NumOps.Multiply(NumOps.FromDouble(2.0), diff);
-                    }
-
-                    // Backprop through output layer
-                    var hFinal = hStates[seq.Length];
-                    for (int j = 0; j < _inputDim; j++)
-                    {
-                        T dOutJ = dOutput[j];
-                        dby[j] += NumOps.ToDouble(dOutJ);
-                        for (int i = 0; i < _hiddenDim; i++)
-                        {
-                            dWy[i, j] += NumOps.ToDouble(NumOps.Multiply(hFinal[i], dOutJ));
-                        }
-                    }
-
-                    // Gradient w.r.t. final hidden state
-                    var dh = new Vector<T>(_hiddenDim);
-                    for (int i = 0; i < _hiddenDim; i++)
-                    {
-                        T sum = NumOps.Zero;
-                        for (int j = 0; j < _inputDim; j++)
-                        {
-                            sum = NumOps.Add(sum, NumOps.Multiply(Wy[i, j], dOutput[j]));
-                        }
-                        dh[i] = sum;
-                    }
-
-                    // BPTT through time steps
-                    var dc = new Vector<T>(_hiddenDim);
-                    for (int i = 0; i < _hiddenDim; i++)
-                    {
-                        dc[i] = NumOps.Zero;
-                    }
-
-                    for (int t = seq.Length - 1; t >= 0; t--)
-                    {
-                        var f = fGates[t];
-                        var ig = iGates[t];
-                        var cCand = cCandidates[t];
-                        var o = oGates[t];
-                        var cPrev = t > 0 ? cStates[t] : CreateZeroVector(_hiddenDim);
-                        var cCurr = cStates[t + 1];
-                        var concat = concats[t];
-
-                        // Gradient of h = o * tanh(c)
-                        var tanhC = Engine.Tanh(cCurr);
-
-                        var do_gate = new Vector<T>(_hiddenDim);
-                        for (int i = 0; i < _hiddenDim; i++)
-                        {
-                            do_gate[i] = NumOps.Multiply(dh[i], tanhC[i]);
-                            T tanhDeriv = NumOps.Subtract(NumOps.One, NumOps.Multiply(tanhC[i], tanhC[i]));
-                            T dcFromH = NumOps.Multiply(dh[i], NumOps.Multiply(o[i], tanhDeriv));
-                            dc[i] = NumOps.Add(dc[i], dcFromH);
-                        }
-
-                        var df = new Vector<T>(_hiddenDim);
-                        var di = new Vector<T>(_hiddenDim);
-                        var dcCand = new Vector<T>(_hiddenDim);
-
-                        for (int i = 0; i < _hiddenDim; i++)
-                        {
-                            df[i] = NumOps.Multiply(dc[i], cPrev[i]);
-                            di[i] = NumOps.Multiply(dc[i], cCand[i]);
-                            dcCand[i] = NumOps.Multiply(dc[i], ig[i]);
-                        }
-
-                        // Apply gate derivatives
-                        var dfPre = new Vector<T>(_hiddenDim);
-                        var diPre = new Vector<T>(_hiddenDim);
-                        var doPre = new Vector<T>(_hiddenDim);
-                        var dcCandPre = new Vector<T>(_hiddenDim);
-
-                        for (int i = 0; i < _hiddenDim; i++)
-                        {
-                            // Sigmoid derivative: s * (1 - s)
-                            T fSigDeriv = NumOps.Multiply(f[i], NumOps.Subtract(NumOps.One, f[i]));
-                            T igSigDeriv = NumOps.Multiply(ig[i], NumOps.Subtract(NumOps.One, ig[i]));
-                            T oSigDeriv = NumOps.Multiply(o[i], NumOps.Subtract(NumOps.One, o[i]));
-
-                            dfPre[i] = NumOps.Multiply(df[i], fSigDeriv);
-                            diPre[i] = NumOps.Multiply(di[i], igSigDeriv);
-                            doPre[i] = NumOps.Multiply(do_gate[i], oSigDeriv);
-                            // Tanh derivative: 1 - tanh^2
-                            dcCandPre[i] = NumOps.Multiply(dcCand[i], NumOps.Subtract(NumOps.One, NumOps.Multiply(cCand[i], cCand[i])));
-                        }
-
-                        // Accumulate gradients for gate weights
-                        for (int i = 0; i < inputSize; i++)
-                        {
-                            T concatI = concat[i];
-                            for (int j = 0; j < _hiddenDim; j++)
-                            {
-                                dWf[i, j] += NumOps.ToDouble(NumOps.Multiply(concatI, dfPre[j]));
-                                dWi[i, j] += NumOps.ToDouble(NumOps.Multiply(concatI, diPre[j]));
-                                dWc[i, j] += NumOps.ToDouble(NumOps.Multiply(concatI, dcCandPre[j]));
-                                dWo[i, j] += NumOps.ToDouble(NumOps.Multiply(concatI, doPre[j]));
-                            }
-                        }
-
-                        for (int j = 0; j < _hiddenDim; j++)
-                        {
-                            dbf[j] += NumOps.ToDouble(dfPre[j]);
-                            dbi[j] += NumOps.ToDouble(diPre[j]);
-                            dbc[j] += NumOps.ToDouble(dcCandPre[j]);
-                            dbo[j] += NumOps.ToDouble(doPre[j]);
-                        }
-
-                        // Gradient w.r.t. concat
-                        var dConcat = new Vector<T>(inputSize);
-                        for (int i = 0; i < inputSize; i++)
-                        {
-                            T sum = NumOps.Zero;
-                            for (int j = 0; j < _hiddenDim; j++)
-                            {
-                                sum = NumOps.Add(sum, NumOps.Multiply(Wf[i, j], dfPre[j]));
-                                sum = NumOps.Add(sum, NumOps.Multiply(Wi[i, j], diPre[j]));
-                                sum = NumOps.Add(sum, NumOps.Multiply(Wc[i, j], dcCandPre[j]));
-                                sum = NumOps.Add(sum, NumOps.Multiply(Wo[i, j], doPre[j]));
-                            }
-                            dConcat[i] = sum;
-                        }
-
-                        // Extract dh_prev from dConcat
-                        var dhPrev = new Vector<T>(_hiddenDim);
-                        for (int i = 0; i < _hiddenDim; i++)
-                        {
-                            dhPrev[i] = dConcat[_inputDim + i];
-                        }
-
-                        // Update dc for next iteration
-                        var dcPrev = new Vector<T>(_hiddenDim);
-                        for (int i = 0; i < _hiddenDim; i++)
-                        {
-                            dcPrev[i] = NumOps.Multiply(dc[i], f[i]);
-                        }
-
-                        dh = dhPrev;
-                        dc = dcPrev;
-                    }
-                }
-
-                // Apply gradients using NumOps
-                double lr = _learningRate / actualBatchSize;
-                double clipValue = 5.0;
-
-                for (int i = 0; i < inputSize; i++)
-                {
-                    for (int j = 0; j < _hiddenDim; j++)
-                    {
-                        double clippedGrad;
-                        clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, dWf[i, j]));
-                        Wf[i, j] = NumOps.Subtract(Wf[i, j], NumOps.FromDouble(lr * clippedGrad));
-                        clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, dWi[i, j]));
-                        Wi[i, j] = NumOps.Subtract(Wi[i, j], NumOps.FromDouble(lr * clippedGrad));
-                        clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, dWc[i, j]));
-                        Wc[i, j] = NumOps.Subtract(Wc[i, j], NumOps.FromDouble(lr * clippedGrad));
-                        clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, dWo[i, j]));
-                        Wo[i, j] = NumOps.Subtract(Wo[i, j], NumOps.FromDouble(lr * clippedGrad));
-                    }
-                }
-
-                for (int j = 0; j < _hiddenDim; j++)
-                {
-                    bf[j] = NumOps.Subtract(bf[j], NumOps.FromDouble(lr * Math.Max(-clipValue, Math.Min(clipValue, dbf[j]))));
-                    bi[j] = NumOps.Subtract(bi[j], NumOps.FromDouble(lr * Math.Max(-clipValue, Math.Min(clipValue, dbi[j]))));
-                    bc[j] = NumOps.Subtract(bc[j], NumOps.FromDouble(lr * Math.Max(-clipValue, Math.Min(clipValue, dbc[j]))));
-                    bo[j] = NumOps.Subtract(bo[j], NumOps.FromDouble(lr * Math.Max(-clipValue, Math.Min(clipValue, dbo[j]))));
-                }
-
-                for (int i = 0; i < _hiddenDim; i++)
-                {
-                    for (int j = 0; j < _inputDim; j++)
-                    {
-                        double clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, dWy[i, j]));
-                        Wy[i, j] = NumOps.Subtract(Wy[i, j], NumOps.FromDouble(lr * clippedGrad));
-                    }
-                }
-
-                for (int j = 0; j < _inputDim; j++)
-                {
-                    by[j] = NumOps.Subtract(by[j], NumOps.FromDouble(lr * Math.Max(-clipValue, Math.Min(clipValue, dby[j]))));
-                }
-            }
-        }
-    }
-
-    private Vector<T> CreateZeroVector(int size)
-    {
-        var v = new Vector<T>(size);
-        for (int i = 0; i < size; i++)
-        {
-            v[i] = NumOps.Zero;
-        }
-        return v;
-    }
-
-    private (Vector<T> output, Vector<T>[] hStates, Vector<T>[] cStates,
-             Vector<T>[] fGates, Vector<T>[] iGates, Vector<T>[] cCandidates,
-             Vector<T>[] oGates, Vector<T>[] concats) ForwardWithCache(Vector<T>[] sequence)
-    {
-        // Capture nullable fields for proper null checking
-        var Wf = _Wf;
-        var Wi = _Wi;
-        var Wc = _Wc;
-        var Wo = _Wo;
-        var bf = _bf;
-        var bi = _bi;
-        var bc = _bc;
-        var bo = _bo;
-        var Wy = _Wy;
-        var by = _by;
-
-        if (Wf == null || Wi == null || Wc == null || Wo == null ||
-            bf == null || bi == null || bc == null || bo == null ||
-            Wy == null || by == null)
-        {
-            throw new InvalidOperationException("Weights not initialized.");
-        }
-
-        int seqLen = sequence.Length;
-        int inputSize = _inputDim + _hiddenDim;
-
-        // Initialize states
-        var hStates = new Vector<T>[seqLen + 1];
-        var cStates = new Vector<T>[seqLen + 1];
-        hStates[0] = CreateZeroVector(_hiddenDim);
-        cStates[0] = CreateZeroVector(_hiddenDim);
-
-        // Cache for BPTT
-        var fGates = new Vector<T>[seqLen];
-        var iGates = new Vector<T>[seqLen];
-        var cCandidates = new Vector<T>[seqLen];
-        var oGates = new Vector<T>[seqLen];
-        var concats = new Vector<T>[seqLen];
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            var x = sequence[t];
-            var hPrev = hStates[t];
-            var cPrev = cStates[t];
-
-            // Concatenate input and previous hidden state
-            var concat = new Vector<T>(inputSize);
-            for (int i = 0; i < _inputDim; i++)
-            {
-                concat[i] = x[i];
-            }
-            for (int i = 0; i < _hiddenDim; i++)
-            {
-                concat[_inputDim + i] = hPrev[i];
-            }
-            concats[t] = concat;
-
-            // Vectorized LSTM gates using Engine.TensorMatMul
-            var concatTensor = Tensor<T>.FromVector(concat).Reshape(1, inputSize);
-
-            // Forget gate: f = sigmoid(concat @ Wf + bf)
-            var fTensor = Engine.TensorMatMul(concatTensor, Tensor<T>.FromMatrix(Wf));
-            fTensor = Engine.TensorBroadcastAdd(fTensor, Tensor<T>.FromVector(bf).Reshape(1, _hiddenDim));
-            fTensor = Engine.Sigmoid(fTensor);
-            var f = fTensor.Reshape(_hiddenDim).ToVector();
-            fGates[t] = f;
-
-            // Input gate: ig = sigmoid(concat @ Wi + bi)
-            var igTensor = Engine.TensorMatMul(concatTensor, Tensor<T>.FromMatrix(Wi));
-            igTensor = Engine.TensorBroadcastAdd(igTensor, Tensor<T>.FromVector(bi).Reshape(1, _hiddenDim));
-            igTensor = Engine.Sigmoid(igTensor);
-            var ig = igTensor.Reshape(_hiddenDim).ToVector();
-            iGates[t] = ig;
-
-            // Cell candidate: cCand = tanh(concat @ Wc + bc)
-            var ccTensor = Engine.TensorMatMul(concatTensor, Tensor<T>.FromMatrix(Wc));
-            ccTensor = Engine.TensorBroadcastAdd(ccTensor, Tensor<T>.FromVector(bc).Reshape(1, _hiddenDim));
-            ccTensor = Engine.Tanh(ccTensor);
-            var cCand = ccTensor.Reshape(_hiddenDim).ToVector();
-            cCandidates[t] = cCand;
-
-            // Output gate: o = sigmoid(concat @ Wo + bo)
-            var oTensor = Engine.TensorMatMul(concatTensor, Tensor<T>.FromMatrix(Wo));
-            oTensor = Engine.TensorBroadcastAdd(oTensor, Tensor<T>.FromVector(bo).Reshape(1, _hiddenDim));
-            oTensor = Engine.Sigmoid(oTensor);
-            var o = oTensor.Reshape(_hiddenDim).ToVector();
-            oGates[t] = o;
-
-            // New cell and hidden state
-            // c = f * cPrev + i * cCand  (SIMD)
-            var cNew = (Vector<T>)Engine.Add(
-                Engine.Multiply(f, cPrev),
-                Engine.Multiply(ig, cCand));
-            // h = o * tanh(c)  (SIMD)
-            var hNew = (Vector<T>)Engine.Multiply(o, Engine.Tanh(cNew));
-
-            hStates[t + 1] = hNew;
-            cStates[t + 1] = cNew;
-        }
-
-        // Output layer
-        var hFinal = hStates[seqLen];
-        var output = new Vector<T>(_inputDim);
-        for (int j = 0; j < _inputDim; j++)
-        {
-            T sum = by[j];
-            { var wc4 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wc4[ii] = Wy[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(hFinal, wc4)); }
-            output[j] = sum;
-        }
-
-        return (output, hStates, cStates, fGates, iGates, cCandidates, oGates, concats);
-    }
-
-    private (Vector<T> output, Vector<T> h, Vector<T> c) Forward(Vector<T>[] sequence)
-    {
-        // Capture nullable fields for proper null checking
-        var Wy = _Wy;
-        var by = _by;
-
-        if (Wy == null || by == null)
-        {
-            throw new InvalidOperationException("Weights not initialized.");
-        }
-
-        var h = CreateZeroVector(_hiddenDim);
-        var c = CreateZeroVector(_hiddenDim);
-
-        foreach (var x in sequence)
-        {
-            (h, c) = LSTMCell(x, h, c);
-        }
-
-        // Output layer
-        var output = new Vector<T>(_inputDim);
-        for (int j = 0; j < _inputDim; j++)
-        {
-            T sum = by[j];
-            { var wc5 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wc5[ii] = Wy[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h, wc5)); }
-            output[j] = sum;
-        }
-
-        return (output, h, c);
-    }
-
-    private (Vector<T> h, Vector<T> c) LSTMCell(Vector<T> x, Vector<T> hPrev, Vector<T> cPrev)
-    {
-        // Capture nullable fields for proper null checking
-        var Wf = _Wf;
-        var Wi = _Wi;
-        var Wc = _Wc;
-        var Wo = _Wo;
-        var bf = _bf;
-        var bi = _bi;
-        var bc = _bc;
-        var bo = _bo;
-
-        if (Wf == null || Wi == null || Wc == null || Wo == null ||
-            bf == null || bi == null || bc == null || bo == null)
-        {
-            throw new InvalidOperationException("Weights not initialized.");
-        }
-
-        int inputSize = _inputDim + _hiddenDim;
-
-        // Concatenate input and previous hidden state
-        var concat = new Vector<T>(inputSize);
-        for (int i = 0; i < _inputDim; i++)
-        {
-            concat[i] = x[i];
-        }
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            concat[_inputDim + i] = hPrev[i];
-        }
-
-        // SIMD-accelerated LSTM gates via Engine vectorized operations
-        var concatTensor = Tensor<T>.FromVector(concat).Reshape(1, inputSize);
-
-        // Gate pre-activations: matmul(concat, W) + b  (SIMD via Engine.TensorMatMul)
-        var fPre = Engine.TensorBroadcastAdd(
-            Engine.TensorMatMul(concatTensor, Tensor<T>.FromMatrix(Wf)),
-            Tensor<T>.FromVector(bf).Reshape(1, _hiddenDim)).Reshape(_hiddenDim).ToVector();
-        var iPre = Engine.TensorBroadcastAdd(
-            Engine.TensorMatMul(concatTensor, Tensor<T>.FromMatrix(Wi)),
-            Tensor<T>.FromVector(bi).Reshape(1, _hiddenDim)).Reshape(_hiddenDim).ToVector();
-        var cPre = Engine.TensorBroadcastAdd(
-            Engine.TensorMatMul(concatTensor, Tensor<T>.FromMatrix(Wc)),
-            Tensor<T>.FromVector(bc).Reshape(1, _hiddenDim)).Reshape(_hiddenDim).ToVector();
-        var oPre = Engine.TensorBroadcastAdd(
-            Engine.TensorMatMul(concatTensor, Tensor<T>.FromMatrix(Wo)),
-            Tensor<T>.FromVector(bo).Reshape(1, _hiddenDim)).Reshape(_hiddenDim).ToVector();
-
-        // Vectorized activations (SIMD via Engine.Sigmoid/Tanh on Vector<T>)
-        var f = Engine.Sigmoid(fPre);
-        var ig = Engine.Sigmoid(iPre);
-        var cCandidate = Engine.Tanh(cPre);
-        var o = Engine.Sigmoid(oPre);
-
-        // New cell state: c = f * cPrev + i * cCand  (SIMD via Engine.Add/Multiply)
-        var cNew = (Vector<T>)Engine.Add(
-            Engine.Multiply(f, cPrev),
-            Engine.Multiply(ig, cCandidate));
-
-        // Hidden state: h = o * tanh(c)  (SIMD)
-        var hNew = (Vector<T>)Engine.Multiply(o, Engine.Tanh(cNew));
-
-        return (hNew, cNew);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> ScoreAnomalies(Matrix<T> X)
-    {
-        EnsureFitted();
-        return ScoreAnomaliesInternal(X);
-    }
-
-    private Vector<T> ScoreAnomaliesInternal(Matrix<T> X)
-    {
-        ValidateInput(X);
-
-        if (X.Columns != _inputDim)
-        {
-            throw new ArgumentException(
-                $"Input has {X.Columns} features but model was trained with {_inputDim} features.",
-                nameof(X));
-        }
-
-        var dataMeans = _dataMeans;
-        var dataStds = _dataStds;
-        if (dataMeans == null || dataStds == null)
-        {
-            throw new InvalidOperationException("Model not properly fitted. Normalization parameters missing.");
-        }
-
-        int n = X.Rows;
-        var scores = new Vector<T>(n);
-
-        // Normalize data into Matrix<T>
-        var normalizedData = new Matrix<T>(n, _inputDim);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < _inputDim; j++)
-            {
-                T diff = NumOps.Subtract(X[i, j], dataMeans[j]);
-                normalizedData[i, j] = NumOps.Divide(diff, dataStds[j]);
-            }
-        }
-
-        // Score each point based on prediction error
-        for (int i = 0; i < n; i++)
-        {
-            T score;
-
-            if (i < _seqLength)
-            {
-                // Not enough history - use simple distance from mean
-                score = NumOps.Zero;
-                for (int j = 0; j < _inputDim; j++)
-                {
-                    T val = normalizedData[i, j];
-                    score = NumOps.Add(score, NumOps.Multiply(val, val));
-                }
-            }
-            else
-            {
-                // Build sequence from previous points
-                var seq = new Vector<T>[_seqLength];
-                for (int t = 0; t < _seqLength; t++)
-                {
-                    seq[t] = normalizedData.GetRow(i - _seqLength + t);
-                }
-
-                // Predict and compute error
-                var (prediction, _, _) = Forward(seq);
-                score = NumOps.Zero;
-                for (int j = 0; j < _inputDim; j++)
-                {
-                    T diff = NumOps.Subtract(normalizedData[i, j], prediction[j]);
-                    score = NumOps.Add(score, NumOps.Multiply(diff, diff));
-                }
-            }
-
-            scores[i] = score;
-        }
-
-        return scores;
     }
 }

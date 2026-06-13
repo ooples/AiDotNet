@@ -152,6 +152,13 @@ public class TemporalVAE<T> : VAEModelBase<T>
     private Tensor<T>? _cachedLogVar;
 
     /// <summary>
+    /// True once this VAE has runtime state that a clone must preserve.
+    /// Constructor-time lazy/eager placeholders do not force default scaffold
+    /// clones to materialize the full paper-scale VAE.
+    /// </summary>
+    private bool _preserveMaterializedParameters;
+
+    /// <summary>
     /// Input channels (3 for RGB video).
     /// </summary>
     private readonly int _inputChannels;
@@ -307,6 +314,7 @@ public class TemporalVAE<T> : VAEModelBase<T>
     /// <inheritdoc />
     public override Tensor<T> Encode(Tensor<T> video, bool sampleMode = true)
     {
+        _preserveMaterializedParameters = true;
         var (mean, logVar) = EncodeWithDistribution(video);
         return sampleMode ? Sample(mean, logVar) : mean;
     }
@@ -409,6 +417,7 @@ public class TemporalVAE<T> : VAEModelBase<T>
     /// <inheritdoc />
     public override Tensor<T> Decode(Tensor<T> latent)
     {
+        _preserveMaterializedParameters = true;
         if (_postQuantConv == null || _outputConv == null)
         {
             throw new InvalidOperationException("Decoder layers not initialized.");
@@ -818,8 +827,62 @@ public class TemporalVAE<T> : VAEModelBase<T>
     }
 
     /// <inheritdoc />
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        foreach (var layer in EnumerateAllLayers())
+        {
+            foreach (var parameter in EnumerateMaterializedParameters(layer))
+                yield return parameter;
+        }
+    }
+
+    private IEnumerable<ILayer<T>?> EnumerateAllLayers()
+    {
+        yield return _inputConv;
+
+        foreach (var layer in _encoderSpatialLayers)
+            yield return layer;
+
+        foreach (var layer in _encoderTemporalLayers)
+            yield return layer;
+
+        yield return _meanConv;
+        yield return _logVarConv;
+        yield return _postQuantConv;
+
+        foreach (var layer in _decoderSpatialLayers)
+            yield return layer;
+
+        foreach (var layer in _decoderTemporalLayers)
+            yield return layer;
+
+        yield return _outputConv;
+    }
+
+    private static IEnumerable<Tensor<T>> EnumerateMaterializedParameters(ILayer<T>? layer)
+    {
+        if (layer is null) yield break;
+
+        if (layer is ITrainableLayer<T> trainable)
+        {
+            foreach (var parameter in trainable.GetTrainableParameters())
+            {
+                if (parameter is null || parameter.Length == 0) continue;
+                yield return parameter;
+            }
+        }
+
+        foreach (var subLayer in layer.GetSubLayers())
+        {
+            foreach (var parameter in EnumerateMaterializedParameters(subLayer))
+                yield return parameter;
+        }
+    }
+
+    /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        _preserveMaterializedParameters = true;
         var index = 0;
 
         SetLayerParameters(_inputConv, parameters, ref index);
@@ -881,8 +944,62 @@ public class TemporalVAE<T> : VAEModelBase<T>
             _latentScaleFactor,
             LossFunction);
 
-        clone.SetParameters(GetParameters());
+        if (_preserveMaterializedParameters)
+        {
+            clone.SetParameters(GetParameters());
+        }
+        else
+        {
+            CopyMaterializedParametersTo(clone);
+        }
         return clone;
+    }
+
+    private void CopyMaterializedParametersTo(TemporalVAE<T> clone)
+    {
+        using var source = EnumerateMaterializedModelParameters().GetEnumerator();
+        using var target = clone.EnumerateMaterializedModelParameters().GetEnumerator();
+
+        while (source.MoveNext())
+        {
+            if (!target.MoveNext())
+            {
+                throw new InvalidOperationException(
+                    "Clone has fewer materialized tensors than the source temporal VAE. " +
+                    "Architectures may differ or a lazy tensor was materialized without " +
+                    "marking runtime state.");
+            }
+
+            CopyTensorData(source.Current, target.Current);
+        }
+
+        if (target.MoveNext())
+        {
+            throw new InvalidOperationException(
+                "Clone has more materialized tensors than the source temporal VAE. " +
+                "Architectures may differ.");
+        }
+    }
+
+    private IEnumerable<Tensor<T>> EnumerateMaterializedModelParameters()
+    {
+        foreach (var layer in EnumerateAllLayers())
+        {
+            foreach (var parameter in EnumerateMaterializedParameters(layer))
+                yield return parameter;
+        }
+    }
+
+    private static void CopyTensorData(Tensor<T> source, Tensor<T> target)
+    {
+        if (source.Length != target.Length)
+        {
+            throw new InvalidOperationException(
+                $"Cannot copy tensor with {source.Length} elements into tensor " +
+                $"with {target.Length} elements.");
+        }
+
+        source.Data.Span.CopyTo(target.Data.Span);
     }
 
     /// <inheritdoc />

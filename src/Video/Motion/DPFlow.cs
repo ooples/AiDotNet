@@ -103,10 +103,6 @@ public class DPFlow<T> : OpticalFlowBase<T>
 
     private void InitializeNativeLayers(NeuralNetworkArchitecture<T> arch)
     {
-        int height = arch.InputHeight > 0 ? arch.InputHeight : 64;
-        int width = arch.InputWidth > 0 ? arch.InputWidth : 64;
-        int channels = arch.InputDepth > 0 ? arch.InputDepth : 3;
-
         _featureExtract = new ConvolutionalLayer<T>(_numFeatures, 3, 1, 1);
 
         for (int i = 0; i < _numLayers; i++)
@@ -117,6 +113,28 @@ public class DPFlow<T> : OpticalFlowBase<T>
         _outputConv = new ConvolutionalLayer<T>(2, 3, 1, 1);
 
         InitializeLayers();
+        WarmUpLazyLayers(arch);
+    }
+
+    private void WarmUpLazyLayers(NeuralNetworkArchitecture<T> arch)
+    {
+        int height = arch.InputHeight > 0 ? arch.InputHeight : 64;
+        int width = arch.InputWidth > 0 ? arch.InputWidth : 64;
+        int channels = arch.InputDepth > 0 ? arch.InputDepth : 3;
+        var dummy = new Tensor<T>([1, 2 * channels, height, width]);
+
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(false);
+        try
+        {
+            _ = Forward(dummy);
+            ResetState();
+            InvalidateParameterCountCache();
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
     }
 
     /// <inheritdoc/>
@@ -133,6 +151,12 @@ public class DPFlow<T> : OpticalFlowBase<T>
         if (_outputConv is not null)
             Layers.Add(_outputConv);
     }
+
+    /// <summary>
+    /// DPFlow's architecture stores the per-frame channel count, while the
+    /// first model layer consumes the two-frame concatenation.
+    /// </summary>
+    protected override int[]? TryGetArchitectureInputShape() => null;
 
     /// <inheritdoc/>
     protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
@@ -260,8 +284,24 @@ public class DPFlow<T> : OpticalFlowBase<T>
     {
         _numFeatures = reader.ReadInt32();
         _numLayers = reader.ReadInt32();
+
+        if (Layers.Count < _numLayers + 2)
+            throw new InvalidDataException(
+                $"DPFlow serialized layer count {Layers.Count} is too small for {_numLayers} processing blocks.");
+
+        _featureExtract = Layers[0] as ConvolutionalLayer<T>
+            ?? throw new InvalidDataException("DPFlow feature extractor layer is missing or has the wrong type.");
+
         _processingBlocks.Clear();
-        InitializeNativeLayers(Architecture);
+        for (int i = 0; i < _numLayers; i++)
+        {
+            var layer = Layers[i + 1] as ConvolutionalLayer<T>
+                ?? throw new InvalidDataException($"DPFlow processing block {i} is missing or has the wrong type.");
+            _processingBlocks.Add(layer);
+        }
+
+        _outputConv = Layers[_numLayers + 1] as ConvolutionalLayer<T>
+            ?? throw new InvalidDataException("DPFlow output layer is missing or has the wrong type.");
     }
 
     /// <inheritdoc/>

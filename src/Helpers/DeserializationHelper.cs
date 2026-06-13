@@ -1872,6 +1872,51 @@ public static class DeserializationHelper
             }
             instance = ctorTeb.Invoke(argsTeb);
         }
+        else if (genericDef.Name == "TimeSformerBlockLayer`1")
+        {
+            int hsTsb = TryGetInt(additionalParams, "HiddenSize")
+                ?? (inputShape.Length > 0 ? inputShape[inputShape.Length - 1] : throw new InvalidOperationException(
+                    $"{genericDef.Name} requires 'HiddenSize' metadata or a rank>=1 inputShape."));
+            int nhTsb = TryGetInt(additionalParams, "NumHeads")
+                ?? throw new InvalidOperationException($"{genericDef.Name} requires 'NumHeads' metadata.");
+            int ffTsb = TryGetInt(additionalParams, "FfnDim")
+                ?? throw new InvalidOperationException($"{genericDef.Name} requires 'FfnDim' metadata.");
+            int nfTsb = TryGetInt(additionalParams, "NumFrames")
+                ?? throw new InvalidOperationException($"{genericDef.Name} requires 'NumFrames' metadata.");
+
+            if (hsTsb <= 0 || nhTsb <= 0 || ffTsb <= 0 || nfTsb <= 0)
+                throw new InvalidOperationException(
+                    $"{genericDef.Name} metadata is corrupt: hiddenSize ({hsTsb}), numHeads ({nhTsb}), " +
+                    $"ffnDim ({ffTsb}), and numFrames ({nfTsb}) must all be positive.");
+            if (hsTsb % nhTsb != 0)
+            {
+                throw new InvalidOperationException(
+                    $"{genericDef.Name} divisibility violation: hiddenSize ({hsTsb}) must be a " +
+                    $"multiple of numHeads ({nhTsb}). Serialized metadata is corrupt.");
+            }
+
+            var activationFuncTypeTsb = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            object? ffnActivationTsb = TryCreateActivationInstance(additionalParams, "FfnActivationType", activationFuncTypeTsb);
+            var ctorTsb = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).FirstOrDefault()
+                ?? throw new MissingLayerCtorException($"Cannot find any public constructor for {layerType} during deserialization.");
+            var psTsb = ctorTsb.GetParameters();
+            var argsTsb = new object?[psTsb.Length];
+            for (int i = 0; i < psTsb.Length; i++)
+            {
+                var p = psTsb[i];
+                var n = (p.Name ?? "").ToLowerInvariant();
+                argsTsb[i] = (p.ParameterType, n) switch
+                {
+                    (Type t, _) when t == typeof(int) && n == "hiddensize" => hsTsb,
+                    (Type t, _) when t == typeof(int) && n == "numheads" => nhTsb,
+                    (Type t, _) when t == typeof(int) && n == "ffndim" => ffTsb,
+                    (Type t, _) when t == typeof(int) && n == "numframes" => nfTsb,
+                    (_, "ffnactivation") => ffnActivationTsb,
+                    _ => p.HasDefaultValue ? p.DefaultValue : null,
+                };
+            }
+            instance = ctorTsb.Invoke(argsTsb);
+        }
         else if (genericDef.Name == "TransformerDecoderBlock`1")
         {
             // Pre-LN decoder block (ctor: hiddenSize, numHeads, ffnDim, dropoutRate).
@@ -2075,9 +2120,11 @@ public static class DeserializationHelper
             //  HybridSchedulePattern, modelDimension, IActivationFunction)
             // HybridBlockScheduler.GetMetadata persists SequenceLength /
             // ModelDimension / NumBlocks / SchedulePattern. Fail fast if
-            // missing — issue #1239. The inner blocks list still uses the
-            // ILayer<T> placeholder until the proper round-trip via
-            // ILayerSerializationExtras lands (separately tracked).
+            // missing — issue #1239. The inner blocks now round-trip as
+            // proper MambaBlock / GatedLinearAttentionLayer instances based
+            // on the AttentionPattern + per-type dimension metadata that
+            // GetMetadata persists, so SetParameters can correctly route
+            // params into each real sub-block (Jamba/Samba/Zamba Clone tests).
             int seqLen = TryGetInt(additionalParams, "SequenceLength")
                 ?? throw new InvalidOperationException(
                     "HybridBlockScheduler requires 'SequenceLength' metadata (added in #1239).");
@@ -2088,23 +2135,49 @@ public static class DeserializationHelper
                 ?? throw new InvalidOperationException(
                     "HybridBlockScheduler requires 'NumBlocks' metadata (added in #1239).");
 
-            // Construct numBlocks placeholder inner-block instances (still
-            // using the DenseLayer<T> placeholder pattern — the real inner
-            // layers round-trip via ILayerSerializationExtras follow-up).
+            // Recover the per-position attention/SSM pattern from metadata.
+            // Older models without AttentionPattern metadata fall back to
+            // all-SSM (the placeholder regime before block-typed deser).
+            var isAttentionPattern = new bool[numBlocks];
+            if (additionalParams is not null
+                && additionalParams.TryGetValue("AttentionPattern", out var patternObj)
+                && patternObj is string patternStr)
+            {
+                int n = Math.Min(numBlocks, patternStr.Length);
+                for (int i = 0; i < n; i++)
+                    isAttentionPattern[i] = patternStr[i] == '1';
+            }
+
+            // Per-type dimension metadata (sampled from the source model's
+            // first SSM / first attention block in HybridBlockScheduler.GetMetadata).
+            int mambaStateDim = TryGetInt(additionalParams, "MambaStateDimension") ?? 16;
+            int mambaExpand = TryGetInt(additionalParams, "MambaExpandFactor") ?? 2;
+            int mambaConv = TryGetInt(additionalParams, "MambaConvKernelSize") ?? 4;
+            int mambaDtRank = TryGetInt(additionalParams, "MambaDtRank") ?? -1;
+            int attnNumHeads = TryGetInt(additionalParams, "AttentionNumHeads") ?? 8;
+
+            // Construct numBlocks proper inner-block instances using the
+            // metadata-driven type + dimensions. This makes the cloned
+            // scheduler.ParameterCount match the original, so SetParameters
+            // routes params into the correct sub-block shapes instead of
+            // failing with a placeholder-vs-real mismatch.
             var blocksArrayType = typeof(ILayer<T>).MakeArrayType();
             var blocksArray = Array.CreateInstance(typeof(ILayer<T>), numBlocks);
             for (int b = 0; b < numBlocks; b++)
             {
-                if (!TryCreatePlaceholderInnerLayer<T>(typeof(ILayer<T>), out var blockLayer) || blockLayer is null)
+                ILayer<T> blockLayer;
+                if (isAttentionPattern[b])
                 {
-                    throw new InvalidOperationException(
-                        $"HybridBlockScheduler placeholder block construction failed at index {b}.");
+                    blockLayer = new NeuralNetworks.Layers.SSM.GatedLinearAttentionLayer<T>(
+                        seqLen, modelDim, attnNumHeads);
+                }
+                else
+                {
+                    blockLayer = new NeuralNetworks.Layers.SSM.MambaBlock<T>(
+                        seqLen, modelDim, mambaStateDim, mambaExpand, mambaConv, mambaDtRank);
                 }
                 blocksArray.SetValue(blockLayer, b);
             }
-            // Default isAttentionBlock pattern: all false (all SSM). Real
-            // pattern restoration would need a serialized bool[] payload.
-            var isAttentionPattern = new bool[numBlocks];
 
             var ctorH = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).FirstOrDefault() ?? throw new MissingLayerCtorException($"Cannot find any public constructor for {layerType} during deserialization.");
             var psH = ctorH.GetParameters();
@@ -2867,7 +2940,8 @@ public static class DeserializationHelper
     {
         // GRULayer(int hiddenSize, bool returnSequences = false, IActivationFunction<T>? activation = null, IActivationFunction<T>? recurrentActivation = null)
         // inputSize is now resolved lazily on first forward (lazy-shape contract from #1220).
-        int hiddenSize = outputShape.Length >= 2 ? outputShape[^1] : outputShape[0];
+        int hiddenSize = TryGetInt(additionalParams, "HiddenSize")
+            ?? (outputShape.Length >= 2 ? outputShape[^1] : outputShape[0]);
         // ReturnSequences serialization contract: when missing from
         // additionalParams, infer from the persisted output shape rather
         // than hard-coding `true` (which contradicts the GRULayer ctor

@@ -74,7 +74,15 @@ public class NnDoubleInputDimTests
         var net = new NeuralNetwork<double>(
             new NeuralNetworkArchitecture<double>(inputFeatures: 3, outputSize: 1),
             lossFunction: new MeanSquaredErrorLoss<double>());
-        for (int e = 0; e < 300; e++) net.Train(x, y);
+        // 2000 full-batch steps, not 300: NeuralNetwork<T>'s default optimizer is
+        // deliberately conservative (AMSGrad-Adam, LR 5e-4 — halved from the Adam
+        // paper default to fix the #1332 MoreData drift), and Adam's per-step
+        // parameter displacement is bounded by the LR, so 300 steps move each
+        // weight at most ~0.15 — mathematically short of the ~1-magnitude weights
+        // this standardized linear map needs. The collapse bug under test is
+        // step-count independent; 2000 steps keeps the learning assertion honest
+        // against the intentional default-LR choice.
+        for (int e = 0; e < 2000; e++) net.Train(x, y);
 
         var (spread, mse) = Eval(net.Predict(x).ToVector(), yv);
         Assert.True(spread > 1e-3, $"output collapsed: spread={spread}");
