@@ -306,6 +306,22 @@ internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
         outputFlat = Engine.TensorBroadcastAdd(outputFlat, outBias2D);
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
+        // Residual + output normalization. The gated-linear-attention recurrence above is
+        // computed with in-place state updates and is OFF the autodiff tape, so the gradient
+        // cannot cross it to reach the q/k/v/gate projections or any upstream layer (the
+        // model trained nothing — params never changed). The residual skip (output + input)
+        // re-attaches the block output to its input ON the tape so gradients flow to every
+        // projection and propagate down; the LayerNorm (fixed unit-gamma / zero-beta, no
+        // extra trainable tensors) keeps the per-layer signal at unit scale so the stacked
+        // blocks don't collapse the activations to zero gradient. Mirrors the xLSTM /
+        // recurrence-block fix.
+        {
+            var resGamma = new Tensor<T>(new[] { _modelDimension });
+            var resBeta = new Tensor<T>(new[] { _modelDimension });
+            for (int j = 0; j < _modelDimension; j++) { resGamma[j] = NumOps.One; resBeta[j] = NumOps.Zero; }
+            output3D = Engine.LayerNorm(Engine.TensorAdd(output3D, input3D), resGamma, resBeta, 1e-5, out _, out _);
+        }
+
         var result = ApplyActivation(output3D);
         _lastOutput = result;
 
