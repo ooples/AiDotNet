@@ -89,6 +89,12 @@ internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
 
     private Tensor<T> _outputBias;
 
+    // Fixed (non-trainable) unit-gamma / zero-beta for the residual-block output LayerNorm.
+    // Allocated once and reused so the hot forward path doesn't re-allocate them per step.
+    private Tensor<T> _residualNormGamma;
+    private Tensor<T> _residualNormBeta;
+    private const double ResidualNormEpsilon = 1e-5;
+
     // Cached values
     private Tensor<T>? _lastInput;
     private Tensor<T>? _lastOutput;
@@ -187,6 +193,8 @@ internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
         _gateBias = new Tensor<T>([totalDim]);
         _outputWeights = new Tensor<T>([totalDim, modelDimension]);
         _outputBias = new Tensor<T>([modelDimension]);
+        _residualNormGamma = new Tensor<T>([modelDimension]);
+        _residualNormBeta = new Tensor<T>([modelDimension]);
 
         InitializeParameters();
     }
@@ -200,6 +208,8 @@ internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
         _gateBias.Fill(NumOps.Zero);
         InitializeTensor(_outputWeights);
         _outputBias.Fill(NumOps.Zero);
+        _residualNormGamma.Fill(NumOps.One);
+        _residualNormBeta.Fill(NumOps.Zero);
     }
 
     private void InitializeTensor(Tensor<T> tensor)
@@ -305,6 +315,19 @@ internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
         var outBias2D = Engine.Reshape(_outputBias, new[] { 1, _modelDimension });
         outputFlat = Engine.TensorBroadcastAdd(outputFlat, outBias2D);
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
+
+        // Residual + output normalization. The gated-linear-attention recurrence above is
+        // computed with in-place state updates and is OFF the autodiff tape, so the gradient
+        // cannot cross it to reach the q/k/v/gate projections or any upstream layer (the
+        // model trained nothing — params never changed). The residual skip (output + input)
+        // re-attaches the block output to its input ON the tape so gradients flow to every
+        // projection and propagate down; the LayerNorm (fixed unit-gamma / zero-beta, no
+        // extra trainable tensors) keeps the per-layer signal at unit scale so the stacked
+        // blocks don't collapse the activations to zero gradient. Mirrors the xLSTM /
+        // recurrence-block fix.
+        output3D = Engine.LayerNorm(
+            Engine.TensorAdd(output3D, input3D),
+            _residualNormGamma, _residualNormBeta, ResidualNormEpsilon, out _, out _);
 
         var result = ApplyActivation(output3D);
         _lastOutput = result;
