@@ -149,6 +149,11 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
     private MelSpectrogram<T>? _melSpectrogram;
     private readonly int? _seed;
 
+    /// <summary>
+    /// Tracks whether lazy UNet/VAE parameter shapes have been materialized.
+    /// </summary>
+    private bool _parameterShapesResolved;
+
     #endregion
 
     #region Properties
@@ -166,7 +171,7 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => RIFF_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override long ParameterCount { get { EnsureInitialized(); return _unet.ParameterCount + _vae.ParameterCount; } }
+    public override long ParameterCount { get { EnsureParameterShapesResolved(); return _unet.ParameterCount + _vae.ParameterCount; } }
 
     /// <summary>
     /// Gets the spectrogram configuration.
@@ -560,7 +565,7 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        EnsureInitialized();
+        EnsureParameterShapesResolved();
         var unetParams = _unet.GetParameters();
         var vaeParams = _vae.GetParameters();
 
@@ -582,7 +587,7 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        EnsureInitialized();
+        EnsureParameterShapesResolved();
         var unetCount = checked((int)_unet.ParameterCount);
         var vaeCount = checked((int)_vae.ParameterCount);
 
@@ -622,14 +627,37 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        EnsureInitialized();
-        var clone = new RiffusionModel<T>(
+        EnsureParameterShapesResolved();
+
+        // Preserve the actual injected architecture instead of rebuilding the
+        // default full-size SD 1.5 spectrogram stack.
+        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
+        var clonedVae = (StandardVAE<T>)_vae.Clone();
+
+        return new RiffusionModel<T>(
+            unet: clonedUnet,
+            vae: clonedVae,
             conditioner: _conditioner,
             spectrogramConfig: _spectrogramConfig,
-            seed: RandomGenerator.Next());
+            seed: _seed);
+    }
 
-        clone.SetParameters(GetParameters());
-        return clone;
+    /// <summary>
+    /// Materializes lazy submodule weights before state-dict style operations.
+    /// </summary>
+    [MemberNotNull(nameof(_unet), nameof(_vae))]
+    private void EnsureParameterShapesResolved()
+    {
+        EnsureInitialized();
+
+        if (_parameterShapesResolved)
+        {
+            return;
+        }
+
+        _unet.TriggerLazyShapeResolution();
+        _vae.TriggerLazyShapeResolution();
+        _parameterShapesResolved = true;
     }
 
     #endregion
