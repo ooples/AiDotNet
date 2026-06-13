@@ -303,19 +303,19 @@ jobs:
           - name: Unit - 08a NN-Classic (ResNet/VGG/DenseNet)
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~ResNetNetworkTests|FullyQualifiedName~VGGNetworkTests|FullyQualifiedName~DenseNetTests)'
+            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.NeuralNetworks&(FullyQualifiedName~ResNetNetworkTests|FullyQualifiedName~VGGNetworkTests|FullyQualifiedName~DenseNetTests)'
           - name: Unit - 08b NN-Efficient (MobileNet/EfficientNet)
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~MobileNetTests|FullyQualifiedName~EfficientNetTests)'
+            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.NeuralNetworks&(FullyQualifiedName~MobileNetTests|FullyQualifiedName~EfficientNetTests)'
           - name: Unit - 08c NN-VLM (Blip/Blip2/Clip)
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~BlipNeuralNetworkTests|FullyQualifiedName~Blip2NeuralNetworkTests|FullyQualifiedName~ClipNeuralNetworkTests)'
+            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.NeuralNetworks&(FullyQualifiedName~BlipNeuralNetworkTests|FullyQualifiedName~Blip2NeuralNetworkTests|FullyQualifiedName~ClipNeuralNetworkTests)'
           - name: Unit - 08d NN-Adapters/Other
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~LoRAAdapterTests|FullyQualifiedName~LoRALayerTests|FullyQualifiedName~VBLoRAAdapterTests|FullyQualifiedName~AdvancedAlgebraNetworkTests|FullyQualifiedName~MixtureOfExpertsNeuralNetworkTests)'
+            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.NeuralNetworks&(FullyQualifiedName~LoRAAdapterTests|FullyQualifiedName~LoRALayerTests|FullyQualifiedName~VBLoRAAdapterTests|FullyQualifiedName~AdvancedAlgebraNetworkTests|FullyQualifiedName~MixtureOfExpertsNeuralNetworkTests)'
           # 'Unit - 08e NN-Remaining (catch-all)' removed: it was a duplicate
           # of `ModelFamily - NeuralNetworks A-L` + `M-Z` (same
           # ModelFamilyTests.NeuralNetworks scope, only excluding 5 unit-test
