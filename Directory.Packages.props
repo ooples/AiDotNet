@@ -143,12 +143,16 @@
          auto-rehydrates a paged-out streaming weight on access, plus symmetric
          owner-drop (gated by GpuOffloadOptions.TransparentAutoEviction) that frees
          the owning tensor's resident copy on pool eviction, so a foundation-scale
-         model fits a bounded resident set with no per-layer orchestration. Native
-         packages coreleased in lockstep at 0.95.0. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.95.0" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.95.0" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.95.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.95.0" />
+         model fits a bounded resident set with no per-layer orchestration.
+         0.95.1 (Tensors #603): extends the auto-rehydrate gate to the .Memory /
+         .Data accessor (the buffer path SelfAttentionLayer.Forward uses) — a
+         paged-out weight read via .Memory previously Sliced empty storage and
+         threw. Required by the DiT transparent-streaming engagement in this repo
+         (DiTWeightStreamingTests). Native packages coreleased in lockstep at 0.95.1. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.95.1" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.95.1" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.95.1" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.95.1" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.8" />
