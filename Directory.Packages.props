@@ -139,7 +139,7 @@
          cause of the #1221 transformer production-scale convergence failure. 0.92.5 is
          the first release carrying that fix. AiDotNet.Native packages coreleased in
          lockstep at 0.92.5. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.94.2" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.95.2" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.94.2" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.94.2" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.94.2" />
