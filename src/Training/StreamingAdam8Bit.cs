@@ -221,44 +221,52 @@ internal abstract class BlockQuantizedStreamingOptimizer<T> : IStreamingOptimize
     {
         int momentCount = _signedMoments.Length;
 
-        // Each block updates a DISJOINT parameter/gradient/quantized-state slice, so the
-        // block loop is embarrassingly parallel. The only per-block shared state on the
-        // serial path is the moment scratch — give each worker its own copy and the loop
-        // parallelizes cleanly. The per-element parameter write goes through the tensor
-        // indexer, whose only cross-thread mutation is an Interlocked version bump; writes
-        // land at disjoint indices, so no extra synchronization (or O(n) staging buffer,
-        // which would defeat the memory-bounded design) is needed.
+        // Force any lazy-graph realization / streaming-weight rehydration ONCE on this thread,
+        // then try to grab the LIVE contiguous backing arrays. For trainable weights and their
+        // gradients (simple, contiguous, CPU-resident storage) this lets us update the parameter
+        // array IN PLACE with raw indexing — no per-element tensor-indexer overhead (each
+        // GetFlat/SetFlat re-checks materialization, bounds, and does an Interlocked version
+        // bump) — and bump the version exactly ONCE at the end. Views / GPU-resident / lazy
+        // tensors return null here and fall back to the per-element indexer. Either way each
+        // block updates a DISJOINT parameter/gradient/state slice, so the loop parallelizes
+        // with per-worker scratch and stays deterministic (no O(n) staging buffer, so the
+        // memory-bounded design is preserved).
+        _ = _ops.ToDouble(param[0]);
+        _ = _ops.ToDouble(grad[0]);
+        T[]? paramArr = param.GetLiveBackingArrayOrNull();
+        T[]? gradArr = grad.GetLiveBackingArrayOrNull();
+
         if (length < ParallelApplyMinLength || state.NumBlocks < 2 || Environment.ProcessorCount < 2)
         {
             for (int b = 0; b < state.NumBlocks; b++)
             {
-                ApplyOneBlock(b, param, grad, state, length, momentCount,
+                ApplyOneBlock(b, param, grad, paramArr, gradArr, state, length, momentCount,
                     _previousMomentValues, _nextMomentValues, _momentScratch, _momentMax);
             }
-            return;
+        }
+        else
+        {
+            System.Threading.Tasks.Parallel.For(
+                0,
+                state.NumBlocks,
+                () => new BlockScratch(momentCount, BlockSize),
+                (b, _, scratch) =>
+                {
+                    ApplyOneBlock(b, param, grad, paramArr, gradArr, state, length, momentCount,
+                        scratch.Previous, scratch.Next, scratch.MomentScratch, scratch.MomentMax);
+                    return scratch;
+                },
+                _ => { });
         }
 
-        // Force any lazy-graph realization / streaming-weight rehydration ONCE on this
-        // thread, so the parallel workers only ever touch already-materialized storage
-        // (the indexer fast path is then a pure disjoint array read/write).
-        _ = _ops.ToDouble(param[0]);
-        _ = _ops.ToDouble(grad[0]);
-
-        System.Threading.Tasks.Parallel.For(
-            0,
-            state.NumBlocks,
-            () => new BlockScratch(momentCount, BlockSize),
-            (b, _, scratch) =>
-            {
-                ApplyOneBlock(b, param, grad, state, length, momentCount,
-                    scratch.Previous, scratch.Next, scratch.MomentScratch, scratch.MomentMax);
-                return scratch;
-            },
-            _ => { });
+        // The raw-array write path bypasses the indexer's per-element version bump, so bump
+        // once here to invalidate any cached GPU buffer for the now-mutated parameter.
+        if (paramArr is not null) param.IncrementVersion();
     }
 
     private void ApplyOneBlock(
-        int b, Tensor<T> param, Tensor<T> grad, QuantizedState state, int length, int momentCount,
+        int b, Tensor<T> param, Tensor<T> grad, T[]? paramArr, T[]? gradArr,
+        QuantizedState state, int length, int momentCount,
         double[] previous, double[] next, double[][] momentScratch, double[] momentMax)
     {
         int start = b * BlockSize;
@@ -278,14 +286,15 @@ internal abstract class BlockQuantizedStreamingOptimizer<T> : IStreamingOptimize
                 next[m] = value;
             }
 
-            double gradientValue = ToDouble(grad[i]);
+            double gradientValue = gradArr is not null ? ToDouble(gradArr[i]) : ToDouble(grad[i]);
             if (!double.IsNaN(gradientValue) && !double.IsInfinity(gradientValue))
             {
-                double parameterValue = ToDouble(param[i]);
+                double parameterValue = paramArr is not null ? ToDouble(paramArr[i]) : ToDouble(param[i]);
                 double nextParameter = UpdateElement(parameterValue, gradientValue, previousSpan, nextSpan, i);
                 if (!double.IsNaN(nextParameter) && !double.IsInfinity(nextParameter))
                 {
-                    param[i] = FromDouble(nextParameter);
+                    if (paramArr is not null) paramArr[i] = FromDouble(nextParameter);
+                    else param[i] = FromDouble(nextParameter);
                 }
             }
 
