@@ -234,7 +234,11 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
             // the output, not full-quality generation — 4 steps is more
             // than enough to surface that signal and keeps Predict within
             // the 120s budget.
-            options ?? new DiffusionModelOptions<T> { DefaultInferenceSteps = 4 },
+            options ?? new DiffusionModelOptions<T>
+            {
+                DefaultInferenceSteps = 4,
+                LearningRate = 0.0001
+            },
             scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
             defaultNumFrames,
             defaultFPS,

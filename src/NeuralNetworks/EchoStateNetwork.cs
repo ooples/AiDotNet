@@ -621,9 +621,6 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         _reservoirBias = new Vector<T>(_reservoirSize);
         _outputBias = new Vector<T>(_outputSize);
         _currentState = new Vector<T>(_reservoirSize); // Start with zero state
-        _leakingRate = NumOps.FromDouble(1.0); // Default to no leaking
-        _regularization = NumOps.FromDouble(1e-4); // Default regularization
-        _warmupPeriod = 10; // Default warmup period
 
         // Initialize input weights and reservoir bias
         for (int i = 0; i < _inputSize; i++)
@@ -1316,19 +1313,19 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         _collectedStates.Add(_currentState.Clone());
         _collectedTargets.Add(targetVector.Clone());
 
-        // Compute loss for diagnostics (the user-visible LastLoss). Done
-        // BEFORE the ridge solve so it reflects the readout this Train
-        // call started with — matches the conventional "loss before
-        // parameter update" semantics other Train(...) impls use.
-        Vector<T> prediction = ComputeOutput();
-        LastLoss = _lossFunction.CalculateLoss(prediction, targetVector);
-
         // Resolve the readout from all collected samples so far. This is
         // the same closed-form solve <see cref="FinalizeTraining"/> runs
         // at the end; we just don't clear the collection so further
         // Train() calls keep accumulating samples and re-solving against
         // the growing dataset.
         SolveReadoutRidgeRegression();
+
+        // Report the post-solve training loss. ESN Train() is a closed-form
+        // readout solve rather than a gradient step, so callers expect the
+        // public loss to describe the fitted readout after this sample has
+        // joined the regression set.
+        Vector<T> prediction = ComputeOutput();
+        LastLoss = _lossFunction.CalculateLoss(prediction, targetVector);
     }
 
     /// <summary>
@@ -1343,7 +1340,8 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         int numSamples = _collectedStates.Count;
         if (numSamples == 0) return;
 
-        Matrix<T> X = new Matrix<T>(numSamples, _reservoirSize);
+        int readoutFeatureCount = _reservoirSize + 1; // reservoir state plus bias feature
+        Matrix<T> X = new Matrix<T>(numSamples, readoutFeatureCount);
         Matrix<T> Y = new Matrix<T>(numSamples, _outputSize);
         for (int i = 0; i < numSamples; i++)
         {
@@ -1351,6 +1349,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
             {
                 X[i, j] = _collectedStates[i][j];
             }
+            X[i, _reservoirSize] = NumOps.One;
             for (int j = 0; j < _outputSize; j++)
             {
                 Y[i, j] = _collectedTargets[i][j];
@@ -1366,14 +1365,12 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         // X X^T + λI instead of the (reservoirSize × reservoirSize)
         // matrix X^T X + λI. For ESN training the Gram matrix is
         // positive definite as long as λ > 0 — even when the reservoir
-        // states are nearly collinear (which feedback drives toward over
-        // long sequences and which made the primal form numerically
-        // explode and produce NaN weights, tripping
-        // MoreData_ShouldNotDegrade). The dual form's conditioning
-        // depends on sample count, not reservoir dimensionality, so it
-        // stays well-conditioned for the iterative-Train-on-same-pair
-        // case that the LossStrictlyDecreasesOnMemorizationTask
-        // invariant exercises.
+        // X includes the constant bias feature, which is the standard ESN
+        // readout design-matrix form: the bias is trained by the same ridge
+        // solve as the reservoir-to-output weights instead of being patched
+        // on afterward by a different objective. The dual form's
+        // conditioning depends on sample count, not reservoir dimensionality,
+        // so it stays well-conditioned for iterative sequence training.
         Matrix<T> XXt = X.Multiply(X.Transpose());
         Matrix<T> regularized = XXt.Clone();
         for (int i = 0; i < numSamples; i++)
@@ -1382,13 +1379,13 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         }
         Matrix<T> inverse = ComputeInverse(regularized);
         Matrix<T> innerY = inverse.Multiply(Y);  // (numSamples × outputSize)
-        Matrix<T> weights = X.Transpose().Multiply(innerY);  // (reservoirSize × outputSize)
+        Matrix<T> weights = X.Transpose().Multiply(innerY);  // ((reservoirSize + bias) × outputSize)
 
         // Safety net — even SVD can produce NaN/Inf on completely
         // degenerate inputs (all-zero reservoir, etc.). Keep the
         // previous readout in that case rather than poisoning the
         // model. Belt-and-suspenders alongside the per-σ skip above.
-        for (int i = 0; i < _reservoirSize; i++)
+        for (int i = 0; i < readoutFeatureCount; i++)
         {
             for (int j = 0; j < _outputSize; j++)
             {
@@ -1410,26 +1407,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
 
         for (int j = 0; j < _outputSize; j++)
         {
-            T targetSum = NumOps.Zero;
-            for (int i = 0; i < numSamples; i++)
-            {
-                targetSum = NumOps.Add(targetSum, Y[i, j]);
-            }
-            T targetMean = NumOps.Divide(targetSum, NumOps.FromDouble(numSamples));
-
-            T outputSum = NumOps.Zero;
-            for (int i = 0; i < numSamples; i++)
-            {
-                T output = NumOps.Zero;
-                for (int k = 0; k < _reservoirSize; k++)
-                {
-                    output = NumOps.Add(output, NumOps.Multiply(_outputWeights[k, j], X[i, k]));
-                }
-                outputSum = NumOps.Add(outputSum, output);
-            }
-            T outputMean = NumOps.Divide(outputSum, NumOps.FromDouble(numSamples));
-
-            _outputBias[j] = NumOps.Subtract(targetMean, outputMean);
+            _outputBias[j] = weights[_reservoirSize, j];
         }
     }
 
@@ -1474,41 +1452,6 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         // overwrite the stable readout with the numerically weaker path
         // this PR was introduced to remove.
         SolveReadoutRidgeRegression();
-
-        // Compute bias terms (mean of target - mean of prediction).
-        // Rebuild X / Y once for the bias-only computation since
-        // SolveReadoutRidgeRegression doesn't expose them.
-        int numSamples = _collectedStates.Count;
-        Matrix<T> X = new Matrix<T>(numSamples, _reservoirSize);
-        Matrix<T> Y = new Matrix<T>(numSamples, _outputSize);
-        for (int i = 0; i < numSamples; i++)
-        {
-            for (int j = 0; j < _reservoirSize; j++) X[i, j] = _collectedStates[i][j];
-            for (int j = 0; j < _outputSize; j++) Y[i, j] = _collectedTargets[i][j];
-        }
-        for (int j = 0; j < _outputSize; j++)
-        {
-            T targetSum = NumOps.Zero;
-            for (int i = 0; i < numSamples; i++)
-            {
-                targetSum = NumOps.Add(targetSum, Y[i, j]);
-            }
-            T targetMean = NumOps.Divide(targetSum, NumOps.FromDouble(numSamples));
-
-            T outputSum = NumOps.Zero;
-            for (int i = 0; i < numSamples; i++)
-            {
-                T output = NumOps.Zero;
-                for (int k = 0; k < _reservoirSize; k++)
-                {
-                    output = NumOps.Add(output, NumOps.Multiply(_outputWeights[k, j], X[i, k]));
-                }
-                outputSum = NumOps.Add(outputSum, output);
-            }
-            T outputMean = NumOps.Divide(outputSum, NumOps.FromDouble(numSamples));
-
-            _outputBias[j] = NumOps.Subtract(targetMean, outputMean);
-        }
 
         // Reset training state
         _isTraining = false;
