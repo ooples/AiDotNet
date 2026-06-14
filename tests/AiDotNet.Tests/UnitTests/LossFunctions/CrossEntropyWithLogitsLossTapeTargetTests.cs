@@ -1,4 +1,5 @@
 using AiDotNet.LossFunctions;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -82,6 +83,119 @@ public class CrossEntropyWithLogitsLossTapeTargetTests
     }
 
     [Fact]
+    public void ComputeTapeLoss_LastAxisOneHotTarget_GradientIsSoftmaxMinusTarget()
+    {
+        var loss = new CrossEntropyWithLogitsLoss<double>();
+        var predicted = new Tensor<double>(new[] { 1, 3 });
+        predicted[0, 0] = 0.0;
+        predicted[0, 1] = 0.0;
+        predicted[0, 2] = 0.0;
+
+        var oneHot = new Tensor<double>(new[] { 1, 3 });
+        oneHot[0, 0] = 1.0;
+
+        using var tape = new GradientTape<double>();
+        var lossTensor = loss.ComputeTapeLoss(predicted, oneHot);
+        var gradients = tape.ComputeGradients(lossTensor, new[] { predicted });
+
+        Assert.True(gradients.TryGetValue(predicted, out var grad), "No gradient returned for logits.");
+        Assert.True(System.Math.Abs(grad[0, 0] - (-2.0 / 3.0)) < 1e-10,
+            $"Target class gradient should be softmax-target = -2/3; actual={grad[0, 0]}");
+        Assert.True(System.Math.Abs(grad[0, 1] - (1.0 / 3.0)) < 1e-10,
+            $"Non-target class gradient should be softmax-target = 1/3; actual={grad[0, 1]}");
+        Assert.True(System.Math.Abs(grad[0, 2] - (1.0 / 3.0)) < 1e-10,
+            $"Non-target class gradient should be softmax-target = 1/3; actual={grad[0, 2]}");
+    }
+
+    [Fact]
+    public void ComputeTapeLoss_NchwClassIndexTarget_UsesChannelAxis()
+    {
+        var loss = new CrossEntropyWithLogitsLoss<double>();
+        var predicted = new Tensor<double>(new[] { 1, 3, 2, 2 });
+
+        // Four pixels, three class logits per pixel in standard PyTorch
+        // segmentation layout [B, C, H, W].
+        SetPixel(predicted, 0, 0, 2.0, 0.0, -1.0);
+        SetPixel(predicted, 0, 1, -1.0, 3.0, 0.0);
+        SetPixel(predicted, 1, 0, 0.0, -2.0, 4.0);
+        SetPixel(predicted, 1, 1, 1.0, 0.5, -0.5);
+
+        var classIdx = new Tensor<double>(new[] { 1, 2, 2 });
+        classIdx[0, 0, 0] = 0;
+        classIdx[0, 0, 1] = 1;
+        classIdx[0, 1, 0] = 2;
+        classIdx[0, 1, 1] = 0;
+
+        var result = loss.ComputeTapeLoss(predicted, classIdx);
+
+        double expected =
+            PixelCrossEntropy(2.0, 0.0, -1.0, 0) +
+            PixelCrossEntropy(-1.0, 3.0, 0.0, 1) +
+            PixelCrossEntropy(0.0, -2.0, 4.0, 2) +
+            PixelCrossEntropy(1.0, 0.5, -0.5, 0);
+        expected /= 4.0;
+
+        Assert.True(
+            System.Math.Abs(result.Data.Span[0] - expected) < 1e-10,
+            $"NCHW CE mismatch: actual={result.Data.Span[0]}, expected={expected}");
+    }
+
+    [Fact]
+    public void ComputeTapeLoss_NchwOneHotTarget_MatchesClassIndexTarget()
+    {
+        var loss = new CrossEntropyWithLogitsLoss<double>();
+        var predicted = new Tensor<double>(new[] { 1, 3, 2, 2 });
+        SetPixel(predicted, 0, 0, 2.0, 0.0, -1.0);
+        SetPixel(predicted, 0, 1, -1.0, 3.0, 0.0);
+        SetPixel(predicted, 1, 0, 0.0, -2.0, 4.0);
+        SetPixel(predicted, 1, 1, 1.0, 0.5, -0.5);
+
+        var classIdx = new Tensor<double>(new[] { 1, 2, 2 });
+        classIdx[0, 0, 0] = 0;
+        classIdx[0, 0, 1] = 1;
+        classIdx[0, 1, 0] = 2;
+        classIdx[0, 1, 1] = 0;
+
+        var oneHot = new Tensor<double>(new[] { 1, 3, 2, 2 });
+        oneHot[0, 0, 0, 0] = 1.0;
+        oneHot[0, 1, 0, 1] = 1.0;
+        oneHot[0, 2, 1, 0] = 1.0;
+        oneHot[0, 0, 1, 1] = 1.0;
+
+        var classIdxLoss = loss.ComputeTapeLoss(predicted, classIdx);
+        var oneHotLoss = loss.ComputeTapeLoss(predicted, oneHot);
+
+        Assert.True(
+            System.Math.Abs(classIdxLoss.Data.Span[0] - oneHotLoss.Data.Span[0]) < 1e-10,
+            $"NCHW one-hot target should match class-index target: oneHot={oneHotLoss.Data.Span[0]}, classIdx={classIdxLoss.Data.Span[0]}");
+    }
+
+    [Fact]
+    public void ComputeTapeLoss_NchwClassIndexTarget_GradientUsesChannelAxis()
+    {
+        var loss = new CrossEntropyWithLogitsLoss<double>();
+        var predicted = new Tensor<double>(new[] { 1, 3, 1, 1 });
+        predicted[0, 0, 0, 0] = 0.0;
+        predicted[0, 1, 0, 0] = 0.0;
+        predicted[0, 2, 0, 0] = 0.0;
+
+        var classIdx = new Tensor<double>(new[] { 1, 1, 1 });
+        classIdx[0, 0, 0] = 0;
+
+        using var tape = new GradientTape<double>();
+        var lossTensor = loss.ComputeTapeLoss(predicted, classIdx);
+        var gradients = tape.ComputeGradients(lossTensor, new[] { predicted });
+
+        Assert.True(gradients.TryGetValue(predicted, out var grad), "No gradient returned for logits.");
+        Assert.True(System.Math.Abs(grad[0, 0, 0, 0] - (-2.0 / 3.0)) < 1e-10,
+            $"Target class gradient should be softmax-target = -2/3; actual={grad[0, 0, 0, 0]}");
+        Assert.True(System.Math.Abs(grad[0, 1, 0, 0] - (1.0 / 3.0)) < 1e-10,
+            $"Non-target class gradient should be softmax-target = 1/3; actual={grad[0, 1, 0, 0]}");
+        Assert.True(System.Math.Abs(grad[0, 2, 0, 0] - (1.0 / 3.0)) < 1e-10,
+            $"Non-target class gradient should be softmax-target = 1/3; actual={grad[0, 2, 0, 0]}");
+    }
+
+    [Fact]
     public void ComputeTapeLoss_OutOfRangeClassIndex_IsTreatedAsIgnore()
     {
         // PyTorch convention: out-of-range indices (e.g. -1 sentinel) zero
@@ -103,5 +217,28 @@ public class CrossEntropyWithLogitsLossTapeTargetTests
         var result = loss.ComputeTapeLoss(predicted, classIdx);
         Assert.False(double.IsNaN(result.Data.Span[0]));
         Assert.False(double.IsInfinity(result.Data.Span[0]));
+    }
+
+    private static void SetPixel(Tensor<double> tensor, int row, int col, double c0, double c1, double c2)
+    {
+        tensor[0, 0, row, col] = c0;
+        tensor[0, 1, row, col] = c1;
+        tensor[0, 2, row, col] = c2;
+    }
+
+    private static double PixelCrossEntropy(double c0, double c1, double c2, int targetClass)
+    {
+        double max = System.Math.Max(c0, System.Math.Max(c1, c2));
+        double logSumExp = max + System.Math.Log(
+            System.Math.Exp(c0 - max) +
+            System.Math.Exp(c1 - max) +
+            System.Math.Exp(c2 - max));
+        double targetLogit = targetClass switch
+        {
+            0 => c0,
+            1 => c1,
+            _ => c2
+        };
+        return -targetLogit + logSumExp;
     }
 }

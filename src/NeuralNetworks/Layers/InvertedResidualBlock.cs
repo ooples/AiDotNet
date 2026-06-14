@@ -383,10 +383,14 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
     public override void SetTrainingMode(bool isTraining)
     {
         base.SetTrainingMode(isTraining);
-        // Propagate to internal BN layers which behave differently in training vs eval mode.
+        // Propagate to internal layers allocated lazily on first forward.
         // Null-guard for the pre-Forward state where sub-layers haven't been allocated yet.
+        _expandConv?.SetTrainingMode(isTraining);
         _expandBn?.SetTrainingMode(isTraining);
+        _dwConv?.SetTrainingMode(isTraining);
         _dwBn?.SetTrainingMode(isTraining);
+        _se?.SetTrainingMode(isTraining);
+        _projectConv?.SetTrainingMode(isTraining);
         _projectBn?.SetTrainingMode(isTraining);
     }
 

@@ -552,7 +552,11 @@ public class FastGenContractTests : DiffusionUnitTestBase
     [Fact(Timeout = 120000)]
     public async Task SDXLTurboModel_Clone_CreatesIndependentCopy()
     {
-        var model = new SDXLTurboModel<double>();
+        // FP32: SDXLTurbo's ~348M params at FP64 require ~2.7 GB for a single
+        // Vector<T>, plus 2× that during Clone (source + clone). CI hit OOM
+        // at the contiguous Vector allocation. FP32 halves both costs and
+        // matches the production-canonical precision for SDXL Turbo weights.
+        var model = new SDXLTurboModel<float>();
         var clone = model.Clone();
 
         Assert.NotNull(clone);
@@ -589,7 +593,10 @@ public class FastGenContractTests : DiffusionUnitTestBase
     [Fact(Timeout = 120000)]
     public async Task SDXLTurboModel_GetSetParameters_RoundTrips()
     {
-        var model = new SDXLTurboModel<double>();
+        // FP32: same rationale as SDXLTurboModel_Clone_CreatesIndependentCopy.
+        // GetParameters allocates a single contiguous Vector<T> sized to all
+        // ~348M params; FP64 requires 2.7 GB which OOMs at the LOH boundary.
+        var model = new SDXLTurboModel<float>();
 
         var parameters = model.GetParameters();
         Assert.True(parameters.Length > 0);

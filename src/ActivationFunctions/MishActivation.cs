@@ -99,7 +99,12 @@ public class MishActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivati
     /// Applies Mish to a tensor via the engine so the gradient tape records the op.
     /// Overrides the scalar element-by-element default which bypasses the tape.
     /// </summary>
-    public override Tensor<T> Activate(Tensor<T> input) => Engine.Mish(input);
+    public override Tensor<T> Activate(Tensor<T> input)
+    {
+        var softplus = Engine.Softplus(input);
+        var tanh = Engine.Tanh(softplus);
+        return Engine.TensorMultiply(input, tanh);
+    }
 
     /// <summary>
     /// Calculates the derivative (gradient) of the Mish function for a single input value.

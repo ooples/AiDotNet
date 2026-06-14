@@ -122,29 +122,23 @@ public class SwinUNETR<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numClasses = numClasses; _modelSize = modelSize; _dropRate = dropRate;
         _useNativeMode = true; _onnxModelPath = null;
-        // Per Hatamizadeh 2022 §4.2 ("Training Setup"): AdamW with initial
-        // learning rate 8e-4 decayed via cosine schedule over 40k iters
-        // with weight decay 1e-5. The library's default optimizer (Adam,
-        // lr=1e-3, no schedule) oscillates around the loss minimum on
-        // single-batch memorization probes — the gradient never goes to
-        // zero on a constant batch, so a momentum-based step keeps
-        // bouncing the params around the minimum, producing the
-        // "200 iters > 50 iters" failure pattern in
-        // MoreData_ShouldNotDegrade. Wiring the paper-faithful cosine
-        // decay drops LR smoothly toward zero, which kills the
-        // oscillation at saturation regardless of dataset size, so the
-        // invariant holds for both real training and single-batch
-        // probes. tMax is set to a generous bound (5000 iters); the
-        // scheduler clamps to tMax for behaviour beyond completion.
+        // Per Hatamizadeh 2022 §4.2 ("Training Setup"): AdamW with peak
+        // learning rate 8e-4, cosine decay, and weight decay 1e-5. A short
+        // linear warmup is the standard transformer/PyTorch recipe for
+        // stabilizing randomly initialized dense heads on tiny batches while
+        // preserving the paper's optimizer, peak LR, and decay shape.
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = 0.0008,
                 LearningRateScheduler =
-                    new AiDotNet.LearningRateSchedulers.CosineAnnealingLRScheduler(
+                    new AiDotNet.LearningRateSchedulers.LinearWarmupScheduler(
                         baseLearningRate: 0.0008,
-                        tMax: 5000,
-                        etaMin: 0.0),
+                        warmupSteps: 100,
+                        totalSteps: 5000,
+                        warmupInitLr: 0.00008,
+                        decayMode: AiDotNet.LearningRateSchedulers.LinearWarmupScheduler.DecayMode.Cosine,
+                        endLr: 0.0),
                 SchedulerStepMode = SchedulerStepMode.StepPerBatch,
                 WeightDecay = 1e-5,
             });
@@ -217,7 +211,11 @@ public class SwinUNETR<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
-        if (input.Shape.Length == 3) { input = AddBatchDimension(input); expectedOutput = AddBatchDimension(expectedOutput); } else if (input.Shape.Length != 4 && input.Shape.Length != 5) throw new ArgumentException($"SwinUNETR supports 2D [C,H,W]/[B,C,H,W] and 3D [C,D,H,W]/[B,C,D,H,W]. Got rank {input.Shape.Length}.", nameof(input));
+        bool inputWasUnbatched = input.Shape.Length == 3;
+        if (inputWasUnbatched) input = AddBatchDimension(input);
+        else if (input.Shape.Length != 4 && input.Shape.Length != 5) throw new ArgumentException($"SwinUNETR supports 2D [C,H,W]/[B,C,H,W] and 3D [C,D,H,W]/[B,C,D,H,W]. Got rank {input.Shape.Length}.", nameof(input));
+
+        expectedOutput = NormalizeTrainingTarget(expectedOutput, inputWasUnbatched);
         SetTrainingMode(true);
         try
         {
@@ -270,6 +268,26 @@ public class SwinUNETR<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
 
     private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
     { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
+
+    private Tensor<T> NormalizeTrainingTarget(Tensor<T> target, bool inputWasUnbatched)
+    {
+        // PyTorch-style dense segmentation targets are class-index masks:
+        //   logits [B, C, H, W] + target [B, H, W]
+        // Also keep backward compatibility with one-hot/probability masks:
+        //   logits [B, C, H, W] + target [B, C, H, W]
+        if (target.Shape.Length == 2)
+            return AddBatchDimension(target);
+
+        if (inputWasUnbatched && target.Shape.Length == 3 && target.Shape[0] == _numClasses)
+            return AddBatchDimension(target);
+
+        if (target.Shape.Length == 3 || target.Shape.Length == 4 || target.Shape.Length == 5)
+            return target;
+
+        throw new ArgumentException(
+            $"SwinUNETR target must be a class-index mask [H,W]/[B,H,W] or a one-hot/probability mask [C,H,W]/[B,C,H,W]. Got rank {target.Shape.Length}.",
+            nameof(target));
+    }
     #endregion
 
     #region Abstract Implementation
@@ -374,7 +392,7 @@ public class SwinUNETR<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     /// </para>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new SwinUNETR<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
+        ? new SwinUNETR<T>(Architecture, optimizer: null, LossFunction, _numClasses, _modelSize, _dropRate, _options)
         : new SwinUNETR<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
 
     /// <summary>

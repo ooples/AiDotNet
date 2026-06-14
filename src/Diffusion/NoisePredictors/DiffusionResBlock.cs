@@ -159,25 +159,24 @@ public class DiffusionResBlock<T> : LayerBase<T>
         // `block2.SetParameters(block1.GetParameters()) ⇒ block2(x) == block1(x)`
         // determinism contract relied on by tests and checkpoint reload.
         //
-        // We trigger materialization by running one probe forward through the
-        // whole block (with NoGradScope so the tape stays clean), then reset
-        // per-step state. Memory cost: one [1, C, S, S] tensor's worth of
-        // intermediate activations per block at construction time, returned
-        // to the pool by ResetState. Cheap relative to one training step.
+        // Materialize via per-sublayer ResolveFromShape — ALLOCATION ONLY, no
+        // conv compute. The previous implementation ran a full probe Forward
+        // through the block at the paper spatial size; profiling
+        // (dotnet-trace, DallE2ModelTests.Predict_ShouldBeDeterministic) showed
+        // 100% of the 120s test timeout inside this ctor chain — the fused
+        // im2col conv GEMM ran a real [1, C, S, S] convolution for every res
+        // block in the U-Net, so paper-scale models (DallE2, SDXLInpainting)
+        // spent minutes CONSTRUCTING and timed out before Predict ever ran.
+        // ResolveFromShape runs each layer's lazy-init hook only (shape
+        // resolution + weight allocation + RNG init) — the determinism
+        // contract needs the weights to exist, not a convolution result.
+        _conv1.ResolveFromShape([1, inChannels, spatialSize, spatialSize]);
+        if (timeEmbedDim > 0)
         {
-            using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-            var probeInput = new Tensor<T>([1, inChannels, spatialSize, spatialSize]);
-            if (timeEmbedDim > 0)
-            {
-                var probeTime = new Tensor<T>([1, timeEmbedDim]);
-                Forward(probeInput, probeTime);
-            }
-            else
-            {
-                Forward(probeInput);
-            }
-            ResetState();
+            _timeMlp.ResolveFromShape([1, timeEmbedDim]);
         }
+        _conv2.ResolveFromShape([1, outChannels, spatialSize, spatialSize]);
+        _skipConv?.ResolveFromShape([1, inChannels, spatialSize, spatialSize]);
     }
 
     /// <summary>

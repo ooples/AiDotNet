@@ -252,28 +252,13 @@ public class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEventDetector
 
     protected override Tensor<T> PostprocessOutput(Tensor<T> o)
     {
-        // Apply softmax returning tensor (base ApplySoftmax returns Dictionary)
-        T maxVal = o[0];
-        for (int i = 1; i < o.Length; i++)
-            if (NumOps.GreaterThan(o[i], maxVal)) maxVal = o[i];
-        var result = new Tensor<T>(o._shape);
-        T sum = NumOps.Zero;
-        for (int i = 0; i < o.Length; i++)
-        {
-            result[i] = NumOps.Exp(NumOps.Subtract(o[i], maxVal));
-            sum = NumOps.Add(sum, result[i]);
-        }
-        if (NumOps.Equals(sum, NumOps.Zero))
-        {
-            T uniform = NumOps.Divide(NumOps.One, NumOps.FromDouble(o.Length));
-            for (int i = 0; i < o.Length; i++) result[i] = uniform;
-        }
-        else
-        {
-            for (int i = 0; i < o.Length; i++)
-                result[i] = NumOps.Divide(result[i], sum);
-        }
-        return result;
+        // Softmax via Engine — single SIMD-vectorised call handles
+        // the max-subtract, exp, and divide stages internally. Drop the
+        // hand-rolled three-loop scalar implementation; the base behaviour
+        // is identical because Engine.Softmax operates on the last axis by
+        // default which matches the rank-1 [classes] tensor this method
+        // produces.
+        return Engine.Softmax(o);
     }
 
     public override ModelMetadata<T> GetModelMetadata()

@@ -182,11 +182,7 @@ public class NeuralVaR<T> : RiskModelBase<T>
         if (NumOps.GreaterThan(currentRisk, riskBudget))
         {
             T scale = NumOps.Divide(riskBudget, currentRisk);
-            var scaledData = new T[action.Length];
-            for (int i = 0; i < action.Length; i++)
-                scaledData[i] = NumOps.Multiply(action.Data.Span[i], scale);
-            
-            return new Tensor<T>(action._shape, new Vector<T>(scaledData));
+            return Engine.TensorMultiplyScalar(action, scale);
         }
 
         return action;

@@ -120,8 +120,18 @@ public class GOBNILPAlgorithm<T> : CausalDiscoveryBase<T>
     {
         var scores = new List<(int[] parents, double score)>();
 
-        // Empty parent set (baseline)
-        double emptyScore = ComputeBICScore(data, target, Array.Empty<int>());
+        // NEGATE BIC so higher = better. CausalDiscoveryBase.ComputeBICScore returns
+        // n*log(σ²) + k*log(n) — canonical convention LOWER is better (smaller BIC
+        // = better fit + parameter penalty). The rest of this class — descending
+        // sort below, `altScore > bestAltScore` picker in SolveILP, and the
+        // `parentSets[j][0] = best` indexing — all assume HIGHER = better. The
+        // sibling OrderMCMCAlgorithm does the same negation via
+        // `totalScore -= ComputeBICScore(...)` for the identical reason. Without
+        // this negation, GOBNILP picks the empty parent set for every variable on
+        // strongly-correlated data: with-parents residual variance is tiny so its
+        // raw BIC is hugely negative; sorting descending puts the (large, near-
+        // zero) empty-parent BIC first, and the algorithm returns an empty DAG.
+        double emptyScore = -ComputeBICScore(data, target, Array.Empty<int>());
         scores.Add((Array.Empty<int>(), emptyScore));
 
         // Generate all parent sets up to _maxParents
@@ -133,12 +143,14 @@ public class GOBNILPAlgorithm<T> : CausalDiscoveryBase<T>
         {
             foreach (var subset in GenerateSubsets(candidates, size))
             {
-                double score = ComputeBICScore(data, target, subset);
+                double score = -ComputeBICScore(data, target, subset);
                 scores.Add((subset, score));
             }
         }
 
-        // Sort by score descending (higher BIC = better fit)
+        // Sort by NEGATED-BIC descending — i.e. lowest raw BIC first, which is the
+        // canonical "best fit" under BIC. The descending direction matches the
+        // `altScore > bestAltScore` comparator in SolveILP without further changes.
         scores.Sort((a, b) => b.score.CompareTo(a.score));
 
         return scores;
