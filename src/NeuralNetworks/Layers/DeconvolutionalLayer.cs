@@ -504,6 +504,9 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Shape-inference mode: resolve dims + return a placeholder, no kernel allocation.
+        if (IsInferringShapes) return ShapeInferenceOutput(input);
+
         EnsureInitializedFromInput(input);
         _lastInput = input;
 

@@ -159,27 +159,18 @@ public class DiffusionResBlock<T> : LayerBase<T>
         // `block2.SetParameters(block1.GetParameters()) ⇒ block2(x) == block1(x)`
         // determinism contract relied on by tests and checkpoint reload.
         //
-        // Resolve each sublayer's SHAPE ONLY — sets the weight dimensions (so
-        // ParameterCount / GetOutputShape are exact pre-forward) WITHOUT allocating
-        // the weight tensors or consuming RNG. The previous implementation called
-        // ResolveFromShape, which additionally allocated + RNG-initialised every
-        // sublayer's weights right here in the ctor. At paper scale that is the
-        // dominant construction cost: a single SD U-Net is ~860M params, ~7 GB at
-        // double, and the Unit-03b contract shard (16 control models constructed,
-        // never disposed) OOM'd the 16 GB CI runner on construction alone — even
-        // though those tests only assert ParameterCount > 0 and never run a forward.
-        // ResolveShapesOnly keeps the weights deferred: they materialise (allocate +
-        // RNG-init, on the untouched stream) on the first GetParameters / Forward,
-        // exactly when a caller actually needs the values. The
-        // SetParameters(GetParameters()) determinism contract is unaffected — it
-        // overwrites the weights, and GetParameters triggers materialisation on demand.
-        _conv1.ResolveShapesOnly([1, inChannels, spatialSize, spatialSize]);
-        if (timeEmbedDim > 0)
-        {
-            _timeMlp.ResolveShapesOnly([1, timeEmbedDim]);
-        }
-        _conv2.ResolveShapesOnly([1, outChannels, spatialSize, spatialSize]);
-        _skipConv?.ResolveShapesOnly([1, inChannels, spatialSize, spatialSize]);
+        // Sublayers are left FULLY LAZY here — no shape resolution and no weight
+        // allocation in the ctor. At paper scale eager allocation was the dominant
+        // construction cost (a single SD U-Net is ~860M params, ~7 GB at double) and
+        // OOM'd the 16 GB CI runner on construction alone (Unit-03b). The owning
+        // UNetNoisePredictor resolves every sublayer's TRUE shape via its shape-only
+        // forward (ResolveShapesViaForward) before any ParameterCount / GetParameters
+        // read — the single source of truth that matches the real forward exactly —
+        // and weights materialise on demand at that GetParameters or the first real
+        // Forward. The SetParameters(GetParameters()) determinism contract is
+        // unaffected: GetParameters resolves shapes then materialises, and
+        // SetParameters overwrites the values.
+        _ = inChannels; _ = outChannels; _ = spatialSize; _ = timeEmbedDim;
     }
 
     /// <summary>

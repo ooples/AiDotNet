@@ -306,19 +306,13 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         _timeEmbedMlp1 = (DenseLayer<T>)baseLayers[1];
         _timeEmbedMlp2 = (DenseLayer<T>)baseLayers[2];
 
-        // The input conv comes from LayerHelper in lazy (deferred-shape) mode, so
-        // resolve its SHAPE ONLY here: it takes the noisy latent ([_inputChannels,
-        // H, W]). Without this its ParameterCount reports the InputDepth=1 placeholder
-        // while GetParameters returns empty (count != length) — the source of the
-        // ControlNetPlusPlus clone count-consistency failure.
-        _inputConv.ResolveShapesOnly([1, _inputChannels, _inputHeight, _inputHeight]);
+        // input/output convs are left fully lazy; the predictor's shape-only forward
+        // (ResolveShapesViaForward) resolves their true InputDepth from the topology.
 
         // Output conv from decoder layers
         var decoderBaseLayers = LayerHelper<T>.CreateUNetNoisePredictorDecoderLayers(
             _outputChannels, _baseChannels, _channelMultipliers, _numResBlocks).ToList();
         _outputConv = (ConvolutionalLayer<T>)decoderBaseLayers[^1];
-        // Output conv takes the final decoder feature map at base-channel width.
-        _outputConv.ResolveShapesOnly([1, _baseChannels, _inputHeight, _inputHeight]);
 
         // Priority 1: Use custom blocks passed directly
         if (customEncoderBlocks != null && customEncoderBlocks.Count > 0 &&
@@ -999,7 +993,9 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     private ILayer<T> CreateDownsample(int channels, int spatialSize)
     {
         // LazyConv2D: kernel tensor stays unallocated until first Forward() call.
-        var conv = LazyConv2D(
+        // Fully lazy: the predictor's ResolveShapesViaForward resolves this conv's
+        // true InputDepth through the forward topology (no construction-time estimate).
+        return LazyConv2D(
             inputDepth: channels,
             inputHeight: spatialSize,
             inputWidth: spatialSize,
@@ -1008,28 +1004,18 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             stride: 2,
             padding: 1,
             activation: new IdentityActivation<T>());
-        // Resolve the SHAPE only (sets InputDepth so ParameterCount is exact
-        // pre-forward) without allocating the kernel — LazyConv2D otherwise leaves
-        // InputDepth = -1, so its ParameterCount would under-count until first
-        // forward, breaking CalculateParameterCount's shape-only path.
-        conv.ResolveShapesOnly([1, channels, spatialSize, spatialSize]);
-        return conv;
     }
 
     private ILayer<T> CreateUpsample(int channels, int spatialSize)
     {
-        // spatialSize here is the current (smaller) spatial size before upsampling
-        var deconv = new DeconvolutionalLayer<T>(
+        // spatialSize here is the current (smaller) spatial size before upsampling.
+        // Fully lazy: shape resolved by the predictor's shape-only forward.
+        return new DeconvolutionalLayer<T>(
             outputDepth: channels,
             kernelSize: 4,
             stride: 2,
             padding: 1,
             activationFunction: new IdentityActivation<T>());
-        // Shape-only resolution: a lazy DeconvolutionalLayer reports ParameterCount
-        // = 0 until its weights exist, so resolve its dims (no allocation) to keep
-        // the exact pre-forward count without materialising the kernel.
-        deconv.ResolveShapesOnly([1, channels, spatialSize, spatialSize]);
-        return deconv;
     }
 
     #endregion
@@ -1038,13 +1024,13 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     private int CalculateParameterCount()
     {
-        // No TriggerLazyShapeResolution() here: every layer is shape-resolved at
-        // construction (eager layers, the resblock sublayers via ResolveShapesOnly,
-        // and the downsample/upsample convs via ResolveShapesOnly), so each reports
-        // its exact ParameterCount from known dims WITHOUT allocating weights. The
-        // previous dummy-forward resolve materialised the entire ~7 GB U-Net just to
-        // read a count — the Unit-03b construction OOM. Weights now stay deferred
-        // until a real forward / GetParameters needs their values.
+        // Resolve every lazy layer's TRUE shape via a shape-only forward (single source
+        // of truth) — NO weight materialisation, so this stays cheap on a foundation-scale
+        // U-Net (the Unit-03b construction OOM was the old materialising dummy forward).
+        // Using the forward topology (not a per-construction estimate) guarantees this
+        // count equals GetParameters().Length and the real forward's resolution, including
+        // decoder skip concatenation.
+        ResolveShapesViaForward();
 
         // Walk the same layers GetParameters walks and sum their actual ParameterCount.
         // Must match GetParameters().Length exactly — the previous "approximate" formula
@@ -1077,11 +1063,11 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        // GetParameters genuinely needs the weight VALUES, so this is where deferred
-        // materialisation happens — but per-layer and on demand: every layer is
-        // already shape-resolved, so each layer.GetParameters() call below
-        // EnsureInitialized()s just that layer's weights. No whole-network dummy
-        // forward (TriggerLazyShapeResolution) is needed to make the lengths line up.
+        // Resolve all layer shapes via the shape-only forward (single source of truth,
+        // no materialisation) so the returned vector's length matches ParameterCount
+        // exactly. Each layer.GetParameters() below then materialises just that layer's
+        // weights on demand.
+        ResolveShapesViaForward();
 
         // Collect all sublayer parameter vectors first (each layer allocates its own)
         var layerParams = new List<Vector<T>>();
@@ -1378,6 +1364,37 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             ? new Tensor<T>(new[] { 1, 1, _contextDim })
             : null;
         _ = PredictNoise(dummy, timestep: 0, conditioning: dummyCtx);
+    }
+
+    private bool _shapesResolvedViaForward;
+
+    /// <summary>
+    /// Single-source-of-truth shape resolution: runs the real forward topology under
+    /// <see cref="LayerBase{T}.RunShapeInference"/> so every lazy layer resolves its TRUE
+    /// shape exactly as the forward would — including decoder skip concatenation — WITHOUT
+    /// allocating any weights. This makes <c>ParameterCount</c>, <see cref="GetParameters"/>,
+    /// <see cref="SetParameters"/>, and the real forward all agree, which a per-construction
+    /// shape estimate cannot guarantee (the estimate diverged from the forward's actual
+    /// decoder concat). Unlike <see cref="TriggerLazyShapeResolution"/> this materialises
+    /// nothing, so it is safe to call from metadata accessors on a foundation-scale model.
+    /// Idempotent; the guard is set before the forward so re-entrant accessor calls during
+    /// resolution short-circuit instead of recursing.
+    /// </summary>
+    internal void ResolveShapesViaForward()
+    {
+        if (_shapesResolvedViaForward) return;
+        _shapesResolvedViaForward = true;
+
+        int numDownsamples = System.Math.Max(0, _channelMultipliers.Length - 1);
+        int safeSpatial = System.Math.Max(2, (1 << numDownsamples) * 2);
+        int resolveSpatial = System.Math.Min(_inputHeight, safeSpatial);
+        if (resolveSpatial < 1) resolveSpatial = _inputHeight;
+
+        var dummy = new Tensor<T>(new[] { 1, _inputChannels, resolveSpatial, resolveSpatial });
+        Tensor<T>? dummyCtx = _contextDim > 0
+            ? new Tensor<T>(new[] { 1, 1, _contextDim })
+            : null;
+        LayerBase<T>.RunShapeInference(() => { _ = PredictNoise(dummy, timestep: 0, conditioning: dummyCtx); });
     }
 
     /// <inheritdoc />
