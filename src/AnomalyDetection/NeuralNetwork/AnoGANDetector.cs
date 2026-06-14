@@ -769,6 +769,106 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         return x >= 0 ? x : alpha * x;
     }
 
+    /// <summary>
+    /// Backpropagates a gradient on the generator OUTPUT to a gradient on the latent input z,
+    /// WITHOUT updating any weights. Used by the inference-time z-optimization in
+    /// <see cref="ScoreAnomaliesInternal"/> to compute the exact analytic gradient in a single
+    /// backward pass — replacing the previous central finite-difference estimate, which ran
+    /// 2 × latentDim full generator+discriminator forwards PER step (hundreds of thousands of
+    /// forwards per scoring call, the cause of the test-host hang). Generator layers:
+    /// h1 = LeakyReLU(z·W1+b1), h2 = LeakyReLU(h1·W2+b2), out = tanh(h2·W3+b3).
+    /// </summary>
+    private Vector<T> BackpropGeneratorToInput(Vector<T> h1, Vector<T> h2, Vector<T> output, Vector<T> dOutput)
+    {
+        var genW1 = _genW1;
+        var genW2 = _genW2;
+        var genW3 = _genW3;
+        if (genW1 == null || genW2 == null || genW3 == null)
+        {
+            throw new InvalidOperationException("Generator weights not initialized.");
+        }
+
+        T leakySlope = NumOps.FromDouble(0.2);
+
+        // Output layer is tanh: d/dpre = (1 - out^2).
+        var dPre3 = new Vector<T>(_inputDim);
+        for (int j = 0; j < _inputDim; j++)
+        {
+            T tanhDeriv = NumOps.Subtract(NumOps.One, NumOps.Multiply(output[j], output[j]));
+            dPre3[j] = NumOps.Multiply(dOutput[j], tanhDeriv);
+        }
+
+        // dH2 = genW3 @ dPre3  (genW3 is [hiddenDim, inputDim]); then LeakyReLU derivative on h2.
+        var dH2 = Engine.TensorMatMul(Tensor<T>.FromMatrix(genW3), Tensor<T>.FromVector(dPre3).Reshape(_inputDim, 1))
+                        .Reshape(_hiddenDim).ToVector();
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            if (NumOps.LessThan(h2[i], NumOps.Zero)) dH2[i] = NumOps.Multiply(dH2[i], leakySlope);
+        }
+
+        // dH1 = genW2 @ dH2  (genW2 is [hiddenDim, hiddenDim]); then LeakyReLU derivative on h1.
+        var dH1 = Engine.TensorMatMul(Tensor<T>.FromMatrix(genW2), Tensor<T>.FromVector(dH2).Reshape(_hiddenDim, 1))
+                        .Reshape(_hiddenDim).ToVector();
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            if (NumOps.LessThan(h1[i], NumOps.Zero)) dH1[i] = NumOps.Multiply(dH1[i], leakySlope);
+        }
+
+        // dz = genW1 @ dH1  (genW1 is [latentDim, hiddenDim]).
+        return Engine.TensorMatMul(Tensor<T>.FromMatrix(genW1), Tensor<T>.FromVector(dH1).Reshape(_hiddenDim, 1))
+                     .Reshape(_latentDim).ToVector();
+    }
+
+    /// <summary>
+    /// Backpropagates a gradient on the discriminator's FEATURE layer (h2) to a gradient on the
+    /// discriminator input, WITHOUT updating weights. Used to flow the feature-matching loss term
+    /// back to the generated sample during inference-time z-optimization. Mirrors the hidden-layer
+    /// portion of <see cref="BackpropDiscriminatorToInput"/> but is seeded with a gradient on h2
+    /// directly (rather than derived from the scalar output).
+    /// </summary>
+    private Vector<T> BackpropDiscriminatorFeaturesToInput(Vector<T> x, Vector<T> h2, Vector<T> dH2Seed)
+    {
+        var discW1 = _discW1;
+        var discB1 = _discB1;
+        var discW2 = _discW2;
+        if (discW1 == null || discB1 == null || discW2 == null)
+        {
+            throw new InvalidOperationException("Discriminator weights not initialized.");
+        }
+
+        T leakySlope = NumOps.FromDouble(0.2);
+
+        // LeakyReLU derivative on h2 (post-activation sign == pre-activation sign).
+        var dH2 = new Vector<T>(_hiddenDim);
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            dH2[i] = NumOps.LessThan(h2[i], NumOps.Zero) ? NumOps.Multiply(dH2Seed[i], leakySlope) : dH2Seed[i];
+        }
+
+        // Recompute h1 for its LeakyReLU derivative.
+        var w1Tensor = Tensor<T>.FromMatrix(discW1);
+        var h1Pre = Engine.TensorMatMul(Tensor<T>.FromVector(x).Reshape(1, _inputDim), w1Tensor)
+                          .Reshape(_hiddenDim).ToVector();
+        var h1 = new Vector<T>(_hiddenDim);
+        for (int j = 0; j < _hiddenDim; j++)
+        {
+            T val = NumOps.Add(h1Pre[j], discB1[j]);
+            h1[j] = NumOps.GreaterThan(val, NumOps.Zero) ? val : NumOps.Multiply(leakySlope, val);
+        }
+
+        // dH1 = W2 @ dH2; LeakyReLU derivative on h1.
+        var dH1 = Engine.TensorMatMul(Tensor<T>.FromMatrix(discW2), Tensor<T>.FromVector(dH2).Reshape(_hiddenDim, 1))
+                        .Reshape(_hiddenDim).ToVector();
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            if (NumOps.LessThan(h1[i], NumOps.Zero)) dH1[i] = NumOps.Multiply(dH1[i], leakySlope);
+        }
+
+        // dX = W1 @ dH1.
+        return Engine.TensorMatMul(w1Tensor, Tensor<T>.FromVector(dH1).Reshape(_hiddenDim, 1))
+                     .Reshape(_inputDim).ToVector();
+    }
+
     /// <inheritdoc/>
     public override Vector<T> ScoreAnomalies(Matrix<T> X)
     {
@@ -814,13 +914,16 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
             T bestLoss = NumOps.MaxValue;
             double zLr = 0.1;
 
+            // Discriminator features of the real input are constant across steps (x is fixed).
+            var (_, featReal) = Discriminate(x);
+
             for (int step = 0; step < _inferenceSteps; step++)
             {
-                var xGen = Generate(z);
-                var (_, featGen) = Discriminate(xGen);
-                var (_, featReal) = Discriminate(x);
+                // Forward with cached activations for the analytic backward pass.
+                var (gH1, gH2, xGen) = GenerateWithCache(z);
+                var (_, featGen, _) = DiscriminateWithCache(xGen);
 
-                // Reconstruction loss
+                // Reconstruction loss: ||x - xGen||^2
                 T reconLoss = NumOps.Zero;
                 for (int j = 0; j < _inputDim; j++)
                 {
@@ -828,7 +931,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
                     reconLoss = NumOps.Add(reconLoss, NumOps.Multiply(diff, diff));
                 }
 
-                // Feature matching loss
+                // Feature-matching loss: ||featReal - featGen||^2
                 T featLoss = NumOps.Zero;
                 for (int j = 0; j < _hiddenDim; j++)
                 {
@@ -844,54 +947,35 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
                     for (int j = 0; j < _latentDim; j++) bestZ[j] = z[j];
                 }
 
-                // Compute gradient of loss w.r.t. z using finite differences
-                double eps = 1e-4;
-                var dz = new Vector<T>(_latentDim);
-
-                for (int j = 0; j < _latentDim; j++)
+                // EXACT analytic gradient of the loss w.r.t. z in ONE backward pass. This replaces
+                // a central finite-difference estimate that ran 2 x latentDim full generator +
+                // discriminator forwards PER step (hundreds of thousands of forwards per scoring
+                // call) — the cause of the >5-minute test-host hang. Same loss, same descent.
+                //
+                // d(reconstruction)/dxGen = 2 (xGen - x)
+                var dxGen = new Vector<T>(_inputDim);
+                for (int j = 0; j < _inputDim; j++)
                 {
-                    // Perturb z[j] positively
-                    T origVal = z[j];
-                    z[j] = NumOps.Add(z[j], NumOps.FromDouble(eps));
-                    var xGenPlus = Generate(z);
-                    var (_, featGenPlus) = Discriminate(xGenPlus);
-
-                    T lossPlus = NumOps.Zero;
-                    for (int k = 0; k < _inputDim; k++)
-                    {
-                        T diff = NumOps.Subtract(x[k], xGenPlus[k]);
-                        lossPlus = NumOps.Add(lossPlus, NumOps.Multiply(diff, diff));
-                    }
-                    for (int k = 0; k < _hiddenDim; k++)
-                    {
-                        T diff = NumOps.Subtract(featReal[k], featGenPlus[k]);
-                        lossPlus = NumOps.Add(lossPlus, NumOps.Multiply(NumOps.FromDouble(0.1), NumOps.Multiply(diff, diff)));
-                    }
-
-                    // Perturb z[j] negatively
-                    z[j] = NumOps.Subtract(origVal, NumOps.FromDouble(eps));
-                    var xGenMinus = Generate(z);
-                    var (_, featGenMinus) = Discriminate(xGenMinus);
-
-                    T lossMinus = NumOps.Zero;
-                    for (int k = 0; k < _inputDim; k++)
-                    {
-                        T diff = NumOps.Subtract(x[k], xGenMinus[k]);
-                        lossMinus = NumOps.Add(lossMinus, NumOps.Multiply(diff, diff));
-                    }
-                    for (int k = 0; k < _hiddenDim; k++)
-                    {
-                        T diff = NumOps.Subtract(featReal[k], featGenMinus[k]);
-                        lossMinus = NumOps.Add(lossMinus, NumOps.Multiply(NumOps.FromDouble(0.1), NumOps.Multiply(diff, diff)));
-                    }
-
-                    // Restore z[j] and compute gradient
-                    z[j] = origVal;
-                    double gradVal = (NumOps.ToDouble(lossPlus) - NumOps.ToDouble(lossMinus)) / (2 * eps);
-                    dz[j] = NumOps.FromDouble(gradVal);
+                    dxGen[j] = NumOps.Multiply(NumOps.FromDouble(2.0), NumOps.Subtract(xGen[j], x[j]));
                 }
 
-                // Update z using gradient descent with regularization
+                // d(0.1 * feature-matching)/dh2 = 0.2 (featGen - featReal); flow it back through the
+                // discriminator's hidden layers to xGen and add to the reconstruction gradient.
+                var dFeatH2 = new Vector<T>(_hiddenDim);
+                for (int k = 0; k < _hiddenDim; k++)
+                {
+                    dFeatH2[k] = NumOps.Multiply(NumOps.FromDouble(0.2), NumOps.Subtract(featGen[k], featReal[k]));
+                }
+                var dFeatX = BackpropDiscriminatorFeaturesToInput(xGen, featGen, dFeatH2);
+                for (int j = 0; j < _inputDim; j++)
+                {
+                    dxGen[j] = NumOps.Add(dxGen[j], dFeatX[j]);
+                }
+
+                // Backprop dxGen through the generator to obtain dLoss/dz.
+                var dz = BackpropGeneratorToInput(gH1, gH2, xGen, dxGen);
+
+                // Gradient descent on z with L2 regularization.
                 for (int j = 0; j < _latentDim; j++)
                 {
                     double gradWithReg = NumOps.ToDouble(dz[j]) + 0.001 * NumOps.ToDouble(z[j]);
