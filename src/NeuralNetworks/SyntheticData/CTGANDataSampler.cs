@@ -111,9 +111,85 @@ public class CTGANDataSampler<T>
                 }
             }
 
-            _discreteColumnInfos.Add(new DiscreteColumnInfo(numCats, rowsByCategory));
+            // Log-frequency category-sampling distribution (Xu 2019 §4.3). The
+            // paper samples the conditioned category from the LOGARITHM of its
+            // frequency, not uniformly — this is the actual imbalance-handling
+            // mechanism of training-by-sampling (it lifts rare categories without
+            // fully flattening to uniform, which would over-represent noise). The
+            // official CTGAN uses log(count + 1) normalized.
+            var logFreqProb = new double[numCats];
+            double probSum = 0;
+            for (int c = 0; c < numCats; c++)
+            {
+                logFreqProb[c] = Math.Log(rowsByCategory[c].Count + 1.0);
+                probSum += logFreqProb[c];
+            }
+            if (probSum > 1e-12)
+                for (int c = 0; c < numCats; c++) logFreqProb[c] /= probSum;
+            else
+                for (int c = 0; c < numCats; c++) logFreqProb[c] = 1.0 / numCats;
+
+            _discreteColumnInfos.Add(new DiscreteColumnInfo(numCats, rowsByCategory, logFreqProb));
             _condVectorWidth += numCats;
         }
+    }
+
+    /// <summary>
+    /// Full training-by-sampling draw (Xu 2019 §4.3) exposing everything the
+    /// generator's conditional cross-entropy loss needs: the one-hot conditional
+    /// vector, a MASK that is 1 only over the selected column's category block,
+    /// the selected discrete-column and category indices, and a real row index
+    /// whose value in that column equals the selected category.
+    /// </summary>
+    public (Vector<T> CondVector, Vector<T> Mask, int DiscreteColIndex, int CategoryIndex, int RowIndex) SampleCondVecWithMask()
+    {
+        var condVector = new Vector<T>(_condVectorWidth);
+        var mask = new Vector<T>(_condVectorWidth);
+
+        if (_discreteColumnInfos.Count == 0)
+        {
+            int randomRow = _totalRows > 0 ? _random.Next(_totalRows) : 0;
+            return (condVector, mask, -1, -1, randomRow);
+        }
+
+        int colIdx = _random.Next(_discreteColumnInfos.Count);
+        var colInfo = _discreteColumnInfos[colIdx];
+        int catIdx = SampleCategoryByLogFreq(colInfo);
+
+        int condOffset = 0;
+        for (int c = 0; c < colIdx; c++) condOffset += _discreteColumnInfos[c].NumCategories;
+
+        condVector[condOffset + catIdx] = NumOps.One;
+        for (int c = 0; c < colInfo.NumCategories; c++) mask[condOffset + c] = NumOps.One;
+
+        var rows = colInfo.RowsByCategory[catIdx];
+        int rowIdx = rows.Count > 0 ? rows[_random.Next(rows.Count)] : (_totalRows > 0 ? _random.Next(_totalRows) : 0);
+
+        return (condVector, mask, colIdx, catIdx, rowIdx);
+    }
+
+    /// <summary>
+    /// Samples a category index from a discrete column's log-frequency
+    /// distribution (Xu 2019 §4.3), falling back to a populated category if the
+    /// draw lands on an empty one.
+    /// </summary>
+    private int SampleCategoryByLogFreq(DiscreteColumnInfo colInfo)
+    {
+        double u = _random.NextDouble();
+        double acc = 0;
+        int catIdx = colInfo.NumCategories - 1;
+        for (int c = 0; c < colInfo.NumCategories; c++)
+        {
+            acc += colInfo.CategoryProb[c];
+            if (u <= acc) { catIdx = c; break; }
+        }
+        // Guard: if the chosen category has no real rows, resample to a populated one.
+        int guard = 0;
+        while (colInfo.RowsByCategory[catIdx].Count == 0 && colInfo.NumCategories > 1 && guard++ < 64)
+        {
+            catIdx = _random.Next(colInfo.NumCategories);
+        }
+        return catIdx;
     }
 
     /// <summary>
@@ -144,18 +220,12 @@ public class CTGANDataSampler<T>
             return (condVector, randomRow);
         }
 
-        // Step 1: Pick a random discrete column
+        // Step 1: Pick a random discrete column (uniform over columns, per paper)
         int colIdx = _random.Next(_discreteColumnInfos.Count);
         var colInfo = _discreteColumnInfos[colIdx];
 
-        // Step 2: Pick a random category from that column
-        int catIdx = _random.Next(colInfo.NumCategories);
-
-        // If no rows have this category, pick a random one that does
-        while (colInfo.RowsByCategory[catIdx].Count == 0 && colInfo.NumCategories > 1)
-        {
-            catIdx = _random.Next(colInfo.NumCategories);
-        }
+        // Step 2: Pick a category by LOG-FREQUENCY (Xu 2019 §4.3), not uniformly.
+        int catIdx = SampleCategoryByLogFreq(colInfo);
 
         // Step 3: Set the conditional vector
         int condOffset = 0;
@@ -233,10 +303,14 @@ public class CTGANDataSampler<T>
         public int NumCategories { get; }
         public List<int>[] RowsByCategory { get; }
 
-        public DiscreteColumnInfo(int numCategories, List<int>[] rowsByCategory)
+        /// <summary>Log-frequency sampling distribution over categories (Xu 2019 §4.3).</summary>
+        public double[] CategoryProb { get; }
+
+        public DiscreteColumnInfo(int numCategories, List<int>[] rowsByCategory, double[] categoryProb)
         {
             NumCategories = numCategories;
             RowsByCategory = rowsByCategory;
+            CategoryProb = categoryProb;
         }
     }
 

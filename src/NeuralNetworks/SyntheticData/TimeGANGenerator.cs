@@ -86,7 +86,14 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly TimeGANOptions<T> _options;
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    // One dedicated optimizer per training phase (Yoon et al. 2019 uses separate
+    // solvers: embedder, supervisor, generator, discriminator). See CTGANGenerator
+    // for why a single shared AdamOptimizer corrupts its flat moment buffer across
+    // networks of different parameter counts and diverges.
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _embedderOptimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _supervisorOptimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _generatorOptimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _discriminatorOptimizer;
     private ILossFunction<T> _lossFunction;
 
     // Synthetic tabular data infrastructure
@@ -162,7 +169,19 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     {
         _options = options ?? new TimeGANOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        AdamOptimizer<T, Tensor<T>, Tensor<T>> MakeAdam() =>
+            new(this, new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = 0.5,
+                Beta2 = 0.9,
+                UseAdaptiveLearningRate = false,
+                UseAMSGrad = false,
+            });
+        _generatorOptimizer = optimizer ?? MakeAdam();
+        _discriminatorOptimizer = MakeAdam();
+        _embedderOptimizer = MakeAdam();
+        _supervisorOptimizer = MakeAdam();
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
@@ -601,7 +620,7 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
             paramsList, grads, lossValue,
             xBatch, xBatch, ComputeForward, RecomputeLoss,
             parameterBuffer: null);
-        _optimizer.Step(context);
+        _embedderOptimizer.Step(context);
     }
 
     /// <summary>
@@ -644,7 +663,7 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
             paramsList, grads, lossValue,
             ht, htNext, ComputeForward, RecomputeLoss,
             parameterBuffer: null);
-        _optimizer.Step(context);
+        _supervisorOptimizer.Step(context);
     }
 
     /// <summary>
@@ -706,7 +725,7 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
             paramsList, grads, lossValue,
             realEmb, realEmb, ComputeForward, RecomputeLoss,
             parameterBuffer: null);
-        _optimizer.Step(context);
+        _discriminatorOptimizer.Step(context);
     }
 
     /// <summary>
@@ -806,7 +825,7 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
             paramsList, grads, lossValue,
             noise, noise, ComputeForward, RecomputeLoss,
             parameterBuffer: null);
-        _optimizer.Step(context);
+        _generatorOptimizer.Step(context);
     }
 
     /// <summary>
