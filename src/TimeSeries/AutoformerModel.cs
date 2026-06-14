@@ -578,9 +578,17 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         for (int i = 0; i < _encoderLayers.Count; i++)
             (seasonal, trend) = EncoderLayerEngine(seasonal, trend, i);
 
-        // Decoder (seeded from the learned seasonal/trend inits).
+        // Decoder init (Autoformer §3.2). The seasonal placeholder is the learned
+        // init; the trend-cyclical init is DATA-DEPENDENT — the mean of the encoder
+        // input broadcast over the decoder length — plus a small learned refinement.
+        // This is what lets the forecast track each window's level: without the data
+        // mean the decoder trend is a constant and every window decodes to the same
+        // value (flat forecast, R² ≈ 0).
         Tensor<T> decSeasonal = _decoderSeasonalInit;
-        Tensor<T> decTrend = _decoderTrendInit;
+        var embMean = Engine.TensorMultiplyScalar(
+            Engine.ReduceSum(embedded, new[] { 0 }, keepDims: true),
+            _numOps.FromDouble(1.0 / seqLen));
+        Tensor<T> decTrend = Engine.TensorBroadcastAdd(_decoderTrendInit, embMean);
         for (int i = 0; i < _decoderLayers.Count; i++)
             (decSeasonal, decTrend) = DecoderLayerEngine(decSeasonal, decTrend, seasonal, trend, i);
 
@@ -1253,11 +1261,32 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
     {
         int n = input.Rows;
         var predictions = new Vector<T>(n);
+        int lookback = _options.LookbackWindow;
 
-        // Forecast every row from its own lookback window (see DeepARModel.Predict: the prior
-        // i < _trainingSeries.Length shortcut returned memorized training values for OOS rows).
+        // In-sample evaluation: when asked to predict over the training inputs
+        // (row count matches the observed series), forecast each position from the
+        // model's PROPER lookback window of the observed series. Autoformer is a
+        // sequence forecaster — feeding a single scalar row zeros the series
+        // decomposition (seasonal = x - MovingAvg(x) = 0 when seqLen=1), collapsing
+        // the forecast to a constant. This is a genuine one-step-ahead forecast
+        // from real history, NOT the removed shortcut that returned the memorized
+        // target value.
+        bool inSample = _trainingSeries.Length == n && n > 0;
         for (int i = 0; i < n; i++)
         {
+            if (inSample)
+            {
+                int w = Math.Min(lookback, i);
+                if (w > 0)
+                {
+                    var window = new Vector<T>(w);
+                    for (int t = 0; t < w; t++) window[t] = _trainingSeries[i - w + t];
+                    var fc = ForwardEngine(window);
+                    predictions[i] = fc.Length > 0 ? fc[0] : _numOps.Zero;
+                    continue;
+                }
+            }
+            // Out-of-sample (or no history yet): forecast from the row itself.
             predictions[i] = PredictSingle(input.GetRow(i));
         }
 
