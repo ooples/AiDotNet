@@ -257,7 +257,6 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         ModelParameters = new Vector<T>(1);
         ModelParameters[0] = _numOps.FromDouble(y.Length);
 
-        T learningRate = _numOps.FromDouble(_options.LearningRate);
         int lookback = _options.LookbackWindow;
 
         // Build training samples from y: input = y[i-lookback : i], target = y[i]
@@ -286,58 +285,49 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         T levelMean = _numOps.Divide(levelSum, _numOps.FromDouble(y.Length));
         for (int h = 0; h < _outputBias.Length; h++) _outputBias[h] = levelMean;
 
-        double prevLoss = double.MaxValue;
+        // IEngine automatic-gradient-tape training (no hand-rolled backprop):
+        // forward via Engine ops under a GradientTape, then AdamOptimizer.Step
+        // applies the tape's gradients to every trainable tensor (model + encoder/
+        // decoder layer params). The model forecasts y[i] from its lookback window,
+        // so the loss compares the decoder's first output position to y[i].
+        var optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            null, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate });
+        var mseLoss = new MeanSquaredErrorLoss<T>();
+        var allParams = CollectTrainableParameters();
 
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
             TrainingCancellationToken.ThrowIfCancellationRequested();
-
             var shuffled = validIndices.OrderBy(_ => _random.Next()).ToList();
-            double epochLoss = 0;
-            int sampleCount = 0;
 
-            for (int batchStart = 0; batchStart < shuffled.Count; batchStart += _options.BatchSize)
+            foreach (int i in shuffled)
             {
-                int batchEnd = Math.Min(batchStart + _options.BatchSize, shuffled.Count);
-                int batchSize = batchEnd - batchStart;
+                if (i % 8 == 0) TrainingCancellationToken.ThrowIfCancellationRequested();
 
-                // Reset gradient accumulators
-                ResetGradientAccumulators();
+                var input = new Vector<T>(lookback);
+                for (int j = 0; j < lookback; j++) input[j] = y[i - lookback + j];
+                var targetTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { y[i] }));
 
-                // Accumulate gradients for batch using backpropagation
-                for (int idx = batchStart; idx < batchEnd; idx++)
-                {
-                    int i = shuffled[idx];
+                using var tape = new Tensors.Engines.Autodiff.GradientTape<T>();
+                var forecast = ForwardEngine(input);
+                var pred0 = Engine.Reshape(Engine.TensorNarrow(forecast, 0, 0, 1), new[] { 1 });
+                var lossTensor = mseLoss.ComputeTapeLoss(pred0, targetTensor);
+                var allGrads = tape.ComputeGradients(lossTensor, sources: null);
 
-                    // Extract lookback window from y as input
-                    var input = new Vector<T>(lookback);
-                    for (int j = 0; j < lookback; j++)
-                    {
-                        input[j] = y[i - lookback + j];
-                    }
+                var grads = new Dictionary<Tensor<T>, Tensor<T>>(
+                    Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                foreach (var param in allParams)
+                    if (allGrads.TryGetValue(param, out var g)) grads[param] = g;
 
-                    T target = y[i];
-
-                    // Compute gradients via backpropagation and accumulate
-                    var (gradients, prediction) = ComputeGradients(input, target);
-                    AccumulateGradients(gradients);
-
-                    double error = _numOps.ToDouble(_numOps.Subtract(target, prediction));
-                    epochLoss += error * error;
-                    sampleCount++;
-                }
-
-                // Apply accumulated gradients
-                ApplyGradients(learningRate, batchSize);
+                T lossValue = lossTensor.Length > 0 ? lossTensor[0] : _numOps.Zero;
+                var inTensor = new Tensor<T>(new[] { lookback, 1 }, input);
+                Tensor<T> ComputeForward(Tensor<T> a, Tensor<T> b) => pred0;
+                Tensor<T> ComputeLoss(Tensor<T> p, Tensor<T> t) => mseLoss.ComputeTapeLoss(p, t);
+                var context = new Tensors.Engines.Autodiff.TapeStepContext<T>(
+                    allParams, grads, lossValue, inTensor, targetTensor, ComputeForward, ComputeLoss, null);
+                optimizer.Step(context);
             }
-
-            // Early termination if loss converges
-            double avgLoss = sampleCount > 0 ? epochLoss / sampleCount : 0;
-            if (Math.Abs(prevLoss - avgLoss) < 1e-8)
-                break;
-            prevLoss = avgLoss;
         }
-
     }
 
     public override Vector<T> Predict(Matrix<T> input)
@@ -391,6 +381,117 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
                 tensor[i] = _numOps.Zero;
             }
         }
+    }
+
+    // ── Unified IEngine-op forward (automatic GradientTape) ─────────────────
+    // One forward for BOTH training (under a GradientTape) and inference, built
+    // entirely from IEngine ops so the tape differentiates it automatically — no
+    // hand-rolled backward, no manual ApplyGradients. Returns [forecastHorizon, 1].
+    // (The paper's self-attention distilling between encoder layers is a sequence-
+    // length efficiency step; it is omitted here so the full encoder context feeds
+    // the decoder cross-attention — it does not change what is learned.)
+    private Tensor<T> ForwardEngine(Vector<T> input)
+    {
+        int seqLen = Math.Min(input.Length, _options.LookbackWindow);
+        int embDim = _options.EmbeddingDim;
+        int horizon = _options.ForecastHorizon;
+
+        var inData = new Vector<T>(seqLen);
+        for (int t = 0; t < seqLen; t++) inData[t] = input[t];
+        var inputTensor = new Tensor<T>(new[] { seqLen, 1 }, inData);
+        var posData = new Vector<T>(seqLen * embDim);
+        for (int i = 0; i < seqLen * embDim; i++) posData[i] = _positionalEncoding[i];
+        var posTensor = new Tensor<T>(new[] { seqLen, embDim }, posData);
+        var enc = Engine.TensorAdd(
+            Engine.TensorMatMul(inputTensor, Engine.Reshape(_inputProjection, new[] { 1, embDim })), posTensor);
+
+        for (int i = 0; i < _encoderLayers.Count; i++) enc = EncoderLayerEngine(enc, i);
+
+        // Decoder input = learned start token (broadcast over the horizon, tape-
+        // tracked) + decoder positional encoding.
+        var decPosData = new Vector<T>(horizon * embDim);
+        for (int t = 0; t < horizon; t++)
+            for (int j = 0; j < embDim; j++)
+                decPosData[t * embDim + j] = _positionalEncoding[(_options.LookbackWindow + t) * embDim + j];
+        var decPos = new Tensor<T>(new[] { horizon, embDim }, decPosData);
+        var dec = Engine.TensorBroadcastAdd(decPos, Engine.Reshape(_decoderStartToken, new[] { 1, embDim }));
+
+        for (int i = 0; i < _decoderLayers.Count; i++) dec = DecoderLayerEngine(dec, enc, i);
+
+        // Per-position output projection: output[t] = Σ_j dec[t,j]·outputProjection[t,j] + bias[t].
+        var summed = Engine.ReduceSum(Engine.TensorMultiply(dec, _outputProjection), new[] { 1 }, keepDims: true);
+        return Engine.TensorAdd(summed, Engine.Reshape(_outputBias, new[] { horizon, 1 }));
+    }
+
+    private Tensor<T> Attend(Tensor<T> q, Tensor<T> k, Tensor<T> v)
+    {
+        int sq = q.Shape[0], e = q.Shape[1], sk = k.Shape[0];
+        var o4 = Engine.ScaledDotProductAttention(
+            Engine.Reshape(q, new[] { 1, 1, sq, e }), Engine.Reshape(k, new[] { 1, 1, sk, e }),
+            Engine.Reshape(v, new[] { 1, 1, sk, e }), null, null, out _);
+        return Engine.Reshape(o4, new[] { sq, e });
+    }
+
+    private Tensor<T> AddBias(Tensor<T> x, Tensor<T> bias)
+        => Engine.TensorBroadcastAdd(x, Engine.Reshape(bias, new[] { 1, bias.Shape[0] }));
+
+    private Tensor<T> EncoderLayerEngine(Tensor<T> x, int layerIdx)
+    {
+        var l = _encoderLayers[layerIdx];
+        var attn = Attend(Engine.TensorMatMul(x, l.GetQueryProjection()),
+            Engine.TensorMatMul(x, l.GetKeyProjection()), Engine.TensorMatMul(x, l.GetValueProjection()));
+        var projected = Engine.TensorMatMul(attn, l.GetOutputProjection());
+        var norm1 = Engine.LayerNorm(Engine.TensorAdd(x, projected),
+            l.GetLayerNorm1Gamma(), l.GetLayerNorm1Beta(), 1e-6, out _, out _);
+        var ffHidden = Engine.ReLU(AddBias(
+            Engine.TensorMatMul(norm1, Engine.TensorTranspose(l.GetFF1Weight())), l.GetFF1Bias()));
+        var ffOutput = AddBias(
+            Engine.TensorMatMul(ffHidden, Engine.TensorTranspose(l.GetFF2Weight())), l.GetFF2Bias());
+        return Engine.LayerNorm(Engine.TensorAdd(norm1, ffOutput),
+            l.GetLayerNorm2Gamma(), l.GetLayerNorm2Beta(), 1e-6, out _, out _);
+    }
+
+    private Tensor<T> DecoderLayerEngine(Tensor<T> dec, Tensor<T> enc, int layerIdx)
+    {
+        var l = _decoderLayers[layerIdx];
+        var selfProj = Engine.TensorMatMul(Attend(
+            Engine.TensorMatMul(dec, l.GetSelfQueryProjection()), Engine.TensorMatMul(dec, l.GetSelfKeyProjection()),
+            Engine.TensorMatMul(dec, l.GetSelfValueProjection())), l.GetSelfOutputProjection());
+        var norm1 = Engine.LayerNorm(Engine.TensorAdd(dec, selfProj),
+            l.GetLayerNorm1Gamma(), l.GetLayerNorm1Beta(), 1e-6, out _, out _);
+        var crossProj = Engine.TensorMatMul(Attend(
+            Engine.TensorMatMul(norm1, l.GetCrossQueryProjection()), Engine.TensorMatMul(enc, l.GetCrossKeyProjection()),
+            Engine.TensorMatMul(enc, l.GetCrossValueProjection())), l.GetCrossOutputProjection());
+        var norm2 = Engine.LayerNorm(Engine.TensorAdd(norm1, crossProj),
+            l.GetLayerNorm2Gamma(), l.GetLayerNorm2Beta(), 1e-6, out _, out _);
+        var ffHidden = Engine.ReLU(AddBias(
+            Engine.TensorMatMul(norm2, Engine.TensorTranspose(l.GetFF1Weight())), l.GetFF1Bias()));
+        var ffOutput = AddBias(
+            Engine.TensorMatMul(ffHidden, Engine.TensorTranspose(l.GetFF2Weight())), l.GetFF2Bias());
+        return Engine.LayerNorm(Engine.TensorAdd(norm2, ffOutput),
+            l.GetLayerNorm3Gamma(), l.GetLayerNorm3Beta(), 1e-6, out _, out _);
+    }
+
+    private List<Tensor<T>> CollectTrainableParameters()
+    {
+        var p = new List<Tensor<T>> { _inputProjection, _decoderStartToken, _outputProjection, _outputBias };
+        foreach (var l in _encoderLayers)
+        {
+            p.Add(l.GetQueryProjection()); p.Add(l.GetKeyProjection()); p.Add(l.GetValueProjection());
+            p.Add(l.GetOutputProjection()); p.Add(l.GetFF1Weight()); p.Add(l.GetFF1Bias());
+            p.Add(l.GetFF2Weight()); p.Add(l.GetFF2Bias()); p.Add(l.GetLayerNorm1Gamma());
+            p.Add(l.GetLayerNorm1Beta()); p.Add(l.GetLayerNorm2Gamma()); p.Add(l.GetLayerNorm2Beta());
+        }
+        foreach (var l in _decoderLayers)
+        {
+            p.Add(l.GetSelfQueryProjection()); p.Add(l.GetSelfKeyProjection()); p.Add(l.GetSelfValueProjection());
+            p.Add(l.GetSelfOutputProjection()); p.Add(l.GetCrossQueryProjection()); p.Add(l.GetCrossKeyProjection());
+            p.Add(l.GetCrossValueProjection()); p.Add(l.GetCrossOutputProjection()); p.Add(l.GetFF1Weight());
+            p.Add(l.GetFF1Bias()); p.Add(l.GetFF2Weight()); p.Add(l.GetFF2Bias());
+            p.Add(l.GetLayerNorm1Gamma()); p.Add(l.GetLayerNorm1Beta()); p.Add(l.GetLayerNorm2Gamma());
+            p.Add(l.GetLayerNorm2Beta()); p.Add(l.GetLayerNorm3Gamma()); p.Add(l.GetLayerNorm3Beta());
+        }
+        return p;
     }
 
     private (Dictionary<string, Tensor<T>> gradients, T prediction) ComputeGradients(Vector<T> input, T target)
@@ -656,8 +757,9 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     public override T PredictSingle(Vector<T> input)
     {
-        Vector<T> forecast = ForecastHorizon(input);
-        return forecast[0];
+        // Same IEngine-op forward as training (no train/predict divergence).
+        var output = ForwardEngine(input);
+        return output.Length > 0 ? output[0] : _numOps.Zero;
     }
 
     /// <summary>
@@ -943,6 +1045,18 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
 
     // Multi-head attention weights (Tensor-based)
     private readonly Tensor<T> _queryProj;
+    public Tensor<T> GetQueryProjection() => _queryProj;
+    public Tensor<T> GetKeyProjection() => _keyProj;
+    public Tensor<T> GetValueProjection() => _valueProj;
+    public Tensor<T> GetOutputProjection() => _outputProj;
+    public Tensor<T> GetFF1Weight() => _ffn1;
+    public Tensor<T> GetFF1Bias() => _ffn1Bias;
+    public Tensor<T> GetFF2Weight() => _ffn2;
+    public Tensor<T> GetFF2Bias() => _ffn2Bias;
+    public Tensor<T> GetLayerNorm1Gamma() => _layerNorm1Gamma;
+    public Tensor<T> GetLayerNorm1Beta() => _layerNorm1Beta;
+    public Tensor<T> GetLayerNorm2Gamma() => _layerNorm2Gamma;
+    public Tensor<T> GetLayerNorm2Beta() => _layerNorm2Beta;
     private readonly Tensor<T> _keyProj;
     private readonly Tensor<T> _valueProj;
     private readonly Tensor<T> _outputProj;
@@ -1556,6 +1670,24 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     private readonly Tensor<T> _layerNorm2Beta;
     private readonly Tensor<T> _layerNorm3Gamma;
     private readonly Tensor<T> _layerNorm3Beta;
+    public Tensor<T> GetSelfQueryProjection() => _selfQueryProj;
+    public Tensor<T> GetSelfKeyProjection() => _selfKeyProj;
+    public Tensor<T> GetSelfValueProjection() => _selfValueProj;
+    public Tensor<T> GetSelfOutputProjection() => _selfOutputProj;
+    public Tensor<T> GetCrossQueryProjection() => _crossQueryProj;
+    public Tensor<T> GetCrossKeyProjection() => _crossKeyProj;
+    public Tensor<T> GetCrossValueProjection() => _crossValueProj;
+    public Tensor<T> GetCrossOutputProjection() => _crossOutputProj;
+    public Tensor<T> GetFF1Weight() => _ffn1;
+    public Tensor<T> GetFF1Bias() => _ffn1Bias;
+    public Tensor<T> GetFF2Weight() => _ffn2;
+    public Tensor<T> GetFF2Bias() => _ffn2Bias;
+    public Tensor<T> GetLayerNorm1Gamma() => _layerNorm1Gamma;
+    public Tensor<T> GetLayerNorm1Beta() => _layerNorm1Beta;
+    public Tensor<T> GetLayerNorm2Gamma() => _layerNorm2Gamma;
+    public Tensor<T> GetLayerNorm2Beta() => _layerNorm2Beta;
+    public Tensor<T> GetLayerNorm3Gamma() => _layerNorm3Gamma;
+    public Tensor<T> GetLayerNorm3Beta() => _layerNorm3Beta;
 
     public override long ParameterCount =>
         _selfQueryProj.Length + _selfKeyProj.Length + _selfValueProj.Length + _selfOutputProj.Length +
