@@ -402,15 +402,16 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
     public override Vector<T> Predict(Matrix<T> input)
     {
         int n = input.Rows;
-        int trainN = _trainingSeries.Length;
         var predictions = new Vector<T>(n);
 
+        // Each input row is an independent lookback window — forecast it from its own content. (Previously
+        // rows with index i < _trainingSeries.Length returned the memorized training value _trainingSeries[i]
+        // instead of a forecast, conflating the test-matrix row index with a training-series position. That
+        // made out-of-sample Predict() return training data — and any two models whose OOS window fit inside
+        // the training length returned byte-identical "predictions".)
         for (int i = 0; i < n; i++)
         {
-            if (i < trainN && trainN > 0)
-                predictions[i] = _trainingSeries[i];
-            else
-                predictions[i] = PredictSingle(input.GetRow(i));
+            predictions[i] = PredictSingle(input.GetRow(i));
         }
 
         return predictions;

@@ -186,15 +186,13 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
     public override Vector<T> Predict(Matrix<T> input)
     {
         int n = input.Rows;
-        int trainN = _trainingSeries.Length;
         var predictions = new Vector<T>(n);
 
+        // Reconstruct every row from its own input window (see DeepARModel.Predict: the prior
+        // i < _trainingSeries.Length shortcut returned memorized training values for OOS rows).
         for (int i = 0; i < n; i++)
         {
-            if (i < trainN && trainN > 0)
-                predictions[i] = _trainingSeries[i];
-            else
-                predictions[i] = PredictSingle(input.GetRow(i));
+            predictions[i] = PredictSingle(input.GetRow(i));
         }
 
         return predictions;
