@@ -4153,6 +4153,42 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
     }
 
+    private bool _streamingScheduleSet;
+
+    /// <summary>
+    /// Feeds the streaming pool this network's per-step weight-access SCHEDULE —
+    /// forward layer order then backward (training) — so it pages with Belady-optimal
+    /// eviction (evict the weight whose next use is furthest) instead of LRU. For the
+    /// cyclic forward→backward pattern LRU is near-pessimal (it evicts the weight
+    /// about to be reused); Belady is provably minimal-fault. No-op unless weight
+    /// streaming is engaged; runs once after the first forward, when every weight's
+    /// StreamingPoolHandle is assigned.
+    /// </summary>
+    private void RefreshStreamingSchedule()
+    {
+        if (_streamingScheduleSet) return;
+        var pool = WeightRegistry.StreamingPool;
+        if (pool is null) return;
+
+        var order = new System.Collections.Generic.List<long>();
+        for (int i = 0; i < Layers.Count; i++) CollectStreamingHandles(Layers[i], order);          // forward 0..N
+        // Backward reuses the same weights in reverse — include it so Belady knows the
+        // late layers are needed again right after the forward turn (training path).
+        if (IsTrainingMode)
+            for (int i = Layers.Count - 1; i >= 0; i--) CollectStreamingHandles(Layers[i], order);
+        if (order.Count == 0) return; // nothing streamed (all weights resident) — keep LRU
+
+        pool.SetAccessSchedule(order.ToArray());
+        _streamingScheduleSet = true;
+    }
+
+    private static void CollectStreamingHandles(ILayer<T> layer, System.Collections.Generic.List<long> order)
+    {
+        if (layer is not LayerBase<T> lb) return;
+        foreach (var t in lb.GetTrainableParameters())
+            if (t is not null && t.StreamingPoolHandle >= 0) order.Add(t.StreamingPoolHandle);
+    }
+
     /// <summary>
     /// Hook into <c>WeightRegistry.PrefetchAsyncMany</c> for the given
     /// layer's trainable tensors. No-op for layers without weights
@@ -4319,6 +4355,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         ResolveLazyLayerShapes();
         TryAutoEnableWeightStreaming();
 
+        // Tell the weight-streaming pool which execution mode we're in so its
+        // StreamingStoreDtype.Auto policy is safe: store paged-out weights as bf16
+        // (2x I/O) during INFERENCE — where a read-only weight is quantized once and
+        // never accumulates error — but at full fp32/fp64 precision during TRAINING,
+        // so the pool's canonical copy (the master weight) isn't silently truncated
+        // to bf16 and small optimizer updates aren't lost. No-op unless streaming is
+        // engaged and the dtype is Auto.
+        WeightRegistry.SetStreamingExecutionTraining(isTraining);
+
         if (SupportsTraining)
         {
             IsTrainingMode = isTraining;
@@ -4333,6 +4378,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 _layers[i].SetTrainingMode(isTraining);
             }
         }
+
+        // If weight streaming is engaged, hand the pool the fwd/bwd access schedule
+        // so it pages Belady-optimally. No-op until the first forward has assigned
+        // every weight's StreamingPoolHandle (then it sets the schedule once), and a
+        // no-op when streaming isn't engaged.
+        RefreshStreamingSchedule();
     }
 
     /// <summary>
