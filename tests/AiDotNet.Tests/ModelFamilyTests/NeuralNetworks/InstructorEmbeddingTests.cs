@@ -4,7 +4,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class InstructorEmbeddingTests : EmbeddingModelTestBase
+public class InstructorEmbeddingTests : EmbeddingModelTestBase<float>
 {
     // InstructorEmbedding's default ctor wires a 768-dim transformer
     // (inputSize=768, outputSize=768). The test base defaults to [1, 4]
@@ -16,6 +16,6 @@ public class InstructorEmbeddingTests : EmbeddingModelTestBase
     protected override int[] InputShape => [1, 768];
     protected override int[] OutputShape => [1, 768];
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new InstructorEmbedding<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new InstructorEmbedding<float>();
 }
