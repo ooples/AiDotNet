@@ -544,38 +544,19 @@ public class StandardVAE<T> : VAEModelBase<T>
         // before the first real forward (lazy layers otherwise contribute 0).
         TriggerLazyShapeResolution();
 
-        var parameters = new List<T>();
-
-        AddLayerParameters(parameters, _inputConv);
-
-        foreach (var layer in _encoderLayers)
+        // Single-allocation concat over the same layers GetParameterChunks walks.
+        // The previous List<T> + per-element Add + ToArray triple-copied the whole
+        // parameter vector (~3x), OOM'ing the runner when a paper-scale VAE is
+        // materialised (e.g. during a foundation model's Clone). Vector<T>.Concatenate
+        // pre-sizes one result and vectorized-copies each layer's params in once.
+        var parts = new List<Vector<T>>();
+        foreach (var layer in EnumerateAllLayers())
         {
-            AddLayerParameters(parameters, layer);
+            if (layer == null) continue;
+            parts.Add(layer.GetParameters());
         }
 
-        AddLayerParameters(parameters, _meanConv);
-        AddLayerParameters(parameters, _logVarConv);
-        AddLayerParameters(parameters, _quantConv);
-        AddLayerParameters(parameters, _postQuantConv);
-
-        foreach (var layer in _decoderLayers)
-        {
-            AddLayerParameters(parameters, layer);
-        }
-
-        AddLayerParameters(parameters, _outputConv);
-
-        return new Vector<T>(parameters.ToArray());
-    }
-
-    private void AddLayerParameters(List<T> parameters, ILayer<T>? layer)
-    {
-        if (layer == null) return;
-        var layerParams = layer.GetParameters();
-        for (int i = 0; i < layerParams.Length; i++)
-        {
-            parameters.Add(layerParams[i]);
-        }
+        return Vector<T>.Concatenate(parts.ToArray());
     }
 
     /// <inheritdoc />
