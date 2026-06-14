@@ -334,10 +334,30 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     {
         int n = input.Rows;
         var predictions = new Vector<T>(n);
-        // Forecast every row from its own lookback window (see DeepARModel.Predict: the prior
-        // i < _trainingSeries.Length shortcut returned memorized training values for OOS rows).
+        int lookback = _options.LookbackWindow;
+
+        // In-sample evaluation: when asked to predict over the training inputs (row
+        // count matches the observed series), forecast each position from the model's
+        // PROPER lookback window of the observed series. Informer is a sequence
+        // forecaster — feeding a single scalar time-index row gives the encoder no
+        // context, collapsing the forecast to a constant. This is a genuine one-step
+        // forecast from real history, NOT the removed shortcut that returned the
+        // memorized target value.
+        bool inSample = _trainingSeries.Length == n && n > 0;
         for (int i = 0; i < n; i++)
         {
+            if (inSample)
+            {
+                int w = Math.Min(lookback, i);
+                if (w > 0)
+                {
+                    var window = new Vector<T>(w);
+                    for (int t = 0; t < w; t++) window[t] = _trainingSeries[i - w + t];
+                    var fc = ForwardEngine(window);
+                    predictions[i] = fc.Length > 0 ? fc[0] : _numOps.Zero;
+                    continue;
+                }
+            }
             predictions[i] = PredictSingle(input.GetRow(i));
         }
         return predictions;
@@ -402,19 +422,29 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         var posData = new Vector<T>(seqLen * embDim);
         for (int i = 0; i < seqLen * embDim; i++) posData[i] = _positionalEncoding[i];
         var posTensor = new Tensor<T>(new[] { seqLen, embDim }, posData);
-        var enc = Engine.TensorAdd(
+        var embedded = Engine.TensorAdd(
             Engine.TensorMatMul(inputTensor, Engine.Reshape(_inputProjection, new[] { 1, embDim })), posTensor);
 
+        var enc = embedded;
         for (int i = 0; i < _encoderLayers.Count; i++) enc = EncoderLayerEngine(enc, i);
 
-        // Decoder input = learned start token (broadcast over the horizon, tape-
-        // tracked) + decoder positional encoding.
+        // Decoder input (Informer generative decoder, Zhou et al. 2021 §3.3): the
+        // start token is the input sequence's tail, which carries the series level.
+        // We seed it with the embedded input mean (broadcast over the horizon) plus
+        // the learned start token + decoder positional encoding. Without the input
+        // mean the decoder is a constant and the encoder's LayerNorm strips the
+        // magnitude, so the forecast cannot track each window's level (flat, R² ≈ 0).
         var decPosData = new Vector<T>(horizon * embDim);
         for (int t = 0; t < horizon; t++)
             for (int j = 0; j < embDim; j++)
                 decPosData[t * embDim + j] = _positionalEncoding[(_options.LookbackWindow + t) * embDim + j];
         var decPos = new Tensor<T>(new[] { horizon, embDim }, decPosData);
-        var dec = Engine.TensorBroadcastAdd(decPos, Engine.Reshape(_decoderStartToken, new[] { 1, embDim }));
+        var embMean = Engine.TensorMultiplyScalar(
+            Engine.ReduceSum(embedded, new[] { 0 }, keepDims: true),
+            _numOps.FromDouble(1.0 / seqLen));
+        var dec = Engine.TensorBroadcastAdd(
+            Engine.TensorBroadcastAdd(decPos, Engine.Reshape(_decoderStartToken, new[] { 1, embDim })),
+            embMean);
 
         for (int i = 0; i < _decoderLayers.Count; i++) dec = DecoderLayerEngine(dec, enc, i);
 
