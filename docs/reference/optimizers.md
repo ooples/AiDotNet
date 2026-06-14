@@ -117,6 +117,16 @@ When `NeuralNetworkBase.StreamingTrainingEnabled` is enabled, the streaming trai
 
 Each state buffer stores one byte per parameter plus one double scale per block, instead of one full-precision numeric value per parameter. With the default 2048-parameter block size, one-buffer optimizers use about 1 byte per parameter plus scale metadata, two-buffer Adam-style optimizers use about 2 bytes per parameter plus metadata, and AMSGrad uses about 3 bytes per parameter plus metadata. Compared with full `double` moment state, this is roughly an 8x reduction for the moment buffers; compared with full `float` moment state, it is roughly a 4x reduction.
 
+#### Second-order streaming: L-BFGS
+
+The first-order variants update each parameter in place as its gradient is produced. L-BFGS is a **second-order** method — its search direction depends on the whole gradient plus a curvature history — so it can't update per-parameter-as-gradient-arrives. `StreamingLBFGS<T>` instead buffers the per-parameter gradients into flat vectors as they stream in, then performs the two-loop recursion and parameter update once the full gradient is available.
+
+| Configured optimizer | Streaming variant | Quantized state |
+|:---------------------|:------------------|:----------------|
+| `LBFGSOptimizer` | `StreamingLBFGS<T>` | `MemorySize` (s, y) history vectors, 8-bit block-quantized |
+
+The dominant memory cost of L-BFGS is its `(s, y)` curvature history — `MemorySize` vector pairs of length *n*, i.e. O(*m·n*). `StreamingLBFGS` stores that history 8-bit block-quantized (~8x smaller than `double`) and dequantizes it **one vector at a time** during the two-loop recursion, so the transient working set stays O(*n*) rather than O(*m·n*). Full BFGS / Newton are intentionally not provided as streaming variants: their O(*n²*) dense Hessian (approximation) does not fit memory-bounded large-model training at all.
+
 ---
 
 ## Second-Order Optimizers
