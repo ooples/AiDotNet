@@ -159,24 +159,27 @@ public class DiffusionResBlock<T> : LayerBase<T>
         // `block2.SetParameters(block1.GetParameters()) ⇒ block2(x) == block1(x)`
         // determinism contract relied on by tests and checkpoint reload.
         //
-        // Materialize via per-sublayer ResolveFromShape — ALLOCATION ONLY, no
-        // conv compute. The previous implementation ran a full probe Forward
-        // through the block at the paper spatial size; profiling
-        // (dotnet-trace, DallE2ModelTests.Predict_ShouldBeDeterministic) showed
-        // 100% of the 120s test timeout inside this ctor chain — the fused
-        // im2col conv GEMM ran a real [1, C, S, S] convolution for every res
-        // block in the U-Net, so paper-scale models (DallE2, SDXLInpainting)
-        // spent minutes CONSTRUCTING and timed out before Predict ever ran.
-        // ResolveFromShape runs each layer's lazy-init hook only (shape
-        // resolution + weight allocation + RNG init) — the determinism
-        // contract needs the weights to exist, not a convolution result.
-        _conv1.ResolveFromShape([1, inChannels, spatialSize, spatialSize]);
+        // Resolve each sublayer's SHAPE ONLY — sets the weight dimensions (so
+        // ParameterCount / GetOutputShape are exact pre-forward) WITHOUT allocating
+        // the weight tensors or consuming RNG. The previous implementation called
+        // ResolveFromShape, which additionally allocated + RNG-initialised every
+        // sublayer's weights right here in the ctor. At paper scale that is the
+        // dominant construction cost: a single SD U-Net is ~860M params, ~7 GB at
+        // double, and the Unit-03b contract shard (16 control models constructed,
+        // never disposed) OOM'd the 16 GB CI runner on construction alone — even
+        // though those tests only assert ParameterCount > 0 and never run a forward.
+        // ResolveShapesOnly keeps the weights deferred: they materialise (allocate +
+        // RNG-init, on the untouched stream) on the first GetParameters / Forward,
+        // exactly when a caller actually needs the values. The
+        // SetParameters(GetParameters()) determinism contract is unaffected — it
+        // overwrites the weights, and GetParameters triggers materialisation on demand.
+        _conv1.ResolveShapesOnly([1, inChannels, spatialSize, spatialSize]);
         if (timeEmbedDim > 0)
         {
-            _timeMlp.ResolveFromShape([1, timeEmbedDim]);
+            _timeMlp.ResolveShapesOnly([1, timeEmbedDim]);
         }
-        _conv2.ResolveFromShape([1, outChannels, spatialSize, spatialSize]);
-        _skipConv?.ResolveFromShape([1, inChannels, spatialSize, spatialSize]);
+        _conv2.ResolveShapesOnly([1, outChannels, spatialSize, spatialSize]);
+        _skipConv?.ResolveShapesOnly([1, inChannels, spatialSize, spatialSize]);
     }
 
     /// <summary>

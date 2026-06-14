@@ -15,7 +15,7 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     [Fact(Timeout = 120000)]
     public async Task PerturbedAttentionGuidance_DefaultConstructor_CreatesValid()
     {
-        var guidance = new PerturbedAttentionGuidance<double>();
+        var guidance = new PerturbedAttentionGuidance<float>();
 
         Assert.NotNull(guidance);
     }
@@ -23,7 +23,7 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     [Fact(Timeout = 120000)]
     public async Task SelfAttentionGuidance_DefaultConstructor_CreatesValid()
     {
-        var guidance = new SelfAttentionGuidance<double>();
+        var guidance = new SelfAttentionGuidance<float>();
 
         Assert.NotNull(guidance);
     }
@@ -31,7 +31,7 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     [Fact(Timeout = 120000)]
     public async Task DynamicCFGScheduler_DefaultConstructor_CreatesValid()
     {
-        var scheduler = new DynamicCFGScheduler<double>();
+        var scheduler = new DynamicCFGScheduler<float>();
 
         Assert.NotNull(scheduler);
     }
@@ -39,7 +39,7 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     [Fact(Timeout = 120000)]
     public async Task RescaledCFG_DefaultConstructor_CreatesValid()
     {
-        var cfg = new RescaledCFG<double>();
+        var cfg = new RescaledCFG<float>();
 
         Assert.NotNull(cfg);
     }
@@ -47,7 +47,7 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     [Fact(Timeout = 120000)]
     public async Task AdaptiveProjectedGuidance_DefaultConstructor_CreatesValid()
     {
-        var guidance = new AdaptiveProjectedGuidance<double>();
+        var guidance = new AdaptiveProjectedGuidance<float>();
 
         Assert.NotNull(guidance);
     }
@@ -59,7 +59,7 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     [Fact(Timeout = 120000)]
     public async Task ControlNetPlusPlusModel_DefaultConstructor_CreatesValidModel()
     {
-        var model = new ControlNetPlusPlusModel<double>();
+        var model = new ControlNetPlusPlusModel<float>();
 
         Assert.NotNull(model);
         Assert.NotNull(model.NoisePredictor);
@@ -71,7 +71,7 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     [Fact(Timeout = 120000)]
     public async Task ControlNetFluxModel_DefaultConstructor_CreatesValidModel()
     {
-        var model = new ControlNetFluxModel<double>();
+        var model = new ControlNetFluxModel<float>();
 
         Assert.NotNull(model);
         Assert.NotNull(model.NoisePredictor);
@@ -82,7 +82,7 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     [Fact(Timeout = 120000)]
     public async Task ControlNetSD3Model_DefaultConstructor_CreatesValidModel()
     {
-        var model = new ControlNetSD3Model<double>();
+        var model = new ControlNetSD3Model<float>();
 
         Assert.NotNull(model);
         Assert.NotNull(model.NoisePredictor);
@@ -93,7 +93,7 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     [Fact(Timeout = 120000)]
     public async Task ControlNetUnionProModel_DefaultConstructor_CreatesValidModel()
     {
-        var model = new ControlNetUnionProModel<double>();
+        var model = new ControlNetUnionProModel<float>();
 
         Assert.NotNull(model);
         Assert.NotNull(model.NoisePredictor);
@@ -104,7 +104,7 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     [Fact(Timeout = 120000)]
     public async Task IPAdapterPlusModel_DefaultConstructor_CreatesValidModel()
     {
-        var model = new IPAdapterPlusModel<double>();
+        var model = new IPAdapterPlusModel<float>();
 
         Assert.NotNull(model);
         Assert.NotNull(model.NoisePredictor);
@@ -115,7 +115,7 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     [Fact(Timeout = 120000)]
     public async Task IPAdapterFaceIDPlusModel_DefaultConstructor_CreatesValidModel()
     {
-        var model = new IPAdapterFaceIDPlusModel<double>();
+        var model = new IPAdapterFaceIDPlusModel<float>();
 
         Assert.NotNull(model);
         Assert.NotNull(model.NoisePredictor);
@@ -126,7 +126,7 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     [Fact(Timeout = 120000)]
     public async Task ControlNetLiteModel_DefaultConstructor_CreatesValidModel()
     {
-        var model = new ControlNetLiteModel<double>();
+        var model = new ControlNetLiteModel<float>();
 
         Assert.NotNull(model);
         Assert.NotNull(model.NoisePredictor);
@@ -137,7 +137,7 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     [Fact(Timeout = 120000)]
     public async Task ControlNetQRModel_DefaultConstructor_CreatesValidModel()
     {
-        var model = new ControlNetQRModel<double>();
+        var model = new ControlNetQRModel<float>();
 
         Assert.NotNull(model);
         Assert.NotNull(model.NoisePredictor);
@@ -148,7 +148,7 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     [Fact(Timeout = 120000)]
     public async Task ReferenceOnlyModel_DefaultConstructor_CreatesValidModel()
     {
-        var model = new ReferenceOnlyModel<double>();
+        var model = new ReferenceOnlyModel<float>();
 
         Assert.NotNull(model);
         Assert.NotNull(model.NoisePredictor);
@@ -159,7 +159,7 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     [Fact(Timeout = 120000)]
     public async Task StyleAlignedModel_DefaultConstructor_CreatesValidModel()
     {
-        var model = new StyleAlignedModel<double>();
+        var model = new StyleAlignedModel<float>();
 
         Assert.NotNull(model);
         Assert.NotNull(model.NoisePredictor);
@@ -170,7 +170,7 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     [Fact(Timeout = 120000)]
     public async Task ControlNetTileModel_DefaultConstructor_CreatesValidModel()
     {
-        var model = new ControlNetTileModel<double>();
+        var model = new ControlNetTileModel<float>();
 
         Assert.NotNull(model);
         Assert.NotNull(model.NoisePredictor);
@@ -181,7 +181,7 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     [Fact(Timeout = 120000)]
     public async Task ControlNetInpaintingModel_DefaultConstructor_CreatesValidModel()
     {
-        var model = new ControlNetInpaintingModel<double>();
+        var model = new ControlNetInpaintingModel<float>();
 
         Assert.NotNull(model);
         Assert.NotNull(model.NoisePredictor);
@@ -192,7 +192,7 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     [Fact(Timeout = 120000)]
     public async Task ControlNeXtModel_DefaultConstructor_CreatesValidModel()
     {
-        var model = new ControlNeXtModel<double>();
+        var model = new ControlNeXtModel<float>();
 
         Assert.NotNull(model);
         Assert.NotNull(model.NoisePredictor);
@@ -203,7 +203,7 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     [Fact(Timeout = 120000)]
     public async Task ControlARModel_DefaultConstructor_CreatesValidModel()
     {
-        var model = new ControlARModel<double>();
+        var model = new ControlARModel<float>();
 
         Assert.NotNull(model);
         Assert.NotNull(model.NoisePredictor);
@@ -214,7 +214,7 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     [Fact(Timeout = 120000)]
     public async Task ControlNetPlusPlusFluxModel_DefaultConstructor_CreatesValidModel()
     {
-        var model = new ControlNetPlusPlusFluxModel<double>();
+        var model = new ControlNetPlusPlusFluxModel<float>();
 
         Assert.NotNull(model);
         Assert.NotNull(model.NoisePredictor);
@@ -229,7 +229,7 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     [Fact(Timeout = 120000)]
     public async Task ControlNetPlusPlusModel_Clone_CreatesIndependentCopy()
     {
-        var model = new ControlNetPlusPlusModel<double>();
+        var model = new ControlNetPlusPlusModel<float>();
         var clone = model.Clone();
 
         Assert.NotNull(clone);
@@ -240,7 +240,7 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     [Fact(Timeout = 120000)]
     public async Task ControlNetFluxModel_Clone_CreatesIndependentCopy()
     {
-        var model = new ControlNetFluxModel<double>();
+        var model = new ControlNetFluxModel<float>();
         var clone = model.Clone();
 
         Assert.NotNull(clone);
@@ -255,7 +255,7 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     [Fact(Timeout = 120000)]
     public async Task IPAdapterModel_DefaultConstructor_CreatesValidModel()
     {
-        var model = new IPAdapterModel<double>();
+        var model = new IPAdapterModel<float>();
 
         Assert.NotNull(model);
         Assert.NotNull(model.NoisePredictor);

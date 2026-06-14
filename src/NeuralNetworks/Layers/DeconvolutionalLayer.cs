@@ -303,7 +303,19 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     /// - It will improve its upsampling abilities as it processes more data
     /// </para>
     /// </remarks>
-    public override long ParameterCount => _kernels.Length + _biases.Length;
+    public override long ParameterCount => _kernels.Length > 0
+        ? _kernels.Length + _biases.Length
+        // Deferred-shape mode: weights aren't materialised yet (e.g. resolved via
+        // ResolveShapesOnly so a parent can read ParameterCount without allocating
+        // the kernel). Once the shape is resolved InputDepth is known, so report the
+        // exact count from dims — kernel layout is [InputDepth, OutputDepth,
+        // KernelSize, KernelSize] plus an OutputDepth-length bias. This equals the
+        // materialised _kernels.Length + _biases.Length, so ParameterCount stays
+        // consistent with GetParameters().Length. Returns 0 only while InputDepth is
+        // still the unresolved -1 sentinel.
+        : InputDepth > 0
+            ? (long)InputDepth * OutputDepth * KernelSize * KernelSize + OutputDepth
+            : 0;
     public override bool SupportsTraining => true;
 
     /// <summary>

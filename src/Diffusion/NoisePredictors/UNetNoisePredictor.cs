@@ -306,10 +306,19 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         _timeEmbedMlp1 = (DenseLayer<T>)baseLayers[1];
         _timeEmbedMlp2 = (DenseLayer<T>)baseLayers[2];
 
+        // The input conv comes from LayerHelper in lazy (deferred-shape) mode, so
+        // resolve its SHAPE ONLY here: it takes the noisy latent ([_inputChannels,
+        // H, W]). Without this its ParameterCount reports the InputDepth=1 placeholder
+        // while GetParameters returns empty (count != length) — the source of the
+        // ControlNetPlusPlus clone count-consistency failure.
+        _inputConv.ResolveShapesOnly([1, _inputChannels, _inputHeight, _inputHeight]);
+
         // Output conv from decoder layers
         var decoderBaseLayers = LayerHelper<T>.CreateUNetNoisePredictorDecoderLayers(
             _outputChannels, _baseChannels, _channelMultipliers, _numResBlocks).ToList();
         _outputConv = (ConvolutionalLayer<T>)decoderBaseLayers[^1];
+        // Output conv takes the final decoder feature map at base-channel width.
+        _outputConv.ResolveShapesOnly([1, _baseChannels, _inputHeight, _inputHeight]);
 
         // Priority 1: Use custom blocks passed directly
         if (customEncoderBlocks != null && customEncoderBlocks.Count > 0 &&
@@ -990,7 +999,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     private ILayer<T> CreateDownsample(int channels, int spatialSize)
     {
         // LazyConv2D: kernel tensor stays unallocated until first Forward() call.
-        return LazyConv2D(
+        var conv = LazyConv2D(
             inputDepth: channels,
             inputHeight: spatialSize,
             inputWidth: spatialSize,
@@ -999,17 +1008,28 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             stride: 2,
             padding: 1,
             activation: new IdentityActivation<T>());
+        // Resolve the SHAPE only (sets InputDepth so ParameterCount is exact
+        // pre-forward) without allocating the kernel — LazyConv2D otherwise leaves
+        // InputDepth = -1, so its ParameterCount would under-count until first
+        // forward, breaking CalculateParameterCount's shape-only path.
+        conv.ResolveShapesOnly([1, channels, spatialSize, spatialSize]);
+        return conv;
     }
 
     private ILayer<T> CreateUpsample(int channels, int spatialSize)
     {
         // spatialSize here is the current (smaller) spatial size before upsampling
-        return new DeconvolutionalLayer<T>(
+        var deconv = new DeconvolutionalLayer<T>(
             outputDepth: channels,
             kernelSize: 4,
             stride: 2,
             padding: 1,
             activationFunction: new IdentityActivation<T>());
+        // Shape-only resolution: a lazy DeconvolutionalLayer reports ParameterCount
+        // = 0 until its weights exist, so resolve its dims (no allocation) to keep
+        // the exact pre-forward count without materialising the kernel.
+        deconv.ResolveShapesOnly([1, channels, spatialSize, spatialSize]);
+        return deconv;
     }
 
     #endregion
@@ -1018,10 +1038,13 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     private int CalculateParameterCount()
     {
-        // Resolve lazy layer shapes so the count matches GetParameters().Length even
-        // pre-forward (lazy layers otherwise report their architectural count here but
-        // an empty GetParameters() vector — the source of the count-equality failures).
-        TriggerLazyShapeResolution();
+        // No TriggerLazyShapeResolution() here: every layer is shape-resolved at
+        // construction (eager layers, the resblock sublayers via ResolveShapesOnly,
+        // and the downsample/upsample convs via ResolveShapesOnly), so each reports
+        // its exact ParameterCount from known dims WITHOUT allocating weights. The
+        // previous dummy-forward resolve materialised the entire ~7 GB U-Net just to
+        // read a count — the Unit-03b construction OOM. Weights now stay deferred
+        // until a real forward / GetParameters needs their values.
 
         // Walk the same layers GetParameters walks and sum their actual ParameterCount.
         // Must match GetParameters().Length exactly — the previous "approximate" formula
@@ -1054,9 +1077,11 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        // Resolve lazy layer shapes so the returned vector matches ParameterCount
-        // even before the first real forward (otherwise lazy layers contribute 0).
-        TriggerLazyShapeResolution();
+        // GetParameters genuinely needs the weight VALUES, so this is where deferred
+        // materialisation happens — but per-layer and on demand: every layer is
+        // already shape-resolved, so each layer.GetParameters() call below
+        // EnsureInitialized()s just that layer's weights. No whole-network dummy
+        // forward (TriggerLazyShapeResolution) is needed to make the lengths line up.
 
         // Collect all sublayer parameter vectors first (each layer allocates its own)
         var layerParams = new List<Vector<T>>();
