@@ -102,6 +102,21 @@ var optimizer = new LionOptimizer<float>(
     weightDecay: 0.0f);
 ```
 
+### Memory-Bounded Streaming Optimizers
+
+When `NeuralNetworkBase.StreamingTrainingEnabled` is enabled, the streaming training path now resolves configured first-order optimizers to optimizer-in-backward variants with 8-bit block-quantized state. This keeps gradients and moment buffers bounded while preserving the configured optimizer family and learning-rate scheduler handoff.
+
+| Configured optimizer | Streaming variant | Quantized state |
+|:---------------------|:------------------|:----------------|
+| Gradient descent, SGD, mini-batch GD, proximal GD | `StreamingSgd8Bit<T>` | none |
+| Momentum, Nesterov | `StreamingMomentum8Bit<T>`, `StreamingNesterov8Bit<T>` | 1 signed buffer |
+| RMSprop, Adagrad | `StreamingRmsProp8Bit<T>`, `StreamingAdagrad8Bit<T>` | 1 unsigned buffer |
+| AdaDelta, FTRL | `StreamingAdaDelta8Bit<T>`, `StreamingFtrl8Bit<T>` | 2 unsigned buffers |
+| Adam, AdamW, Nadam, AdaMax, Lion, LAMB, LARS | matching `Streaming*8Bit<T>` variant | 1-2 buffers |
+| AMSGrad or Adam with `UseAMSGrad = true` | `StreamingAMSGrad8Bit<T>` | 3 buffers |
+
+Each state buffer stores one byte per parameter plus one double scale per block, instead of one full-precision numeric value per parameter. With the default 2048-parameter block size, one-buffer optimizers use about 1 byte per parameter plus scale metadata, two-buffer Adam-style optimizers use about 2 bytes per parameter plus metadata, and AMSGrad uses about 3 bytes per parameter plus metadata. Compared with full `double` moment state, this is roughly an 8x reduction for the moment buffers; compared with full `float` moment state, it is roughly a 4x reduction.
+
 ---
 
 ## Second-Order Optimizers

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using AiDotNet.Helpers;
+using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -8,74 +10,390 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.Training;
 
 /// <summary>
-/// Per-parameter 8-bit Adam(W) optimizer state for the memory-bounded streaming
-/// training path. Each parameter's first/second moments are stored block-wise
-/// quantized to 8 bits — roughly 16× smaller than fp64 moments — so a model
-/// whose full-precision Adam state would not fit in RAM can still take a real,
-/// Adam-faithful optimizer step. Each parameter's state is created lazily and
-/// updated + applied IN PLACE inside the gradient-streaming callback, right
-/// after that parameter's gradient is produced and before it is freed
-/// (optimizer-in-backward).
+/// Optimizer-in-backward contract for the memory-bounded streaming training path.
 /// </summary>
-/// <remarks>
-/// <para>
-/// This mirrors the block-wise quantization scheme of
-/// <see cref="AiDotNet.Optimizers.Adam8BitOptimizer{T, TInput, TOutput}"/>
-/// (8-bit signed first moment, 8-bit unsigned second moment, one scale per
-/// block) but is scoped to a single parameter tensor so it can run incrementally
-/// during the streaming backward rather than over one flat model-wide vector.
-/// All arithmetic is performed in <see cref="double"/> and converted at the
-/// tensor boundary, matching the rest of the framework's numeric pattern.
-/// </para>
-/// <para>
-/// State persists across <c>Train</c> calls (keyed by parameter-tensor
-/// reference) so the moments accumulate correctly over a multi-step training
-/// run; <see cref="BeginStep"/> advances the shared timestep used for Adam bias
-/// correction once per backward pass.
-/// </para>
-/// </remarks>
-internal sealed class StreamingAdam8Bit<T>
+internal interface IStreamingOptimizer<T>
 {
-    private sealed class MomentState
-    {
-        public readonly byte[] MQuant;     // signed first moment, 128 == 0
-        public readonly byte[] VQuant;     // unsigned second moment
-        public readonly double[] MScale;   // per block
-        public readonly double[] VScale;   // per block
+    void BeginStep();
+    void Apply(Tensor<T> param, Tensor<T> grad);
+}
 
-        public MomentState(int length, int numBlocks)
+internal interface IStreamingOptimizerLearningRate
+{
+    void SetLearningRate(double learningRate);
+}
+
+/// <summary>
+/// Shared per-parameter block-quantized state machinery for streaming optimizers.
+/// Concrete optimizers only provide the per-element update rule and moment layout.
+/// </summary>
+internal abstract class BlockQuantizedStreamingOptimizer<T> : IStreamingOptimizer<T>, IStreamingOptimizerLearningRate
+{
+    protected sealed class QuantizedState
+    {
+        public readonly byte[][] Quantized;
+        public readonly double[][] Scales;
+        public readonly int Length;
+        public readonly int NumBlocks;
+
+        public QuantizedState(int momentCount, int length, int numBlocks, IReadOnlyList<bool> signedMoments)
         {
-            MQuant = new byte[length];
-            VQuant = new byte[length];
-            MScale = new double[numBlocks];
-            VScale = new double[numBlocks];
-            // 128 maps to 0 for the signed first moment; scales start at 1.0
-            // so the zero-initialized state dequantizes to exactly zero.
-            for (int i = 0; i < length; i++) MQuant[i] = 128;
-            for (int b = 0; b < numBlocks; b++) { MScale[b] = 1.0; VScale[b] = 1.0; }
+            Length = length;
+            NumBlocks = numBlocks;
+            Quantized = new byte[momentCount][];
+            Scales = new double[momentCount][];
+
+            for (int m = 0; m < momentCount; m++)
+            {
+                Quantized[m] = new byte[length];
+                Scales[m] = new double[numBlocks];
+                if (signedMoments[m])
+                {
+                    Array.Fill(Quantized[m], (byte)128);
+                }
+
+                Array.Fill(Scales[m], 1.0);
+            }
         }
     }
 
-    private readonly Dictionary<Tensor<T>, MomentState> _state =
+    private readonly Dictionary<Tensor<T>, QuantizedState> _state =
         new(TensorReferenceComparer<Tensor<T>>.Instance);
     private readonly INumericOperations<T> _ops = MathHelper.GetNumericOperations<T>();
+    private readonly bool[] _signedMoments;
+    private readonly double[] _previousMomentValues;
+    private readonly double[] _nextMomentValues;
+    private readonly double[][] _momentScratch;
+    private readonly double[] _momentMax;
+    private readonly string _optimizerName;
 
-    private readonly int _blockSize;
-    private readonly double _lr;
+    protected readonly int BlockSize;
+    protected readonly double MaxUpdateRatio;
+    protected int Step { get; private set; }
+    protected double LearningRate { get; private set; }
+
+    protected BlockQuantizedStreamingOptimizer(
+        string optimizerName,
+        double learningRate,
+        bool[] signedMoments,
+        int blockSize = 2048,
+        double maxUpdateRatio = 5.0)
+    {
+        _optimizerName = optimizerName;
+        LearningRate = learningRate;
+        _signedMoments = signedMoments;
+        BlockSize = Math.Max(1, blockSize);
+        MaxUpdateRatio = maxUpdateRatio > 0 ? maxUpdateRatio : 5.0;
+
+        _previousMomentValues = new double[signedMoments.Length];
+        _nextMomentValues = new double[signedMoments.Length];
+        _momentScratch = new double[signedMoments.Length][];
+        _momentMax = new double[signedMoments.Length];
+        for (int i = 0; i < signedMoments.Length; i++)
+        {
+            _momentScratch[i] = new double[BlockSize];
+        }
+    }
+
+    public void SetLearningRate(double learningRate)
+    {
+        if (learningRate > 0.0 && !double.IsNaN(learningRate) && !double.IsInfinity(learningRate))
+        {
+            LearningRate = learningRate;
+        }
+    }
+
+    public void BeginStep()
+    {
+        Step++;
+        OnBeginStep();
+    }
+
+    protected virtual void OnBeginStep()
+    {
+    }
+
+    public virtual void Apply(Tensor<T> param, Tensor<T> grad)
+    {
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (grad is null) throw new ArgumentNullException(nameof(grad));
+
+        int length = param.Length;
+        if (length == 0)
+        {
+            throw new ArgumentException(
+                $"{_optimizerName}.Apply: param is empty (length == 0); a zero-length parameter should never be registered as a training source.",
+                nameof(param));
+        }
+
+        if (grad.Length != length)
+        {
+            throw new ArgumentException(
+                $"{_optimizerName}.Apply: gradient length {grad.Length} does not match param length {length}.",
+                nameof(grad));
+        }
+
+        int numBlocks = (length + BlockSize - 1) / BlockSize;
+        if (!_state.TryGetValue(param, out var state) || state.Length != length)
+        {
+            state = new QuantizedState(_signedMoments.Length, length, numBlocks, _signedMoments);
+            _state[param] = state;
+        }
+
+        PrepareParameter(param, grad, state, length);
+        ApplyBlocks(param, grad, state, length);
+    }
+
+    protected virtual void PrepareParameter(Tensor<T> param, Tensor<T> grad, QuantizedState state, int length)
+    {
+    }
+
+    protected abstract double UpdateElement(
+        double parameter,
+        double gradient,
+        ReadOnlySpan<double> moments,
+        Span<double> nextMoments,
+        int index);
+
+    protected double ToDouble(T value) => _ops.ToDouble(value);
+
+    protected T FromDouble(double value) => _ops.FromDouble(value);
+
+    protected double Dequantize(QuantizedState state, int moment, int index)
+    {
+        int block = index / BlockSize;
+        double scale = state.Scales[moment][block];
+        byte q = state.Quantized[moment][index];
+        return _signedMoments[moment] ? (q - 128) * scale : q * scale;
+    }
+
+    protected double L2Norm(Tensor<T> tensor)
+    {
+        double sum = 0.0;
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            double v = ToDouble(tensor[i]);
+            if (double.IsNaN(v) || double.IsInfinity(v)) continue;
+            sum += v * v;
+        }
+
+        return Math.Sqrt(sum);
+    }
+
+    protected double ApplyDecoupledWeightDecay(double parameter, double weightDecay)
+    {
+        return weightDecay == 0.0 ? parameter : parameter - LearningRate * weightDecay * parameter;
+    }
+
+    protected double ClampUpdate(double update)
+    {
+        double maxStep = LearningRate * MaxUpdateRatio;
+        if (maxStep <= 0.0 || double.IsNaN(maxStep) || double.IsInfinity(maxStep))
+            return update;
+
+        if (double.IsNaN(update) || double.IsInfinity(update))
+            return update > 0 ? maxStep : -maxStep;
+        if (update > maxStep) return maxStep;
+        if (update < -maxStep) return -maxStep;
+        return update;
+    }
+
+    private void ApplyBlocks(Tensor<T> param, Tensor<T> grad, QuantizedState state, int length)
+    {
+        int momentCount = _signedMoments.Length;
+        var previous = _previousMomentValues.AsSpan(0, momentCount);
+        var next = _nextMomentValues.AsSpan(0, momentCount);
+
+        for (int b = 0; b < state.NumBlocks; b++)
+        {
+            int start = b * BlockSize;
+            int end = Math.Min(start + BlockSize, length);
+            Array.Clear(_momentMax, 0, _momentMax.Length);
+
+            for (int i = start; i < end; i++)
+            {
+                int local = i - start;
+                for (int m = 0; m < momentCount; m++)
+                {
+                    double value = Dequantize(state, m, i);
+                    _previousMomentValues[m] = value;
+                    _nextMomentValues[m] = value;
+                }
+
+                double gradientValue = ToDouble(grad[i]);
+                if (!double.IsNaN(gradientValue) && !double.IsInfinity(gradientValue))
+                {
+                    double parameterValue = ToDouble(param[i]);
+                    double nextParameter = UpdateElement(parameterValue, gradientValue, previous, next, i);
+                    if (!double.IsNaN(nextParameter) && !double.IsInfinity(nextParameter))
+                    {
+                        param[i] = FromDouble(nextParameter);
+                    }
+                }
+
+                for (int m = 0; m < momentCount; m++)
+                {
+                    double value = _nextMomentValues[m];
+                    _momentScratch[m][local] = value;
+                    double magnitude = _signedMoments[m] ? Math.Abs(value) : Math.Max(0.0, value);
+                    if (magnitude > _momentMax[m]) _momentMax[m] = magnitude;
+                }
+            }
+
+            for (int m = 0; m < momentCount; m++)
+            {
+                double divisor = _signedMoments[m] ? 127.0 : 255.0;
+                double scale = _momentMax[m] / divisor;
+                if (scale < 1e-10 || double.IsNaN(scale) || double.IsInfinity(scale))
+                    scale = 1e-10;
+                state.Scales[m][b] = scale;
+
+                double invScale = 1.0 / scale;
+                for (int i = start; i < end; i++)
+                {
+                    int local = i - start;
+                    double value = _momentScratch[m][local];
+                    if (_signedMoments[m])
+                    {
+                        int q = (int)Math.Round(value * invScale);
+                        if (q < -127) q = -127;
+                        else if (q > 127) q = 127;
+                        state.Quantized[m][i] = (byte)(q + 128);
+                    }
+                    else
+                    {
+                        int q = (int)Math.Round(Math.Max(0.0, value) * invScale);
+                        if (q < 0) q = 0;
+                        else if (q > 255) q = 255;
+                        state.Quantized[m][i] = (byte)q;
+                    }
+                }
+            }
+        }
+    }
+}
+
+internal sealed class StreamingSgd8Bit<T> : BlockQuantizedStreamingOptimizer<T>
+{
+    public StreamingSgd8Bit(double learningRate)
+        : base(nameof(StreamingSgd8Bit<T>), learningRate, Array.Empty<bool>())
+    {
+    }
+
+    protected override double UpdateElement(double parameter, double gradient, ReadOnlySpan<double> moments, Span<double> nextMoments, int index)
+        => parameter - ClampUpdate(LearningRate * gradient);
+}
+
+internal sealed class StreamingMomentum8Bit<T> : BlockQuantizedStreamingOptimizer<T>
+{
+    private readonly double _momentum;
+
+    public StreamingMomentum8Bit(double learningRate, double momentum)
+        : base(nameof(StreamingMomentum8Bit<T>), learningRate, new[] { true })
+    {
+        _momentum = momentum;
+    }
+
+    protected override double UpdateElement(double parameter, double gradient, ReadOnlySpan<double> moments, Span<double> nextMoments, int index)
+    {
+        double velocity = _momentum * moments[0] + LearningRate * gradient;
+        nextMoments[0] = velocity;
+        return parameter - ClampUpdate(velocity);
+    }
+}
+
+internal sealed class StreamingNesterov8Bit<T> : BlockQuantizedStreamingOptimizer<T>
+{
+    private readonly double _momentum;
+
+    public StreamingNesterov8Bit(double learningRate, double momentum)
+        : base(nameof(StreamingNesterov8Bit<T>), learningRate, new[] { true })
+    {
+        _momentum = momentum;
+    }
+
+    protected override double UpdateElement(double parameter, double gradient, ReadOnlySpan<double> moments, Span<double> nextMoments, int index)
+    {
+        double velocity = _momentum * moments[0] + LearningRate * gradient;
+        double nesterovUpdate = _momentum * velocity + LearningRate * gradient;
+        nextMoments[0] = velocity;
+        return parameter - ClampUpdate(nesterovUpdate);
+    }
+}
+
+internal sealed class StreamingRmsProp8Bit<T> : BlockQuantizedStreamingOptimizer<T>
+{
+    private readonly double _decay;
+    private readonly double _epsilon;
+
+    public StreamingRmsProp8Bit(double learningRate, double decay, double epsilon)
+        : base(nameof(StreamingRmsProp8Bit<T>), learningRate, new[] { false })
+    {
+        _decay = decay;
+        _epsilon = epsilon;
+    }
+
+    protected override double UpdateElement(double parameter, double gradient, ReadOnlySpan<double> moments, Span<double> nextMoments, int index)
+    {
+        double sq = _decay * moments[0] + (1.0 - _decay) * gradient * gradient;
+        nextMoments[0] = sq;
+        double update = LearningRate * gradient / (Math.Sqrt(sq) + _epsilon);
+        return parameter - ClampUpdate(update);
+    }
+}
+
+internal sealed class StreamingAdagrad8Bit<T> : BlockQuantizedStreamingOptimizer<T>
+{
+    private readonly double _epsilon;
+
+    public StreamingAdagrad8Bit(double learningRate, double epsilon)
+        : base(nameof(StreamingAdagrad8Bit<T>), learningRate, new[] { false })
+    {
+        _epsilon = epsilon;
+    }
+
+    protected override double UpdateElement(double parameter, double gradient, ReadOnlySpan<double> moments, Span<double> nextMoments, int index)
+    {
+        double acc = moments[0] + gradient * gradient;
+        nextMoments[0] = acc;
+        double update = LearningRate * gradient / (Math.Sqrt(acc) + _epsilon);
+        return parameter - ClampUpdate(update);
+    }
+}
+
+internal sealed class StreamingAdaDelta8Bit<T> : BlockQuantizedStreamingOptimizer<T>
+{
+    private readonly double _rho;
+    private readonly double _epsilon;
+
+    public StreamingAdaDelta8Bit(double learningRate, double rho, double epsilon)
+        : base(nameof(StreamingAdaDelta8Bit<T>), learningRate, new[] { false, false })
+    {
+        _rho = rho;
+        _epsilon = epsilon;
+    }
+
+    protected override double UpdateElement(double parameter, double gradient, ReadOnlySpan<double> moments, Span<double> nextMoments, int index)
+    {
+        double accGrad = _rho * moments[0] + (1.0 - _rho) * gradient * gradient;
+        double delta = Math.Sqrt(moments[1] + _epsilon) / Math.Sqrt(accGrad + _epsilon) * gradient;
+        double accUpdate = _rho * moments[1] + (1.0 - _rho) * delta * delta;
+
+        nextMoments[0] = accGrad;
+        nextMoments[1] = accUpdate;
+        return parameter - ClampUpdate(LearningRate * delta);
+    }
+}
+
+/// <summary>
+/// Per-parameter 8-bit Adam optimizer state for the memory-bounded streaming path.
+/// </summary>
+internal class StreamingAdam8Bit<T> : BlockQuantizedStreamingOptimizer<T>
+{
     private readonly double _beta1;
     private readonly double _beta2;
     private readonly double _epsilon;
     private readonly double _weightDecay;
-    private readonly double _maxUpdateRatio;
-
-    private int _t; // shared Adam timestep (bias correction), advanced per backward pass
-
-    // Reusable one-block-wide scratch for the updated full-precision moments —
-    // the only full-precision optimizer buffers ever resident, and reused across
-    // every block of every parameter so the steady-state epilogue is zero-alloc.
-    // Training is single-threaded per step (reentrancy guard), so sharing is safe.
-    private readonly double[] _mScratch;
-    private readonly double[] _vScratch;
 
     public StreamingAdam8Bit(
         double learningRate,
@@ -85,290 +403,500 @@ internal sealed class StreamingAdam8Bit<T>
         double weightDecay = 0.0,
         int blockSize = 2048,
         double maxUpdateRatio = 5.0)
+        : base(nameof(StreamingAdam8Bit<T>), learningRate, new[] { true, false }, blockSize, maxUpdateRatio)
     {
-        _lr = learningRate;
         _beta1 = beta1;
         _beta2 = beta2;
         _epsilon = epsilon;
         _weightDecay = weightDecay;
-        _blockSize = Math.Max(1, blockSize);
-        _maxUpdateRatio = maxUpdateRatio > 0 ? maxUpdateRatio : 5.0;
-        _mScratch = new double[_blockSize];
-        _vScratch = new double[_blockSize];
     }
 
-    /// <summary>Advances the shared Adam timestep. Call once per backward pass,
-    /// before streaming that pass's parameter gradients.</summary>
-    public void BeginStep() => _t++;
-
-    /// <summary>
-    /// Applies one Adam(W) update to <paramref name="param"/> in place using the
-    /// just-computed <paramref name="grad"/>, maintaining this parameter's 8-bit
-    /// moment state. Safe to call exactly once per parameter per backward pass.
-    /// </summary>
-    public void Apply(Tensor<T> param, Tensor<T> grad)
+    protected override double UpdateElement(double parameter, double gradient, ReadOnlySpan<double> moments, Span<double> nextMoments, int index)
     {
-        // Apply is on the hot training path — a null tensor or length mismatch is a
-        // hard correctness bug in the backward pass (gradient missing for a registered
-        // source, or a shape regression between forward and backward). Silently
-        // dropping the update hides the bug and leaves the parameter forever frozen,
-        // which is worse than failing fast.
-        if (param is null) throw new ArgumentNullException(nameof(param));
-        if (grad is null) throw new ArgumentNullException(nameof(grad));
-        int length = param.Length;
-        if (length == 0)
-            throw new ArgumentException("StreamingAdam8Bit.Apply: param is empty (length == 0); " +
-                "a zero-length parameter should never be registered as a training source.", nameof(param));
-        if (grad.Length != length)
-            throw new ArgumentException(
-                $"StreamingAdam8Bit.Apply: gradient length {grad.Length} does not match param length {length}. " +
-                "This indicates a shape mismatch between the forward pass and the tape backward — " +
-                "fix the source of the size drift rather than letting Apply silently no-op.",
-                nameof(grad));
+        double m = _beta1 * moments[0] + (1.0 - _beta1) * gradient;
+        double v = _beta2 * moments[1] + (1.0 - _beta2) * gradient * gradient;
+        nextMoments[0] = m;
+        nextMoments[1] = v;
 
-        int numBlocks = (length + _blockSize - 1) / _blockSize;
-        if (!_state.TryGetValue(param, out var st))
-        {
-            st = new MomentState(length, numBlocks);
-            _state[param] = st;
-        }
+        double biasCorr1 = 1.0 - Math.Pow(_beta1, Step);
+        double biasCorr2 = 1.0 - Math.Pow(_beta2, Step);
+        if (biasCorr1 <= 0.0) biasCorr1 = 1.0;
+        if (biasCorr2 <= 0.0) biasCorr2 = 1.0;
 
-        double biasCorr1 = 1.0 - Math.Pow(_beta1, _t);
-        double biasCorr2 = 1.0 - Math.Pow(_beta2, _t);
-        if (biasCorr1 <= 0) biasCorr1 = 1.0;
-        if (biasCorr2 <= 0) biasCorr2 = 1.0;
+        parameter = ApplyDecoupledWeightDecay(parameter, _weightDecay);
+        double update = LearningRate * (m / biasCorr1) / (Math.Sqrt(v / biasCorr2) + _epsilon);
+        return parameter - ClampUpdate(update);
+    }
+}
 
-        // Fast path: raw double spans (no per-element Tensor indexer / NumOps
-        // virtual dispatch). This is the dominant cost at foundation scale —
-        // billions of elements — so the spanned path is ~10× the generic one and
-        // the JIT auto-vectorizes the FMA-heavy moment math. Only valid for
-        // non-view, full-storage parameter tensors (layer weights are exactly
-        // that); anything else falls through to the generic path.
-        if (typeof(T) == typeof(double)
-            && (object)param is Tensor<double> pTen
-            && (object)grad is Tensor<double> gTen)
-        {
-            var pSpan = pTen.Data.Span;
-            var gSpan = gTen.Data.Span;
-            if (pSpan.Length >= length && gSpan.Length >= length)
-            {
-                ApplyDouble(pSpan, gSpan, st, numBlocks, length, biasCorr1, biasCorr2);
-                return;
-            }
-        }
-        else if (typeof(T) == typeof(float)
-            && (object)param is Tensor<float> pTenF
-            && (object)grad is Tensor<float> gTenF)
-        {
-            var pSpan = pTenF.Data.Span;
-            var gSpan = gTenF.Data.Span;
-            if (pSpan.Length >= length && gSpan.Length >= length)
-            {
-                ApplyFloat(pSpan, gSpan, st, numBlocks, length, biasCorr1, biasCorr2);
-                return;
-            }
-        }
+internal sealed class StreamingAdamW8Bit<T> : StreamingAdam8Bit<T>
+{
+    public StreamingAdamW8Bit(
+        double learningRate,
+        double beta1,
+        double beta2,
+        double epsilon,
+        double weightDecay)
+        : base(learningRate, beta1, beta2, epsilon, weightDecay)
+    {
+    }
+}
 
-        ApplyGeneric(param, grad, st, numBlocks, length, biasCorr1, biasCorr2);
+internal sealed class StreamingAMSGrad8Bit<T> : BlockQuantizedStreamingOptimizer<T>
+{
+    private readonly double _beta1;
+    private readonly double _beta2;
+    private readonly double _epsilon;
+    private readonly double _weightDecay;
+
+    public StreamingAMSGrad8Bit(double learningRate, double beta1, double beta2, double epsilon, double weightDecay)
+        : base(nameof(StreamingAMSGrad8Bit<T>), learningRate, new[] { true, false, false })
+    {
+        _beta1 = beta1;
+        _beta2 = beta2;
+        _epsilon = epsilon;
+        _weightDecay = weightDecay;
     }
 
-    private void ApplyDouble(
-        Span<double> p, ReadOnlySpan<double> g, MomentState st,
-        int numBlocks, int length, double biasCorr1, double biasCorr2)
+    protected override double UpdateElement(double parameter, double gradient, ReadOnlySpan<double> moments, Span<double> nextMoments, int index)
     {
-        double beta1 = _beta1, beta2 = _beta2, oneMinusB1 = 1.0 - _beta1, oneMinusB2 = 1.0 - _beta2;
-        double lr = _lr, eps = _epsilon, wd = _weightDecay, maxStep = _lr * _maxUpdateRatio;
-        double invBc1 = 1.0 / biasCorr1, invBc2 = 1.0 / biasCorr2;
-        double[] mNew = _mScratch, vNew = _vScratch;
-        byte[] mQ = st.MQuant, vQ = st.VQuant;
+        double m = _beta1 * moments[0] + (1.0 - _beta1) * gradient;
+        double v = _beta2 * moments[1] + (1.0 - _beta2) * gradient * gradient;
+        double vMax = Math.Max(moments[2], v);
+        nextMoments[0] = m;
+        nextMoments[1] = v;
+        nextMoments[2] = vMax;
 
-        for (int b = 0; b < numBlocks; b++)
-        {
-            int start = b * _blockSize;
-            int end = Math.Min(start + _blockSize, length);
-            double mScale = st.MScale[b];
-            double vScale = st.VScale[b];
-            double newMMaxAbs = 0.0, newVMax = 0.0;
+        double biasCorr1 = 1.0 - Math.Pow(_beta1, Step);
+        double biasCorr2 = 1.0 - Math.Pow(_beta2, Step);
+        if (biasCorr1 <= 0.0) biasCorr1 = 1.0;
+        if (biasCorr2 <= 0.0) biasCorr2 = 1.0;
 
-            for (int i = start; i < end; i++)
-            {
-                int li = i - start;
-                double gi = g[i];
-                double mPrev = (mQ[i] - 128) * mScale;   // signed dequant
-                double vPrev = vQ[i] * vScale;            // unsigned dequant
+        parameter = ApplyDecoupledWeightDecay(parameter, _weightDecay);
+        double update = LearningRate * (m / biasCorr1) / (Math.Sqrt(vMax / biasCorr2) + _epsilon);
+        return parameter - ClampUpdate(update);
+    }
+}
 
-                if (double.IsNaN(gi) || double.IsInfinity(gi))
-                {
-                    // Skip non-finite gradient: keep prior moments + weight.
-                    mNew[li] = mPrev; vNew[li] = vPrev;
-                }
-                else
-                {
-                    double m = beta1 * mPrev + oneMinusB1 * gi;
-                    double v = beta2 * vPrev + oneMinusB2 * gi * gi;
-                    double mHat = m * invBc1;
-                    double vHat = v * invBc2;
+internal sealed class StreamingNadam8Bit<T> : BlockQuantizedStreamingOptimizer<T>
+{
+    private readonly double _beta1;
+    private readonly double _beta2;
+    private readonly double _epsilon;
 
-                    double pv = p[i];
-                    if (wd != 0.0) pv -= lr * wd * pv;
-                    double update = lr * mHat / (Math.Sqrt(vHat) + eps);
-                    // Trust bound: 8-bit quantization can round vHat→0, which
-                    // would blow up the step; clamp to a small multiple of lr
-                    // (real Adam steps are ~lr) and catch any residual NaN.
-                    if (!(update >= -maxStep)) update = update > 0 ? maxStep : -maxStep;
-                    else if (update > maxStep) update = maxStep;
-                    p[i] = pv - update;
-                    mNew[li] = m; vNew[li] = v;
-                }
-
-                double am = Math.Abs(mNew[li]);
-                if (am > newMMaxAbs) newMMaxAbs = am;
-                if (vNew[li] > newVMax) newVMax = vNew[li];
-            }
-
-            double newMScale = newMMaxAbs / 127.0; if (newMScale < 1e-10) newMScale = 1e-10;
-            double newVScale = newVMax / 255.0;     if (newVScale < 1e-10) newVScale = 1e-10;
-            st.MScale[b] = newMScale; st.VScale[b] = newVScale;
-            double invM = 1.0 / newMScale, invV = 1.0 / newVScale;
-
-            for (int i = start; i < end; i++)
-            {
-                int li = i - start;
-                int mq = (int)Math.Round(mNew[li] * invM);
-                if (mq < -127) mq = -127; else if (mq > 127) mq = 127;
-                mQ[i] = (byte)(mq + 128);
-                int vq = (int)Math.Round(vNew[li] * invV);
-                if (vq < 0) vq = 0; else if (vq > 255) vq = 255;
-                vQ[i] = (byte)vq;
-            }
-        }
+    public StreamingNadam8Bit(double learningRate, double beta1, double beta2, double epsilon)
+        : base(nameof(StreamingNadam8Bit<T>), learningRate, new[] { true, false })
+    {
+        _beta1 = beta1;
+        _beta2 = beta2;
+        _epsilon = epsilon;
     }
 
-    private void ApplyFloat(
-        Span<float> p, ReadOnlySpan<float> g, MomentState st,
-        int numBlocks, int length, double biasCorr1, double biasCorr2)
+    protected override double UpdateElement(double parameter, double gradient, ReadOnlySpan<double> moments, Span<double> nextMoments, int index)
     {
-        double beta1 = _beta1, beta2 = _beta2, oneMinusB1 = 1.0 - _beta1, oneMinusB2 = 1.0 - _beta2;
-        double lr = _lr, eps = _epsilon, wd = _weightDecay, maxStep = _lr * _maxUpdateRatio;
-        double invBc1 = 1.0 / biasCorr1, invBc2 = 1.0 / biasCorr2;
-        double[] mNew = _mScratch, vNew = _vScratch;
-        byte[] mQ = st.MQuant, vQ = st.VQuant;
+        double m = _beta1 * moments[0] + (1.0 - _beta1) * gradient;
+        double v = _beta2 * moments[1] + (1.0 - _beta2) * gradient * gradient;
+        nextMoments[0] = m;
+        nextMoments[1] = v;
 
-        for (int b = 0; b < numBlocks; b++)
+        double biasCorr1 = 1.0 - Math.Pow(_beta1, Step);
+        double biasCorr2 = 1.0 - Math.Pow(_beta2, Step);
+        if (biasCorr1 <= 0.0) biasCorr1 = 1.0;
+        if (biasCorr2 <= 0.0) biasCorr2 = 1.0;
+
+        double mHat = m / biasCorr1;
+        double vHat = v / biasCorr2;
+        double nesterov = _beta1 * mHat + (1.0 - _beta1) * gradient / biasCorr1;
+        double update = LearningRate * nesterov / (Math.Sqrt(vHat) + _epsilon);
+        return parameter - ClampUpdate(update);
+    }
+}
+
+internal sealed class StreamingAdaMax8Bit<T> : BlockQuantizedStreamingOptimizer<T>
+{
+    private readonly double _beta1;
+    private readonly double _beta2;
+    private readonly double _epsilon;
+
+    public StreamingAdaMax8Bit(double learningRate, double beta1, double beta2, double epsilon)
+        : base(nameof(StreamingAdaMax8Bit<T>), learningRate, new[] { true, false })
+    {
+        _beta1 = beta1;
+        _beta2 = beta2;
+        _epsilon = epsilon;
+    }
+
+    protected override double UpdateElement(double parameter, double gradient, ReadOnlySpan<double> moments, Span<double> nextMoments, int index)
+    {
+        double m = _beta1 * moments[0] + (1.0 - _beta1) * gradient;
+        double u = Math.Max(_beta2 * moments[1], Math.Abs(gradient));
+        nextMoments[0] = m;
+        nextMoments[1] = u;
+
+        double biasCorr1 = 1.0 - Math.Pow(_beta1, Step);
+        if (biasCorr1 <= 0.0) biasCorr1 = 1.0;
+
+        double update = (LearningRate / biasCorr1) * m / (u + _epsilon);
+        return parameter - ClampUpdate(update);
+    }
+}
+
+internal sealed class StreamingLion8Bit<T> : BlockQuantizedStreamingOptimizer<T>
+{
+    private readonly double _beta1;
+    private readonly double _beta2;
+    private readonly double _weightDecay;
+
+    public StreamingLion8Bit(double learningRate, double beta1, double beta2, double weightDecay)
+        : base(nameof(StreamingLion8Bit<T>), learningRate, new[] { true })
+    {
+        _beta1 = beta1;
+        _beta2 = beta2;
+        _weightDecay = weightDecay;
+    }
+
+    protected override double UpdateElement(double parameter, double gradient, ReadOnlySpan<double> moments, Span<double> nextMoments, int index)
+    {
+        double updateDirection = _beta1 * moments[0] + (1.0 - _beta1) * gradient;
+        double momentum = _beta2 * moments[0] + (1.0 - _beta2) * gradient;
+        nextMoments[0] = momentum;
+
+        parameter = ApplyDecoupledWeightDecay(parameter, _weightDecay);
+        double update = LearningRate * Math.Sign(updateDirection);
+        return parameter - ClampUpdate(update);
+    }
+}
+
+internal sealed class StreamingLars8Bit<T> : BlockQuantizedStreamingOptimizer<T>
+{
+    private readonly double _momentum;
+    private readonly double _weightDecay;
+    private readonly double _trustCoefficient;
+    private readonly double _epsilon;
+    private readonly bool _useNesterov;
+    private double _localLearningRate;
+
+    public StreamingLars8Bit(
+        double learningRate,
+        double momentum,
+        double weightDecay,
+        double trustCoefficient,
+        double epsilon,
+        bool useNesterov)
+        : base(nameof(StreamingLars8Bit<T>), learningRate, new[] { true })
+    {
+        _momentum = momentum;
+        _weightDecay = weightDecay;
+        _trustCoefficient = trustCoefficient;
+        _epsilon = epsilon;
+        _useNesterov = useNesterov;
+        _localLearningRate = learningRate;
+    }
+
+    protected override void PrepareParameter(Tensor<T> param, Tensor<T> grad, QuantizedState state, int length)
+    {
+        double paramNorm = L2Norm(param);
+        double gradNorm = L2Norm(grad);
+        if (paramNorm > 0.0 && gradNorm > 0.0)
         {
-            int start = b * _blockSize;
-            int end = Math.Min(start + _blockSize, length);
-            double mScale = st.MScale[b];
-            double vScale = st.VScale[b];
-            double newMMaxAbs = 0.0, newVMax = 0.0;
-
-            for (int i = start; i < end; i++)
-            {
-                int li = i - start;
-                double gi = g[i];
-                double mPrev = (mQ[i] - 128) * mScale;
-                double vPrev = vQ[i] * vScale;
-
-                if (double.IsNaN(gi) || double.IsInfinity(gi))
-                {
-                    mNew[li] = mPrev; vNew[li] = vPrev;
-                }
-                else
-                {
-                    double m = beta1 * mPrev + oneMinusB1 * gi;
-                    double v = beta2 * vPrev + oneMinusB2 * gi * gi;
-                    double mHat = m * invBc1;
-                    double vHat = v * invBc2;
-                    double pv = p[i];
-                    if (wd != 0.0) pv -= lr * wd * pv;
-                    double update = lr * mHat / (Math.Sqrt(vHat) + eps);
-                    if (!(update >= -maxStep)) update = update > 0 ? maxStep : -maxStep;
-                    else if (update > maxStep) update = maxStep;
-                    p[i] = (float)(pv - update);
-                    mNew[li] = m; vNew[li] = v;
-                }
-                double am = Math.Abs(mNew[li]);
-                if (am > newMMaxAbs) newMMaxAbs = am;
-                if (vNew[li] > newVMax) newVMax = vNew[li];
-            }
-
-            double newMScale = newMMaxAbs / 127.0; if (newMScale < 1e-10) newMScale = 1e-10;
-            double newVScale = newVMax / 255.0;     if (newVScale < 1e-10) newVScale = 1e-10;
-            st.MScale[b] = newMScale; st.VScale[b] = newVScale;
-            double invM = 1.0 / newMScale, invV = 1.0 / newVScale;
-
-            for (int i = start; i < end; i++)
-            {
-                int li = i - start;
-                int mq = (int)Math.Round(mNew[li] * invM);
-                if (mq < -127) mq = -127; else if (mq > 127) mq = 127;
-                mQ[i] = (byte)(mq + 128);
-                int vq = (int)Math.Round(vNew[li] * invV);
-                if (vq < 0) vq = 0; else if (vq > 255) vq = 255;
-                vQ[i] = (byte)vq;
-            }
+            double denom = gradNorm + _weightDecay * paramNorm + _epsilon;
+            _localLearningRate = LearningRate * _trustCoefficient * paramNorm / denom;
+        }
+        else
+        {
+            _localLearningRate = LearningRate;
         }
     }
 
-    private void ApplyGeneric(
-        Tensor<T> param, Tensor<T> grad, MomentState st,
-        int numBlocks, int length, double biasCorr1, double biasCorr2)
+    protected override double UpdateElement(double parameter, double gradient, ReadOnlySpan<double> moments, Span<double> nextMoments, int index)
     {
-        double[] mNew = _mScratch, vNew = _vScratch;
-        double maxStep = _lr * _maxUpdateRatio;
+        double gradWithDecay = gradient + _weightDecay * parameter;
+        double scaledGrad = _localLearningRate * gradWithDecay;
+        double velocity = _momentum * moments[0] + scaledGrad;
+        nextMoments[0] = velocity;
 
-        for (int b = 0; b < numBlocks; b++)
+        double update = _useNesterov ? _momentum * velocity + scaledGrad : velocity;
+        return parameter - ClampUpdate(update);
+    }
+}
+
+internal sealed class StreamingLamb8Bit<T> : BlockQuantizedStreamingOptimizer<T>
+{
+    private readonly double _beta1;
+    private readonly double _beta2;
+    private readonly double _epsilon;
+    private readonly double _weightDecay;
+    private readonly bool _clipTrustRatio;
+    private readonly double _maxTrustRatio;
+    private readonly bool _useBiasCorrection;
+    private double _trustRatio = 1.0;
+
+    public StreamingLamb8Bit(
+        double learningRate,
+        double beta1,
+        double beta2,
+        double epsilon,
+        double weightDecay,
+        bool clipTrustRatio,
+        double maxTrustRatio,
+        bool useBiasCorrection)
+        : base(nameof(StreamingLamb8Bit<T>), learningRate, new[] { true, false })
+    {
+        _beta1 = beta1;
+        _beta2 = beta2;
+        _epsilon = epsilon;
+        _weightDecay = weightDecay;
+        _clipTrustRatio = clipTrustRatio;
+        _maxTrustRatio = maxTrustRatio;
+        _useBiasCorrection = useBiasCorrection;
+    }
+
+    protected override void PrepareParameter(Tensor<T> param, Tensor<T> grad, QuantizedState state, int length)
+    {
+        double paramNormSq = 0.0;
+        double updateNormSq = 0.0;
+        double biasCorr1 = _useBiasCorrection ? 1.0 - Math.Pow(_beta1, Step) : 1.0;
+        double biasCorr2 = _useBiasCorrection ? 1.0 - Math.Pow(_beta2, Step) : 1.0;
+        if (biasCorr1 <= 0.0) biasCorr1 = 1.0;
+        if (biasCorr2 <= 0.0) biasCorr2 = 1.0;
+
+        for (int i = 0; i < length; i++)
         {
-            int start = b * _blockSize;
-            int end = Math.Min(start + _blockSize, length);
-            double mScale = st.MScale[b];
-            double vScale = st.VScale[b];
-            double newMMaxAbs = 0.0, newVMax = 0.0;
+            double p = ToDouble(param[i]);
+            double g = ToDouble(grad[i]);
+            if (double.IsNaN(g) || double.IsInfinity(g)) continue;
 
-            for (int i = start; i < end; i++)
-            {
-                int li = i - start;
-                double g = _ops.ToDouble(grad[i]);
-                double mPrev = (st.MQuant[i] - 128) * mScale;
-                double vPrev = st.VQuant[i] * vScale;
-
-                if (double.IsNaN(g) || double.IsInfinity(g))
-                {
-                    mNew[li] = mPrev; vNew[li] = vPrev;
-                }
-                else
-                {
-                    double m = _beta1 * mPrev + (1.0 - _beta1) * g;
-                    double v = _beta2 * vPrev + (1.0 - _beta2) * g * g;
-                    double mHat = m / biasCorr1;
-                    double vHat = v / biasCorr2;
-                    double p = _ops.ToDouble(param[i]);
-                    if (_weightDecay != 0.0) p -= _lr * _weightDecay * p;
-                    double update = _lr * mHat / (Math.Sqrt(vHat) + _epsilon);
-                    if (!(update >= -maxStep)) update = update > 0 ? maxStep : -maxStep;
-                    else if (update > maxStep) update = maxStep;
-                    param[i] = _ops.FromDouble(p - update);
-                    mNew[li] = m; vNew[li] = v;
-                }
-                double am = Math.Abs(mNew[li]);
-                if (am > newMMaxAbs) newMMaxAbs = am;
-                if (vNew[li] > newVMax) newVMax = vNew[li];
-            }
-
-            double newMScale = newMMaxAbs / 127.0; if (newMScale < 1e-10) newMScale = 1e-10;
-            double newVScale = newVMax / 255.0;     if (newVScale < 1e-10) newVScale = 1e-10;
-            st.MScale[b] = newMScale; st.VScale[b] = newVScale;
-
-            for (int i = start; i < end; i++)
-            {
-                int li = i - start;
-                int mq = (int)Math.Round(mNew[li] / newMScale);
-                if (mq < -127) mq = -127; else if (mq > 127) mq = 127;
-                st.MQuant[i] = (byte)(mq + 128);
-                int vq = (int)Math.Round(vNew[li] / newVScale);
-                if (vq < 0) vq = 0; else if (vq > 255) vq = 255;
-                st.VQuant[i] = (byte)vq;
-            }
+            double m = _beta1 * Dequantize(state, 0, i) + (1.0 - _beta1) * g;
+            double v = _beta2 * Dequantize(state, 1, i) + (1.0 - _beta2) * g * g;
+            double update = (m / biasCorr1) / (Math.Sqrt(v / biasCorr2) + _epsilon) + _weightDecay * p;
+            paramNormSq += p * p;
+            updateNormSq += update * update;
         }
+
+        double paramNorm = Math.Sqrt(paramNormSq);
+        double updateNorm = Math.Sqrt(updateNormSq);
+        if (paramNorm > 0.0 && updateNorm > 0.0)
+        {
+            _trustRatio = paramNorm / updateNorm;
+            if (_clipTrustRatio && _trustRatio > _maxTrustRatio)
+                _trustRatio = _maxTrustRatio;
+        }
+        else
+        {
+            _trustRatio = 1.0;
+        }
+    }
+
+    protected override double UpdateElement(double parameter, double gradient, ReadOnlySpan<double> moments, Span<double> nextMoments, int index)
+    {
+        double m = _beta1 * moments[0] + (1.0 - _beta1) * gradient;
+        double v = _beta2 * moments[1] + (1.0 - _beta2) * gradient * gradient;
+        nextMoments[0] = m;
+        nextMoments[1] = v;
+
+        double biasCorr1 = _useBiasCorrection ? 1.0 - Math.Pow(_beta1, Step) : 1.0;
+        double biasCorr2 = _useBiasCorrection ? 1.0 - Math.Pow(_beta2, Step) : 1.0;
+        if (biasCorr1 <= 0.0) biasCorr1 = 1.0;
+        if (biasCorr2 <= 0.0) biasCorr2 = 1.0;
+
+        double update = (m / biasCorr1) / (Math.Sqrt(v / biasCorr2) + _epsilon) + _weightDecay * parameter;
+        return parameter - ClampUpdate(LearningRate * _trustRatio * update);
+    }
+}
+
+internal sealed class StreamingFtrl8Bit<T> : BlockQuantizedStreamingOptimizer<T>
+{
+    private readonly double _alpha;
+    private readonly double _beta;
+    private readonly double _lambda1;
+    private readonly double _lambda2;
+
+    public StreamingFtrl8Bit(double alpha, double beta, double lambda1, double lambda2)
+        : base(nameof(StreamingFtrl8Bit<T>), alpha, new[] { true, false })
+    {
+        _alpha = alpha;
+        _beta = beta;
+        _lambda1 = lambda1;
+        _lambda2 = lambda2;
+    }
+
+    protected override double UpdateElement(double parameter, double gradient, ReadOnlySpan<double> moments, Span<double> nextMoments, int index)
+    {
+        double z = moments[0];
+        double n = moments[1];
+        double nNew = n + gradient * gradient;
+        double sigma = (Math.Sqrt(nNew) - Math.Sqrt(n)) / _alpha;
+        double zNew = z + gradient - sigma * parameter;
+
+        nextMoments[0] = zNew;
+        nextMoments[1] = nNew;
+
+        if (Math.Abs(zNew) <= _lambda1)
+            return 0.0;
+
+        double numerator = -Math.Sign(zNew) * (Math.Abs(zNew) - _lambda1);
+        double denominator = _lambda2 + (Math.Sqrt(nNew) + _beta) / _alpha;
+        return numerator / denominator;
+    }
+}
+
+internal static class StreamingOptimizerResolver<T>
+{
+    public static string BuildKey(
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
+        bool useStreamingDefaults,
+        double streamingWeightDecay)
+    {
+        string type = useStreamingDefaults ? "DefaultAdam" : optimizer.GetType().FullName ?? optimizer.GetType().Name;
+        object? options = GetOptionsObject(optimizer);
+        return string.Join("|",
+            type,
+            ReadDouble(options, "Beta1", 0.9),
+            ReadDouble(options, "Beta2", 0.999),
+            ReadDouble(options, "Epsilon", 1e-8),
+            ReadDouble(options, "Decay", 0.9),
+            ReadDouble(options, "Rho", 0.95),
+            ReadDouble(options, "InitialMomentum", ReadDouble(options, "Momentum", 0.9)),
+            ReadDouble(options, "WeightDecay", streamingWeightDecay),
+            ReadDouble(options, "TrustCoefficient", 0.001),
+            ReadDouble(options, "Alpha", 0.005),
+            ReadDouble(options, "Lambda1", 1.0),
+            ReadDouble(options, "Lambda2", 1.0),
+            ReadBool(options, "UseAMSGrad", false),
+            ReadBool(options, "UseNesterov", false),
+            ReadBool(options, "ClipTrustRatio", true),
+            ReadDouble(options, "MaxTrustRatio", 10.0),
+            ReadBool(options, "UseBiasCorrection", true));
+    }
+
+    public static IStreamingOptimizer<T> Create(
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
+        bool useStreamingDefaults,
+        double fallbackLearningRate,
+        double fallbackWeightDecay)
+    {
+        object? options = GetOptionsObject(optimizer);
+        double lr = useStreamingDefaults ? fallbackLearningRate : ResolveLearningRate(optimizer, fallbackLearningRate);
+
+        if (useStreamingDefaults)
+        {
+            return new StreamingAdam8Bit<T>(lr, weightDecay: fallbackWeightDecay);
+        }
+
+        switch (optimizer)
+        {
+            case AdamWOptimizer<T, Tensor<T>, Tensor<T>>:
+                if (ReadBool(options, "UseAMSGrad", false))
+                    return new StreamingAMSGrad8Bit<T>(lr, ReadDouble(options, "Beta1", 0.9), ReadDouble(options, "Beta2", 0.999), ReadDouble(options, "Epsilon", 1e-8), ReadDouble(options, "WeightDecay", 0.01));
+                return new StreamingAdamW8Bit<T>(lr, ReadDouble(options, "Beta1", 0.9), ReadDouble(options, "Beta2", 0.999), ReadDouble(options, "Epsilon", 1e-8), ReadDouble(options, "WeightDecay", 0.01));
+            case AdamOptimizer<T, Tensor<T>, Tensor<T>>:
+                if (ReadBool(options, "UseAMSGrad", false))
+                    return new StreamingAMSGrad8Bit<T>(lr, ReadDouble(options, "Beta1", 0.9), ReadDouble(options, "Beta2", 0.999), ReadDouble(options, "Epsilon", 1e-8), fallbackWeightDecay);
+                return new StreamingAdam8Bit<T>(lr, ReadDouble(options, "Beta1", 0.9), ReadDouble(options, "Beta2", 0.999), ReadDouble(options, "Epsilon", 1e-8), fallbackWeightDecay);
+            case AMSGradOptimizer<T, Tensor<T>, Tensor<T>>:
+                return new StreamingAMSGrad8Bit<T>(lr, ReadDouble(options, "Beta1", 0.9), ReadDouble(options, "Beta2", 0.999), ReadDouble(options, "Epsilon", 1e-8), 0.0);
+            case NadamOptimizer<T, Tensor<T>, Tensor<T>>:
+                return new StreamingNadam8Bit<T>(lr, ReadDouble(options, "Beta1", 0.9), ReadDouble(options, "Beta2", 0.999), ReadDouble(options, "Epsilon", 1e-8));
+            case AdaMaxOptimizer<T, Tensor<T>, Tensor<T>>:
+                return new StreamingAdaMax8Bit<T>(lr, ReadDouble(options, "Beta1", 0.9), ReadDouble(options, "Beta2", 0.999), ReadDouble(options, "Epsilon", 1e-8));
+            case LionOptimizer<T, Tensor<T>, Tensor<T>>:
+                return new StreamingLion8Bit<T>(lr, ReadDouble(options, "Beta1", 0.9), ReadDouble(options, "Beta2", 0.99), ReadDouble(options, "WeightDecay", 0.0));
+            case LAMBOptimizer<T, Tensor<T>, Tensor<T>>:
+                return new StreamingLamb8Bit<T>(lr, ReadDouble(options, "Beta1", 0.9), ReadDouble(options, "Beta2", 0.999), ReadDouble(options, "Epsilon", 1e-6), ReadDouble(options, "WeightDecay", 0.01), ReadBool(options, "ClipTrustRatio", true), ReadDouble(options, "MaxTrustRatio", 10.0), ReadBool(options, "UseBiasCorrection", true));
+            case LARSOptimizer<T, Tensor<T>, Tensor<T>>:
+                return new StreamingLars8Bit<T>(lr, ReadDouble(options, "Momentum", 0.9), ReadDouble(options, "WeightDecay", 1e-4), ReadDouble(options, "TrustCoefficient", 0.001), ReadDouble(options, "Epsilon", 1e-8), ReadBool(options, "UseNesterov", false));
+            case FTRLOptimizer<T, Tensor<T>, Tensor<T>>:
+                return new StreamingFtrl8Bit<T>(ReadDouble(options, "Alpha", lr), ReadDouble(options, "Beta", 1.0), ReadDouble(options, "Lambda1", 1.0), ReadDouble(options, "Lambda2", 1.0));
+            case AdaDeltaOptimizer<T, Tensor<T>, Tensor<T>>:
+                return new StreamingAdaDelta8Bit<T>(lr, ReadDouble(options, "Rho", 0.95), ReadDouble(options, "Epsilon", 1e-6));
+            case AdagradOptimizer<T, Tensor<T>, Tensor<T>>:
+                return new StreamingAdagrad8Bit<T>(lr, ReadDouble(options, "Epsilon", 1e-8));
+            case RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>:
+                return new StreamingRmsProp8Bit<T>(lr, ReadDouble(options, "Decay", 0.9), ReadDouble(options, "Epsilon", 1e-8));
+            case MomentumOptimizer<T, Tensor<T>, Tensor<T>>:
+                return new StreamingMomentum8Bit<T>(lr, ReadDouble(options, "InitialMomentum", 0.9));
+            case NesterovAcceleratedGradientOptimizer<T, Tensor<T>, Tensor<T>>:
+                return new StreamingNesterov8Bit<T>(lr, ReadDouble(options, "InitialMomentum", 0.9));
+            case GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>:
+            case StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>:
+            case MiniBatchGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>:
+            case ProximalGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>:
+                return new StreamingSgd8Bit<T>(lr);
+            default:
+                return new StreamingAdam8Bit<T>(fallbackLearningRate, weightDecay: fallbackWeightDecay);
+        }
+    }
+
+    public static void RefreshLearningRate(
+        IStreamingOptimizer<T> streamingOptimizer,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
+        bool useStreamingDefaults,
+        double fallbackLearningRate)
+    {
+        if (streamingOptimizer is IStreamingOptimizerLearningRate mutable)
+        {
+            mutable.SetLearningRate(useStreamingDefaults
+                ? fallbackLearningRate
+                : ResolveLearningRate(optimizer, fallbackLearningRate));
+        }
+    }
+
+    private static double ResolveLearningRate(
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
+        double fallbackLearningRate)
+    {
+        if (optimizer is GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> gradientBased)
+        {
+            return gradientBased.GetCurrentLearningRate();
+        }
+
+        return fallbackLearningRate;
+    }
+
+    private static object? GetOptionsObject(object optimizer)
+    {
+        Type? type = optimizer.GetType();
+        while (type is not null)
+        {
+            foreach (var field in type.GetFields(BindingFlags.Instance | BindingFlags.NonPublic))
+            {
+                if (!field.Name.Contains("options", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                object? value = field.GetValue(optimizer);
+                if (value is not null)
+                    return value;
+            }
+
+            type = type.BaseType;
+        }
+
+        return null;
+    }
+
+    private static double ReadDouble(object? options, string propertyName, double fallback)
+    {
+        object? value = ReadProperty(options, propertyName);
+        if (value is null) return fallback;
+        try
+        {
+            return Convert.ToDouble(value);
+        }
+        catch
+        {
+            return fallback;
+        }
+    }
+
+    private static bool ReadBool(object? options, string propertyName, bool fallback)
+    {
+        object? value = ReadProperty(options, propertyName);
+        return value is bool b ? b : fallback;
+    }
+
+    private static object? ReadProperty(object? options, string propertyName)
+    {
+        if (options is null) return null;
+        var property = options.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public);
+        return property?.GetValue(options);
     }
 }
