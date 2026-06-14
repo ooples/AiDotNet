@@ -511,6 +511,11 @@ public class StandardVAE<T> : VAEModelBase<T>
 
     private int CalculateParameterCount()
     {
+        // Resolve lazy layer shapes so the count matches GetParameters().Length even
+        // pre-forward (lazy layers otherwise report their architectural count here
+        // but an empty GetParameters() vector — the count-equality failure source).
+        TriggerLazyShapeResolution();
+
         // Walk the same layers GetParameters walks and sum their actual ParameterCount.
         // Must match GetParameters().Length exactly — earlier "approximate" formulas
         // diverged from the real per-layer count and broke contract tests asserting
@@ -535,40 +540,23 @@ public class StandardVAE<T> : VAEModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
+        // Resolve lazy layer shapes so the vector matches ParameterCount even
+        // before the first real forward (lazy layers otherwise contribute 0).
         TriggerLazyShapeResolution();
 
-        var parameters = new List<T>();
-
-        AddLayerParameters(parameters, _inputConv);
-
-        foreach (var layer in _encoderLayers)
+        // Single-allocation concat over the same layers GetParameterChunks walks.
+        // The previous List<T> + per-element Add + ToArray triple-copied the whole
+        // parameter vector (~3x), OOM'ing the runner when a paper-scale VAE is
+        // materialised (e.g. during a foundation model's Clone). Vector<T>.Concatenate
+        // pre-sizes one result and vectorized-copies each layer's params in once.
+        var parts = new List<Vector<T>>();
+        foreach (var layer in EnumerateAllLayers())
         {
-            AddLayerParameters(parameters, layer);
+            if (layer == null) continue;
+            parts.Add(layer.GetParameters());
         }
 
-        AddLayerParameters(parameters, _meanConv);
-        AddLayerParameters(parameters, _logVarConv);
-        AddLayerParameters(parameters, _quantConv);
-        AddLayerParameters(parameters, _postQuantConv);
-
-        foreach (var layer in _decoderLayers)
-        {
-            AddLayerParameters(parameters, layer);
-        }
-
-        AddLayerParameters(parameters, _outputConv);
-
-        return new Vector<T>(parameters.ToArray());
-    }
-
-    private void AddLayerParameters(List<T> parameters, ILayer<T>? layer)
-    {
-        if (layer == null) return;
-        var layerParams = layer.GetParameters();
-        for (int i = 0; i < layerParams.Length; i++)
-        {
-            parameters.Add(layerParams[i]);
-        }
+        return Vector<T>.Concatenate(parts.ToArray());
     }
 
     /// <inheritdoc />
@@ -622,6 +610,9 @@ public class StandardVAE<T> : VAEModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        // Resolve lazy layer shapes first so each layer's slice is sized to its
+        // real parameter count; otherwise lazy layers size to 0 and incoming
+        // values are silently dropped (the round-trip bug).
         _preserveMaterializedParameters = true;
         TriggerLazyShapeResolution();
 
@@ -754,8 +745,21 @@ public class StandardVAE<T> : VAEModelBase<T>
     /// invariant), so any size works as long as the conv stack doesn't
     /// underflow.
     /// </remarks>
+    private bool _lazyShapesResolved;
+
     internal void TriggerLazyShapeResolution()
     {
+        // Idempotent: one tiny encode+decode resolves every lazy layer's weight
+        // shapes (channel-based, so a minimal spatial extent suffices); shapes
+        // never change afterwards. Guard set before the forward to block
+        // re-entrant parameter access during resolution. Without this, the VAE's
+        // GetParameters / SetParameters / ParameterCount disagreed pre-forward
+        // (lazy layers reported architectural ParameterCount but an empty
+        // GetParameters() vector), which propagated to every latent diffusion
+        // model's ParameterCount == GetParameters().Length contract (SD1.5, SDXL,
+        // TripoSR, …) since those sum _unet + _vae.
+        if (_lazyShapesResolved) return;
+        _lazyShapesResolved = true;
         int downsamples = _channelMultipliers.Length - 1;
         int dummySpatial = 1 << Math.Max(downsamples, 1);
         var dummyImage = new Tensor<T>(new[] { 1, _inputChannels, dummySpatial, dummySpatial });

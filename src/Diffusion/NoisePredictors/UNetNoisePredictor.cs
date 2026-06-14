@@ -306,6 +306,9 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         _timeEmbedMlp1 = (DenseLayer<T>)baseLayers[1];
         _timeEmbedMlp2 = (DenseLayer<T>)baseLayers[2];
 
+        // input/output convs are left fully lazy; the predictor's shape-only forward
+        // (ResolveShapesViaForward) resolves their true InputDepth from the topology.
+
         // Output conv from decoder layers
         var decoderBaseLayers = LayerHelper<T>.CreateUNetNoisePredictorDecoderLayers(
             _outputChannels, _baseChannels, _channelMultipliers, _numResBlocks).ToList();
@@ -990,6 +993,8 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     private ILayer<T> CreateDownsample(int channels, int spatialSize)
     {
         // LazyConv2D: kernel tensor stays unallocated until first Forward() call.
+        // Fully lazy: the predictor's ResolveShapesViaForward resolves this conv's
+        // true InputDepth through the forward topology (no construction-time estimate).
         return LazyConv2D(
             inputDepth: channels,
             inputHeight: spatialSize,
@@ -1003,7 +1008,8 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     private ILayer<T> CreateUpsample(int channels, int spatialSize)
     {
-        // spatialSize here is the current (smaller) spatial size before upsampling
+        // spatialSize here is the current (smaller) spatial size before upsampling.
+        // Fully lazy: shape resolved by the predictor's shape-only forward.
         return new DeconvolutionalLayer<T>(
             outputDepth: channels,
             kernelSize: 4,
@@ -1018,6 +1024,14 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     private int CalculateParameterCount()
     {
+        // Resolve every lazy layer's TRUE shape via a shape-only forward (single source
+        // of truth) — NO weight materialisation, so this stays cheap on a foundation-scale
+        // U-Net (the Unit-03b construction OOM was the old materialising dummy forward).
+        // Using the forward topology (not a per-construction estimate) guarantees this
+        // count equals GetParameters().Length and the real forward's resolution, including
+        // decoder skip concatenation.
+        ResolveShapesViaForward();
+
         // Walk the same layers GetParameters walks and sum their actual ParameterCount.
         // Must match GetParameters().Length exactly — the previous "approximate" formula
         // diverged from the real count and broke contract tests asserting equality.
@@ -1049,6 +1063,12 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
+        // Resolve all layer shapes via the shape-only forward (single source of truth,
+        // no materialisation) so the returned vector's length matches ParameterCount
+        // exactly. Each layer.GetParameters() below then materialises just that layer's
+        // weights on demand.
+        ResolveShapesViaForward();
+
         // Collect all sublayer parameter vectors first (each layer allocates its own)
         var layerParams = new List<Vector<T>>();
         int totalCount = 0;
@@ -1165,7 +1185,12 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        // Resolve lazy layer shapes first so each layer's slice is sized to its
+        // real ParameterCount; otherwise lazy layers size to 0 and the incoming
+        // values are silently dropped (the SetParameters/GetParameters round-trip bug).
+        TriggerLazyShapeResolution();
         _preserveMaterializedParameters = true;
+
         var index = 0;
 
         SetLayerParameters(_inputConv, parameters, ref index);
@@ -1303,13 +1328,73 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// manually (instead of delegating to <see cref="Clone"/>) can
     /// force lazy shape resolution on both sides too.
     /// </summary>
+    private bool _lazyShapesResolved;
+
     internal void TriggerLazyShapeResolution()
     {
-        var dummy = new Tensor<T>(new[] { 1, _inputChannels, _inputHeight, _inputHeight });
+        // Idempotent: a single dummy forward resolves every lazy layer's weight
+        // shapes; shapes never change afterwards (SetParameters overwrites values,
+        // not shapes), so cache it. The guard is set BEFORE the forward so any
+        // re-entrant parameter access during resolution short-circuits instead of
+        // recursing. Without this, GetParameters / SetParameters / ParameterCount
+        // disagreed before the first real forward — the lazy layers reported their
+        // architectural ParameterCount but an empty GetParameters() vector — which
+        // broke the parameter round-trip, count-equality, Clone, and SaveState
+        // contracts (the whole DDPM parameter-management test cluster).
+        if (_lazyShapesResolved) return;
+        _lazyShapesResolved = true;
+
+        // Resolve at the SMALLEST valid spatial size, not the model's native
+        // _inputHeight. Weight shapes are channel-based (conv kernels
+        // [outC,inC,kH,kW], dense [in,out], attention [embed,embed]) and are
+        // INDEPENDENT of spatial H/W — but the forward compute (conv/attention)
+        // scales with H×W. On a foundation-scale UNet a native-resolution
+        // resolve forward costs minutes purely to allocate weights; resolving at
+        // the minimum spatial extent that still survives every downsampling
+        // stage (2^stages, doubled so the bottleneck stays >= 2) allocates the
+        // identical weight tensors with trivial compute. Cap at _inputHeight so
+        // models whose native size is already small aren't enlarged.
+        int numDownsamples = System.Math.Max(0, _channelMultipliers.Length - 1);
+        int safeSpatial = System.Math.Max(2, (1 << numDownsamples) * 2);
+        int resolveSpatial = System.Math.Min(_inputHeight, safeSpatial);
+        if (resolveSpatial < 1) resolveSpatial = _inputHeight;
+
+        var dummy = new Tensor<T>(new[] { 1, _inputChannels, resolveSpatial, resolveSpatial });
         Tensor<T>? dummyCtx = _contextDim > 0
             ? new Tensor<T>(new[] { 1, 1, _contextDim })
             : null;
         _ = PredictNoise(dummy, timestep: 0, conditioning: dummyCtx);
+    }
+
+    private bool _shapesResolvedViaForward;
+
+    /// <summary>
+    /// Single-source-of-truth shape resolution: runs the real forward topology under
+    /// <see cref="LayerBase{T}.RunShapeInference"/> so every lazy layer resolves its TRUE
+    /// shape exactly as the forward would — including decoder skip concatenation — WITHOUT
+    /// allocating any weights. This makes <c>ParameterCount</c>, <see cref="GetParameters"/>,
+    /// <see cref="SetParameters"/>, and the real forward all agree, which a per-construction
+    /// shape estimate cannot guarantee (the estimate diverged from the forward's actual
+    /// decoder concat). Unlike <see cref="TriggerLazyShapeResolution"/> this materialises
+    /// nothing, so it is safe to call from metadata accessors on a foundation-scale model.
+    /// Idempotent; the guard is set before the forward so re-entrant accessor calls during
+    /// resolution short-circuit instead of recursing.
+    /// </summary>
+    internal void ResolveShapesViaForward()
+    {
+        if (_shapesResolvedViaForward) return;
+        _shapesResolvedViaForward = true;
+
+        int numDownsamples = System.Math.Max(0, _channelMultipliers.Length - 1);
+        int safeSpatial = System.Math.Max(2, (1 << numDownsamples) * 2);
+        int resolveSpatial = System.Math.Min(_inputHeight, safeSpatial);
+        if (resolveSpatial < 1) resolveSpatial = _inputHeight;
+
+        var dummy = new Tensor<T>(new[] { 1, _inputChannels, resolveSpatial, resolveSpatial });
+        Tensor<T>? dummyCtx = _contextDim > 0
+            ? new Tensor<T>(new[] { 1, 1, _contextDim })
+            : null;
+        LayerBase<T>.RunShapeInference(() => { _ = PredictNoise(dummy, timestep: 0, conditioning: dummyCtx); });
     }
 
     /// <inheritdoc />

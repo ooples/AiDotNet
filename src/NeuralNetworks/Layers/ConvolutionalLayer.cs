@@ -1028,6 +1028,11 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Shape-inference mode: resolve dims from the input and return a correctly-shaped
+        // placeholder WITHOUT allocating the kernel or computing. Lets a model resolve all
+        // layer shapes via its real forward topology as the single source of truth.
+        if (IsInferringShapes) return ShapeInferenceOutput(input);
+
         // Resolve deferred shape (PyTorch LazyConv2d-style) and allocate weights on first call.
         EnsureInitializedFromInput(input);
 

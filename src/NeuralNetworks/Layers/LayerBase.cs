@@ -642,6 +642,73 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         EnsureInitialized();
     }
 
+    // ── Shape-inference mode (single source of truth for lazy shape resolution) ─────
+    // When active, a leaf layer's Forward resolves its shape from the input (OnFirstForward)
+    // and returns a correctly-shaped, zero-filled placeholder WITHOUT materialising weights
+    // or running compute. A model can then run its real forward topology in this mode to
+    // resolve every layer's true shape exactly as the forward would (including skip
+    // concatenation, reshapes, etc.) — making ParameterCount / GetParameters / SetParameters
+    // / forward all agree, with no weight allocation. ThreadStatic: the resolution forward is
+    // synchronous and single-threaded, and normal forwards must never see it set.
+    [ThreadStatic]
+    private static bool _shapeInferenceActive;
+
+    /// <summary>
+    /// Whether the current thread is running a shape-only resolution forward. Leaf-layer
+    /// <c>Forward</c> overrides check this and return <see cref="ShapeInferenceOutput"/>
+    /// instead of materialising weights and computing. Off during all real forwards.
+    /// </summary>
+    internal static bool IsInferringShapes
+    {
+        get => _shapeInferenceActive;
+        set => _shapeInferenceActive = value;
+    }
+
+    /// <summary>
+    /// Resolves this layer's shape from <paramref name="input"/> (without allocating weights)
+    /// and returns a zero-filled tensor of the resulting forward output shape
+    /// (<c>[batch, ...OutputShape]</c>). Leaf layers call this at the top of <c>Forward</c>
+    /// when <see cref="IsInferringShapes"/> is set, so shapes propagate through the real
+    /// forward topology with no materialisation.
+    /// </summary>
+    protected virtual Tensor<T> ShapeInferenceOutput(Tensor<T> input)
+    {
+        if (!IsShapeResolved)
+        {
+            OnFirstForward(input);
+        }
+
+        // Default: forward output is [batch, ...OutputShape] — correct for layers like
+        // Conv/Deconv whose OutputShape carries the full per-sample output dims. Layers
+        // with a different shape contract (e.g. a rank-agnostic Dense that maps only the
+        // last axis) override this.
+        int batch = input.Shape.Length > 0 ? input.Shape[0] : 1;
+        int[] outShape = OutputShape;
+        var full = new int[outShape.Length + 1];
+        full[0] = batch;
+        System.Array.Copy(outShape, 0, full, 1, outShape.Length);
+        return new Tensor<T>(full);
+    }
+
+    /// <summary>
+    /// Runs <paramref name="resolve"/> with shape-inference mode active, guaranteeing the flag
+    /// is cleared afterward even on exception. Models call this around a dummy forward to
+    /// resolve all layer shapes as the single source of truth.
+    /// </summary>
+    internal static void RunShapeInference(Action resolve)
+    {
+        bool prior = _shapeInferenceActive;
+        _shapeInferenceActive = true;
+        try
+        {
+            resolve();
+        }
+        finally
+        {
+            _shapeInferenceActive = prior;
+        }
+    }
+
     /// <summary>
     /// Eagerly resolves a lazy layer's shape (and allocates its weights) from a known
     /// input shape, without running an actual forward pass. Parent wrappers that already

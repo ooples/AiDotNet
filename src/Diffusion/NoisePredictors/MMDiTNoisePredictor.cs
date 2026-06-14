@@ -1146,8 +1146,73 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
             contextDim: _contextDim,
             mlpRatio: _mlpRatio);
 
-        clone.SetParameters(GetParameters());
+        // The LazyDense weights resolve+allocate through the FORWARD path
+        // (EnsureInitializedFromInput) — a different entry than the SetParameters/GetParameters
+        // path (EnsureInitialized). Copying parameters into a clone whose layers were never
+        // forwarded leaves its first real forward to re-resolve and RNG-initialize along the
+        // forward path, discarding the copied values and diverging from the source. Run one
+        // throwaway forward to materialize the clone through the same path the source used,
+        // THEN copy the source's weights so they persist. Gated on the source having been
+        // forwarded (a never-forwarded foundation-scale model has nothing materialized to copy
+        // and must not pay a full forward here).
+        if (_patchEmbed.IsInitialized)
+        {
+            int probeSpatial = _patchSize * 2;
+            var probe = new Tensor<T>(new[] { 1, _inputChannels, probeSpatial, probeSpatial });
+            // A null-conditioned probe only materializes the unconditional (image-stream) path.
+            // When the source ran conditioned forwards its context projection (_contextProj) and
+            // text-stream block layers are materialized, so probe the clone WITH a representative
+            // text-conditioning tensor — otherwise those layers stay lazy on the clone and re-init
+            // with fresh RNG on the first conditioned forward, diverging from the source.
+            Tensor<T>? probeConditioning = _contextProj.IsInitialized
+                ? new Tensor<T>(new[] { 1, 1, _contextDim })
+                : null;
+            clone.PredictNoise(probe, timestep: 0, conditioning: probeConditioning);
+            // Layer-by-layer copy: each layer's GetParameters/SetParameters works on its own small
+            // vector, so cloning never materializes one contiguous foundation-scale parameter vector
+            // (the flat List<T> -> ToArray() path in GetParameters that OOMs at SD3/FLUX scale).
+            clone.CopyParametersFrom(this);
+            // The probe forward traced a compiled plan over the clone's random init; drop it so
+            // the next real forward re-traces against the copied weights.
+            clone.InvalidateCompiledPlans();
+        }
         return clone;
+    }
+
+    /// <summary>
+    /// Copies trained weights from <paramref name="source"/> into this predictor layer by layer,
+    /// without ever materializing a single contiguous parameter vector. Both predictors enumerate
+    /// their layers via the same <see cref="EnumerateLayers"/> order, so each source layer is paired
+    /// with its target and copied through that layer's own (small) <c>GetParameters</c>/
+    /// <c>SetParameters</c>. This is the foundation-scale-safe path that <see cref="Clone"/> uses
+    /// instead of <c>SetParameters(GetParameters())</c>, whose flat allocation OOMs at SD3/FLUX scale.
+    /// </summary>
+    private void CopyParametersFrom(MMDiTNoisePredictor<T> source)
+    {
+        Guard.NotNull(source);
+
+        using var src = source.EnumerateLayers().GetEnumerator();
+        using var dst = EnumerateLayers().GetEnumerator();
+
+        while (src.MoveNext())
+        {
+            if (!dst.MoveNext())
+            {
+                throw new InvalidOperationException(
+                    "Clone has fewer layers than the source MMDiT predictor; architectures differ.");
+            }
+
+            // Per-layer copy. A lazy source layer reports an empty vector and the corresponding
+            // SetParameters is a no-op, which is correct: the clone's matching layer was probed to
+            // the same materialization state, so both stay lazy together.
+            dst.Current.SetParameters(src.Current.GetParameters());
+        }
+
+        if (dst.MoveNext())
+        {
+            throw new InvalidOperationException(
+                "Clone has more layers than the source MMDiT predictor; architectures differ.");
+        }
     }
 
     /// <inheritdoc />
