@@ -1,29 +1,17 @@
 namespace AiDotNet.Training;
 
-/// <summary>
-/// Per-parameter 8-bit Adam optimizer state for the memory-bounded streaming path.
-/// </summary>
-internal class StreamingAdam8Bit<T> : BlockQuantizedStreamingOptimizer<T>
+internal sealed class StreamingNadam8Bit<T> : BlockQuantizedStreamingOptimizer<T>
 {
     private readonly double _beta1;
     private readonly double _beta2;
     private readonly double _epsilon;
-    private readonly double _weightDecay;
 
-    public StreamingAdam8Bit(
-        double learningRate,
-        double beta1 = 0.9,
-        double beta2 = 0.999,
-        double epsilon = 1e-8,
-        double weightDecay = 0.0,
-        int blockSize = 2048,
-        double maxUpdateRatio = 5.0)
-        : base(nameof(StreamingAdam8Bit<T>), learningRate, new[] { true, false }, blockSize, maxUpdateRatio)
+    public StreamingNadam8Bit(double learningRate, double beta1, double beta2, double epsilon)
+        : base(nameof(StreamingNadam8Bit<T>), learningRate, new[] { true, false })
     {
         _beta1 = beta1;
         _beta2 = beta2;
         _epsilon = epsilon;
-        _weightDecay = weightDecay;
     }
 
     protected override double UpdateElement(double parameter, double gradient, ReadOnlySpan<double> moments, Span<double> nextMoments, int index)
@@ -38,8 +26,10 @@ internal class StreamingAdam8Bit<T> : BlockQuantizedStreamingOptimizer<T>
         if (biasCorr1 <= 0.0) biasCorr1 = 1.0;
         if (biasCorr2 <= 0.0) biasCorr2 = 1.0;
 
-        parameter = ApplyDecoupledWeightDecay(parameter, _weightDecay);
-        double update = LearningRate * (m / biasCorr1) / (Math.Sqrt(v / biasCorr2) + _epsilon);
+        double mHat = m / biasCorr1;
+        double vHat = v / biasCorr2;
+        double nesterov = _beta1 * mHat + (1.0 - _beta1) * gradient / biasCorr1;
+        double update = LearningRate * nesterov / (Math.Sqrt(vHat) + _epsilon);
         return parameter - ClampUpdate(update);
     }
 }
