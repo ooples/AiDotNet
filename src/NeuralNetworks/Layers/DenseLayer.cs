@@ -860,8 +860,29 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// This is where the actual "thinking" happens in the neural network.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Dense maps only the last axis (to the output size) and preserves all leading
+    /// batch/sequence dims, so the shape-inference placeholder is the input shape with
+    /// its last dimension replaced by the output size.
+    /// </summary>
+    protected override Tensor<T> ShapeInferenceOutput(Tensor<T> input)
+    {
+        if (!IsShapeResolved)
+        {
+            OnFirstForward(input);
+        }
+        int rank = input.Shape.Length;
+        var shape = new int[rank];
+        for (int i = 0; i < rank; i++) shape[i] = input.Shape[i];
+        shape[rank - 1] = OutputShape[OutputShape.Length - 1];
+        return new Tensor<T>(shape);
+    }
+
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Shape-inference mode: resolve dims + return a placeholder, no weight allocation.
+        if (IsInferringShapes) return ShapeInferenceOutput(input);
+
         // Lazy layers must run shape resolution (OnFirstForward) BEFORE
         // EnsureInitialized — calling EnsureInitialized() directly on a
         // lazily-constructed DenseLayer reads InputShape[0]/OutputShape[0]

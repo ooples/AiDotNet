@@ -443,43 +443,39 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
-        var rng = ModelTestHelpers.CreateSeededRandom();
         using var model = CreateModel();
-        var baseInput = CreateRandomTensor(InputShape, rng);
 
-        // Predict at different "noise levels" by scaling input
-        // Low noise (near-original), medium noise, high noise
-        double[] scales = new double[] { 0.1, 0.5, 1.0, 2.0 };
-        double[] outputMagnitudes = new double[scales.Length];
+        // The noise schedule is the SCHEDULER's signal-retention curve: the cumulative product
+        // of alphas (the fraction of the original signal retained at timestep t) must not
+        // increase as t grows, because every step only adds noise. Equivalently the noise
+        // fraction 1 - alpha_cumprod is monotonically non-decreasing. That is the actual
+        // "noise schedule is monotonic" invariant this test is named for, and it holds for
+        // every correctly-configured scheduler (DDPM/cosine/linear/flow-matching).
+        //
+        // (The previous proxy scaled the model's INPUT and checked the OUTPUT magnitude. That
+        // is architecturally invalid for input-normalizing noise predictors such as DiT — its
+        // LayerNorm removes the input scale, so the denoised sample's magnitude is independent
+        // of the input scale by design. Every DiT-based diffusion model failed the old proxy
+        // for that reason, not because of a real bug.)
+        var scheduler = model.Scheduler;
+        int n = scheduler.TrainTimesteps;
+        if (n < 2) return;
 
-        for (int s = 0; s < scales.Length; s++)
-        {
-            var noisyInput = new Tensor<TNum>(InputShape);
-            for (int i = 0; i < baseInput.Length; i++)
-                noisyInput[i] = _numOps.FromDouble(ToDouble(baseInput[i]) * scales[s]);
-
-            var output = model.Predict(noisyInput);
-
-            double magnitude = 0;
-            for (int i = 0; i < output.Length; i++)
-            {
-                double v = ToDouble(output[i]);
-                magnitude += v * v;
-            }
-            outputMagnitudes[s] = Math.Sqrt(magnitude / Math.Max(1, output.Length));
-        }
-
-        // Check monotonicity: allow at most 1 violation out of 3 transitions
+        double prevSignal = ToDouble(scheduler.GetAlphaCumulativeProduct(0));
         int violations = 0;
-        for (int i = 1; i < outputMagnitudes.Length; i++)
+        double worst = 0;
+        for (int t = 1; t < n; t++)
         {
-            if (outputMagnitudes[i] < outputMagnitudes[i - 1] - 1e-10)
-                violations++;
+            double signal = ToDouble(scheduler.GetAlphaCumulativeProduct(t));
+            double increase = signal - prevSignal;
+            if (increase > 1e-9) { violations++; worst = Math.Max(worst, increase); }
+            prevSignal = signal;
         }
 
-        Assert.True(violations <= 1,
-            $"Noise schedule not monotonic: magnitudes = [{string.Join(", ", outputMagnitudes.Select(m => m.ToString("F4")))}]. " +
-            $"Found {violations} violations (max allowed: 1).");
+        Assert.True(violations == 0,
+            $"Noise schedule not monotonic: alpha-cumulative-product (signal retention) increased " +
+            $"with timestep at {violations} step(s) (worst +{worst:E3}); it must be non-increasing " +
+            "as noise accumulates.");
     }
 
     // =====================================================

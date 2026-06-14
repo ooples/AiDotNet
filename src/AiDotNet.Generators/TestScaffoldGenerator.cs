@@ -137,6 +137,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // ModelFamilyTests/NeuralNetworks/{HelixTests,GPT4PointTests}.
         "Helix", "GPT4Point",
 
+        // OmniGen2 (VisionLanguage.Unified): paper-faithful unified understanding +
+        // generation VLM (VisionDim=1024, DecoderDim=4096, 24 vision + 32 decoder layers,
+        // 32 heads, Phi-3 backbone) — a multi-billion-parameter model. At paper scale it
+        // trips disk-backed weight streaming (so a forward no longer OOMs) but a single
+        // backward+AdamW step still cannot complete inside the 120s CI budget on CPU. The
+        // manual OmniGen2Tests in ModelFamilyTests/NeuralNetworks runs the same dual-path
+        // architecture at reduced <float> scale (Janus precedent), exercising every code path
+        // in seconds. NB: matches the VisionLanguage class named exactly "OmniGen2" — the
+        // separate diffusion model AiDotNet.Diffusion.ImageEditing.OmniGen2Model is unaffected
+        // (exact-name match) and has its own manual DiffusionModelTestBase scaffold.
+        "OmniGen2",
+
         // Donut (Kim et al. 2022, VisionLanguage.Document): paper-scale Swin+BART defaults
         // (VisionDim=1024, DecoderDim=1024, 12+4 layers, NumHeads=16, ImageSize=2560) make
         // a single AdamW train step ~9s on CPU, so the training-invariant counts overflow
@@ -1812,13 +1824,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "vocabSize: 16, modelDimension: 32, numLayers: 2, stateDimension: 8, " +
                     "attentionInterval: 2, maxSeqLength: 8)";
             }
-            else if (IsValleCodecLMModel(model.ClassName) && model.TypeParameterCount == 1)
+            else if (IsValleCodecLMModel(model.ClassName) && model.TypeParameterCount == 1
+                     && model.FullyQualifiedName.StartsWith("AiDotNet.TextToSpeech.", System.StringComparison.Ordinal))
             {
                 // VALL-E-family models are neural codec language models: token
                 // IDs -> transformer text/codec LM -> codec logits. Use a
                 // smoke-scale config that preserves that paper contract without
                 // constructing the production 1024-wide, 12-layer stack for every
-                // generated invariant test.
+                // generated invariant test. The namespace gate is REQUIRED: the
+                // codec-LM VALL-E family lives under AiDotNet.TextToSpeech.* and uses
+                // TextToSpeech VALLE*Options, but a distinct AiDotNet.Audio.Generation.VALLE
+                // (different VALLEOptions type + an arch-only native ctor) shares the simple
+                // name "VALLE" — without this gate it would be emitted with the wrong
+                // TextToSpeech.CodecBased.VALLEOptions and fail to compile. The Audio one
+                // falls through to the arch-only constructor path below.
                 string optionsType = GetValleCodecLMOptionsType(model.ClassName);
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
