@@ -4,11 +4,11 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class HyperbolicNeuralNetworkTests : NeuralNetworkModelTestBase
+public class HyperbolicNeuralNetworkTests : NeuralNetworkModelTestBase<float>
 {
     protected override int[] InputShape => [128];
     protected override int[] OutputShape => [1];
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new HyperbolicNeuralNetwork<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new HyperbolicNeuralNetwork<float>();
 }

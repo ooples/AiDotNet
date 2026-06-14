@@ -4,11 +4,11 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-public class PlaygroundV3ModelTests : DiffusionModelTestBase
+public class PlaygroundV3ModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 16, 32, 32];
     protected override int[] OutputShape => [1, 16, 32, 32];
 
-    protected override IDiffusionModel<double> CreateModel()
-        => new PlaygroundV3Model<double>(seed: 42);
+    protected override IDiffusionModel<float> CreateModel()
+        => new PlaygroundV3Model<float>(seed: 42);
 }

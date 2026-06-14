@@ -4,11 +4,11 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-public class TripoSRModelTests : DiffusionModelTestBase
+public class TripoSRModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 4, 32, 32];
     protected override int[] OutputShape => [1, 4, 32, 32];
 
-    protected override IDiffusionModel<double> CreateModel()
-        => new TripoSRModel<double>(seed: 42);
+    protected override IDiffusionModel<float> CreateModel()
+        => new TripoSRModel<float>(seed: 42);
 }

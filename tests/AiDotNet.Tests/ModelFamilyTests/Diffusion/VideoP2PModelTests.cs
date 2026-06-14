@@ -4,11 +4,11 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-public class VideoP2PModelTests : DiffusionModelTestBase
+public class VideoP2PModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 4, 16, 16];
     protected override int[] OutputShape => [1, 4, 16, 16];
 
-    protected override IDiffusionModel<double> CreateModel()
-        => new VideoP2PModel<double>(seed: 42);
+    protected override IDiffusionModel<float> CreateModel()
+        => new VideoP2PModel<float>(seed: 42);
 }

@@ -4,11 +4,11 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-public class StyleAlignedModelTests : DiffusionModelTestBase
+public class StyleAlignedModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 4, 64, 64];
     protected override int[] OutputShape => [1, 4, 64, 64];
 
-    protected override IDiffusionModel<double> CreateModel()
-        => new StyleAlignedModel<double>(seed: 42);
+    protected override IDiffusionModel<float> CreateModel()
+        => new StyleAlignedModel<float>(seed: 42);
 }

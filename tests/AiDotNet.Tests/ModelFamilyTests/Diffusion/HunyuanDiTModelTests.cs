@@ -4,11 +4,11 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-public class HunyuanDiTModelTests : DiffusionModelTestBase
+public class HunyuanDiTModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 4, 32, 32];
     protected override int[] OutputShape => [1, 4, 32, 32];
 
-    protected override IDiffusionModel<double> CreateModel()
-        => new HunyuanDiTModel<double>(seed: 42);
+    protected override IDiffusionModel<float> CreateModel()
+        => new HunyuanDiTModel<float>(seed: 42);
 }

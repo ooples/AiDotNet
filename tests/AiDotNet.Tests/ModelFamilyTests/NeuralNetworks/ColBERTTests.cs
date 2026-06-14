@@ -4,7 +4,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class ColBERTTests : NeuralNetworkModelTestBase
+public class ColBERTTests : NeuralNetworkModelTestBase<float>
 {
     // ColBERT (Khattab & Zaharia 2020) projects 768-dim BERT embeddings
     // down to 128-dim for late interaction retrieval.
@@ -12,6 +12,6 @@ public class ColBERTTests : NeuralNetworkModelTestBase
     protected override int[] InputShape => [768];
     protected override int[] OutputShape => [128];
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new ColBERT<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new ColBERT<float>();
 }

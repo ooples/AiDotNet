@@ -4,11 +4,11 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-public class ControlNetQRModelTests : DiffusionModelTestBase
+public class ControlNetQRModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 4, 64, 64];
     protected override int[] OutputShape => [1, 4, 64, 64];
 
-    protected override IDiffusionModel<double> CreateModel()
-        => new ControlNetQRModel<double>(seed: 42);
+    protected override IDiffusionModel<float> CreateModel()
+        => new ControlNetQRModel<float>(seed: 42);
 }

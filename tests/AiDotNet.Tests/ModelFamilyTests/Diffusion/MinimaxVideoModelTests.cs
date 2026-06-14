@@ -4,11 +4,11 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-public class MinimaxVideoModelTests : DiffusionModelTestBase
+public class MinimaxVideoModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 16, 32, 32];
     protected override int[] OutputShape => [1, 16, 32, 32];
 
-    protected override IDiffusionModel<double> CreateModel()
-        => new MinimaxVideoModel<double>(seed: 42);
+    protected override IDiffusionModel<float> CreateModel()
+        => new MinimaxVideoModel<float>(seed: 42);
 }

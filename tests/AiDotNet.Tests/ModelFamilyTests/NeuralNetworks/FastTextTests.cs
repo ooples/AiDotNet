@@ -4,8 +4,8 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class FastTextTests : NeuralNetworkModelTestBase
+public class FastTextTests : NeuralNetworkModelTestBase<float>
 {
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new FastText<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new FastText<float>();
 }
