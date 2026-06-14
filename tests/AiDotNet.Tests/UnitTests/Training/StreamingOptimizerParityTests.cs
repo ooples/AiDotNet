@@ -311,4 +311,80 @@ public class StreamingOptimizerParityTests
         double rel = RelL2(sa, rp);
         Assert.True(rel < 0.10, $"Streaming L-BFGS (8-bit history) drifted from fp64 L-BFGS (relL2 {rel:E3} >= 0.10).");
     }
+
+    private static double[] GradN(int n, int step)
+    {
+        var g = new double[n];
+        uint s = (uint)(step * 2654435761u + 12345u);
+        for (int i = 0; i < n; i++)
+        {
+            s ^= s << 13; s ^= s >> 17; s ^= s << 5;
+            g[i] = ((s & 0xFFFF) / 65535.0 - 0.5) * 0.2;
+        }
+        return g;
+    }
+
+    private static double[] InitParamsN(int n)
+    {
+        var p = new double[n];
+        uint s = 99u;
+        for (int i = 0; i < n; i++) { s ^= s << 13; s ^= s >> 17; s ^= s << 5; p[i] = ((s & 0xFFFF) / 65535.0 - 0.5); }
+        return p;
+    }
+
+    private static double[] RunAdamLarge(int n)
+    {
+        var opt = new StreamingAdam8Bit<double>(Lr);
+        var p = new Tensor<double>(new[] { n });
+        var init = InitParamsN(n);
+        for (int i = 0; i < n; i++) p[i] = init[i];
+        for (int step = 1; step <= Steps; step++)
+        {
+            var g = GradN(n, step);
+            opt.BeginStep();
+            var gt = new Tensor<double>(new[] { n });
+            for (int i = 0; i < n; i++) gt[i] = g[i];
+            opt.Apply(p, gt);
+            opt.EndStep();
+        }
+        var outArr = new double[n];
+        for (int i = 0; i < n; i++) outArr[i] = p[i];
+        return outArr;
+    }
+
+    // The block loop parallelizes over DISJOINT parameter slices, so for a parameter large enough
+    // to take the parallel path (40000 > the 1<<15 threshold) the result must (a) still track the
+    // fp64 Adam reference within the same tolerance as the small serial case — no drift from a race
+    // — and (b) be perfectly reproducible across runs — no nondeterminism from a race.
+    [Fact]
+    public void Adam_LargeTensor_ParallelBlockLoop_TracksFp64AndIsDeterministic()
+    {
+        const int n = 40000;
+
+        // fp64 reference (independent of the streaming optimizer).
+        var refParam = InitParamsN(n);
+        var m = new double[n];
+        var v = new double[n];
+        for (int step = 1; step <= Steps; step++)
+        {
+            var g = GradN(n, step);
+            double c1 = 1 - Math.Pow(0.9, step), c2 = 1 - Math.Pow(0.999, step);
+            for (int i = 0; i < n; i++)
+            {
+                m[i] = 0.9 * m[i] + 0.1 * g[i];
+                v[i] = 0.999 * v[i] + 0.001 * g[i] * g[i];
+                refParam[i] -= Lr * (m[i] / c1) / (Math.Sqrt(v[i] / c2) + 1e-8);
+            }
+        }
+
+        var run1 = RunAdamLarge(n);
+        double rel = RelL2(run1, refParam);
+        Assert.True(rel < 0.05, $"Adam (parallel block loop, n={n}) drifted from fp64 reference (relL2 {rel:E3} >= 0.05).");
+
+        // Determinism: a second identical run must be bit-for-bit identical (a data race in the
+        // parallel loop would surface here as a mismatch).
+        var run2 = RunAdamLarge(n);
+        for (int i = 0; i < n; i++)
+            Assert.Equal(run1[i], run2[i]);
+    }
 }

@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using AiDotNet.Helpers;
+using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
@@ -213,77 +213,142 @@ internal abstract class BlockQuantizedStreamingOptimizer<T> : IStreamingOptimize
         return update;
     }
 
+    // Only parallelize the block loop when there is enough work to amortize thread
+    // dispatch. Small parameters (biases, norms) stay on the serial, zero-dispatch path.
+    private const int ParallelApplyMinLength = 1 << 15;
+
     private void ApplyBlocks(Tensor<T> param, Tensor<T> grad, QuantizedState state, int length)
     {
         int momentCount = _signedMoments.Length;
-        var previous = _previousMomentValues.AsSpan(0, momentCount);
-        var next = _nextMomentValues.AsSpan(0, momentCount);
 
-        for (int b = 0; b < state.NumBlocks; b++)
+        // Each block updates a DISJOINT parameter/gradient/quantized-state slice, so the
+        // block loop is embarrassingly parallel. The only per-block shared state on the
+        // serial path is the moment scratch — give each worker its own copy and the loop
+        // parallelizes cleanly. The per-element parameter write goes through the tensor
+        // indexer, whose only cross-thread mutation is an Interlocked version bump; writes
+        // land at disjoint indices, so no extra synchronization (or O(n) staging buffer,
+        // which would defeat the memory-bounded design) is needed.
+        if (length < ParallelApplyMinLength || state.NumBlocks < 2 || Environment.ProcessorCount < 2)
         {
-            int start = b * BlockSize;
-            int end = Math.Min(start + BlockSize, length);
-            Array.Clear(_momentMax, 0, _momentMax.Length);
-
-            for (int i = start; i < end; i++)
+            for (int b = 0; b < state.NumBlocks; b++)
             {
-                int local = i - start;
-                for (int m = 0; m < momentCount; m++)
-                {
-                    double value = Dequantize(state, m, i);
-                    _previousMomentValues[m] = value;
-                    _nextMomentValues[m] = value;
-                }
+                ApplyOneBlock(b, param, grad, state, length, momentCount,
+                    _previousMomentValues, _nextMomentValues, _momentScratch, _momentMax);
+            }
+            return;
+        }
 
-                double gradientValue = ToDouble(grad[i]);
-                if (!double.IsNaN(gradientValue) && !double.IsInfinity(gradientValue))
-                {
-                    double parameterValue = ToDouble(param[i]);
-                    double nextParameter = UpdateElement(parameterValue, gradientValue, previous, next, i);
-                    if (!double.IsNaN(nextParameter) && !double.IsInfinity(nextParameter))
-                    {
-                        param[i] = FromDouble(nextParameter);
-                    }
-                }
+        // Force any lazy-graph realization / streaming-weight rehydration ONCE on this
+        // thread, so the parallel workers only ever touch already-materialized storage
+        // (the indexer fast path is then a pure disjoint array read/write).
+        _ = _ops.ToDouble(param[0]);
+        _ = _ops.ToDouble(grad[0]);
 
-                for (int m = 0; m < momentCount; m++)
+        System.Threading.Tasks.Parallel.For(
+            0,
+            state.NumBlocks,
+            () => new BlockScratch(momentCount, BlockSize),
+            (b, _, scratch) =>
+            {
+                ApplyOneBlock(b, param, grad, state, length, momentCount,
+                    scratch.Previous, scratch.Next, scratch.MomentScratch, scratch.MomentMax);
+                return scratch;
+            },
+            _ => { });
+    }
+
+    private void ApplyOneBlock(
+        int b, Tensor<T> param, Tensor<T> grad, QuantizedState state, int length, int momentCount,
+        double[] previous, double[] next, double[][] momentScratch, double[] momentMax)
+    {
+        int start = b * BlockSize;
+        int end = Math.Min(start + BlockSize, length);
+        for (int m = 0; m < momentCount; m++) momentMax[m] = 0.0;
+
+        var previousSpan = previous.AsSpan(0, momentCount);
+        var nextSpan = next.AsSpan(0, momentCount);
+
+        for (int i = start; i < end; i++)
+        {
+            int local = i - start;
+            for (int m = 0; m < momentCount; m++)
+            {
+                double value = Dequantize(state, m, i);
+                previous[m] = value;
+                next[m] = value;
+            }
+
+            double gradientValue = ToDouble(grad[i]);
+            if (!double.IsNaN(gradientValue) && !double.IsInfinity(gradientValue))
+            {
+                double parameterValue = ToDouble(param[i]);
+                double nextParameter = UpdateElement(parameterValue, gradientValue, previousSpan, nextSpan, i);
+                if (!double.IsNaN(nextParameter) && !double.IsInfinity(nextParameter))
                 {
-                    double value = _nextMomentValues[m];
-                    _momentScratch[m][local] = value;
-                    double magnitude = _signedMoments[m] ? Math.Abs(value) : Math.Max(0.0, value);
-                    if (magnitude > _momentMax[m]) _momentMax[m] = magnitude;
+                    param[i] = FromDouble(nextParameter);
                 }
             }
 
             for (int m = 0; m < momentCount; m++)
             {
-                double divisor = _signedMoments[m] ? 127.0 : 255.0;
-                double scale = _momentMax[m] / divisor;
-                if (scale < 1e-10 || double.IsNaN(scale) || double.IsInfinity(scale))
-                    scale = 1e-10;
-                state.Scales[m][b] = scale;
+                double value = next[m];
+                momentScratch[m][local] = value;
+                double magnitude = _signedMoments[m] ? Math.Abs(value) : Math.Max(0.0, value);
+                if (magnitude > momentMax[m]) momentMax[m] = magnitude;
+            }
+        }
 
-                double invScale = 1.0 / scale;
-                for (int i = start; i < end; i++)
+        for (int m = 0; m < momentCount; m++)
+        {
+            double divisor = _signedMoments[m] ? 127.0 : 255.0;
+            double scale = momentMax[m] / divisor;
+            if (scale < 1e-10 || double.IsNaN(scale) || double.IsInfinity(scale))
+                scale = 1e-10;
+            state.Scales[m][b] = scale;
+
+            double invScale = 1.0 / scale;
+            for (int i = start; i < end; i++)
+            {
+                int local = i - start;
+                double value = momentScratch[m][local];
+                if (_signedMoments[m])
                 {
-                    int local = i - start;
-                    double value = _momentScratch[m][local];
-                    if (_signedMoments[m])
-                    {
-                        int q = (int)Math.Round(value * invScale);
-                        if (q < -127) q = -127;
-                        else if (q > 127) q = 127;
-                        state.Quantized[m][i] = (byte)(q + 128);
-                    }
-                    else
-                    {
-                        int q = (int)Math.Round(Math.Max(0.0, value) * invScale);
-                        if (q < 0) q = 0;
-                        else if (q > 255) q = 255;
-                        state.Quantized[m][i] = (byte)q;
-                    }
+                    int q = (int)Math.Round(value * invScale);
+                    if (q < -127) q = -127;
+                    else if (q > 127) q = 127;
+                    state.Quantized[m][i] = (byte)(q + 128);
+                }
+                else
+                {
+                    int q = (int)Math.Round(Math.Max(0.0, value) * invScale);
+                    if (q < 0) q = 0;
+                    else if (q > 255) q = 255;
+                    state.Quantized[m][i] = (byte)q;
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Per-worker moment scratch for the parallel block loop. Each parallel worker owns one
+    /// instance (allocated once per worker via <c>Parallel.For</c> localInit, reused across the
+    /// blocks that worker handles), so no two threads share the requantization scratch.
+    /// </summary>
+    private sealed class BlockScratch
+    {
+        public readonly double[] Previous;
+        public readonly double[] Next;
+        public readonly double[][] MomentScratch;
+        public readonly double[] MomentMax;
+
+        public BlockScratch(int momentCount, int blockSize)
+        {
+            Previous = new double[momentCount];
+            Next = new double[momentCount];
+            MomentMax = new double[momentCount];
+            MomentScratch = new double[momentCount][];
+            for (int m = 0; m < momentCount; m++)
+                MomentScratch[m] = new double[blockSize];
         }
     }
 }
@@ -762,26 +827,16 @@ internal static class StreamingOptimizerResolver<T>
         bool useStreamingDefaults,
         double streamingWeightDecay)
     {
-        string type = useStreamingDefaults ? "DefaultAdam" : optimizer.GetType().FullName ?? optimizer.GetType().Name;
-        object? options = GetOptionsObject(optimizer);
+        if (useStreamingDefaults)
+            return "DefaultAdam|" + streamingWeightDecay;
+
+        StreamingConfig c = Resolve(optimizer, streamingWeightDecay);
         return string.Join("|",
-            type,
-            ReadDouble(options, "Beta1", 0.9),
-            ReadDouble(options, "Beta2", 0.999),
-            ReadDouble(options, "Epsilon", 1e-8),
-            ReadDouble(options, "Decay", 0.9),
-            ReadDouble(options, "Rho", 0.95),
-            ReadDouble(options, "InitialMomentum", ReadDouble(options, "Momentum", 0.9)),
-            ReadDouble(options, "WeightDecay", streamingWeightDecay),
-            ReadDouble(options, "TrustCoefficient", 0.001),
-            ReadDouble(options, "Alpha", 0.005),
-            ReadDouble(options, "Lambda1", 1.0),
-            ReadDouble(options, "Lambda2", 1.0),
-            ReadBool(options, "UseAMSGrad", false),
-            ReadBool(options, "UseNesterov", false),
-            ReadBool(options, "ClipTrustRatio", true),
-            ReadDouble(options, "MaxTrustRatio", 10.0),
-            ReadBool(options, "UseBiasCorrection", true));
+            optimizer.GetType().FullName ?? optimizer.GetType().Name,
+            c.Kind,
+            c.Beta1, c.Beta2, c.Epsilon, c.Decay, c.Rho, c.Momentum, c.WeightDecay,
+            c.TrustCoefficient, c.FtrlAlpha, c.FtrlBeta, c.Lambda1, c.Lambda2, c.MaxTrustRatio,
+            c.UseAMSGrad, c.UseNesterov, c.ClipTrustRatio, c.UseBiasCorrection, c.MemorySize);
     }
 
     public static IStreamingOptimizer<T> Create(
@@ -790,7 +845,6 @@ internal static class StreamingOptimizerResolver<T>
         double fallbackLearningRate,
         double fallbackWeightDecay)
     {
-        object? options = GetOptionsObject(optimizer);
         double lr = useStreamingDefaults ? fallbackLearningRate : ResolveLearningRate(optimizer, fallbackLearningRate);
 
         if (useStreamingDefaults)
@@ -798,50 +852,210 @@ internal static class StreamingOptimizerResolver<T>
             return new StreamingAdam8Bit<T>(lr, weightDecay: fallbackWeightDecay);
         }
 
+        StreamingConfig c = Resolve(optimizer, fallbackWeightDecay);
+        switch (c.Kind)
+        {
+            case StreamingKind.AdamW:
+                return new StreamingAdamW8Bit<T>(lr, c.Beta1, c.Beta2, c.Epsilon, c.WeightDecay);
+            case StreamingKind.AmsGrad:
+                return new StreamingAMSGrad8Bit<T>(lr, c.Beta1, c.Beta2, c.Epsilon, c.WeightDecay);
+            case StreamingKind.Nadam:
+                return new StreamingNadam8Bit<T>(lr, c.Beta1, c.Beta2, c.Epsilon);
+            case StreamingKind.AdaMax:
+                return new StreamingAdaMax8Bit<T>(lr, c.Beta1, c.Beta2, c.Epsilon);
+            case StreamingKind.Lion:
+                return new StreamingLion8Bit<T>(lr, c.Beta1, c.Beta2, c.WeightDecay);
+            case StreamingKind.Lamb:
+                return new StreamingLamb8Bit<T>(lr, c.Beta1, c.Beta2, c.Epsilon, c.WeightDecay, c.ClipTrustRatio, c.MaxTrustRatio, c.UseBiasCorrection);
+            case StreamingKind.Lars:
+                return new StreamingLars8Bit<T>(lr, c.Momentum, c.WeightDecay, c.TrustCoefficient, c.Epsilon, c.UseNesterov);
+            case StreamingKind.Ftrl:
+                return new StreamingFtrl8Bit<T>(c.FtrlAlpha, c.FtrlBeta, c.Lambda1, c.Lambda2);
+            case StreamingKind.Lbfgs:
+                // Second-order: memory-bounded streaming L-BFGS (8-bit-quantized (s,y) history).
+                return new StreamingLBFGS<T>(lr, c.MemorySize);
+            case StreamingKind.AdaDelta:
+                return new StreamingAdaDelta8Bit<T>(lr, c.Rho, c.Epsilon);
+            case StreamingKind.Adagrad:
+                return new StreamingAdagrad8Bit<T>(lr, c.Epsilon);
+            case StreamingKind.RmsProp:
+                return new StreamingRmsProp8Bit<T>(lr, c.Decay, c.Epsilon);
+            case StreamingKind.Momentum:
+                return new StreamingMomentum8Bit<T>(lr, c.Momentum);
+            case StreamingKind.Nesterov:
+                return new StreamingNesterov8Bit<T>(lr, c.Momentum);
+            case StreamingKind.Sgd:
+                return new StreamingSgd8Bit<T>(lr);
+            case StreamingKind.Adam:
+            default:
+                return new StreamingAdam8Bit<T>(lr, c.Beta1, c.Beta2, c.Epsilon, c.WeightDecay);
+        }
+    }
+
+    /// <summary>
+    /// The streaming variant family a configured optimizer maps to.
+    /// </summary>
+    private enum StreamingKind
+    {
+        Sgd, Momentum, Nesterov, RmsProp, Adagrad, AdaDelta,
+        Adam, AdamW, AmsGrad, Nadam, AdaMax, Lion, Lamb, Lars, Ftrl, Lbfgs
+    }
+
+    /// <summary>
+    /// Strongly-typed snapshot of the hyperparameters needed to build (and cache-key) a streaming
+    /// optimizer. Populated once by <see cref="Resolve"/> from each optimizer's typed options, so
+    /// the construction path and the cache key never disagree and never depend on reflection.
+    /// </summary>
+    private struct StreamingConfig
+    {
+        public StreamingKind Kind;
+        public double Beta1;
+        public double Beta2;
+        public double Epsilon;
+        public double Decay;
+        public double Rho;
+        public double Momentum;
+        public double WeightDecay;
+        public double TrustCoefficient;
+        public double FtrlAlpha;
+        public double FtrlBeta;
+        public double Lambda1;
+        public double Lambda2;
+        public double MaxTrustRatio;
+        public bool UseAMSGrad;
+        public bool UseNesterov;
+        public bool ClipTrustRatio;
+        public bool UseBiasCorrection;
+        public int MemorySize;
+    }
+
+    /// <summary>
+    /// Maps a configured optimizer + its strongly-typed options to a <see cref="StreamingConfig"/>.
+    /// Reads each option via the optimizer's public <c>GetOptions()</c> downcast to its concrete
+    /// options type — compile-time-checked property access, no reflection. A renamed option becomes
+    /// a build error here rather than a silently-defaulted hyperparameter.
+    /// </summary>
+    private static StreamingConfig Resolve(
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
+        double defaultWeightDecay)
+    {
         switch (optimizer)
         {
-            case AdamWOptimizer<T, Tensor<T>, Tensor<T>>:
-                if (ReadBool(options, "UseAMSGrad", false))
-                    return new StreamingAMSGrad8Bit<T>(lr, ReadDouble(options, "Beta1", 0.9), ReadDouble(options, "Beta2", 0.999), ReadDouble(options, "Epsilon", 1e-8), ReadDouble(options, "WeightDecay", 0.01));
-                return new StreamingAdamW8Bit<T>(lr, ReadDouble(options, "Beta1", 0.9), ReadDouble(options, "Beta2", 0.999), ReadDouble(options, "Epsilon", 1e-8), ReadDouble(options, "WeightDecay", 0.01));
-            case AdamOptimizer<T, Tensor<T>, Tensor<T>>:
-                if (ReadBool(options, "UseAMSGrad", false))
-                    return new StreamingAMSGrad8Bit<T>(lr, ReadDouble(options, "Beta1", 0.9), ReadDouble(options, "Beta2", 0.999), ReadDouble(options, "Epsilon", 1e-8), fallbackWeightDecay);
-                return new StreamingAdam8Bit<T>(lr, ReadDouble(options, "Beta1", 0.9), ReadDouble(options, "Beta2", 0.999), ReadDouble(options, "Epsilon", 1e-8), fallbackWeightDecay);
-            case AMSGradOptimizer<T, Tensor<T>, Tensor<T>>:
-                return new StreamingAMSGrad8Bit<T>(lr, ReadDouble(options, "Beta1", 0.9), ReadDouble(options, "Beta2", 0.999), ReadDouble(options, "Epsilon", 1e-8), 0.0);
-            case NadamOptimizer<T, Tensor<T>, Tensor<T>>:
-                return new StreamingNadam8Bit<T>(lr, ReadDouble(options, "Beta1", 0.9), ReadDouble(options, "Beta2", 0.999), ReadDouble(options, "Epsilon", 1e-8));
-            case AdaMaxOptimizer<T, Tensor<T>, Tensor<T>>:
-                return new StreamingAdaMax8Bit<T>(lr, ReadDouble(options, "Beta1", 0.9), ReadDouble(options, "Beta2", 0.999), ReadDouble(options, "Epsilon", 1e-8));
-            case LionOptimizer<T, Tensor<T>, Tensor<T>>:
-                return new StreamingLion8Bit<T>(lr, ReadDouble(options, "Beta1", 0.9), ReadDouble(options, "Beta2", 0.99), ReadDouble(options, "WeightDecay", 0.0));
-            case LAMBOptimizer<T, Tensor<T>, Tensor<T>>:
-                return new StreamingLamb8Bit<T>(lr, ReadDouble(options, "Beta1", 0.9), ReadDouble(options, "Beta2", 0.999), ReadDouble(options, "Epsilon", 1e-6), ReadDouble(options, "WeightDecay", 0.01), ReadBool(options, "ClipTrustRatio", true), ReadDouble(options, "MaxTrustRatio", 10.0), ReadBool(options, "UseBiasCorrection", true));
-            case LARSOptimizer<T, Tensor<T>, Tensor<T>>:
-                return new StreamingLars8Bit<T>(lr, ReadDouble(options, "Momentum", 0.9), ReadDouble(options, "WeightDecay", 1e-4), ReadDouble(options, "TrustCoefficient", 0.001), ReadDouble(options, "Epsilon", 1e-8), ReadBool(options, "UseNesterov", false));
-            case FTRLOptimizer<T, Tensor<T>, Tensor<T>>:
-                return new StreamingFtrl8Bit<T>(ReadDouble(options, "Alpha", lr), ReadDouble(options, "Beta", 1.0), ReadDouble(options, "Lambda1", 1.0), ReadDouble(options, "Lambda2", 1.0));
-            case LBFGSOptimizer<T, Tensor<T>, Tensor<T>>:
-                // Second-order: memory-bounded streaming L-BFGS (8-bit-quantized (s,y) history).
-                return new StreamingLBFGS<T>(lr, (int)ReadDouble(options, "MemorySize", 10.0));
-            case AdaDeltaOptimizer<T, Tensor<T>, Tensor<T>>:
-                return new StreamingAdaDelta8Bit<T>(lr, ReadDouble(options, "Rho", 0.95), ReadDouble(options, "Epsilon", 1e-6));
-            case AdagradOptimizer<T, Tensor<T>, Tensor<T>>:
-                return new StreamingAdagrad8Bit<T>(lr, ReadDouble(options, "Epsilon", 1e-8));
-            case RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>:
-                return new StreamingRmsProp8Bit<T>(lr, ReadDouble(options, "Decay", 0.9), ReadDouble(options, "Epsilon", 1e-8));
-            case MomentumOptimizer<T, Tensor<T>, Tensor<T>>:
-                return new StreamingMomentum8Bit<T>(lr, ReadDouble(options, "InitialMomentum", 0.9));
-            case NesterovAcceleratedGradientOptimizer<T, Tensor<T>, Tensor<T>>:
-                return new StreamingNesterov8Bit<T>(lr, ReadDouble(options, "InitialMomentum", 0.9));
+            case AdamWOptimizer<T, Tensor<T>, Tensor<T>> o:
+            {
+                var opt = (AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>)o.GetOptions();
+                return new StreamingConfig
+                {
+                    Kind = opt.UseAMSGrad ? StreamingKind.AmsGrad : StreamingKind.AdamW,
+                    Beta1 = opt.Beta1, Beta2 = opt.Beta2, Epsilon = opt.Epsilon,
+                    WeightDecay = opt.WeightDecay, UseAMSGrad = opt.UseAMSGrad,
+                };
+            }
+            case AdamOptimizer<T, Tensor<T>, Tensor<T>> o:
+            {
+                var opt = (AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>)o.GetOptions();
+                return new StreamingConfig
+                {
+                    Kind = opt.UseAMSGrad ? StreamingKind.AmsGrad : StreamingKind.Adam,
+                    Beta1 = opt.Beta1, Beta2 = opt.Beta2, Epsilon = opt.Epsilon,
+                    WeightDecay = defaultWeightDecay, UseAMSGrad = opt.UseAMSGrad,
+                };
+            }
+            case AMSGradOptimizer<T, Tensor<T>, Tensor<T>> o:
+            {
+                var opt = (AMSGradOptimizerOptions<T, Tensor<T>, Tensor<T>>)o.GetOptions();
+                return new StreamingConfig
+                {
+                    Kind = StreamingKind.AmsGrad,
+                    Beta1 = opt.Beta1, Beta2 = opt.Beta2, Epsilon = opt.Epsilon,
+                    WeightDecay = 0.0, UseAMSGrad = true,
+                };
+            }
+            case NadamOptimizer<T, Tensor<T>, Tensor<T>> o:
+            {
+                var opt = (NadamOptimizerOptions<T, Tensor<T>, Tensor<T>>)o.GetOptions();
+                return new StreamingConfig { Kind = StreamingKind.Nadam, Beta1 = opt.Beta1, Beta2 = opt.Beta2, Epsilon = opt.Epsilon };
+            }
+            case AdaMaxOptimizer<T, Tensor<T>, Tensor<T>> o:
+            {
+                var opt = (AdaMaxOptimizerOptions<T, Tensor<T>, Tensor<T>>)o.GetOptions();
+                return new StreamingConfig { Kind = StreamingKind.AdaMax, Beta1 = opt.Beta1, Beta2 = opt.Beta2, Epsilon = opt.Epsilon };
+            }
+            case LionOptimizer<T, Tensor<T>, Tensor<T>> o:
+            {
+                var opt = (LionOptimizerOptions<T, Tensor<T>, Tensor<T>>)o.GetOptions();
+                return new StreamingConfig { Kind = StreamingKind.Lion, Beta1 = opt.Beta1, Beta2 = opt.Beta2, WeightDecay = opt.WeightDecay };
+            }
+            case LAMBOptimizer<T, Tensor<T>, Tensor<T>> o:
+            {
+                var opt = (LAMBOptimizerOptions<T, Tensor<T>, Tensor<T>>)o.GetOptions();
+                return new StreamingConfig
+                {
+                    Kind = StreamingKind.Lamb,
+                    Beta1 = opt.Beta1, Beta2 = opt.Beta2, Epsilon = opt.Epsilon, WeightDecay = opt.WeightDecay,
+                    ClipTrustRatio = opt.ClipTrustRatio, MaxTrustRatio = opt.MaxTrustRatio, UseBiasCorrection = opt.UseBiasCorrection,
+                };
+            }
+            case LARSOptimizer<T, Tensor<T>, Tensor<T>> o:
+            {
+                var opt = (LARSOptimizerOptions<T, Tensor<T>, Tensor<T>>)o.GetOptions();
+                return new StreamingConfig
+                {
+                    Kind = StreamingKind.Lars,
+                    Momentum = opt.Momentum, WeightDecay = opt.WeightDecay, TrustCoefficient = opt.TrustCoefficient,
+                    Epsilon = opt.Epsilon, UseNesterov = opt.UseNesterov,
+                };
+            }
+            case FTRLOptimizer<T, Tensor<T>, Tensor<T>> o:
+            {
+                var opt = (FTRLOptimizerOptions<T, Tensor<T>, Tensor<T>>)o.GetOptions();
+                return new StreamingConfig
+                {
+                    Kind = StreamingKind.Ftrl,
+                    FtrlAlpha = opt.Alpha, FtrlBeta = opt.Beta, Lambda1 = opt.Lambda1, Lambda2 = opt.Lambda2,
+                };
+            }
+            case LBFGSOptimizer<T, Tensor<T>, Tensor<T>> o:
+            {
+                var opt = (LBFGSOptimizerOptions<T, Tensor<T>, Tensor<T>>)o.GetOptions();
+                return new StreamingConfig { Kind = StreamingKind.Lbfgs, MemorySize = opt.MemorySize };
+            }
+            case AdaDeltaOptimizer<T, Tensor<T>, Tensor<T>> o:
+            {
+                var opt = (AdaDeltaOptimizerOptions<T, Tensor<T>, Tensor<T>>)o.GetOptions();
+                return new StreamingConfig { Kind = StreamingKind.AdaDelta, Rho = opt.Rho, Epsilon = opt.Epsilon };
+            }
+            case AdagradOptimizer<T, Tensor<T>, Tensor<T>> o:
+            {
+                var opt = (AdagradOptimizerOptions<T, Tensor<T>, Tensor<T>>)o.GetOptions();
+                return new StreamingConfig { Kind = StreamingKind.Adagrad, Epsilon = opt.Epsilon };
+            }
+            case RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>> o:
+            {
+                var opt = (RootMeanSquarePropagationOptimizerOptions<T, Tensor<T>, Tensor<T>>)o.GetOptions();
+                return new StreamingConfig { Kind = StreamingKind.RmsProp, Decay = opt.Decay, Epsilon = opt.Epsilon };
+            }
+            case MomentumOptimizer<T, Tensor<T>, Tensor<T>> o:
+            {
+                var opt = (MomentumOptimizerOptions<T, Tensor<T>, Tensor<T>>)o.GetOptions();
+                return new StreamingConfig { Kind = StreamingKind.Momentum, Momentum = opt.InitialMomentum };
+            }
+            case NesterovAcceleratedGradientOptimizer<T, Tensor<T>, Tensor<T>> o:
+            {
+                var opt = (NesterovAcceleratedGradientOptimizerOptions<T, Tensor<T>, Tensor<T>>)o.GetOptions();
+                return new StreamingConfig { Kind = StreamingKind.Nesterov, Momentum = opt.InitialMomentum };
+            }
             case GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>:
             case StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>:
             case MiniBatchGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>:
             case ProximalGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>:
-                return new StreamingSgd8Bit<T>(lr);
+                return new StreamingConfig { Kind = StreamingKind.Sgd };
             default:
-                return new StreamingAdam8Bit<T>(fallbackLearningRate, weightDecay: fallbackWeightDecay);
+                return new StreamingConfig
+                {
+                    Kind = StreamingKind.Adam,
+                    Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, WeightDecay = defaultWeightDecay,
+                };
         }
     }
 
@@ -869,52 +1083,5 @@ internal static class StreamingOptimizerResolver<T>
         }
 
         return fallbackLearningRate;
-    }
-
-    private static object? GetOptionsObject(object optimizer)
-    {
-        Type? type = optimizer.GetType();
-        while (type is not null)
-        {
-            foreach (var field in type.GetFields(BindingFlags.Instance | BindingFlags.NonPublic))
-            {
-                if (!field.Name.Contains("options", StringComparison.OrdinalIgnoreCase))
-                    continue;
-                object? value = field.GetValue(optimizer);
-                if (value is not null)
-                    return value;
-            }
-
-            type = type.BaseType;
-        }
-
-        return null;
-    }
-
-    private static double ReadDouble(object? options, string propertyName, double fallback)
-    {
-        object? value = ReadProperty(options, propertyName);
-        if (value is null) return fallback;
-        try
-        {
-            return Convert.ToDouble(value);
-        }
-        catch
-        {
-            return fallback;
-        }
-    }
-
-    private static bool ReadBool(object? options, string propertyName, bool fallback)
-    {
-        object? value = ReadProperty(options, propertyName);
-        return value is bool b ? b : fallback;
-    }
-
-    private static object? ReadProperty(object? options, string propertyName)
-    {
-        if (options is null) return null;
-        var property = options.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public);
-        return property?.GetValue(options);
     }
 }
