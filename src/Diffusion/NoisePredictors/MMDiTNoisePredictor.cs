@@ -1146,7 +1146,25 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
             contextDim: _contextDim,
             mlpRatio: _mlpRatio);
 
-        clone.SetParameters(GetParameters());
+        // The LazyDense weights resolve+allocate through the FORWARD path
+        // (EnsureInitializedFromInput) — a different entry than the SetParameters/GetParameters
+        // path (EnsureInitialized). Copying parameters into a clone whose layers were never
+        // forwarded leaves its first real forward to re-resolve and RNG-initialize along the
+        // forward path, discarding the copied values and diverging from the source. Run one
+        // throwaway forward to materialize the clone through the same path the source used,
+        // THEN copy the source's weights so they persist. Gated on the source having been
+        // forwarded (a never-forwarded foundation-scale model has nothing materialized to copy
+        // and must not pay a full forward here).
+        if (_patchEmbed.IsInitialized)
+        {
+            int probeSpatial = _patchSize * 2;
+            var probe = new Tensor<T>(new[] { 1, _inputChannels, probeSpatial, probeSpatial });
+            clone.PredictNoise(probe, timestep: 0, conditioning: null);
+            clone.SetParameters(GetParameters());
+            // The probe forward traced a compiled plan over the clone's random init; drop it so
+            // the next real forward re-traces against the copied weights.
+            clone.InvalidateCompiledPlans();
+        }
         return clone;
     }
 
