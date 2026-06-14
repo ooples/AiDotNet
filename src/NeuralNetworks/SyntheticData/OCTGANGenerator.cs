@@ -80,7 +80,11 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly OCTGANOptions<T> _options;
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    // Separate G/D optimizers (see CTGANGenerator for the divergence rationale).
+    // Both training steps route through TapeStepOver, which now takes the optimizer
+    // so the generator and discriminator never share Adam moment state.
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _generatorOptimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _discriminatorOptimizer;
     private ILossFunction<T> _lossFunction;
 
     // Synthetic tabular data infrastructure
@@ -142,7 +146,17 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     {
         _options = options ?? new OCTGANOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        AdamOptimizer<T, Tensor<T>, Tensor<T>> MakeAdam() =>
+            new(this, new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = 0.5,
+                Beta2 = 0.9,
+                UseAdaptiveLearningRate = false,
+                UseAMSGrad = false,
+            });
+        _generatorOptimizer = optimizer ?? MakeAdam();
+        _discriminatorOptimizer = MakeAdam();
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
@@ -524,7 +538,7 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             var fakeRow = GeneratorForward(noise);
             var fakeEmb = DiscriminatorForward(fakeRow, isTraining: true);
             var loss = Engine.TensorSubtract(SvddDistSq(realEmb), SvddDistSq(fakeEmb));
-            TapeStepOver(tape, loss, BuildDiscriminatorLayerList());
+            TapeStepOver(tape, loss, BuildDiscriminatorLayerList(), _discriminatorOptimizer);
         }
         ClipWeights(BuildDiscriminatorLayerList());
     }
@@ -539,7 +553,7 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             var fakeRow = GeneratorForward(noise);
             var fakeEmb = DiscriminatorForward(fakeRow, isTraining: false);
             var loss = SvddDistSq(fakeEmb);
-            TapeStepOver(tape, loss, BuildGeneratorLayerList());
+            TapeStepOver(tape, loss, BuildGeneratorLayerList(), _generatorOptimizer);
         }
     }
 
@@ -745,7 +759,7 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             var flatOut = output.Rank == 1 ? output : Engine.Reshape(output, new[] { output.Length });
             var target = expectedOutput.Rank == 1 ? expectedOutput : Engine.Reshape(expectedOutput, new[] { expectedOutput.Length });
             var loss = ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(flatOut, target)));
-            TapeStepOver(tape, loss, BuildGeneratorLayerList());
+            TapeStepOver(tape, loss, BuildGeneratorLayerList(), _generatorOptimizer);
         }
         finally { SetTrainingMode(false); }
     }
@@ -817,7 +831,7 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     /// <inheritdoc />
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new OCTGANGenerator<T>(Architecture, _options, _optimizer, _lossFunction);
+        return new OCTGANGenerator<T>(Architecture, _options, _generatorOptimizer, _lossFunction);
     }
 
     #endregion
@@ -825,7 +839,8 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
     #region Tape Step Helpers
 
-    private void TapeStepOver(GradientTape<T> tape, Tensor<T> loss, IReadOnlyList<ILayer<T>> layers)
+    private void TapeStepOver(GradientTape<T> tape, Tensor<T> loss, IReadOnlyList<ILayer<T>> layers,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
     {
         var trainable = Training.TapeTrainingStep<T>.CollectParameters(layers);
         if (trainable.Count == 0) return;
@@ -833,7 +848,7 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
         LastLoss = lossValue;
         var ctx = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(trainable, grads, lossValue);
-        _optimizer.Step(ctx);
+        optimizer.Step(ctx);
     }
 
     private Tensor<T> ReduceToScalar(Tensor<T> t)

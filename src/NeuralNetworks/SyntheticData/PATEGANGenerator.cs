@@ -90,7 +90,14 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly PATEGANOptions<T> _options;
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    // One dedicated optimizer per sub-network (Jordon et al. 2019 PATE-GAN trains
+    // NumTeachers teacher discriminators + one student + one generator). See
+    // CTGANGenerator: a single shared AdamOptimizer corrupts its flat moment buffer
+    // across networks of different parameter counts. Each teacher is its own
+    // network, so it gets its own optimizer in the array.
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _generatorOptimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _studentOptimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>[] _teacherOptimizers = System.Array.Empty<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>();
     private ILossFunction<T> _lossFunction;
 
     // Synthetic tabular data infrastructure
@@ -163,7 +170,19 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     {
         _options = options ?? new PATEGANOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        AdamOptimizer<T, Tensor<T>, Tensor<T>> MakeAdam() =>
+            new(this, new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = 0.5,
+                Beta2 = 0.9,
+                UseAdaptiveLearningRate = false,
+                UseAMSGrad = false,
+            });
+        _generatorOptimizer = optimizer ?? MakeAdam();
+        _studentOptimizer = MakeAdam();
+        _teacherOptimizers = new IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>[Math.Max(1, _options.NumTeachers)];
+        for (int t = 0; t < _teacherOptimizers.Length; t++) _teacherOptimizers[t] = MakeAdam();
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
@@ -547,7 +566,7 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
                 var fakeData = GeneratorForward(noise);
                 var fakeScore = TeacherForward(teacherIdx, fakeData);
                 var loss = Engine.TensorAdd(BceLoss(realScore, 1.0), BceLoss(fakeScore, 0.0));
-                TapeStepOver(tape, loss, BuildTeacherLayerList(teacherIdx));
+                TapeStepOver(tape, loss, BuildTeacherLayerList(teacherIdx), _teacherOptimizers[teacherIdx % _teacherOptimizers.Length]);
             }
         }
     }
@@ -568,7 +587,7 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
             var fakeScore = StudentForward(VectorToTensor(fakeVector), isTraining: true);
             var realScore = StudentForward(VectorToTensor(realSample), isTraining: true);
             var loss = Engine.TensorAdd(BceLoss(fakeScore, fakeLabel), BceLoss(realScore, realLabel));
-            TapeStepOver(tape, loss, BuildStudentLayerList());
+            TapeStepOver(tape, loss, BuildStudentLayerList(), _studentOptimizer);
         }
     }
 
@@ -581,7 +600,7 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
             var fakeData = GeneratorForward(noise);
             var studentScore = StudentForward(fakeData, isTraining: true);
             var loss = BceLoss(studentScore, 1.0);
-            TapeStepOver(tape, loss, BuildGeneratorLayerList());
+            TapeStepOver(tape, loss, BuildGeneratorLayerList(), _generatorOptimizer);
         }
     }
 
@@ -632,7 +651,8 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
 
     #region Tape Step Helpers
 
-    private void TapeStepOver(GradientTape<T> tape, Tensor<T> loss, IReadOnlyList<ILayer<T>> layers)
+    private void TapeStepOver(GradientTape<T> tape, Tensor<T> loss, IReadOnlyList<ILayer<T>> layers,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
     {
         var trainable = Training.TapeTrainingStep<T>.CollectParameters(layers);
         if (trainable.Count == 0) return;
@@ -640,7 +660,7 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
         LastLoss = lossValue;
         var ctx = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(trainable, grads, lossValue);
-        _optimizer.Step(ctx);
+        optimizer.Step(ctx);
     }
 
     private Tensor<T> ReduceToScalar(Tensor<T> t)
@@ -901,7 +921,7 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
             var flatOut = output.Rank == 1 ? output : Engine.Reshape(output, new[] { output.Length });
             var target = expectedOutput.Rank == 1 ? expectedOutput : Engine.Reshape(expectedOutput, new[] { expectedOutput.Length });
             var loss = ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(flatOut, target)));
-            TapeStepOver(tape, loss, BuildGeneratorLayerList());
+            TapeStepOver(tape, loss, BuildGeneratorLayerList(), _generatorOptimizer);
         }
         finally
         {
@@ -974,7 +994,7 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     /// <inheritdoc />
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new PATEGANGenerator<T>(Architecture, _options, _optimizer, _lossFunction);
+        return new PATEGANGenerator<T>(Architecture, _options, _generatorOptimizer, _lossFunction);
     }
 
     #endregion

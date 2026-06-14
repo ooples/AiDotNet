@@ -182,6 +182,20 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     private readonly object _initLock = new();
 
     /// <summary>
+    /// Whether this predictor's lazy weight tensors have been materialized yet
+    /// (i.e. a forward pass, <see cref="GetParameters"/>, or
+    /// <see cref="SetParameters"/> has run). While <c>false</c> the predictor
+    /// holds no resident weights — its parameters are fully determined by its
+    /// construction config — so a clone can be produced by re-running the same
+    /// construction rather than copying a flat parameter vector. That matters
+    /// for foundation-scale configs (e.g. WanVideo-14B ≈ 15 B params) where the
+    /// flat <see cref="Vector{T}"/> copy path is both int.MaxValue-bounded and
+    /// far larger than host RAM. Callers that need a true deep copy of resolved
+    /// weights use <see cref="CopyParametersFrom"/> instead.
+    /// </summary>
+    public bool AreLayersInitialized => _layersInitialized;
+
+    /// <summary>
     /// Position embeddings (learnable).
     /// </summary>
     private Tensor<T>? _posEmbed;
@@ -473,21 +487,33 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
         EnsureLayersInitialized();
+        // Engage transparent weight streaming for foundation-scale predictors
+        // BEFORE the forward resolves lazy weights, so they allocate through the
+        // disk-backed pool. No-op below threshold or when the registry is busy.
+        MaybeEngageWeightStreaming();
         _lastInput = noisySample;
 
         // Get timestep embedding
         var timeEmbed = GetTimestepEmbedding(timestep);
         timeEmbed = ProjectTimeEmbedding(timeEmbed);
 
-        return Forward(noisySample, timeEmbed, conditioning);
+        var result = Forward(noisySample, timeEmbed, conditioning);
+        // Drop the now-resolved weights to the pool; from the next forward on the
+        // denoising loop runs against a bounded resident set (auto-rehydrate +
+        // owner-drop). No-op unless streaming engaged above.
+        RegisterResolvedStreamingWeights();
+        return result;
     }
 
     /// <inheritdoc />
     public override Tensor<T> PredictNoiseWithEmbedding(Tensor<T> noisySample, Tensor<T> timeEmbedding, Tensor<T>? conditioning = null)
     {
         EnsureLayersInitialized();
+        MaybeEngageWeightStreaming();
         _lastInput = noisySample;
-        return Forward(noisySample, timeEmbedding, conditioning);
+        var result = Forward(noisySample, timeEmbedding, conditioning);
+        RegisterResolvedStreamingWeights();
+        return result;
     }
 
     /// <summary>
@@ -1266,11 +1292,78 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             mlpRatio: _mlpRatio,
             latentSpatialSize: _latentSpatialSize);
 
-        // Preserve trained/materialized weights without forcing a foundation-scale
-        // default constructor to allocate and copy billions of random parameters.
+        // Preserve trained/materialized weights without forcing a foundation-scale default
+        // constructor to allocate and copy billions of random parameters (HasMaterializedParameters
+        // gates the copy to a source that genuinely has allocated weights).
+        //
+        // The DiT's projection layers are LazyDense — they only ALLOCATE their weight tensors on
+        // the first forward, not in EnsureLayersInitialized. A fresh clone therefore has the layer
+        // STRUCTURE but unallocated weights, so CopyParametersFrom alone has nothing to copy INTO;
+        // the clone would re-initialize those tensors with a fresh RNG on its first real forward
+        // and diverge from the source (observed: ~50k fewer materialized params, divergent Predict).
+        // Run one throwaway forward at the canonical input shape to materialize EVERY weight tensor
+        // on the clone first (weight dims are fixed by config, so the probe's spatial size is
+        // irrelevant), then copy the source's trained values. The probe must materialize exactly the
+        // paths the source has materialized so CopyParametersFrom finds a target for every source
+        // weight. A null-conditioned probe only touches the unconditional path, so if the source was
+        // used WITH conditioning its class-embedding (_labelEmbed) and/or cross-attention K/V/Out
+        // projections are materialized — leaving the clone's equivalents lazy would let them re-init
+        // with fresh RNG on the first conditioned forward and diverge from the source.
+        // BuildProbeConditioning returns representative conditioning whenever a conditioned path is
+        // materialized on the source (and null otherwise, keeping those layers lazy on both).
         if (HasMaterializedParameters())
+        {
+            var probe = new Tensor<T>(new[] { 1, _inputChannels, _latentSpatialSize, _latentSpatialSize });
+            clone.PredictNoise(probe, timestep: 0, conditioning: BuildProbeConditioning());
             clone.CopyParametersFrom(this);
+            // The probe forward traced a compiled plan over the clone's random init; drop it so
+            // the next real forward re-traces against the copied weights.
+            clone.InvalidateCompiledPlans();
+        }
+        // else: source has no materialized weights — nothing to copy. The clone shares the same
+        // config and initializes lazily on first use; calling GetParameters() here would allocate
+        // the full (foundation-scale) parameter vector for nothing.
         return clone;
+    }
+
+    /// <summary>
+    /// Builds a representative conditioning tensor for the <see cref="Clone"/> probe forward,
+    /// matching whichever conditioned path the source has materialized so that path is allocated on
+    /// the clone before <see cref="CopyParametersFrom"/> runs. Returns <c>null</c> when no conditioned
+    /// path is materialized — the source's conditioned layers are lazy, so the clone's stay lazy too.
+    /// </summary>
+    private Tensor<T>? BuildProbeConditioning()
+    {
+        // Class-conditional DiT: a one-hot [1, numClasses] label materializes _labelEmbed.
+        if (_numClasses > 0 && _labelEmbed is { IsInitialized: true })
+        {
+            return new Tensor<T>(new[] { 1, _numClasses });
+        }
+
+        // Text/cross-attention DiT: a [1, 1, contextDim] context tensor materializes the per-block
+        // cross-attention K/V/Out projections.
+        if (_contextDim > 0 && HasMaterializedCrossAttention())
+        {
+            return new Tensor<T>(new[] { 1, 1, _contextDim });
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// True when any transformer block's cross-attention key projection has materialized its weights,
+    /// i.e. the source ran at least one conditioned (text/context) forward.
+    /// </summary>
+    private bool HasMaterializedCrossAttention()
+    {
+        foreach (var block in _blocks)
+        {
+            if (block.CrossAttnK is { IsInitialized: true })
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// <inheritdoc />
