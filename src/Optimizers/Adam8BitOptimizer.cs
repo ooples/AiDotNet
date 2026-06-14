@@ -1,6 +1,7 @@
 using AiDotNet.Helpers;
 using System.Collections.Concurrent;
 using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
 
 using AiDotNet.Attributes;
@@ -117,11 +118,6 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     private int _parameterLength;
 
     /// <summary>
-    /// Random number generator for stochastic rounding.
-    /// </summary>
-    private readonly Random _random;
-
-    /// <summary>
     /// Initializes a new instance of the Adam8BitOptimizer class.
     /// </summary>
     /// <param name="model">The model to optimize.</param>
@@ -140,7 +136,6 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         _options = options ?? new();
         _currentBeta1 = NumOps.Zero;
         _currentBeta2 = NumOps.Zero;
-        _random = RandomHelper.CreateSeededRandom(42);
 
         InitializeAdaptiveParameters();
     }
@@ -203,10 +198,17 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// <param name="isSigned">Whether to use signed quantization (for m) or unsigned (for v).</param>
     private void Quantize(Vector<T> values, Vector<byte> quantized, Vector<double> scales, bool isSigned)
     {
-        for (int b = 0; b < _numBlocks; b++)
+        // Blocks are independent (disjoint slices + own scale[b]) — parallelize.
+        // Stochastic rounding uses RandomHelper.ThreadSafeRandom (per-thread
+        // LockedRandom) so it stays thread-safe; exact seed reproducibility can't
+        // survive parallel work-stealing regardless, and the default path is
+        // deterministic round-to-nearest (UseStochasticRounding == false).
+        int blockSize = _options.BlockSize;
+        int length = _parameterLength;
+        CpuParallelSettings.ParallelForOrSerial(0, _numBlocks, (long)length, b =>
         {
-            int blockStart = b * _options.BlockSize;
-            int blockEnd = Math.Min(blockStart + _options.BlockSize, _parameterLength);
+            int blockStart = b * blockSize;
+            int blockEnd = Math.Min(blockStart + blockSize, length);
 
             // Find the scale for this block
             double maxAbs = 0;
@@ -249,7 +251,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 {
                     double floor = Math.Floor(scaled);
                     double frac = scaled - floor;
-                    quantizedVal = (int)(floor + (_random.NextDouble() < frac ? 1 : 0));
+                    quantizedVal = (int)(floor + (RandomHelper.ThreadSafeRandom.NextDouble() < frac ? 1 : 0));
                 }
                 else
                 {
@@ -268,7 +270,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                     quantized[i] = (byte)quantizedVal;
                 }
             }
-        }
+        });
     }
 
     /// <summary>
@@ -282,10 +284,14 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     {
         var result = new Vector<T>(_parameterLength);
 
-        for (int b = 0; b < _numBlocks; b++)
+        // Blocks are independent (disjoint slices + own scale) — parallelize over
+        // them; the grain gate keeps small parameters serial.
+        int blockSize = _options.BlockSize;
+        int length = _parameterLength;
+        CpuParallelSettings.ParallelForOrSerial(0, _numBlocks, (long)length, b =>
         {
-            int blockStart = b * _options.BlockSize;
-            int blockEnd = Math.Min(blockStart + _options.BlockSize, _parameterLength);
+            int blockStart = b * blockSize;
+            int blockEnd = Math.Min(blockStart + blockSize, length);
             double scale = scales[b];
 
             for (int i = blockStart; i < blockEnd; i++)
@@ -302,7 +308,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
 
                 result[i] = NumOps.FromDouble(quantizedVal * scale);
             }
-        }
+        });
 
         return result;
     }
@@ -727,80 +733,80 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         int blockSize = _options.BlockSize;
         int totalLength = values.Length;
 
-        // Reuse a single rented buffer across all blocks for the percentile
-        // path. Previously each block allocated a fresh List<double> and
-        // fully sorted it — at default QuantizationPercentile=99.9 with a
-        // foundation-scale model (300 M params, blockSize=64 → ~4.7 M
-        // blocks per Step) this was the dominant allocator hotspot. ArrayPool
-        // amortizes the allocation across the whole tensor; we still pay a
-        // sort per block but no GC pressure for the buffer itself.
-        double[]? rentedBuffer = null;
-        try
-        {
-        for (int b = 0; b < numBlocks; b++)
-        {
-            int blockStart = b * blockSize;
-            int blockEnd = Math.Min(blockStart + blockSize, totalLength);
-
-            double maxAbs = 0;
-            if (_options.QuantizationPercentile >= 100)
+        // Blocks are independent — parallelize over them (grain-gated for small
+        // tensors). The percentile path needs a per-block sort scratch; rather
+        // than allocate one List per block (the dominant allocator hotspot at
+        // foundation scale), each worker lazily rents ONE ArrayPool buffer via
+        // localInit and reuses it across the blocks it processes, returning it in
+        // localFinally. Stochastic rounding uses the thread-safe per-thread RNG.
+        CpuParallelSettings.ParallelForOrSerial<double[]?>(
+            0, numBlocks, (long)totalLength,
+            () => null,
+            (b, _, rentedBuffer) =>
             {
+                int blockStart = b * blockSize;
+                int blockEnd = Math.Min(blockStart + blockSize, totalLength);
+
+                double maxAbs = 0;
+                if (_options.QuantizationPercentile >= 100)
+                {
+                    for (int i = blockStart; i < blockEnd; i++)
+                    {
+                        double val = Math.Abs(NumOps.ToDouble(values[i]));
+                        if (val > maxAbs) maxAbs = val;
+                    }
+                }
+                else
+                {
+                    int blockLen = blockEnd - blockStart;
+                    rentedBuffer ??= System.Buffers.ArrayPool<double>.Shared.Rent(blockSize);
+                    for (int i = 0; i < blockLen; i++)
+                        rentedBuffer[i] = Math.Abs(NumOps.ToDouble(values[blockStart + i]));
+                    Array.Sort(rentedBuffer, 0, blockLen);
+                    int percentileIdx = (int)((blockLen - 1) * _options.QuantizationPercentile / 100.0);
+                    maxAbs = rentedBuffer[percentileIdx];
+                }
+
+                double scale = maxAbs / (isSigned ? 127.0 : 255.0);
+                if (scale < 1e-10) scale = 1e-10;
+                scales[b] = scale;
+
                 for (int i = blockStart; i < blockEnd; i++)
                 {
-                    double val = Math.Abs(NumOps.ToDouble(values[i]));
-                    if (val > maxAbs) maxAbs = val;
+                    double val = NumOps.ToDouble(values[i]);
+                    double scaled = val / scale;
+
+                    int quantizedVal;
+                    if (_options.UseStochasticRounding)
+                    {
+                        double floor = Math.Floor(scaled);
+                        double frac = scaled - floor;
+                        quantizedVal = (int)(floor + (RandomHelper.ThreadSafeRandom.NextDouble() < frac ? 1 : 0));
+                    }
+                    else
+                    {
+                        quantizedVal = (int)Math.Round(scaled);
+                    }
+
+                    if (isSigned)
+                    {
+                        quantizedVal = MathHelper.Clamp(quantizedVal, -127, 127);
+                        quantized[i] = (byte)(quantizedVal + 128);
+                    }
+                    else
+                    {
+                        quantizedVal = MathHelper.Clamp(quantizedVal, 0, 255);
+                        quantized[i] = (byte)quantizedVal;
+                    }
                 }
-            }
-            else
+
+                return rentedBuffer;
+            },
+            rentedBuffer =>
             {
-                int blockLen = blockEnd - blockStart;
-                rentedBuffer ??= System.Buffers.ArrayPool<double>.Shared.Rent(blockSize);
-                for (int i = 0; i < blockLen; i++)
-                    rentedBuffer[i] = Math.Abs(NumOps.ToDouble(values[blockStart + i]));
-                Array.Sort(rentedBuffer, 0, blockLen);
-                int percentileIdx = (int)((blockLen - 1) * _options.QuantizationPercentile / 100.0);
-                maxAbs = rentedBuffer[percentileIdx];
-            }
-
-            double scale = maxAbs / (isSigned ? 127.0 : 255.0);
-            if (scale < 1e-10) scale = 1e-10;
-            scales[b] = scale;
-
-            for (int i = blockStart; i < blockEnd; i++)
-            {
-                double val = NumOps.ToDouble(values[i]);
-                double scaled = val / scale;
-
-                int quantizedVal;
-                if (_options.UseStochasticRounding)
-                {
-                    double floor = Math.Floor(scaled);
-                    double frac = scaled - floor;
-                    quantizedVal = (int)(floor + (_random.NextDouble() < frac ? 1 : 0));
-                }
-                else
-                {
-                    quantizedVal = (int)Math.Round(scaled);
-                }
-
-                if (isSigned)
-                {
-                    quantizedVal = MathHelper.Clamp(quantizedVal, -127, 127);
-                    quantized[i] = (byte)(quantizedVal + 128);
-                }
-                else
-                {
-                    quantizedVal = MathHelper.Clamp(quantizedVal, 0, 255);
-                    quantized[i] = (byte)quantizedVal;
-                }
-            }
-        }
-        }
-        finally
-        {
-            if (rentedBuffer is not null)
-                System.Buffers.ArrayPool<double>.Shared.Return(rentedBuffer);
-        }
+                if (rentedBuffer is not null)
+                    System.Buffers.ArrayPool<double>.Shared.Return(rentedBuffer);
+            });
     }
 
     /// <summary>
@@ -814,7 +820,8 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         var result = new Tensor<T>(paramShape);
         int blockSize = _options.BlockSize;
         int totalLength = result.Length;
-        for (int b = 0; b < numBlocks; b++)
+        // Blocks are independent — parallelize (grain-gated for small tensors).
+        CpuParallelSettings.ParallelForOrSerial(0, numBlocks, (long)totalLength, b =>
         {
             int blockStart = b * blockSize;
             int blockEnd = Math.Min(blockStart + blockSize, totalLength);
@@ -825,7 +832,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 double quantizedVal = isSigned ? (int)quantized[i] - 128 : (int)quantized[i];
                 result[i] = NumOps.FromDouble(quantizedVal * scale);
             }
-        }
+        });
         return result;
     }
 
