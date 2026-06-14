@@ -390,6 +390,18 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
 
         var sampleIndices = Enumerable.Range(startIdx, endIdx - startIdx + 1).ToList();
 
+        // Level initialization: seed the output bias with the mean of the training
+        // targets so the forecast starts at the series' level. This mirrors the
+        // Autoformer decoder, whose trend branch is initialized from the input
+        // series mean (Wu et al. 2021 §3.2), rather than learned from zero. Plain
+        // gradient descent over a few epochs cannot otherwise move the bias across
+        // a large raw level; seeding it lets training refine only the residual
+        // pattern. (1-D reduction over the target vector — not a tensor loop.)
+        T levelSum = _numOps.Zero;
+        for (int i = 0; i < y.Length; i++) levelSum = _numOps.Add(levelSum, y[i]);
+        T levelMean = _numOps.Divide(levelSum, _numOps.FromDouble(y.Length));
+        for (int h = 0; h < _outputBias.Length; h++) _outputBias[h] = levelMean;
+
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
             TrainingCancellationToken.ThrowIfCancellationRequested();
@@ -912,7 +924,12 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         {
             for (int i = 0; i < _seasonalProjection.Length; i++)
             {
-                _seasonalProjection[i] = _numOps.Add(_seasonalProjection[i],
+                // Gradient DESCENT: subtract the gradient step (the layers below
+                // already do `Subtract`; these outer projections wrongly used Add =
+                // gradient ASCENT, pushing the output level AWAY from the target so
+                // the model could never learn a forecast level — the root cause of
+                // the translation/scaling-equivariance and R² failures).
+                _seasonalProjection[i] = _numOps.Subtract(_seasonalProjection[i],
                     _numOps.Multiply(scale, dSeasonal[i]));
             }
         }
@@ -922,7 +939,7 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         {
             for (int i = 0; i < _trendProjection.Length; i++)
             {
-                _trendProjection[i] = _numOps.Add(_trendProjection[i],
+                _trendProjection[i] = _numOps.Subtract(_trendProjection[i],
                     _numOps.Multiply(scale, dTrend[i]));
             }
         }
@@ -932,9 +949,33 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         {
             for (int i = 0; i < _outputBias.Length; i++)
             {
-                _outputBias[i] = _numOps.Add(_outputBias[i],
+                _outputBias[i] = _numOps.Subtract(_outputBias[i],
                     _numOps.Multiply(scale, dBias[i]));
             }
+        }
+
+        // Apply to input projection, decoder seasonal/trend inits. Their gradients
+        // were computed and accumulated but previously NEVER applied here, leaving
+        // these parameters frozen at initialization — so the model could not learn
+        // the input->embedding mapping or the decoder's seasonal/trend seeds, and
+        // therefore could not track a trend (R² stayed <= 0). Gradient descent.
+        if (_gradientAccumulators.TryGetValue("inputProjection", out var dInput))
+        {
+            for (int i = 0; i < _inputProjection.Length; i++)
+                _inputProjection[i] = _numOps.Subtract(_inputProjection[i],
+                    _numOps.Multiply(scale, dInput[i]));
+        }
+        if (_gradientAccumulators.TryGetValue("decoderSeasonalInit", out var dDecSeasonal))
+        {
+            for (int i = 0; i < _decoderSeasonalInit.Length; i++)
+                _decoderSeasonalInit[i] = _numOps.Subtract(_decoderSeasonalInit[i],
+                    _numOps.Multiply(scale, dDecSeasonal[i]));
+        }
+        if (_gradientAccumulators.TryGetValue("decoderTrendInit", out var dDecTrend))
+        {
+            for (int i = 0; i < _decoderTrendInit.Length; i++)
+                _decoderTrendInit[i] = _numOps.Subtract(_decoderTrendInit[i],
+                    _numOps.Multiply(scale, dDecTrend[i]));
         }
 
         // Apply to encoder layers
