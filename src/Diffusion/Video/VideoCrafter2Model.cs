@@ -70,7 +70,7 @@ public class VideoCrafter2Model<T> : VideoDiffusionModelBase<T>
     public override bool SupportsImageToVideo => true;
     public override bool SupportsTextToVideo => true;
     public override bool SupportsVideoToVideo => false;
-    public override long ParameterCount => _predictor.ParameterCount + _temporalVAE.GetParameters().Length;
+    public override long ParameterCount => _predictor.ParameterCount + _temporalVAE.ParameterCount;
 
     /// <summary>
     /// Initializes a new instance of VideoCrafter2Model with full customization support.
@@ -162,20 +162,15 @@ public class VideoCrafter2Model<T> : VideoDiffusionModelBase<T>
 
     public override IDiffusionModel<T> Clone()
     {
-        var clonedPredictor = new VideoUNetPredictor<T>(
-            inputChannels: LATENT_CHANNELS,
-            baseChannels: 320,
-            channelMultipliers: new[] { 1, 2, 4, 4 },
-            numResBlocks: 2,
-            numHeads: 8,
-            contextDim: CONTEXT_DIM);
-        clonedPredictor.SetParameters(_predictor.GetParameters());
+        var clonedOptions = GetOptions() is DiffusionModelOptions<T> options
+            ? new DiffusionModelOptions<T>(options)
+            : null;
 
         return new VideoCrafter2Model<T>(
             architecture: Architecture,
-            options: Options as DiffusionModelOptions<T>,
-            scheduler: Scheduler,
-            predictor: clonedPredictor,
+            options: clonedOptions,
+            scheduler: new DDIMScheduler<T>(Scheduler.Config),
+            predictor: (VideoUNetPredictor<T>)_predictor.Clone(),
             temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
             conditioner: _conditioner,
             defaultNumFrames: DefaultNumFrames,
