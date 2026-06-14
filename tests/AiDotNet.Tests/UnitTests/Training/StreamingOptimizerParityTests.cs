@@ -312,6 +312,56 @@ public class StreamingOptimizerParityTests
         Assert.True(rel < 0.10, $"Streaming L-BFGS (8-bit history) drifted from fp64 L-BFGS (relL2 {rel:E3} >= 0.10).");
     }
 
+    // Streaming Conjugate Gradient (Hessian-free second-order-like) with an 8-bit-quantized
+    // previous-gradient/direction history must track an fp64 nonlinear CG (Polak-Ribiere+ with the
+    // SAME fixed step and full-precision history). The only divergence source is the 8-bit history
+    // quantization; the test asserts it stays bounded over many steps.
+    [Fact]
+    public void ConjugateGradient_8bitHistory_TracksFp64()
+    {
+        var opt = new StreamingConjugateGradient<double>(Lr);
+        var sp = new Tensor<double>(new[] { N });
+        var rp = InitParams();
+        for (int i = 0; i < N; i++) sp[i] = rp[i];
+
+        double[]? gPrev = null;
+        double[]? dPrev = null;
+
+        for (int step = 1; step <= Steps; step++)
+        {
+            var g = Grad(step);
+
+            opt.BeginStep();
+            var gt = new Tensor<double>(new[] { N });
+            for (int i = 0; i < N; i++) gt[i] = g[i];
+            opt.Apply(sp, gt);
+            opt.EndStep();
+
+            // fp64 reference: Polak-Ribiere+ nonlinear CG, full-precision history.
+            var d = new double[N];
+            if (gPrev is null || dPrev is null)
+            {
+                for (int i = 0; i < N; i++) d[i] = -g[i];
+            }
+            else
+            {
+                double denom = Dot(gPrev, gPrev);
+                double num = 0.0;
+                for (int i = 0; i < N; i++) num += g[i] * (g[i] - gPrev[i]);
+                double beta = denom > 1e-30 ? num / denom : 0.0;
+                if (beta < 0.0) beta = 0.0;
+                for (int i = 0; i < N; i++) d[i] = -g[i] + beta * dPrev[i];
+            }
+            for (int i = 0; i < N; i++) rp[i] += Lr * d[i];
+            gPrev = (double[])g.Clone();
+            dPrev = d;
+        }
+
+        var sa = new double[N]; for (int i = 0; i < N; i++) sa[i] = sp[i];
+        double rel = RelL2(sa, rp);
+        Assert.True(rel < 0.10, $"Streaming CG (8-bit history) drifted from fp64 CG (relL2 {rel:E3} >= 0.10).");
+    }
+
     private static double[] GradN(int n, int step)
     {
         var g = new double[n];

@@ -58,6 +58,9 @@ internal static class StreamingOptimizerResolver<T>
             case StreamingKind.Lbfgs:
                 // Second-order: memory-bounded streaming L-BFGS (8-bit-quantized (s,y) history).
                 return new StreamingLBFGS<T>(lr, c.MemorySize);
+            case StreamingKind.ConjugateGradient:
+                // Hessian-free second-order-like: memory-bounded streaming nonlinear CG.
+                return new StreamingConjugateGradient<T>(lr);
             case StreamingKind.AdaDelta:
                 return new StreamingAdaDelta8Bit<T>(lr, c.Rho, c.Epsilon);
             case StreamingKind.Adagrad:
@@ -82,7 +85,7 @@ internal static class StreamingOptimizerResolver<T>
     private enum StreamingKind
     {
         Sgd, Momentum, Nesterov, RmsProp, Adagrad, AdaDelta,
-        Adam, AdamW, AmsGrad, Nadam, AdaMax, Lion, Lamb, Lars, Ftrl, Lbfgs
+        Adam, AdamW, AmsGrad, Nadam, AdaMax, Lion, Lamb, Lars, Ftrl, Lbfgs, ConjugateGradient
     }
 
     /// <summary>
@@ -204,6 +207,33 @@ internal static class StreamingOptimizerResolver<T>
                 var opt = (LBFGSOptimizerOptions<T, Tensor<T>, Tensor<T>>)o.GetOptions();
                 return new StreamingConfig { Kind = StreamingKind.Lbfgs, MemorySize = opt.MemorySize };
             }
+            case Adam8BitOptimizer<T, Tensor<T>, Tensor<T>> o:
+            {
+                // Adam8Bit IS an 8-bit Adam — its streaming form is the 8-bit-state streaming Adam.
+                var opt = (Adam8BitOptimizerOptions<T, Tensor<T>, Tensor<T>>)o.GetOptions();
+                return new StreamingConfig
+                {
+                    Kind = StreamingKind.Adam,
+                    Beta1 = opt.Beta1, Beta2 = opt.Beta2, Epsilon = opt.Epsilon, WeightDecay = defaultWeightDecay,
+                };
+            }
+            case ConjugateGradientOptimizer<T, Tensor<T>, Tensor<T>>:
+                // Hessian-free O(n) method → first-class streaming nonlinear CG.
+                return new StreamingConfig { Kind = StreamingKind.ConjugateGradient };
+            case BFGSOptimizer<T, Tensor<T>, Tensor<T>>:
+            case DFPOptimizer<T, Tensor<T>, Tensor<T>>:
+            case NewtonMethodOptimizer<T, Tensor<T>, Tensor<T>>:
+            case TrustRegionOptimizer<T, Tensor<T>, Tensor<T>>:
+            case LevenbergMarquardtOptimizer<T, Tensor<T>, Tensor<T>>:
+                // Dense-Hessian / full second-order methods keep an O(n^2) Hessian (approximation)
+                // that cannot fit a memory budget. The limited-memory quasi-Newton (streaming
+                // L-BFGS) is their memory-bounded streaming substitute.
+                return new StreamingConfig { Kind = StreamingKind.Lbfgs, MemorySize = 10 };
+            case ADMMOptimizer<T, Tensor<T>, Tensor<T>>:
+            case CoordinateDescentOptimizer<T, Tensor<T>, Tensor<T>>:
+                // Proximal / coordinate gradient methods reduce to a memory-bounded gradient step
+                // under per-parameter streaming.
+                return new StreamingConfig { Kind = StreamingKind.Sgd };
             case AdaDeltaOptimizer<T, Tensor<T>, Tensor<T>> o:
             {
                 var opt = (AdaDeltaOptimizerOptions<T, Tensor<T>, Tensor<T>>)o.GetOptions();
