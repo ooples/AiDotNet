@@ -70,10 +70,12 @@ internal sealed class StreamingAdam8Bit<T>
 
     private int _t; // shared Adam timestep (bias correction), advanced per backward pass
 
-    // Reusable one-block-wide scratch for the updated full-precision moments —
-    // the only full-precision optimizer buffers ever resident, and reused across
-    // every block of every parameter so the steady-state epilogue is zero-alloc.
-    // Training is single-threaded per step (reentrancy guard), so sharing is safe.
+    // Reusable one-block-wide scratch for the updated full-precision moments,
+    // used by the serial generic fallback (ApplyGeneric) only. The hot double/
+    // float paths parallelize the block loop and allocate per-worker scratch via
+    // ParallelForOrSerial's localInit, so this shared buffer must not be touched
+    // from them (it is not thread-safe). ApplyGeneric runs serial, so sharing is
+    // safe there.
     private readonly double[] _mScratch;
     private readonly double[] _vScratch;
 
@@ -148,11 +150,11 @@ internal sealed class StreamingAdam8Bit<T>
             && (object)param is Tensor<double> pTen
             && (object)grad is Tensor<double> gTen)
         {
-            var pSpan = pTen.Data.Span;
-            var gSpan = gTen.Data.Span;
-            if (pSpan.Length >= length && gSpan.Length >= length)
+            var pMem = pTen.Data;
+            var gMem = gTen.Data;
+            if (pMem.Length >= length && gMem.Length >= length)
             {
-                ApplyDouble(pSpan, gSpan, st, numBlocks, length, biasCorr1, biasCorr2);
+                ApplyDouble(pMem, gMem, st, numBlocks, length, biasCorr1, biasCorr2);
                 return;
             }
         }
@@ -160,11 +162,11 @@ internal sealed class StreamingAdam8Bit<T>
             && (object)param is Tensor<float> pTenF
             && (object)grad is Tensor<float> gTenF)
         {
-            var pSpan = pTenF.Data.Span;
-            var gSpan = gTenF.Data.Span;
-            if (pSpan.Length >= length && gSpan.Length >= length)
+            var pMem = pTenF.Data;
+            var gMem = gTenF.Data;
+            if (pMem.Length >= length && gMem.Length >= length)
             {
-                ApplyFloat(pSpan, gSpan, st, numBlocks, length, biasCorr1, biasCorr2);
+                ApplyFloat(pMem, gMem, st, numBlocks, length, biasCorr1, biasCorr2);
                 return;
             }
         }
@@ -173,141 +175,169 @@ internal sealed class StreamingAdam8Bit<T>
     }
 
     private void ApplyDouble(
-        Span<double> p, ReadOnlySpan<double> g, MomentState st,
+        Memory<double> pMem, ReadOnlyMemory<double> gMem, MomentState st,
         int numBlocks, int length, double biasCorr1, double biasCorr2)
     {
         double beta1 = _beta1, beta2 = _beta2, oneMinusB1 = 1.0 - _beta1, oneMinusB2 = 1.0 - _beta2;
         double lr = _lr, eps = _epsilon, wd = _weightDecay, maxStep = _lr * _maxUpdateRatio;
         double invBc1 = 1.0 / biasCorr1, invBc2 = 1.0 / biasCorr2;
-        double[] mNew = _mScratch, vNew = _vScratch;
         byte[] mQ = st.MQuant, vQ = st.VQuant;
+        double[] mScaleArr = st.MScale, vScaleArr = st.VScale;
+        int blockSize = _blockSize;
 
-        for (int b = 0; b < numBlocks; b++)
-        {
-            int start = b * _blockSize;
-            int end = Math.Min(start + _blockSize, length);
-            double mScale = st.MScale[b];
-            double vScale = st.VScale[b];
-            double newMMaxAbs = 0.0, newVMax = 0.0;
-
-            for (int i = start; i < end; i++)
+        // Each block owns a disjoint slice of p / mQ / vQ and its own per-block
+        // scale, so the block loop is embarrassingly parallel. Per-worker scratch
+        // (one block wide) is allocated once in localInit to keep the steady state
+        // alloc-free; ParallelForOrSerial gates on DefaultSerialGrainSize so small
+        // parameters still run serial (no thread-dispatch overhead). At foundation
+        // scale this was ~28% of the training step and previously single-threaded.
+        CpuParallelSettings.ParallelForOrSerial<(double[] m, double[] v)>(
+            0, numBlocks, (long)length,
+            () => (new double[blockSize], new double[blockSize]),
+            (b, _, scratch) =>
             {
-                int li = i - start;
-                double gi = g[i];
-                double mPrev = (mQ[i] - 128) * mScale;   // signed dequant
-                double vPrev = vQ[i] * vScale;            // unsigned dequant
+                double[] mNew = scratch.m, vNew = scratch.v;
+                var p = pMem.Span;
+                var g = gMem.Span;
+                int start = b * blockSize;
+                int end = Math.Min(start + blockSize, length);
+                double mScale = mScaleArr[b];
+                double vScale = vScaleArr[b];
+                double newMMaxAbs = 0.0, newVMax = 0.0;
 
-                if (double.IsNaN(gi) || double.IsInfinity(gi))
+                for (int i = start; i < end; i++)
                 {
-                    // Skip non-finite gradient: keep prior moments + weight.
-                    mNew[li] = mPrev; vNew[li] = vPrev;
+                    int li = i - start;
+                    double gi = g[i];
+                    double mPrev = (mQ[i] - 128) * mScale;   // signed dequant
+                    double vPrev = vQ[i] * vScale;            // unsigned dequant
+
+                    if (double.IsNaN(gi) || double.IsInfinity(gi))
+                    {
+                        // Skip non-finite gradient: keep prior moments + weight.
+                        mNew[li] = mPrev; vNew[li] = vPrev;
+                    }
+                    else
+                    {
+                        double m = beta1 * mPrev + oneMinusB1 * gi;
+                        double v = beta2 * vPrev + oneMinusB2 * gi * gi;
+                        double mHat = m * invBc1;
+                        double vHat = v * invBc2;
+
+                        double pv = p[i];
+                        if (wd != 0.0) pv -= lr * wd * pv;
+                        double update = lr * mHat / (Math.Sqrt(vHat) + eps);
+                        // Trust bound: 8-bit quantization can round vHat→0, which
+                        // would blow up the step; clamp to a small multiple of lr
+                        // (real Adam steps are ~lr) and catch any residual NaN.
+                        if (!(update >= -maxStep)) update = update > 0 ? maxStep : -maxStep;
+                        else if (update > maxStep) update = maxStep;
+                        p[i] = pv - update;
+                        mNew[li] = m; vNew[li] = v;
+                    }
+
+                    double am = Math.Abs(mNew[li]);
+                    if (am > newMMaxAbs) newMMaxAbs = am;
+                    if (vNew[li] > newVMax) newVMax = vNew[li];
                 }
-                else
+
+                double newMScale = newMMaxAbs / 127.0; if (newMScale < 1e-10) newMScale = 1e-10;
+                double newVScale = newVMax / 255.0;     if (newVScale < 1e-10) newVScale = 1e-10;
+                mScaleArr[b] = newMScale; vScaleArr[b] = newVScale;
+                double invM = 1.0 / newMScale, invV = 1.0 / newVScale;
+
+                for (int i = start; i < end; i++)
                 {
-                    double m = beta1 * mPrev + oneMinusB1 * gi;
-                    double v = beta2 * vPrev + oneMinusB2 * gi * gi;
-                    double mHat = m * invBc1;
-                    double vHat = v * invBc2;
-
-                    double pv = p[i];
-                    if (wd != 0.0) pv -= lr * wd * pv;
-                    double update = lr * mHat / (Math.Sqrt(vHat) + eps);
-                    // Trust bound: 8-bit quantization can round vHat→0, which
-                    // would blow up the step; clamp to a small multiple of lr
-                    // (real Adam steps are ~lr) and catch any residual NaN.
-                    if (!(update >= -maxStep)) update = update > 0 ? maxStep : -maxStep;
-                    else if (update > maxStep) update = maxStep;
-                    p[i] = pv - update;
-                    mNew[li] = m; vNew[li] = v;
+                    int li = i - start;
+                    int mq = (int)Math.Round(mNew[li] * invM);
+                    if (mq < -127) mq = -127; else if (mq > 127) mq = 127;
+                    mQ[i] = (byte)(mq + 128);
+                    int vq = (int)Math.Round(vNew[li] * invV);
+                    if (vq < 0) vq = 0; else if (vq > 255) vq = 255;
+                    vQ[i] = (byte)vq;
                 }
 
-                double am = Math.Abs(mNew[li]);
-                if (am > newMMaxAbs) newMMaxAbs = am;
-                if (vNew[li] > newVMax) newVMax = vNew[li];
-            }
-
-            double newMScale = newMMaxAbs / 127.0; if (newMScale < 1e-10) newMScale = 1e-10;
-            double newVScale = newVMax / 255.0;     if (newVScale < 1e-10) newVScale = 1e-10;
-            st.MScale[b] = newMScale; st.VScale[b] = newVScale;
-            double invM = 1.0 / newMScale, invV = 1.0 / newVScale;
-
-            for (int i = start; i < end; i++)
-            {
-                int li = i - start;
-                int mq = (int)Math.Round(mNew[li] * invM);
-                if (mq < -127) mq = -127; else if (mq > 127) mq = 127;
-                mQ[i] = (byte)(mq + 128);
-                int vq = (int)Math.Round(vNew[li] * invV);
-                if (vq < 0) vq = 0; else if (vq > 255) vq = 255;
-                vQ[i] = (byte)vq;
-            }
-        }
+                return scratch;
+            },
+            _ => { });
     }
 
     private void ApplyFloat(
-        Span<float> p, ReadOnlySpan<float> g, MomentState st,
+        Memory<float> pMem, ReadOnlyMemory<float> gMem, MomentState st,
         int numBlocks, int length, double biasCorr1, double biasCorr2)
     {
         double beta1 = _beta1, beta2 = _beta2, oneMinusB1 = 1.0 - _beta1, oneMinusB2 = 1.0 - _beta2;
         double lr = _lr, eps = _epsilon, wd = _weightDecay, maxStep = _lr * _maxUpdateRatio;
         double invBc1 = 1.0 / biasCorr1, invBc2 = 1.0 / biasCorr2;
-        double[] mNew = _mScratch, vNew = _vScratch;
         byte[] mQ = st.MQuant, vQ = st.VQuant;
+        double[] mScaleArr = st.MScale, vScaleArr = st.VScale;
+        int blockSize = _blockSize;
 
-        for (int b = 0; b < numBlocks; b++)
-        {
-            int start = b * _blockSize;
-            int end = Math.Min(start + _blockSize, length);
-            double mScale = st.MScale[b];
-            double vScale = st.VScale[b];
-            double newMMaxAbs = 0.0, newVMax = 0.0;
-
-            for (int i = start; i < end; i++)
+        // Parallel block loop with per-worker scratch — see ApplyDouble for the
+        // independence + grain-gating rationale.
+        CpuParallelSettings.ParallelForOrSerial<(double[] m, double[] v)>(
+            0, numBlocks, (long)length,
+            () => (new double[blockSize], new double[blockSize]),
+            (b, _, scratch) =>
             {
-                int li = i - start;
-                double gi = g[i];
-                double mPrev = (mQ[i] - 128) * mScale;
-                double vPrev = vQ[i] * vScale;
+                double[] mNew = scratch.m, vNew = scratch.v;
+                var p = pMem.Span;
+                var g = gMem.Span;
+                int start = b * blockSize;
+                int end = Math.Min(start + blockSize, length);
+                double mScale = mScaleArr[b];
+                double vScale = vScaleArr[b];
+                double newMMaxAbs = 0.0, newVMax = 0.0;
 
-                if (double.IsNaN(gi) || double.IsInfinity(gi))
+                for (int i = start; i < end; i++)
                 {
-                    mNew[li] = mPrev; vNew[li] = vPrev;
+                    int li = i - start;
+                    double gi = g[i];
+                    double mPrev = (mQ[i] - 128) * mScale;
+                    double vPrev = vQ[i] * vScale;
+
+                    if (double.IsNaN(gi) || double.IsInfinity(gi))
+                    {
+                        mNew[li] = mPrev; vNew[li] = vPrev;
+                    }
+                    else
+                    {
+                        double m = beta1 * mPrev + oneMinusB1 * gi;
+                        double v = beta2 * vPrev + oneMinusB2 * gi * gi;
+                        double mHat = m * invBc1;
+                        double vHat = v * invBc2;
+                        double pv = p[i];
+                        if (wd != 0.0) pv -= lr * wd * pv;
+                        double update = lr * mHat / (Math.Sqrt(vHat) + eps);
+                        if (!(update >= -maxStep)) update = update > 0 ? maxStep : -maxStep;
+                        else if (update > maxStep) update = maxStep;
+                        p[i] = (float)(pv - update);
+                        mNew[li] = m; vNew[li] = v;
+                    }
+                    double am = Math.Abs(mNew[li]);
+                    if (am > newMMaxAbs) newMMaxAbs = am;
+                    if (vNew[li] > newVMax) newVMax = vNew[li];
                 }
-                else
+
+                double newMScale = newMMaxAbs / 127.0; if (newMScale < 1e-10) newMScale = 1e-10;
+                double newVScale = newVMax / 255.0;     if (newVScale < 1e-10) newVScale = 1e-10;
+                mScaleArr[b] = newMScale; vScaleArr[b] = newVScale;
+                double invM = 1.0 / newMScale, invV = 1.0 / newVScale;
+
+                for (int i = start; i < end; i++)
                 {
-                    double m = beta1 * mPrev + oneMinusB1 * gi;
-                    double v = beta2 * vPrev + oneMinusB2 * gi * gi;
-                    double mHat = m * invBc1;
-                    double vHat = v * invBc2;
-                    double pv = p[i];
-                    if (wd != 0.0) pv -= lr * wd * pv;
-                    double update = lr * mHat / (Math.Sqrt(vHat) + eps);
-                    if (!(update >= -maxStep)) update = update > 0 ? maxStep : -maxStep;
-                    else if (update > maxStep) update = maxStep;
-                    p[i] = (float)(pv - update);
-                    mNew[li] = m; vNew[li] = v;
+                    int li = i - start;
+                    int mq = (int)Math.Round(mNew[li] * invM);
+                    if (mq < -127) mq = -127; else if (mq > 127) mq = 127;
+                    mQ[i] = (byte)(mq + 128);
+                    int vq = (int)Math.Round(vNew[li] * invV);
+                    if (vq < 0) vq = 0; else if (vq > 255) vq = 255;
+                    vQ[i] = (byte)vq;
                 }
-                double am = Math.Abs(mNew[li]);
-                if (am > newMMaxAbs) newMMaxAbs = am;
-                if (vNew[li] > newVMax) newVMax = vNew[li];
-            }
 
-            double newMScale = newMMaxAbs / 127.0; if (newMScale < 1e-10) newMScale = 1e-10;
-            double newVScale = newVMax / 255.0;     if (newVScale < 1e-10) newVScale = 1e-10;
-            st.MScale[b] = newMScale; st.VScale[b] = newVScale;
-            double invM = 1.0 / newMScale, invV = 1.0 / newVScale;
-
-            for (int i = start; i < end; i++)
-            {
-                int li = i - start;
-                int mq = (int)Math.Round(mNew[li] * invM);
-                if (mq < -127) mq = -127; else if (mq > 127) mq = 127;
-                mQ[i] = (byte)(mq + 128);
-                int vq = (int)Math.Round(vNew[li] * invV);
-                if (vq < 0) vq = 0; else if (vq > 255) vq = 255;
-                vQ[i] = (byte)vq;
-            }
-        }
+                return scratch;
+            },
+            _ => { });
     }
 
     private void ApplyGeneric(
