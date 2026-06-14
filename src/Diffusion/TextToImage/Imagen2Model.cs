@@ -271,21 +271,8 @@ public class Imagen2Model<T> : LatentDiffusionModelBase<T>
         int baseChannels = _isImagen3 ? 384 : 320;
         int contextDim = _isImagen3 ? 4096 : CROSS_ATTENTION_DIM;
 
-        var clonedUnet = new UNetNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS, outputChannels: LATENT_CHANNELS,
-            baseChannels: baseChannels, channelMultipliers: [1, 2, 4, 4],
-            numResBlocks: 3, attentionResolutions: [4, 2, 1],
-            contextDim: contextDim);
-        clonedUnet.SetParameters(_unet.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3, latentChannels: LATENT_CHANNELS,
-            baseChannels: 128, channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2, latentScaleFactor: 0.18215);
-        clonedVae.SetParameters(_vae.GetParameters());
-
-        return new Imagen2Model<T>(
-            unet: clonedUnet, vae: clonedVae,
+                        return new Imagen2Model<T>(
+            unet: (UNetNoisePredictor<T>)_unet.Clone(), vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner, isImagen3: _isImagen3);
     }
 

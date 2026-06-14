@@ -305,30 +305,10 @@ public class Magic3DModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedCoarse = new UNetNoisePredictor<T>(
-            inputChannels: 3, outputChannels: 3,
-            baseChannels: 256, channelMultipliers: [1, 2, 3, 4],
-            numResBlocks: 3, attentionResolutions: [4, 2, 1],
-            contextDim: MAGIC3D_CROSS_ATTENTION_DIM);
-        clonedCoarse.SetParameters(_coarseUnet.GetParameters());
-
-        var clonedFine = new UNetNoisePredictor<T>(
-            inputChannels: MAGIC3D_LATENT_CHANNELS, outputChannels: MAGIC3D_LATENT_CHANNELS,
-            baseChannels: 320, channelMultipliers: [1, 2, 4, 4],
-            numResBlocks: 2, attentionResolutions: [4, 2, 1],
-            contextDim: MAGIC3D_CROSS_ATTENTION_DIM);
-        clonedFine.SetParameters(_fineUnet.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3, latentChannels: MAGIC3D_LATENT_CHANNELS,
-            baseChannels: 128, channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2, latentScaleFactor: 0.18215);
-        clonedVae.SetParameters(_vae.GetParameters());
-
-        return new Magic3DModel<T>(
-            coarseUnet: clonedCoarse,
-            fineUnet: clonedFine,
-            vae: clonedVae,
+                                return new Magic3DModel<T>(
+            coarseUnet: (UNetNoisePredictor<T>)_coarseUnet.Clone(),
+            fineUnet: (UNetNoisePredictor<T>)_fineUnet.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
             defaultPointCount: DefaultPointCount);
     }

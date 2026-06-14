@@ -340,27 +340,9 @@ public class StableDiffusion3Model<T> : LatentDiffusionModelBase<T>
             _ => (1536, 24, 24)
         };
 
-        var clonedMmdit = new MMDiTNoisePredictor<T>(
-            inputChannels: SD3_LATENT_CHANNELS,
-            hiddenSize: hiddenSize,
-            numJointLayers: numLayers,
-            numHeads: numHeads,
-            patchSize: 2,
-            contextDim: SD3_CONTEXT_DIM);
-        clonedMmdit.SetParameters(_mmdit.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: SD3_LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2,
-            latentScaleFactor: 1.5305);
-        clonedVae.SetParameters(_vae.GetParameters());
-
-        return new StableDiffusion3Model<T>(
-            mmdit: clonedMmdit,
-            vae: clonedVae,
+                        return new StableDiffusion3Model<T>(
+            mmdit: (MMDiTNoisePredictor<T>)_mmdit.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
             variant: _variant);
     }

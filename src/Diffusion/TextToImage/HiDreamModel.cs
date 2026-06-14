@@ -334,20 +334,9 @@ public class HiDreamModel<T> : LatentDiffusionModelBase<T>
     public override IDiffusionModel<T> Clone()
     {
         var mmditVariant = _variant == HiDreamVariant.Fast ? MMDiTXVariant.Medium : MMDiTXVariant.Large;
-        var clonedPredictor = new MMDiTXNoisePredictor<T>(variant: mmditVariant);
-        clonedPredictor.SetParameters(_predictor.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: HIDREAM_LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2);
-        clonedVae.SetParameters(_vae.GetParameters());
-
-        return new HiDreamModel<T>(
-            predictor: clonedPredictor,
-            vae: clonedVae,
+                        return new HiDreamModel<T>(
+            predictor: (MMDiTXNoisePredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
             variant: _variant);
     }
