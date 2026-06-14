@@ -275,6 +275,17 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
                 nameof(y));
         }
 
+        // Level initialization: seed the output bias with the mean of the training
+        // targets so the forecast starts at the series' level. Informer's generative
+        // decoder predicts the whole horizon at once; without a level seed, plain
+        // SGD over a few epochs only nudges the bias a fraction of the way across a
+        // large raw level (the +32 instead of +500 translation shift). Seeding lets
+        // training refine the residual pattern. (1-D reduction, not a tensor loop.)
+        T levelSum = _numOps.Zero;
+        for (int i = 0; i < y.Length; i++) levelSum = _numOps.Add(levelSum, y[i]);
+        T levelMean = _numOps.Divide(levelSum, _numOps.FromDouble(y.Length));
+        for (int h = 0; h < _outputBias.Length; h++) _outputBias[h] = levelMean;
+
         double prevLoss = double.MaxValue;
 
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
