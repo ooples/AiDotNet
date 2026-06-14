@@ -387,4 +387,49 @@ public class StreamingOptimizerParityTests
         for (int i = 0; i < n; i++)
             Assert.Equal(run1[i], run2[i]);
     }
+
+    // Proves the parallel block loop actually takes the raw LIVE-backing-array branch (the perf
+    // win) rather than silently falling back to the per-element indexer. ApplyBlocks computes
+    // `paramArr = param.GetLiveBackingArrayOrNull()` (after a one-time `param[0]` materialization
+    // touch) and uses raw array writes iff that is non-null. We reproduce that exact call on the
+    // same tensor instances the optimizer receives and assert it is non-null — and that the array
+    // we capture beforehand is the one mutated in place by training.
+    [Fact]
+    public void Adam_LargeTensor_TakesLiveBackingArrayFastPath()
+    {
+        const int n = 40000;
+        var param = new Tensor<double>(new[] { n });
+        var init = InitParamsN(n);
+        for (int i = 0; i < n; i++) param[i] = init[i];
+
+        _ = param[0]; // identical to the optimizer's materialization touch before the fast-path probe
+        var liveProbe = param.GetLiveBackingArrayOrNull();
+        Assert.NotNull(liveProbe); // non-null => ApplyBlocks takes the raw-array branch, not the indexer fallback
+        double[] live = liveProbe ?? throw new InvalidOperationException("param exposed no live backing array");
+
+        // A gradient tensor built the same way must also expose its live array (so gradArr != null).
+        var grad = new Tensor<double>(new[] { n });
+        var g0 = GradN(n, 1);
+        for (int i = 0; i < n; i++) grad[i] = g0[i];
+        _ = grad[0];
+        Assert.NotNull(grad.GetLiveBackingArrayOrNull());
+
+        // End-to-end: train, then confirm the captured live array was mutated in place and still
+        // aliases the tensor's logical values (i.e. the raw writes landed in the real storage).
+        var opt = new StreamingAdam8Bit<double>(Lr);
+        for (int step = 1; step <= Steps; step++)
+        {
+            opt.BeginStep();
+            var g = GradN(n, step);
+            var gt = new Tensor<double>(new[] { n });
+            for (int i = 0; i < n; i++) gt[i] = g[i];
+            opt.Apply(param, gt);
+            opt.EndStep();
+        }
+
+        bool changed = false;
+        for (int i = 0; i < n; i++) if (live[i] != init[i]) { changed = true; break; }
+        Assert.True(changed, "optimizer did not mutate the live backing array in place");
+        for (int i = 0; i < n; i++) Assert.Equal(param[i], live[i]);
+    }
 }
