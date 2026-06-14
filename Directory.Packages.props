@@ -139,22 +139,19 @@
          cause of the #1221 transformer production-scale convergence failure. 0.92.5 is
          the first release carrying that fix. AiDotNet.Native packages coreleased in
          lockstep at 0.92.5. -->
-    <!-- 0.95.0: transparent weight streaming (Tensors #602) — EnsureMaterialized
-         auto-rehydrates a paged-out streaming weight on access, plus symmetric
-         owner-drop (gated by GpuOffloadOptions.TransparentAutoEviction) that frees
-         the owning tensor's resident copy on pool eviction, so a foundation-scale
-         model fits a bounded resident set with no per-layer orchestration.
-         0.95.1 (Tensors #603): extends the auto-rehydrate gate to the .Memory /
-         .Data accessor (the buffer path SelfAttentionLayer.Forward uses) — a
-         paged-out weight read via .Memory previously Sliced empty storage and
-         threw. Required by the DiT transparent-streaming engagement in this repo
-         (DiTWeightStreamingTests). This PR requires the 0.95.x streaming APIs, so it
-         supersedes master's 0.94.2 bump; the 0.95.x release line must carry forward
-         0.94.2's prepacked-B cache-validation fix. Native packages coreleased at 0.95.1. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.95.1" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.95.1" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.95.1" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.95.1" />
+    <!-- 0.95.2: transparent weight streaming (Tensors #602 + #603 — EnsureMaterialized AND the
+         .Memory/.Data accessor auto-rehydrate a paged-out streaming weight on access; required by
+         the DiT transparent-streaming engagement here, DiTWeightStreamingTests) PLUS the full
+         weight-streaming PERF stack (Tensors #604): clean/dirty eviction (stops re-writing
+         read-only weights every eviction), default compression (bf16 inference / lossless training
+         via StreamingStoreDtype.Auto), RAM-aware budget, Belady-optimal paging, and int8 weight-only
+         quantized inference. So a foundation-scale model fits a bounded resident set with no
+         per-layer orchestration. 0.95.2 supersedes both master's 0.94.2 and this PR's earlier 0.95.1
+         pin. Native packages coreleased in lockstep at 0.95.2. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.95.2" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.95.2" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.95.2" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.95.2" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.8" />

@@ -104,7 +104,15 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly MisGANOptions<T> _options;
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    // One dedicated optimizer per sub-network (Li et al. 2019 MisGAN trains four:
+    // data discriminator, mask discriminator, data generator, mask generator).
+    // See CTGANGenerator for why one shared AdamOptimizer corrupts moments across
+    // networks of different parameter counts. TapeStepOver takes the optimizer so
+    // each network keeps its own moment state.
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _dataGenOptimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _maskGenOptimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _dataDiscOptimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _maskDiscOptimizer;
     private ILossFunction<T> _lossFunction;
 
     // Synthetic tabular data infrastructure
@@ -186,7 +194,19 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     {
         _options = options ?? new MisGANOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        AdamOptimizer<T, Tensor<T>, Tensor<T>> MakeAdam() =>
+            new(this, new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = 0.5,
+                Beta2 = 0.9,
+                UseAdaptiveLearningRate = false,
+                UseAMSGrad = false,
+            });
+        _dataGenOptimizer = optimizer ?? MakeAdam();
+        _maskGenOptimizer = MakeAdam();
+        _dataDiscOptimizer = MakeAdam();
+        _maskDiscOptimizer = MakeAdam();
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
@@ -565,7 +585,7 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             var fakeMask = MaskGeneratorForward(maskNoise);
             var fakeScore = DataDiscriminatorForward(ElementwiseMultiplyTensor(fakeRow, fakeMask), isTraining: true);
             var loss = Engine.TensorSubtract(ReduceToScalar(fakeScore), ReduceToScalar(realScore));
-            TapeStepOver(tape, loss, criticLayers);
+            TapeStepOver(tape, loss, criticLayers, _dataDiscOptimizer);
             ClipWeights(criticLayers);
         }
     }
@@ -583,7 +603,7 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             var fakeMask = MaskGeneratorForward(noise);
             var fakeScore = MaskDiscriminatorForward(fakeMask, isTraining: true);
             var loss = Engine.TensorSubtract(ReduceToScalar(fakeScore), ReduceToScalar(realScore));
-            TapeStepOver(tape, loss, criticLayers);
+            TapeStepOver(tape, loss, criticLayers, _maskDiscOptimizer);
             ClipWeights(criticLayers);
         }
     }
@@ -602,7 +622,7 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             var fakeMask = MaskGeneratorForward(maskNoise);
             var fakeScore = DataDiscriminatorForward(ElementwiseMultiplyTensor(fakeRow, fakeMask), isTraining: true);
             var loss = Engine.TensorNegate(ReduceToScalar(fakeScore));
-            TapeStepOver(tape, loss, BuildDataGenLayerList());
+            TapeStepOver(tape, loss, BuildDataGenLayerList(), _dataGenOptimizer);
         }
     }
 
@@ -616,7 +636,7 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             var fakeMask = MaskGeneratorForward(noise);
             var fakeScore = MaskDiscriminatorForward(fakeMask, isTraining: true);
             var loss = Engine.TensorNegate(ReduceToScalar(fakeScore));
-            TapeStepOver(tape, loss, BuildMaskGenLayerList());
+            TapeStepOver(tape, loss, BuildMaskGenLayerList(), _maskGenOptimizer);
         }
     }
 
@@ -625,7 +645,8 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     #region Tape Step Helpers
 
     /// <summary>Runs one optimizer step over the given sub-network's parameters from a tape-tracked loss.</summary>
-    private void TapeStepOver(GradientTape<T> tape, Tensor<T> loss, IReadOnlyList<ILayer<T>> layers)
+    private void TapeStepOver(GradientTape<T> tape, Tensor<T> loss, IReadOnlyList<ILayer<T>> layers,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
     {
         var trainable = Training.TapeTrainingStep<T>.CollectParameters(layers);
         if (trainable.Count == 0) return;
@@ -633,7 +654,7 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
         LastLoss = lossValue;
         var ctx = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(trainable, grads, lossValue);
-        _optimizer.Step(ctx);
+        optimizer.Step(ctx);
     }
 
     private Tensor<T> ReduceToScalar(Tensor<T> t)
@@ -717,7 +738,7 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             Tensor<T> loss = LossFunction is LossFunctions.LossFunctionBase<T> tapeLoss
                 ? tapeLoss.ComputeTapeLoss(flatOut, target)
                 : ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(flatOut, target)));
-            TapeStepOver(tape, loss, BuildDataGenLayerList());
+            TapeStepOver(tape, loss, BuildDataGenLayerList(), _dataGenOptimizer);
         }
         finally
         {

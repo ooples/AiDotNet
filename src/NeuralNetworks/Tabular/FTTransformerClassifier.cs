@@ -267,21 +267,64 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
         T learningRate,
         Matrix<int>? categoricalIndices = null)
     {
-        // Forward pass
-        var probabilities = PredictProbabilities(numericalFeatures, categoricalIndices);
+        // Collect every trainable tensor as a LIVE field instance — tokenizer
+        // (custom), then backbone encoder layers + final LayerNorm + the
+        // classification head (via the tape param collector). ComputeGradients
+        // maps gradients back to exactly these instances, and we apply SGD to
+        // them in place so the model actually updates.
+        var trainable = new System.Collections.Generic.List<Tensor<T>>(Tokenizer.GetTrainableTensors());
+        var layers = new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<T>>();
+        foreach (var encoderLayer in EncoderLayers) layers.Add(encoderLayer);
+        layers.Add(FinalLayerNorm);
+        layers.Add(_classificationHead);
+        trainable.AddRange(AiDotNet.Training.TapeTrainingStep<T>.CollectParameters(layers));
 
-        // Compute loss
-        var loss = ComputeCrossEntropyLoss(probabilities, targets);
+        // Reverse-mode AD over the whole network: the forward (tokenizer +
+        // transformer + head) and the cross-entropy below are Engine ops, so a
+        // forward under the tape records them and ComputeGradients fills in the
+        // gradient for every leaf tensor we collected. (Previously TrainStep had
+        // only a "// Backward pass" comment, so UpdateParameters threw "Backward
+        // pass must be called before updating parameters" — training never ran.)
+        using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>();
+        var logits = Forward(numericalFeatures, categoricalIndices);
+        var lossTensor = SoftmaxCrossEntropyLoss(logits, targets);
+        var grads = tape.ComputeGradients(lossTensor, trainable.ToArray());
 
-        // Backward pass
+        // SGD: param -= lr * grad, written back into the live tensor in place.
+        foreach (var t in trainable)
+        {
+            if (t is null || !grads.TryGetValue(t, out var g) || g is null) continue;
+            var updated = Engine.TensorSubtract(t, Engine.TensorMultiplyScalar(g, learningRate));
+            int n = t.Length;
+            for (int i = 0; i < n; i++) t[i] = updated[i];
+        }
 
-        // Update parameters
-        UpdateParameters(learningRate);
-
-        // Reset for next iteration
+        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
         ResetState();
+        return lossValue;
+    }
 
-        return loss;
+    /// <summary>
+    /// Tape-tracked softmax cross-entropy on logits [B, C] against integer targets.
+    /// CE = −mean_b Σ_c onehot[b,c]·log(softmax(logits)[b,c]). Built from Engine
+    /// tensor ops (recorded by the active <c>GradientTape</c>) with a CONSTANT
+    /// one-hot target (no gradient), so reverse-mode AD differentiates it cleanly.
+    /// </summary>
+    private Tensor<T> SoftmaxCrossEntropyLoss(Tensor<T> logits, int[] targets)
+    {
+        int batch = logits.Shape[0];
+        int numClasses = logits.Shape[1];
+
+        var onehot = new Tensor<T>([batch, numClasses]);
+        for (int b = 0; b < batch; b++)
+            onehot[b * numClasses + targets[b]] = NumOps.One;
+
+        // Numerically-stable log-softmax (avoids the log(0) risk of softmax→log).
+        var logProbs = Engine.TensorLogSoftmax(logits, axis: -1);
+        var weighted = Engine.TensorMultiply(logProbs, onehot);
+        var perRow = Engine.ReduceSum(weighted, new[] { 1 }, keepDims: false);
+        var meanVal = Engine.ReduceMean(perRow, new[] { 0 }, keepDims: false);
+        return Engine.TensorMultiplyScalar(meanVal, NumOps.FromDouble(-1.0));
     }
 
     /// <summary>
@@ -405,7 +448,13 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
     /// </summary>
     public override void SetParameters(Vector<T> parameters)
     {
-        int baseCount = (int)(base.ParameterCount - _classificationHead.ParameterCount);
+        // GetParameters concatenates [base.GetParameters() (= base.ParameterCount)][head].
+        // base.ParameterCount is the explicit-base call (backbone only, WITHOUT the head),
+        // so the base slice is exactly base.ParameterCount. The previous
+        // `base.ParameterCount - head.ParameterCount` under-counted the base by the head
+        // size, leaving the head to read trailing base params — corrupting both halves
+        // (the save/load round-trip then failed).
+        int baseCount = checked((int)base.ParameterCount);
         var baseParams = new Vector<T>(baseCount);
         for (int i = 0; i < baseCount; i++)
         {
