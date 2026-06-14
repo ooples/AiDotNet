@@ -1,0 +1,236 @@
+// Copyright (c) AiDotNet. All rights reserved.
+
+using System;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Training;
+using Xunit;
+
+namespace AiDotNet.Tests.UnitTests.Training;
+
+/// <summary>
+/// Parity tests for the 8-bit block-quantized streaming optimizers (#1600 acceptance criterion:
+/// "each streaming variant matches its full-precision counterpart within tolerance over N steps").
+/// Each streaming optimizer is run against an INDEPENDENT fp64 reference of the SAME canonical
+/// update rule, on the same fixed gradient sequence; the test asserts the 8-bit parameter
+/// trajectory tracks the fp64 one within a bounded relative error — i.e. the rule is correct AND
+/// the per-block 8-bit moment quantization doesn't drift/diverge over many steps.
+/// </summary>
+public class StreamingOptimizerParityTests
+{
+    private const int N = 512;     // one 2048-block, so per-block scale behaviour is exercised
+    private const int Steps = 60;
+    private const double Lr = 1e-2;
+
+    // Per-element fp64 reference update: (param, grad, state[]) -> newParam, mutating state in place.
+    private delegate double RefUpdate(double param, double grad, double[] state, int step);
+
+    private static double[] Grad(int step)
+    {
+        var g = new double[N];
+        uint s = (uint)(step * 2654435761u + 12345u);
+        for (int i = 0; i < N; i++)
+        {
+            s ^= s << 13; s ^= s >> 17; s ^= s << 5;
+            g[i] = ((s & 0xFFFF) / 65535.0 - 0.5) * 0.2; // ~[-0.1, 0.1]
+        }
+        return g;
+    }
+
+    private static double[] InitParams()
+    {
+        var p = new double[N];
+        uint s = 99u;
+        for (int i = 0; i < N; i++) { s ^= s << 13; s ^= s >> 17; s ^= s << 5; p[i] = ((s & 0xFFFF) / 65535.0 - 0.5); }
+        return p;
+    }
+
+    private static double RelL2(double[] a, double[] b)
+    {
+        double num = 0, den = 0;
+        for (int i = 0; i < a.Length; i++) { double e = a[i] - b[i]; num += e * e; den += b[i] * b[i]; }
+        return Math.Sqrt(num / Math.Max(1e-30, den));
+    }
+
+    private void RunParity(string name, IStreamingOptimizer<double> opt, RefUpdate reference, int momentCount, double tol)
+    {
+        var streamParam = new Tensor<double>(new[] { N });
+        var refParam = InitParams();
+        for (int i = 0; i < N; i++) streamParam[i] = refParam[i];
+        var refState = new double[N * Math.Max(1, momentCount)];
+
+        for (int step = 1; step <= Steps; step++)
+        {
+            var g = Grad(step);
+
+            opt.BeginStep();
+            var gradTensor = new Tensor<double>(new[] { N });
+            for (int i = 0; i < N; i++) gradTensor[i] = g[i];
+            opt.Apply(streamParam, gradTensor);
+
+            for (int i = 0; i < N; i++)
+            {
+                var slot = momentCount == 0 ? Array.Empty<double>() : new double[momentCount];
+                for (int m = 0; m < momentCount; m++) slot[m] = refState[i * momentCount + m];
+                refParam[i] = reference(refParam[i], g[i], slot, step);
+                for (int m = 0; m < momentCount; m++) refState[i * momentCount + m] = slot[m];
+            }
+        }
+
+        var streamArr = new double[N];
+        for (int i = 0; i < N; i++) streamArr[i] = streamParam[i];
+        double rel = RelL2(streamArr, refParam);
+        Assert.True(rel < tol, $"{name}: 8-bit streaming drifted from fp64 reference (relL2 {rel:E3} >= {tol}).");
+    }
+
+    [Fact] public void Sgd_TracksFp64()
+        => RunParity("SGD", new StreamingSgd8Bit<double>(Lr), (p, g, st, t) => p - Lr * g, 0, 1e-9);
+
+    [Fact] public void Momentum_TracksFp64()
+        => RunParity("Momentum", new StreamingMomentum8Bit<double>(Lr, 0.9),
+            (p, g, st, t) => { st[0] = 0.9 * st[0] + Lr * g; return p - st[0]; }, 1, 0.03);
+
+    [Fact] public void Nesterov_TracksFp64()
+        => RunParity("Nesterov", new StreamingNesterov8Bit<double>(Lr, 0.9),
+            (p, g, st, t) => { st[0] = 0.9 * st[0] + Lr * g; return p - (0.9 * st[0] + Lr * g); }, 1, 0.03);
+
+    [Fact] public void RmsProp_TracksFp64()
+        => RunParity("RMSProp", new StreamingRmsProp8Bit<double>(Lr, 0.9, 1e-8),
+            (p, g, st, t) => { st[0] = 0.9 * st[0] + 0.1 * g * g; return p - Lr * g / (Math.Sqrt(st[0]) + 1e-8); }, 1, 0.05);
+
+    [Fact] public void Adagrad_TracksFp64()
+        => RunParity("Adagrad", new StreamingAdagrad8Bit<double>(Lr, 1e-8),
+            (p, g, st, t) => { st[0] += g * g; return p - Lr * g / (Math.Sqrt(st[0]) + 1e-8); }, 1, 0.05);
+
+    [Fact] public void Adam_TracksFp64()
+        => RunParity("Adam", new StreamingAdam8Bit<double>(Lr), (p, g, st, t) =>
+        {
+            st[0] = 0.9 * st[0] + 0.1 * g; st[1] = 0.999 * st[1] + 0.001 * g * g;
+            double c1 = 1 - Math.Pow(0.9, t), c2 = 1 - Math.Pow(0.999, t);
+            return p - Lr * (st[0] / c1) / (Math.Sqrt(st[1] / c2) + 1e-8);
+        }, 2, 0.05);
+
+    [Fact] public void AmsGrad_TracksFp64()
+        => RunParity("AMSGrad", new StreamingAMSGrad8Bit<double>(Lr, 0.9, 0.999, 1e-8, 0.0), (p, g, st, t) =>
+        {
+            st[0] = 0.9 * st[0] + 0.1 * g; st[1] = 0.999 * st[1] + 0.001 * g * g; st[2] = Math.Max(st[2], st[1]);
+            double c1 = 1 - Math.Pow(0.9, t), c2 = 1 - Math.Pow(0.999, t);
+            return p - Lr * (st[0] / c1) / (Math.Sqrt(st[2] / c2) + 1e-8);
+        }, 3, 0.05);
+
+    [Fact] public void Nadam_TracksFp64()
+        => RunParity("Nadam", new StreamingNadam8Bit<double>(Lr, 0.9, 0.999, 1e-8), (p, g, st, t) =>
+        {
+            st[0] = 0.9 * st[0] + 0.1 * g; st[1] = 0.999 * st[1] + 0.001 * g * g;
+            double c1 = 1 - Math.Pow(0.9, t), c2 = 1 - Math.Pow(0.999, t);
+            double mHat = st[0] / c1, vHat = st[1] / c2;
+            double nest = 0.9 * mHat + 0.1 * g / c1;
+            return p - Lr * nest / (Math.Sqrt(vHat) + 1e-8);
+        }, 2, 0.05);
+
+    [Fact] public void AdaMax_TracksFp64()
+        => RunParity("AdaMax", new StreamingAdaMax8Bit<double>(Lr, 0.9, 0.999, 1e-8), (p, g, st, t) =>
+        {
+            st[0] = 0.9 * st[0] + 0.1 * g; st[1] = Math.Max(0.999 * st[1], Math.Abs(g));
+            double c1 = 1 - Math.Pow(0.9, t);
+            return p - (Lr / c1) * st[0] / (st[1] + 1e-8);
+        }, 2, 0.05);
+
+    [Fact] public void AdaDelta_TracksFp64()
+        => RunParity("AdaDelta", new StreamingAdaDelta8Bit<double>(Lr, 0.95, 1e-6), (p, g, st, t) =>
+        {
+            double accG = 0.95 * st[0] + 0.05 * g * g;
+            double delta = Math.Sqrt(st[1] + 1e-6) / Math.Sqrt(accG + 1e-6) * g;
+            st[1] = 0.95 * st[1] + 0.05 * delta * delta;
+            st[0] = accG;
+            return p - Lr * delta;
+        }, 2, 0.06);
+
+    [Fact] public void AdamW_TracksFp64()
+        => RunParity("AdamW", new StreamingAdamW8Bit<double>(Lr, 0.9, 0.999, 1e-8, 0.01), (p, g, st, t) =>
+        {
+            st[0] = 0.9 * st[0] + 0.1 * g; st[1] = 0.999 * st[1] + 0.001 * g * g;
+            double c1 = 1 - Math.Pow(0.9, t), c2 = 1 - Math.Pow(0.999, t);
+            p -= Lr * 0.01 * p; // decoupled weight decay
+            return p - Lr * (st[0] / c1) / (Math.Sqrt(st[1] / c2) + 1e-8);
+        }, 2, 0.05);
+
+    // Lion's update is lr*sign(interp(m,g)); the 8-bit momentum only flips the SIGN near zero, so
+    // a looser bound (a few sign disagreements over 60 steps) is expected and still meaningful.
+    [Fact] public void Lion_TracksFp64()
+        => RunParity("Lion", new StreamingLion8Bit<double>(Lr, 0.9, 0.99, 0.0), (p, g, st, t) =>
+        {
+            double dir = 0.9 * st[0] + 0.1 * g;
+            st[0] = 0.99 * st[0] + 0.01 * g;
+            return p - Lr * Math.Sign(dir);
+        }, 1, 0.12);
+
+    // FTRL replaces the parameter from its (z, n) accumulators (closed form), so it's per-element.
+    // lambda1 is the L1 strength; use a small value so the soft-threshold actually fires.
+    [Fact] public void Ftrl_TracksFp64()
+        => RunParity("FTRL", new StreamingFtrl8Bit<double>(Lr, 1.0, 1e-3, 1e-3), (p, g, st, t) =>
+        {
+            double nNew = st[1] + g * g;
+            double sigma = (Math.Sqrt(nNew) - Math.Sqrt(st[1])) / Lr;
+            double zNew = st[0] + g - sigma * p;
+            st[0] = zNew; st[1] = nNew;
+            if (Math.Abs(zNew) <= 1e-3) return 0.0;
+            double num = -Math.Sign(zNew) * (Math.Abs(zNew) - 1e-3);
+            double den = 1e-3 + (Math.Sqrt(nNew) + 1.0) / Lr;
+            return num / den;
+        }, 2, 0.06);
+
+    // LARS/LAMB need the per-PARAMETER norm (a full-param pre-pass), so they get a dedicated driver.
+    [Fact] public void Lars_TracksFp64()
+    {
+        const double momentum = 0.9, wd = 1e-4, trust = 0.001, eps = 1e-8;
+        var opt = new StreamingLars8Bit<double>(Lr, momentum, wd, trust, eps, false);
+        var sp = new Tensor<double>(new[] { N }); var rp = InitParams(); var vel = new double[N];
+        for (int i = 0; i < N; i++) sp[i] = rp[i];
+        for (int step = 1; step <= Steps; step++)
+        {
+            var g = Grad(step);
+            opt.BeginStep(); var gt = new Tensor<double>(new[] { N }); for (int i = 0; i < N; i++) gt[i] = g[i];
+            opt.Apply(sp, gt);
+            double pn = 0, gn = 0; for (int i = 0; i < N; i++) { pn += rp[i] * rp[i]; gn += g[i] * g[i]; }
+            pn = Math.Sqrt(pn); gn = Math.Sqrt(gn);
+            double localLr = (pn > 0 && gn > 0) ? Lr * trust * pn / (gn + wd * pn + eps) : Lr;
+            for (int i = 0; i < N; i++) { vel[i] = momentum * vel[i] + localLr * (g[i] + wd * rp[i]); rp[i] -= vel[i]; }
+        }
+        var sa = new double[N]; for (int i = 0; i < N; i++) sa[i] = sp[i];
+        double rel = RelL2(sa, rp);
+        Assert.True(rel < 0.05, $"LARS: 8-bit drifted from fp64 (relL2 {rel:E3}).");
+    }
+
+    [Fact] public void Lamb_TracksFp64()
+    {
+        const double b1 = 0.9, b2 = 0.999, eps = 1e-6, wd = 0.01, maxTrust = 10.0;
+        var opt = new StreamingLamb8Bit<double>(Lr, b1, b2, eps, wd, true, maxTrust, true);
+        var sp = new Tensor<double>(new[] { N }); var rp = InitParams(); var m = new double[N]; var v = new double[N];
+        for (int i = 0; i < N; i++) sp[i] = rp[i];
+        for (int step = 1; step <= Steps; step++)
+        {
+            var g = Grad(step);
+            opt.BeginStep(); var gt = new Tensor<double>(new[] { N }); for (int i = 0; i < N; i++) gt[i] = g[i];
+            opt.Apply(sp, gt);
+            double c1 = 1 - Math.Pow(b1, step), c2 = 1 - Math.Pow(b2, step);
+            double pn = 0, un = 0;
+            for (int i = 0; i < N; i++)
+            {
+                double mm = b1 * m[i] + (1 - b1) * g[i], vv = b2 * v[i] + (1 - b2) * g[i] * g[i];
+                double u = (mm / c1) / (Math.Sqrt(vv / c2) + eps) + wd * rp[i];
+                pn += rp[i] * rp[i]; un += u * u;
+            }
+            pn = Math.Sqrt(pn); un = Math.Sqrt(un);
+            double tr = (pn > 0 && un > 0) ? Math.Min(pn / un, maxTrust) : 1.0;
+            for (int i = 0; i < N; i++)
+            {
+                m[i] = b1 * m[i] + (1 - b1) * g[i]; v[i] = b2 * v[i] + (1 - b2) * g[i] * g[i];
+                double u = (m[i] / c1) / (Math.Sqrt(v[i] / c2) + eps) + wd * rp[i];
+                rp[i] -= Lr * tr * u;
+            }
+        }
+        var sa = new double[N]; for (int i = 0; i < N; i++) sa[i] = sp[i];
+        double rel = RelL2(sa, rp);
+        Assert.True(rel < 0.05, $"LAMB: 8-bit drifted from fp64 (relL2 {rel:E3}).");
+    }
+}
