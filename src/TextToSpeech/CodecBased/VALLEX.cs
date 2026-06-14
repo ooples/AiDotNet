@@ -94,7 +94,7 @@ public class VALLEX<T> : TtsModelBase<T>, ICodecTts<T>
     {
         _options = options ?? new VALLEXOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -221,8 +221,9 @@ public class VALLEX<T> : TtsModelBase<T>, ICodecTts<T>
     {
         int len = Math.Min(text.Length, _options.MaxTextLength);
         var t = new Tensor<T>([len]);
+        int vocabSize = Math.Max(1, _options.VocabSize);
         for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
+            t[i] = NumOps.FromDouble(text[i] % vocabSize);
         return t;
     }
 
@@ -240,7 +241,8 @@ public class VALLEX<T> : TtsModelBase<T>, ICodecTts<T>
                 _options.TextEncoderDim, _options.LLMDim,
                 _options.NumCodebooks * _options.CodebookSize,
                 _options.NumEncoderLayers, _options.NumLLMLayers,
-                _options.NumHeads, _options.DropoutRate));
+                _options.NumHeads, _options.DropoutRate,
+                _options.VocabSize));
         ComputeEncoderDecoderBoundary();
     }
 
@@ -270,7 +272,7 @@ public class VALLEX<T> : TtsModelBase<T>, ICodecTts<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {
@@ -299,7 +301,26 @@ public class VALLEX<T> : TtsModelBase<T>, ICodecTts<T>
         {
             Name = _useNativeMode ? "VALLEX-Native" : "VALLEX-ONNX",
             Description = "VALL-E X: Cross-Lingual Zero-Shot TTS (Zhang et al., 2023)",
-            FeatureCount = _options.LLMDim
+            FeatureCount = _options.LLMDim,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                ["Architecture"] = "VALL-E X",
+                ["Mode"] = _useNativeMode ? "Native" : "ONNX",
+                ["SampleRate"] = _options.SampleRate,
+                ["MelChannels"] = _options.MelChannels,
+                ["HopSize"] = _options.HopSize,
+                ["CodecFrameRate"] = _options.CodecFrameRate,
+                ["NumCodebooks"] = _options.NumCodebooks,
+                ["CodebookSize"] = _options.CodebookSize,
+                ["TextEncoderDim"] = _options.TextEncoderDim,
+                ["LLMDim"] = _options.LLMDim,
+                ["NumEncoderLayers"] = _options.NumEncoderLayers,
+                ["NumLLMLayers"] = _options.NumLLMLayers,
+                ["NumHeads"] = _options.NumHeads,
+                ["MaxTextLength"] = _options.MaxTextLength,
+                ["LayerCount"] = Layers.Count
+            },
+            ModelData = SerializeForMetadata()
         };
     }
 
@@ -356,6 +377,14 @@ public class VALLEX<T> : TtsModelBase<T>, ICodecTts<T>
         if (_disposed)
             throw new ObjectDisposedException(GetType().FullName ?? nameof(VALLEX<T>));
     }
+
+    private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+        => new(this, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = _options.LearningRate,
+            WeightDecay = _options.WeightDecay,
+            UseAdaptiveLearningRate = false
+        });
 
     /// <inheritdoc />
     protected override void Dispose(bool disposing)

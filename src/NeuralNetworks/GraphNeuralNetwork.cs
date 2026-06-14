@@ -1,6 +1,7 @@
 #pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
@@ -300,7 +301,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         GraphNeuralNetworkOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer(this);
         _options = options ?? new GraphNeuralNetworkOptions();
         Options = _options;
         AuxiliaryLossWeight = NumOps.FromDouble(0.05);
@@ -347,7 +348,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         GraphNeuralNetworkOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer(this);
         _options = options ?? new GraphNeuralNetworkOptions();
         Options = _options;
         AuxiliaryLossWeight = NumOps.FromDouble(0.05);
@@ -359,6 +360,16 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         _finalActivationLayerScalarActivation = finalActivationLayerActivation;
 
         InitializeLayers();
+    }
+
+    private static AdamOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer(GraphNeuralNetwork<T> model)
+    {
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            model,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = DefaultTrainLearningRate
+            });
     }
 
     /// <summary>
@@ -780,15 +791,13 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
                 nameof(numNodes));
         }
 
-        // Create fully-connected adjacency with symmetric normalization per Kipf & Welling 2017.
-        // Â = D^(-1/2) · (A + I) · D^(-1/2) where D is the degree matrix of A + I.
-        // For a fully-connected graph with self-loops, every node has degree = numNodes,
-        // so D^(-1/2) = 1/sqrt(numNodes) * I, giving Â[i,j] = 1/numNodes.
+        // No explicit graph was supplied, so use the neutral Kipf-Welling case:
+        // A has no off-diagonal edges, A + I is identity, and symmetric
+        // normalization leaves identity unchanged. Real graph structure should
+        // still be provided through PredictGraph when available.
         var adj = new Tensor<T>([numNodes, numNodes]);
-        T normalizedWeight = NumOps.FromDouble(1.0 / numNodes);
         for (int i = 0; i < numNodes; i++)
-            for (int j = 0; j < numNodes; j++)
-                adj[i, j] = normalizedWeight;
+            adj[i, i] = NumOps.One;
 
         _autoAdjacencyMatrix = adj;
         return adj;
@@ -843,6 +852,23 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         TrainWithTape(input, expectedOutput, _optimizer);
 
         SetTrainingMode(false);
+    }
+
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (input.Rank == 1)
+            input = Engine.Reshape(input, [1, input.Shape[0]]);
+
+        int numNodes = input.Shape[0];
+        var adjacencyMatrix = EnsureAdjacencyMatrix(numNodes);
+
+        foreach (var layer in Layers)
+        {
+            if (layer is IGraphConvolutionLayer<T> graphLayer)
+                graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
+        }
+
+        return base.ForwardForTraining(input);
     }
 
 

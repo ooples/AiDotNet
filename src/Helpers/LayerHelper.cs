@@ -3090,22 +3090,17 @@ public static class LayerHelper<T>
         // Input layer
         yield return new InputLayer<T>(inputSize);
 
-        // Controller (Feed-forward network) — input is [features + memoryVectorSize]
-        // because ProcessController concatenates input with read results
+        // Controller (feed-forward network). NeuralTuringMachine.ForwardTape
+        // concatenates the external input with the previous read vector before
+        // running this stack; the controller's output is then partitioned into
+        // read/write interface parameters per Graves et al. 2014.
         int controllerInputSize = inputSize + memoryVectorSize;
         yield return new DenseLayer<T>(controllerSize, new TanhActivation<T>() as IActivationFunction<T>);
 
-        // Read heads - typically use content-based addressing with cosine similarity
-        yield return new MemoryReadLayer<T>(memoryVectorSize, memoryVectorSize,
-            new SigmoidActivation<T>() as IActivationFunction<T>);
-
-        // Write heads - typically use gated mechanism with sigmoid for gates
-        yield return new MemoryWriteLayer<T>(
-            memoryVectorSize,
-            new TanhActivation<T>() as IActivationFunction<T>
-        );
-
-        // Output layer - linear projection before final task-specific activation
+        // Output layer. ForwardTape concatenates controller output with the
+        // freshly read memory vector before this projection. The read/write
+        // heads are not standalone feed-forward layers here; they are the
+        // differentiable addressing operations implemented by ForwardTape.
         yield return new DenseLayer<T>(outputSize,
             new IdentityActivation<T>() as IActivationFunction<T>);
 
@@ -32545,9 +32540,14 @@ public static class LayerHelper<T>
         int llmFfnDim = llmDim * 4;
 
         // === Character/Byte Embedding (E2 TTS Eskimez et al. 2024 §3.1) ===
-        // Input is character/byte token IDs [seq], embedded to [seq, textEncoderDim]
-        // before the text encoder's FFT blocks consume them.
-        yield return new EmbeddingLayer<T>(vocabSize, textEncoderDim);
+        // Input is discrete text/acoustic token IDs [seq], embedded to
+        // [seq, textEncoderDim] before the transformer stack consumes them.
+        var tokenEmbedding = new EmbeddingLayer<T>(vocabSize, textEncoderDim)
+        {
+            InputMode = EmbeddingInputMode.Indices,
+            ScaleBySqrtDimension = true
+        };
+        yield return tokenEmbedding;
 
         // === Text Encoder ===
         // Canonical Pre-LN residual Transformer blocks (Vaswani 2017 §3.1). The prior

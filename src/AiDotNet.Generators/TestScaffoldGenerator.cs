@@ -1812,6 +1812,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "vocabSize: 16, modelDimension: 32, numLayers: 2, stateDimension: 8, " +
                     "attentionInterval: 2, maxSeqLength: 8)";
             }
+            else if (IsValleCodecLMModel(model.ClassName) && model.TypeParameterCount == 1)
+            {
+                // VALL-E-family models are neural codec language models: token
+                // IDs -> transformer text/codec LM -> codec logits. Use a
+                // smoke-scale config that preserves that paper contract without
+                // constructing the production 1024-wide, 12-layer stack for every
+                // generated invariant test.
+                string optionsType = GetValleCodecLMOptionsType(model.ClassName);
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
+                    "inputSize: 4, outputSize: 16), " +
+                    $"new {optionsType} {{ SampleRate = 24000, NumCodebooks = 1, CodebookSize = 16, " +
+                    "CodecFrameRate = 75, TextEncoderDim = 32, LLMDim = 32, NumEncoderLayers = 1, " +
+                    "NumLLMLayers = 1, NumHeads = 4, VocabSize = 64, MaxTextLength = 8, " +
+                    "DropoutRate = 0.0, LearningRate = 1e-3, WeightDecay = 0.0 })";
+            }
             else if (model.HasParameterlessConstructor)
             {
                 // Zero-arg constructor: simple instantiation
@@ -2575,8 +2592,45 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // garbage → NaN / no learning). Output is the codec logits
                 // [seq, NumCodebooks*CodebookSize].
                 int codecDim = CodecLMOutputDim(model.ClassName);
+                int tokenVocab = CodecLMInputVocabSize(model.ClassName);
                 sb.AppendLine("    protected override int[] InputShape => new[] { 4 };");
                 sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 4, {codecDim} }};");
+                sb.AppendLine();
+                sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateRandomTensor(int[] shape, System.Random rng)");
+                sb.AppendLine("    {");
+                sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
+                sb.AppendLine("        bool isInputShape = shape.Length == InputShape.Length;");
+                sb.AppendLine("        for (int d = 0; d < shape.Length && isInputShape; d++)");
+                sb.AppendLine("            isInputShape &= shape[d] == InputShape[d];");
+                sb.AppendLine("        if (isInputShape)");
+                sb.AppendLine("        {");
+                sb.AppendLine("            for (int i = 0; i < tensor.Length; i++)");
+                sb.AppendLine($"                tensor[i] = rng.Next(0, {tokenVocab});");
+                sb.AppendLine("            return tensor;");
+                sb.AppendLine("        }");
+                sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
+                sb.AppendLine("            tensor[i] = rng.NextDouble();");
+                sb.AppendLine("        return tensor;");
+                sb.AppendLine("    }");
+                sb.AppendLine();
+                sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateConstantTensor(int[] shape, double value)");
+                sb.AppendLine("    {");
+                sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
+                sb.AppendLine("        bool isInputShape = shape.Length == InputShape.Length;");
+                sb.AppendLine("        for (int d = 0; d < shape.Length && isInputShape; d++)");
+                sb.AppendLine("            isInputShape &= shape[d] == InputShape[d];");
+                sb.AppendLine("        if (isInputShape)");
+                sb.AppendLine("        {");
+                sb.AppendLine("            int offset = value < 0.5 ? 1 : 17;");
+                sb.AppendLine("            for (int i = 0; i < tensor.Length; i++)");
+                sb.AppendLine($"                tensor[i] = (i + offset) % {tokenVocab};");
+                sb.AppendLine("            return tensor;");
+                sb.AppendLine("        }");
+                sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
+                sb.AppendLine("            tensor[i] = value;");
+                sb.AppendLine("        return tensor;");
+                sb.AppendLine("    }");
+                sb.AppendLine();
                 sb.AppendLine("    protected override int MoreDataShortIterations => 3;");
                 sb.AppendLine("    protected override int MoreDataLongIterations => 10;");
                 // Deep embedding-first AR codec LM: pin a deterministic init so the
@@ -5081,7 +5135,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         int tickIdx = className.IndexOf('`');
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
-        return className is "GPTSoVITS";
+        return className is "GPTSoVITS" || IsValleCodecLMModel(className);
     }
 
     /// <summary>
@@ -5094,8 +5148,39 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
         return className switch
         {
+            "VALLE" => 16,
+            "VALLEX" => 16,
+            "VALLE2" => 16,
+            "VALLEXClone" => 16,
             "GPTSoVITS" => 1024,
             _ => 1024,
+        };
+    }
+
+    private static int CodecLMInputVocabSize(string className)
+    {
+        int tickIdx = className.IndexOf('`');
+        if (tickIdx > 0) className = className.Substring(0, tickIdx);
+        return IsValleCodecLMModel(className) ? 64 : 256;
+    }
+
+    private static bool IsValleCodecLMModel(string className)
+    {
+        int tickIdx = className.IndexOf('`');
+        if (tickIdx > 0) className = className.Substring(0, tickIdx);
+        return className is "VALLE" or "VALLEX" or "VALLE2" or "VALLEXClone";
+    }
+
+    private static string GetValleCodecLMOptionsType(string className)
+    {
+        int tickIdx = className.IndexOf('`');
+        if (tickIdx > 0) className = className.Substring(0, tickIdx);
+        return className switch
+        {
+            "VALLEXClone" => "AiDotNet.TextToSpeech.VoiceCloning.VALLEXCloneOptions",
+            "VALLE2" => "AiDotNet.TextToSpeech.CodecBased.VALLE2Options",
+            "VALLEX" => "AiDotNet.TextToSpeech.CodecBased.VALLEXOptions",
+            _ => "AiDotNet.TextToSpeech.CodecBased.VALLEOptions",
         };
     }
 
