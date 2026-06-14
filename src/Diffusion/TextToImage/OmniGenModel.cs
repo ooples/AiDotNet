@@ -328,27 +328,14 @@ public class OmniGenModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedDit = new DiTNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS,
-            hiddenSize: 2048,
-            numLayers: 32,
-            numHeads: 16,
-            patchSize: 2,
-            contextDim: CROSS_ATTENTION_DIM);
-        clonedDit.SetParameters(_dit.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2,
-            latentScaleFactor: 0.18215);
-        clonedVae.SetParameters(_vae.GetParameters());
-
+        // Delegate to the predictor's and VAE's own Clone(), which reconstruct from their
+        // actual config fields (NOT hardcoded foundation-scale constants) and preserve
+        // materialized weights — so a caller-injected variant of any scale round-trips
+        // correctly. Rebuilding at fixed 2048/32 here would size a clone that cannot accept
+        // an injected tiny (or otherwise non-default) predictor's parameter vector.
         return new OmniGenModel<T>(
-            dit: clonedDit,
-            vae: clonedVae,
+            dit: (DiTNoisePredictor<T>)_dit.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner);
     }
 

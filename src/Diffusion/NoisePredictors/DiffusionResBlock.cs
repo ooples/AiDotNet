@@ -159,24 +159,18 @@ public class DiffusionResBlock<T> : LayerBase<T>
         // `block2.SetParameters(block1.GetParameters()) ⇒ block2(x) == block1(x)`
         // determinism contract relied on by tests and checkpoint reload.
         //
-        // Materialize via per-sublayer ResolveFromShape — ALLOCATION ONLY, no
-        // conv compute. The previous implementation ran a full probe Forward
-        // through the block at the paper spatial size; profiling
-        // (dotnet-trace, DallE2ModelTests.Predict_ShouldBeDeterministic) showed
-        // 100% of the 120s test timeout inside this ctor chain — the fused
-        // im2col conv GEMM ran a real [1, C, S, S] convolution for every res
-        // block in the U-Net, so paper-scale models (DallE2, SDXLInpainting)
-        // spent minutes CONSTRUCTING and timed out before Predict ever ran.
-        // ResolveFromShape runs each layer's lazy-init hook only (shape
-        // resolution + weight allocation + RNG init) — the determinism
-        // contract needs the weights to exist, not a convolution result.
-        _conv1.ResolveFromShape([1, inChannels, spatialSize, spatialSize]);
-        if (timeEmbedDim > 0)
-        {
-            _timeMlp.ResolveFromShape([1, timeEmbedDim]);
-        }
-        _conv2.ResolveFromShape([1, outChannels, spatialSize, spatialSize]);
-        _skipConv?.ResolveFromShape([1, inChannels, spatialSize, spatialSize]);
+        // Sublayers are left FULLY LAZY here — no shape resolution and no weight
+        // allocation in the ctor. At paper scale eager allocation was the dominant
+        // construction cost (a single SD U-Net is ~860M params, ~7 GB at double) and
+        // OOM'd the 16 GB CI runner on construction alone (Unit-03b). The owning
+        // UNetNoisePredictor resolves every sublayer's TRUE shape via its shape-only
+        // forward (ResolveShapesViaForward) before any ParameterCount / GetParameters
+        // read — the single source of truth that matches the real forward exactly —
+        // and weights materialise on demand at that GetParameters or the first real
+        // Forward. The SetParameters(GetParameters()) determinism contract is
+        // unaffected: GetParameters resolves shapes then materialises, and
+        // SetParameters overwrites the values.
+        _ = inChannels; _ = outChannels; _ = spatialSize; _ = timeEmbedDim;
     }
 
     /// <summary>

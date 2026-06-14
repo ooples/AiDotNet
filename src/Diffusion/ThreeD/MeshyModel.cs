@@ -241,17 +241,15 @@ public class MeshyModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedUnet = new UNetNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS, outputChannels: LATENT_CHANNELS,
-            baseChannels: BASE_CHANNELS, channelMultipliers: new[] { 1, 2, 4 },
-            numResBlocks: 2, attentionResolutions: new[] { 4, 2 },
-            contextDim: CROSS_ATTENTION_DIM);
-        clonedUnet.SetParameters(_unet.GetParameters());
-        return new MeshyModel<T>(unet: clonedUnet,
-            vae: new StandardVAE<T>(inputChannels: 3, latentChannels: LATENT_CHANNELS,
-                baseChannels: 128, channelMultipliers: new[] { 1, 2, 4, 4 },
-                numResBlocksPerLevel: 2, latentScaleFactor: 0.18215),
-            conditioner: _conditioner, defaultPointCount: DefaultPointCount);
+        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
+        var clonedVae = (StandardVAE<T>)_vae.Clone();
+
+        return new MeshyModel<T>(
+            architecture: Architecture,
+            unet: clonedUnet,
+            vae: clonedVae,
+            conditioner: _conditioner,
+            defaultPointCount: DefaultPointCount);
     }
 
     #endregion

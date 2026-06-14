@@ -247,20 +247,16 @@ public class PixArtSigmaModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedDit = new DiTNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS, hiddenSize: 1152,
-            numLayers: 28, numHeads: 16, patchSize: 2,
-            contextDim: CROSS_ATTENTION_DIM);
-        clonedDit.SetParameters(_dit.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3, latentChannels: LATENT_CHANNELS,
-            baseChannels: 128, channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2, latentScaleFactor: 0.13025);
-        clonedVae.SetParameters(_vae.GetParameters());
-
+        // Lazy-preserving clone: delegate to the predictor's and VAE's own Clone(), which
+        // reconstruct from their actual config fields and copy only materialized weights.
+        // The previous flatten -> SetParameters(GetParameters()) round-trip materialised the
+        // entire foundation-scale DiT + VAE (model + clone + flat parameter vector) at once
+        // and OOM'd the runner. Delegating also lets a caller-injected non-default-scale
+        // predictor/VAE round-trip correctly instead of being rebuilt at fixed constants.
         return new PixArtSigmaModel<T>(
-            dit: clonedDit, vae: clonedVae, conditioner: _conditioner);
+            dit: (DiTNoisePredictor<T>)_dit.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner);
     }
 
     #endregion
