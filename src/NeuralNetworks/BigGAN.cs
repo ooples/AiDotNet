@@ -463,54 +463,44 @@ public class BigGAN<T> : NeuralNetworkBase<T>
         // Concatenate latent codes and class embeddings
         var input = ConcatenateTensors(truncatedCodes, classEmbeddings);
 
-        // Reshape input to 3D/4D format for CNN generator
+        // Reshape the concatenated (latent + class-embedding) input into the
+        // generator's DECLARED input volume — see SAGAN.Generate for the
+        // rationale. The ceil(sqrt(...)) heuristic produced a grid that did not
+        // match the generator's actual input grid and threw a weight-shape
+        // mismatch. Bulk span copies (vectorized memcpy), never per-element
+        // indexer loops; the zero-initialized buffer supplies the padding tail.
+        int[] genInputShape = Generator.Architecture.GetInputShape();
+        int genInputSize = 1;
+        foreach (int d in genInputShape) genInputSize *= d;
+
         Tensor<T> reshapedInput;
         if (input.Shape.Length == 1)
         {
-            // 1D [total_size] -> 3D [1, height, width]
             int totalLen = input.Shape[0];
-            int h = (int)Math.Ceiling(Math.Sqrt(totalLen));
-            int w = h;
-            int padded = h * w;
-            if (padded > totalLen)
-            {
-                var paddedData = new T[padded];
-                Array.Copy(input.Data.ToArray(), paddedData, totalLen);
-                reshapedInput = new Tensor<T>(paddedData, [1, h, w]);
-            }
-            else
-            {
-                reshapedInput = input.Reshape([1, h, w]);
-            }
+            int copy = Math.Min(totalLen, genInputSize);
+            var flat = new Tensor<T>([genInputSize]);
+            input.Data.Span.Slice(0, copy).CopyTo(flat.Data.Span);
+            reshapedInput = flat.Reshape(genInputShape);
         }
         else if (input.Shape.Length == 2)
         {
-            // 2D [batch, total_size] -> 4D [batch, 1, height, width]
             int batch = input.Shape[0];
             int latentLen = input.Shape[1];
-            int h = (int)Math.Ceiling(Math.Sqrt(latentLen));
-            int w = h;
-            int padded = h * w;
-            if (padded > latentLen)
-            {
-                var paddedData = new T[batch * padded];
-                for (int b = 0; b < batch; b++)
-                {
-                    for (int j = 0; j < latentLen; j++)
-                    {
-                        paddedData[b * padded + j] = input[b, j];
-                    }
-                }
-                reshapedInput = new Tensor<T>(paddedData, [batch, 1, h, w]);
-            }
-            else
-            {
-                reshapedInput = input.Reshape([batch, 1, h, w]);
-            }
+            int copy = Math.Min(latentLen, genInputSize);
+            var batchShape = new int[genInputShape.Length + 1];
+            batchShape[0] = batch;
+            for (int i = 0; i < genInputShape.Length; i++)
+                batchShape[i + 1] = genInputShape[i];
+            var flat = new Tensor<T>([batch, genInputSize]);
+            var src = input.Data.Span;
+            var dst = flat.Data.Span;
+            for (int b = 0; b < batch; b++)
+                src.Slice(b * latentLen, copy).CopyTo(dst.Slice(b * genInputSize, copy));
+            reshapedInput = flat.Reshape(batchShape);
         }
         else
         {
-            // Already 3D or higher
+            // Already in the generator's expected rank — use as-is.
             reshapedInput = input;
         }
 
