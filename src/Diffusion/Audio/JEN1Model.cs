@@ -266,19 +266,11 @@ public class JEN1Model<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedUnet = new UNetNoisePredictor<T>(
-            inputChannels: JEN1_LATENT_CHANNELS, outputChannels: JEN1_LATENT_CHANNELS,
-            baseChannels: 256, channelMultipliers: [1, 2, 4, 4],
-            numResBlocks: 2, attentionResolutions: [4, 2, 1],
-            contextDim: JEN1_CROSS_ATTENTION_DIM);
-        clonedUnet.SetParameters(_unet.GetParameters());
-
-        var clonedVae = new AudioVAE<T>(
-            melChannels: 128, latentChannels: JEN1_LATENT_CHANNELS,
-            baseChannels: 64, numResBlocks: 2);
-        clonedVae.SetParameters(_audioVae.GetParameters());
+        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
+        var clonedVae = (AudioVAE<T>)_audioVae.Clone();
 
         return new JEN1Model<T>(
+            architecture: Architecture,
             unet: clonedUnet,
             audioVae: clonedVae,
             conditioner: _conditioner);
