@@ -402,42 +402,47 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         T levelMean = _numOps.Divide(levelSum, _numOps.FromDouble(y.Length));
         for (int h = 0; h < _outputBias.Length; h++) _outputBias[h] = levelMean;
 
+        // IEngine automatic-gradient-tape training (no hand-rolled backprop):
+        // forward via Engine ops under a GradientTape, then optimizer.Step applies
+        // the tape's gradients to every trainable tensor. Same pattern as
+        // TemporalFusionTransformer / NBEATS.
+        var optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            null, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate });
+        var mseLoss = new MeanSquaredErrorLoss<T>();
+        var allParams = CollectTrainableParameters();
+
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
             TrainingCancellationToken.ThrowIfCancellationRequested();
             var shuffled = sampleIndices.OrderBy(_ => _random.Next()).ToList();
 
-            for (int batchStart = 0; batchStart < shuffled.Count; batchStart += _options.BatchSize)
+            foreach (int i in shuffled)
             {
-                int batchEnd = Math.Min(batchStart + _options.BatchSize, shuffled.Count);
-                int batchSize = batchEnd - batchStart;
+                if (i % 8 == 0) TrainingCancellationToken.ThrowIfCancellationRequested();
 
-                ResetGradientAccumulators();
+                var inData = new Vector<T>(lookback);
+                for (int t = 0; t < lookback; t++) inData[t] = y[i - lookback + t];
+                var targetData = new Vector<T>(forecastHorizon);
+                for (int h = 0; h < forecastHorizon; h++) targetData[h] = y[i + h];
+                var targetTensor = new Tensor<T>(new[] { forecastHorizon, 1 }, targetData);
 
-                for (int idx = batchStart; idx < batchEnd; idx++)
-                {
-                    if (idx % 20 == 0) TrainingCancellationToken.ThrowIfCancellationRequested();
-                    int i = shuffled[idx];
+                using var tape = new Tensors.Engines.Autodiff.GradientTape<T>();
+                var prediction = ForwardEngine(inData);
+                var lossTensor = mseLoss.ComputeTapeLoss(prediction, targetTensor);
+                var allGrads = tape.ComputeGradients(lossTensor, sources: null);
 
-                    // Extract lookback window from y
-                    var input = new Vector<T>(lookback);
-                    for (int t = 0; t < lookback; t++)
-                    {
-                        input[t] = y[i - lookback + t];
-                    }
+                var grads = new Dictionary<Tensor<T>, Tensor<T>>(
+                    Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                foreach (var param in allParams)
+                    if (allGrads.TryGetValue(param, out var g)) grads[param] = g;
 
-                    // Extract multi-step targets from y
-                    var targets = new Vector<T>(forecastHorizon);
-                    for (int h = 0; h < forecastHorizon; h++)
-                    {
-                        targets[h] = y[i + h];
-                    }
-
-                    var gradients = ComputeGradientsMultiStep(input, targets);
-                    AccumulateGradients(gradients);
-                }
-
-                ApplyGradients(learningRate, batchSize);
+                T lossValue = lossTensor.Length > 0 ? lossTensor[0] : _numOps.Zero;
+                var inputTensor = new Tensor<T>(new[] { lookback, 1 }, inData);
+                Tensor<T> ComputeForward(Tensor<T> a, Tensor<T> b) => prediction;
+                Tensor<T> ComputeLoss(Tensor<T> p, Tensor<T> t) => mseLoss.ComputeTapeLoss(p, t);
+                var context = new Tensors.Engines.Autodiff.TapeStepContext<T>(
+                    allParams, grads, lossValue, inputTensor, targetTensor, ComputeForward, ComputeLoss, null);
+                optimizer.Step(context);
             }
         }
 
@@ -538,6 +543,191 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
                 tensor[i] = _numOps.Zero;
             }
         }
+    }
+
+    // ── Unified Engine-op forward (IEngine automatic gradient tape) ──────────
+    // Single forward used by BOTH training (under a GradientTape) and inference,
+    // so there is no train/predict divergence. All ops are IEngine ops that the
+    // active GradientTape records automatically — no hand-rolled backward, no
+    // manual ApplyGradients. Returns the [forecastHorizon, 1] forecast.
+    private Tensor<T> ForwardEngine(Vector<T> input)
+    {
+        int seqLen = Math.Min(input.Length, _options.LookbackWindow);
+        int embDim = _options.EmbeddingDim;
+        int forecastHorizon = _options.ForecastHorizon;
+
+        // Input + positional encoding as constant data tensors (no grad needed).
+        var inData = new Vector<T>(seqLen);
+        for (int t = 0; t < seqLen; t++) inData[t] = input[t];
+        var inputTensor = new Tensor<T>(new[] { seqLen, 1 }, inData);
+
+        var posData = new Vector<T>(seqLen * embDim);
+        for (int i = 0; i < seqLen * embDim; i++) posData[i] = _positionalEncoding[i];
+        var posTensor = new Tensor<T>(new[] { seqLen, embDim }, posData);
+
+        // Embedding: input @ inputProj(1×embDim) + positional encoding.
+        var embedded = Engine.TensorAdd(
+            Engine.TensorMatMul(inputTensor, Engine.Reshape(_inputProjection, new[] { 1, embDim })),
+            posTensor);
+
+        // Series decomposition.
+        var trend = MovingAverageEngine(embedded, _movingAvgKernel, seqLen, embDim);
+        var seasonal = Engine.TensorSubtract(embedded, trend);
+
+        // Encoder.
+        for (int i = 0; i < _encoderLayers.Count; i++)
+            (seasonal, trend) = EncoderLayerEngine(seasonal, trend, i);
+
+        // Decoder (seeded from the learned seasonal/trend inits).
+        Tensor<T> decSeasonal = _decoderSeasonalInit;
+        Tensor<T> decTrend = _decoderTrendInit;
+        for (int i = 0; i < _decoderLayers.Count; i++)
+            (decSeasonal, decTrend) = DecoderLayerEngine(decSeasonal, decTrend, seasonal, trend, i);
+
+        // Output projection: seasonal·projᵀ + trend·projᵀ + bias.
+        var output = Engine.TensorAdd(
+            Engine.TensorMatMul(decSeasonal, Engine.TensorTranspose(_seasonalProjection)),
+            Engine.TensorMatMul(decTrend, Engine.TensorTranspose(_trendProjection)));
+        return Engine.TensorAdd(output, Engine.Reshape(_outputBias, new[] { forecastHorizon, 1 }));
+    }
+
+    // Paper-faithful series-decomposition moving average (replication-pad +
+    // stride-1 windowed mean) built from IEngine ops so the tape differentiates
+    // the trend. Vectorized — O(kernelSize) tensor ops, no per-element indexing.
+    private Tensor<T> MovingAverageEngine(Tensor<T> x, int kernelSize, int seqLen, int embDim)
+    {
+        int leftPad = kernelSize / 2;
+        int rightPad = kernelSize - 1 - leftPad;
+        Tensor<T> padded;
+        if (leftPad + rightPad == 0)
+        {
+            padded = x;
+        }
+        else
+        {
+            var front = Engine.TensorNarrow(x, 0, 0, 1);
+            var back = Engine.TensorNarrow(x, 0, seqLen - 1, 1);
+            var parts = new Tensor<T>[leftPad + 1 + rightPad];
+            int idx = 0;
+            for (int i = 0; i < leftPad; i++) parts[idx++] = front;
+            parts[idx++] = x;
+            for (int i = 0; i < rightPad; i++) parts[idx++] = back;
+            padded = Engine.Concat(parts, 0);
+        }
+        Tensor<T> acc = Engine.TensorNarrow(padded, 0, 0, seqLen);
+        for (int j = 1; j < kernelSize; j++)
+            acc = Engine.TensorAdd(acc, Engine.TensorNarrow(padded, 0, j, seqLen));
+        return Engine.TensorMultiplyScalar(acc, _numOps.FromDouble(1.0 / kernelSize));
+    }
+
+    // Broadcast-add a [D] bias across the sequence dim of a [S, D] tensor
+    // (Engine.TensorAdd requires equal shapes; the FFN biases need broadcasting).
+    private Tensor<T> AddBias(Tensor<T> x, Tensor<T> bias)
+        => Engine.TensorBroadcastAdd(x, Engine.Reshape(bias, new[] { 1, bias.Shape[0] }));
+
+    // Single-head scaled-dot-product attention on 2-D [seq, embDim] tensors:
+    // Engine.ScaledDotProductAttention requires 4-D [batch, heads, seq, d], so
+    // reshape in as [1,1,seq,embDim] and reshape the result back to [seq, embDim].
+    private Tensor<T> Attend(Tensor<T> q, Tensor<T> k, Tensor<T> v)
+    {
+        int sq = q.Shape[0], e = q.Shape[1], sk = k.Shape[0];
+        var q4 = Engine.Reshape(q, new[] { 1, 1, sq, e });
+        var k4 = Engine.Reshape(k, new[] { 1, 1, sk, e });
+        var v4 = Engine.Reshape(v, new[] { 1, 1, sk, e });
+        var o4 = Engine.ScaledDotProductAttention(q4, k4, v4, null, null, out _);
+        return Engine.Reshape(o4, new[] { sq, e });
+    }
+
+    private (Tensor<T> seasonal, Tensor<T> trend) EncoderLayerEngine(Tensor<T> seasonal, Tensor<T> trend, int layerIdx)
+    {
+        var layer = _encoderLayers[layerIdx];
+        int seqLen = seasonal.Shape[0];
+        int embDim = seasonal.Shape[1];
+
+        var q = Engine.TensorMatMul(seasonal, layer.GetQueryProjection());
+        var k = Engine.TensorMatMul(seasonal, layer.GetKeyProjection());
+        var v = Engine.TensorMatMul(seasonal, layer.GetValueProjection());
+        var attn = Attend(q, k, v);
+        var projected = Engine.TensorMatMul(attn, layer.GetOutputProjection());
+        var residual = Engine.TensorAdd(seasonal, projected);
+        var normalized = Engine.LayerNorm(residual, layer.GetLayerNorm1Gamma(), layer.GetLayerNorm1Beta(),
+            1e-6, out _, out _);
+
+        var ffHidden = Engine.ReLU(AddBias(
+            Engine.TensorMatMul(normalized, Engine.TensorTranspose(layer.GetFF1Weight())), layer.GetFF1Bias()));
+        var ffOutput = AddBias(
+            Engine.TensorMatMul(ffHidden, Engine.TensorTranspose(layer.GetFF2Weight())), layer.GetFF2Bias());
+        var ffResidual = Engine.TensorAdd(normalized, ffOutput);
+        var newSeasonal = Engine.LayerNorm(ffResidual, layer.GetLayerNorm2Gamma(), layer.GetLayerNorm2Beta(),
+            1e-6, out _, out _);
+
+        var newTrend = MovingAverageEngine(newSeasonal, _movingAvgKernel, seqLen, embDim);
+        newSeasonal = Engine.TensorSubtract(newSeasonal, newTrend);
+        return (newSeasonal, Engine.TensorAdd(trend, newTrend));
+    }
+
+    private (Tensor<T> seasonal, Tensor<T> trend) DecoderLayerEngine(
+        Tensor<T> decSeasonal, Tensor<T> decTrend, Tensor<T> encSeasonal, Tensor<T> encTrend, int layerIdx)
+    {
+        var layer = _decoderLayers[layerIdx];
+        int seqLen = decSeasonal.Shape[0];
+        int embDim = decSeasonal.Shape[1];
+
+        var sq = Engine.TensorMatMul(decSeasonal, layer.GetSelfQueryProjection());
+        var sk = Engine.TensorMatMul(decSeasonal, layer.GetSelfKeyProjection());
+        var sv = Engine.TensorMatMul(decSeasonal, layer.GetSelfValueProjection());
+        var selfAttn = Attend(sq, sk, sv);
+        var selfProjected = Engine.TensorMatMul(selfAttn, layer.GetSelfOutputProjection());
+        var norm1 = Engine.LayerNorm(Engine.TensorAdd(decSeasonal, selfProjected),
+            layer.GetLayerNorm1Gamma(), layer.GetLayerNorm1Beta(), 1e-6, out _, out _);
+
+        var cq = Engine.TensorMatMul(norm1, layer.GetCrossQueryProjection());
+        var ck = Engine.TensorMatMul(encSeasonal, layer.GetCrossKeyProjection());
+        var cv = Engine.TensorMatMul(encSeasonal, layer.GetCrossValueProjection());
+        var crossAttn = Attend(cq, ck, cv);
+        var crossProjected = Engine.TensorMatMul(crossAttn, layer.GetCrossOutputProjection());
+        var norm2 = Engine.LayerNorm(Engine.TensorAdd(norm1, crossProjected),
+            layer.GetLayerNorm2Gamma(), layer.GetLayerNorm2Beta(), 1e-6, out _, out _);
+
+        var ffHidden = Engine.ReLU(AddBias(
+            Engine.TensorMatMul(norm2, Engine.TensorTranspose(layer.GetFF1Weight())), layer.GetFF1Bias()));
+        var ffOutput = AddBias(
+            Engine.TensorMatMul(ffHidden, Engine.TensorTranspose(layer.GetFF2Weight())), layer.GetFF2Bias());
+        var newSeasonal = Engine.LayerNorm(Engine.TensorAdd(norm2, ffOutput),
+            layer.GetLayerNorm3Gamma(), layer.GetLayerNorm3Beta(), 1e-6, out _, out _);
+
+        var newTrend = MovingAverageEngine(newSeasonal, _movingAvgKernel, seqLen, embDim);
+        newSeasonal = Engine.TensorSubtract(newSeasonal, newTrend);
+        return (newSeasonal, Engine.TensorAdd(decTrend, newTrend));
+    }
+
+    // All trainable parameter tensors (model + encoder/decoder layers), in a
+    // stable order, for the GradientTape sources and the optimizer step.
+    private List<Tensor<T>> CollectTrainableParameters()
+    {
+        var p = new List<Tensor<T>>
+        {
+            _inputProjection, _seasonalProjection, _trendProjection, _outputBias,
+            _decoderSeasonalInit, _decoderTrendInit
+        };
+        foreach (var l in _encoderLayers)
+        {
+            p.Add(l.GetQueryProjection()); p.Add(l.GetKeyProjection()); p.Add(l.GetValueProjection());
+            p.Add(l.GetOutputProjection()); p.Add(l.GetLayerNorm1Gamma()); p.Add(l.GetLayerNorm1Beta());
+            p.Add(l.GetFF1Weight()); p.Add(l.GetFF1Bias()); p.Add(l.GetFF2Weight()); p.Add(l.GetFF2Bias());
+            p.Add(l.GetLayerNorm2Gamma()); p.Add(l.GetLayerNorm2Beta());
+        }
+        foreach (var l in _decoderLayers)
+        {
+            p.Add(l.GetSelfQueryProjection()); p.Add(l.GetSelfKeyProjection()); p.Add(l.GetSelfValueProjection());
+            p.Add(l.GetSelfOutputProjection()); p.Add(l.GetCrossQueryProjection()); p.Add(l.GetCrossKeyProjection());
+            p.Add(l.GetCrossValueProjection()); p.Add(l.GetCrossOutputProjection());
+            p.Add(l.GetFF1Weight()); p.Add(l.GetFF1Bias()); p.Add(l.GetFF2Weight()); p.Add(l.GetFF2Bias());
+            p.Add(l.GetLayerNorm1Gamma()); p.Add(l.GetLayerNorm1Beta());
+            p.Add(l.GetLayerNorm2Gamma()); p.Add(l.GetLayerNorm2Beta());
+            p.Add(l.GetLayerNorm3Gamma()); p.Add(l.GetLayerNorm3Beta());
+        }
+        return p;
     }
 
     private Dictionary<string, Tensor<T>> ComputeGradientsMultiStep(Vector<T> input, Vector<T> targets)
@@ -1076,8 +1266,9 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
 
     public override T PredictSingle(Vector<T> input)
     {
-        var (prediction, _) = ForwardWithCache(input);
-        return prediction;
+        // Use the SAME Engine-op forward as training (no train/predict divergence).
+        var output = ForwardEngine(input);
+        return output.Length > 0 ? output[0] : _numOps.Zero;
     }
 
     /// <summary>
