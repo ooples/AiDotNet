@@ -79,6 +79,7 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
     // Native mode layers
     private readonly List<ILayer<T>> _encoderLayersList = [];
     private readonly List<ILayer<T>> _decoderLayersList = [];
+    private bool _nativeLayersInitialized;
 
     // Learnable embeddings
     private Tensor<T>? _patchEmbeddings;
@@ -215,8 +216,12 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
 
-        InitializeLayers();
-        InitializeEmbeddings();
+        // Native layers/embeddings are materialized on first use to avoid
+        // constructor-time allocation for metadata and construction probes.
+        if (Architecture.Layers is { Count: > 0 })
+        {
+            EnsureNativeInitialized();
+        }
     }
 
     #endregion
@@ -264,6 +269,19 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
         InitializeWithSmallRandomValues(_decoderPositionEmbeddings, random, 0.02);
     }
 
+    private void EnsureNativeInitialized()
+    {
+        if (!_useNativeMode || _nativeLayersInitialized)
+        {
+            return;
+        }
+
+        InitializeLayers();
+        InitializeEmbeddings();
+        _nativeLayersInitialized = true;
+        InvalidateParameterCountCache();
+    }
+
     private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
     {
         for (int i = 0; i < tensor.Data.Length; i++)
@@ -292,7 +310,9 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
         var startTime = DateTime.UtcNow;
 
         var preprocessed = PreprocessDocument(documentImage);
-        var output = _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
+        var output = _useNativeMode
+            ? ForwardAfterNativeInitialization(preprocessed)
+            : RunOnnxInference(preprocessed);
 
         var answer = DecodeOutput(output, maxAnswerLength);
 
@@ -381,7 +401,9 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
     {
         ValidateImageShape(documentImage);
         var preprocessed = PreprocessDocument(documentImage);
-        var output = _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
+        var output = _useNativeMode
+            ? ForwardAfterNativeInitialization(preprocessed)
+            : RunOnnxInference(preprocessed);
 
         // MATCHA detects chart/table regions
         yield return new TableRegion<T>
@@ -404,7 +426,9 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
     {
         ValidateImageShape(tableImage);
         var preprocessed = PreprocessDocument(tableImage);
-        var output = _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
+        var output = _useNativeMode
+            ? ForwardAfterNativeInitialization(preprocessed)
+            : RunOnnxInference(preprocessed);
 
         // MATCHA can derender charts to data tables
         var cells = ExtractChartData(output, 0.5);
@@ -553,7 +577,9 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
     {
         ValidateImageShape(documentImage);
         var preprocessed = PreprocessDocument(documentImage);
-        return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
+        return _useNativeMode
+            ? ForwardAfterNativeInitialization(preprocessed)
+            : RunOnnxInference(preprocessed);
     }
 
     /// <inheritdoc/>
@@ -679,8 +705,15 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
                 { "image_size", ImageSize },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = SafeSerialize()
+            ModelData = SafeSerializeMaterializedModel()
         };
+    }
+
+    private byte[] SafeSerializeMaterializedModel()
+    {
+        return _useNativeMode && !_nativeLayersInitialized
+            ? Array.Empty<byte>()
+            : SafeSerialize();
     }
 
     /// <inheritdoc/>
@@ -714,13 +747,20 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSeqLen;
+        _nativeLayersInitialized = Layers.Count > 0;
     }
 
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new MATCHA<T>(Architecture, ImageSize, MaxSequenceLength, _encoderDim, _decoderDim,
+        var model = new MATCHA<T>(Architecture, ImageSize, MaxSequenceLength, _encoderDim, _decoderDim,
             _encoderLayers, _decoderLayers, _numHeads, _vocabSize, _maxPatchesPerImage);
+        if (_nativeLayersInitialized)
+        {
+            model.EnsureNativeInitialized();
+        }
+
+        return model;
     }
 
     #endregion
@@ -731,7 +771,15 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
     public override Tensor<T> Predict(Tensor<T> input)
     {
         var preprocessed = PreprocessDocument(input);
-        return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
+        return _useNativeMode
+            ? ForwardAfterNativeInitialization(preprocessed)
+            : RunOnnxInference(preprocessed);
+    }
+
+    private Tensor<T> ForwardAfterNativeInitialization(Tensor<T> input)
+    {
+        EnsureNativeInitialized();
+        return Forward(input);
     }
 
     /// <inheritdoc/>
@@ -740,6 +788,7 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
         if (!_useNativeMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
+        EnsureNativeInitialized();
         SetTrainingMode(true);
         TrainWithTape(input, expectedOutput);
 
@@ -753,6 +802,7 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
         if (!_useNativeMode)
             throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
 
+        EnsureNativeInitialized();
         var currentParams = GetParameters();
         T lr = NumOps.FromDouble(0.00005);
         
@@ -763,6 +813,7 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
     private Vector<T> CollectGradients()
     {
         var grads = new List<T>();
+        EnsureNativeInitialized();
         foreach (var layer in Layers)
             grads.AddRange(layer.GetParameterGradients());
         return new Vector<T>([.. grads]);

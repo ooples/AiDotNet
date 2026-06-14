@@ -77,6 +77,7 @@ public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     // Native mode layers
     private readonly List<ILayer<T>> _encoderLayers = [];
     private readonly List<ILayer<T>> _decoderLayers = [];
+    private bool _nativeLayersInitialized;
 
     #endregion
 
@@ -155,7 +156,6 @@ public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 
         _onnxSession = new InferenceSession(onnxModelPath);
 
-        InitializeLayers();
     }
 
     /// <summary>
@@ -220,7 +220,12 @@ public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 
         _tokenizer = tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
 
-        InitializeLayers();
+        // Native layers are materialized on first use to avoid constructor-time
+        // allocation for metadata and construction probes.
+        if (Architecture.Layers is { Count: > 0 })
+        {
+            EnsureNativeInitialized();
+        }
     }
 
     #endregion
@@ -259,6 +264,18 @@ public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         Layers.AddRange(_decoderLayers);
     }
 
+    private void EnsureNativeInitialized()
+    {
+        if (!_useNativeMode || _nativeLayersInitialized)
+        {
+            return;
+        }
+
+        InitializeLayers();
+        _nativeLayersInitialized = true;
+        InvalidateParameterCountCache();
+    }
+
     #endregion
 
     #region IDocumentQA Implementation
@@ -276,7 +293,9 @@ public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         var startTime = DateTime.UtcNow;
 
         var preprocessed = PreprocessDocument(documentImage);
-        var output = _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
+        var output = _useNativeMode
+            ? ForwardAfterNativeInitialization(preprocessed)
+            : RunOnnxInference(preprocessed);
 
         // Decode output to text
         var answer = DecodeOutput(output, maxAnswerLength, temperature);
@@ -379,7 +398,9 @@ public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     {
         ValidateImageShape(documentImage);
         var preprocessed = PreprocessDocument(documentImage);
-        return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
+        return _useNativeMode
+            ? ForwardAfterNativeInitialization(preprocessed)
+            : RunOnnxInference(preprocessed);
     }
 
     /// <inheritdoc/>
@@ -480,8 +501,15 @@ public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
                 { "vocab_size", _vocabSize },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = SafeSerialize()
+            ModelData = SafeSerializeMaterializedModel()
         };
+    }
+
+    private byte[] SafeSerializeMaterializedModel()
+    {
+        return _useNativeMode && !_nativeLayersInitialized
+            ? Array.Empty<byte>()
+            : SafeSerialize();
     }
 
     /// <inheritdoc/>
@@ -515,13 +543,20 @@ public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSeqLen;
+        _nativeLayersInitialized = Layers.Count > 0;
     }
 
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new Pix2Struct<T>(Architecture, _tokenizer, ImageSize, _patchSize, _maxPatches,
+        var model = new Pix2Struct<T>(Architecture, _tokenizer, ImageSize, _patchSize, _maxPatches,
             MaxSequenceLength, _hiddenDim, _numEncoderLayers, _numDecoderLayers, _numHeads, _vocabSize);
+        if (_nativeLayersInitialized)
+        {
+            model.EnsureNativeInitialized();
+        }
+
+        return model;
     }
 
     #endregion
@@ -532,7 +567,15 @@ public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     public override Tensor<T> Predict(Tensor<T> input)
     {
         var preprocessed = PreprocessDocument(input);
-        return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
+        return _useNativeMode
+            ? ForwardAfterNativeInitialization(preprocessed)
+            : RunOnnxInference(preprocessed);
+    }
+
+    private Tensor<T> ForwardAfterNativeInitialization(Tensor<T> input)
+    {
+        EnsureNativeInitialized();
+        return Forward(input);
     }
 
     /// <inheritdoc/>
@@ -541,6 +584,7 @@ public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         if (!_useNativeMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
+        EnsureNativeInitialized();
         SetTrainingMode(true);
         TrainWithTape(input, expectedOutput);
 
@@ -554,6 +598,7 @@ public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         if (!_useNativeMode)
             throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
 
+        EnsureNativeInitialized();
         var currentParams = GetParameters();
         T lr = NumOps.FromDouble(0.0001);
         
@@ -564,6 +609,7 @@ public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     private Vector<T> CollectGradients()
     {
         var grads = new List<T>();
+        EnsureNativeInitialized();
         foreach (var layer in Layers)
             grads.AddRange(layer.GetParameterGradients());
         return new Vector<T>([.. grads]);
