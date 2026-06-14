@@ -233,4 +233,82 @@ public class StreamingOptimizerParityTests
         double rel = RelL2(sa, rp);
         Assert.True(rel < 0.05, $"LAMB: 8-bit drifted from fp64 (relL2 {rel:E3}).");
     }
+
+    private static double Dot(double[] a, double[] b) { double s = 0; for (int i = 0; i < a.Length; i++) s += a[i] * b[i]; return s; }
+
+    // fp64 reference two-loop recursion (full-precision (s,y) history) — identical algorithm to
+    // StreamingLBFGS.TwoLoopDirection but without the 8-bit history quantization.
+    private static double[] RefLbfgsDirection(double[] g, System.Collections.Generic.List<double[]> sH, System.Collections.Generic.List<double[]> yH)
+    {
+        int n = g.Length, k = sH.Count;
+        var q = (double[])g.Clone();
+        if (k == 0) return q;
+        var alpha = new double[k]; var rho = new double[k];
+        for (int i = k - 1; i >= 0; i--)
+        {
+            double ys = Dot(yH[i], sH[i]); rho[i] = ys != 0 ? 1.0 / ys : 0.0;
+            alpha[i] = rho[i] * Dot(sH[i], q);
+            for (int j = 0; j < n; j++) q[j] -= alpha[i] * yH[i][j];
+        }
+        double yy = Dot(yH[k - 1], yH[k - 1]);
+        double gamma = yy > 0 ? Dot(sH[k - 1], yH[k - 1]) / yy : 1.0;
+        if (gamma <= 0 || double.IsNaN(gamma) || double.IsInfinity(gamma)) gamma = 1.0;
+        var r = new double[n]; for (int j = 0; j < n; j++) r[j] = gamma * q[j];
+        for (int i = 0; i < k; i++)
+        {
+            double beta = rho[i] * Dot(yH[i], r);
+            for (int j = 0; j < n; j++) r[j] += (alpha[i] - beta) * sH[i][j];
+        }
+        return r;
+    }
+
+    // Streaming L-BFGS (second-order) with an 8-bit-quantized (s,y) history must track an fp64
+    // L-BFGS (full-precision history) running the SAME two-loop + fixed step. The only divergence
+    // source is the 8-bit history quantization; the test asserts it stays bounded over many steps.
+    [Fact]
+    public void LBFGS_8bitHistory_TracksFp64()
+    {
+        const int memSize = 10;
+        var opt = new StreamingLBFGS<double>(Lr, memSize);
+        var sp = new Tensor<double>(new[] { N });
+        var rp = InitParams();
+        for (int i = 0; i < N; i++) sp[i] = rp[i];
+
+        var sH = new System.Collections.Generic.List<double[]>();
+        var yH = new System.Collections.Generic.List<double[]>();
+        double[]? prevGrad = null;
+
+        for (int step = 1; step <= Steps; step++)
+        {
+            var g = Grad(step);
+
+            opt.BeginStep();
+            var gt = new Tensor<double>(new[] { N });
+            for (int i = 0; i < N; i++) gt[i] = g[i];
+            opt.Apply(sp, gt);
+            opt.EndStep();
+
+            // fp64 reference: same two-loop, full-precision history.
+            var d = RefLbfgsDirection(g, sH, yH);
+            var xNew = new double[N];
+            var s = new double[N];
+            for (int i = 0; i < N; i++) { xNew[i] = rp[i] - Lr * d[i]; s[i] = xNew[i] - rp[i]; }
+            if (prevGrad is not null)
+            {
+                var y = new double[N];
+                for (int i = 0; i < N; i++) y[i] = g[i] - prevGrad[i];
+                if (Dot(s, y) > 1e-12)
+                {
+                    sH.Add(s); yH.Add(y);
+                    if (sH.Count > memSize) { sH.RemoveAt(0); yH.RemoveAt(0); }
+                }
+            }
+            rp = xNew;
+            prevGrad = (double[])g.Clone();
+        }
+
+        var sa = new double[N]; for (int i = 0; i < N; i++) sa[i] = sp[i];
+        double rel = RelL2(sa, rp);
+        Assert.True(rel < 0.10, $"Streaming L-BFGS (8-bit history) drifted from fp64 L-BFGS (relL2 {rel:E3} >= 0.10).");
+    }
 }

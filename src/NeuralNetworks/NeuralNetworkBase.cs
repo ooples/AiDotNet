@@ -5925,6 +5925,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 });
         }
 
+        // Post-step hook: first-order optimizers already updated each parameter in place during
+        // Apply (no-op here); a full-gradient optimizer like streaming L-BFGS buffered the
+        // per-parameter gradients above and performs its global two-loop update + parameter
+        // write-back now that the whole gradient is available.
+        streamingOptimizer.EndStep();
+
         // GPU weight-cache coherence after the in-place parameter mutation. The
         // 8-bit StreamingAdam state already updated source tensors in place; without
         // invalidation here, the cached derived weights (CPU SIMD-packed copies,

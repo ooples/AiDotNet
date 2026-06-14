@@ -16,6 +16,14 @@ internal interface IStreamingOptimizer<T>
 {
     void BeginStep();
     void Apply(Tensor<T> param, Tensor<T> grad);
+
+    /// <summary>
+    /// Called once after every parameter's gradient has been handed to <see cref="Apply"/> for
+    /// the current step. First-order optimizers update in place during <see cref="Apply"/> and
+    /// no-op here; full-gradient (second-order) optimizers like streaming L-BFGS buffer the
+    /// per-parameter gradients and perform their global update here.
+    /// </summary>
+    void EndStep();
 }
 
 internal interface IStreamingOptimizerLearningRate
@@ -47,12 +55,14 @@ internal abstract class BlockQuantizedStreamingOptimizer<T> : IStreamingOptimize
             {
                 Quantized[m] = new byte[length];
                 Scales[m] = new double[numBlocks];
+                // net471 has no Array.Fill — initialize with loops. Signed moments quantize 0 as
+                // byte 128 (the zero point); unsigned default to 0. All block scales start at 1.0.
                 if (signedMoments[m])
                 {
-                    Array.Fill(Quantized[m], (byte)128);
+                    for (int i = 0; i < length; i++) Quantized[m][i] = 128;
                 }
 
-                Array.Fill(Scales[m], 1.0);
+                for (int i = 0; i < numBlocks; i++) Scales[m][i] = 1.0;
             }
         }
     }
@@ -110,6 +120,11 @@ internal abstract class BlockQuantizedStreamingOptimizer<T> : IStreamingOptimize
     }
 
     protected virtual void OnBeginStep()
+    {
+    }
+
+    // First-order optimizers update in place during Apply, so the post-step hook is a no-op.
+    public virtual void EndStep()
     {
     }
 
@@ -807,6 +822,9 @@ internal static class StreamingOptimizerResolver<T>
                 return new StreamingLars8Bit<T>(lr, ReadDouble(options, "Momentum", 0.9), ReadDouble(options, "WeightDecay", 1e-4), ReadDouble(options, "TrustCoefficient", 0.001), ReadDouble(options, "Epsilon", 1e-8), ReadBool(options, "UseNesterov", false));
             case FTRLOptimizer<T, Tensor<T>, Tensor<T>>:
                 return new StreamingFtrl8Bit<T>(ReadDouble(options, "Alpha", lr), ReadDouble(options, "Beta", 1.0), ReadDouble(options, "Lambda1", 1.0), ReadDouble(options, "Lambda2", 1.0));
+            case LBFGSOptimizer<T, Tensor<T>, Tensor<T>>:
+                // Second-order: memory-bounded streaming L-BFGS (8-bit-quantized (s,y) history).
+                return new StreamingLBFGS<T>(lr, (int)ReadDouble(options, "MemorySize", 10.0));
             case AdaDeltaOptimizer<T, Tensor<T>, Tensor<T>>:
                 return new StreamingAdaDelta8Bit<T>(lr, ReadDouble(options, "Rho", 0.95), ReadDouble(options, "Epsilon", 1e-6));
             case AdagradOptimizer<T, Tensor<T>, Tensor<T>>:
