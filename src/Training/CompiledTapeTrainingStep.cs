@@ -579,6 +579,22 @@ public static class CompiledTapeTrainingStep<T>
             var parameters = _cachedParameters ??= CollectDeduplicatedParameters(layers);
             if (firstCollectThisLifecycle) RememberLayerSet(layers);
 
+            // GPU-RESIDENCY (campaign M1): on the DirectGpu engine, make the parameters GPU-resident ONCE so
+            // CompiledTrainingPlan.ConfigureOptimizerFloat takes its GPU Adam branch (param.TryGetGpuBuffer()
+            // != null) — Adam/m/v run on-device and the forward reads weights from the resident buffer instead
+            // of re-uploading per op (the ~10%-util host ping-pong). .Gpu() mutates in place and no-ops when no
+            // GPU engine is available. Gated to float + Adam/AdamW/SGD (the only GPU-supported optimizer
+            // kernels; others would NotSupported on the GPU branch). Opt out with AIDOTNET_GPU_RESIDENT_PARAMS=0.
+            if (firstCollectThisLifecycle && typeof(T) == typeof(float)
+                && (optimizerType == AiDotNet.Tensors.Engines.Compilation.OptimizerType.Adam
+                    || optimizerType == AiDotNet.Tensors.Engines.Compilation.OptimizerType.AdamW
+                    || optimizerType == AiDotNet.Tensors.Engines.Compilation.OptimizerType.SGD)
+                && Environment.GetEnvironmentVariable("AIDOTNET_GPU_RESIDENT_PARAMS") != "0"
+                && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine)
+            {
+                foreach (var p in parameters) p.Gpu();
+            }
+
             foreach (var layer in layers)
                 layer.ZeroGrad();
 
