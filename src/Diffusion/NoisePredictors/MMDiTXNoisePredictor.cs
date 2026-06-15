@@ -192,6 +192,8 @@ public class MMDiTXNoisePredictor<T> : NoisePredictorBase<T>
                 $"MMDiTXNoisePredictor requires spatial dims divisible by patchSize ({_patchSize}); got {height}×{width}.",
                 nameof(noisySample));
 
+        using var streaming = BeginWeightStreamingForward();
+
         int patchDim = _inputChannels * _patchSize * _patchSize;
         int hPatches = height / _patchSize;
         int wPatches = width / _patchSize;
@@ -211,7 +213,7 @@ public class MMDiTXNoisePredictor<T> : NoisePredictorBase<T>
 
         if (wasUnbatched)
             output = output.Reshape(new[] { channels, height, width });
-        return output;
+        return streaming.Complete(output);
     }
 
     /// <summary>

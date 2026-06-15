@@ -133,9 +133,10 @@ public class FlagDiTPredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
+        using var streaming = BeginWeightStreamingForward();
         var x = _patchEmbed.Forward(noisySample);
         foreach (var block in _blocks) x = block.Forward(x);
-        return _finalLayer.Forward(x);
+        return streaming.Complete(_finalLayer.Forward(x));
     }
 
     /// <inheritdoc />
