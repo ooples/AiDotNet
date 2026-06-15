@@ -232,7 +232,7 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
             new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 UseAMSGrad = false,
-                InitialLearningRate = 0.001
+                InitialLearningRate = 0.01
             });
     }
 
