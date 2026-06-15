@@ -79,34 +79,13 @@ public class ODISETests : NeuralNetworkModelTestBase
         return tensor;
     }
 
-    // Override of Training_ShouldReduceLoss / MoreData_ShouldNotDegrade probe
-    // metric for softmax-output models trained with CrossEntropyLoss. The base
-    // probe measures MSE between Predict (softmax probabilities) and target
-    // (a distribution post-CreateRandomTargetTensor override). CE training
-    // minimizes the KL divergence between softmax(logits) and target, which
-    // is the model's REAL training objective — MSE on softmax is only loosely
-    // correlated with that and can transiently INCREASE over the 30 training
-    // steps as softmax leaves its uniform-1/C initialization and over-/under-
-    // shoots toward the target before settling. Allow a generous tolerance
-    // (0.5 on a metric bounded above by 1.0 per element) so the test still
-    // catches genuinely broken gradient flow (which would either keep softmax
-    // pinned at 1/C or drive it to NaN) without flagging the legitimate
-    // transient overshoot of an early-phase CE-trained classifier.
-    protected override double TrainingLossReductionTolerance => 0.1;
-
-    // Override of MoreDataTolerance for softmax + CrossEntropyLoss models.
-    // The base invariant is "200 iters MSE ≤ 50 iters MSE + tolerance" — fine
-    // for an MSE-trained regressor (monotonic), wrong for a CE-trained softmax
-    // classifier (MSE-on-softmax is non-monotonic over the first few hundred
-    // iterations as softmax leaves the uniform-1/C initialization, overshoots
-    // toward the per-pixel target distribution, then settles). 0.1 stays
-    // under the per-pixel MSE upper bound (Σ (p_i - q_i)² over an 8-class
-    // softmax is ≤ 2 / 8 = 0.25, so an averaged-across-pixels MSE delta
-    // of 0.1 is the right tightness band: catches both hard divergence
-    // (NaN / runaway loss) AND the regression where MSE doubles between
-    // 50 → 200 iters because training is going backwards. The previous
-    // 0.5 value was too loose — it effectively disabled the invariant.
-    protected override double MoreDataTolerance => 0.1;
+    // NOTE: the previous TrainingLossReductionTolerance => 0.1 and
+    // MoreDataTolerance => 0.1 overrides were removed. They loosened the base
+    // invariants enough to PASS while ODISE's training was effectively a no-op
+    // (per-pixel loss flat / drifting up), hiding the real bug rather than
+    // exposing it. The model must reduce loss under the SAME tolerances every
+    // other model is held to; the fix belongs in the model (gradient flow),
+    // not in a relaxed assertion.
 
     // Override of the random TARGET tensor used by Training_ShouldReduceLoss /
     // *_AfterTraining / GradientFlow / MoreData. ODISE outputs per-pixel

@@ -26561,14 +26561,60 @@ public static class LayerHelper<T>
     /// Creates decoder layers for the ODISE model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateODISEDecoderLayers(
-        int encoderOutputChannels, int decoderDim, int numClasses,
-        int featureHeight, int featureWidth)
+        int[] channelDims, int decoderDim, int numClasses,
+        int inputHeight, int inputWidth)
     {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        // Per Xu et al. 2023 §3 ODISE produces a DENSE per-pixel class map, so the
+        // decoder must upsample the encoder's spatial bottleneck back to the input
+        // resolution. The previous decoder was three stride-1 convolutions that
+        // never upsampled — at the encoder's 32x downsample a 32x32 input collapses
+        // to a 1x1 bottleneck and the output stays spatially uniform, so the model
+        // cannot fit a per-pixel target (LossStrictlyDecreasesOnMemorizationTask).
+        //
+        // This decoder mirrors the SD U-Net decoder: a transposed-conv upsampling
+        // ladder that reverses the encoder's stride schedule (stem stride 4, then
+        // stride 2 per stage), each followed by GroupNorm + SiLU (SD's activation).
+        // The learned upsampling kernels recover spatial structure — a 1x1 input
+        // deconvolved with a KxK kernel directly produces a KxK spatial pattern, so
+        // the dense head can represent a per-pixel output the way the paper requires.
+        var silu = new SiLUActivation<T>() as IActivationFunction<T>;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
+        int n = channelDims.Length;
+
+        // Reverse stages n-1..1: each is a 2x transposed-conv upsample (kernel 4,
+        // stride 2, padding 1 doubles the spatial dims), stepping the channel count
+        // back down the encoder's pyramid (channelDims[stage] -> channelDims[stage-1]).
+        // Each upsampling stage mirrors an SD U-Net decoder block: a 2x transposed
+        // conv, then a RESIDUAL block (the defining ResBlock of the SD U-Net decoder).
+        // The residual skip is what keeps the gradient alive through the deep decoder
+        // — a plain Deconv->GN->SiLU ladder vanishes the gradient and the per-pixel
+        // loss barely moves; the residual identity path restores a trainable descent.
+        // NOTE: this 5-layer stage layout must stay in sync with
+        // ODISE.DecoderStageLayerCount, which drives the skip-concat indexing.
+        for (int stage = n - 1; stage >= 1; stage--)
+        {
+            int outC = channelDims[stage - 1];
+            yield return new DeconvolutionalLayer<T>(outC, 4, 2, 1, activationFunction: null);
+            yield return new GroupNormalizationLayer<T>(ChooseGroupCount(outC), outC);
+            yield return new ActivationLayer<T>(silu);
+            yield return new ResidualLayer<T>(new ConvolutionalLayer<T>(outC, 3, 1, 1, activationFunction: null), silu);
+            yield return new GroupNormalizationLayer<T>(ChooseGroupCount(outC), outC);
+        }
+
+        // Reverse the stride-4 stem: a 4x transposed-conv upsample (kernel 4,
+        // stride 4, padding 0) restores the full input resolution, followed by a
+        // residual block (no skip-concat after the stem — handled by Forward's tail).
+        yield return new DeconvolutionalLayer<T>(decoderDim, 4, 4, 0, activationFunction: null);
+        yield return new GroupNormalizationLayer<T>(ChooseGroupCount(decoderDim), decoderDim);
+        yield return new ActivationLayer<T>(silu);
+        yield return new ResidualLayer<T>(new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, activationFunction: null), silu);
+        yield return new GroupNormalizationLayer<T>(ChooseGroupCount(decoderDim), decoderDim);
+
+        // Dense prediction head at full resolution.
+        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, activationFunction: null);
+        yield return new GroupNormalizationLayer<T>(ChooseGroupCount(decoderDim), decoderDim);
+        yield return new ActivationLayer<T>(silu);
         yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
