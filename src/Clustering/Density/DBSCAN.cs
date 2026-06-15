@@ -553,8 +553,9 @@ public class DBSCAN<T> : ClusteringBase<T>
                     }
                 }
 
-                // Only assign to cluster if within epsilon of the center
-                if (minDist > _options.Epsilon * 2)
+                // Prediction runs in normalized feature space, so compare against
+                // the fitted normalized epsilon rather than the caller's raw-scale value.
+                if (minDist > NumOps.ToDouble(_fittedEpsilon) * 2)
                 {
                     nearestCluster = NoiseLabel;
                 }

@@ -84,7 +84,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// Initializes a new instance with default settings.
     /// </summary>
     public QMIXAgent()
-        : this(new QMIXOptions<T> { StateSize = 4, ActionSize = 2 })
+        : this(new QMIXOptions<T> { NumAgents = 2, StateSize = 4, ActionSize = 2, GlobalStateSize = 8 })
     {
     }
 

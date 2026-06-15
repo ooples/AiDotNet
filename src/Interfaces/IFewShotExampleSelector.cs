@@ -36,6 +36,7 @@ namespace AiDotNet.Interfaces;
 /// Good examples → Better LLM performance
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("FewShotExampleSelector")]
 public interface IFewShotExampleSelector<T>
 {
     /// <summary>

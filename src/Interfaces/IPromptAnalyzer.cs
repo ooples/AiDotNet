@@ -40,6 +40,7 @@ namespace AiDotNet.Interfaces;
 /// - Budgeting: Track and forecast API spending
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("PromptAnalyzer")]
 public interface IPromptAnalyzer
 {
     /// <summary>
