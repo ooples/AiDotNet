@@ -42,8 +42,8 @@ internal sealed class StreamingLBFGS<T> : IStreamingOptimizer<T>, IStreamingOpti
     private int _writeOffset;
 
     // 8-bit block-quantized history (the memory win) + the O(n) previous gradient for y = g - g_prev.
-    private readonly List<QuantVec> _sHist = new();
-    private readonly List<QuantVec> _yHist = new();
+    private readonly List<QuantizedVector> _sHist = new();
+    private readonly List<QuantizedVector> _yHist = new();
     private double[]? _prevGrad;
 
     // O(n) reused scratch so the two-loop's dequant stays O(n) transient (not O(m·n)).
@@ -134,8 +134,8 @@ internal sealed class StreamingLBFGS<T> : IStreamingOptimizer<T>, IStreamingOpti
 
         for (int i = k - 1; i >= 0; i--) // recent → old
         {
-            Dequantize(_sHist[i], _tmpS, n);
-            Dequantize(_yHist[i], _tmpY, n);
+            _sHist[i].Dequantize(_tmpS, n);
+            _yHist[i].Dequantize(_tmpY, n);
             double ys = Dot(_tmpY, _tmpS, n);
             rho[i] = ys != 0.0 ? 1.0 / ys : 0.0;
             alpha[i] = rho[i] * Dot(_tmpS, _q, n);
@@ -143,8 +143,8 @@ internal sealed class StreamingLBFGS<T> : IStreamingOptimizer<T>, IStreamingOpti
         }
 
         // H0 = gamma·I, gamma = (s·y)/(y·y) of the most recent pair (Nocedal & Wright).
-        Dequantize(_sHist[k - 1], _tmpS, n);
-        Dequantize(_yHist[k - 1], _tmpY, n);
+        _sHist[k - 1].Dequantize(_tmpS, n);
+        _yHist[k - 1].Dequantize(_tmpY, n);
         double yy = Dot(_tmpY, _tmpY, n);
         double gamma = yy > 0.0 ? Dot(_tmpS, _tmpY, n) / yy : 1.0;
         if (gamma <= 0.0 || double.IsNaN(gamma) || double.IsInfinity(gamma)) gamma = 1.0;
@@ -154,8 +154,8 @@ internal sealed class StreamingLBFGS<T> : IStreamingOptimizer<T>, IStreamingOpti
 
         for (int i = 0; i < k; i++) // old → recent
         {
-            Dequantize(_sHist[i], _tmpS, n);
-            Dequantize(_yHist[i], _tmpY, n);
+            _sHist[i].Dequantize(_tmpS, n);
+            _yHist[i].Dequantize(_tmpY, n);
             double beta = rho[i] * Dot(_tmpY, r, n);
             Axpy(r, _tmpS, alpha[i] - beta, n); // r += (alpha_i - beta) * s_i
         }
@@ -176,56 +176,12 @@ internal sealed class StreamingLBFGS<T> : IStreamingOptimizer<T>, IStreamingOpti
 
     private void PushHistory(double[] s, double[] y, int n)
     {
-        _sHist.Add(Quantize(s, n));
-        _yHist.Add(Quantize(y, n));
+        _sHist.Add(QuantizedVector.Quantize(s, n, _blockSize));
+        _yHist.Add(QuantizedVector.Quantize(y, n, _blockSize));
         while (_sHist.Count > _memorySize)
         {
             _sHist.RemoveAt(0);
             _yHist.RemoveAt(0);
-        }
-    }
-
-    private sealed class QuantVec
-    {
-        public byte[] Quantized = Array.Empty<byte>();
-        public double[] Scales = Array.Empty<double>();
-    }
-
-    private QuantVec Quantize(double[] v, int n)
-    {
-        int numBlocks = (n + _blockSize - 1) / _blockSize;
-        var q = new byte[n];
-        var scales = new double[numBlocks];
-        for (int b = 0; b < numBlocks; b++)
-        {
-            int start = b * _blockSize, end = Math.Min(start + _blockSize, n);
-            double max = 0.0;
-            for (int i = start; i < end; i++)
-            {
-                double a = Math.Abs(v[i]);
-                if (!double.IsNaN(a) && !double.IsInfinity(a) && a > max) max = a;
-            }
-            double scale = max / 127.0;
-            if (scale < 1e-12 || double.IsNaN(scale) || double.IsInfinity(scale)) scale = 1e-12;
-            scales[b] = scale;
-            double inv = 1.0 / scale;
-            for (int i = start; i < end; i++)
-            {
-                int qi = (int)Math.Round(v[i] * inv);
-                if (qi < -127) qi = -127; else if (qi > 127) qi = 127;
-                q[i] = (byte)(qi + 128);
-            }
-        }
-        return new QuantVec { Quantized = q, Scales = scales };
-    }
-
-    private void Dequantize(QuantVec qv, double[] dst, int n)
-    {
-        for (int b = 0; b * _blockSize < n; b++)
-        {
-            int start = b * _blockSize, end = Math.Min(start + _blockSize, n);
-            double scale = qv.Scales[b];
-            for (int i = start; i < end; i++) dst[i] = (qv.Quantized[i] - 128) * scale;
         }
     }
 

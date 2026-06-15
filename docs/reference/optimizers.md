@@ -119,15 +119,26 @@ Each state buffer stores one byte per parameter plus one double scale per block,
 
 Within a single parameter, the per-block update (dequantize moments → apply the rule → requantize) runs in parallel across blocks: each block owns a disjoint parameter/gradient/state slice, so each worker gets its own requantization scratch and the blocks update concurrently with no shared mutable state. The parallel path is gated on parameter size (small parameters such as biases and norm scales stay on the serial path, where thread-dispatch overhead would not pay off) and is deterministic — block `b`'s output depends only on its own slice, so results are identical regardless of how blocks are scheduled.
 
-#### Second-order streaming: L-BFGS
+#### Second-order and full-gradient streaming
 
-The first-order variants update each parameter in place as its gradient is produced. L-BFGS is a **second-order** method — its search direction depends on the whole gradient plus a curvature history — so it can't update per-parameter-as-gradient-arrives. `StreamingLBFGS<T>` instead buffers the per-parameter gradients into flat vectors as they stream in, then performs the two-loop recursion and parameter update once the full gradient is available.
+The first-order variants update each parameter in place as its gradient is produced. **Full-gradient** methods — whose search direction depends on the whole gradient plus a history — can't update per-parameter-as-gradient-arrives, so they buffer the per-parameter gradients into flat vectors as they stream in (during `Apply`) and perform the direction computation and parameter update once the full gradient is available (in `EndStep`). Both share the same 8-bit block-quantized O(*n*) history primitive (`QuantizedVector`), dequantized one vector at a time so the transient working set stays O(*n*).
 
 | Configured optimizer | Streaming variant | Quantized state |
 |:---------------------|:------------------|:----------------|
-| `LBFGSOptimizer` | `StreamingLBFGS<T>` | `MemorySize` (s, y) history vectors, 8-bit block-quantized |
+| `LBFGSOptimizer` | `StreamingLBFGS<T>` | `MemorySize` (s, y) curvature pairs of length *n* (O(*m·n*) → 8-bit) |
+| `ConjugateGradientOptimizer` | `StreamingConjugateGradient<T>` | previous gradient + previous direction (O(*n*) → 8-bit) |
 
-The dominant memory cost of L-BFGS is its `(s, y)` curvature history — `MemorySize` vector pairs of length *n*, i.e. O(*m·n*). `StreamingLBFGS` stores that history 8-bit block-quantized (~8x smaller than `double`) and dequantizes it **one vector at a time** during the two-loop recursion, so the transient working set stays O(*n*) rather than O(*m·n*). Full BFGS / Newton are intentionally not provided as streaming variants: their O(*n²*) dense Hessian (approximation) does not fit memory-bounded large-model training at all.
+`StreamingConjugateGradient` is a Hessian-free, second-order-like method: it uses Polak–Ribière+ with automatic restart (β clamped at 0) so it needs no line search, and its only persistent state is the previous gradient and direction.
+
+**Every gradient-based optimizer now resolves to a streaming variant** — none silently fall back to default Adam:
+
+| Configured optimizer(s) | Streaming variant | Rationale |
+|:------------------------|:------------------|:----------|
+| `Adam8BitOptimizer` | `StreamingAdam8Bit<T>` | already an 8-bit Adam |
+| `BFGSOptimizer`, `DFPOptimizer`, `NewtonMethodOptimizer`, `TrustRegionOptimizer`, `LevenbergMarquardtOptimizer` | `StreamingLBFGS<T>` | their dense O(*n²*) Hessian (approximation) can't fit a memory budget; limited-memory quasi-Newton (L-BFGS) is the memory-bounded second-order substitute |
+| `ADMMOptimizer`, `CoordinateDescentOptimizer` | `StreamingSgd8Bit<T>` | reduce to a memory-bounded gradient step under per-parameter streaming |
+
+(Non-gradient optimizers — genetic, particle-swarm, CMA-ES, simulated annealing, etc. — are not `IGradientBasedOptimizer` and never enter the streaming training path, so streaming does not apply to them.)
 
 ---
 
