@@ -112,6 +112,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
 
     // Gradient storage
     private Tensor<T>? _decoderPositionEmbeddingsGradients;
+    private bool _nativeLayersInitialized;
     #pragma warning disable CS0414
     private bool _decoderForwardExecuted;
     #pragma warning restore CS0414
@@ -326,8 +327,12 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
         _tokenizer = tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
-        InitializeLayers();
-        InitializeEmbeddings();
+        // Native layers/embeddings are materialized on first use to avoid
+        // constructor-time allocation for metadata and construction probes.
+        if (Architecture.Layers is { Count: > 0 })
+        {
+            EnsureNativeInitialized();
+        }
     }
 
     #endregion
@@ -543,6 +548,19 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
 
         // Initialize gradient tensor
         _decoderPositionEmbeddingsGradients = Tensor<T>.CreateDefault([_maxGenerationLength, _decoderHiddenDim], NumOps.Zero);
+    }
+
+    private void EnsureNativeInitialized()
+    {
+        if (!_useNativeMode || _nativeLayersInitialized)
+        {
+            return;
+        }
+
+        InitializeLayers();
+        InitializeEmbeddings();
+        _nativeLayersInitialized = true;
+        InvalidateParameterCountCache();
     }
 
     private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
@@ -901,6 +919,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
 
         if (_useNativeMode)
         {
+            EnsureNativeInitialized();
             var output = preprocessed;
 
             // Patch embedding
@@ -1162,8 +1181,15 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
                 { "use_native_mode", _useNativeMode },
                 { "ocr_free", IsOCRFree }
             },
-            ModelData = SafeSerialize()
+            ModelData = SafeSerializeMaterializedModel()
         };
+    }
+
+    private byte[] SafeSerializeMaterializedModel()
+    {
+        return _useNativeMode && !_nativeLayersInitialized
+            ? Array.Empty<byte>()
+            : SafeSerialize();
     }
 
     /// <inheritdoc/>
@@ -1317,10 +1343,11 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
             _decoderPositionEmbeddingsGradients = Tensor<T>.CreateDefault(
                 [_maxGenerationLength, _decoderHiddenDim], NumOps.Zero);
         }
-        else
+        else if (Layers.Count > 0)
         {
             InitializeEmbeddings();
         }
+        _nativeLayersInitialized = _useNativeMode && Layers.Count > 0;
     }
 
     /// <inheritdoc/>
@@ -1359,7 +1386,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
                 LossFunction);
         }
 
-        return new Donut<T>(
+        var model = new Donut<T>(
             Architecture,
             _tokenizer,
             ImageHeight,
@@ -1377,6 +1404,12 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
             _vocabSize,
             _optimizer,
             LossFunction);
+        if (_nativeLayersInitialized)
+        {
+            model.EnsureNativeInitialized();
+        }
+
+        return model;
     }
 
     #endregion
@@ -1390,6 +1423,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
 
         if (_useNativeMode)
         {
+            EnsureNativeInitialized();
             // Encode image and generate text output
             var encoderOutput = EncodeImage(preprocessed);
             return encoderOutput;
@@ -1408,6 +1442,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
             throw new NotSupportedException("Training is not supported in ONNX inference mode. Use native mode for training.");
         }
 
+        EnsureNativeInitialized();
         SetTrainingMode(true);
         try
         {
@@ -1427,6 +1462,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
             throw new NotSupportedException("Parameter updates are not supported in ONNX inference mode.");
         }
 
+        EnsureNativeInitialized();
         int expectedCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
         if (gradients.Length != expectedCount)
         {
@@ -1468,6 +1504,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
     private Vector<T> CollectParameterGradients()
     {
         var gradients = new List<T>();
+        EnsureNativeInitialized();
 
         // Collect gradients from all layers
         foreach (var layer in Layers)

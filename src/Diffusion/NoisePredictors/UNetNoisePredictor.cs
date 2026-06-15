@@ -161,6 +161,12 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private readonly NeuralNetworkArchitecture<T>? _architecture;
 
+    /// <summary>
+    /// Tracks whether the U-Net layer graph has been built. Default paper-scale
+    /// constructors defer this work so simple model construction stays cheap.
+    /// </summary>
+    private bool _layersInitialized;
+
     /// <inheritdoc />
     public override int InputChannels => _inputChannels;
 
@@ -270,7 +276,30 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         _middleBlocks = new List<UNetBlock>();
         _decoderBlocks = new List<UNetBlock>();
 
-        InitializeLayers(architecture, encoderBlocks, middleBlocks, decoderBlocks);
+        bool hasCustomBlocks =
+            encoderBlocks is { Count: > 0 } &&
+            middleBlocks is { Count: > 0 } &&
+            decoderBlocks is { Count: > 0 };
+        bool hasCustomArchitecture = architecture?.Layers is { Count: > 0 };
+
+        if (hasCustomBlocks || hasCustomArchitecture)
+        {
+            InitializeLayers(architecture, encoderBlocks, middleBlocks, decoderBlocks);
+        }
+    }
+
+    [MemberNotNull(nameof(_inputConv), nameof(_outputConv), nameof(_timeEmbedMlp1), nameof(_timeEmbedMlp2))]
+    private void EnsureLayersInitialized()
+    {
+        if (!_layersInitialized)
+        {
+            InitializeLayers(_architecture, null, null, null);
+        }
+
+        if (_inputConv is null || _outputConv is null || _timeEmbedMlp1 is null || _timeEmbedMlp2 is null)
+        {
+            throw new InvalidOperationException("U-Net layer initialization completed without required projection layers.");
+        }
     }
 
     /// <summary>
@@ -289,13 +318,17 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// 3. Otherwise, create industry-standard layers from the Stable Diffusion paper
     /// </para>
     /// </remarks>
-    [MemberNotNull(nameof(_inputConv), nameof(_outputConv), nameof(_timeEmbedMlp1), nameof(_timeEmbedMlp2))]
     private void InitializeLayers(
         NeuralNetworkArchitecture<T>? architecture,
         List<UNetBlock>? customEncoderBlocks,
         List<UNetBlock>? customMiddleBlocks,
         List<UNetBlock>? customDecoderBlocks)
     {
+        if (_layersInitialized)
+        {
+            return;
+        }
+
         // Create input/output convolutions and time embedding MLP via LayerHelper
         var baseLayers = LayerHelper<T>.CreateUNetNoisePredictorEncoderLayers(
             _inputChannels, _baseChannels, _channelMultipliers, _numResBlocks,
@@ -322,6 +355,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             _encoderBlocks.AddRange(customEncoderBlocks);
             _middleBlocks.AddRange(customMiddleBlocks);
             _decoderBlocks.AddRange(customDecoderBlocks);
+            _layersInitialized = true;
             return;
         }
 
@@ -334,6 +368,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             }
             CreateDefaultMiddleBlocks(_baseChannels * _channelMultipliers[^1]);
             CreateDefaultDecoderBlocks();
+            _layersInitialized = true;
             return;
         }
 
@@ -341,6 +376,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         CreateDefaultEncoderBlocks();
         CreateDefaultMiddleBlocks(_baseChannels * _channelMultipliers[^1]);
         CreateDefaultDecoderBlocks();
+        _layersInitialized = true;
     }
 
     /// <summary>
@@ -453,6 +489,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
+        EnsureLayersInitialized();
         _preserveMaterializedParameters = true;
         _lastInput = noisySample;
 
@@ -493,6 +530,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
         try
         {
+            EnsureLayersInitialized();
             var timeEmbed = GetTimestepEmbedding(sampleTimestep);
             timeEmbed = ProjectTimeEmbedding(timeEmbed);
 
@@ -585,6 +623,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Tensor<T> PredictNoiseWithEmbedding(Tensor<T> noisySample, Tensor<T> timeEmbedding, Tensor<T>? conditioning = null)
     {
+        EnsureLayersInitialized();
         _preserveMaterializedParameters = true;
         _lastInput = noisySample;
 
@@ -1024,6 +1063,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     private int CalculateParameterCount()
     {
+        EnsureLayersInitialized();
         // Resolve every lazy layer's TRUE shape via a shape-only forward (single source
         // of truth) — NO weight materialisation, so this stays cheap on a foundation-scale
         // U-Net (the Unit-03b construction OOM was the old materialising dummy forward).
@@ -1063,6 +1103,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
+        EnsureLayersInitialized();
         // Resolve all layer shapes via the shape-only forward (single source of truth,
         // no materialisation) so the returned vector's length matches ParameterCount
         // exactly. Each layer.GetParameters() below then materialises just that layer's
@@ -1119,6 +1160,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override IEnumerable<Tensor<T>> GetParameterChunks()
     {
+        EnsureLayersInitialized();
         foreach (var layer in EnumerateAllLayers())
         {
             foreach (var parameter in EnumerateMaterializedParameters(layer))
@@ -1185,6 +1227,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        EnsureLayersInitialized();
         // Resolve lazy layer shapes first so each layer's slice is sized to its
         // real ParameterCount; otherwise lazy layers size to 0 and the incoming
         // values are silently dropped (the SetParameters/GetParameters round-trip bug).
@@ -1244,6 +1287,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     public override INoisePredictor<T> Clone()
     {
         var clone = new UNetNoisePredictor<T>(
+            architecture: _architecture,
             inputChannels: _inputChannels,
             outputChannels: _outputChannels,
             baseChannels: _baseChannels,
@@ -1266,6 +1310,11 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         }
         else
         {
+            if (_layersInitialized)
+            {
+                clone.EnsureLayersInitialized();
+            }
+
             CopyMaterializedParametersTo(clone);
         }
         return clone;
@@ -1332,6 +1381,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     internal void TriggerLazyShapeResolution()
     {
+        EnsureLayersInitialized();
         // Idempotent: a single dummy forward resolves every lazy layer's weight
         // shapes; shapes never change afterwards (SetParameters overwrites values,
         // not shapes), so cache it. The guard is set BEFORE the forward so any
@@ -1382,6 +1432,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     internal void ResolveShapesViaForward()
     {
+        EnsureLayersInitialized();
         if (_shapesResolvedViaForward) return;
         _shapesResolvedViaForward = true;
 

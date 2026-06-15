@@ -45,6 +45,7 @@ namespace AiDotNet.Interfaces;
 /// "Analyze this document and summarize the main points: [document text]"
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("PromptCompressor")]
 public interface IPromptCompressor
 {
     /// <summary>

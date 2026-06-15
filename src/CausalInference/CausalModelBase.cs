@@ -709,8 +709,12 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
         var estimates = new List<double>();
         int n = x.Rows;
 
-        for (int b = 0; b < numBootstraps; b++)
+        int attempts = 0;
+        int maxAttempts = numBootstraps * 5;
+        while (estimates.Count < numBootstraps && attempts < maxAttempts)
         {
+            attempts++;
+
             // Bootstrap sample
             var indices = new int[n];
             for (int i = 0; i < n; i++)
@@ -733,14 +737,35 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
                 outcomeBoot[i] = outcome[indices[i]];
             }
 
-            T estimate = estimator(xBoot, treatmentBoot, outcomeBoot);
-            estimates.Add(NumOps.ToDouble(estimate));
+            try
+            {
+                T estimate = estimator(xBoot, treatmentBoot, outcomeBoot);
+                estimates.Add(NumOps.ToDouble(estimate));
+            }
+            catch (InvalidOperationException)
+            {
+                // Some bootstrap resamples are not estimable, e.g. propensity
+                // matching can draw a sample with no treated-control overlap
+                // inside the configured caliper. Discard the invalid resample;
+                // the primary estimator already validates the original data.
+            }
+            catch (ArgumentException)
+            {
+                // Degenerate resamples can also violate estimator preconditions
+                // such as requiring both treatment groups. They do not
+                // invalidate the original estimate.
+            }
+        }
+
+        if (estimates.Count < 2)
+        {
+            return NumOps.Zero;
         }
 
         // Calculate standard deviation of estimates
         double mean = estimates.Average();
         double sumSqDiff = estimates.Sum(e => (e - mean) * (e - mean));
-        double variance = sumSqDiff / (numBootstraps - 1);
+        double variance = sumSqDiff / (estimates.Count - 1);
         double se = Math.Sqrt(variance);
 
         return NumOps.FromDouble(se);
