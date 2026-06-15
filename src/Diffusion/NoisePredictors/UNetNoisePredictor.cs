@@ -575,30 +575,15 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> PredictCompiledForward(Tensor<T> noisySample, Tensor<T> timeEmbed, Tensor<T>? conditioning)
     {
-        if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
-            return ForwardUNet(noisySample, timeEmbed, conditioning);
-
-        try
-        {
-            var cache = _compiledInferenceCache ??= new AiDotNet.Tensors.Engines.Compilation.CompiledModelCache<T>();
-            // Key includes conditioning presence so null-vs-present paths
-            // don't share plans (different traced graphs).
-            var key = BuildCompileKey(noisySample, conditioning);
-            var plan = cache.GetOrCompileInference(
-                key,
-                () => ForwardUNet(noisySample, timeEmbed, conditioning));
-            return plan.Execute();
-        }
-        catch (Exception ex) when (
-            ex is not OutOfMemoryException &&
-            ex is not StackOverflowException &&
-            ex is not AccessViolationException)
-        {
-            System.Diagnostics.Trace.TraceWarning(
-                $"UNetNoisePredictor.PredictCompiledForward fallback: " +
-                $"{ex.GetType().Name}: {ex.Message}");
-            return ForwardUNet(noisySample, timeEmbed, conditioning);
-        }
+        // CORRECTNESS: run eagerly. The compiled-plan cache keys on the noisy-sample
+        // shape only and the plan re-binds at most a single mutable input slot, baking
+        // every other traced leaf — including the per-step timeEmbed — as a constant.
+        // Because the denoising loop calls this at a constant shape with a changing
+        // timestep, the cached plan would replay step 0's output for every step (and
+        // compilation defaults ON). The compiled replay returns only after the compile
+        // layer supports multiple mutable inputs so timeEmbed + conditioning are
+        // re-bound each step; until then eager execution is the only correct path.
+        return ForwardUNet(noisySample, timeEmbed, conditioning);
     }
 
     /// <summary>
