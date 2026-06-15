@@ -4,11 +4,11 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-public class MeissonicModelTests : DiffusionModelTestBase
+public class MeissonicModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 16, 64, 64];
     protected override int[] OutputShape => [1, 16, 64, 64];
 
-    protected override IDiffusionModel<double> CreateModel()
-        => new MeissonicModel<double>(seed: 42);
+    protected override IDiffusionModel<float> CreateModel()
+        => new MeissonicModel<float>(seed: 42);
 }

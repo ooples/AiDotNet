@@ -203,17 +203,7 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
     public override IDiffusionModel<T> Clone()
     {
         EnsureInitialized();
-        var cd = new DiTNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS, hiddenSize: 1536,
-            numLayers: 30, numHeads: 16, patchSize: 2,
-            contextDim: CROSS_ATTENTION_DIM);
-        cd.SetParameters(_dit.GetParameters());
-        var cv = new StandardVAE<T>(
-            inputChannels: 3, latentChannels: LATENT_CHANNELS,
-            baseChannels: 128, channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2, latentScaleFactor: 0.13025);
-        cv.SetParameters(_vae.GetParameters());
-        return new LuminaT2XModel<T>(dit: cd, vae: cv, conditioner: _conditioner);
+                        return new LuminaT2XModel<T>(dit: (DiTNoisePredictor<T>)_dit.Clone(), vae: (StandardVAE<T>)_vae.Clone(), conditioner: _conditioner);
     }
 
     #endregion

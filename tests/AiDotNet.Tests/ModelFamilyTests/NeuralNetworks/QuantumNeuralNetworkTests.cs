@@ -8,13 +8,13 @@ using Xunit;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class QuantumNeuralNetworkTests : NeuralNetworkModelTestBase
+public class QuantumNeuralNetworkTests : NeuralNetworkModelTestBase<float>
 {
     protected override int[] InputShape => [128];
     protected override int[] OutputShape => [1];
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new QuantumNeuralNetwork<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new QuantumNeuralNetwork<float>();
 
     // Paper-faithful constant input for quantum-state-encoded networks.
     //
@@ -41,9 +41,9 @@ public class QuantumNeuralNetworkTests : NeuralNetworkModelTestBase
     // "is the network input-sensitive" question rather than turning
     // into an unrelated stress test.
     // </para>
-    protected override Tensor<double> CreateConstantTensor(int[] shape, double value)
+    protected override Tensor<float> CreateConstantTensor(int[] shape, double value)
     {
-        var tensor = new Tensor<double>(shape);
+        var tensor = new Tensor<float>(shape);
         int len = tensor.Length;
         for (int i = 0; i < len; i++)
         {
@@ -57,7 +57,7 @@ public class QuantumNeuralNetworkTests : NeuralNetworkModelTestBase
             // the sinusoid term dominates and the direction tracks Sin(...);
             // at value=0.9 the offset dominates and the direction is closer
             // to uniform with a smaller sinusoidal ripple.
-            tensor[i] = value + 0.5 * Math.Sin(i * Math.PI / Math.Max(1, len - 1));
+            tensor[i] = (float)(value + 0.5 * Math.Sin(i * Math.PI / Math.Max(1, len - 1)));
         }
         return tensor;
     }
@@ -81,7 +81,7 @@ public class QuantumNeuralNetworkTests : NeuralNetworkModelTestBase
         using var network = CreateNetwork();
 
         var input = CreateRandomTensor(InputShape, rng);
-        var perturbedInput = new Tensor<double>(InputShape);
+        var perturbedInput = new Tensor<float>(InputShape);
         int len = input.Length;
         for (int i = 0; i < len; i++)
         {
@@ -89,7 +89,7 @@ public class QuantumNeuralNetworkTests : NeuralNetworkModelTestBase
             // of the input vector (which a unit-norm quantum encoding is
             // sensitive to), not just its magnitude (which it isn't).
             double delta = 0.5 * Math.Sin(i * Math.PI / Math.Max(1, len - 1));
-            perturbedInput[i] = input[i] + delta;
+            perturbedInput[i] = (float)(input[i] + delta);
         }
 
         var output1 = network.Predict(input);

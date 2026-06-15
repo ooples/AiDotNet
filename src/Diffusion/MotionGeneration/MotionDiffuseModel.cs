@@ -119,9 +119,14 @@ public class MotionDiffuseModel<T> : LatentDiffusionModelBase<T>
 
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new MotionDiffuseModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
-        return clone;
+        // Lazy-preserving Clone (recipe from #1596): delegate to the predictor's and VAE's own Clone()
+        // (preserves materialized weights, reconstructs from actual config) instead of rebuilding a
+        // default-scale model and SetParameters(GetParameters()), which mismatches an injected non-default
+        // variant and re-randomizes the clone's unmaterialized lazy weights.
+        return new MotionDiffuseModel<T>(
+            predictor: (SiTPredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner);
     }
 
     public override ModelMetadata<T> GetModelMetadata()

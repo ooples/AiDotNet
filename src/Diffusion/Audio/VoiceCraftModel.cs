@@ -227,12 +227,7 @@ public class VoiceCraftModel<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedTransformer = new DiTNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS, hiddenSize: HIDDEN_DIM,
-            numLayers: NUM_LAYERS, numHeads: NUM_HEADS,
-            patchSize: 1, contextDim: CONTEXT_DIM);
-        clonedTransformer.SetParameters(_transformer.GetParameters());
-        return new VoiceCraftModel<T>(transformer: clonedTransformer,
+                return new VoiceCraftModel<T>(transformer: (DiTNoisePredictor<T>)_transformer.Clone(),
             audioVAE: (AudioVAE<T>)_audioVAE.Clone(),
             conditioner: _conditioner);
     }

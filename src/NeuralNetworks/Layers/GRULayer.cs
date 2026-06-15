@@ -1528,6 +1528,14 @@ public partial class GRULayer<T> : LayerBase<T>
         var metadata = base.GetMetadata();
         metadata["HiddenSize"] = _hiddenSize.ToString();
         metadata["ReturnSequences"] = _returnSequences.ToString();
+        // Persist the gate (recurrent) activation so deserialization restores it exactly. The base
+        // GetMetadata only records the candidate/scalar activation; without this, a non-default gate
+        // activation would be lost on a serialize/clone round-trip.
+        if (_recurrentActivation is not null)
+            metadata["RecurrentActivationType"] =
+                _recurrentActivation.GetType().AssemblyQualifiedName
+                ?? _recurrentActivation.GetType().FullName
+                ?? string.Empty;
         return metadata;
     }
 

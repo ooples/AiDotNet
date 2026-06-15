@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Inherits all neural network invariant tests and adds GAN-specific invariants:
 /// generator output shape, mode diversity, parameter count, and output range.
 /// </summary>
-public abstract class GANModelTestBase : NeuralNetworkModelTestBase
+public abstract class GANModelTestBase<T> : NeuralNetworkModelTestBase<T>
 {
     // =====================================================
     // GAN INVARIANT: Generator Output Shape
@@ -60,7 +60,7 @@ public abstract class GANModelTestBase : NeuralNetworkModelTestBase
         int minLen = Math.Min(output1.Length, output2.Length);
         for (int i = 0; i < minLen; i++)
         {
-            if (Math.Abs(output1[i] - output2[i]) > 1e-12)
+            if (Math.Abs(ConvertToDouble(output1[i]) - ConvertToDouble(output2[i])) > 1e-12)
             {
                 anyDifferent = true;
                 break;
@@ -106,8 +106,9 @@ public abstract class GANModelTestBase : NeuralNetworkModelTestBase
 
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.True(Math.Abs(output[i]) < 1e6,
-                $"Output[{i}] = {output[i]:E4} is out of reasonable range [-1e6, 1e6]. " +
+            double ov = ConvertToDouble(output[i]);
+            Assert.True(Math.Abs(ov) < 1e6,
+                $"Output[{i}] = {ov:E4} is out of reasonable range [-1e6, 1e6]. " +
                 "Generator may have exploding values.");
         }
     }
@@ -204,11 +205,11 @@ public abstract class GANModelTestBase : NeuralNetworkModelTestBase
         try { network1.Predict(input); }
         catch (System.InvalidOperationException) { /* layer requires training mode for first forward */ }
 
-        INeuralNetworkModel<double> network2;
-        if (network1 is AiDotNet.NeuralNetworks.NeuralNetworkBase<double> nn1)
-            network2 = (INeuralNetworkModel<double>)nn1.Clone();
+        INeuralNetworkModel<T> network2;
+        if (network1 is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn1)
+            network2 = (INeuralNetworkModel<T>)nn1.Clone();
         else
-            network2 = (INeuralNetworkModel<double>)network1.Clone();
+            network2 = (INeuralNetworkModel<T>)network1.Clone();
 
         int shortIters = MoreDataShortIterations;
         int longIters = MoreDataLongIterations;
@@ -304,3 +305,6 @@ public abstract class GANModelTestBase : NeuralNetworkModelTestBase
         }
     }
 }
+
+/// <summary>Double-precision default for <see cref="GANModelTestBase{T}"/>.</summary>
+public abstract class GANModelTestBase : GANModelTestBase<double> { }

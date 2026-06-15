@@ -290,24 +290,9 @@ public class CogVideoModel<T> : VideoDiffusionModelBase<T>
     {
         var baseChannels = _variant == "5B" ? 384 : 320;
 
-        var clonedUnet = new VideoUNetPredictor<T>(
-            inputChannels: COG_LATENT_CHANNELS,
-            baseChannels: baseChannels,
-            contextDim: COG_CROSS_ATTENTION_DIM,
-            numTemporalLayers: 2);
-        clonedUnet.SetParameters(_videoUnet.GetParameters());
-
-        var clonedVae = new TemporalVAE<T>(
-            inputChannels: 3,
-            latentChannels: COG_LATENT_CHANNELS,
-            baseChannels: 128,
-            numTemporalLayers: 2,
-            causalMode: true);
-        clonedVae.SetParameters(_temporalVae.GetParameters());
-
-        return new CogVideoModel<T>(
-            videoUnet: clonedUnet,
-            temporalVae: clonedVae,
+                        return new CogVideoModel<T>(
+            videoUnet: (VideoUNetPredictor<T>)_videoUnet.Clone(),
+            temporalVae: (TemporalVAE<T>)_temporalVae.Clone(),
             conditioner: _conditioner,
             variant: _variant,
             defaultNumFrames: DefaultNumFrames,

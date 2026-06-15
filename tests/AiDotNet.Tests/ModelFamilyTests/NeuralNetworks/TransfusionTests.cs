@@ -23,14 +23,14 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 /// at paper scale are model-side performance bugs to be fixed in the
 /// model code, not papered over here.
 /// </remarks>
-public class TransfusionTests : VisionLanguageTestBase
+public class TransfusionTests : VisionLanguageTestBase<float>
 {
     // Paper-faithful image size — matches TransfusionOptions's default
     // ImageSize = 256 (Transfusion paper §3 VAE+DiT image-patch size).
     // VisionLanguageModelBase treats input as [batch, channels=3, height, width].
     protected override int[] InputShape => [1, 3, 256, 256];
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
+    protected override INeuralNetworkModel<float> CreateNetwork()
     {
         // VisionLanguageModelBase wants a real NeuralNetworkArchitecture
         // even in native mode. Match the architecture's image dims to
@@ -38,7 +38,7 @@ public class TransfusionTests : VisionLanguageTestBase
         // OutputSize is left at the paper's VocabSize-derived next-token
         // classification head; the architecture's actual layer
         // construction is delegated to TransfusionOptions.
-        var architecture = new NeuralNetworkArchitecture<double>(
+        var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
             taskType: NeuralNetworkTaskType.ImageClassification,
             inputHeight: 256,
@@ -47,6 +47,6 @@ public class TransfusionTests : VisionLanguageTestBase
             outputSize: 512);
 
         // Defaults intentional — see <remarks> above.
-        return new Transfusion<double>(architecture, new TransfusionOptions());
+        return new Transfusion<float>(architecture, new TransfusionOptions());
     }
 }
