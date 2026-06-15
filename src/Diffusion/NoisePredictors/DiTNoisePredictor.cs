@@ -511,7 +511,10 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         EnsureLayersInitialized();
         MaybeEngageWeightStreaming();
         _lastInput = noisySample;
-        var result = Forward(noisySample, timeEmbedding, conditioning);
+        // Route the per-step forward through the compile host: the first call at a given input shape
+        // traces + compiles the DiT graph, and every subsequent step of the denoising loop replays the
+        // compiled plan at near-zero overhead. Falls back to eager when compilation is disabled.
+        var result = PredictCompiled(noisySample, () => Forward(noisySample, timeEmbedding, conditioning));
         RegisterResolvedStreamingWeights();
         return result;
     }
