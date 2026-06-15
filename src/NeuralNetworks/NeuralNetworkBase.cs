@@ -22,6 +22,7 @@ using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Validation;
+using System.Reflection;
 using System.Threading;
 
 namespace AiDotNet.NeuralNetworks;
@@ -4211,8 +4212,42 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             for (int i = Layers.Count - 1; i >= 0; i--) CollectStreamingHandles(Layers[i], order);
         if (order.Count == 0) return; // nothing streamed (all weights resident) — keep LRU
 
-        pool.SetAccessSchedule(order.ToArray());
+        TrySetStreamingAccessSchedule(pool, order.ToArray());
         _streamingScheduleSet = true;
+    }
+
+    private static MethodInfo? _streamingPoolSetAccessScheduleMethod;
+    private static bool _streamingPoolSetAccessScheduleLookupDone;
+
+    private static void TrySetStreamingAccessSchedule(object pool, long[] order)
+    {
+        // Optional hook: present in some AiDotNet.Tensors versions, absent in others.
+        // Keep the Belady schedule when available without binding this assembly to it.
+        if (!_streamingPoolSetAccessScheduleLookupDone)
+        {
+            _streamingPoolSetAccessScheduleMethod = pool.GetType().GetMethod(
+                "SetAccessSchedule",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                binder: null,
+                types: new[] { typeof(long[]) },
+                modifiers: null);
+            _streamingPoolSetAccessScheduleLookupDone = true;
+        }
+
+        _streamingPoolSetAccessScheduleMethod?.Invoke(pool, new object[] { order });
+    }
+
+    private static readonly MethodInfo? StreamingExecutionTrainingMethod =
+        typeof(WeightRegistry).GetMethod(
+            "SetStreamingExecutionTraining",
+            BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            types: new[] { typeof(bool) },
+            modifiers: null);
+
+    private static void SetStreamingExecutionTrainingIfSupported(bool isTraining)
+    {
+        StreamingExecutionTrainingMethod?.Invoke(null, new object[] { isTraining });
     }
 
     private static void CollectStreamingHandles(ILayer<T> layer, System.Collections.Generic.List<long> order)
@@ -4395,7 +4430,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // so the pool's canonical copy (the master weight) isn't silently truncated
         // to bf16 and small optimizer updates aren't lost. No-op unless streaming is
         // engaged and the dtype is Auto.
-        WeightRegistry.SetStreamingExecutionTraining(isTraining);
+        SetStreamingExecutionTrainingIfSupported(isTraining);
 
         if (SupportsTraining)
         {
@@ -5699,17 +5734,20 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     public StreamingTrainingMode StreamingTraining { get; set; } = StreamingTrainingMode.Auto;
 
-    /// <summary>Learning rate used by the streaming 8-bit Adam epilogue. Defaults
+    /// <summary>Learning rate used by the default streaming 8-bit Adam epilogue. Defaults
     /// to 1e-4 — the conservative rate large-transformer/foundation-model
-    /// training uses, which stays stable under 8-bit moment quantization.</summary>
+    /// training uses, which stays stable under 8-bit moment quantization. When
+    /// callers configure a gradient optimizer explicitly, the streaming resolver
+    /// uses that optimizer's current learning rate instead.</summary>
     public double StreamingTrainingLearningRate { get; set; } = 1e-4;
 
-    /// <summary>Decoupled (AdamW) weight decay used by the streaming epilogue. 0 = plain Adam.</summary>
+    /// <summary>Decoupled weight decay used by the default streaming Adam epilogue. 0 = plain Adam.</summary>
     public double StreamingTrainingWeightDecay { get; set; } = 0.0;
 
-    // Per-parameter 8-bit Adam state for the streaming path; persists across
-    // Train calls so the moments accumulate over a multi-step run.
-    private Training.StreamingAdam8Bit<T>? _streamingOptimizerState;
+    // Per-parameter 8-bit optimizer state for the streaming path; persists
+    // across Train calls so the moments accumulate over a multi-step run.
+    private Training.IStreamingOptimizer<T>? _streamingOptimizerState;
+    private string? _streamingOptimizerKey;
 
     /// <summary>
     /// Autotuner: decides whether this Train step should take the memory-bounded
@@ -5763,18 +5801,49 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
     }
 
+    private Training.IStreamingOptimizer<T> GetOrCreateStreamingOptimizer(
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> resolvedOptimizer,
+        bool useStreamingDefaults)
+    {
+        string key = Training.StreamingOptimizerResolver<T>.BuildKey(
+            resolvedOptimizer,
+            useStreamingDefaults,
+            StreamingTrainingWeightDecay);
+
+        if (_streamingOptimizerState is null || _streamingOptimizerKey != key)
+        {
+            _streamingOptimizerState = Training.StreamingOptimizerResolver<T>.Create(
+                resolvedOptimizer,
+                useStreamingDefaults,
+                StreamingTrainingLearningRate,
+                StreamingTrainingWeightDecay);
+            _streamingOptimizerKey = key;
+        }
+
+        Training.StreamingOptimizerResolver<T>.RefreshLearningRate(
+            _streamingOptimizerState,
+            resolvedOptimizer,
+            useStreamingDefaults,
+            StreamingTrainingLearningRate);
+
+        return _streamingOptimizerState;
+    }
+
     /// <summary>
     /// Memory-bounded streaming training step: optimizer-in-backward with 8-bit
-    /// Adam state and topological-min gradient release. Each parameter's gradient
-    /// is applied (via <see cref="Training.StreamingAdam8Bit{T}"/>) and freed the
-    /// instant it is computed, so the full gradient set is never resident — which
-    /// is what lets a model whose gradients exceed RAM still take a real Adam
-    /// step. Used automatically by <see cref="TrainWithTape(Tensor{T}, Tensor{T}, IGradientBasedOptimizer{T, Tensor{T}, Tensor{T}}?)"/>
-    /// when the autotuner engages it. The model's configured optimizer is not
-    /// used on this path (its full-precision moment state is exactly what does
-    /// not fit); the 8-bit streaming epilogue stands in for it.
+    /// quantized optimizer state and topological-min gradient release. Each
+    /// parameter's gradient is applied (via <see cref="Training.IStreamingOptimizer{T}"/>)
+    /// and freed the instant it is computed, so the full gradient set is never
+    /// resident. Used automatically by <see cref="TrainWithTape(Tensor{T}, Tensor{T}, IGradientBasedOptimizer{T, Tensor{T}, Tensor{T}}?)"/>
+    /// when the autotuner engages it. The streaming resolver mirrors the user's
+    /// configured first-order optimizer while replacing its full-precision state
+    /// tensors with per-parameter 8-bit block-quantized state.
     /// </summary>
-    protected void TrainWithTapeStreaming(Tensor<T> input, Tensor<T> expected)
+    protected void TrainWithTapeStreaming(
+        Tensor<T> input,
+        Tensor<T> expected,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> resolvedOptimizer,
+        bool useStreamingDefaults)
     {
         var loss = LossFunction as LossFunctions.LossFunctionBase<T>
             ?? throw new InvalidOperationException(
@@ -5815,11 +5884,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         foreach (var t in GetExtraTrainableTensors())
             if (t is not null && t.Length > 0) sources.Add(t);
 
-        _streamingOptimizerState ??= new Training.StreamingAdam8Bit<T>(
-            learningRate: StreamingTrainingLearningRate,
-            beta1: 0.9, beta2: 0.999, epsilon: 1e-8,
-            weightDecay: StreamingTrainingWeightDecay);
-        _streamingOptimizerState.BeginStep();
+        var streamingOptimizer = GetOrCreateStreamingOptimizer(
+            resolvedOptimizer,
+            useStreamingDefaults);
+        streamingOptimizer.BeginStep();
 
         if (!clip)
         {
@@ -5836,7 +5904,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 (source, grad) =>
                 {
                     if (grad is null || grad.Length == 0) return;
-                    _streamingOptimizerState.Apply(source, grad);
+                    streamingOptimizer.Apply(source, grad);
                 });
         }
         else
@@ -5886,9 +5954,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                         for (int i = 0; i < len; i++)
                             span[i] = NumOps.Multiply(span[i], scale);
                     }
-                    _streamingOptimizerState.Apply(source, grad);
+                    streamingOptimizer.Apply(source, grad);
                 });
         }
+
+        // Post-step hook: first-order optimizers already updated each parameter in place during
+        // Apply (no-op here); a full-gradient optimizer like streaming L-BFGS buffered the
+        // per-parameter gradients above and performs its global two-loop update + parameter
+        // write-back now that the whole gradient is available.
+        streamingOptimizer.EndStep();
 
         // GPU weight-cache coherence after the in-place parameter mutation. The
         // 8-bit StreamingAdam state already updated source tensors in place; without
@@ -5897,6 +5971,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // and subsequent forwards would silently produce stale predictions. Other
         // update paths (TrainWithTape, batch eager) call this at the same point.
         InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+        StepSchedulerIfSupported(resolvedOptimizer);
     }
 
     protected void TrainWithTape(Tensor<T> input, Tensor<T> expected,
@@ -5909,20 +5984,23 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // exit. See AcquireTrainSentinel for the contract.
         using var __reentrancyGuard = AcquireTrainSentinel();
 
+        var configuredOptimizer = optimizer ?? _baseTrainOptimizer;
+        bool useStreamingDefaults = configuredOptimizer is null;
+        var resolvedOptimizer = configuredOptimizer ?? GetOrCreateBaseOptimizer();
+
         // Memory-bounded streaming training path (optimizer-in-backward). The
         // autotuner engages it only when the model's estimated full-precision
-        // training footprint (weights + grads + Adam moments) would not
+        // training footprint (weights + grads + optimizer moments) would not
         // comfortably fit in available memory — so for the overwhelming
         // majority of models that already fit, this is a no-op and the classic
         // path below runs unchanged (zero overhead, bit-identical results).
         // StreamingTraining = ForceOn/ForceOff overrides the autotuner.
         if (ShouldUseStreamingTraining())
         {
-            TrainWithTapeStreaming(input, expected);
+            TrainWithTapeStreaming(input, expected, resolvedOptimizer, useStreamingDefaults);
             return;
         }
 
-        var resolvedOptimizer = optimizer ?? GetOrCreateBaseOptimizer();
         // Reset the pending fused-miss reason so this call's emission
         // window starts clean. The fused-path try sets it via
         // EmitFusedMissAndFallback when it bails out; the post-commit
@@ -5949,7 +6027,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // eager tape path so the MP wiring below (cast weights to low precision,
         // scale loss, unscale gradients, overflow detection) actually runs.
         if (_mixedPrecisionContext is null
-            && TryTrainWithFusedOptimizer(input, expected, resolvedOptimizer))
+            && TryTrainWithFusedOptimizer(input, expected, resolvedOptimizer, useStreamingDefaults))
             return;
 
         // Loud one-time fallback warning. The fused path above is the fast path;
@@ -7040,7 +7118,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     private bool TryTrainWithFusedOptimizer(
         Tensor<T> input,
         Tensor<T> expected,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> resolvedOptimizer)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> resolvedOptimizer,
+        bool useStreamingDefaults)
     {
         // Callers can still force the eager path via
         // <c>TensorCodecOptions.EnableCompilation = false</c> (handled
@@ -7212,9 +7291,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // moments resident. This is precisely what the memory-bounded streaming
             // training path exists for — degrade to it rather than aborting the run.
             // TrainWithTapeStreaming drives optimizer-in-backward with topological-min
-            // gradient release (tape.ComputeGradientsStreaming) and an 8-bit Adam
-            // (StreamingAdam8Bit) that maintains its OWN moment state, so the
-            // "the compiled plan's Adam moments can't be transferred" obstruction
+            // gradient release (tape.ComputeGradientsStreaming) and an 8-bit
+            // streaming optimizer that maintains its OWN moment state, so the
+            // "the compiled plan's moments can't be transferred" obstruction
             // that forces the throw below does NOT apply here — streaming simply
             // continues training under its own optimizer. Pin StreamingTraining =
             // ForceOn so every subsequent step in this run also takes the streaming
@@ -7228,7 +7307,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 _fusedTrainingCommitted = false;
                 StreamingTraining = StreamingTrainingMode.ForceOn;
                 InvalidateParameterCountCache();
-                TrainWithTapeStreaming(input, expected);
+                TrainWithTapeStreaming(input, expected, resolvedOptimizer, useStreamingDefaults);
                 return true; // step handled via the streaming path
             }
 
