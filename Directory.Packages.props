@@ -155,7 +155,7 @@
          FP16-native path instead of the eager FP32 fallback. 0.96.0 supersedes master's 0.95.2;
          Native packages coreleased in lockstep at 0.96.0. -->
     <PackageVersion Include="AiDotNet.Tensors" Version="0.96.1" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.96.0" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.96.1" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.96.1" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.96.1" />
     <!-- Microsoft / .NET -->
