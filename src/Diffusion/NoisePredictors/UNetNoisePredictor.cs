@@ -170,6 +170,12 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override int BaseChannels => _baseChannels;
 
+    /// <summary>
+    /// Gets the per-level channel multipliers of this UNet's encoder/decoder. Exposed so a paired
+    /// ControlNet control branch can mirror the base UNet's channel configuration exactly.
+    /// </summary>
+    public int[] ChannelMultipliers => _channelMultipliers;
+
     /// <inheritdoc />
     public override int TimeEmbeddingDim => _timeEmbeddingDim;
 
