@@ -4,7 +4,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class SpikingNeuralNetworkTests : NeuralNetworkModelTestBase
+public class SpikingNeuralNetworkTests : NeuralNetworkModelTestBase<float>
 {
     protected override int[] InputShape => [128];
     protected override int[] OutputShape => [1];
@@ -23,6 +23,6 @@ public class SpikingNeuralNetworkTests : NeuralNetworkModelTestBase
     // reduction margin, so they pass without any tolerance change.
     protected override double MoreDataTolerance => 0.02;
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new SpikingNeuralNetwork<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new SpikingNeuralNetwork<float>();
 }

@@ -4,8 +4,8 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class SGPTTests : NeuralNetworkModelTestBase
+public class SGPTTests : NeuralNetworkModelTestBase<float>
 {
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new SGPT<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new SGPT<float>();
 }

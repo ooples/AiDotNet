@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Inherits all neural network invariant tests and adds embedding-specific invariants:
 /// similarity preservation, bounded outputs, and output dimensionality.
 /// </summary>
-public abstract class EmbeddingModelTestBase : NeuralNetworkModelTestBase
+public abstract class EmbeddingModelTestBase<T> : NeuralNetworkModelTestBase<T>
 {
     // =====================================================
     // EMBEDDING INVARIANT: Similar Inputs → Similar Embeddings
@@ -29,9 +29,9 @@ public abstract class EmbeddingModelTestBase : NeuralNetworkModelTestBase
 
         var input1 = CreateRandomTensor(InputShape, rng);
         // Create a near-identical input (small perturbation)
-        var input2 = new Tensor<double>(InputShape);
+        var input2 = new Tensor<T>(InputShape);
         for (int i = 0; i < input1.Length; i++)
-            input2[i] = input1[i] + 1e-6;
+            input2[i] = NumOps.Add(input1[i], NumOps.FromDouble(1e-6));
 
         var emb1 = network.Predict(input1);
         var emb2 = network.Predict(input2);
@@ -41,9 +41,11 @@ public abstract class EmbeddingModelTestBase : NeuralNetworkModelTestBase
         int minLen = Math.Min(emb1.Length, emb2.Length);
         for (int i = 0; i < minLen; i++)
         {
-            dot += emb1[i] * emb2[i];
-            norm1 += emb1[i] * emb1[i];
-            norm2 += emb2[i] * emb2[i];
+            double e1 = ConvertToDouble(emb1[i]);
+            double e2 = ConvertToDouble(emb2[i]);
+            dot += e1 * e2;
+            norm1 += e1 * e1;
+            norm2 += e2 * e2;
         }
 
         if (norm1 > 1e-15 && norm2 > 1e-15)
@@ -74,12 +76,13 @@ public abstract class EmbeddingModelTestBase : NeuralNetworkModelTestBase
 
         for (int i = 0; i < embedding.Length; i++)
         {
-            Assert.False(double.IsNaN(embedding[i]),
+            double e = ConvertToDouble(embedding[i]);
+            Assert.False(double.IsNaN(e),
                 $"Embedding[{i}] is NaN — numerical instability in embedding computation.");
-            Assert.False(double.IsInfinity(embedding[i]),
+            Assert.False(double.IsInfinity(e),
                 $"Embedding[{i}] is Infinity — overflow in embedding computation.");
-            Assert.True(Math.Abs(embedding[i]) < 1e4,
-                $"Embedding[{i}] = {embedding[i]:E4} exceeds bound of 1e4 — embedding is not well-bounded.");
+            Assert.True(Math.Abs(e) < 1e4,
+                $"Embedding[{i}] = {e:E4} exceeds bound of 1e4 — embedding is not well-bounded.");
         }
     }
 
@@ -107,3 +110,6 @@ public abstract class EmbeddingModelTestBase : NeuralNetworkModelTestBase
         Assert.Equal(expectedLength, embedding.Length);
     }
 }
+
+/// <summary>Double-precision default for <see cref="EmbeddingModelTestBase{T}"/>.</summary>
+public abstract class EmbeddingModelTestBase : EmbeddingModelTestBase<double> { }

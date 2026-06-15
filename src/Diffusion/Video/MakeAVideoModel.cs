@@ -301,15 +301,12 @@ public class MakeAVideoModel<T> : VideoDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
+        // Lazy-preserving Clone (recipe from #1596): delegate to the video UNet's AND VAE's own Clone()
+        // — the previous code rebuilt a FRESH StandardVAE here, re-randomizing the clone's VAE weights
+        // and diverging from the source on the first decode.
         return new MakeAVideoModel<T>(
             videoUNet: (VideoUNetPredictor<T>)_videoUNet.Clone(),
-            vae: new StandardVAE<T>(
-                inputChannels: 3,
-                latentChannels: LATENT_CHANNELS,
-                baseChannels: 128,
-                channelMultipliers: [1, 2, 4, 4],
-                numResBlocksPerLevel: 2,
-                latentScaleFactor: 0.18215),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
             defaultNumFrames: DefaultNumFrames,
             defaultFPS: DefaultFPS);

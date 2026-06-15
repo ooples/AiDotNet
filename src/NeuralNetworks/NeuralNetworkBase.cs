@@ -8684,6 +8684,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             var largeCopy = CreateNewInstance();
             if (largeCopy is NeuralNetworkBase<T> largeBase && largeBase._layers.Count == _layers.Count)
             {
+                // A DeepCopy clone is a transient in-memory copy whose weights are materialized
+                // resident below. Suppress its independent weight-streaming auto-enable: the
+                // process-wide WeightRegistry / streaming pool is a singleton that cannot host two
+                // streaming models at once (original + clone). Without this, the clone's first
+                // SetTrainingMode / forward re-Configures the singleton and throws "existing streaming
+                // pool has entries" / "unknown handle". Must run BEFORE any copy/SetTrainingMode below.
+                largeBase.DisableAutoStreaming();
+
                 // Copy layer-by-layer parameters + serialization extras + network-specific data.
                 for (int i = 0; i < _layers.Count; i++)
                 {
@@ -8730,6 +8738,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var copy = CreateNewInstance();
         if (copy is NeuralNetworkBase<T> copyBase)
         {
+            // Suppress the clone's independent weight-streaming auto-enable BEFORE deserialize (whose
+            // trailing SetTrainingMode would otherwise re-Configure the process-wide singleton streaming
+            // pool already owned by the original, throwing "existing streaming pool has entries" /
+            // "unknown handle"). A transient in-memory clone keeps its weights resident — see the
+            // matching guard in the large/custom-layer copy path above.
+            copyBase.DisableAutoStreaming();
             copyBase.DeserializeInternalUnchecked(serialized);
         }
         else

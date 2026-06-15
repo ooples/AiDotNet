@@ -4,11 +4,11 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-public class RecraftV3ModelTests : DiffusionModelTestBase
+public class RecraftV3ModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 16, 64, 64];
     protected override int[] OutputShape => [1, 16, 64, 64];
 
-    protected override IDiffusionModel<double> CreateModel()
-        => new RecraftV3Model<double>(seed: 42);
+    protected override IDiffusionModel<float> CreateModel()
+        => new RecraftV3Model<float>(seed: 42);
 }

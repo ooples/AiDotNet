@@ -22,7 +22,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 /// are model-side performance bugs to be fixed in the model code, not
 /// papered over here.
 /// </remarks>
-public class ACEStepTests : AudioNNModelTestBase
+public class ACEStepTests : AudioNNModelTestBase<float>
 {
     // Paper-faithful 1-second stereo audio at 44.1 kHz. The model
     // contract is [batch, channels, samples] per AudioNeuralNetworkBase.
@@ -31,18 +31,18 @@ public class ACEStepTests : AudioNNModelTestBase
     protected override int[] InputShape => [1, 2, 44100];
     protected override int[] OutputShape => [1, 2, 44100];
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
+    protected override INeuralNetworkModel<float> CreateNetwork()
     {
         // Architecture matches the audio I/O contract; ACEStepOptions
         // carries the paper-default diffusion-stack hyperparameters via
         // its own field initializers.
-        var architecture = new NeuralNetworkArchitecture<double>(
+        var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Regression,
             inputSize: 44100,
             outputSize: 44100);
 
         // Defaults intentional — see <remarks> above.
-        return new ACEStep<double>(architecture, new ACEStepOptions());
+        return new ACEStep<float>(architecture, new ACEStepOptions());
     }
 }

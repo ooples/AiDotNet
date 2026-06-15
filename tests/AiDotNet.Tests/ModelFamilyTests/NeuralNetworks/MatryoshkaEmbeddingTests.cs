@@ -4,7 +4,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class MatryoshkaEmbeddingTests : EmbeddingModelTestBase
+public class MatryoshkaEmbeddingTests : EmbeddingModelTestBase<float>
 {
     // MatryoshkaEmbedding (Kusupati et al. 2022 §3) emits a maxEmbeddingDimension-
     // wide vector at full resolution; nested sub-vectors of decreasing length
@@ -21,6 +21,6 @@ public class MatryoshkaEmbeddingTests : EmbeddingModelTestBase
     protected override int MoreDataShortIterations => 4;
     protected override int MoreDataLongIterations => 8;
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new MatryoshkaEmbedding<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new MatryoshkaEmbedding<float>();
 }

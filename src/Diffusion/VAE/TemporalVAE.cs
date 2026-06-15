@@ -157,6 +157,7 @@ public class TemporalVAE<T> : VAEModelBase<T>
     /// clones to materialize the full paper-scale VAE.
     /// </summary>
     private bool _preserveMaterializedParameters;
+    private bool _lazyShapesResolved;
 
     /// <summary>
     /// Input channels (3 for RGB video).
@@ -946,6 +947,15 @@ public class TemporalVAE<T> : VAEModelBase<T>
 
         if (_preserveMaterializedParameters)
         {
+            // The encoder/decoder conv stacks are lazy — they only ALLOCATE their weight tensors on
+            // the first Encode/Decode, not at construction. A fresh clone has the layer STRUCTURE but
+            // unallocated weights, so SetParameters(GetParameters()) onto it copies into nothing and the
+            // clone re-initializes with a fresh RNG on its first real forward → divergent Predict and a
+            // parameter-count mismatch. Resolve both sides' lazy shapes (one tiny encode+decode) before
+            // the parameter round-trip so the vectors line up and the trained values land. Mirrors
+            // StandardVAE.Clone.
+            TriggerLazyShapeResolution();
+            clone.TriggerLazyShapeResolution();
             clone.SetParameters(GetParameters());
         }
         else
@@ -953,6 +963,26 @@ public class TemporalVAE<T> : VAEModelBase<T>
             CopyMaterializedParametersTo(clone);
         }
         return clone;
+    }
+
+    /// <summary>
+    /// Materializes every lazy encoder/decoder weight tensor by running one tiny encode+decode probe,
+    /// so <see cref="GetParameters"/>/<see cref="SetParameters"/>/parameter-count agree before any real
+    /// forward. Idempotent (weight shapes are channel-driven and fixed once allocated). A 5-D video probe
+    /// is used so the temporal conv stack is resolved too — an image probe would leave the temporal layers
+    /// lazy and let them re-RNG-initialize on the first real video forward.
+    /// </summary>
+    internal void TriggerLazyShapeResolution()
+    {
+        if (_lazyShapesResolved) return;
+        int spatial = Math.Max(_downsampleFactor, 2);
+        int frames = Math.Max(_temporalKernelSize, 2);
+        var dummyVideo = new Tensor<T>(new[] { 1, _inputChannels, frames, spatial, spatial });
+        var dummyLatent = Encode(dummyVideo, sampleMode: false);
+        _ = Decode(dummyLatent);
+        // Mark resolved only AFTER a successful probe — if Encode/Decode throws, a retry must
+        // re-run the probe rather than skip it on the stale flag.
+        _lazyShapesResolved = true;
     }
 
     private void CopyMaterializedParametersTo(TemporalVAE<T> clone)

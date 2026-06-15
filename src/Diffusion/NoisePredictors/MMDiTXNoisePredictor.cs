@@ -95,14 +95,20 @@ public class MMDiTXNoisePredictor<T> : NoisePredictorBase<T>
         int inputChannels = 16,
         int patchSize = 2,
         int contextDim = 4096,
-        int? seed = null)
+        int? seed = null,
+        int hiddenSizeOverride = 0,
+        int numLayersOverride = 0,
+        int numHeadsOverride = 0)
         : base(seed: seed)
     {
         _variant = variant;
         _inputChannels = inputChannels;
-        _hiddenSize = GetHiddenSize(variant);
-        _numJointLayers = GetNumLayers(variant);
-        _numHeads = GetNumHeads(variant);
+        // Width/depth/head-count come from the SD3.5 variant by default; the overrides (>0) let callers
+        // build a smaller same-architecture predictor (e.g. a reduced-scale test fixture) without
+        // changing the paper-scale production defaults.
+        _hiddenSize = hiddenSizeOverride > 0 ? hiddenSizeOverride : GetHiddenSize(variant);
+        _numJointLayers = numLayersOverride > 0 ? numLayersOverride : GetNumLayers(variant);
+        _numHeads = numHeadsOverride > 0 ? numHeadsOverride : GetNumHeads(variant);
         _patchSize = patchSize;
         _contextDim = contextDim;
 
@@ -309,7 +315,22 @@ public class MMDiTXNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override INoisePredictor<T> Clone()
     {
-        var clone = new MMDiTXNoisePredictor<T>(_variant, _inputChannels, _patchSize, _contextDim);
+        var clone = new MMDiTXNoisePredictor<T>(
+            _variant, _inputChannels, _patchSize, _contextDim,
+            hiddenSizeOverride: _hiddenSize, numLayersOverride: _numJointLayers, numHeadsOverride: _numHeads);
+
+        // The patch-embed/joint/final layers are LazyDense — their weight tensors only allocate on the
+        // first Forward, not at construction. A fresh clone has the structure but unallocated weights, so
+        // SetParameters(GetParameters()) onto it would copy into nothing and the clone would re-RNG-init
+        // on its first real forward, diverging from the source. When the source has been forwarded
+        // (its layers are materialized), run one tiny probe forward to materialize the clone through the
+        // same path, THEN copy the trained values so they persist. (_posEmbed is eager, always copied.)
+        if (_patchEmbed.IsInitialized)
+        {
+            int probeSpatial = _patchSize * 2;
+            var probe = new Tensor<T>(new[] { 1, _inputChannels, probeSpatial, probeSpatial });
+            clone.PredictNoise(probe, timestep: 0, conditioning: null);
+        }
         clone.SetParameters(GetParameters());
         return clone;
     }

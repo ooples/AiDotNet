@@ -15,7 +15,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 /// Paper-faithful invariant tests for MobileNetV2 per Sandler et al. 2018,
 /// "MobileNetV2: Inverted Residuals and Linear Bottlenecks".
 /// </summary>
-public class MobileNetV2NetworkTests : NeuralNetworkModelTestBase
+public class MobileNetV2NetworkTests : NeuralNetworkModelTestBase<float>
 {
     private const int Channels = 3;
     private const int Height = 32;
@@ -40,9 +40,9 @@ public class MobileNetV2NetworkTests : NeuralNetworkModelTestBase
     // small 3x32x32 probe and 10-class OutputShape assertion. Use the
     // architecture-aware overload so the network classifier head matches
     // the test's expected output dimension.
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new MobileNetV2Network<double>(
-            new NeuralNetworkArchitecture<double>(
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new MobileNetV2Network<float>(
+            new NeuralNetworkArchitecture<float>(
                 inputType: InputType.ThreeDimensional,
                 taskType: NeuralNetworkTaskType.MultiClassClassification,
                 inputHeight: Height, inputWidth: Width, inputDepth: Channels,
@@ -57,15 +57,15 @@ public class MobileNetV2NetworkTests : NeuralNetworkModelTestBase
     // MobileNetV2 is a raw-logit classifier trained with CrossEntropyWithLogitsLoss
     // (PyTorch nn.CrossEntropyLoss semantics). The base scaffold's continuous
     // [0,1) targets are regression targets, not legal class distributions.
-    protected override Tensor<double> CreateRandomTargetTensor(int[] shape, Random rng)
+    protected override Tensor<float> CreateRandomTargetTensor(int[] shape, Random rng)
     {
-        var target = new Tensor<double>(shape);
+        var target = new Tensor<float>(shape);
         int classCount = shape[^1];
         int samples = target.Length / classCount;
         for (int sample = 0; sample < samples; sample++)
         {
             int classIndex = rng.Next(classCount);
-            target[sample * classCount + classIndex] = 1.0;
+            target[sample * classCount + classIndex] = 1.0f;
         }
 
         return target;
@@ -108,7 +108,7 @@ public class MobileNetV2NetworkTests : NeuralNetworkModelTestBase
         var target2 = CreateRandomTargetTensor(EffectiveOutputShape, rng2);
 
         network1.Predict(input);
-        var network2 = (INeuralNetworkModel<double>)network1.Clone();
+        var network2 = (INeuralNetworkModel<float>)network1.Clone();
 
         for (int i = 0; i < MoreDataShortIterations; i++)
             network1.Train(input, target);
@@ -124,7 +124,7 @@ public class MobileNetV2NetworkTests : NeuralNetworkModelTestBase
             "Optimizer may be diverging with more training.");
     }
 
-    private static double ComputeCrossEntropy(Tensor<double> logits, Tensor<double> target)
+    private static double ComputeCrossEntropy(Tensor<float> logits, Tensor<float> target)
     {
         int classCount = target.Shape[^1];
         if (classCount <= 0 || logits.Length != target.Length || target.Length % classCount != 0)

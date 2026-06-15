@@ -28,7 +28,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 /// through the InfoGAN convenience ctor (gen / disc / q all share the
 /// 1-D MLP backbone).
 /// </remarks>
-public class InfoGANTests : GANModelTestBase
+public class InfoGANTests : GANModelTestBase<float>
 {
     // Test data shapes: input is the noise tensor (4-dim raw noise),
     // output is the imageDim (4). InfoGAN.Predict / ForwardForTraining
@@ -54,7 +54,7 @@ public class InfoGANTests : GANModelTestBase
     protected override int MemorizationTaskIterations => 4;
     protected override double MemorizationTaskLossThreshold => 0.99999;
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
+    protected override INeuralNetworkModel<float> CreateNetwork()
     {
         // Per Chen et al. 2016 §3, InfoGAN has three sub-networks with
         // distinct input dimensions:
@@ -68,22 +68,22 @@ public class InfoGANTests : GANModelTestBase
         const int noiseSize = 4;
         const int latentSize = 2;
         const int imageSize = 4;
-        var generatorArch = new NeuralNetworkArchitecture<double>(
+        var generatorArch = new NeuralNetworkArchitecture<float>(
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Regression,
             inputSize: noiseSize + latentSize,
             outputSize: imageSize);
-        var discriminatorArch = new NeuralNetworkArchitecture<double>(
+        var discriminatorArch = new NeuralNetworkArchitecture<float>(
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.BinaryClassification,
             inputSize: imageSize,
             outputSize: 1);
-        var qNetworkArch = new NeuralNetworkArchitecture<double>(
+        var qNetworkArch = new NeuralNetworkArchitecture<float>(
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Regression,
             inputSize: imageSize,
             outputSize: latentSize);
-        return new InfoGAN<double>(
+        return new InfoGAN<float>(
             generatorArch,
             discriminatorArch,
             qNetworkArch,
