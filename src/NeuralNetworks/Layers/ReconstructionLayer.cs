@@ -321,11 +321,21 @@ public class ReconstructionLayer<T> : LayerBase<T>
     private Tensor<T> FlattenToFeatureMatrix(Tensor<T> input)
     {
         int featureWidth = InputShape[0];
-        if (featureWidth <= 0 || input.Length % featureWidth != 0)
+        if (featureWidth <= 0)
         {
-            // Declared width is unusable for this input — leave it untouched
-            // and let the sub-layer resolve against the input as-is.
-            return input;
+            throw new InvalidOperationException(
+                $"{nameof(ReconstructionLayer<T>)} has an invalid declared feature width " +
+                $"({nameof(InputShape)}[0] = {featureWidth}); it must be positive.");
+        }
+        if (input.Length % featureWidth != 0)
+        {
+            // Fail fast rather than silently passing an unnormalizable input
+            // through — letting the FCL resolve against an unintended width just
+            // pushes a confusing dimension-mismatch to a later layer.
+            throw new ArgumentException(
+                $"Input length {input.Length} is not divisible by the reconstruction " +
+                $"feature width {featureWidth}; cannot normalize to [batch, {featureWidth}].",
+                nameof(input));
         }
 
         int batch = input.Length / featureWidth;
