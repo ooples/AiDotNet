@@ -826,12 +826,11 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
     /// portion of <see cref="BackpropDiscriminatorToInput"/> but is seeded with a gradient on h2
     /// directly (rather than derived from the scalar output).
     /// </summary>
-    private Vector<T> BackpropDiscriminatorFeaturesToInput(Vector<T> x, Vector<T> h2, Vector<T> dH2Seed)
+    private Vector<T> BackpropDiscriminatorFeaturesToInput(Vector<T> h1, Vector<T> h2, Vector<T> dH2Seed)
     {
         var discW1 = _discW1;
-        var discB1 = _discB1;
         var discW2 = _discW2;
-        if (discW1 == null || discB1 == null || discW2 == null)
+        if (discW1 == null || discW2 == null)
         {
             throw new InvalidOperationException("Discriminator weights not initialized.");
         }
@@ -845,17 +844,6 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
             dH2[i] = NumOps.LessThan(h2[i], NumOps.Zero) ? NumOps.Multiply(dH2Seed[i], leakySlope) : dH2Seed[i];
         }
 
-        // Recompute h1 for its LeakyReLU derivative.
-        var w1Tensor = Tensor<T>.FromMatrix(discW1);
-        var h1Pre = Engine.TensorMatMul(Tensor<T>.FromVector(x).Reshape(1, _inputDim), w1Tensor)
-                          .Reshape(_hiddenDim).ToVector();
-        var h1 = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T val = NumOps.Add(h1Pre[j], discB1[j]);
-            h1[j] = NumOps.GreaterThan(val, NumOps.Zero) ? val : NumOps.Multiply(leakySlope, val);
-        }
-
         // dH1 = W2 @ dH2; LeakyReLU derivative on h1.
         var dH1 = Engine.TensorMatMul(Tensor<T>.FromMatrix(discW2), Tensor<T>.FromVector(dH2).Reshape(_hiddenDim, 1))
                         .Reshape(_hiddenDim).ToVector();
@@ -865,6 +853,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         }
 
         // dX = W1 @ dH1.
+        var w1Tensor = Tensor<T>.FromMatrix(discW1);
         return Engine.TensorMatMul(w1Tensor, Tensor<T>.FromVector(dH1).Reshape(_hiddenDim, 1))
                      .Reshape(_inputDim).ToVector();
     }
@@ -921,7 +910,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
             {
                 // Forward with cached activations for the analytic backward pass.
                 var (gH1, gH2, xGen) = GenerateWithCache(z);
-                var (_, featGen, _) = DiscriminateWithCache(xGen);
+                var (discH1, featGen, _) = DiscriminateWithCache(xGen);
 
                 // Reconstruction loss: ||x - xGen||^2
                 T reconLoss = NumOps.Zero;
@@ -966,7 +955,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
                 {
                     dFeatH2[k] = NumOps.Multiply(NumOps.FromDouble(0.2), NumOps.Subtract(featGen[k], featReal[k]));
                 }
-                var dFeatX = BackpropDiscriminatorFeaturesToInput(xGen, featGen, dFeatH2);
+                var dFeatX = BackpropDiscriminatorFeaturesToInput(discH1, featGen, dFeatH2);
                 for (int j = 0; j < _inputDim; j++)
                 {
                     dxGen[j] = NumOps.Add(dxGen[j], dFeatX[j]);

@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using System.Buffers;
 using System.Collections.Concurrent;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
@@ -223,15 +224,24 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             }
             else
             {
-                // Use percentile-based scale (collect values, sort, take percentile)
-                var absValues = new List<double>(blockEnd - blockStart);
-                for (int i = blockStart; i < blockEnd; i++)
+                // Use percentile-based scale (collect values, sort, take percentile).
+                int count = blockEnd - blockStart;
+                var absValues = ArrayPool<double>.Shared.Rent(count);
+                try
                 {
-                    absValues.Add(Math.Abs(NumOps.ToDouble(values[i])));
+                    for (int i = blockStart; i < blockEnd; i++)
+                    {
+                        absValues[i - blockStart] = Math.Abs(NumOps.ToDouble(values[i]));
+                    }
+
+                    Array.Sort(absValues, 0, count);
+                    int percentileIdx = (int)((count - 1) * _options.QuantizationPercentile / 100.0);
+                    maxAbs = absValues[percentileIdx];
                 }
-                absValues.Sort();
-                int percentileIdx = (int)((absValues.Count - 1) * _options.QuantizationPercentile / 100.0);
-                maxAbs = absValues[percentileIdx];
+                finally
+                {
+                    ArrayPool<double>.Shared.Return(absValues);
+                }
             }
 
             // Compute scale (with small epsilon to avoid division by zero)

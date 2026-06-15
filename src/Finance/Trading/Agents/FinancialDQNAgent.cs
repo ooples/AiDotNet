@@ -94,8 +94,8 @@ public class FinancialDQNAgent<T> : TradingAgentBase<T>
             inputType: AiDotNet.Enums.InputType.OneDimensional,
             taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
             inputSize: 10,
-            outputSize: 1),
-            options: new TradingAgentOptions<T>())
+            outputSize: 3),
+            options: new FinancialDQNAgentOptions<T> { StateSize = 10, ActionSize = 3 })
     {
     }
 

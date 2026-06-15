@@ -474,28 +474,8 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
 
     private List<TableCell<T>> ExtractChartData(Tensor<T> output, double threshold)
     {
-        var cells = new List<TableCell<T>>();
-
-        // Simplified chart data extraction
-        // In production, this would parse the model output
-        cells.Add(new TableCell<T>
-        {
-            Row = 0,
-            Column = 0,
-            Text = "Category",
-            IsHeader = true,
-            Confidence = NumOps.FromDouble(0.9)
-        });
-        cells.Add(new TableCell<T>
-        {
-            Row = 0,
-            Column = 1,
-            Text = "Value",
-            IsHeader = true,
-            Confidence = NumOps.FromDouble(0.9)
-        });
-
-        return cells;
+        throw new NotSupportedException(
+            "MATCHA chart data extraction requires a task-specific decoder and is not implemented for raw output tensors.");
     }
 
     private string ExportToCsv(TableStructureResult<T> table)

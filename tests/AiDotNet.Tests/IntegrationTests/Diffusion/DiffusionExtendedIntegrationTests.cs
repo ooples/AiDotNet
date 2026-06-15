@@ -154,15 +154,14 @@ public class DiffusionExtendedIntegrationTests
         // diffusion tests to FP32`): Kandinsky 3.0's paper-faithful defaults
         // (prior + decoder UNets + MoVQ-GAN VAE) instantiate ~16 GB of weight
         // tensors at FP64, which OOMs the CI runner — confirmed locally:
-        // `new KandinskyModel<float>()` throws OutOfMemoryException at
+        // `new KandinskyModel<double>()` throws OutOfMemoryException at
         // ConvolutionalLayer.EnsureInitialized while constructing the decoder
         // UNet's level-3 ResBlocks, while `new KandinskyModel<float>()` succeeds
         // in ~45s on the same machine. FP32 is the production-canonical
         // precision for SD/Kandinsky paper checkpoints (FP32 master / FP16
-        // working). The other Construction smoke tests in this file currently
-        // fit at FP64 in CI's specific scheduling — they're left at <float>
-        // until CI demonstrates they too need migration, so the surface area
-        // of this fix matches the actual CI failure exactly.
+        // working). The other Construction smoke tests in this file are also
+        // migrated to <float> to reduce cumulative shard memory pressure and
+        // avoid future OOM as the test suite grows.
         var model = new KandinskyModel<float>();
         Assert.NotNull(model);
     }

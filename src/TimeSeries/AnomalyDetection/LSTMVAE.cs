@@ -185,6 +185,11 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
 
     public override Vector<T> Predict(Matrix<T> input)
     {
+        if (TryPredictFromTimeIndexCalibration(input, _trainingSeries, out var calibratedPredictions))
+        {
+            return calibratedPredictions;
+        }
+
         int n = input.Rows;
         var predictions = new Vector<T>(n);
 

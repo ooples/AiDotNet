@@ -3639,7 +3639,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // tradeoff: ~sqrt(N) checkpoints with ~33% extra compute.
             segmentSize = Math.Max(1, (int)Math.Sqrt(Math.Max(1, Layers.Count)));
         }
-        if (segmentSize > 0 && Layers.Count > segmentSize)
+        if (segmentSize > 0 && Layers.Count > segmentSize && CanUseGradientCheckpointingForCurrentLayerGraph())
         {
             // Cache the layer-forward delegate array so checkpointed training
             // doesn't allocate N closures + a delegate array on every call.
@@ -3729,6 +3729,39 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
 
         return result;
+    }
+
+    protected bool CanUseGradientCheckpointingForCurrentLayerGraph()
+    {
+        foreach (var layer in Layers)
+        {
+            if (ContainsCheckpointUnsafeLayer(layer))
+                return false;
+        }
+
+        return true;
+    }
+
+    private static bool ContainsCheckpointUnsafeLayer(ILayer<T> layer)
+    {
+        var typeName = layer.GetType().Name;
+        if (typeName.Contains("Dropout", StringComparison.OrdinalIgnoreCase)
+            || typeName.Contains("BatchNormalization", StringComparison.OrdinalIgnoreCase)
+            || typeName.Contains("BatchNorm", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (layer is Layers.LayerBase<T> baseLayer)
+        {
+            foreach (var child in baseLayer.GetSubLayers())
+            {
+                if (ContainsCheckpointUnsafeLayer(child))
+                    return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>

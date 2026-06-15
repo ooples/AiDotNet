@@ -250,6 +250,15 @@ public class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         InitializeWithSmallRandomValues(_decoderPositionEmbeddings, random, 0.02);
     }
 
+    /// <summary>
+    /// Ensures native layers and embeddings are initialized on first use.
+    /// </summary>
+    /// <remarks>
+    /// This method is not thread-safe during initialization. Native document
+    /// models must be initialized on one thread before concurrent access; calling
+    /// this on a freshly constructed instance from multiple threads can corrupt
+    /// the shared layer and embedding state.
+    /// </remarks>
     private void EnsureNativeInitialized()
     {
         if (!_useNativeMode || _nativeLayersInitialized)
