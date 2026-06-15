@@ -223,10 +223,21 @@ internal static class MixedPrecisionReflection
         if (gradScaler is null) throw new ArgumentNullException(nameof(gradScaler));
         MethodInfo? stepAdam = _stepAdamMethod;
         if (stepAdam is null) throw new InvalidOperationException("Mixed-precision API not available.");
-        object? result = stepAdam.Invoke(plan, new object[]
+
+        // The hyperparameters were `double` in the original mixed-precision API but are `float` in the
+        // public StepAdam published from Tensors 0.96.0 (PR #606). Invoke() does not implicitly narrow
+        // double->float, so coerce each numeric argument to the RESOLVED method's parameter type —
+        // version-tolerant across both signatures (otherwise reflection throws "Object of type
+        // 'System.Double' cannot be converted to type 'System.Single'" and the entire Adam FP16 path
+        // silently falls back to the eager tape).
+        var args = new object[] { parameters, learningRate, beta1, beta2, eps, weightDecay, gradScaler };
+        var ps = stepAdam.GetParameters();
+        for (int i = 0; i < args.Length && i < ps.Length; i++)
         {
-            parameters, learningRate, beta1, beta2, eps, weightDecay, gradScaler
-        });
+            if (args[i] is double d && ps[i].ParameterType == typeof(float))
+                args[i] = (float)d;
+        }
+        object? result = stepAdam.Invoke(plan, args);
         return ExtractLoss(result);
     }
 
