@@ -2371,18 +2371,67 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(ResidualLayer<>))
         {
-            // ResidualLayer wraps an inner DenseLayer. Reconstruct inner layer from metadata.
-            int innerInputSize = TryGetInt(additionalParams, "InnerInputSize") ?? inputShape[0];
-            int innerOutputSize = TryGetInt(additionalParams, "InnerOutputSize") ?? inputShape[0];
-
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-            object? innerActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-            var innerLayer = new DenseLayer<T>(innerOutputSize, innerActivation as IActivationFunction<T>);
-            // Eagerly resolve so ValidateInnerLayer sees concrete matching shapes.
-            innerLayer.ResolveFromShape(new[] { innerInputSize });
+            object? residualActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+
+            // Preferred path: reconstruct the inner layer by its REAL type from the
+            // full type-name + I/O shapes + nested "Inner__" metadata written by
+            // ResidualLayer.GetMetadata. This round-trips ANY inner layer (Conv,
+            // Dense, …) instead of assuming a DenseLayer — without it, a ResidualLayer
+            // wrapping a ConvolutionalLayer rebuilds as a wrong-sized DenseLayer and
+            // SetParameters throws "Expected N parameters, but got M" on Clone/DeepCopy.
+            ILayer<T>? innerLayer = null;
+            string? innerTypeName = null;
+            if (additionalParams != null
+                && additionalParams.TryGetValue("InnerLayerTypeName", out var innerTypeObj)
+                && innerTypeObj is string innerTypeStr
+                && !string.IsNullOrEmpty(innerTypeStr))
+            {
+                innerTypeName = innerTypeStr;
+                int[]? innerIn = TryGetIntArray(additionalParams, "InnerLayerInputShape");
+                int[]? innerOut = TryGetIntArray(additionalParams, "InnerLayerOutputShape");
+                if (innerIn is { Length: > 0 } && innerOut is { Length: > 0 })
+                {
+                    // Strip the "Inner__" prefix so the inner layer's own metadata
+                    // (FilterSize/Stride/Padding/ScalarActivationType/…) is read by
+                    // CreateLayerFromType's per-type branch verbatim.
+                    var innerParams = new Dictionary<string, object>();
+                    foreach (var kv in additionalParams)
+                    {
+                        if (kv.Key.StartsWith("Inner__", StringComparison.Ordinal))
+                            innerParams[kv.Key.Substring("Inner__".Length)] = kv.Value;
+                    }
+
+                    var built = CreateLayerFromType<T>(innerTypeName, innerIn, innerOut, innerParams);
+                    if (built is LayerBase<T> builtBase
+                        && !builtBase.IsShapeResolved
+                        && System.Array.TrueForAll(innerIn, d => d > 0))
+                    {
+                        try { builtBase.ResolveFromShape(innerIn); }
+                        catch (Exception resolveEx)
+                        {
+                            System.Diagnostics.Trace.TraceWarning(
+                                $"DeserializationHelper: ResolveFromShape on reconstructed ResidualLayer inner " +
+                                $"'{innerTypeName}' with shape [{string.Join(",", innerIn)}] failed: {resolveEx.Message}");
+                        }
+                    }
+                    innerLayer = built;
+                }
+            }
+
+            if (innerLayer is null)
+            {
+                // Legacy fallback: older saves stored only a scalar Dense size.
+                int innerInputSize = TryGetInt(additionalParams, "InnerInputSize") ?? inputShape[0];
+                int innerOutputSize = TryGetInt(additionalParams, "InnerOutputSize") ?? inputShape[0];
+                object? innerActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+                var denseInner = new DenseLayer<T>(innerOutputSize, innerActivation as IActivationFunction<T>);
+                // Eagerly resolve so ValidateInnerLayer sees concrete matching shapes.
+                denseInner.ResolveFromShape(new[] { innerInputSize });
+                innerLayer = denseInner;
+            }
 
             // Create ResidualLayer directly to avoid constructor ambiguity
-            object? residualActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             instance = new ResidualLayer<T>(innerLayer, residualActivation as IActivationFunction<T>);
         }
         else if (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".MambaBlock`1"))

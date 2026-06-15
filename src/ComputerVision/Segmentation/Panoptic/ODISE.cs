@@ -74,6 +74,7 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _disposed;
     private int _encoderLayerEnd;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _baseTapeOptimizer;
     #endregion
 
     #region Properties
@@ -205,6 +206,26 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown when called on an ONNX-mode model.</exception>
+    /// <summary>
+    /// ODISE trains the dense per-pixel segmentation head through a deep convolutional
+    /// encoder/decoder. The base Adam default (1e-3) is tuned for shallow MLP-style heads
+    /// and oscillates here — the encoder's GroupNorm + SiLU residual stack amplifies the
+    /// effective step, so the per-pixel cross-entropy drifts UP rather than down on a
+    /// memorization task. A conservative 1e-4 (the standard fine-tuning rate for diffusion
+    /// U-Net backbones, which ODISE's encoder mirrors per Xu et al. 2023 §3) restores a
+    /// monotonic decrease without changing the architecture.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+    {
+        return _baseTapeOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                UseAMSGrad = false,
+                InitialLearningRate = 0.0001
+            });
+    }
+
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");

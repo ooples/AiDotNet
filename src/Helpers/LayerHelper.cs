@@ -26501,7 +26501,11 @@ public static class LayerHelper<T>
         // the chain rule — manifesting in tests as "Network produces
         // identical output for inputs [0.1,...] and [0.9,...]" (zero
         // L2 distance between distinct-input outputs).
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        // SD U-Net backbone: SiLU/Swish (SD's activation, not ReLU) + GroupNorm
+        // (batch-independent, non-degenerate at B=1) + identity residual skips on
+        // the same-resolution depth blocks (the SD ResBlock's defining element,
+        // which also carries gradient to the early encoder a plain conv stack can't).
+        var silu = new SiLUActivation<T>() as IActivationFunction<T>;
         int h = inputHeight, w = inputWidth, inC = inputChannels;
 
         for (int stage = 0; stage < channelDims.Length; stage++)
@@ -26511,21 +26515,20 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            // Conv -> GroupNorm -> Activation: GN must see raw pre-activation
-            // tensors (Wu & He 2018 §3 — normalising the linear projection's
-            // outputs before the nonlinearity). Passing relu into the Conv
-            // would push GN downstream of the nonlinearity and change the
-            // encoder block's distributional behaviour.
+            // Stage entry = strided downsample conv (changes channels, no skip):
+            // Conv -> GroupNorm -> SiLU. GN sees the raw linear projection before
+            // the nonlinearity (Wu & He 2018 §3).
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, activationFunction: null);
             h /= stride; w /= stride;
             yield return new GroupNormalizationLayer<T>(ChooseGroupCount(outC), outC);
-            yield return new ActivationLayer<T>(relu);
+            yield return new ActivationLayer<T>(silu);
 
+            // Same-resolution depth = SD residual blocks: SiLU(x + Conv(x)) → GroupNorm.
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, activationFunction: null);
+                yield return new ResidualLayer<T>(
+                    new ConvolutionalLayer<T>(outC, 3, 1, 1, activationFunction: null), silu);
                 yield return new GroupNormalizationLayer<T>(ChooseGroupCount(outC), outC);
-                yield return new ActivationLayer<T>(relu);
             }
 
             inC = outC;
