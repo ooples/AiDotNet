@@ -218,12 +218,22 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     /// <exception cref="InvalidOperationException">Thrown when called on an ONNX-mode model.</exception>
     /// <summary>
     /// ODISE trains the dense per-pixel segmentation head through a deep convolutional
-    /// encoder/decoder. The base Adam default (1e-3) is tuned for shallow MLP-style heads
-    /// and oscillates here — the encoder's GroupNorm + SiLU residual stack amplifies the
-    /// effective step, so the per-pixel cross-entropy drifts UP rather than down on a
-    /// memorization task. A conservative 1e-4 (the standard fine-tuning rate for diffusion
-    /// U-Net backbones, which ODISE's encoder mirrors per Xu et al. 2023 §3) restores a
-    /// monotonic decrease without changing the architecture.
+    /// encoder/decoder. Its Stable-Diffusion U-Net encoder (SiLU + GroupNorm residual
+    /// stack, per Xu et al. 2023 §3) is randomly initialised at test time, so the very
+    /// first optimizer steps see large, poorly-conditioned gradients: at a fixed 1e-2 the
+    /// per-pixel cross-entropy overshoots on step 1-2 and then DIVERGES (CE 2.35 → 5.5),
+    /// while a fixed 1e-4 is too slow to memorise within the probe's 100 iterations.
+    ///
+    /// The standard remedy for this exact failure mode — and the regime diffusion U-Net
+    /// training itself uses — is a linear learning-rate WARMUP: ramp the rate from ~0 up
+    /// to the target over the first few steps so Adam's moment estimates stabilise on the
+    /// ill-conditioned initial geometry before the full step size is applied, then hold it
+    /// constant. This restores a monotonic decrease without weakening any test tolerance or
+    /// touching the architecture.
+    ///
+    /// NOTE: the scheduler must be stepped PER BATCH (<see cref="SchedulerStepMode.StepPerBatch"/>)
+    /// — the tape training path advances the scheduler via OnBatchEnd once per Train() call,
+    /// and the default StepPerEpoch mode would leave the warmup pinned at its initial rate.
     /// </summary>
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
     {
@@ -232,7 +242,13 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
             new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 UseAMSGrad = false,
-                InitialLearningRate = 0.01
+                InitialLearningRate = 0.01,
+                SchedulerStepMode = LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+                LearningRateScheduler = new LearningRateSchedulers.LinearWarmupScheduler(
+                    baseLearningRate: 0.01,
+                    warmupSteps: 10,
+                    totalSteps: 0,         // 0 => no decay phase; hold at baseLearningRate after warmup
+                    warmupInitLr: 0.001)   // start small but NONZERO so the very first step still trains
             });
     }
 
