@@ -139,6 +139,21 @@
          cause of the #1221 transformer production-scale convergence failure. 0.92.5 is
          the first release carrying that fix. AiDotNet.Native packages coreleased in
          lockstep at 0.92.5. -->
+    <!-- 0.95.2: transparent weight streaming (Tensors #602 + #603 — EnsureMaterialized AND the
+         .Memory/.Data accessor auto-rehydrate a paged-out streaming weight on access; required by
+         the DiT transparent-streaming engagement here, DiTWeightStreamingTests) PLUS the full
+         weight-streaming PERF stack (Tensors #604): clean/dirty eviction (stops re-writing
+         read-only weights every eviction), default compression (bf16 inference / lossless training
+         via StreamingStoreDtype.Auto), RAM-aware budget, Belady-optimal paging, and int8 weight-only
+         quantized inference. So a foundation-scale model fits a bounded resident set with no
+         per-layer orchestration. 0.95.2 supersedes both master's 0.94.2 and this PR's earlier 0.95.1
+         pin. Native packages coreleased in lockstep at 0.95.2. -->
+    <!-- 0.96.0: Tensors PR #606 — FP16-native activation ops (LayerNorm/GELU emit + all-backend
+         kernels) keep the activation chain Half end-to-end, plus the #555 activation-cache
+         eviction-safety fix. This is the release this PR's FP16 LayerNorm/GELU integration test was
+         gated on: Dense -> LayerNorm -> GELU -> Dense now routes its between-matmul ops through the
+         FP16-native path instead of the eager FP32 fallback. 0.96.0 supersedes master's 0.95.2;
+         Native packages coreleased in lockstep at 0.96.0. -->
     <PackageVersion Include="AiDotNet.Tensors" Version="0.96.0" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.96.0" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.96.0" />

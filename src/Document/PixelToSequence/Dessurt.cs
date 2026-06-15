@@ -77,6 +77,7 @@ public class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     // Native mode layers
     private readonly List<ILayer<T>> _encoderLayersList = [];
     private readonly List<ILayer<T>> _decoderLayersList = [];
+    private bool _nativeLayersInitialized;
 
     // Learnable embeddings
     private Tensor<T>? _encoderPositionEmbeddings;
@@ -196,8 +197,12 @@ public class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
 
-        InitializeLayers();
-        InitializeEmbeddings();
+        // Native layers/embeddings are materialized on first use to avoid
+        // constructor-time allocation for metadata and construction probes.
+        if (Architecture.Layers is { Count: > 0 })
+        {
+            EnsureNativeInitialized();
+        }
     }
 
     #endregion
@@ -245,6 +250,28 @@ public class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         InitializeWithSmallRandomValues(_decoderPositionEmbeddings, random, 0.02);
     }
 
+    /// <summary>
+    /// Ensures native layers and embeddings are initialized on first use.
+    /// </summary>
+    /// <remarks>
+    /// This method is not thread-safe during initialization. Native document
+    /// models must be initialized on one thread before concurrent access; calling
+    /// this on a freshly constructed instance from multiple threads can corrupt
+    /// the shared layer and embedding state.
+    /// </remarks>
+    private void EnsureNativeInitialized()
+    {
+        if (!_useNativeMode || _nativeLayersInitialized)
+        {
+            return;
+        }
+
+        InitializeLayers();
+        InitializeEmbeddings();
+        _nativeLayersInitialized = true;
+        InvalidateParameterCountCache();
+    }
+
     private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
     {
         for (int i = 0; i < tensor.Data.Length; i++)
@@ -273,7 +300,9 @@ public class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         var startTime = DateTime.UtcNow;
 
         var preprocessed = PreprocessDocument(documentImage);
-        var output = _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
+        var output = _useNativeMode
+            ? ForwardAfterNativeInitialization(preprocessed)
+            : RunOnnxInference(preprocessed);
 
         // Decode output to text
         var answer = DecodeOutput(output, maxAnswerLength);
@@ -373,7 +402,9 @@ public class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     {
         ValidateImageShape(documentImage);
         var preprocessed = PreprocessDocument(documentImage);
-        return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
+        return _useNativeMode
+            ? ForwardAfterNativeInitialization(preprocessed)
+            : RunOnnxInference(preprocessed);
     }
 
     /// <inheritdoc/>
@@ -475,8 +506,15 @@ public class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
                 { "image_size", ImageSize },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = SafeSerialize()
+            ModelData = SafeSerializeMaterializedModel()
         };
+    }
+
+    private byte[] SafeSerializeMaterializedModel()
+    {
+        return _useNativeMode && !_nativeLayersInitialized
+            ? Array.Empty<byte>()
+            : SafeSerialize();
     }
 
     /// <inheritdoc/>
@@ -508,13 +546,20 @@ public class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSeqLen;
+        _nativeLayersInitialized = Layers.Count > 0;
     }
 
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new Dessurt<T>(Architecture, ImageSize, MaxSequenceLength, _encoderDim, _decoderDim,
+        var model = new Dessurt<T>(Architecture, ImageSize, MaxSequenceLength, _encoderDim, _decoderDim,
             _encoderLayers, _decoderLayers, _numHeads, _vocabSize);
+        if (_nativeLayersInitialized)
+        {
+            model.EnsureNativeInitialized();
+        }
+
+        return model;
     }
 
     #endregion
@@ -525,7 +570,15 @@ public class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     public override Tensor<T> Predict(Tensor<T> input)
     {
         var preprocessed = PreprocessDocument(input);
-        return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
+        return _useNativeMode
+            ? ForwardAfterNativeInitialization(preprocessed)
+            : RunOnnxInference(preprocessed);
+    }
+
+    private Tensor<T> ForwardAfterNativeInitialization(Tensor<T> input)
+    {
+        EnsureNativeInitialized();
+        return Forward(input);
     }
 
     /// <inheritdoc/>
@@ -534,6 +587,7 @@ public class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         if (!_useNativeMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
+        EnsureNativeInitialized();
         SetTrainingMode(true);
         TrainWithTape(input, expectedOutput);
 
@@ -547,6 +601,7 @@ public class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         if (!_useNativeMode)
             throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
 
+        EnsureNativeInitialized();
         var currentParams = GetParameters();
         T lr = NumOps.FromDouble(0.00005);
         
@@ -557,6 +612,7 @@ public class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     private Vector<T> CollectGradients()
     {
         var grads = new List<T>();
+        EnsureNativeInitialized();
         foreach (var layer in Layers)
             grads.AddRange(layer.GetParameterGradients());
         return new Vector<T>([.. grads]);

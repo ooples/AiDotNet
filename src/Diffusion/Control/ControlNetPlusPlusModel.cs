@@ -140,12 +140,14 @@ public class ControlNetPlusPlusModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        var allParams = new List<T>();
-        var baseParams = _baseUNet.GetParameters();
-        for (int i = 0; i < baseParams.Length; i++) allParams.Add(baseParams[i]);
-        var ctrlParams = _controlEncoder.GetParameters();
-        for (int i = 0; i < ctrlParams.Length; i++) allParams.Add(ctrlParams[i]);
-        return new Vector<T>(allParams.ToArray());
+        // Single-allocation concat. The previous List<T> + per-element Add +
+        // ToArray triple-copied the parameter vector (~3x the model's size) and
+        // OOM'd the CI runner when materialising a paper-scale (580M-param) model.
+        // Vector<T>.Concatenate pre-sizes one result and vectorized-copies each
+        // sub-network's parameters in exactly once.
+        return Vector<T>.Concatenate(
+            _baseUNet.GetParameters(),
+            _controlEncoder.GetParameters());
     }
 
     /// <inheritdoc />
