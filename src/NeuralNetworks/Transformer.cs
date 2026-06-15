@@ -736,7 +736,7 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         {
             segmentSize = Math.Max(1, (int)Math.Sqrt(Math.Max(1, Layers.Count)));
         }
-        if (segmentSize > 0 && Layers.Count > segmentSize)
+        if (segmentSize > 0 && Layers.Count > segmentSize && CanUseGradientCheckpointingForCurrentLayerGraph())
         {
             return RunCheckpointedLayerWalk(input, segmentSize);
         }

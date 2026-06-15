@@ -444,6 +444,47 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return nnResult;
     }
 
+    private bool ShouldUseDirectSupervisedNeuralTraining(IFullModel<T, TInput, TOutput> model)
+    {
+        // Configured Transformer training needs the neural network training path
+        // so mixed precision and checkpoint-safe memory settings are actually
+        // consumed instead of evaluated through a black-box parameter search.
+        return model is NeuralNetworks.Transformer<T>
+            && (_mixedPrecisionConfig is not null || _memoryConfig is not null);
+    }
+
+    private OptimizationResult<T, TInput, TOutput> TrainTensorNeuralNetworkRows(
+        IFullModel<T, TInput, TOutput> model,
+        INeuralNetwork<T> neuralNetwork,
+        Tensor<T> xTrain,
+        Tensor<T> yTrain,
+        int epochs)
+    {
+        if (_optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> gbo
+            && neuralNetwork is NeuralNetworks.NeuralNetworkBase<T> neuralNetworkBase)
+        {
+            neuralNetworkBase.SetBaseTrainOptimizer(gbo);
+        }
+
+        int rows = xTrain.Rank >= 1 ? xTrain.Shape[0] : 1;
+        int iterations = 0;
+        for (int epoch = 0; epoch < epochs; epoch++)
+        {
+            for (int row = 0; row < rows; row++)
+            {
+                var rowIndex = new[] { row };
+                neuralNetwork.Train(GatherRows(xTrain, rowIndex), GatherRows(yTrain, rowIndex));
+                iterations++;
+            }
+        }
+
+        return new OptimizationResult<T, TInput, TOutput>
+        {
+            BestSolution = model,
+            Iterations = iterations,
+        };
+    }
+
     /// <summary>
     /// Collects all data from a streaming data loader into aggregated features and labels.
     /// </summary>
@@ -472,21 +513,31 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// a class of bug that bites only when the loader's last batch
     /// happens to be unevenly-sized (review-comment #1265.hc8I).
     /// </remarks>
-    /// <summary>Gathers the given rows of a rank-1/rank-2 tensor into a new tensor (grouped training slices).</summary>
+    /// <summary>Gathers the given leading-batch rows into a new tensor.</summary>
     private static Tensor<T> GatherRows(Tensor<T> source, IReadOnlyList<int> rows)
     {
-        int cols = source.Rank >= 2 ? source.Shape[1] : 1;
-        var data = new T[rows.Count * cols];
+        int sourceRows = source.Rank >= 1 ? source.Shape[0] : 1;
+        int rowStride = sourceRows > 0 ? source.Length / sourceRows : source.Length;
+        var data = new T[rows.Count * rowStride];
         var span = source.Data.Span;
         for (int r = 0; r < rows.Count; r++)
         {
-            for (int c = 0; c < cols; c++)
+            int sourceOffset = rows[r] * rowStride;
+            int targetOffset = r * rowStride;
+            for (int c = 0; c < rowStride; c++)
             {
-                data[(r * cols) + c] = span[(rows[r] * cols) + c];
+                data[targetOffset + c] = span[sourceOffset + c];
             }
         }
 
-        var shape = source.Rank >= 2 ? new[] { rows.Count, cols } : new[] { rows.Count };
+        var shape = source.Rank <= 1
+            ? new[] { rows.Count }
+            : source.Shape.ToArray();
+        if (source.Rank > 1)
+        {
+            shape[0] = rows.Count;
+        }
+
         return new Tensor<T>(shape, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(data));
     }
 
@@ -787,21 +838,20 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // which caused race conditions when multiple models were built concurrently.
         ConfigureDocumentTransformers(_model);
 
-        // Use defaults for the optimizer if not set. When the caller
-        // ALSO configured regularization but did not pick an optimizer,
-        // promote to AdamOptimizer (a GradientBasedOptimizerBase) so the
-        // SetRegularization wiring below succeeds instead of throwing
-        // — the regularization request is the strong signal that the user
-        // expects a gradient-based optimizer (review #1368 C88Kn:
-        // NormalOptimizer default + non-default regularization gave a
-        // surprising Build-time throw with no clear fix because the user
-        // never explicitly chose NormalOptimizer).
+        // Use defaults for the optimizer if not set. ConfigureRegularization
+        // and ConfigureDistributedTraining both require gradient semantics:
+        // regularization is applied in GradientBasedOptimizerBase, and DDP
+        // synchronizes gradients before applying an update. In those configured
+        // paths, promote the default to AdamOptimizer instead of constructing
+        // NormalOptimizer and failing later in the requested feature path.
         IOptimizer<T, TInput, TOutput> optimizer;
         if (_optimizer is not null)
         {
             optimizer = _optimizer;
         }
-        else if (_regularization is not null)
+        else if (_regularization is not null
+            || _distributedBackend is not null
+            || _distributedConfiguration is not null)
         {
             optimizer = new Optimizers.AdamOptimizer<T, TInput, TOutput>(_model);
         }
@@ -1948,6 +1998,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 {
                     BestSolution = model,
                 };
+            }
+            else if (ShouldUseDirectSupervisedNeuralTraining(model)
+                && model is INeuralNetwork<T> neuralNetwork
+                && XTrain is Tensor<T> neuralX
+                && yTrain is Tensor<T> neuralY)
+            {
+                int epochs = finalOptimizer.GetOptions()?.MaxIterations ?? 100;
+                optimizationResult = TrainTensorNeuralNetworkRows(model, neuralNetwork, neuralX, neuralY, epochs);
             }
             else
             {

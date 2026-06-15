@@ -398,18 +398,9 @@ public class SDTurboModel<T> : LatentDiffusionModelBase<T>
         }
         clonedUnet.SetParameters(_unet.GetParameters());
 
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: TURBO_LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2,
-            latentScaleFactor: 0.18215);
-        clonedVae.SetParameters(_vae.GetParameters());
-
-        return new SDTurboModel<T>(
+                return new SDTurboModel<T>(
             unet: clonedUnet,
-            vae: clonedVae,
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
             isXLVariant: _isXLVariant);
     }

@@ -18,7 +18,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 /// Image Diffusion Models") ODISE takes an NCHW image and produces a per-pixel
 /// class map.
 /// </summary>
-public class ODISETests : NeuralNetworkModelTestBase
+public class ODISETests : NeuralNetworkModelTestBase<float>
 {
     // Smaller spatial dim (32 vs paper's 512) keeps the test fast while still
     // exercising the diffusion-feature + mask-classifier pipeline.
@@ -30,16 +30,16 @@ public class ODISETests : NeuralNetworkModelTestBase
     protected override int[] InputShape => [1, Channels, Height, Width];
     protected override int[] OutputShape => [1, NumClasses, Height, Width];
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
+    protected override INeuralNetworkModel<float> CreateNetwork()
     {
-        var arch = new NeuralNetworkArchitecture<double>(
+        var arch = new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
             taskType: NeuralNetworkTaskType.MultiClassClassification,
             inputHeight: Height,
             inputWidth: Width,
             inputDepth: Channels,
             outputSize: NumClasses);
-        return new ODISE<double>(arch, numClasses: NumClasses);
+        return new ODISE<float>(arch, numClasses: NumClasses);
     }
 
     // Per Xu et al. 2023 §3 ODISE's encoder is the Stable Diffusion U-Net,
@@ -57,9 +57,9 @@ public class ODISETests : NeuralNetworkModelTestBase
     // the "constant" value with a position-dependent modulation so two
     // different scalars produce two different spatial patterns the encoder
     // can actually distinguish post-normalization.
-    protected override Tensor<double> CreateConstantTensor(int[] shape, double value)
+    protected override Tensor<float> CreateConstantTensor(int[] shape, double value)
     {
-        var tensor = new Tensor<double>(shape);
+        var tensor = new Tensor<float>(shape);
         int len = tensor.Length;
         for (int i = 0; i < len; i++)
         {
@@ -71,10 +71,10 @@ public class ODISETests : NeuralNetworkModelTestBase
             // A frequency-dependent sinusoid produces a distinct spatial
             // shape per `value` that survives mean+variance normalisation.
             double pos = (double)i / Math.Max(1, len - 1);
-            tensor[i] =
+            tensor[i] = (float)(
                 value
                 + 0.20 * Math.Sin((1.0 + value) * Math.PI * pos)
-                + 0.05 * Math.Cos((2.0 + value) * Math.PI * pos);
+                + 0.05 * Math.Cos((2.0 + value) * Math.PI * pos));
         }
         return tensor;
     }
@@ -98,9 +98,9 @@ public class ODISETests : NeuralNetworkModelTestBase
     // objectives disagree and training INCREASES MSE (initial 0.148 → final
     // 0.252 observed). Normalizing the target to a per-pixel distribution
     // aligns CE-training with the MSE probe so loss reduction is observable.
-    protected override Tensor<double> CreateRandomTargetTensor(int[] shape, Random rng)
+    protected override Tensor<float> CreateRandomTargetTensor(int[] shape, Random rng)
     {
-        var tensor = new Tensor<double>(shape);
+        var tensor = new Tensor<float>(shape);
         // Target shape is [B, C, H, W]; normalize along the class axis (axis 1).
         if (shape.Length == 4)
         {
@@ -113,17 +113,17 @@ public class ODISETests : NeuralNetworkModelTestBase
                 for (int cls = 0; cls < c; cls++)
                 {
                     double v = rng.NextDouble();
-                    tensor[bi, cls, row, col] = v;
+                    tensor[bi, cls, row, col] = (float)v;
                     sum += v;
                 }
                 if (sum > 0)
                     for (int cls = 0; cls < c; cls++)
-                        tensor[bi, cls, row, col] /= sum;
+                        tensor[bi, cls, row, col] = (float)(tensor[bi, cls, row, col] / sum);
             }
         }
         else
         {
-            for (int i = 0; i < tensor.Length; i++) tensor[i] = rng.NextDouble();
+            for (int i = 0; i < tensor.Length; i++) tensor[i] = (float)rng.NextDouble();
         }
         return tensor;
     }

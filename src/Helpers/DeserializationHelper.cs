@@ -3003,14 +3003,21 @@ public static class DeserializationHelper
             ?? (outputShape.Length == inputShape.Length);
 
         var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-        var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(bool), activationFuncType, activationFuncType });
-        if (ctor is null)
-        {
-            throw new MissingLayerCtorException("Cannot find GRULayer constructor with (int hiddenSize, bool returnSequences, IActivationFunction<T>?, IActivationFunction<T>?).");
-        }
+        var activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType)
+            as IActivationFunction<T>;
+        var recurrentActivation = TryCreateActivationInstance(additionalParams, "RecurrentActivationType", activationFuncType)
+            as IActivationFunction<T>;
 
-        object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-        return ctor.Invoke(new object?[] { hiddenSize, returnSequences, activation, null });
+        // Construct directly (this method is generic in T) rather than via a reflection ctor-type
+        // match. The GRULayer ctor gained a trailing optional `stateful` parameter, so the old
+        // GetConstructor(int, bool, IActivationFunction, IActivationFunction) lookup no longer matched
+        // (GetConstructor ignores optional params), threw MissingLayerCtorException, and fell through to
+        // the metadata-matching fallback — which built the GRU WITHOUT a ctor, leaving the readonly
+        // _activation/_recurrentActivation fields null. A cloned GRU then ran its gates/candidate through
+        // the wrong (identity) activation and diverged from the source despite byte-identical weights.
+        // Passing null activations lets the ctor restore its Tanh (candidate) / Sigmoid (gate) defaults,
+        // which match the model's default GRU construction.
+        return new GRULayer<T>(hiddenSize, returnSequences, activation, recurrentActivation);
     }
 
     /// <summary>

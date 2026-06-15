@@ -21,12 +21,17 @@ public class TinyBERTNERTests : TransformerNERTestBase
     // with the 312-dim attention weights).
     protected override int[] InputShape => [8, 312];
 
+    // inputSize must equal TinyBERT's HiddenDimension (312): the model consumes pre-embedded hidden
+    // states of shape [seq, 312] (ExpectedInputShape = [MaxSequenceLength, HiddenDimension]). The old
+    // inputSize:128 only surfaced via the serialize/deserialize Clone roundtrip — the first encoder
+    // layer's input shape is recorded from the architecture, so deserialize resolved embeddingSize=128
+    // (128 % 12 heads != 0) even though the live forward resolves 312 from the real input.
     protected override INeuralNetworkModel<double> CreateNetwork()
         => new TinyBERTNER<double>(
             new NeuralNetworkArchitecture<double>(
                 inputType: InputType.OneDimensional,
                 taskType: NeuralNetworkTaskType.Regression,
-                inputSize: 128,
+                inputSize: 312,
                 outputSize: 4));
 
     /// <summary>

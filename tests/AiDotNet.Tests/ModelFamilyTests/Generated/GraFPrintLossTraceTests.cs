@@ -7,7 +7,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Generated;
 
-public class GraFPrintLossTraceTests : EmbeddingModelTestBase
+public class GraFPrintLossTraceTests : EmbeddingModelTestBase<float>
 {
     // Paper-faithful test setup. Bhattacharjee 2023 §4.1 trains GraFPrint
     // with batch=128 to give BatchNorm well-conditioned running statistics
@@ -34,9 +34,9 @@ public class GraFPrintLossTraceTests : EmbeddingModelTestBase
     // by iter 3-5 (post-warmup descent before Adam's accumulated moments
     // start oscillating), so 12 iters is enough to capture convergence.
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
+    protected override INeuralNetworkModel<float> CreateNetwork()
     {
-        var arch = new NeuralNetworkArchitecture<double>(
+        var arch = new NeuralNetworkArchitecture<float>(
             inputType: InputType.TwoDimensional,
             taskType: NeuralNetworkTaskType.Regression,
             inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4);
@@ -45,7 +45,7 @@ public class GraFPrintLossTraceTests : EmbeddingModelTestBase
         // unresolved 30-iter fused-Adam divergence on this network's
         // 53-layer BN pyramid in the xunit test context. Production callers
         // leave this at the default (false). See GraFPrintOptions XML doc.
-        return new GraFPrint<double>(arch, new GraFPrintOptions
+        return new GraFPrint<float>(arch, new GraFPrintOptions
         {
             DropoutRate = 0.0,
             DisableFusedOptimizerStep = true,
@@ -61,9 +61,9 @@ public class GraFPrintLossTraceTests : EmbeddingModelTestBase
     // arbitrary distribution that has no relation to its output geometry,
     // which gradient-descent can't converge on regardless of optimizer
     // choice.
-    protected override Tensor<double> CreateRandomTargetTensor(int[] shape, Random rng)
+    protected override Tensor<float> CreateRandomTargetTensor(int[] shape, Random rng)
     {
-        var t = new Tensor<double>(shape);
+        var t = new Tensor<float>(shape);
         // Treat the last axis as the embedding axis; normalize each
         // embedding to unit L2 norm. For shape [B, 4], that's 8
         // independent unit vectors.
@@ -83,12 +83,12 @@ public class GraFPrintLossTraceTests : EmbeddingModelTestBase
                 double u2 = rng.NextDouble();
                 double z = Math.Sqrt(-2.0 * Math.Log(Math.Max(u1, 1e-12)))
                          * Math.Cos(2.0 * Math.PI * u2);
-                t[baseIdx + d] = z;
+                t[baseIdx + d] = (float)z;
                 sumSq += z * z;
             }
             double inv = 1.0 / Math.Sqrt(sumSq + 1e-12);
             for (int d = 0; d < embDim; d++)
-                t[baseIdx + d] *= inv;
+                t[baseIdx + d] = (float)(t[baseIdx + d] * inv);
         }
         return t;
     }

@@ -167,6 +167,7 @@ public class TrackingOptions<T>
 /// Base class for object trackers.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("ObjectTracker")]
 public abstract class ObjectTrackerBase<T>
 {
     protected readonly INumericOperations<T> NumOps;

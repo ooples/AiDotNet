@@ -218,12 +218,7 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var cp = new FlagDiTPredictor<T>();
-        cp.SetParameters(_predictor.GetParameters());
-        var cv = new StandardVAE<T>(inputChannels: 3, latentChannels: T2X_LATENT_CHANNELS,
-            baseChannels: 128, channelMultipliers: [1, 2, 4, 4], numResBlocksPerLevel: 2);
-        cv.SetParameters(_vae.GetParameters());
-        return new LuminaT2XModel<T>(predictor: cp, vae: cv, conditioner: _conditioner);
+                        return new LuminaT2XModel<T>(predictor: (FlagDiTPredictor<T>)_predictor.Clone(), vae: (StandardVAE<T>)_vae.Clone(), conditioner: _conditioner);
     }
 
     #endregion

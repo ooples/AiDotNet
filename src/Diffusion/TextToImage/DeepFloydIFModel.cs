@@ -406,39 +406,10 @@ public class DeepFloydIFModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedStage1 = new UNetNoisePredictor<T>(
-            inputChannels: IF_PIXEL_CHANNELS,
-            outputChannels: IF_PIXEL_CHANNELS,
-            baseChannels: 256,
-            channelMultipliers: [1, 2, 3, 4],
-            numResBlocks: 3,
-            attentionResolutions: [4, 2, 1],
-            contextDim: IF_CROSS_ATTENTION_DIM);
-        clonedStage1.SetParameters(_stageIUnet.GetParameters());
-
-        var clonedStage2 = new UNetNoisePredictor<T>(
-            inputChannels: IF_STAGE2_INPUT_CHANNELS,
-            outputChannels: IF_PIXEL_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocks: 2,
-            attentionResolutions: [4, 2, 1],
-            contextDim: IF_CROSS_ATTENTION_DIM);
-        clonedStage2.SetParameters(_stageIIUnet.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: IF_PIXEL_CHANNELS,
-            baseChannels: 64,
-            channelMultipliers: [1, 2, 4],
-            numResBlocksPerLevel: 1,
-            latentScaleFactor: 1.0);
-        clonedVae.SetParameters(_vae.GetParameters());
-
-        return new DeepFloydIFModel<T>(
-            stageIUnet: clonedStage1,
-            stageIIUnet: clonedStage2,
-            vae: clonedVae,
+                                return new DeepFloydIFModel<T>(
+            stageIUnet: (UNetNoisePredictor<T>)_stageIUnet.Clone(),
+            stageIIUnet: (UNetNoisePredictor<T>)_stageIIUnet.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
             useDynamicThresholding: _useDynamicThresholding);
     }

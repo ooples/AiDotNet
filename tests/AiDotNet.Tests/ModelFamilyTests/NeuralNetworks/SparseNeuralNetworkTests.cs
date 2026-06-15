@@ -4,11 +4,11 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class SparseNeuralNetworkTests : NeuralNetworkModelTestBase
+public class SparseNeuralNetworkTests : NeuralNetworkModelTestBase<float>
 {
     protected override int[] InputShape => [128];
     protected override int[] OutputShape => [1];
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new SparseNeuralNetwork<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new SparseNeuralNetwork<float>();
 }

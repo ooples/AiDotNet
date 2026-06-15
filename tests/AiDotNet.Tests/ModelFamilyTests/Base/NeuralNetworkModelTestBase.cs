@@ -722,9 +722,22 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var clonedOutput = cloned.Predict(input);
 
         Assert.Equal(original.Length, clonedOutput.Length);
+        // Clone preserves weights exactly, but the two Predict calls don't take a bit-identical compute
+        // path: the original's forward populates cached/compiled plans (e.g. SIMD pre-packed weights),
+        // while the clone runs them fresh, so float32 results differ at the ~1e-7 (float-epsilon) level.
+        // A re-randomized / weight-dropping clone differs by O(1), not O(1e-7), so a dtype-appropriate
+        // relative+absolute tolerance (torch.allclose-style) still catches real Clone bugs while not
+        // demanding sub-float-epsilon equality. double stays strict (its path diff is ~1e-13).
+        bool isFloat = typeof(T) == typeof(float);
+        double atol = isFloat ? 1e-4 : 1e-10;
+        double rtol = isFloat ? 1e-3 : 0.0;
         for (int i = 0; i < original.Length; i++)
-            Assert.True(Math.Abs(ConvertToDouble(original[i]) - ConvertToDouble(clonedOutput[i])) < 1e-10,
-                $"Clone output[{i}] differs: original={original[i]}, cloned={clonedOutput[i]}");
+        {
+            double a = ConvertToDouble(original[i]);
+            double b = ConvertToDouble(clonedOutput[i]);
+            Assert.True(Math.Abs(a - b) <= atol + rtol * Math.Abs(a),
+                $"Clone output[{i}] differs beyond {(isFloat ? "float" : "double")} tolerance: original={original[i]}, cloned={clonedOutput[i]}");
+        }
     }
 
     // =====================================================

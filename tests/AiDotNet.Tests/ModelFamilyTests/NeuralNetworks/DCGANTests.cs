@@ -13,13 +13,13 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 /// (GeneratorOutput_ShouldHaveCorrectShape, DifferentLatentInputs_ProduceDifferentOutputs)
 /// actually exercise the generator path.
 /// </summary>
-public class DCGANTests : GANModelTestBase
+public class DCGANTests : GANModelTestBase<float>
 {
     // DCGAN parameterless defaults: latentSize=100, imageChannels=3,
     // imageHeight=64, imageWidth=64 (Radford et al. 2015 §3, NCHW).
     protected override int[] InputShape => [100];
     protected override int[] OutputShape => [3, 64, 64];
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new DCGAN<double>(latentSize: 100, imageChannels: 3, imageHeight: 64, imageWidth: 64);
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new DCGAN<float>(latentSize: 100, imageChannels: 3, imageHeight: 64, imageWidth: 64);
 }

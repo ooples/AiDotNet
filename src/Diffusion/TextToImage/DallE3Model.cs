@@ -813,19 +813,15 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
     /// <inheritdoc/>
     public override IDiffusionModel<T> Clone()
     {
-        // Create a new DallE3Model with the same conditioner
-        var cloned = new DallE3Model<T>(
-            options: null,
-            scheduler: null,
+        // Lazy-preserving Clone (recipe from #1596): delegate to the UNet's and VAE's own Clone(), which
+        // reconstruct from their actual config fields and preserve materialized weights. Rebuilding a
+        // DEFAULT (foundation-scale) DallE3 here and copying the source's parameters onto its internal
+        // UNet mismatches when the source is an injected tiny/non-default variant, and re-randomizes the
+        // clone's unmaterialized lazy weights on its first forward.
+        return new DallE3Model<T>(
+            unet: (UNetNoisePredictor<T>)_unet.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner);
-
-        // Copy UNet parameters to the cloned model's UNet
-        cloned._unet.SetParameters(_unet.GetParameters());
-
-        // Copy VAE parameters to the cloned model's VAE
-        cloned._vae.SetParameters(_vae.GetParameters());
-
-        return cloned;
     }
 
     #endregion
