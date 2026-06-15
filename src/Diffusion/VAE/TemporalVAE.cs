@@ -975,12 +975,14 @@ public class TemporalVAE<T> : VAEModelBase<T>
     internal void TriggerLazyShapeResolution()
     {
         if (_lazyShapesResolved) return;
-        _lazyShapesResolved = true;
         int spatial = Math.Max(_downsampleFactor, 2);
         int frames = Math.Max(_temporalKernelSize, 2);
         var dummyVideo = new Tensor<T>(new[] { 1, _inputChannels, frames, spatial, spatial });
         var dummyLatent = Encode(dummyVideo, sampleMode: false);
         _ = Decode(dummyLatent);
+        // Mark resolved only AFTER a successful probe — if Encode/Decode throws, a retry must
+        // re-run the probe rather than skip it on the stale flag.
+        _lazyShapesResolved = true;
     }
 
     private void CopyMaterializedParametersTo(TemporalVAE<T> clone)

@@ -579,11 +579,9 @@ public class AudioLDMModel<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        // Clone U-Net with trained weights
-        var baseChannels = _isVersion2 ? 384 : 256;
-        var contextDim = _isVersion2 ? 1024 : 768;
-                // Clone AudioVAE with trained weights
-                return new AudioLDMModel<T>(
+        // Lazy-preserving Clone: delegate to the U-Net's and AudioVAE's own Clone() (trained weights
+        // preserved); configuration is carried by the injected submodules + the passed-through fields.
+        return new AudioLDMModel<T>(
             options: null,
             scheduler: null,
             unet: (UNetNoisePredictor<T>)_unet.Clone(),

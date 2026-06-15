@@ -318,7 +318,13 @@ public class LEDITSPPModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-                        return new LEDITSPPModel<T>(
+        // Lazy-preserving Clone: delegate weights to the submodules' own Clone(), and carry through the
+        // caller-provided runtime configuration (architecture / options / scheduler) so the clone is a
+        // faithful copy rather than a defaults-rebuild.
+        return new LEDITSPPModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
             unet: (UNetNoisePredictor<T>)_unet.Clone(),
             vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner);
