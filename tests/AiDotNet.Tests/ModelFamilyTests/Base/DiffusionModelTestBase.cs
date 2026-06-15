@@ -66,29 +66,19 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
     private static readonly object _lohCompactionGate = new();
 
     /// <summary>
-    /// Caps concurrent foundation-scale diffusion tests to avoid BLAS thread-
-    /// pool oversubscription when many SD-UNet-scale Predicts run in parallel
-    /// on the same machine. xUnit's parallelizeTestCollections=true puts one
-    /// test class per core; if 16 of them are simultaneously inside an FP64
-    /// SD-UNet forward (each wanting all 16 cores via OpenBLAS), every test
-    /// gets ~1 core and the per-step latency multiplies by 4-8×, blowing the
-    /// 120 s <c>[Fact(Timeout)]</c> envelope even though each test fits the
-    /// budget in isolation. See <c>tools/ConsistencyModelPerfDiag</c> for the
-    /// measurement that motivated this (issue #1305 ConsistencyModel:
-    /// 76 s isolated vs 120 s under-contention timeout).
+    /// Caps how many diffusion tests run their model forward concurrently, to avoid BLAS thread-pool
+    /// oversubscription when Predicts run in parallel on the same machine. xUnit's
+    /// parallelizeTestCollections=true puts one test class per core; if many of them are simultaneously
+    /// inside a forward (each wanting all cores via OpenBLAS), every test gets ~1 core and per-step
+    /// latency multiplies by 4-8×, blowing the 120 s <c>[Fact(Timeout)]</c> envelope even though each
+    /// test fits the budget in isolation (issue #1305 ConsistencyModel: 76 s isolated vs 120 s
+    /// under-contention timeout). EVERY diffusion test acquires this gate (see
+    /// <see cref="InitializeAsync"/>): a forward needs ~ProcessorCount/this-cap BLAS threads to fit
+    /// 120 s, so at most this-cap forwards can run at once without oversubscription — gating only the
+    /// largest tests left moderate ones running free and re-creating the contention. Combined with the
+    /// matching per-test BLAS-thread cap below, concurrent demand ≈ core count.
     /// </summary>
     private const int HeavyConcurrencyCap = 2;
-
-    /// <summary>
-    /// Element-count threshold above which a test counts as "heavy" and gates
-    /// through <see cref="_heavyTestGate"/>. 16,384 = the latent-shape product
-    /// for the canonical SD pipeline at [1, 4, 64, 64]; everything at or above
-    /// this scale uses an SD-UNet-class noise predictor whose FP64 forward
-    /// saturates the BLAS thread pool. Smaller-scale diffusion tests (tabular
-    /// [1, 4] or single-channel [1, 1, 16, 16]) bypass the gate so they can
-    /// stay fully parallel.
-    /// </summary>
-    private const int HeavyInputElementThreshold = 16_384;
 
     private static readonly SemaphoreSlim _heavyTestGate =
         new(HeavyConcurrencyCap, HeavyConcurrencyCap);
@@ -122,30 +112,18 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
     /// </summary>
     public async Task InitializeAsync()
     {
-        if (IsHeavyScale(InputShape))
-        {
-            await _heavyTestGate.WaitAsync().ConfigureAwait(false);
-            _heavyGateAcquired = true;
-        }
-    }
-
-    /// <summary>
-    /// True when the supplied input shape implies foundation-scale work
-    /// (SD-UNet or larger). Computed from product-of-dims so a future
-    /// [1, 16, 32, 32] (Flux/SD3) or [1, 8, 64, 64] (CogVideo) shape
-    /// auto-gates without any per-class plumbing.
-    /// </summary>
-    private static bool IsHeavyScale(int[] shape)
-    {
-        if (shape is null || shape.Length == 0) return false;
-        long elements = 1;
-        foreach (int d in shape)
-        {
-            if (d <= 0) return false;
-            elements *= d;
-            if (elements >= HeavyInputElementThreshold) return true;
-        }
-        return false;
+        // Gate EVERY diffusion test through the concurrency semaphore, not only foundation-scale
+        // ones. The 120s timeouts that survived the BLAS-thread cap came from MODERATE-scale tests
+        // running fully parallel and contending with the gated heavy ones — whichever test landed at
+        // a contention spike tipped over, so the timed-out set varied run to run (even a gated
+        // SD-scale ControlNet was pushed past budget by the ungated moderate tests around it).
+        // A heavy forward needs ~ProcessorCount/HeavyConcurrencyCap BLAS threads to fit 120s, so at
+        // most HeavyConcurrencyCap forwards can run at once without oversubscription — which means
+        // every diffusion forward must share that budget, not just the ≥16,384-element ones. With all
+        // tests gated to HeavyConcurrencyCap concurrent, each pinned to that thread cap, total demand
+        // ≈ core count: no oversubscription, so every test runs at ~its isolated speed.
+        await _heavyTestGate.WaitAsync().ConfigureAwait(false);
+        _heavyGateAcquired = true;
     }
 
     /// <summary>
