@@ -267,6 +267,13 @@ public class ResidualLayer<T> : LayerBase<T>
         : base(new[] { -1 }, new[] { -1 }, activationFunction ?? new IdentityActivation<T>())
     {
         _innerLayer = innerLayer;
+        // Register the inner layer as a sub-layer so gradient-tape training collects
+        // its parameters. TapeTrainingStep.CollectParameters recurses through
+        // GetSubLayers(); without this the inner layer's weights are NEVER added to
+        // the optimizer's parameter set and the residual block trains as a no-op
+        // (the inner conv/dense stays at its random init). All learning in a residual
+        // block happens in the inner layer, so this is essential, not optional.
+        if (innerLayer != null) RegisterSubLayer(innerLayer);
         ValidateInnerLayer();
     }
 
@@ -301,6 +308,9 @@ public class ResidualLayer<T> : LayerBase<T>
         : base(new[] { -1 }, new[] { -1 }, vectorActivation ?? new IdentityActivation<T>())
     {
         _innerLayer = innerLayer;
+        // See the scalar-activation constructor: register the inner layer so the
+        // gradient tape trains it (otherwise the residual block is a training no-op).
+        if (innerLayer != null) RegisterSubLayer(innerLayer);
         ValidateInnerLayer();
     }
 
@@ -412,6 +422,8 @@ public class ResidualLayer<T> : LayerBase<T>
     public void SetInnerLayer(ILayer<T> innerLayer)
     {
         _innerLayer = innerLayer;
+        // Register so gradient-tape training collects the new inner layer's params.
+        if (innerLayer != null) RegisterSubLayer(innerLayer);
         ValidateInnerLayer();
     }
 
