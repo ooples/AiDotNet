@@ -144,7 +144,7 @@ public class SDXLLightningModel<T> : LatentDiffusionModelBase<T>
     public override IDiffusionModel<T> Clone()
     {
         var clone = new SDXLLightningModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
+        clone.ShareWeightsFrom(this);
         return clone;
     }
 

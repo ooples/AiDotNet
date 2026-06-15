@@ -137,7 +137,7 @@ public class ControlNetPlusPlusFluxModel<T> : LatentDiffusionModelBase<T>
     {
         var clone = new ControlNetPlusPlusFluxModel<T>(
             controlType: _controlType, conditioner: _conditioner, rewardWeight: _rewardWeight, seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
+        clone.ShareWeightsFrom(this);
         return clone;
     }
 

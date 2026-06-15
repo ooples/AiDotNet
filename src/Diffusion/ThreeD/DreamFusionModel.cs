@@ -668,7 +668,7 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
             conditioner: _conditioner,
             seed: RandomGenerator.Next());
 
-        clone.SetParameters(GetParameters());
+        clone.ShareWeightsFrom(this);
         return clone;
     }
 

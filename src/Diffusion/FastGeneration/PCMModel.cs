@@ -151,7 +151,7 @@ public class PCMModel<T> : LatentDiffusionModelBase<T>
     {
         var clone = new PCMModel<T>(
             conditioner: _conditioner, isXLVariant: _isXLVariant, seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
+        clone.ShareWeightsFrom(this);
         return clone;
     }
 

@@ -147,7 +147,7 @@ public class ControlNetLiteModel<T> : LatentDiffusionModelBase<T>
     public override IDiffusionModel<T> Clone()
     {
         var clone = new ControlNetLiteModel<T>(controlType: _controlType, conditioner: _conditioner, seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
+        clone.ShareWeightsFrom(this);
         return clone;
     }
 

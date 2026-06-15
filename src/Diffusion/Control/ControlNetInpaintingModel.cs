@@ -157,7 +157,7 @@ public class ControlNetInpaintingModel<T> : LatentDiffusionModelBase<T>
     public override IDiffusionModel<T> Clone()
     {
         var clone = new ControlNetInpaintingModel<T>(controlType: _controlType, conditioner: _conditioner, seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
+        clone.ShareWeightsFrom(this);
         return clone;
     }
 

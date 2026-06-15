@@ -536,7 +536,7 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
             vae: (StandardVAE<T>)_vae.Clone(),
             seed: RandomGenerator.Next());
 
-        clone.SetParameters(GetParameters());
+        clone.ShareWeightsFrom(this);
         return clone;
     }
 

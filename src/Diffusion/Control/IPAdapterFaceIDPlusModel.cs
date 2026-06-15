@@ -174,7 +174,7 @@ public class IPAdapterFaceIDPlusModel<T> : LatentDiffusionModelBase<T>
     public override IDiffusionModel<T> Clone()
     {
         var clone = new IPAdapterFaceIDPlusModel<T>(conditioner: _conditioner, faceIdScale: _faceIdScale, seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
+        clone.ShareWeightsFrom(this);
         return clone;
     }
 
