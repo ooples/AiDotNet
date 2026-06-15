@@ -173,12 +173,11 @@ public class FusedOptimizerIntegrationTests
     /// matmuls with LayerNorm/GELU, so those ops (not just the GEMM the matmul-only tests cover) must
     /// keep their activations Half. Dense → LayerNorm → GELU → Dense, Adam, <c>AIDOTNET_FP16_ACTIVATIONS=1</c>.
     /// <para>Asserts the contract that holds REGARDLESS of which path engages: enabling FP16 activations on
-    /// a LayerNorm/GELU model trains correctly (finite loss every step, loss descends). On a Tensors build
-    /// whose mixed-precision plan can compile LayerNorm/GELU in the FP16 path (Tensors #558 — adds the
-    /// FP16-native LayerNorm/GELU emit), this runs through the fused FP16 plan; on an older build it falls
-    /// back to the eager FP32 tape and still trains. This is the integration harness that lights up the
-    /// FP16-fused LayerNorm/GELU path the moment Tensors #558 publishes — without ever silently breaking
-    /// training in the meantime.</para>
+    /// a LayerNorm/GELU model trains correctly (finite loss every step, loss descends). Tensors 0.96.0
+    /// (PR #606) ships the FP16-native LayerNorm/GELU ops, but compiling a full LayerNorm/GELU model into
+    /// the fused mixed-precision plan still falls back to the eager FP32 tape here — so this currently
+    /// exercises the eager path and stays green; it lights up the fused path automatically once the
+    /// plan-compilation follow-up lands, without ever silently breaking training in the meantime.</para>
     /// </summary>
     [Fact(Timeout = 120000)]
     public async Task Fp16Activations_LayerNormGeluBlock_TrainsCorrectly_ViaWhicheverPathEngages()
@@ -213,8 +212,11 @@ public class FusedOptimizerIntegrationTests
             }
 
             // FP16 activations through LayerNorm + GELU must train the FP32 master weights — whether the
-            // fused FP16 plan engaged (Tensors #558+ compiles LayerNorm/GELU in the FP16 path) or the eager
-            // FP32 tape fallback ran (older Tensors). Either way, enabling the flag must not break training.
+            // fused FP16 plan engaged or the eager FP32 tape fallback ran. As of Tensors 0.96.0 the
+            // FP16-native LayerNorm/GELU *ops* exist (Tensors PR #606), but compiling a full LayerNorm/GELU
+            // *model* into the fused mixed-precision plan still falls back to eager here (verified via
+            // GetFusedStepCount() == 0) — lighting up that path is tracked follow-up work in the
+            // mixed-precision plan's graph compilation. Either way, enabling the flag must not break training.
             Assert.True(losses[losses.Count - 1] < losses[0],
                 $"FP16 LayerNorm/GELU training did not descend: first {losses[0]}, last {losses[losses.Count - 1]}");
         }
