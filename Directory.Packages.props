@@ -156,7 +156,7 @@
          Native packages coreleased in lockstep at 0.96.0. -->
     <PackageVersion Include="AiDotNet.Tensors" Version="0.96.1" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.96.0" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.96.0" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.96.1" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.96.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
