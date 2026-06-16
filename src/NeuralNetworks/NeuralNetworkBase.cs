@@ -8805,7 +8805,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         var copy = CreateNewInstance();
         result = copy;
-        if (copy is not NeuralNetworkBase<T> copyBase || copyBase._layers.Count != _layers.Count)
+        if (copy is not NeuralNetworkBase<T> copyBase)
         {
             (copy as IDisposable)?.Dispose();
             return false;
@@ -8816,62 +8816,74 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // original (same guard the eager large/serialize paths use). Must run before any SetTrainingMode.
         copyBase.DisableAutoStreaming();
 
-        for (int i = 0; i < _layers.Count; i++)
+        // Full-fidelity reflection walk: captures every trainable layer reachable from the model — both
+        // those in the base _layers list AND those held in dedicated fields (e.g. a tabular transformer's
+        // feature tokenizer / encoder stack / final layer-norm), which a _layers-only walk would miss,
+        // silently leaving the clone with fresh-random weights for those components.
+        var srcLayers = AiDotNet.Helpers.CopyOnWriteCloneHelper.CollectTrainableLayers<T>(this);
+        var dstLayers = AiDotNet.Helpers.CopyOnWriteCloneHelper.CollectTrainableLayers<T>(copyBase);
+        if (srcLayers.Count == 0 || srcLayers.Count != dstLayers.Count)
         {
-            // GetTrainableParameters / SetTrainableParameters live on LayerBase<T>; a layer that isn't
-            // one can't be COW-mapped 1:1 — abandon and fall back to the eager path.
-            if (_layers[i] is not LayerBase<T> srcLayer || copyBase._layers[i] is not LayerBase<T> dstLayer)
-            {
-                (copy as IDisposable)?.Dispose();
-                return false;
-            }
+            (copy as IDisposable)?.Dispose();
+            return false;
+        }
 
-            // Resolve a lazy destination layer's shape from the source so its parameter list exists
-            // before we map it (identical to the large-copy path).
-            if (!dstLayer.IsShapeResolved && srcLayer.ParameterCount > 0)
+        for (int i = 0; i < srcLayers.Count; i++)
+        {
+            var src = srcLayers[i];
+            var dst = dstLayers[i];
+
+            // Resolve a lazy destination LayerBase from the source's input shape so its parameter list
+            // exists (and won't re-initialize over the shared tensors on first forward) before we map it.
+            if (dst is LayerBase<T> dstBase && src is LayerBase<T> srcBase
+                && !dstBase.IsShapeResolved && srcBase.ParameterCount > 0)
             {
-                int[] srcInputShape = srcLayer.GetInputShape();
-                if (srcInputShape is { Length: > 0 } && Array.TrueForAll(srcInputShape, d => d > 0))
+                int[] s = srcBase.GetInputShape();
+                if (s is { Length: > 0 } && Array.TrueForAll(s, d => d > 0))
                 {
-                    try { dstLayer.ResolveFromShape(srcInputShape); }
+                    try { dstBase.ResolveFromShape(s); }
                     catch (ArgumentException) { /* layer rejects this shape; leave lazy */ }
                 }
             }
 
-            var srcParams = srcLayer.GetTrainableParameters();
-            if (srcParams.Count > 0)
-            {
-                var dstParams = dstLayer.GetTrainableParameters();
-                if (dstParams.Count != srcParams.Count)
-                {
-                    // Cannot map weights 1:1 — abandon COW and let the caller take the eager path.
-                    (copy as IDisposable)?.Dispose();
-                    return false;
-                }
-
-                // Share storage copy-on-write: each clone tensor is a DISTINCT Tensor<T> over the same
-                // backing storage as the source, privatizing on the first in-place write to either side.
-                var shared = new Tensor<T>[srcParams.Count];
-                for (int p = 0; p < srcParams.Count; p++)
-                    shared[p] = (Tensor<T>)srcParams[p].CloneShared();
-                dstLayer.SetTrainableParameters(shared);
-            }
-
-            // Conservative fidelity guard: COW only shares (and re-syncs) the layer's TRAINABLE tensors.
-            // A layer that also carries non-trainable persistent state — serialization EXTRAS (e.g.
-            // BatchNorm running mean/variance) or registered BUFFERS — would have that state silently
-            // dropped by a trainable-only share, giving a wrong post-training clone. Copying it correctly
-            // through a fresh/lazy destination is layer-specific and fragile, so for any model that has it
-            // we fall back to the eager full-fidelity copy. The COW clone-OOM targets (diffusion models —
-            // CogVideo/ControlNet++/Flux2Schnell) are pure weight tensors, so they keep the O(1) share;
-            // extras/buffer-bearing models (ResNet/VGG/DenseNet, whose OOMs are TRAINING tests addressed
-            // by other levers) take the eager path.
-            if ((srcLayer is AiDotNet.NeuralNetworks.Layers.ILayerSerializationExtras<T> srcExtras
-                    && srcExtras.ExtraParameterCount > 0)
-                || srcLayer.GetRegisteredBuffers().Count > 0)
+            // Share trainable tensors copy-on-write (privatizes on the first in-place write to either side).
+            var sp = src.GetTrainableParameters();
+            var dp = dst.GetTrainableParameters();
+            if (sp.Count != dp.Count)
             {
                 (copy as IDisposable)?.Dispose();
                 return false;
+            }
+            if (sp.Count > 0)
+            {
+                var shared = new Tensor<T>[sp.Count];
+                for (int p = 0; p < sp.Count; p++)
+                    shared[p] = (Tensor<T>)sp[p].CloneShared();
+                dst.SetTrainableParameters(shared);
+            }
+
+            // Copy serialization EXTRAS (non-trainable trained state NOT in GetTrainableParameters —
+            // e.g. BatchNorm running mean/variance) eagerly; they are small. SetExtraParameters
+            // self-allocates and validates against the (now-resolved) destination shape, so copy whenever
+            // the SOURCE has them — gating on the destination's current count would drop them for a fresh
+            // lazy layer. If the destination can't accept them, fall back to the eager full-fidelity copy.
+            if (src is AiDotNet.NeuralNetworks.Layers.ILayerSerializationExtras<T> srcExtras
+                && srcExtras.ExtraParameterCount > 0)
+            {
+                if (dst is AiDotNet.NeuralNetworks.Layers.ILayerSerializationExtras<T> dstExtras)
+                {
+                    try { dstExtras.SetExtraParameters(srcExtras.GetExtraParameters()); }
+                    catch (ArgumentException)
+                    {
+                        (copy as IDisposable)?.Dispose();
+                        return false;
+                    }
+                }
+                else
+                {
+                    (copy as IDisposable)?.Dispose();
+                    return false;
+                }
             }
         }
 

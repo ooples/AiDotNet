@@ -31,7 +31,9 @@ public static class CopyOnWriteCloneHelper
     /// not line up 1:1 (e.g. a freshly-constructed clone whose lazy layers aren't resolved yet), so the
     /// caller can fall back to the eager flat copy.
     /// </summary>
-    public static bool TryShareTrainableParameters<T>(object? source, object? dest)
+    public static bool TryShareTrainableParameters<T>(
+        IFullModel<T, Tensor<T>, Tensor<T>>? source,
+        IFullModel<T, Tensor<T>, Tensor<T>>? dest)
     {
         if (source is null || dest is null || ReferenceEquals(source, dest)) return false;
         if (source.GetType() != dest.GetType()) return false;
@@ -58,9 +60,18 @@ public static class CopyOnWriteCloneHelper
         return true;
     }
 
-    private static List<ITrainableLayer<T>> CollectTrainableLayers<T>(object root)
+    /// <summary>
+    /// Collects every <see cref="ITrainableLayer{T}"/> reachable from <paramref name="root"/> by reflection,
+    /// in a deterministic order. Captures layers held both in a base <c>_layers</c> list AND in dedicated
+    /// fields (e.g. a tabular transformer's feature tokenizer / encoder stack / final layer-norm), which a
+    /// <c>_layers</c>-only walk misses. Two instances of the same runtime type yield matching order, so the
+    /// result pairs 1:1 between a model and its fresh clone.
+    /// </summary>
+    public static List<ITrainableLayer<T>> CollectTrainableLayers<T>(IFullModel<T, Tensor<T>, Tensor<T>> root)
     {
         var layers = new List<ITrainableLayer<T>>();
+        // CollectInto walks arbitrary instance fields, so it is necessarily typed `object?` internally;
+        // the public entry point is constrained to a model so callers can't pass an unrelated graph.
         CollectInto(root, layers, new HashSet<object>(TensorReferenceComparer<object>.Instance));
         return layers;
     }
