@@ -1213,34 +1213,23 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
 
     private List<int> GenerateTokens(Matrix<T> contextFeatures, int maxTokens, double temperature)
     {
-        var generatedTokens = new List<int>();
+        // Uses the shared AutoregressiveDecoder + TokenSampler (#1632) instead of a bespoke
+        // temperature/softmax/sample loop. Behaviour preserved: temperature sampling over the raw
+        // logits, stop at an end token without emitting it. (Bonus: temperature 0 now means greedy
+        // instead of dividing logits by zero.)
         var currentFeatures = contextFeatures;
-
-        for (int step = 0; step < maxTokens; step++)
-        {
-            var logits = GetNextTokenLogits(currentFeatures);
-
-            if (Math.Abs(temperature - 1.0) > 0.001)
+        var options = new Generation.SamplingOptions { Temperature = temperature };
+        var generated = Generation.AutoregressiveDecoder<T>.Decode(
+            stepLogits: prev =>
             {
-                for (int i = 0; i < logits.Length; i++)
-                {
-                    logits[i] = NumOps.Divide(logits[i], NumOps.FromDouble(temperature));
-                }
-            }
-
-            var probs = SoftmaxVector(logits);
-            int nextToken = SampleFromDistribution(probs);
-
-            if (IsEndToken(nextToken))
-            {
-                break;
-            }
-
-            generatedTokens.Add(nextToken);
-            currentFeatures = AppendTokenToContext(currentFeatures, nextToken);
-        }
-
-        return generatedTokens;
+                if (prev.HasValue)
+                    currentFeatures = AppendTokenToContext(currentFeatures, prev.Value);
+                return GetNextTokenLogits(currentFeatures);
+            },
+            maxNewTokens: maxTokens,
+            options: options,
+            isEndToken: IsEndToken);
+        return new List<int>(generated);
     }
 
     private Vector<T> GetNextTokenLogits(Matrix<T> features)
@@ -1337,50 +1326,9 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
         return expValues.Select(v => NumOps.Divide(v, sum)).ToList();
     }
 
-    private Vector<T> SoftmaxVector(Vector<T> values)
-    {
-        double maxVal = double.MinValue;
-        for (int i = 0; i < values.Length; i++)
-        {
-            double val = NumOps.ToDouble(values[i]);
-            if (val > maxVal) maxVal = val;
-        }
-
-        var result = new Vector<T>(values.Length);
-        T sum = NumOps.Zero;
-
-        for (int i = 0; i < values.Length; i++)
-        {
-            result[i] = NumOps.Exp(NumOps.Subtract(values[i], NumOps.FromDouble(maxVal)));
-            sum = NumOps.Add(sum, result[i]);
-        }
-
-        for (int i = 0; i < values.Length; i++)
-        {
-            result[i] = NumOps.Divide(result[i], sum);
-        }
-
-        return result;
-    }
-
-    private int SampleFromDistribution(Vector<T> probs)
-    {
-        // Use thread-safe random instead of creating RandomHelper.CreateSecureRandom() per call
-        // (RandomHelper.CreateSecureRandom() produces identical sequences when called rapidly)
-        double random = Tensors.Helpers.RandomHelper.ThreadSafeRandom.NextDouble();
-        double cumulative = 0;
-
-        for (int i = 0; i < probs.Length; i++)
-        {
-            cumulative += NumOps.ToDouble(probs[i]);
-            if (random < cumulative)
-            {
-                return i;
-            }
-        }
-
-        return probs.Length - 1;
-    }
+    // SoftmaxVector + SampleFromDistribution were removed (#1632): GenerateTokens now uses the
+    // shared Generation.TokenSampler / AutoregressiveDecoder, which centralise the same
+    // temperature-softmax-sample logic (plus top-k/top-p) across all generative models.
 
     private bool IsEndToken(int token)
     {
