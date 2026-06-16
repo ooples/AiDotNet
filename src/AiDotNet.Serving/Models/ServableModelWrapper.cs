@@ -11,10 +11,15 @@ namespace AiDotNet.Serving.Models;
 /// This allows any model with a Predict method to be served via the REST API.
 /// </summary>
 /// <typeparam name="T">The numeric type used by the model</typeparam>
-public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenceOptions
+public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenceOptions, IServableGenerativeModel<T>
 {
     private readonly Func<Vector<T>, Vector<T>> _predictFunc;
     private readonly Func<Matrix<T>, Matrix<T>>? _predictBatchFunc;
+
+    // Raw token-level forward (tokens -> logits) for autoregressive generation. Set only when
+    // the wrapper is constructed from a tensor-to-tensor model (e.g. a transformer language
+    // model); null for vector/matrix prediction models, which cannot generate text.
+    private readonly Func<Tensor<T>, Tensor<T>>? _tensorForward;
     private readonly string _modelName;
     private readonly int _inputDimension;
     private readonly int _outputDimension;
@@ -37,6 +42,8 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     /// <param name="inputShape">Optional full input shape array. If null, derived from inputDimension.</param>
     /// <param name="outputShape">Optional full output shape array. If null, derived from outputDimension.</param>
     /// <param name="dynamicShapeInfo">Optional dynamic shape information. If null, all dimensions are fixed.</param>
+    /// <param name="generationForward">Optional token-level forward (token-IDs tensor -> logits) enabling
+    /// autoregressive text generation. When null, the model does not support generation.</param>
     public ServableModelWrapper(
         string modelName,
         int inputDimension,
@@ -47,7 +54,8 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         bool enableSpeculativeDecoding = false,
         int[]? inputShape = null,
         int[]? outputShape = null,
-        DynamicShapeInfo? dynamicShapeInfo = null)
+        DynamicShapeInfo? dynamicShapeInfo = null,
+        Func<Tensor<T>, Tensor<T>>? generationForward = null)
     {
         Guard.NotNullOrWhiteSpace(modelName);
         _modelName = modelName;
@@ -61,6 +69,7 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         _predictBatchFunc = predictBatchFunc;
         _enableBatching = enableBatching;
         _enableSpeculativeDecoding = enableSpeculativeDecoding;
+        _tensorForward = generationForward;
     }
 
     /// <summary>
@@ -245,6 +254,11 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         _modelName = modelName;
         _enableBatching = enableBatching;
         _enableSpeculativeDecoding = enableSpeculativeDecoding;
+
+        // Tensor-to-tensor models can run token-level generation: the raw forward maps a
+        // [1, seqLen] token tensor to per-position logits, exactly what the continuous-batching
+        // engine drives. Capture it directly (bypassing the flat-vector reshape in _predictFunc).
+        _tensorForward = model.Predict;
 
         // Use provided inputShape and extract output shape from IModelShape if available
         _inputShape = inputShape ?? Array.Empty<int>();
@@ -449,6 +463,24 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     bool IServableModelInferenceOptions.EnableBatching => _enableBatching;
 
     bool IServableModelInferenceOptions.EnableSpeculativeDecoding => _enableSpeculativeDecoding;
+
+    /// <inheritdoc/>
+    public bool SupportsGeneration => _tensorForward is not null;
+
+    /// <inheritdoc/>
+    public Tensor<T> Forward(Tensor<T> inputTokenIds)
+    {
+        Guard.NotNull(inputTokenIds);
+
+        if (_tensorForward is null)
+        {
+            throw new NotSupportedException(
+                $"Model '{_modelName}' does not support token-level generation. " +
+                "Only tensor-to-tensor models (e.g. transformer language models) can generate text.");
+        }
+
+        return _tensorForward(inputTokenIds);
+    }
 
     /// <inheritdoc/>
     public Vector<T> Predict(Vector<T> input)
