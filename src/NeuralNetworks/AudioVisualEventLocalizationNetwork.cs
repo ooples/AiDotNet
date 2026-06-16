@@ -1377,13 +1377,19 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>
+        var metadata = new ModelMetadata<T>
         {
             Name = "AudioVisualEventLocalizationNetwork",
             FeatureCount = _embeddingDimension,
             Complexity = _numEncoderLayers * 2 + 4,
             Description = "Audio-visual event localization network for temporal and spatial event detection"
         };
+        metadata.AdditionalInfo["EmbeddingDimension"] = _embeddingDimension;
+        metadata.AdditionalInfo["TemporalResolution"] = _temporalResolution;
+        metadata.AdditionalInfo["NumEncoderLayers"] = _numEncoderLayers;
+        metadata.AdditionalInfo["NumEventCategories"] = _supportedCategories.Count;
+        metadata.AdditionalInfo["ParameterCount"] = ParameterCount;
+        return metadata;
     }
 
     /// <inheritdoc/>
@@ -1568,7 +1574,21 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
             _optimizer,
             _lossFunction);
 
-        copy.SetParameters(GetParameters());
+        // Copy trained weights PER LAYER from the (materialized) source rather than via the
+        // model-level SetParameters(GetParameters()). The freshly-constructed copy's layers are lazy
+        // (ParameterCount == 0 until first forward), and the model-level SetParameters slices the flat
+        // vector by each target layer's ParameterCount — which is 0 for a lazy layer, so every slice was
+        // empty, `offset` never advanced, and NO weights were applied (the clone re-randomized on its
+        // first forward). Each source layer is materialized, so copying its parameter vector directly
+        // into the matching copy layer lets that layer self-materialize (DenseLayer/MultiHeadAttention
+        // resolve their shape from the vector length). copy.Layers[i] is the same object the cached
+        // field references (_audioInputProjection, etc.) point at, so they are materialized in place.
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            var src = Layers[i];
+            if (src.ParameterCount > 0)
+                copy.Layers[i].SetParameters(src.GetParameters());
+        }
         return copy;
     }
 
