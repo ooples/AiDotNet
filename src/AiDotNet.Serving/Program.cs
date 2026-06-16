@@ -170,7 +170,7 @@ public class Program
 
         // Register services as singletons for thread-safe shared access
         builder.Services.AddSingleton<IModelRepository, ModelRepository>();
-        builder.Services.AddSingleton<IRequestBatcher, RequestBatcher>();
+        AddConfiguredRequestBatcher(builder.Services);
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddSingleton<ITierResolver, ClaimsTierResolver>();
         builder.Services.AddSingleton<ITierPolicyProvider, DefaultTierPolicyProvider>();
@@ -330,5 +330,25 @@ public class Program
         logger.LogInformation("Swagger UI available at: http://localhost:{Port}", servingOptions.Port);
 
         app.Run();
+    }
+
+    /// <summary>
+    /// Registers the <see cref="IRequestBatcher"/> chosen by the configured
+    /// <see cref="ServingOptions.BatchingStrategy"/>. The <see cref="BatchingStrategyType.Continuous"/>
+    /// strategy is true vLLM-style continuous batching — per-iteration admission/eviction of requests
+    /// through a running scheduler loop — which only <see cref="ContinuousBatchingRequestBatcher"/>
+    /// implements. The other strategies (Adaptive/Timeout/Size/Bucket) are batch-sizing policies that
+    /// the static <see cref="RequestBatcher"/> applies internally, so they resolve to it. Both batchers
+    /// share the same constructor dependencies, so each is built via <see cref="ActivatorUtilities"/>.
+    /// </summary>
+    internal static void AddConfiguredRequestBatcher(IServiceCollection services)
+    {
+        services.AddSingleton<IRequestBatcher>(sp =>
+        {
+            var servingOptions = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ServingOptions>>();
+            return servingOptions.Value.BatchingStrategy == BatchingStrategyType.Continuous
+                ? ActivatorUtilities.CreateInstance<ContinuousBatchingRequestBatcher>(sp)
+                : ActivatorUtilities.CreateInstance<RequestBatcher>(sp);
+        });
     }
 }
