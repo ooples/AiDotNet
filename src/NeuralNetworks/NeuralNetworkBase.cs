@@ -1514,8 +1514,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Fall back to GPU-resident forward without deferred execution
         try
         {
-            using var result = ForwardGpu(input);
-            return result;
+            // Fix for #1625: the previous `using var result = ForwardGpu(input)` disposed
+            // the GPU tensor before the caller could read its values — same use-after-dispose
+            // anti-pattern as TryForwardGpuOptimized above. The returned tensor's lifetime
+            // belongs to the caller.
+            return ForwardGpu(input);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException and not System.Threading.ThreadAbortException)
         {
