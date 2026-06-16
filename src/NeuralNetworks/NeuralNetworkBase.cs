@@ -1636,8 +1636,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                using var result = ForwardGpu(input);
-                return result;
+                // Fix for #1625: same use-after-dispose pattern as TryForwardGpuOptimized
+                // and ForwardDeferred's non-deferred fallback. The returned tensor's lifetime
+                // belongs to the caller.
+                return ForwardGpu(input);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException and not System.Threading.ThreadAbortException)
             {
