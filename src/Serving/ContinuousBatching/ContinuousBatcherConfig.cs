@@ -64,6 +64,18 @@ public class ContinuousBatcherConfig
     public bool UseTreeSpeculation { get; set; } = false;
 
     /// <summary>
+    /// Branching factor for tree speculation (continuations explored per step). When 0, the
+    /// batcher derives it from <see cref="SpeculativeMethod"/> (Medusa = 4, otherwise 2).
+    /// </summary>
+    public int TreeBranchFactor { get; set; } = 0;
+
+    /// <summary>
+    /// Maximum depth of the speculation tree. When 0, the batcher derives it from
+    /// <see cref="SpeculationDepth"/>.
+    /// </summary>
+    public int MaxTreeDepth { get; set; } = 0;
+
+    /// <summary>
     /// Creates config for a specific model.
     /// </summary>
     public static ContinuousBatcherConfig ForModel(string modelName, int maxBatchSize = 8)

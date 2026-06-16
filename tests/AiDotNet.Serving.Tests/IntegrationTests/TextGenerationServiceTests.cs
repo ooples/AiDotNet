@@ -108,6 +108,31 @@ public class TextGenerationServiceTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task Generate_WithTreeSpeculation_HonorsRequestKnobs()
+    {
+        var service = BuildService("lm", GenerativeModel("lm", peakToken: 7));
+
+        var request = new SpeculativeDecodingRequest
+        {
+            InputTokens = new[] { 1, 5 },
+            MaxNewTokens = 3,
+            EosTokenId = 2,
+            NumDraftTokens = 2,
+            UseTreeSpeculation = true,
+            TreeBranchFactor = 3,
+            MaxTreeDepth = 2,
+            Temperature = 1.0
+        };
+
+        var response = service.Generate("lm", NumericType.Float, request);
+
+        // Tree-speculation knobs flow through without breaking generation; output stays correct.
+        Assert.Null(response.Error);
+        Assert.Equal(3, response.NumGenerated);
+        Assert.All(response.GeneratedTokens, t => Assert.Equal(7, t));
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task Generate_NonGenerativeModel_ReturnsError()
     {
         await Task.Yield();

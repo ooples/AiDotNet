@@ -75,7 +75,11 @@ public sealed class TextGenerationService : ITextGenerationService
             EosTokenId = request.EosTokenId ?? new ContinuousBatcherConfig().EosTokenId,
             EnableSpeculativeDecoding = true,
             SpeculationDepth = request.NumDraftTokens,
-            UseTreeSpeculation = request.UseTreeSpeculation
+            UseTreeSpeculation = request.UseTreeSpeculation,
+            // Tree knobs only take effect when tree speculation is engaged; pass them through so
+            // the request's TreeBranchFactor/MaxTreeDepth are honored rather than silently ignored.
+            TreeBranchFactor = request.UseTreeSpeculation ? request.TreeBranchFactor : 0,
+            MaxTreeDepth = request.UseTreeSpeculation ? request.MaxTreeDepth : 0
         };
 
         using var batcher = new ContinuousBatcher<T>(config, tokens => generativeModel.Forward(tokens));

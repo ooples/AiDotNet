@@ -661,8 +661,13 @@ internal class ContinuousBatcher<T> : IDisposable
                 UseTreeSpeculation = _config.UseTreeSpeculation ||
                                     _config.SpeculativeMethod == AiDotNet.Configuration.SpeculativeMethod.Medusa ||
                                     _config.SpeculativeMethod == AiDotNet.Configuration.SpeculativeMethod.Eagle,
-                TreeBranchFactor = _config.SpeculativeMethod == AiDotNet.Configuration.SpeculativeMethod.Medusa ? 4 : 2,
-                MaxTreeDepth = Math.Max(1, _config.SpeculationDepth)
+                // Honor explicit config values when provided (> 0); otherwise derive sensible defaults.
+                TreeBranchFactor = _config.TreeBranchFactor > 0
+                    ? _config.TreeBranchFactor
+                    : (_config.SpeculativeMethod == AiDotNet.Configuration.SpeculativeMethod.Medusa ? 4 : 2),
+                MaxTreeDepth = _config.MaxTreeDepth > 0
+                    ? _config.MaxTreeDepth
+                    : Math.Max(1, _config.SpeculationDepth)
             };
 
             try
