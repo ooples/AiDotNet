@@ -7,6 +7,7 @@ using Newtonsoft.Json;
 
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.MixedPrecision;
 
 namespace AiDotNet.Optimizers;
 
@@ -417,6 +418,11 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         public Vector<double>? MScales;         // null when CompressBothMoments == false
         public Vector<double> VScales = null!;
 
+        // BF16 moment storage (UseBFloat16MomentStorage == true): 2 bytes/element, no per-block
+        // scales. Mutually exclusive with the byte-quantized fields above — only one set is allocated.
+        public Vector<ushort>? MBf16;
+        public Vector<ushort>? VBf16;
+
         // GPU-resident 8-bit state (AIDOTNET_GPU_ADAM=1, CUDA): int8 m/v + per-block
         // double scales kept on the device across steps so the adam8bit_update kernel
         // runs the whole dequant→Adam→requant cycle with no host download. Allocated
@@ -451,6 +457,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         // absolute-max scale, deterministic rounding) is eligible; otherwise the CPU
         // path runs. Quantized state is kept GPU-resident per parameter across steps.
         bool gpu8 = typeof(T) == typeof(float)
+            && !_options.UseBFloat16MomentStorage
             && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine
             && _options.CompressBothMoments
@@ -468,7 +475,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             // percentile>=100, no stochastic rounding); other configs fall
             // through to the dense ToDense path so quantization semantics stay
             // bit-identical with the dense code.
-            if (!gpu8 && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            if (!gpu8 && !_options.UseBFloat16MomentStorage && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
             {
                 // Lazily allocate quantized state at the parameter's actual length —
                 // mirroring the same shape-mismatch handling as the dense path below
@@ -544,6 +551,31 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             if (!param._shape.SequenceEqual(grad._shape) && param.Length == grad.Length)
             {
                 grad = Engine.Reshape(grad, param._shape);
+            }
+
+            // BF16 moment storage: expand the 2-byte moments to a transient full-precision tensor,
+            // run the identical Adam recurrence + update, then re-pack to BF16. Only this parameter's
+            // moments are materialized at a time (per-parameter loop), so the resident footprint stays
+            // at 2 bytes/element while the math runs at full precision.
+            if (_options.UseBFloat16MomentStorage)
+            {
+                Tensor<T> mB = Bf16ToTensor(state.MBf16!, param._shape);
+                Tensor<T> vB = Bf16ToTensor(state.VBf16!, param._shape);
+
+                var newMB = Engine.TensorAdd(Engine.TensorMultiplyScalar(mB, beta1),
+                                             Engine.TensorMultiplyScalar(grad, oneMinusBeta1));
+                var newVB = Engine.TensorAdd(Engine.TensorMultiplyScalar(vB, beta2),
+                                             Engine.TensorMultiplyScalar(Engine.TensorMultiply(grad, grad), oneMinusBeta2));
+
+                TensorToBf16(newMB, state.MBf16!);
+                TensorToBf16(newVB, state.VBf16!);
+
+                var mHatB = Engine.TensorDivideScalar(newMB, biasCorrection1);
+                var vHatB = Engine.TensorDivideScalar(newVB, biasCorrection2);
+                var denomB = Engine.TensorAddScalar(Engine.TensorSqrt(vHatB), epsilon);
+                var updateB = Engine.TensorMultiplyScalar(Engine.TensorDivide(mHatB, denomB), CurrentLearningRate);
+                Engine.TensorSubtractInPlace(param, updateB);
+                continue;
             }
 
             // GPU-resident 8-bit step: lazily allocate the device quant state on
@@ -671,6 +703,18 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// </summary>
     private QuantizedTapeState AllocateTapeState(int paramLength)
     {
+        if (_options.UseBFloat16MomentStorage)
+        {
+            // BF16 moments: 2 bytes/element, zero-initialized (BF16 0x0000 == +0.0), no scales/blocks.
+            return new QuantizedTapeState
+            {
+                Length = paramLength,
+                NumBlocks = 0,
+                MBf16 = new Vector<ushort>(paramLength),
+                VBf16 = new Vector<ushort>(paramLength),
+            };
+        }
+
         int blockSize = _options.BlockSize;
         int numBlocks = (paramLength + blockSize - 1) / blockSize;
 
@@ -844,6 +888,34 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             }
         });
         return result;
+    }
+
+    /// <summary>
+    /// Expands a BF16 (2 bytes/element) moment buffer into a freshly-allocated full-precision tensor of
+    /// the given shape. Transient — consumed within a single Step iteration and released to the arena.
+    /// </summary>
+    private Tensor<T> Bf16ToTensor(Vector<ushort> bf16, int[] paramShape)
+    {
+        var result = new Tensor<T>(paramShape);
+        int length = result.Length;
+        CpuParallelSettings.ParallelForOrSerial(0, length, (long)length, i =>
+        {
+            result[i] = NumOps.FromDouble(BitConverterHelper.Bf16BitsToFloat(bf16[i]));
+        });
+        return result;
+    }
+
+    /// <summary>
+    /// Packs a full-precision tensor's values back into a pre-allocated BF16 (2 bytes/element) buffer
+    /// with round-to-nearest-even. BF16 keeps the float32 exponent, so no scale factor is needed.
+    /// </summary>
+    private void TensorToBf16(Tensor<T> values, Vector<ushort> bf16)
+    {
+        int length = values.Length;
+        CpuParallelSettings.ParallelForOrSerial(0, length, (long)length, i =>
+        {
+            bf16[i] = BitConverterHelper.FloatToBf16Bits((float)NumOps.ToDouble(values[i]));
+        });
     }
 
     /// <summary>

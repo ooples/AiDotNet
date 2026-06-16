@@ -7617,15 +7617,28 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         if (_baseTrainOptimizer is not null) return _baseTrainOptimizer;
 
-        // G2 (#1624) — 8-bit optimizer state for large models. A standard fp32 Adam keeps two moment
-        // buffers (m, v), each the size of the model: 2x the weights, the dominant training-step memory
-        // cost after the parameters themselves. For models large enough to threaten the 8c/16 GB runner's
-        // budget, switch to Adam8BitOptimizer, which block-quantizes m/v to 8-bit (~0.5x instead of 2x),
-        // saving ~1.5x the model size of RAM per step. 8-bit Adam matches fp32 Adam within tolerance
-        // (parity-tested), so convergence is preserved. Small/medium models keep fp32 for exact
-        // reproducibility. AIDOTNET_ADAM8BIT=0 forces fp32 everywhere; =1 forces 8-bit (for testing).
+        // G2 (#1624) — optimizer-state memory ladder. Standard fp32 Adam keeps two moment buffers (m, v),
+        // each the size of the model: 2x the weights, the dominant training-step memory cost after the
+        // parameters. The rungs trade that footprint against convergence/throughput:
+        //   fp32 (4B/elem, default)  →  BF16 (2B, proactive)  →  8-bit block-quant (1B, reactive on OOM).
+        //
+        // 8-bit (most aggressive) is engaged ONLY reactively, after a step has actually OOM'd, because the
+        // block quantization measurably changes the update. BF16 keeps the full fp32 exponent (only the
+        // mantissa shortens), so it changes Adam's trajectory far less and can be engaged proactively for
+        // large models — halving resident moment memory before an OOM ever happens. Per-parameter expansion
+        // keeps only one parameter's moments at full precision at a time, so the resident state stays at the
+        // compressed width. AIDOTNET_ADAM8BIT=1 / AIDOTNET_BF16_ADAM=1 force a rung for testing; =0 pins it off.
         if (ShouldUseEightBitOptimizer())
             return _baseTrainOptimizer = new Adam8BitOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
+        if (ShouldUseBFloat16Optimizer())
+            return _baseTrainOptimizer = new Adam8BitOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new Models.Options.Adam8BitOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    UseBFloat16MomentStorage = true,
+                    UseAMSGrad = false,
+                });
 
         // Standard Adam with AMSGrad pinned OFF locally (not relying on the
         // AdamOptimizerOptions default) so the fused compiled-training kernel can map
@@ -7634,6 +7647,29 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         return _baseTrainOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { UseAMSGrad = false });
+    }
+
+    /// <summary>
+    /// G2 proactive rung: whether to store optimizer moments as BF16 (half the fp32 footprint, minimal
+    /// convergence impact). Unlike the 8-bit rung this CAN be size-gated, because BF16 keeps the full
+    /// float32 exponent and changes Adam's trajectory negligibly. Engages only for models large enough
+    /// that fp32 moment state is a real memory concern (and where the per-step pack/unpack overhead is
+    /// worth it), so small/medium models keep plain fp32 Adam unchanged. <c>AIDOTNET_BF16_ADAM</c>
+    /// overrides: <c>1/true/on</c> forces it; <c>0/false/off</c> pins it off.
+    /// </summary>
+    private bool ShouldUseBFloat16Optimizer()
+    {
+        var env = Environment.GetEnvironmentVariable("AIDOTNET_BF16_ADAM");
+        if (env == "0" || string.Equals(env, "false", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(env, "off", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (env == "1" || string.Equals(env, "true", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(env, "on", StringComparison.OrdinalIgnoreCase))
+            return true;
+        // ~50M params ⇒ ~400 MB fp32 moment state (2 buffers x 4B); BF16 halves that to ~200 MB. Below
+        // this the fp32 state is small enough that the pack/unpack overhead isn't worth it.
+        const long bf16ParamThreshold = 50_000_000L;
+        return ParameterCount >= bf16ParamThreshold;
     }
 
     /// <summary>
