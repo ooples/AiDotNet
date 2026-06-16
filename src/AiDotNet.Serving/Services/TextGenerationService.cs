@@ -38,15 +38,15 @@ public sealed class TextGenerationService : ITextGenerationService
     }
 
     /// <inheritdoc/>
-    public SpeculativeDecodingResponse Generate(string modelName, NumericType numericType, SpeculativeDecodingRequest request)
+    public SpeculativeDecodingResponse Generate(string modelName, NumericType numericType, SpeculativeDecodingRequest request, CancellationToken cancellationToken = default)
     {
         Guard.NotNull(request);
 
         return numericType switch
         {
-            NumericType.Double => GenerateTyped<double>(modelName, request),
-            NumericType.Float => GenerateTyped<float>(modelName, request),
-            NumericType.Decimal => GenerateTyped<decimal>(modelName, request),
+            NumericType.Double => GenerateTyped<double>(modelName, request, cancellationToken),
+            NumericType.Float => GenerateTyped<float>(modelName, request, cancellationToken),
+            NumericType.Decimal => GenerateTyped<decimal>(modelName, request, cancellationToken),
             _ => new SpeculativeDecodingResponse
             {
                 Error = $"Unsupported numeric type '{numericType}' for text generation.",
@@ -55,9 +55,21 @@ public sealed class TextGenerationService : ITextGenerationService
         };
     }
 
-    private SpeculativeDecodingResponse GenerateTyped<T>(string modelName, SpeculativeDecodingRequest request)
+    private SpeculativeDecodingResponse GenerateTyped<T>(string modelName, SpeculativeDecodingRequest request, CancellationToken cancellationToken)
     {
         var model = _modelRepository.GetModel<T>(modelName);
+        if (model is null)
+        {
+            // Distinguish "not loaded / does not exist" from "loaded but not generative" — the
+            // `is not IServableGenerativeModel<T>` check below also succeeds for null, but its
+            // message would misreport a missing model as an unsupported one.
+            return new SpeculativeDecodingResponse
+            {
+                Error = $"Model '{modelName}' is not loaded or does not exist.",
+                RequestId = request.RequestId
+            };
+        }
+
         if (model is not IServableGenerativeModel<T> generativeModel || !generativeModel.SupportsGeneration)
         {
             return new SpeculativeDecodingResponse
@@ -72,7 +84,7 @@ public sealed class TextGenerationService : ITextGenerationService
         {
             // Drive the engine synchronously via Step() for this single REST request.
             AutoStart = false,
-            EosTokenId = request.EosTokenId ?? new ContinuousBatcherConfig().EosTokenId,
+            EosTokenId = request.EosTokenId ?? ContinuousBatcherConfig.DefaultEosTokenId,
             EnableSpeculativeDecoding = true,
             SpeculationDepth = request.NumDraftTokens,
             UseTreeSpeculation = request.UseTreeSpeculation,
@@ -100,6 +112,16 @@ public sealed class TextGenerationService : ITextGenerationService
         int maxIterations = request.MaxNewTokens + request.InputTokens.Length + 8;
         while (!task.IsCompleted && maxIterations-- > 0)
         {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                // Client disconnected / request aborted — stop driving the engine instead of
+                // leaving orphaned generation work running to the iteration budget.
+                return new SpeculativeDecodingResponse
+                {
+                    Error = "Text generation was cancelled.",
+                    RequestId = request.RequestId
+                };
+            }
             batcher.Step();
         }
 

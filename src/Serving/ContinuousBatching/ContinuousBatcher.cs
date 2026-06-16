@@ -372,7 +372,7 @@ internal class ContinuousBatcher<T> : IDisposable
         if (_model != null && sequence.TokenIds.Count > 0)
         {
             // Create input tensor from prompt tokens
-            var inputTokens = CreateInputTensor(sequence.TokenIds.ToArray());
+            var inputTokens = CreateInputTensor(sequence.TokenIds);
 
             // Run model forward pass for all prompt tokens
             var logits = _model(inputTokens);
@@ -399,7 +399,7 @@ internal class ContinuousBatcher<T> : IDisposable
         // matches the speculative path's TargetForward, which already forwards the full sequence.
         // (A KV-cached incremental forward is a future optimization that would require a stateful
         // model-forward contract; full-context decode is the correct behavior for a stateless one.)
-        var inputTokens = CreateInputTensor(sequence.TokenIds.ToArray());
+        var inputTokens = CreateInputTensor(sequence.TokenIds);
 
         // Run model forward pass
         var logits = _model(inputTokens);
@@ -701,11 +701,12 @@ internal class ContinuousBatcher<T> : IDisposable
         }
     }
 
-    private Tensor<T> CreateInputTensor(int[] tokenIds)
+    private Tensor<T> CreateInputTensor(IReadOnlyList<int> tokenIds)
     {
-        // Create a simple 2D tensor [batch=1, seq_len]
-        var tensor = new Tensor<T>([1, tokenIds.Length]);
-        for (int i = 0; i < tokenIds.Length; i++)
+        // Create a simple 2D tensor [batch=1, seq_len]. Accepts IReadOnlyList so callers can pass
+        // the live token list directly — no per-step ToArray() copy in the decode hot path.
+        var tensor = new Tensor<T>([1, tokenIds.Count]);
+        for (int i = 0; i < tokenIds.Count; i++)
         {
             tensor[[0, i]] = ConvertToT(tokenIds[i]);
         }

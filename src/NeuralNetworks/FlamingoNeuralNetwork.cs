@@ -926,7 +926,11 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
 
         if (_outputProjection is null)
         {
-            return _tokenizer.Decode(generatedIds.Skip(inputIds.Count).ToList());
+            // Fail fast: without the output projection there are no logits to decode, so
+            // returning the (empty) suffix here would masquerade an unsupported state as a
+            // successful empty generation.
+            throw new InvalidOperationException(
+                "Output projection must be initialized before Flamingo text generation can produce logits.");
         }
 
         // The shared AutoregressiveDecoder owns the loop + greedy argmax + EOS stop. The per-step
@@ -937,8 +941,18 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
             stepLogits: prev =>
             {
                 if (prev.HasValue) generatedIds.Add(prev.Value);
-                int seqLen = Math.Min(generatedIds.Count, _maxSequenceLength);
-                var embeddings = EmbedTextTokens(generatedIds.Take(seqLen).ToList());
+                // Slide the context to the most recent _maxSequenceLength tokens — Take(seqLen)
+                // would keep the FIRST tokens and silently drop every newly-generated token once
+                // the sequence exceeds the window, so later forward passes never see the latest token.
+                var contextIds = generatedIds
+                    .Skip(Math.Max(0, generatedIds.Count - _maxSequenceLength))
+                    .ToList();
+                if (contextIds.Count == 0)
+                {
+                    throw new InvalidOperationException("Generation requires at least one prompt token.");
+                }
+                int seqLen = contextIds.Count;
+                var embeddings = EmbedTextTokens(contextIds);
 
                 var current = embeddings;
                 int gatedAttnIdx = 0;

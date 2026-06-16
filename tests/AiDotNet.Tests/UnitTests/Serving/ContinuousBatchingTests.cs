@@ -555,6 +555,9 @@ public class ContinuousBatchingTests
             batcher.Step();
         }
 
+        // Fail fast with a clear message if bounded stepping didn't drive generation to completion,
+        // instead of hanging on the await until the test timeout.
+        Assert.True(task.IsCompleted, "Generation did not complete within 32 scheduler steps.");
         var result = await task;
 
         // Prompt length 1 -> first token 1, then 2, 3, 4 as the context grows. (A last-token-only

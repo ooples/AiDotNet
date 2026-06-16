@@ -241,12 +241,18 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     /// <param name="inputShape">The shape to reshape flat input vectors into tensors.</param>
     /// <param name="enableBatching">Whether serving-side batching is enabled.</param>
     /// <param name="enableSpeculativeDecoding">Whether speculative decoding is enabled.</param>
+    /// <param name="generationForward">Optional token-level forward (token-IDs tensor -> logits) that
+    /// enables autoregressive text generation. Pass <c>model.Predict</c> ONLY for models with
+    /// token-to-logits semantics (e.g. a transformer LM). When null (default), the model does not
+    /// advertise generation support — not every Tensor-to-Tensor model (e.g. a diffusion model) has
+    /// valid next-token-logits semantics, so generation must be opt-in rather than assumed.</param>
     public ServableModelWrapper(
         string modelName,
         IFullModel<T, Tensor<T>, Tensor<T>> model,
         int[] inputShape,
         bool enableBatching = true,
-        bool enableSpeculativeDecoding = false)
+        bool enableSpeculativeDecoding = false,
+        Func<Tensor<T>, Tensor<T>>? generationForward = null)
     {
         Guard.NotNullOrWhiteSpace(modelName);
         Guard.NotNull(model);
@@ -255,10 +261,11 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         _enableBatching = enableBatching;
         _enableSpeculativeDecoding = enableSpeculativeDecoding;
 
-        // Tensor-to-tensor models can run token-level generation: the raw forward maps a
-        // [1, seqLen] token tensor to per-position logits, exactly what the continuous-batching
-        // engine drives. Capture it directly (bypassing the flat-vector reshape in _predictFunc).
-        _tensorForward = model.Predict;
+        // Generation is explicit opt-in: only a caller that knows this model maps a [1, seqLen] token
+        // tensor to per-position logits supplies generationForward. Wiring model.Predict
+        // unconditionally would make SupportsGeneration true for non-generative tensor models and route
+        // them into the token-generation path with meaningless logits.
+        _tensorForward = generationForward;
 
         // Use provided inputShape and extract output shape from IModelShape if available
         _inputShape = inputShape ?? Array.Empty<int>();

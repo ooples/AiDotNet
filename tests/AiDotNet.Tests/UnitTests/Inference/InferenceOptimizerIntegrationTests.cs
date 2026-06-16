@@ -419,6 +419,12 @@ public class InferenceOptimizerIntegrationTests
         // that rewrite is the proof the stack actually engages under the default config.
         Assert.Contains(optimized.Layers,
             l => l is PagedCachedMultiHeadAttention<float> || l is CachedMultiHeadAttention<float>);
+
+        // ...and the KV cache the rewrite is backed by was actually built/attached (the second half
+        // of this test's contract). Default has EnablePagedKVCache=true, so the paged cache is the
+        // one that must exist; the non-paged cache stays null on this path.
+        Assert.NotNull(optimizer.PagedKVCache);
+        Assert.Null(optimizer.KVCache);
     }
 
     private static NeuralNetworkBase<float> CreateMHAModel(
