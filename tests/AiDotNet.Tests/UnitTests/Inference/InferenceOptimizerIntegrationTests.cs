@@ -45,6 +45,35 @@ public class InferenceOptimizerIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task Optimizer_PagedKVCache_RewritesMHA_ToPagedCachedMHA()
+    {
+        await Task.Yield();
+        // EnablePagedKVCache is on in InferenceOptimizationConfig.Default; this proves that flag
+        // specifically rewrites MHA to the PAGED cache-backed attention (vLLM-style block KV cache)
+        // — the sibling Default test only asserts "paged OR non-paged", so this pins the paged path.
+        var model = CreateMHAModel();
+        Assert.Contains(model.Layers, l => l is MultiHeadAttentionLayer<float>);
+
+        var config = new InferenceOptimizationConfig
+        {
+            EnableKVCache = true,
+            EnablePagedKVCache = true,
+            EnableFlashAttention = false,
+            AttentionMasking = AttentionMaskingMode.Causal
+        };
+
+        var optimizer = new InferenceOptimizer<float>(config);
+        var (optimized, anyApplied) = optimizer.OptimizeForInference(model, cloneModel: false);
+
+        Assert.True(anyApplied);
+        Assert.Contains(optimized.Layers, l => l is PagedCachedMultiHeadAttention<float>);
+        Assert.DoesNotContain(optimized.Layers, l => l is MultiHeadAttentionLayer<float>);
+
+        var paged = optimized.Layers.OfType<PagedCachedMultiHeadAttention<float>>().First();
+        Assert.True(paged.InferenceMode);
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task Optimizer_RewritesGQA_ToCachedGQA_WithKVCache()
     {
         var model = CreateGQAModel(numHeads: 8, numKVHeads: 2);
