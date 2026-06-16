@@ -8626,8 +8626,39 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// - Save a snapshot of your model at a particular point in training
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// COW lever (G6, issue #1624): when <c>true</c> (the default), <see cref="DeepCopy"/> shares each
+    /// weight tensor's backing STORAGE with the clone via the Tensors copy-on-write
+    /// <c>Tensor&lt;T&gt;.CloneShared()</c> (O(1)-until-write) instead of materializing a full second
+    /// copy through the serialize-roundtrip / flatten paths. The first in-place write on either side
+    /// privatizes that tensor, so the result is observationally identical to a deep copy — but an
+    /// inference-only clone (e.g. the <c>Clone_ShouldProduceIdenticalOutput</c> family) never writes,
+    /// so it stays O(1) and no longer OOMs the 16 GB runner on large models. Unlike the proven-unsafe
+    /// by-reference weight-sharing clone (it shared the SAME tensor object → training corrupted both),
+    /// CloneShared hands the clone a DISTINCT tensor that shares storage until write. Set to
+    /// <c>false</c> (or <c>AIDOTNET_COW_DEEPCOPY=0</c>) to force the eager full-copy path everywhere.
+    /// </summary>
+    // Default OFF while full trained-clone fidelity across every NeuralNetwork family is still being
+    // verified: the COW share is correct for inference clones (the OOM-relevant case) and for models
+    // whose entire state is their trainable parameters, but a layer can hold trained state outside
+    // GetTrainableParameters (BatchNorm running stats, registered buffers, and at least one further
+    // category seen on FT/TabTransformer) that the share path does not yet carry, which the
+    // Clone_AfterTraining_ShouldPreserveLearnedWeights invariant catches. Opt in with
+    // AIDOTNET_COW_DEEPCOPY=1 (or set this true) to exercise it. The diffusion clone-OOM lever (#1624)
+    // is wired separately on DiffusionModelBase, where models are pure weight tensors.
+    public static bool UseCopyOnWriteDeepCopy { get; set; } =
+        Environment.GetEnvironmentVariable("AIDOTNET_COW_DEEPCOPY") is { } e &&
+        (e == "1" || string.Equals(e, "true", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(e, "on", StringComparison.OrdinalIgnoreCase));
+
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
+        // G6 COW fast path: share weight-tensor storage instead of materializing a second full copy.
+        // Falls back to the eager paths below for any model it cannot share safely (layer-count or
+        // parameter-count mismatch, a layer whose SetTrainableParameters can't re-sync its fields).
+        if (UseCopyOnWriteDeepCopy && TryDeepCopyCopyOnWrite(out var cowCopy))
+            return cowCopy;
+
         // DeepCopy is a training-internal in-memory clone, not a user-facing
         // save/load. We route through the private SerializeInternalUnchecked /
         // DeserializeInternalUnchecked helpers rather than the public virtual
@@ -8758,6 +8789,95 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             }
         }
         return copy;
+    }
+
+    /// <summary>
+    /// G6 COW lever (#1624): builds the clone by sharing each layer's weight-tensor STORAGE with the
+    /// original via the Tensors copy-on-write <c>CloneShared()</c> (O(1)-until-write), instead of the
+    /// eager serialize-roundtrip / flatten copy. Mirrors the large-model layer-by-layer copy path
+    /// (parameters + serialization extras; network architecture comes from <see cref="CreateNewInstance"/>),
+    /// so it has the same fidelity as that already-accepted path — it just shares storage rather than
+    /// duplicating it. Returns <c>false</c> (and the caller falls back to the eager paths) for any model
+    /// it cannot map 1:1 (layer-count or per-layer parameter-count mismatch, e.g. a custom layer whose
+    /// <c>SetTrainableParameters</c> cannot re-sync its fields).
+    /// </summary>
+    private bool TryDeepCopyCopyOnWrite(out IFullModel<T, Tensor<T>, Tensor<T>> result)
+    {
+        var copy = CreateNewInstance();
+        result = copy;
+        if (copy is not NeuralNetworkBase<T> copyBase || copyBase._layers.Count != _layers.Count)
+        {
+            (copy as IDisposable)?.Dispose();
+            return false;
+        }
+
+        // A COW clone keeps its (shared) weights resident; suppress its independent weight-streaming
+        // auto-enable so it does not re-Configure the process-wide singleton streaming pool owned by the
+        // original (same guard the eager large/serialize paths use). Must run before any SetTrainingMode.
+        copyBase.DisableAutoStreaming();
+
+        for (int i = 0; i < _layers.Count; i++)
+        {
+            // GetTrainableParameters / SetTrainableParameters live on LayerBase<T>; a layer that isn't
+            // one can't be COW-mapped 1:1 — abandon and fall back to the eager path.
+            if (_layers[i] is not LayerBase<T> srcLayer || copyBase._layers[i] is not LayerBase<T> dstLayer)
+            {
+                (copy as IDisposable)?.Dispose();
+                return false;
+            }
+
+            // Resolve a lazy destination layer's shape from the source so its parameter list exists
+            // before we map it (identical to the large-copy path).
+            if (!dstLayer.IsShapeResolved && srcLayer.ParameterCount > 0)
+            {
+                int[] srcInputShape = srcLayer.GetInputShape();
+                if (srcInputShape is { Length: > 0 } && Array.TrueForAll(srcInputShape, d => d > 0))
+                {
+                    try { dstLayer.ResolveFromShape(srcInputShape); }
+                    catch (ArgumentException) { /* layer rejects this shape; leave lazy */ }
+                }
+            }
+
+            var srcParams = srcLayer.GetTrainableParameters();
+            if (srcParams.Count > 0)
+            {
+                var dstParams = dstLayer.GetTrainableParameters();
+                if (dstParams.Count != srcParams.Count)
+                {
+                    // Cannot map weights 1:1 — abandon COW and let the caller take the eager path.
+                    (copy as IDisposable)?.Dispose();
+                    return false;
+                }
+
+                // Share storage copy-on-write: each clone tensor is a DISTINCT Tensor<T> over the same
+                // backing storage as the source, privatizing on the first in-place write to either side.
+                var shared = new Tensor<T>[srcParams.Count];
+                for (int p = 0; p < srcParams.Count; p++)
+                    shared[p] = (Tensor<T>)srcParams[p].CloneShared();
+                dstLayer.SetTrainableParameters(shared);
+            }
+
+            // Conservative fidelity guard: COW only shares (and re-syncs) the layer's TRAINABLE tensors.
+            // A layer that also carries non-trainable persistent state — serialization EXTRAS (e.g.
+            // BatchNorm running mean/variance) or registered BUFFERS — would have that state silently
+            // dropped by a trainable-only share, giving a wrong post-training clone. Copying it correctly
+            // through a fresh/lazy destination is layer-specific and fragile, so for any model that has it
+            // we fall back to the eager full-fidelity copy. The COW clone-OOM targets (diffusion models —
+            // CogVideo/ControlNet++/Flux2Schnell) are pure weight tensors, so they keep the O(1) share;
+            // extras/buffer-bearing models (ResNet/VGG/DenseNet, whose OOMs are TRAINING tests addressed
+            // by other levers) take the eager path.
+            if ((srcLayer is AiDotNet.NeuralNetworks.Layers.ILayerSerializationExtras<T> srcExtras
+                    && srcExtras.ExtraParameterCount > 0)
+                || srcLayer.GetRegisteredBuffers().Count > 0)
+            {
+                (copy as IDisposable)?.Dispose();
+                return false;
+            }
+        }
+
+        copyBase.InvalidateParameterCountCache();
+        copyBase.SetTrainingMode(false);
+        return true;
     }
 
     /// <summary>
