@@ -309,7 +309,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     /// <param name="inputSize">The number of input neurons.</param>
     /// <param name="outputSize">The number of output neurons.</param>
-    /// <param name="activationFunction">The activation function to apply. Defaults to ReLU if not specified.</param>
+    /// <param name="activationFunction">The activation function to apply. Defaults to <see cref="IdentityActivation{T}"/> (no activation / linear) when not specified, matching Keras / PyTorch nn.Linear / TensorFlow Dense conventions.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a dense layer with the specified number of input and output neurons.
@@ -332,7 +332,15 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public DenseLayer(int outputSize, IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null)
-        : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new ReLUActivation<T>())
+        // Default to IdentityActivation (linear / no activation) — matches Keras, PyTorch
+        // nn.Linear, and TF Dense conventions, and is the least-surprise behavior for
+        // callers that write `new DenseLayer<T>(outputSize: N)` expecting no activation
+        // (regression output heads, residual projections, etc.). The previous default of
+        // ReLU silently substituted an activation, which manifested as #1629: a regression
+        // model with `new DenseLayer<T>(outputSize: 1)` as its output layer would lock to
+        // all-zero predictions whenever the pre-activation went negative (dying ReLU on
+        // the output) — masquerading as a training-divergence bug.
+        : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new IdentityActivation<T>())
     {
         if (outputSize <= 0)
         {
