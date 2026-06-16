@@ -11,8 +11,16 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Base test class for regression models implementing IFullModel&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;.
 /// Tests deep mathematical invariants that any correctly implemented regression model must satisfy.
 /// </summary>
-public abstract class RegressionModelTestBase
+public abstract class RegressionModelTestBase : System.IDisposable
 {
+    /// <summary>
+    /// Reclaim memory between tests (shared model-family teardown). xUnit constructs a fresh
+    /// test-class instance per test and calls Dispose() afterward, so this clears the
+    /// InferenceWeightCache and compacts the LOH between model classes — keeping committed memory
+    /// from accumulating across a shard. Pure hygiene; no test-observable behavior change.
+    /// </summary>
+    public void Dispose() => ModelFamilyTestGcGate.ReclaimBetweenTests();
+
     protected abstract IFullModel<double, Matrix<double>, Vector<double>> CreateModel();
 
     protected virtual int TrainSamples => 100;

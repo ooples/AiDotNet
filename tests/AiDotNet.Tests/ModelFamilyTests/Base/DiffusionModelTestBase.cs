@@ -158,19 +158,9 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
     {
         try
         {
-            lock (ModelFamilyTestGcGate.LohCompaction)
-            {
-                // First pass: compacting Gen-2 + LOH reclaims everything unreachable
-                // including the just-Disposed model's weight tensors.
-                GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-                GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
-                GC.WaitForPendingFinalizers();
-
-                // Second pass: finalizer-released memory (e.g. GPU-pool return paths)
-                // and any LOH allocations from finalizers.
-                GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-                GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
-            }
+            // Shared with every model-family base: clears InferenceWeightCache + compacting Gen-2
+            // collect, serialized on the process-global LOH-compaction gate.
+            ModelFamilyTestGcGate.ReclaimBetweenTests();
         }
         finally
         {

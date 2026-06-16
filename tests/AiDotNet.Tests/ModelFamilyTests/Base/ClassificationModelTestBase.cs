@@ -10,8 +10,16 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Base test class for classification models. Tests deep mathematical invariants
 /// that any correctly implemented classifier must satisfy.
 /// </summary>
-public abstract class ClassificationModelTestBase
+public abstract class ClassificationModelTestBase : System.IDisposable
 {
+    /// <summary>
+    /// Reclaim memory between tests (shared model-family teardown). xUnit constructs a fresh
+    /// test-class instance per test and calls Dispose() afterward, so this clears the
+    /// InferenceWeightCache and compacts the LOH between model classes — keeping committed memory
+    /// from accumulating across a shard. Pure hygiene; no test-observable behavior change.
+    /// </summary>
+    public void Dispose() => ModelFamilyTestGcGate.ReclaimBetweenTests();
+
     protected abstract IFullModel<double, Matrix<double>, Vector<double>> CreateModel();
 
     protected virtual int TrainSamples => 120;

@@ -20,6 +20,42 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 internal static class ModelFamilyTestGcGate
 {
     internal static readonly object LohCompaction = new();
+
+    /// <summary>
+    /// Between-test memory reclaim shared by EVERY model-family test base (NeuralNetworks, Diffusion,
+    /// Classification, Regression, TimeSeries, Clustering). Two retention sources let committed memory
+    /// accumulate across a shard's model classes until a heavy shard OOM-kills the 16 GB CI runner even
+    /// though each model is disposed:
+    /// <list type="number">
+    /// <item><b>InferenceWeightCache</b> — fused-MlpForward / SgemmWithCachedB / Conv2D-kernel packs key
+    /// derived weight forms by the weight ARRAY's object identity, pinning disposed models' tensors.</item>
+    /// <item><b>LOH not compacted</b> — plain GC.Collect() sweeps but does not compact the LOH; under
+    /// DOTNET_GCHeapHardLimit (the CI cap) committed-but-free LOH counts against the limit.</item>
+    /// </list>
+    /// This clears the cache and runs a compacting Gen-2 collect, serialized on
+    /// <see cref="LohCompaction"/> because <c>GCSettings.LargeObjectHeapCompactionMode</c> is
+    /// process-global. Pure hygiene — changes no assertion, scale, iteration count, or timeout. On the
+    /// light classical-ML bases the heap is small, so the compacting collect is cheap.
+    /// </summary>
+    internal static void ReclaimBetweenTests()
+    {
+        // Drop process-wide weight-derived caches that pin the disposed model's tensors.
+        AiDotNet.Tensors.Engines.InferenceWeightCache.InvalidateAll();
+
+        lock (LohCompaction)
+        {
+            // First pass: compacting Gen-2 + LOH reclaims everything unreachable, including the
+            // just-disposed model's weight tensors.
+            System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
+            GC.WaitForPendingFinalizers();
+
+            // Second pass: reclaim finalizer-released memory (pool return paths) + any LOH allocations
+            // made by finalizers.
+            System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
+        }
+    }
 }
 
 /// <summary>
@@ -220,22 +256,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// </remarks>
     public virtual Task DisposeAsync()
     {
-        // Drop process-wide weight-derived caches that pin the disposed model's tensors.
-        AiDotNet.Tensors.Engines.InferenceWeightCache.InvalidateAll();
-
-        lock (ModelFamilyTestGcGate.LohCompaction)
-        {
-            // First pass: compacting Gen-2 + LOH reclaims everything unreachable,
-            // including the just-disposed model's weight tensors.
-            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-            GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
-            GC.WaitForPendingFinalizers();
-
-            // Second pass: reclaim finalizer-released memory (pool return paths) and
-            // any LOH allocations made by finalizers.
-            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-            GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
-        }
+        ModelFamilyTestGcGate.ReclaimBetweenTests();
         return Task.CompletedTask;
     }
 

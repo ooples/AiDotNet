@@ -11,8 +11,16 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// that any correctly implemented clustering algorithm must satisfy.
 /// Modeled after the Classification gold standard with domain-specific invariants.
 /// </summary>
-public abstract class ClusteringModelTestBase
+public abstract class ClusteringModelTestBase : System.IDisposable
 {
+    /// <summary>
+    /// Reclaim memory between tests (shared model-family teardown). xUnit constructs a fresh
+    /// test-class instance per test and calls Dispose() afterward, so this clears the
+    /// InferenceWeightCache and compacts the LOH between model classes — keeping committed memory
+    /// from accumulating across a shard. Pure hygiene; no test-observable behavior change.
+    /// </summary>
+    public void Dispose() => ModelFamilyTestGcGate.ReclaimBetweenTests();
+
     protected abstract IFullModel<double, Matrix<double>, Vector<double>> CreateModel();
 
     protected virtual int TrainSamples => 90;
