@@ -4846,6 +4846,34 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Quant-resident inference store selection (Tier 1 / AiDotNet#1622). Picks the streaming-store
+    /// precision for a foundation-scale model in INFERENCE so its weight set stays RESIDENT — no
+    /// per-forward paging I/O, which is the dominant cost of the multi-forward Predict the
+    /// ModelFamily tests run — at the best accuracy that fits <paramref name="residentBudgetBytes"/>:
+    /// <list type="bullet">
+    /// <item>bf16 (2 B/param) when it fits — least lossy, and the current Auto-inference behaviour,
+    /// so models that already fit bf16-resident are unchanged.</item>
+    /// <item>int8-resident (1 B/param, 4x vs fp32, fed by the no-upcast int8 GEMM) when bf16 will
+    /// not fit but int8 will — this is the lever that keeps the mid-size OOM models resident.</item>
+    /// <item>int4-resident (0.5 B/param, 8x) slots in here once the Tensors package exposes
+    /// <c>StreamingStoreDtype.Int4</c>; until then the &gt;int8 case falls through.</item>
+    /// <item>If even the tightest available precision will not fit, return bf16 and let the pool
+    /// page to stay under budget (the existing streaming fallback).</item>
+    /// </list>
+    /// Inference-only: training keeps the Auto policy so fp/bf16 masters are preserved.
+    /// </summary>
+    internal static StreamingStoreDtype ResolveInferenceStoreDtype(long paramCount, long residentBudgetBytes)
+    {
+        if (paramCount <= 0 || residentBudgetBytes <= 0) return StreamingStoreDtype.Auto;
+        long bf16Bytes = paramCount * 2L;
+        if (bf16Bytes <= residentBudgetBytes) return StreamingStoreDtype.Bf16; // bf16-resident
+        if (paramCount <= residentBudgetBytes) return StreamingStoreDtype.Int8; // int8-resident (1 B/param)
+        // int4-resident (paramCount/2 bytes) is the next rung — enabled once the int4-capable
+        // Tensors release is consumed; until then, fall back to bf16 + paging.
+        return StreamingStoreDtype.Bf16;
+    }
+
+    /// <summary>
     /// True once auto-detect has FINALIZED on this instance. Distinct from
     /// "attempted once" because lazy models legitimately need a second
     /// look after the first forward materializes their placeholder weights
@@ -5131,6 +5159,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Tensors-side default rather than getting frozen at the value we
         // pinned today.
         var options = new GpuOffloadOptions();
+        // Quant-resident inference (Tier 1, #1622): for a foundation-scale model in inference, keep
+        // the weights resident at the loosest precision that fits the budget so multi-forward
+        // Predict pays no per-forward paging I/O. Training keeps the Auto policy (fp/bf16 masters).
+        if (!IsTrainingMode)
+            options.StreamingStoreDtype = ResolveInferenceStoreDtype(paramCount, options.StreamingPoolMaxResidentBytes);
         ConfigureWeightLifetime(options);
         _streamingEngagedByAutoDetect = true;
         _streamingAutoDetectFinalized = true;
