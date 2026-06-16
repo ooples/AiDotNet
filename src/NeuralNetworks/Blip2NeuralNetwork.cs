@@ -1528,13 +1528,16 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         }
         else
         {
-            // Start with BOS token (usually token ID 1 for BERT-style tokenizers)
-            prefix = [1];
+            // Resolve BOS from the configured tokenizer — BLIP-2 supports OPT/Flan-T5/custom
+            // tokenizers whose BOS is not the BERT-style id 1.
+            prefix = [GetBosTokenIdNative()];
         }
 
-        // Special token IDs
-        const int eosTokenId = 2;  // EOS token
-        const int padTokenId = 0;  // PAD token
+        // Resolve EOS/PAD from the configured tokenizer rather than hard-coding BERT ids:
+        // a mismatched EOS makes generation run to the full budget, and suppressing a wrong
+        // PAD id can drop a valid token. PAD is optional → null means "no suppression".
+        int eosTokenId = GetEosTokenIdNative();
+        int? padTokenId = GetPadTokenIdNative();
 
         // Running token sequence (prefix + emitted). The shared AutoregressiveDecoder owns the loop +
         // temperature sampling + EOS stop + PAD suppression; the closure runs the per-step decoder
@@ -1604,13 +1607,64 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             maxNewTokens: budget,
             options: options,
             isEndToken: t => t == eosTokenId,
-            suppressToken: t => t == padTokenId);
+            suppressToken: t => padTokenId.HasValue && t == padTokenId.Value);
 
         var generatedTokens = new List<int>(prefix);
         generatedTokens.AddRange(newTokens);
 
         // Decode generated tokens to text
         return _tokenizer.Decode(generatedTokens);
+    }
+
+    /// <summary>
+    /// Resolves the BOS token id from the configured tokenizer (BOS → CLS fallback), so native
+    /// generation works across OPT/Flan-T5/BERT-style tokenizers rather than assuming a fixed id.
+    /// </summary>
+    private int GetBosTokenIdNative()
+    {
+        var specialTokens = _tokenizer.SpecialTokens;
+        if (specialTokens is not null && !string.IsNullOrEmpty(specialTokens.BosToken))
+        {
+            return _tokenizer.Vocabulary.GetTokenId(specialTokens.BosToken);
+        }
+        if (specialTokens is not null && !string.IsNullOrEmpty(specialTokens.ClsToken))
+        {
+            return _tokenizer.Vocabulary.GetTokenId(specialTokens.ClsToken);
+        }
+        return 1; // BERT-style default BOS
+    }
+
+    /// <summary>
+    /// Resolves the EOS token id from the configured tokenizer (EOS → SEP fallback). A correct
+    /// EOS is what lets generation stop early instead of running to the full token budget.
+    /// </summary>
+    private int GetEosTokenIdNative()
+    {
+        var specialTokens = _tokenizer.SpecialTokens;
+        if (specialTokens is not null && !string.IsNullOrEmpty(specialTokens.EosToken))
+        {
+            return _tokenizer.Vocabulary.GetTokenId(specialTokens.EosToken);
+        }
+        if (specialTokens is not null && !string.IsNullOrEmpty(specialTokens.SepToken))
+        {
+            return _tokenizer.Vocabulary.GetTokenId(specialTokens.SepToken);
+        }
+        return 2; // default EOS
+    }
+
+    /// <summary>
+    /// Resolves the PAD token id from the configured tokenizer, or null when the tokenizer
+    /// defines no PAD token — in which case no token is suppressed (suppressing a guessed PAD id
+    /// could silently drop a valid token).
+    /// </summary>
+    private int? GetPadTokenIdNative()
+    {
+        var specialTokens = _tokenizer.SpecialTokens;
+        if (specialTokens is not null && !string.IsNullOrEmpty(specialTokens.PadToken))
+        {
+            return _tokenizer.Vocabulary.GetTokenId(specialTokens.PadToken);
+        }
+        return null;
     }
 
     /// <summary>

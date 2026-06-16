@@ -20,7 +20,7 @@ namespace AiDotNet.Serving.Models;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used by the model.</typeparam>
-public interface IServableGenerativeModel<T>
+internal interface IServableGenerativeModel<T>
 {
     /// <summary>
     /// Gets whether this model supports token-level generation. When false,

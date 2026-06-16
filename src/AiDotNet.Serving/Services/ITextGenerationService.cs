@@ -1,3 +1,4 @@
+using System.Threading;
 using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Models;
 
@@ -22,9 +23,13 @@ public interface ITextGenerationService
     /// <param name="modelName">The name of the model to generate with.</param>
     /// <param name="numericType">The numeric type the model was loaded with.</param>
     /// <param name="request">The generation request (input tokens, limits, sampling, speculation).</param>
+    /// <param name="cancellationToken">
+    /// Cancels the synchronous generation loop (e.g. from <c>HttpContext.RequestAborted</c> on client
+    /// disconnect) so a long-running request stops consuming engine steps instead of running to budget.
+    /// </param>
     /// <returns>
     /// A response containing the generated tokens and statistics. If the model does not support
     /// generation, the response's <see cref="SpeculativeDecodingResponse.Error"/> is populated.
     /// </returns>
-    SpeculativeDecodingResponse Generate(string modelName, NumericType numericType, SpeculativeDecodingRequest request);
+    SpeculativeDecodingResponse Generate(string modelName, NumericType numericType, SpeculativeDecodingRequest request, CancellationToken cancellationToken = default);
 }

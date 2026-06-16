@@ -997,6 +997,10 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         // duplicated hand-rolled loop + SampleWithTemperature).
         var seq = new List<int> { bos };
         var options = new Generation.SamplingOptions { Temperature = temperature };
+        // Cap generation to the positional-embedding window: ForwardDecoderNative only has
+        // positional embeddings for _maxSequenceLength positions, so letting seq grow past it
+        // would hit shape/index failures. Budget is the remaining room after the BOS token.
+        int budget = Math.Max(0, Math.Min(maxLength, _maxSequenceLength - seq.Count));
         var newTokens = Generation.AutoregressiveDecoder<T>.Decode(
             stepLogits: prev =>
             {
@@ -1010,7 +1014,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
                 var logits = ForwardDecoderNative(inputTensor, imageFeatures);
                 return LastPositionLogits(logits);
             },
-            maxNewTokens: maxLength,
+            maxNewTokens: budget,
             options: options,
             isEndToken: t => t == eos);
 

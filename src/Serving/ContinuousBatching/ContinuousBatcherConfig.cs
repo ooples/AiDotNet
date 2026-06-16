@@ -11,9 +11,14 @@ public class ContinuousBatcherConfig
     public BatchSchedulerConfig SchedulerConfig { get; set; } = new();
 
     /// <summary>
+    /// Default end-of-sequence token ID when none is configured.
+    /// </summary>
+    public const int DefaultEosTokenId = 2;
+
+    /// <summary>
     /// End-of-sequence token ID.
     /// </summary>
-    public int EosTokenId { get; set; } = 2;
+    public int EosTokenId { get; set; } = DefaultEosTokenId;
 
     /// <summary>
     /// Milliseconds to sleep when idle.

@@ -310,19 +310,39 @@ public class ContinuousBatchingRequestBatcher : RequestBatcherBase
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            // Stack the inputs into a single batch matrix (one row per request).
-            int batchSize = requests.Count;
-            int inputDim = requests[0].InputLength;
+            // Collect only the validly-typed inputs. A bad-type request is failed immediately and
+            // EXCLUDED from the batch — we must NOT leave a hole in batchMatrix, because the scatter
+            // below maps predictions.GetRow(k) to validRequests[k] by position. Skipping population
+            // while keeping the row (the previous behaviour) misaligns every subsequent request's
+            // result once any request is dropped.
+            var validRequests = new List<ContinuousRequest>(requests.Count);
+            var validInputs = new List<Vector<T>>(requests.Count);
+            foreach (var request in requests)
+            {
+                if (request.Input is Vector<T> inputVector)
+                {
+                    validRequests.Add(request);
+                    validInputs.Add(inputVector);
+                }
+                else
+                {
+                    FailTyped<T>(request, new InvalidOperationException(
+                        $"Request input for model '{modelName}' was not a Vector<{typeof(T).Name}>."));
+                }
+            }
+
+            if (validRequests.Count == 0)
+            {
+                return;
+            }
+
+            // Stack the valid inputs into a single batch matrix (one row per valid request).
+            int batchSize = validRequests.Count;
+            int inputDim = validInputs[0].Length;
             var batchMatrix = new Matrix<T>(batchSize, inputDim);
             for (int i = 0; i < batchSize; i++)
             {
-                if (requests[i].Input is not Vector<T> inputVector)
-                {
-                    FailTyped<T>(requests[i], new InvalidOperationException(
-                        $"Request input for model '{modelName}' was not a Vector<{typeof(T).Name}>."));
-                    continue;
-                }
-
+                var inputVector = validInputs[i];
                 for (int j = 0; j < inputDim; j++)
                 {
                     batchMatrix[i, j] = inputVector[j];
@@ -334,7 +354,7 @@ public class ContinuousBatchingRequestBatcher : RequestBatcherBase
 
             for (int i = 0; i < batchSize; i++)
             {
-                if (requests[i].CompletionSource is TaskCompletionSource<Vector<T>> tcs)
+                if (validRequests[i].CompletionSource is TaskCompletionSource<Vector<T>> tcs)
                 {
                     tcs.TrySetResult(predictions.GetRow(i));
                 }

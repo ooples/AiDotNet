@@ -15,7 +15,7 @@ namespace AiDotNet.NeuralNetworks.Generation;
 /// <see cref="SamplingOptions"/> (no model coupling), so it's fully unit-testable.
 /// </summary>
 /// <typeparam name="T">Numeric type of the logits.</typeparam>
-public static class TokenSampler<T>
+internal static class TokenSampler<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
