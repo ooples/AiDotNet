@@ -229,7 +229,15 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private ICrossValidator<T, TInput, TOutput>? _crossValidator;
     private KnowledgeDistillationOptions<T, TInput, TOutput>? _knowledgeDistillationOptions;
     private MixedPrecisionConfig? _mixedPrecisionConfig;
-    private AiDotNet.Configuration.InferenceOptimizationConfig? _inferenceOptimizationConfig;
+    // #1632 — inference optimizations ON BY DEFAULT (opt-out). The stack (layer fusion +
+    // flash/cached attention) is only ENGAGED if this is non-null, and previously it was null
+    // unless the user called ConfigureInferenceOptimizations() — so the whole built-and-verified
+    // inference stack sat dormant for every model. Default it to the sensible Default config; the
+    // Predict path applies only the STATELESS subset on a CLONE (original untouched) inside a
+    // try/catch fallback, and OptimizeForInference no-ops for models without foldable BatchNorm /
+    // optimizable attention. Opt out by calling ConfigureInferenceOptimizations with disabled flags.
+    private AiDotNet.Configuration.InferenceOptimizationConfig? _inferenceOptimizationConfig
+        = AiDotNet.Configuration.InferenceOptimizationConfig.Default;
     private AiDotNet.Configuration.JitCompilationConfig? _jitCompilationConfig;
     private bool _reportAccelerationAtBuild;
     private Action<string>? _accelerationLogger;
