@@ -7584,13 +7584,47 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
     {
+        if (_baseTrainOptimizer is not null) return _baseTrainOptimizer;
+
+        // G2 (#1624) — 8-bit optimizer state for large models. A standard fp32 Adam keeps two moment
+        // buffers (m, v), each the size of the model: 2x the weights, the dominant training-step memory
+        // cost after the parameters themselves. For models large enough to threaten the 8c/16 GB runner's
+        // budget, switch to Adam8BitOptimizer, which block-quantizes m/v to 8-bit (~0.5x instead of 2x),
+        // saving ~1.5x the model size of RAM per step. 8-bit Adam matches fp32 Adam within tolerance
+        // (parity-tested), so convergence is preserved. Small/medium models keep fp32 for exact
+        // reproducibility. AIDOTNET_ADAM8BIT=0 forces fp32 everywhere; =1 forces 8-bit (for testing).
+        if (ShouldUseEightBitOptimizer())
+            return _baseTrainOptimizer = new Adam8BitOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
         // Standard Adam with AMSGrad pinned OFF locally (not relying on the
         // AdamOptimizerOptions default) so the fused compiled-training kernel can map
         // this optimizer and engage — if that external default ever flips, the fused
         // fast path must not silently regress.
-        return _baseTrainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+        return _baseTrainOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { UseAMSGrad = false });
+    }
+
+    /// <summary>
+    /// G2 engagement decision: whether to use the 8-bit Adam optimizer (quantized moment state) for this
+    /// model. Honors <c>AIDOTNET_ADAM8BIT</c> (0/false/off → never; 1/true/on → always), else engages when
+    /// the model's <see cref="ParameterCount"/> is large enough that its fp32 optimizer state (2x weights)
+    /// is a meaningful slice of a tight memory budget (default ≥ 16M params).
+    /// </summary>
+    private bool ShouldUseEightBitOptimizer()
+    {
+        var env = Environment.GetEnvironmentVariable("AIDOTNET_ADAM8BIT");
+        if (env is not null)
+        {
+            if (env == "0" || string.Equals(env, "false", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(env, "off", StringComparison.OrdinalIgnoreCase))
+                return false;
+            if (env == "1" || string.Equals(env, "true", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(env, "on", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        const long eightBitParamThreshold = 16_000_000L; // ~128 MB fp32 weights ⇒ ~256 MB fp32 Adam state
+        return ParameterCount >= eightBitParamThreshold;
     }
 
     /// <summary>
