@@ -25,8 +25,11 @@ namespace AiDotNet.Tests.Fixtures;
 /// </summary>
 public sealed class FoundationScaleCpuFixture : IDisposable
 {
+    private readonly int _originalMaxDegreeOfParallelism;
+
     public FoundationScaleCpuFixture()
     {
+        _originalMaxDegreeOfParallelism = CpuParallelSettings.MaxDegreeOfParallelism;
         TestModuleInitializer.EnsureInitialized();
         // Serialized → no concurrent test contends, so let the heavy forward use every core.
         // (Defensive: restore the all-cores default in case an earlier test capped it.)
@@ -34,7 +37,12 @@ public sealed class FoundationScaleCpuFixture : IDisposable
             CpuParallelSettings.MaxDegreeOfParallelism = Environment.ProcessorCount;
     }
 
-    public void Dispose() { }
+    // Restore the global parallelism setting so this collection's mutation doesn't leak into
+    // later test collections and reintroduce nondeterministic core contention / flakiness.
+    public void Dispose()
+    {
+        CpuParallelSettings.MaxDegreeOfParallelism = _originalMaxDegreeOfParallelism;
+    }
 }
 
 /// <summary>
