@@ -5319,6 +5319,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // <c>[B,C,H,W]</c> / <c>[B,seq,F]</c> / <c>[B,F]</c> — both work.
         (input, expectedOutput) = NormalizeBatchDim(input, expectedOutput);
 
+        // G8 (#1624) — gradient micro-batch accumulation. For a large model with a batch big enough to
+        // make activations a memory problem, process the batch in small chunks (forward+backward per
+        // chunk, accumulate gradients, one optimizer step) to cap the activation peak that OOMs the
+        // 8c/16 GB runner. This is gradient-EQUIVALENT to the full-batch step (verified by the Issue1296
+        // accumulation test) EXCEPT for cross-batch normalization (BatchNorm computes per-chunk batch
+        // statistics), so it is gated to models without a BatchNorm layer. AIDOTNET_MICROBATCH=0 disables.
+        if (ShouldMicroBatch(input))
+        {
+            TrainWithGradientAccumulation(input, expectedOutput, MicroBatchChunkSize);
+            return;
+        }
+
         SetTrainingMode(true);
         try
         {
@@ -7625,6 +7637,67 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
         const long eightBitParamThreshold = 16_000_000L; // ~128 MB fp32 weights ⇒ ~256 MB fp32 Adam state
         return ParameterCount >= eightBitParamThreshold;
+    }
+
+    /// <summary>G8 micro-batch chunk size: the per-step batch processed at once when accumulating.</summary>
+    private const int MicroBatchChunkSize = 8;
+
+    private bool? _hasCrossBatchNormCached;
+
+    /// <summary>
+    /// G8 engagement decision: micro-batch this training step only when it is both safe and useful —
+    /// the batch is larger than <see cref="MicroBatchChunkSize"/>, the model is large enough to risk an
+    /// activation-driven OOM (≥ 16M params), it trains through the tape with a <c>LossFunctionBase</c>
+    /// (required by <see cref="TrainWithGradientAccumulation"/>), and it has NO BatchNorm layer (whose
+    /// per-chunk batch statistics would make accumulation non-equivalent to the full-batch step).
+    /// <c>AIDOTNET_MICROBATCH=0</c> disables it.
+    /// </summary>
+    private bool ShouldMicroBatch(Tensor<T> input)
+    {
+        var env = Environment.GetEnvironmentVariable("AIDOTNET_MICROBATCH");
+        if (env is "0" || string.Equals(env, "false", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(env, "off", StringComparison.OrdinalIgnoreCase))
+            return false;
+        bool force = env is "1" || string.Equals(env, "true", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(env, "on", StringComparison.OrdinalIgnoreCase);
+
+        // Correctness-necessary gates (apply even when forced): a batch big enough to chunk, a tape loss,
+        // and no cross-batch normalization (else accumulation ≠ full-batch step).
+        if (input.Rank < 1 || input.Shape[0] <= MicroBatchChunkSize) return false;
+        if (LossFunction is not LossFunctions.LossFunctionBase<T>) return false;
+        if (HasCrossBatchNormalization()) return false;
+        // Engagement heuristic (skipped when forced): only worth the extra steps for large models.
+        if (!force && ParameterCount < 16_000_000L) return false;
+
+        // Must have tape-trainable parameters (the accumulation path forwards/backwards through the tape).
+        if (Training.TapeTrainingStep<T>.CollectParameters(Layers).Count == 0)
+        {
+            using var e = GetExtraTrainableTensors().GetEnumerator();
+            if (!e.MoveNext()) return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Whether any layer reachable from this model performs cross-batch normalization (a BatchNorm layer),
+    /// whose statistics depend on the whole batch — making G8 micro-batching non-equivalent. Cached; the
+    /// layer graph is stable after construction. LayerNorm/GroupNorm/InstanceNorm/RMSNorm are per-sample
+    /// and therefore micro-batch-safe.
+    /// </summary>
+    private bool HasCrossBatchNormalization()
+    {
+        if (_hasCrossBatchNormCached is { } cached) return cached;
+        bool found = false;
+        foreach (var layer in AiDotNet.Helpers.CopyOnWriteCloneHelper.CollectTrainableLayers<T>(this))
+        {
+            if (layer is AiDotNet.NeuralNetworks.Layers.BatchNormalizationLayer<T>)
+            {
+                found = true;
+                break;
+            }
+        }
+        _hasCrossBatchNormCached = found;
+        return found;
     }
 
     /// <summary>
