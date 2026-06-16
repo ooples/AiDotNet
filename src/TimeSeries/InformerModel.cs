@@ -431,7 +431,15 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
             Engine.TensorMatMul(inputTensor, Engine.Reshape(_inputProjection, new[] { 1, embDim })), posTensor);
 
         var enc = embedded;
-        for (int i = 0; i < _encoderLayers.Count; i++) enc = EncoderLayerEngine(enc, i);
+        for (int i = 0; i < _encoderLayers.Count; i++)
+        {
+            enc = EncoderLayerEngine(enc, i);
+            // Self-attention distilling between encoder layers (not after the last): halve the
+            // sequence so the stack privileges dominant features. The decoder cross-attention
+            // handles the shortened encoder memory (it already supports differing q/kv lengths).
+            if (i < _encoderLayers.Count - 1 && i < _distillingLayers.Count)
+                enc = DistillEngine(enc, i);
+        }
 
         // Decoder input (Informer generative decoder, Zhou et al. 2021 §3.3): the
         // start token is the input sequence's tail, which carries the series level.
@@ -467,13 +475,114 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         return Engine.Reshape(o4, new[] { sq, e });
     }
 
+    // ProbSparse self-attention (Zhou et al. 2021, "Informer", §3.2), Engine/tape version. Each query's
+    // sparsity measure M(q_i,K) = max_j(s_ij) - mean_j(s_ij) (s = q·kᵀ/√d) ranks queries; only the
+    // top-u = round(c·ln(Lq)) "active" queries take full attention, the rest ("lazy" queries) take the
+    // mean of V — exactly the paper's output semantics. The top-u SELECTION is data-dependent
+    // (non-differentiable, as in the official impl); gradients flow through the full-attention output,
+    // the mean-V, and the constant active/lazy mask. When u >= Lq (small sequences) every query is
+    // active and this reduces EXACTLY to full attention.
+    private Tensor<T> ProbSparseAttend(Tensor<T> q, Tensor<T> k, Tensor<T> v)
+    {
+        int lq = q.Shape[0], d = q.Shape[1], lk = k.Shape[0];
+        var attn = Attend(q, k, v); // full attention output [lq, d] (used by active queries)
+
+        int u = Math.Max(1, (int)Math.Round(SparsityFactor * Math.Log(Math.Max(2.0, lq))));
+        if (u >= lq) return attn; // all queries active → ProbSparse == full attention
+
+        // Sparsity measure per query (host read for the non-diff top-u selection).
+        var scores = Engine.TensorMultiplyScalar(
+            Engine.TensorMatMul(q, Engine.TensorTranspose(k)), _numOps.FromDouble(1.0 / Math.Sqrt(d))); // [lq, lk]
+        var measure = new double[lq];
+        for (int i = 0; i < lq; i++)
+        {
+            double mx = double.NegativeInfinity, sum = 0.0;
+            for (int j = 0; j < lk; j++)
+            {
+                double s = _numOps.ToDouble(scores[i * lk + j]);
+                if (s > mx) mx = s;
+                sum += s;
+            }
+            measure[i] = mx - sum / lk;
+        }
+        var active = new bool[lq];
+        foreach (var i in Enumerable.Range(0, lq).OrderByDescending(i => measure[i]).Take(u)) active[i] = true;
+
+        // Lazy queries get mean(V) over keys (broadcast across query positions).
+        var meanV = Engine.TensorMultiplyScalar(
+            Engine.ReduceSum(v, new[] { 0 }, keepDims: true), _numOps.FromDouble(1.0 / lk)); // [1, d]
+        var meanVBroadcast = Engine.TensorBroadcastAdd(new Tensor<T>(new[] { lq, d }), meanV); // [lq, d]
+
+        // out = mask⊙attn + (1-mask)⊙meanV. mask/inv are constant data-dependent gates.
+        var maskData = new Vector<T>(lq);
+        var invData = new Vector<T>(lq);
+        for (int i = 0; i < lq; i++)
+        {
+            maskData[i] = active[i] ? _numOps.One : _numOps.Zero;
+            invData[i] = active[i] ? _numOps.Zero : _numOps.One;
+        }
+        var mask = new Tensor<T>(new[] { lq, 1 }, maskData);
+        var inv = new Tensor<T>(new[] { lq, 1 }, invData);
+        return Engine.TensorAdd(
+            Engine.TensorBroadcastMultiply(attn, mask),
+            Engine.TensorBroadcastMultiply(meanVBroadcast, inv));
+    }
+
     private Tensor<T> AddBias(Tensor<T> x, Tensor<T> bias)
         => Engine.TensorBroadcastAdd(x, Engine.Reshape(bias, new[] { 1, bias.Shape[0] }));
+
+    // Self-attention distilling (Zhou et al. 2021, "Informer", §3.2), Engine/tape version: a depthwise
+    // 1-D conv (kernel 3) + ELU + stride-`factor` max-pool that HALVES the sequence between encoder
+    // layers, privileging dominant attention features and shrinking the memory footprint of the stack.
+    // Uses the DistillingConvTensor's weights as tape sources so they actually train on the tape path
+    // (they were previously dead — counted/serialized but never in the IEngine forward).
+    private Tensor<T> DistillEngine(Tensor<T> x, int distillIdx)
+    {
+        var distill = _distillingLayers[distillIdx];
+        int seqLen = x.Shape[0];
+        int embDim = x.Shape[1];
+        if (seqLen < 2) return x; // nothing to compress
+
+        var w = distill.GetConvWeights();   // [embDim, 3]
+        var bias = distill.GetConvBias();   // [embDim]
+        int factor = distill.DistillingFactor;
+
+        // Depthwise conv (per channel, kernel 3): conv[t,d] = bias[d] + Σ_k w[d,k]·x[t+k-1, d].
+        // Shift x by ±1 with zero padding at the boundaries (Narrow + zero-row Concat).
+        var zeroRow = new Tensor<T>(new[] { 1, embDim });
+        var xLeft = Engine.Concat(new[] { zeroRow, Engine.TensorNarrow(x, 0, 0, seqLen - 1) }, 0);  // x[t-1]
+        var xRight = Engine.Concat(new[] { Engine.TensorNarrow(x, 0, 1, seqLen - 1), zeroRow }, 0); // x[t+1]
+        var w0 = Engine.Reshape(Engine.TensorNarrow(w, 1, 0, 1), new[] { 1, embDim }); // w[:,0]
+        var w1 = Engine.Reshape(Engine.TensorNarrow(w, 1, 1, 1), new[] { 1, embDim }); // w[:,1]
+        var w2 = Engine.Reshape(Engine.TensorNarrow(w, 1, 2, 1), new[] { 1, embDim }); // w[:,2]
+        var conv = Engine.TensorAdd(
+            Engine.TensorAdd(
+                Engine.TensorBroadcastMultiply(xLeft, w0),
+                Engine.TensorBroadcastMultiply(x, w1)),
+            Engine.TensorBroadcastMultiply(xRight, w2));
+        conv = Engine.ELU(Engine.TensorBroadcastAdd(conv, Engine.Reshape(bias, new[] { 1, embDim })));
+
+        // Stride-`factor` max-pool: pad (replicate last row) to a multiple of factor, reshape to
+        // [outLen, factor, embDim], max over the window axis.
+        int outLen = (seqLen + factor - 1) / factor;
+        int padded = outLen * factor;
+        Tensor<T> poolInput = conv;
+        if (padded != seqLen)
+        {
+            var last = Engine.TensorNarrow(conv, 0, seqLen - 1, 1);
+            var parts = new Tensor<T>[1 + (padded - seqLen)];
+            parts[0] = conv;
+            for (int r = 1; r < parts.Length; r++) parts[r] = last;
+            poolInput = Engine.Concat(parts, 0);
+        }
+        var grouped = Engine.Reshape(poolInput, new[] { outLen, factor, embDim });
+        return Engine.ReduceMax(grouped, new[] { 1 }, keepDims: false, out _); // [outLen, embDim]
+    }
 
     private Tensor<T> EncoderLayerEngine(Tensor<T> x, int layerIdx)
     {
         var l = _encoderLayers[layerIdx];
-        var attn = Attend(Engine.TensorMatMul(x, l.GetQueryProjection()),
+        var attn = ProbSparseAttend(Engine.TensorMatMul(x, l.GetQueryProjection()),
             Engine.TensorMatMul(x, l.GetKeyProjection()), Engine.TensorMatMul(x, l.GetValueProjection()));
         var projected = Engine.TensorMatMul(attn, l.GetOutputProjection());
         var norm1 = Engine.LayerNorm(Engine.TensorAdd(x, projected),
@@ -489,7 +598,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     private Tensor<T> DecoderLayerEngine(Tensor<T> dec, Tensor<T> enc, int layerIdx)
     {
         var l = _decoderLayers[layerIdx];
-        var selfProj = Engine.TensorMatMul(Attend(
+        var selfProj = Engine.TensorMatMul(ProbSparseAttend(
             Engine.TensorMatMul(dec, l.GetSelfQueryProjection()), Engine.TensorMatMul(dec, l.GetSelfKeyProjection()),
             Engine.TensorMatMul(dec, l.GetSelfValueProjection())), l.GetSelfOutputProjection());
         var norm1 = Engine.LayerNorm(Engine.TensorAdd(dec, selfProj),
@@ -1441,6 +1550,12 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     private List<Tensor<T>>? _cachedInput;
 
     public override long ParameterCount => _convWeights.Length + _convBias.Length;
+
+    // Tape accessors so the IEngine forward can run the distilling conv/pool as tracked ops
+    // (the [embDim,3] depthwise kernel + [embDim] bias + the stride factor).
+    internal Tensor<T> GetConvWeights() => _convWeights;
+    internal Tensor<T> GetConvBias() => _convBias;
+    internal int DistillingFactor => _distillingFactor;
 
     public override bool SupportsTraining => true;
     public override void ResetState() { }

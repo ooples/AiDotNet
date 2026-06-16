@@ -646,6 +646,82 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         return Engine.Reshape(o4, new[] { sq, e });
     }
 
+    // Auto-correlation attention (Wu et al. 2021, "Autoformer", §3.1) on 2-D [seq, embDim] tensors,
+    // built from IEngine ops so the gradient tape differentiates Autoformer's DEFINING time-delay
+    // aggregation rather than the generic scaled-dot-product attention it would otherwise reduce to.
+    // For each delay lag, the series auto-correlation R(lag) = mean over (t, d) of q[t]·k[t+lag]; the
+    // top-k = round(factor·ln(L)) delays are softmax-weighted and used to aggregate the VALUE series
+    // rolled by those delays (out[t] = Σ_i softmax(R)_i · v[(t+lag_i) mod L]). The top-k SELECTION is
+    // data-dependent (non-differentiable, exactly as in the official implementation), but the gradient
+    // still flows through the softmax weights (gathered R values → q, k) and through the rolled v.
+    private Tensor<T> AutoCorrelationEngine(Tensor<T> q, Tensor<T> k, Tensor<T> v)
+    {
+        int lq = q.Shape[0];
+        int d = q.Shape[1];
+        int lk = k.Shape[0];
+        int corrLen = Math.Min(lq, lk);
+        if (corrLen <= 0) return v;
+
+        int topK = Math.Max(1, (int)Math.Round(_options.AutoCorrelationFactor * Math.Log(Math.Max(2.0, corrLen))));
+        topK = Math.Min(topK, corrLen);
+
+        // R[lag] = mean_{t < corrLen-lag, dim} q[t]·k[t+lag], lag in [0, corrLen). Tape-tracked.
+        var corrParts = new Tensor<T>[corrLen];
+        for (int lag = 0; lag < corrLen; lag++)
+        {
+            int valid = corrLen - lag;
+            var qSlice = Engine.TensorNarrow(q, 0, 0, valid);
+            var kSlice = Engine.TensorNarrow(k, 0, lag, valid);
+            var summed = Engine.ReduceSum(Engine.TensorMultiply(qSlice, kSlice), new[] { 0, 1 }, keepDims: false);
+            corrParts[lag] = Engine.TensorMultiplyScalar(
+                Engine.Reshape(summed, new[] { 1 }), _numOps.FromDouble(1.0 / (valid * d)));
+        }
+        var corr = Engine.Concat(corrParts, 0); // [corrLen]
+
+        // Top-k delays by correlation value (host read of the forward values; the index choice is
+        // non-differentiable, like the paper's topk over the autocorrelation spectrum).
+        var corrVals = new double[corrLen];
+        for (int lag = 0; lag < corrLen; lag++) corrVals[lag] = _numOps.ToDouble(corr[lag]);
+        var topLags = Enumerable.Range(0, corrLen)
+            .OrderByDescending(i => corrVals[i])
+            .Take(topK)
+            .ToArray();
+
+        // Softmax over the gathered top-k correlation values → aggregation weights (tape-tracked).
+        var gatheredParts = new Tensor<T>[topLags.Length];
+        for (int i = 0; i < topLags.Length; i++)
+            gatheredParts[i] = Engine.TensorNarrow(corr, 0, topLags[i], 1);
+        var weights = Engine.Softmax(Engine.Concat(gatheredParts, 0)); // [topK]
+
+        // Aggregate: out[t,d] = Σ_i weights[i] · v[(t + lag_i) mod lk, d], for t in [0, lq).
+        var w0 = Engine.Reshape(Engine.TensorNarrow(weights, 0, 0, 1), new[] { 1, 1 });
+        var agg = Engine.TensorBroadcastMultiply(RollAndFit(v, topLags[0], lk, lq), w0);
+        for (int i = 1; i < topLags.Length; i++)
+        {
+            var rolled = RollAndFit(v, topLags[i], lk, lq);
+            var wi = Engine.Reshape(Engine.TensorNarrow(weights, 0, i, 1), new[] { 1, 1 });
+            agg = Engine.TensorAdd(agg, Engine.TensorBroadcastMultiply(rolled, wi));
+        }
+        return agg;
+    }
+
+    // Circular roll of a [lk, d] sequence by `lag` so result[t] = v[(t + lag) mod lk], then fit to
+    // length outLen (truncate, or tile-then-truncate when outLen > lk). Built from Narrow/Concat —
+    // no per-element indexing — so it stays on the gradient tape.
+    private Tensor<T> RollAndFit(Tensor<T> v, int lag, int lk, int outLen)
+    {
+        lag %= lk;
+        Tensor<T> rolled = lag == 0
+            ? v
+            : Engine.Concat(new[] { Engine.TensorNarrow(v, 0, lag, lk - lag), Engine.TensorNarrow(v, 0, 0, lag) }, 0);
+        if (outLen == lk) return rolled;
+        if (outLen < lk) return Engine.TensorNarrow(rolled, 0, 0, outLen);
+        int reps = (outLen + lk - 1) / lk;
+        var parts = new Tensor<T>[reps];
+        for (int r = 0; r < reps; r++) parts[r] = rolled;
+        return Engine.TensorNarrow(Engine.Concat(parts, 0), 0, 0, outLen);
+    }
+
     private (Tensor<T> seasonal, Tensor<T> trend) EncoderLayerEngine(Tensor<T> seasonal, Tensor<T> trend, int layerIdx)
     {
         var layer = _encoderLayers[layerIdx];
@@ -655,7 +731,7 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         var q = Engine.TensorMatMul(seasonal, layer.GetQueryProjection());
         var k = Engine.TensorMatMul(seasonal, layer.GetKeyProjection());
         var v = Engine.TensorMatMul(seasonal, layer.GetValueProjection());
-        var attn = Attend(q, k, v);
+        var attn = AutoCorrelationEngine(q, k, v);
         var projected = Engine.TensorMatMul(attn, layer.GetOutputProjection());
         var residual = Engine.TensorAdd(seasonal, projected);
         var normalized = Engine.LayerNorm(residual, layer.GetLayerNorm1Gamma(), layer.GetLayerNorm1Beta(),
@@ -684,7 +760,7 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         var sq = Engine.TensorMatMul(decSeasonal, layer.GetSelfQueryProjection());
         var sk = Engine.TensorMatMul(decSeasonal, layer.GetSelfKeyProjection());
         var sv = Engine.TensorMatMul(decSeasonal, layer.GetSelfValueProjection());
-        var selfAttn = Attend(sq, sk, sv);
+        var selfAttn = AutoCorrelationEngine(sq, sk, sv);
         var selfProjected = Engine.TensorMatMul(selfAttn, layer.GetSelfOutputProjection());
         var norm1 = Engine.LayerNorm(Engine.TensorAdd(decSeasonal, selfProjected),
             layer.GetLayerNorm1Gamma(), layer.GetLayerNorm1Beta(), 1e-6, out _, out _);
@@ -692,7 +768,7 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         var cq = Engine.TensorMatMul(norm1, layer.GetCrossQueryProjection());
         var ck = Engine.TensorMatMul(encSeasonal, layer.GetCrossKeyProjection());
         var cv = Engine.TensorMatMul(encSeasonal, layer.GetCrossValueProjection());
-        var crossAttn = Attend(cq, ck, cv);
+        var crossAttn = AutoCorrelationEngine(cq, ck, cv);
         var crossProjected = Engine.TensorMatMul(crossAttn, layer.GetCrossOutputProjection());
         var norm2 = Engine.LayerNorm(Engine.TensorAdd(norm1, crossProjected),
             layer.GetLayerNorm2Gamma(), layer.GetLayerNorm2Beta(), 1e-6, out _, out _);
