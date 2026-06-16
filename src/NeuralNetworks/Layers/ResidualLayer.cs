@@ -421,6 +421,11 @@ public class ResidualLayer<T> : LayerBase<T>
     /// </remarks>
     public void SetInnerLayer(ILayer<T> innerLayer)
     {
+        // Unregister the layer being replaced first — RegisterSubLayer APPENDS without
+        // dedup, so without this a post-construction SetInnerLayer would leave the old
+        // inner layer in GetSubLayers() alongside the new one, and gradient-tape training
+        // would collect (and try to optimize) the stale layer's parameters too.
+        if (_innerLayer != null) UnregisterSubLayer(_innerLayer);
         _innerLayer = innerLayer;
         // Register so gradient-tape training collects the new inner layer's params.
         if (innerLayer != null) RegisterSubLayer(innerLayer);

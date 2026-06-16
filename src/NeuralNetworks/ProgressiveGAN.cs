@@ -843,6 +843,51 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
     #region Generation
 
     /// <summary>
+    /// Projects a latent/noise tensor into the generator's DECLARED input volume
+    /// (<c>Generator.Architecture.GetInputShape()</c>), copying the overlap and zero-padding the
+    /// tail, with a leading batch axis. Shared by every generation entry point so none regresses
+    /// to the old ceil(sqrt(LatentSize)) square grid that mismatched the generator's input grid
+    /// and threw a weight-shape error. Bulk span copies (vectorized memcpy), never per-element loops.
+    /// </summary>
+    private Tensor<T> ProjectLatentToGeneratorInputShape(Tensor<T> latentCodes)
+    {
+        int[] genInputShape = Generator.Architecture.GetInputShape();
+        int genInputSize = 1;
+        foreach (int d in genInputShape) genInputSize *= d;
+
+        if (latentCodes.Shape.Length == 1)
+        {
+            int latentLen = latentCodes.Shape[0];
+            int copy = Math.Min(latentLen, genInputSize);
+            var batchShape = new int[genInputShape.Length + 1];
+            batchShape[0] = 1;
+            for (int i = 0; i < genInputShape.Length; i++)
+                batchShape[i + 1] = genInputShape[i];
+            var flat = new Tensor<T>([genInputSize]);
+            latentCodes.Data.Span.Slice(0, copy).CopyTo(flat.Data.Span);
+            return flat.Reshape(batchShape);
+        }
+        if (latentCodes.Shape.Length == 2)
+        {
+            int batchSize = latentCodes.Shape[0];
+            int latentLen = latentCodes.Shape[1];
+            int copy = Math.Min(latentLen, genInputSize);
+            var batchShape = new int[genInputShape.Length + 1];
+            batchShape[0] = batchSize;
+            for (int i = 0; i < genInputShape.Length; i++)
+                batchShape[i + 1] = genInputShape[i];
+            var flat = new Tensor<T>([batchSize, genInputSize]);
+            var src = latentCodes.Data.Span;
+            var dst = flat.Data.Span;
+            for (int b = 0; b < batchSize; b++)
+                src.Slice(b * latentLen, copy).CopyTo(dst.Slice(b * genInputSize, copy));
+            return flat.Reshape(batchShape);
+        }
+        // Already in the generator's expected rank — use as-is.
+        return latentCodes;
+    }
+
+    /// <summary>
     /// Generates images from random latent codes.
     /// </summary>
     /// <param name="numImages">Number of images to generate</param>
@@ -857,27 +902,11 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
         Generator.SetTrainingMode(false);
         var noise = GenerateGaussianNoise(numImages);
 
-        // Reshape noise to 4D format for CNN generator: [batch, latent_size] -> [batch, 1, h, w]
-        int h = (int)Math.Ceiling(Math.Sqrt(LatentSize));
-        int w = h;
-        int padSize = h * w - LatentSize;
-        Tensor<T> reshapedNoise;
-        if (padSize > 0)
-        {
-            var padded = new Tensor<T>([numImages, h * w]);
-            for (int b = 0; b < numImages; b++)
-            {
-                for (int i = 0; i < LatentSize; i++)
-                    padded[b, i] = noise[b, i];
-                for (int i = LatentSize; i < h * w; i++)
-                    padded[b, i] = NumOps.Zero;
-            }
-            reshapedNoise = padded.Reshape(numImages, 1, h, w);
-        }
-        else
-        {
-            reshapedNoise = noise.Reshape(numImages, 1, h, w);
-        }
+        // Project the noise into the generator's DECLARED input volume via the same
+        // helper the latent-code Generate overload uses, instead of the old
+        // ceil(sqrt(LatentSize)) square grid that did not match the generator's actual
+        // input grid and threw a weight-shape mismatch.
+        var reshapedNoise = ProjectLatentToGeneratorInputShape(noise);
 
         var newOutput = Generator.Predict(reshapedNoise);
 
@@ -908,44 +937,7 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
         // indexer loops; the zero-initialized buffer supplies the padding tail.
         // The generator expects a batched input, so the per-sample input shape is
         // prefixed with a batch dimension.
-        int[] genInputShape = Generator.Architecture.GetInputShape();
-        int genInputSize = 1;
-        foreach (int d in genInputShape) genInputSize *= d;
-
-        Tensor<T> reshapedLatent;
-        if (latentCodes.Shape.Length == 1)
-        {
-            int latentLen = latentCodes.Shape[0];
-            int copy = Math.Min(latentLen, genInputSize);
-            var batchShape = new int[genInputShape.Length + 1];
-            batchShape[0] = 1;
-            for (int i = 0; i < genInputShape.Length; i++)
-                batchShape[i + 1] = genInputShape[i];
-            var flat = new Tensor<T>([genInputSize]);
-            latentCodes.Data.Span.Slice(0, copy).CopyTo(flat.Data.Span);
-            reshapedLatent = flat.Reshape(batchShape);
-        }
-        else if (latentCodes.Shape.Length == 2)
-        {
-            int batchSize = latentCodes.Shape[0];
-            int latentLen = latentCodes.Shape[1];
-            int copy = Math.Min(latentLen, genInputSize);
-            var batchShape = new int[genInputShape.Length + 1];
-            batchShape[0] = batchSize;
-            for (int i = 0; i < genInputShape.Length; i++)
-                batchShape[i + 1] = genInputShape[i];
-            var flat = new Tensor<T>([batchSize, genInputSize]);
-            var src = latentCodes.Data.Span;
-            var dst = flat.Data.Span;
-            for (int b = 0; b < batchSize; b++)
-                src.Slice(b * latentLen, copy).CopyTo(dst.Slice(b * genInputSize, copy));
-            reshapedLatent = flat.Reshape(batchShape);
-        }
-        else
-        {
-            // Already in the generator's expected rank — use as-is.
-            reshapedLatent = latentCodes;
-        }
+        var reshapedLatent = ProjectLatentToGeneratorInputShape(latentCodes);
 
         var newOutput = Generator.Predict(reshapedLatent);
 

@@ -315,7 +315,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
                 var allGrads = tape.ComputeGradients(lossTensor, sources: null);
 
                 var grads = new Dictionary<Tensor<T>, Tensor<T>>(
-                    Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                    AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
                 foreach (var param in allParams)
                     if (allGrads.TryGetValue(param, out var g)) grads[param] = g;
 
@@ -802,39 +802,19 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     public Vector<T> ForecastHorizon(Vector<T> input)
     {
-        var result = new Vector<T>(_options.ForecastHorizon);
+        int forecastHorizon = _options.ForecastHorizon;
+        var result = new Vector<T>(forecastHorizon);
 
-        // Embed input
-        var embedded = EmbedInput(input);
-
-        // Encoder forward with distilling
-        var encoderOutput = embedded;
-        for (int i = 0; i < _encoderLayers.Count; i++)
+        // Use the SAME IEngine-op forward as training and PredictSingle so the multi-horizon
+        // forecast comes from the trained architecture. The old manual encoder/decoder path here
+        // could diverge from what ForwardEngine actually trains. ForwardEngine produces the full
+        // forecast horizon (PredictSingle reads element 0).
+        var output = ForwardEngine(input);
+        for (int h = 0; h < forecastHorizon; h++)
         {
-            encoderOutput = _encoderLayers[i].Forward(encoderOutput);
-            if (i < _distillingLayers.Count)
-            {
-                encoderOutput = _distillingLayers[i].Forward(encoderOutput);
-            }
-        }
-
-        // Decoder forward
-        var decoderInput = CreateDecoderInput();
-        for (int i = 0; i < _decoderLayers.Count; i++)
-        {
-            decoderInput = _decoderLayers[i].Forward(decoderInput, encoderOutput);
-        }
-
-        // Output projection for all forecast positions
-        for (int t = 0; t < _options.ForecastHorizon && t < decoderInput.Count; t++)
-        {
-            T value = _outputBias[t];
-            for (int j = 0; j < Math.Min(_options.EmbeddingDim, decoderInput[t].Length); j++)
-            {
-                value = _numOps.Add(value, _numOps.Multiply(
-                    _outputProjection[t * _options.EmbeddingDim + j], decoderInput[t][j]));
-            }
-            result[t] = value;
+            result[h] = h < output.Length
+                ? output[h]
+                : (output.Length > 0 ? output[output.Length - 1] : _numOps.Zero);
         }
 
         return result;
@@ -1080,18 +1060,18 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
 
     // Multi-head attention weights (Tensor-based)
     private readonly Tensor<T> _queryProj;
-    public Tensor<T> GetQueryProjection() => _queryProj;
-    public Tensor<T> GetKeyProjection() => _keyProj;
-    public Tensor<T> GetValueProjection() => _valueProj;
-    public Tensor<T> GetOutputProjection() => _outputProj;
-    public Tensor<T> GetFF1Weight() => _ffn1;
-    public Tensor<T> GetFF1Bias() => _ffn1Bias;
-    public Tensor<T> GetFF2Weight() => _ffn2;
-    public Tensor<T> GetFF2Bias() => _ffn2Bias;
-    public Tensor<T> GetLayerNorm1Gamma() => _layerNorm1Gamma;
-    public Tensor<T> GetLayerNorm1Beta() => _layerNorm1Beta;
-    public Tensor<T> GetLayerNorm2Gamma() => _layerNorm2Gamma;
-    public Tensor<T> GetLayerNorm2Beta() => _layerNorm2Beta;
+    internal Tensor<T> GetQueryProjection() => _queryProj;
+    internal Tensor<T> GetKeyProjection() => _keyProj;
+    internal Tensor<T> GetValueProjection() => _valueProj;
+    internal Tensor<T> GetOutputProjection() => _outputProj;
+    internal Tensor<T> GetFF1Weight() => _ffn1;
+    internal Tensor<T> GetFF1Bias() => _ffn1Bias;
+    internal Tensor<T> GetFF2Weight() => _ffn2;
+    internal Tensor<T> GetFF2Bias() => _ffn2Bias;
+    internal Tensor<T> GetLayerNorm1Gamma() => _layerNorm1Gamma;
+    internal Tensor<T> GetLayerNorm1Beta() => _layerNorm1Beta;
+    internal Tensor<T> GetLayerNorm2Gamma() => _layerNorm2Gamma;
+    internal Tensor<T> GetLayerNorm2Beta() => _layerNorm2Beta;
     private readonly Tensor<T> _keyProj;
     private readonly Tensor<T> _valueProj;
     private readonly Tensor<T> _outputProj;
@@ -1705,24 +1685,24 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     private readonly Tensor<T> _layerNorm2Beta;
     private readonly Tensor<T> _layerNorm3Gamma;
     private readonly Tensor<T> _layerNorm3Beta;
-    public Tensor<T> GetSelfQueryProjection() => _selfQueryProj;
-    public Tensor<T> GetSelfKeyProjection() => _selfKeyProj;
-    public Tensor<T> GetSelfValueProjection() => _selfValueProj;
-    public Tensor<T> GetSelfOutputProjection() => _selfOutputProj;
-    public Tensor<T> GetCrossQueryProjection() => _crossQueryProj;
-    public Tensor<T> GetCrossKeyProjection() => _crossKeyProj;
-    public Tensor<T> GetCrossValueProjection() => _crossValueProj;
-    public Tensor<T> GetCrossOutputProjection() => _crossOutputProj;
-    public Tensor<T> GetFF1Weight() => _ffn1;
-    public Tensor<T> GetFF1Bias() => _ffn1Bias;
-    public Tensor<T> GetFF2Weight() => _ffn2;
-    public Tensor<T> GetFF2Bias() => _ffn2Bias;
-    public Tensor<T> GetLayerNorm1Gamma() => _layerNorm1Gamma;
-    public Tensor<T> GetLayerNorm1Beta() => _layerNorm1Beta;
-    public Tensor<T> GetLayerNorm2Gamma() => _layerNorm2Gamma;
-    public Tensor<T> GetLayerNorm2Beta() => _layerNorm2Beta;
-    public Tensor<T> GetLayerNorm3Gamma() => _layerNorm3Gamma;
-    public Tensor<T> GetLayerNorm3Beta() => _layerNorm3Beta;
+    internal Tensor<T> GetSelfQueryProjection() => _selfQueryProj;
+    internal Tensor<T> GetSelfKeyProjection() => _selfKeyProj;
+    internal Tensor<T> GetSelfValueProjection() => _selfValueProj;
+    internal Tensor<T> GetSelfOutputProjection() => _selfOutputProj;
+    internal Tensor<T> GetCrossQueryProjection() => _crossQueryProj;
+    internal Tensor<T> GetCrossKeyProjection() => _crossKeyProj;
+    internal Tensor<T> GetCrossValueProjection() => _crossValueProj;
+    internal Tensor<T> GetCrossOutputProjection() => _crossOutputProj;
+    internal Tensor<T> GetFF1Weight() => _ffn1;
+    internal Tensor<T> GetFF1Bias() => _ffn1Bias;
+    internal Tensor<T> GetFF2Weight() => _ffn2;
+    internal Tensor<T> GetFF2Bias() => _ffn2Bias;
+    internal Tensor<T> GetLayerNorm1Gamma() => _layerNorm1Gamma;
+    internal Tensor<T> GetLayerNorm1Beta() => _layerNorm1Beta;
+    internal Tensor<T> GetLayerNorm2Gamma() => _layerNorm2Gamma;
+    internal Tensor<T> GetLayerNorm2Beta() => _layerNorm2Beta;
+    internal Tensor<T> GetLayerNorm3Gamma() => _layerNorm3Gamma;
+    internal Tensor<T> GetLayerNorm3Beta() => _layerNorm3Beta;
 
     public override long ParameterCount =>
         _selfQueryProj.Length + _selfKeyProj.Length + _selfValueProj.Length + _selfOutputProj.Length +

@@ -9,6 +9,20 @@ using AiDotNet.Tensors.Helpers;
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
 /// <summary>
+/// Process-wide lock guarding the teardown LOH-compaction critical section, which mutates the
+/// PROCESS-GLOBAL <see cref="System.Runtime.GCSettings.LargeObjectHeapCompactionMode"/>. It is a
+/// NON-generic holder on purpose: a static field inside a generic base (e.g.
+/// <c>NeuralNetworkModelTestBase&lt;T&gt;</c>) gets a SEPARATE instance per closed type
+/// (<c>&lt;float&gt;</c> vs <c>&lt;double&gt;</c>), which would let parallel teardowns across type
+/// boundaries enter the "lock" concurrently and race on the global GC flag. Every model-family test
+/// base (NeuralNetworks + Diffusion) serializes on this single object.
+/// </summary>
+internal static class ModelFamilyTestGcGate
+{
+    internal static readonly object LohCompaction = new();
+}
+
+/// <summary>
 /// Base test class for neural network models implementing INeuralNetworkModel&lt;double&gt;.
 /// Tests mathematical invariants: training loss decrease, gradient flow,
 /// parameter sensitivity, output stability, and architecture consistency.
@@ -179,10 +193,6 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    // Serializes the process-global LOH-compaction flag so parallel teardowns in
-    // different test classes don't race on it (mirrors DiffusionModelTestBase).
-    private static readonly object _lohCompactionGate = new();
-
     /// <summary>
     /// Force finalization of the per-test network between tests. Production-default
     /// neural networks instantiate VGG-16BN / DiT-XL / etc. \u2014 multi-GB weight
@@ -213,7 +223,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // Drop process-wide weight-derived caches that pin the disposed model's tensors.
         AiDotNet.Tensors.Engines.InferenceWeightCache.InvalidateAll();
 
-        lock (_lohCompactionGate)
+        lock (ModelFamilyTestGcGate.LohCompaction)
         {
             // First pass: compacting Gen-2 + LOH reclaims everything unreachable,
             // including the just-disposed model's weight tensors.

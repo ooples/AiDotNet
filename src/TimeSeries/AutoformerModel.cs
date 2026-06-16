@@ -1321,47 +1321,16 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         int forecastHorizon = _options.ForecastHorizon;
         var predictions = new Vector<T>(forecastHorizon);
 
-        var (firstPrediction, cache) = ForwardWithCache(input);
-
-        // Extract predictions from the decoder output for each step in the forecast horizon
-        var seasonalOutput = cache.SeasonalOutput;
-        var trendOutput = cache.TrendOutput;
-
-        // If cache outputs are null, fall back to repeating the first prediction
-        if (seasonalOutput == null || trendOutput == null)
-        {
-            for (int h = 0; h < forecastHorizon; h++)
-            {
-                predictions[h] = firstPrediction;
-            }
-            return predictions;
-        }
-
-        int embDim = _options.EmbeddingDim;
-
+        // Use the SAME IEngine-op forward as training and PredictSingle so the multi-horizon
+        // forecast comes from the trained architecture. The old ForwardWithCache path was a
+        // separate manual projection that could diverge from what was actually trained.
+        // ForwardEngine produces the full forecast horizon (PredictSingle reads element 0).
+        var output = ForwardEngine(input);
         for (int h = 0; h < forecastHorizon; h++)
         {
-            var pred = _numOps.Zero;
-
-            // Combine seasonal and trend contributions for this step
-            for (int d = 0; d < embDim; d++)
-            {
-                int idx = Math.Min(h, seasonalOutput.Length / embDim - 1) * embDim + d;
-                if (idx >= 0 && idx < seasonalOutput.Length && idx < trendOutput.Length)
-                {
-                    var seasonalContrib = _numOps.Multiply(_seasonalProjection[d], seasonalOutput[idx]);
-                    var trendContrib = _numOps.Multiply(_trendProjection[d], trendOutput[idx]);
-                    pred = _numOps.Add(pred, _numOps.Add(seasonalContrib, trendContrib));
-                }
-            }
-
-            // Add bias for this step
-            if (h < _outputBias.Length)
-            {
-                pred = _numOps.Add(pred, _outputBias[h]);
-            }
-
-            predictions[h] = pred;
+            predictions[h] = h < output.Length
+                ? output[h]
+                : (output.Length > 0 ? output[output.Length - 1] : _numOps.Zero);
         }
 
         return predictions;

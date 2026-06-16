@@ -26558,11 +26558,32 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates decoder layers for the ODISE model.
+    /// Number of layers emitted per decoder upsampling stage by
+    /// <see cref="CreateODISEDecoderLayers"/> (Deconv + GroupNorm + SiLU + Residual + GroupNorm).
+    /// ODISE.Forward consumes exactly this many layers per stage before inserting each U-Net
+    /// skip-concat, so the loop below and ODISE's skip-indexing MUST agree — both reference
+    /// this single constant (ODISE.DecoderStageLayerCount aliases it) rather than a literal.
     /// </summary>
+    public const int ODISEDecoderStageLayerCount = 5;
+
+    /// <summary>
+    /// Builds the ODISE decoder: an SD-U-Net-style transposed-conv upsampling ladder that
+    /// reverses the encoder's stride schedule to restore the spatial bottleneck back to full
+    /// input resolution for dense per-pixel prediction (Xu et al. 2023 §3).
+    /// </summary>
+    /// <param name="channelDims">Per-stage encoder channel widths; the decoder steps back down this pyramid.</param>
+    /// <param name="decoderDim">Channel width of the full-resolution decoder tail and dense head.</param>
+    /// <param name="numClasses">Number of output segmentation classes (final 1x1 conv width).</param>
+    /// <returns>
+    /// Decoder layers in forward order: <see cref="ODISEDecoderStageLayerCount"/> layers per
+    /// upsampling stage, then the stride-4 stem reversal, then the dense prediction head.
+    /// </returns>
+    /// <remarks>
+    /// Tightly coupled to ODISE.Forward, which consumes the output stage-by-stage and relies on
+    /// <see cref="ODISEDecoderStageLayerCount"/> to index its skip-connection concatenations.
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateODISEDecoderLayers(
-        int[] channelDims, int decoderDim, int numClasses,
-        int inputHeight, int inputWidth)
+        int[] channelDims, int decoderDim, int numClasses)
     {
         // Per Xu et al. 2023 §3 ODISE produces a DENSE per-pixel class map, so the
         // decoder must upsample the encoder's spatial bottleneck back to the input
@@ -26590,8 +26611,8 @@ public static class LayerHelper<T>
         // The residual skip is what keeps the gradient alive through the deep decoder
         // — a plain Deconv->GN->SiLU ladder vanishes the gradient and the per-pixel
         // loss barely moves; the residual identity path restores a trainable descent.
-        // NOTE: this 5-layer stage layout must stay in sync with
-        // ODISE.DecoderStageLayerCount, which drives the skip-concat indexing.
+        // NOTE: this stage emits exactly ODISEDecoderStageLayerCount layers; ODISE.Forward's
+        // skip-concat indexing reads the same constant, so the two stay in sync by construction.
         for (int stage = n - 1; stage >= 1; stage--)
         {
             int outC = channelDims[stage - 1];

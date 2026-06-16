@@ -463,26 +463,35 @@ public class BigGAN<T> : NeuralNetworkBase<T>
         // Concatenate latent codes and class embeddings
         var input = ConcatenateTensors(truncatedCodes, classEmbeddings);
 
-        // Reshape the concatenated (latent + class-embedding) input into the
-        // generator's DECLARED input volume — see SAGAN.Generate for the
-        // rationale. The ceil(sqrt(...)) heuristic produced a grid that did not
-        // match the generator's actual input grid and threw a weight-shape
-        // mismatch. Bulk span copies (vectorized memcpy), never per-element
-        // indexer loops; the zero-initialized buffer supplies the padding tail.
+        // Project the concatenated (latent + class-embedding) input into the
+        // generator's DECLARED input volume (see ProjectToGeneratorInputShape).
+        return Generator.Predict(ProjectToGeneratorInputShape(input));
+    }
+
+    /// <summary>
+    /// Projects a flat/concatenated (latent + class-embedding) tensor into the generator's
+    /// DECLARED input volume (<c>Generator.Architecture.GetInputShape()</c>), copying the overlap
+    /// and zero-padding the tail. The previous ceil(sqrt(...)) heuristic produced a grid that did
+    /// not match the generator's actual input grid and threw a weight-shape mismatch. Used by BOTH
+    /// the inference (<see cref="Generate(Tensor{T}, int[])"/>) and training
+    /// (<c>GenerateWithGradients</c>) paths so neither regresses. Bulk span copies (vectorized
+    /// memcpy), never per-element indexer loops; the zero-initialized buffer supplies the padding tail.
+    /// </summary>
+    private Tensor<T> ProjectToGeneratorInputShape(Tensor<T> input)
+    {
         int[] genInputShape = Generator.Architecture.GetInputShape();
         int genInputSize = 1;
         foreach (int d in genInputShape) genInputSize *= d;
 
-        Tensor<T> reshapedInput;
         if (input.Shape.Length == 1)
         {
             int totalLen = input.Shape[0];
             int copy = Math.Min(totalLen, genInputSize);
             var flat = new Tensor<T>([genInputSize]);
             input.Data.Span.Slice(0, copy).CopyTo(flat.Data.Span);
-            reshapedInput = flat.Reshape(genInputShape);
+            return flat.Reshape(genInputShape);
         }
-        else if (input.Shape.Length == 2)
+        if (input.Shape.Length == 2)
         {
             int batch = input.Shape[0];
             int latentLen = input.Shape[1];
@@ -496,15 +505,10 @@ public class BigGAN<T> : NeuralNetworkBase<T>
             var dst = flat.Data.Span;
             for (int b = 0; b < batch; b++)
                 src.Slice(b * latentLen, copy).CopyTo(dst.Slice(b * genInputSize, copy));
-            reshapedInput = flat.Reshape(batchShape);
+            return flat.Reshape(batchShape);
         }
-        else
-        {
-            // Already in the generator's expected rank — use as-is.
-            reshapedInput = input;
-        }
-
-        return Generator.Predict(reshapedInput);
+        // Already in the generator's expected rank — use as-is.
+        return input;
     }
 
     /// <summary>
@@ -691,7 +695,9 @@ public class BigGAN<T> : NeuralNetworkBase<T>
         // Concatenate latent codes and class embeddings
         var input = ConcatenateTensors(noise, classEmbeddings);
 
-        return Generator.Predict(input);
+        // Same generator-input projection as the inference Generate path, so the
+        // train-time generation can't regress to the weight-shape mismatch.
+        return Generator.Predict(ProjectToGeneratorInputShape(input));
     }
 
     /// <summary>

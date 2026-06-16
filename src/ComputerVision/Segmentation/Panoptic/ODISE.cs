@@ -72,6 +72,9 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     private readonly string? _onnxModelPath;
     private InferenceSession? _onnxSession;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    // True when the constructor caller supplied an explicit optimizer, so tape
+    // training honors it instead of the built-in LR-warmup Adam default.
+    private readonly bool _hasUserSuppliedOptimizer;
     private bool _disposed;
     private int _encoderLayerEnd;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _baseTapeOptimizer;
@@ -83,8 +86,9 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 
     // Each decoder upsampling stage is Deconv + GroupNorm + SiLU + ResidualBlock +
     // GroupNorm (see LayerHelper.CreateODISEDecoderLayers). Forward consumes exactly
-    // this many layers per stage before inserting the skip-concat.
-    private const int DecoderStageLayerCount = 5;
+    // this many layers per stage before inserting the skip-concat. Aliases the single
+    // source of truth in LayerHelper so the builder and this consumer can't drift apart.
+    private const int DecoderStageLayerCount = LayerHelper<T>.ODISEDecoderStageLayerCount;
     #endregion
 
     #region Properties
@@ -131,7 +135,8 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numClasses = numClasses; _modelSize = modelSize; _dropRate = dropRate;
         _useNativeMode = true; _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _hasUserSuppliedOptimizer = optimizer is not null;
+        _optimizer = optimizer;
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
         InitializeLayers();
     }
@@ -237,6 +242,12 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     /// </summary>
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
     {
+        // Honor a constructor-supplied optimizer (public contract). Only fall back to
+        // the built-in LR-warmup Adam — which the from-scratch SD-U-Net needs for a
+        // stable descent — when the caller did not provide one.
+        if (_hasUserSuppliedOptimizer && _optimizer is not null)
+            return _optimizer;
+
         return _baseTapeOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
@@ -383,7 +394,7 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
             // wrapped as ResidualLayer + GroupNorm.
             _encoderStageLayerCounts = new int[_depths.Length];
             for (int s = 0; s < _depths.Length; s++) _encoderStageLayerCounts[s] = 3 + (_depths[s] - 1) * 2;
-            var decoderLayers = LayerHelper<T>.CreateODISEDecoderLayers(_channelDims, _decoderDim, _numClasses, _height, _width);
+            var decoderLayers = LayerHelper<T>.CreateODISEDecoderLayers(_channelDims, _decoderDim, _numClasses);
             Layers.AddRange(decoderLayers);
         }
     }

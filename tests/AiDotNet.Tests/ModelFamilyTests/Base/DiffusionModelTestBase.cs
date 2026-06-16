@@ -63,7 +63,9 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
     /// mode-set → collect → wait → mode-set → collect sequence keeps LOH
     /// compaction deterministic per teardown.
     /// </summary>
-    private static readonly object _lohCompactionGate = new();
+    // Uses the shared non-generic ModelFamilyTestGcGate: a static field here (inside the
+    // generic DiffusionModelTestBase<TNum>) would be per-closed-type, letting <float>/<double>
+    // teardowns race on the process-global GCSettings. Shared with the NeuralNetworks base.
 
     /// <summary>
     /// Caps concurrent foundation-scale diffusion tests to avoid BLAS thread-
@@ -149,14 +151,14 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
     /// <see cref="GCLargeObjectHeapCompactionMode.CompactOnce"/> on the next
     /// Gen-2 pass forces LOH compaction; the mode auto-resets to Default
     /// after each use, so this is scoped per-teardown. The entire sequence
-    /// runs under <see cref="_lohCompactionGate"/> so parallel teardowns
+    /// runs under <see cref="ModelFamilyTestGcGate.LohCompaction"/> so parallel teardowns
     /// don't race on the process-global flag.
     /// </remarks>
     public Task DisposeAsync()
     {
         try
         {
-            lock (_lohCompactionGate)
+            lock (ModelFamilyTestGcGate.LohCompaction)
             {
                 // First pass: compacting Gen-2 + LOH reclaims everything unreachable
                 // including the just-Disposed model's weight tensors.

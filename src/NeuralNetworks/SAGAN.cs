@@ -344,7 +344,15 @@ public class SAGAN<T> : NeuralNetworkBase<T>
             int copy = Math.Min(latentLen, genInputSize);
             var flat = new Tensor<T>([genInputSize]);
             latentCodes.Data.Span.Slice(0, copy).CopyTo(flat.Data.Span);
-            reshapedLatent = flat.Reshape(genInputShape);
+            // Promote to a leading batch axis of 1: conditional generation concatenates
+            // BATCHED class embeddings on axis 0, so a rank-0-batch latent would hit a
+            // rank mismatch in ConcatenateTensors. A [1, ...genInputShape] latent is also
+            // what the generator's batched Predict expects.
+            var batchShape = new int[genInputShape.Length + 1];
+            batchShape[0] = 1;
+            for (int i = 0; i < genInputShape.Length; i++)
+                batchShape[i + 1] = genInputShape[i];
+            reshapedLatent = flat.Reshape(batchShape);
         }
         else if (latentCodes.Shape.Length == 2)
         {
@@ -371,6 +379,11 @@ public class SAGAN<T> : NeuralNetworkBase<T>
 
         if (_isConditional && classIndices != null)
         {
+            if (classIndices.Length != reshapedLatent.Shape[0])
+                throw new ArgumentException(
+                    $"Conditional generation requires one class index per batch element: got " +
+                    $"{classIndices.Length} class indices for batch size {reshapedLatent.Shape[0]}.",
+                    nameof(classIndices));
             var classEmbeddings = CreateClassEmbeddings(classIndices);
             var input = ConcatenateTensors(reshapedLatent, classEmbeddings);
             return Generator.Predict(input);
