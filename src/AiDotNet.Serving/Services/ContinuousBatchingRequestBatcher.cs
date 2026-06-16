@@ -46,30 +46,30 @@ namespace AiDotNet.Serving.Services;
 public class ContinuousBatchingRequestBatcher : RequestBatcherBase
 {
     private readonly ConcurrentQueue<ContinuousRequest> _requestQueue = new();
-    private readonly ConcurrentDictionary<long, ContinuousRequest> _runningRequests = new();
     private readonly Task _processingLoop;
     private readonly CancellationTokenSource _cts = new();
     private readonly PerformanceMetrics _performanceMetrics;
 
     // Configuration
-    private readonly int _maxConcurrentRequests;
+    private readonly int _maxBatchSize;
     private readonly int _iterationIntervalMs;
-    private readonly bool _enableAdaptiveConcurrency;
+    private readonly bool _enableAdaptiveBatchSize;
     private readonly double _targetLatencyMs;
 
-    // Adaptive concurrency tracking
-    private int _currentConcurrency;
+    // Adaptive batch-size tracking
+    private int _currentBatchSize;
     private readonly Queue<double> _latencyHistory = new();
     private const int MaxLatencyHistorySize = 50;
-    private readonly object _concurrencyLock = new();
+    private readonly object _batchSizeLock = new();
 
     // Statistics
     private long _requestIdCounter;
+    private int _inFlightCount;
 
     /// <summary>
-    /// Gets the current number of requests being processed.
+    /// Gets the number of requests in the batch currently being processed.
     /// </summary>
-    public int RunningRequestCount => _runningRequests.Count;
+    public int RunningRequestCount => Volatile.Read(ref _inFlightCount);
 
     /// <summary>
     /// Gets the current queue depth.
@@ -89,17 +89,17 @@ public class ContinuousBatchingRequestBatcher : RequestBatcherBase
         : base(modelRepository, logger, options.Value)
     {
         // Configure from options or use defaults optimized for continuous batching
-        _maxConcurrentRequests = Options.MaxBatchSize > 0 ? Options.MaxBatchSize : 32;
+        _maxBatchSize = Options.MaxBatchSize > 0 ? Options.MaxBatchSize : 32;
 
         // Validate BatchingWindowMs - must be positive for meaningful iteration intervals
         // If invalid or zero, use sensible default (100ms window / 10 = 10ms iteration)
         var batchingWindowMs = Options.BatchingWindowMs > 0 ? Options.BatchingWindowMs : 100;
         _iterationIntervalMs = Math.Max(1, batchingWindowMs / 10); // Run loop faster than traditional batching
 
-        _enableAdaptiveConcurrency = Options.AdaptiveBatchSize;
+        _enableAdaptiveBatchSize = Options.AdaptiveBatchSize;
         _targetLatencyMs = Options.TargetLatencyMs > 0 ? Options.TargetLatencyMs : 50;
 
-        _currentConcurrency = Math.Max(1, _maxConcurrentRequests / 2); // Start at half capacity
+        _currentBatchSize = Math.Max(1, _maxBatchSize / 2); // Start at half capacity
 
         _performanceMetrics = Options.EnablePerformanceMetrics
             ? new PerformanceMetrics(Options.MaxLatencySamples)
@@ -109,8 +109,8 @@ public class ContinuousBatchingRequestBatcher : RequestBatcherBase
         _processingLoop = Task.Run(() => ProcessingLoop(_cts.Token));
 
         Logger.LogInformation(
-            "ContinuousBatchingRequestBatcher initialized: maxConcurrency={MaxConcurrency}, iterationMs={IterationMs}, adaptiveConcurrency={Adaptive}",
-            _maxConcurrentRequests, _iterationIntervalMs, _enableAdaptiveConcurrency);
+            "ContinuousBatchingRequestBatcher initialized: maxBatchSize={MaxBatchSize}, iterationMs={IterationMs}, adaptiveBatchSize={Adaptive}",
+            _maxBatchSize, _iterationIntervalMs, _enableAdaptiveBatchSize);
     }
 
     /// <summary>
@@ -135,6 +135,7 @@ public class ContinuousBatchingRequestBatcher : RequestBatcherBase
             ModelName = modelName,
             NumericType = typeof(T).Name,
             Input = input,
+            InputLength = input.Length,
             CompletionSource = tcs,
             Priority = priority,
             EnqueueTime = DateTime.UtcNow
@@ -171,10 +172,10 @@ public class ContinuousBatchingRequestBatcher : RequestBatcherBase
         var metrics = _performanceMetrics.GetAllMetrics();
         metrics["metricsEnabled"] = true;
         metrics["batchingStrategy"] = "Continuous";
-        metrics["currentConcurrency"] = _currentConcurrency;
-        metrics["maxConcurrency"] = _maxConcurrentRequests;
+        metrics["currentBatchSize"] = Volatile.Read(ref _currentBatchSize);
+        metrics["maxBatchSize"] = _maxBatchSize;
         metrics["queuedRequests"] = _requestQueue.Count;
-        metrics["runningRequests"] = _runningRequests.Count;
+        metrics["inFlightRequests"] = Volatile.Read(ref _inFlightCount);
 
         return metrics;
     }
@@ -188,27 +189,37 @@ public class ContinuousBatchingRequestBatcher : RequestBatcherBase
         var stats = base.GetStatistics();
         stats["batchingStrategy"] = "Continuous";
         stats["queuedRequests"] = _requestQueue.Count;
-        stats["runningRequests"] = _runningRequests.Count;
-        stats["currentConcurrency"] = _currentConcurrency;
-        stats["maxConcurrency"] = _maxConcurrentRequests;
-        stats["adaptiveConcurrency"] = _enableAdaptiveConcurrency;
+        stats["inFlightRequests"] = Volatile.Read(ref _inFlightCount);
+        stats["currentBatchSize"] = Volatile.Read(ref _currentBatchSize);
+        stats["maxBatchSize"] = _maxBatchSize;
+        stats["adaptiveBatchSize"] = _enableAdaptiveBatchSize;
         return stats;
     }
 
     /// <summary>
-    /// Main processing loop that continuously schedules and processes requests.
+    /// Main processing loop that continuously admits queued requests and runs them as batched
+    /// model forward passes.
     /// </summary>
+    /// <remarks>
+    /// Each iteration admits up to the current (adaptive) batch size from the queue, groups the
+    /// admitted requests by model + numeric type + input shape, and runs a single
+    /// <c>PredictBatch</c> forward per group — sharing one forward pass across all requests in the
+    /// group. New requests join the very next iteration (continuous admission), and the batch size
+    /// adapts to observed latency.
+    /// </remarks>
     private async Task ProcessingLoop(CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
         {
             try
             {
-                // Try to fill available slots with new requests
-                await ScheduleNewRequests(cancellationToken).ConfigureAwait(false);
+                int processed = ProcessAvailableRequests();
 
-                // Small delay to prevent tight loop
-                await Task.Delay(_iterationIntervalMs, cancellationToken).ConfigureAwait(false);
+                // Only sleep when idle, so queued requests are admitted promptly.
+                if (processed == 0)
+                {
+                    await Task.Delay(_iterationIntervalMs, cancellationToken).ConfigureAwait(false);
+                }
             }
             catch (OperationCanceledException)
             {
@@ -223,124 +234,147 @@ public class ContinuousBatchingRequestBatcher : RequestBatcherBase
     }
 
     /// <summary>
-    /// Schedules new requests up to the current concurrency limit.
+    /// Admits up to the current batch size from the queue and processes the admitted requests as
+    /// batched forward passes, grouped by model + numeric type + input length.
     /// </summary>
-    private async Task ScheduleNewRequests(CancellationToken cancellationToken)
+    /// <returns>The number of requests admitted (0 when the queue was empty).</returns>
+    private int ProcessAvailableRequests()
     {
-        int availableSlots;
-        lock (_concurrencyLock)
+        int budget = Math.Max(1, Volatile.Read(ref _currentBatchSize));
+
+        var admitted = new List<ContinuousRequest>(budget);
+        while (admitted.Count < budget && _requestQueue.TryDequeue(out var request))
         {
-            availableSlots = _currentConcurrency - _runningRequests.Count;
+            admitted.Add(request);
         }
 
-        // Schedule new requests to fill available slots
-        var tasks = new List<Task>();
-        while (availableSlots > 0 && _requestQueue.TryDequeue(out var request))
+        if (admitted.Count == 0)
         {
-            _runningRequests[request.RequestId] = request;
-            tasks.Add(ProcessRequestAsync(request, cancellationToken));
-            availableSlots--;
+            return 0;
         }
 
-        // Wait for all newly scheduled requests to at least start
-        if (tasks.Count > 0)
-        {
-            // Don't await completion - let them run continuously
-            _ = Task.WhenAll(tasks);
-        }
-    }
-
-    /// <summary>
-    /// Processes a single request asynchronously.
-    /// </summary>
-    private async Task ProcessRequestAsync(ContinuousRequest request, CancellationToken cancellationToken)
-    {
-        var stopwatch = Stopwatch.StartNew();
-
+        Volatile.Write(ref _inFlightCount, admitted.Count);
         try
         {
-            // Process based on numeric type
-            if (request.NumericType == "Double")
+            // Group so every batched forward pass is well-formed: same model, same numeric type,
+            // and same input width (rows of a matrix must have equal length).
+            foreach (var group in admitted.GroupBy(r => (r.ModelName, r.NumericType, r.InputLength)))
             {
-                await ProcessTypedRequest<double>(request, cancellationToken);
+                var requests = group.ToList();
+                switch (group.Key.NumericType)
+                {
+                    case "Double":
+                        ProcessBatch<double>(group.Key.ModelName, requests);
+                        break;
+                    case "Single":
+                        ProcessBatch<float>(group.Key.ModelName, requests);
+                        break;
+                    case "Decimal":
+                        ProcessBatch<decimal>(group.Key.ModelName, requests);
+                        break;
+                    default:
+                        foreach (var request in requests)
+                        {
+                            SetRequestException(request, new NotSupportedException(
+                                $"Numeric type '{group.Key.NumericType}' is not supported"));
+                        }
+                        break;
+                }
             }
-            else if (request.NumericType == "Single")
-            {
-                await ProcessTypedRequest<float>(request, cancellationToken);
-            }
-            else if (request.NumericType == "Decimal")
-            {
-                await ProcessTypedRequest<decimal>(request, cancellationToken);
-            }
-            else
-            {
-                SetRequestException(request, new NotSupportedException($"Numeric type '{request.NumericType}' is not supported"));
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error processing request {RequestId} for model '{ModelName}'",
-                request.RequestId, request.ModelName);
-            SetRequestException(request, ex);
         }
         finally
         {
-            stopwatch.Stop();
-            var latencyMs = stopwatch.Elapsed.TotalMilliseconds;
+            Volatile.Write(ref _inFlightCount, 0);
+        }
 
-            // Remove from running requests
-            _runningRequests.TryRemove(request.RequestId, out _);
+        return admitted.Count;
+    }
 
-            // Record metrics
-            RecordBatch(1, latencyMs);
-            if (Options.EnablePerformanceMetrics)
+    /// <summary>
+    /// Runs a single batched forward pass for a group of same-shape requests against one model and
+    /// scatters the per-row results back to the individual requests.
+    /// </summary>
+    private void ProcessBatch<T>(string modelName, List<ContinuousRequest> requests)
+    {
+        var model = ModelRepository.GetModel<T>(modelName);
+        if (model == null)
+        {
+            var notFound = new InvalidOperationException($"Model '{modelName}' not found or wrong numeric type");
+            foreach (var request in requests)
             {
-                _performanceMetrics.RecordBatch(1, latencyMs);
+                FailTyped<T>(request, notFound);
+            }
+            return;
+        }
+
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            // Stack the inputs into a single batch matrix (one row per request).
+            int batchSize = requests.Count;
+            int inputDim = requests[0].InputLength;
+            var batchMatrix = new Matrix<T>(batchSize, inputDim);
+            for (int i = 0; i < batchSize; i++)
+            {
+                if (requests[i].Input is not Vector<T> inputVector)
+                {
+                    FailTyped<T>(requests[i], new InvalidOperationException(
+                        $"Request input for model '{modelName}' was not a Vector<{typeof(T).Name}>."));
+                    continue;
+                }
+
+                for (int j = 0; j < inputDim; j++)
+                {
+                    batchMatrix[i, j] = inputVector[j];
+                }
             }
 
-            // Update adaptive concurrency
-            if (_enableAdaptiveConcurrency)
+            // Single shared model forward pass for the whole group.
+            var predictions = model.PredictBatch(batchMatrix);
+
+            for (int i = 0; i < batchSize; i++)
             {
-                UpdateAdaptiveConcurrency(latencyMs);
+                if (requests[i].CompletionSource is TaskCompletionSource<Vector<T>> tcs)
+                {
+                    tcs.TrySetResult(predictions.GetRow(i));
+                }
+            }
+
+            stopwatch.Stop();
+            var latencyMs = stopwatch.Elapsed.TotalMilliseconds;
+            RecordBatch(batchSize, latencyMs);
+            if (Options.EnablePerformanceMetrics)
+            {
+                _performanceMetrics.RecordBatch(batchSize, latencyMs);
+            }
+            if (_enableAdaptiveBatchSize)
+            {
+                UpdateAdaptiveBatchSize(latencyMs);
+            }
+
+            Logger.LogDebug(
+                "Continuous batch for model '{ModelName}': size={BatchSize}, latency={LatencyMs}ms",
+                modelName, batchSize, latencyMs);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error processing continuous batch for model '{ModelName}'", modelName);
+            foreach (var request in requests)
+            {
+                FailTyped<T>(request, ex);
             }
         }
     }
 
     /// <summary>
-    /// Processes a typed request.
+    /// Fails a single request's typed completion source.
     /// </summary>
-    private Task ProcessTypedRequest<T>(ContinuousRequest request, CancellationToken cancellationToken)
+    private static void FailTyped<T>(ContinuousRequest request, Exception exception)
     {
-        var model = ModelRepository.GetModel<T>(request.ModelName);
-        if (model == null)
+        if (request.CompletionSource is TaskCompletionSource<Vector<T>> tcs)
         {
-            if (request.CompletionSource is TaskCompletionSource<Vector<T>> errorTcs)
-            {
-                errorTcs.TrySetException(new InvalidOperationException(
-                    $"Model '{request.ModelName}' not found or wrong numeric type"));
-            }
-            return Task.CompletedTask;
+            tcs.TrySetException(exception);
         }
-
-        try
-        {
-            var input = (Vector<T>)request.Input;
-            var result = model.Predict(input);
-
-            if (request.CompletionSource is TaskCompletionSource<Vector<T>> tcs)
-            {
-                tcs.TrySetResult(result);
-            }
-        }
-        catch (Exception ex)
-        {
-            if (request.CompletionSource is TaskCompletionSource<Vector<T>> exTcs)
-            {
-                exTcs.TrySetException(ex);
-            }
-        }
-
-        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -375,11 +409,12 @@ public class ContinuousBatchingRequestBatcher : RequestBatcherBase
     }
 
     /// <summary>
-    /// Updates the adaptive concurrency level based on observed latency.
+    /// Updates the adaptive batch size based on observed latency: grow the batch when latency is
+    /// comfortably under target (throughput headroom), shrink it when latency exceeds target.
     /// </summary>
-    private void UpdateAdaptiveConcurrency(double latencyMs)
+    private void UpdateAdaptiveBatchSize(double latencyMs)
     {
-        lock (_concurrencyLock)
+        lock (_batchSizeLock)
         {
             // Track latency history
             _latencyHistory.Enqueue(latencyMs);
@@ -391,20 +426,20 @@ public class ContinuousBatchingRequestBatcher : RequestBatcherBase
             // Calculate average latency
             var avgLatency = _latencyHistory.Average();
 
-            // Adjust concurrency based on latency
-            if (avgLatency < _targetLatencyMs * 0.8 && _currentConcurrency < _maxConcurrentRequests)
+            // Adjust batch size based on latency
+            if (avgLatency < _targetLatencyMs * 0.8 && _currentBatchSize < _maxBatchSize)
             {
-                // Latency is good, increase concurrency
-                _currentConcurrency = Math.Min(_currentConcurrency + 1, _maxConcurrentRequests);
-                Logger.LogDebug("Increased concurrency to {Concurrency} (avgLatency={AvgLatency}ms)",
-                    _currentConcurrency, avgLatency);
+                // Latency is good, grow the batch for more throughput.
+                _currentBatchSize = Math.Min(_currentBatchSize + 1, _maxBatchSize);
+                Logger.LogDebug("Increased batch size to {BatchSize} (avgLatency={AvgLatency}ms)",
+                    _currentBatchSize, avgLatency);
             }
-            else if (avgLatency > _targetLatencyMs * 1.5 && _currentConcurrency > 1)
+            else if (avgLatency > _targetLatencyMs * 1.5 && _currentBatchSize > 1)
             {
-                // Latency is too high, decrease concurrency
-                _currentConcurrency = Math.Max(_currentConcurrency - 1, 1);
-                Logger.LogDebug("Decreased concurrency to {Concurrency} (avgLatency={AvgLatency}ms)",
-                    _currentConcurrency, avgLatency);
+                // Latency is too high, shrink the batch.
+                _currentBatchSize = Math.Max(_currentBatchSize - 1, 1);
+                Logger.LogDebug("Decreased batch size to {BatchSize} (avgLatency={AvgLatency}ms)",
+                    _currentBatchSize, avgLatency);
             }
         }
     }
@@ -439,13 +474,9 @@ public class ContinuousBatchingRequestBatcher : RequestBatcherBase
 
         _cts.Dispose();
 
-        // Fail any remaining requests
+        // Fail any requests still queued at shutdown (in-flight requests are processed
+        // synchronously inside the loop, which has already stopped at this point).
         while (_requestQueue.TryDequeue(out var request))
-        {
-            SetRequestException(request, new OperationCanceledException("Batcher is shutting down"));
-        }
-
-        foreach (var request in _runningRequests.Values)
         {
             SetRequestException(request, new OperationCanceledException("Batcher is shutting down"));
         }
