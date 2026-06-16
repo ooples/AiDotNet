@@ -5303,6 +5303,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // A sticky GPU fault tripped the circuit breaker (engine is now CPU); retry on CPU.
             TrainCore(input, expectedOutput);
         }
+        catch (OutOfMemoryException) when (!_memoryLeversForced)
+        {
+            // Reactive memory levers (#1624). The full-precision, full-batch step exhausted RAM. Latch the
+            // 8-bit optimizer (G2 — ~1.5x model size less moment state) and micro-batch accumulation (G8 —
+            // caps the activation peak) ON, drop the fp32 optimizer so it rebuilds as 8-bit, reclaim the
+            // failed step's transients, and retry. Models that fit never reach this path, so they keep exact
+            // fp32 full-batch training (no convergence change); only a model that would otherwise crash pays
+            // the levers' cost. If the retry still OOMs, the exception propagates (the levers weren't enough).
+            _memoryLeversForced = true;
+            _baseTrainOptimizer = null;
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            TrainCore(input, expectedOutput);
+        }
     }
 
     private void TrainCore(Tensor<T> input, Tensor<T> expectedOutput)
@@ -7618,25 +7633,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
-    /// G2 engagement decision: whether to use the 8-bit Adam optimizer (quantized moment state) for this
-    /// model. Honors <c>AIDOTNET_ADAM8BIT</c> (0/false/off → never; 1/true/on → always), else engages when
-    /// the model's <see cref="ParameterCount"/> is large enough that its fp32 optimizer state (2x weights)
-    /// is a meaningful slice of a tight memory budget (default ≥ 16M params).
+    /// G2 engagement decision: whether to use the 8-bit Adam optimizer (quantized moment state). Engaged
+    /// <em>reactively</em> — only after a training step has actually run out of memory at full precision
+    /// (<see cref="_memoryLeversForced"/>) — so models that fit keep exact fp32 Adam and never change
+    /// convergence. <c>AIDOTNET_ADAM8BIT</c> overrides: <c>0/false/off</c> pins fp32 even under memory
+    /// pressure; <c>1/true/on</c> forces 8-bit (for parity testing). A size threshold is deliberately NOT
+    /// used: 8-bit moment state slightly changes the update, so engaging it on a model that fits is a
+    /// needless convergence regression — the OOM is the only signal that the trade is worth making.
     /// </summary>
     private bool ShouldUseEightBitOptimizer()
     {
         var env = Environment.GetEnvironmentVariable("AIDOTNET_ADAM8BIT");
-        if (env is not null)
-        {
-            if (env == "0" || string.Equals(env, "false", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(env, "off", StringComparison.OrdinalIgnoreCase))
-                return false;
-            if (env == "1" || string.Equals(env, "true", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(env, "on", StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
-        const long eightBitParamThreshold = 16_000_000L; // ~128 MB fp32 weights ⇒ ~256 MB fp32 Adam state
-        return ParameterCount >= eightBitParamThreshold;
+        if (env == "0" || string.Equals(env, "false", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(env, "off", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (env == "1" || string.Equals(env, "true", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(env, "on", StringComparison.OrdinalIgnoreCase))
+            return true;
+        return _memoryLeversForced;
     }
 
     /// <summary>G8 micro-batch chunk size: the per-step batch processed at once when accumulating.</summary>
@@ -7645,12 +7659,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     private bool? _hasCrossBatchNormCached;
 
     /// <summary>
-    /// G8 engagement decision: micro-batch this training step only when it is both safe and useful —
-    /// the batch is larger than <see cref="MicroBatchChunkSize"/>, the model is large enough to risk an
-    /// activation-driven OOM (≥ 16M params), it trains through the tape with a <c>LossFunctionBase</c>
-    /// (required by <see cref="TrainWithGradientAccumulation"/>), and it has NO BatchNorm layer (whose
-    /// per-chunk batch statistics would make accumulation non-equivalent to the full-batch step).
-    /// <c>AIDOTNET_MICROBATCH=0</c> disables it.
+    /// G8 engagement decision: split this training step into <see cref="MicroBatchChunkSize"/>-row chunks
+    /// and accumulate gradients, capping the peak activation memory. Like G2 this is engaged
+    /// <em>reactively</em> — only after a full-batch step has actually OOM'd (<see cref="_memoryLeversForced"/>)
+    /// — so a model that fits runs the exact full-batch step and never pays the extra forward/backward
+    /// passes. Several correctness gates apply even under memory pressure: the batch must be larger than a
+    /// chunk, training must go through the tape with a <c>LossFunctionBase</c> (required by
+    /// <see cref="TrainWithGradientAccumulation"/>), and the model must have NO BatchNorm layer (whose
+    /// per-chunk batch statistics would make accumulation non-equivalent to the full-batch step). If a
+    /// BatchNorm model OOMs, G8 stays off (correctness over recovery) and only G2 applies.
+    /// <c>AIDOTNET_MICROBATCH</c> overrides: <c>0</c> disables; <c>1</c> forces (subject to the gates).
     /// </summary>
     private bool ShouldMicroBatch(Tensor<T> input)
     {
@@ -7661,13 +7679,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         bool force = env is "1" || string.Equals(env, "true", StringComparison.OrdinalIgnoreCase)
             || string.Equals(env, "on", StringComparison.OrdinalIgnoreCase);
 
+        // Engage reactively (after an OOM) or when explicitly forced; a fitting model keeps the full step.
+        if (!force && !_memoryLeversForced) return false;
+
         // Correctness-necessary gates (apply even when forced): a batch big enough to chunk, a tape loss,
         // and no cross-batch normalization (else accumulation ≠ full-batch step).
         if (input.Rank < 1 || input.Shape[0] <= MicroBatchChunkSize) return false;
         if (LossFunction is not LossFunctions.LossFunctionBase<T>) return false;
         if (HasCrossBatchNormalization()) return false;
-        // Engagement heuristic (skipped when forced): only worth the extra steps for large models.
-        if (!force && ParameterCount < 16_000_000L) return false;
 
         // Must have tape-trainable parameters (the accumulation path forwards/backwards through the tape).
         if (Training.TapeTrainingStep<T>.CollectParameters(Layers).Count == 0)
@@ -7677,6 +7696,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
         return true;
     }
+
+    /// <summary>
+    /// Set once a training step has OOM'd at full precision/full batch; latches the reactive G2 (8-bit
+    /// optimizer) and G8 (micro-batch accumulation) memory levers ON for all subsequent steps of this model.
+    /// </summary>
+    private bool _memoryLeversForced;
 
     /// <summary>
     /// Whether any layer reachable from this model performs cross-batch normalization (a BatchNorm layer),
