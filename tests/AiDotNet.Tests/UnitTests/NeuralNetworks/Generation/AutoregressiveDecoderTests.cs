@@ -74,6 +74,25 @@ public class AutoregressiveDecoderTests
     }
 
     [Fact]
+    public void SuppressedToken_IsNotEmitted_ButConsumesStep()
+    {
+        // Step 0 peaks at the suppressed token 2 (greedy) → consumed, not emitted, prefix unchanged.
+        // Steps 1..3 peak at token 1 → emitted. maxNewTokens=4 ⇒ exactly 3 emitted tokens.
+        const int pad = 2;
+        int step = 0;
+        var prevSeen = new List<int?>();
+        var tokens = AutoregressiveDecoder<float>.Decode(
+            stepLogits: prev => { prevSeen.Add(prev); return PeakAt(step++ == 0 ? pad : 1); },
+            maxNewTokens: 4,
+            options: SamplingOptions.Greedy,
+            suppressToken: t => t == pad);
+
+        Assert.Equal(new[] { 1, 1, 1 }, tokens.ToArray());
+        // The suppressed step did not advance `prev`, so step 1 still sees null (prefix unchanged).
+        Assert.Equal(new int?[] { null, null, 1, 1 }, prevSeen.ToArray());
+    }
+
+    [Fact]
     public void NullStepLogits_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
