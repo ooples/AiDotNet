@@ -4426,7 +4426,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // _layerShapesResolved / _streamingAutoDetectFinalized) so the
         // hot path is one branch + early-return after the first call.
         ResolveLazyLayerShapes();
-        TryAutoEnableWeightStreaming();
+        // Pass the INCOMING mode explicitly: this runs before IsTrainingMode is updated below,
+        // so relying on the field would finalize the streaming store dtype from the prior mode.
+        TryAutoEnableWeightStreaming(isTrainingOverride: isTraining);
 
         // Tell the weight-streaming pool which execution mode we're in so its
         // StreamingStoreDtype.Auto policy is safe: store paged-out weights as bf16
@@ -5075,7 +5077,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// regression tests can assert on the auto-detect branch firing.
     /// </para>
     /// </remarks>
-    internal void TryAutoEnableWeightStreaming()
+    /// <param name="isTrainingOverride">
+    /// The execution mode the caller is about to enter, when it is known to differ from the
+    /// current <see cref="IsTrainingMode"/> field. <see cref="SetTrainingMode"/> calls this
+    /// BEFORE it updates the field, so it must pass the incoming mode here — otherwise the
+    /// permanent inference-vs-training store-dtype decision below is made from the stale prior
+    /// mode (e.g. finalizing an inference dtype while transitioning INTO training, which would
+    /// silently truncate the master weights and lose the Auto training-safety policy).
+    /// When null, the current <see cref="IsTrainingMode"/> is used (correct for every call site
+    /// that runs after the field already reflects the intended mode).
+    /// </param>
+    internal void TryAutoEnableWeightStreaming(bool? isTrainingOverride = null)
     {
         if (_streamingAutoDetectFinalized) return;
         if (_weightLifetimeConfigured)
@@ -5167,7 +5179,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Quant-resident inference (Tier 1, #1622): for a foundation-scale model in inference, keep
         // the weights resident at the loosest precision that fits the budget so multi-forward
         // Predict pays no per-forward paging I/O. Training keeps the Auto policy (fp/bf16 masters).
-        if (!IsTrainingMode)
+        // Use the entry point's intended mode, not the (possibly stale) field — see the
+        // isTrainingOverride remarks. Training keeps the Auto policy (fp/bf16 masters).
+        bool isTrainingForThisAttempt = isTrainingOverride ?? IsTrainingMode;
+        if (!isTrainingForThisAttempt)
             options.StreamingStoreDtype = ResolveInferenceStoreDtype(paramCount, options.StreamingPoolMaxResidentBytes);
         ConfigureWeightLifetime(options);
         _streamingEngagedByAutoDetect = true;

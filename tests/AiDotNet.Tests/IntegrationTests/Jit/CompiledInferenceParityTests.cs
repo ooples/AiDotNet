@@ -193,7 +193,14 @@ public class CompiledInferenceParityTests : IDisposable
         var inputA = MakeInput(new[] { 2, 1, 28, 28 }, seed: 303);
         var inputB = MakeInput(new[] { 2, 1, 28, 28 }, seed: 404);
 
+        var eagerA = PredictEagerOracle(network, inputA);
         var eagerB = PredictEagerOracle(network, inputB);
+        // Sanity: the two inputs genuinely produce different outputs, so "stale" is detectable
+        // (mirrors the MLP test — without this the parity assert could false-pass if A≈B).
+        double aVsB = 0; var ea = eagerA.AsSpan(); var eb = eagerB.AsSpan();
+        for (int i = 0; i < ea.Length; i++) aVsB = Math.Max(aVsB, Math.Abs(ea[i] - eb[i]));
+        Assert.True(aVsB > 1e-3, "test inputs must produce distinct outputs for staleness to be observable");
+
         Assert.True(network.CompileForward(inputA), "CompileForward(A) did not produce a plan.");
         _ = network.PredictCompiled(inputA);
         var compiledB = network.PredictCompiled(inputB);
