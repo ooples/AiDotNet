@@ -989,32 +989,33 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
     private string GenerateCaptionWithSampling(Tensor<T> image, int maxLength, double temperature)
     {
         Tensor<T> imageFeatures = GetImageFeaturesNative(image);
-        var generatedTokens = new List<int> { GetBosTokenId() };
-        // Use thread-safe random with proper seed (not DateTime.Millisecond which only has 1000 values)
-        var random = Tensors.Helpers.RandomHelper.CreateSeededRandom(
-            Tensors.Helpers.RandomHelper.ThreadSafeRandom.Next());
+        int bos = GetBosTokenId();
+        int eos = GetEosTokenId();
 
-        for (int step = 0; step < maxLength; step++)
-        {
-            var inputTensor = new Tensor<T>(new[] { 1, generatedTokens.Count });
-            for (int i = 0; i < generatedTokens.Count; i++)
+        // Running token sequence (BOS-prefixed). Each step rebuilds the decoder input from it; the
+        // shared AutoregressiveDecoder owns the loop + temperature sampling + EOS stop (replaces the
+        // duplicated hand-rolled loop + SampleWithTemperature).
+        var seq = new List<int> { bos };
+        var options = new Generation.SamplingOptions { Temperature = temperature };
+        var newTokens = Generation.AutoregressiveDecoder<T>.Decode(
+            stepLogits: prev =>
             {
-                inputTensor[0, i] = NumOps.FromDouble(generatedTokens[i]);
-            }
+                if (prev.HasValue) seq.Add(prev.Value);
+                var inputTensor = new Tensor<T>(new[] { 1, seq.Count });
+                for (int i = 0; i < seq.Count; i++)
+                {
+                    inputTensor[0, i] = NumOps.FromDouble(seq[i]);
+                }
 
-            var logits = ForwardDecoderNative(inputTensor, imageFeatures);
+                var logits = ForwardDecoderNative(inputTensor, imageFeatures);
+                return LastPositionLogits(logits);
+            },
+            maxNewTokens: maxLength,
+            options: options,
+            isEndToken: t => t == eos);
 
-            // Apply temperature and sample
-            int nextToken = SampleWithTemperature(logits, temperature, random);
-
-            if (nextToken == GetEosTokenId())
-            {
-                break;
-            }
-
-            generatedTokens.Add(nextToken);
-        }
-
+        var generatedTokens = new List<int>(newTokens.Count + 1) { bos };
+        generatedTokens.AddRange(newTokens);
         return DecodeTokens(generatedTokens);
     }
 
@@ -1467,49 +1468,20 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
     }
 
     /// <summary>
-    /// Samples token with temperature at the last sequence position for autoregressive decoding.
+    /// Extracts the next-token logits (the last sequence position) from a decoder output tensor as a
+    /// <see cref="Vector{T}"/> for the shared <see cref="Generation.TokenSampler{T}"/>. Handles both
+    /// 3D <c>[batch, seq, vocab]</c> and 2D <c>[batch, vocab]</c> decoder outputs.
     /// </summary>
-    private int SampleWithTemperature(Tensor<T> logits, double temperature, Random random)
+    private Vector<T> LastPositionLogits(Tensor<T> logits)
     {
-        int lastDim = logits.Shape[^1];
-        var probs = new double[lastDim];
-        double maxLogit = double.MinValue;
-
-        // For 3D tensor [batch, seq_len, vocab_size], use last sequence position
+        int vocab = logits.Shape[^1];
         int seqPos = logits.Shape.Length == 3 ? logits.Shape[1] - 1 : 0;
-
-        // Find max for numerical stability
-        for (int i = 0; i < lastDim; i++)
+        var v = new Vector<T>(vocab);
+        for (int i = 0; i < vocab; i++)
         {
-            double val = NumOps.ToDouble(logits.Shape.Length == 3 ? logits[0, seqPos, i] : logits[0, i]);
-            if (val > maxLogit) maxLogit = val;
+            v[i] = logits.Shape.Length == 3 ? logits[0, seqPos, i] : logits[0, i];
         }
-
-        // Compute softmax with temperature
-        double sum = 0;
-        for (int i = 0; i < lastDim; i++)
-        {
-            double val = NumOps.ToDouble(logits.Shape.Length == 3 ? logits[0, seqPos, i] : logits[0, i]);
-            probs[i] = Math.Exp((val - maxLogit) / temperature);
-            sum += probs[i];
-        }
-
-        // Normalize
-        for (int i = 0; i < lastDim; i++)
-        {
-            probs[i] /= sum;
-        }
-
-        // Sample
-        double r = random.NextDouble();
-        double cumSum = 0;
-        for (int i = 0; i < lastDim; i++)
-        {
-            cumSum += probs[i];
-            if (r < cumSum) return i;
-        }
-
-        return lastDim - 1;
+        return v;
     }
 
     #endregion

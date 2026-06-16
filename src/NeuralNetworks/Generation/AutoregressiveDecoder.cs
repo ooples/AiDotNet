@@ -26,12 +26,17 @@ public static class AutoregressiveDecoder<T>
     /// <param name="maxNewTokens">Maximum tokens to generate (≥ 0).</param>
     /// <param name="options">Sampling options; null ⇒ <see cref="SamplingOptions.Default"/>.</param>
     /// <param name="isEndToken">Optional EOS predicate; generation stops (without emitting it) when true.</param>
+    /// <param name="suppressToken">Optional predicate for tokens to suppress (e.g. PAD): when a sampled
+    /// token matches, it is neither emitted nor fed back, but the step is still consumed (the model
+    /// re-samples on the next step from the unchanged prefix). Mirrors a <c>continue</c> in a hand-rolled
+    /// fixed-length loop — the same semantics as HuggingFace's <c>suppress_tokens</c>.</param>
     /// <returns>The generated token ids, in order (length ≤ <paramref name="maxNewTokens"/>).</returns>
     public static IReadOnlyList<int> Decode(
         Func<int?, Vector<T>> stepLogits,
         int maxNewTokens,
         SamplingOptions? options = null,
-        Func<int, bool>? isEndToken = null)
+        Func<int, bool>? isEndToken = null,
+        Func<int, bool>? suppressToken = null)
     {
         if (stepLogits is null) throw new ArgumentNullException(nameof(stepLogits));
         if (maxNewTokens < 0) throw new ArgumentOutOfRangeException(nameof(maxNewTokens));
@@ -56,6 +61,9 @@ public static class AutoregressiveDecoder<T>
                 : TokenSampler<T>.Sample(logits, options, rng);
 
             if (isEndToken is not null && isEndToken(next)) break;
+            // Suppressed tokens consume the step but are neither emitted nor fed back; the prefix is
+            // unchanged so the next step re-samples from it.
+            if (suppressToken is not null && suppressToken(next)) continue;
             tokens.Add(next);
             prev = next;
         }
