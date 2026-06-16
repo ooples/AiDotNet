@@ -9,6 +9,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 /// for the FP32 rationale. StableVITON's SD-inpainting UNet at paper defaults
 /// allocates ≈11.4 GB at FP64 standalone.
 /// </summary>
+[Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4)
 public class StableVITONModelTests : DiffusionModelTestBase<float>
 {
     // SD-based latent diffusion: 4 channels, 64x64 latent (512x512 images / 8x VAE)

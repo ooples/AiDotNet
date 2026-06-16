@@ -10,6 +10,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 /// fresh-process probes (24-channel 64×64 latent through a multi-stage cascade
 /// at paper defaults is too large for the 16 GB CI host at FP64).
 /// </summary>
+[Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4)
 public class StableCascadeModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 24, 64, 64];
