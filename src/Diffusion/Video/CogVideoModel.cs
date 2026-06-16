@@ -288,15 +288,17 @@ public class CogVideoModel<T> : VideoDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var baseChannels = _variant == "5B" ? 384 : 320;
-
-                        return new CogVideoModel<T>(
-            videoUnet: (VideoUNetPredictor<T>)_videoUnet.Clone(),
-            temporalVae: (TemporalVAE<T>)_temporalVae.Clone(),
+        // #1624: build with fresh (cheap) sub-models and share weight-tensor STORAGE copy-on-write
+        // (O(1)-until-write), instead of cloning each sub-model's full weight set. Falls back to the flat
+        // copy if the structure doesn't match 1:1 (e.g. a sub-model whose lazy layers aren't resolved).
+        var clone = new CogVideoModel<T>(
             conditioner: _conditioner,
             variant: _variant,
             defaultNumFrames: DefaultNumFrames,
             defaultFPS: DefaultFPS);
+        if (!AiDotNet.Helpers.CopyOnWriteCloneHelper.TryShareTrainableParameters<T>(this, clone))
+            clone.SetParameters(GetParameters());
+        return clone;
     }
 
     #endregion

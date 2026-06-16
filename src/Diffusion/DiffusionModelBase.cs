@@ -1110,70 +1110,10 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// </summary>
     protected bool TryShareParametersFrom(DiffusionModelBase<T> source)
     {
-        if (source is null) return false;
-        var srcLayers = CollectTrainableLayers(source);
-        var dstLayers = CollectTrainableLayers(this);
-        if (srcLayers.Count == 0 || srcLayers.Count != dstLayers.Count) return false;
-
-        // Verify the full structure matches before mutating anything.
-        for (int i = 0; i < srcLayers.Count; i++)
-            if (srcLayers[i].GetTrainableParameters().Count != dstLayers[i].GetTrainableParameters().Count)
-                return false;
-
-        for (int i = 0; i < srcLayers.Count; i++)
-        {
-            var sp = srcLayers[i].GetTrainableParameters();
-            if (sp.Count == 0) continue;
-            var shared = new Tensor<T>[sp.Count];
-            for (int p = 0; p < sp.Count; p++)
-                shared[p] = (Tensor<T>)sp[p].CloneShared();
-            dstLayers[i].SetTrainableParameters(shared);
-        }
-
+        if (!AiDotNet.Helpers.CopyOnWriteCloneHelper.TryShareTrainableParameters<T>(source, this))
+            return false;
         InvalidateTrainableParametersCache();
         return true;
-    }
-
-    /// <summary>Reflection walk collecting every <see cref="Interfaces.ITrainableLayer{T}"/> reachable from
-    /// <paramref name="root"/>, in the same deterministic order as <see cref="CollectLayerParameters"/>.</summary>
-    private static List<Interfaces.ITrainableLayer<T>> CollectTrainableLayers(object root)
-    {
-        var layers = new List<Interfaces.ITrainableLayer<T>>();
-        CollectTrainableLayersInto(root, layers,
-            new HashSet<object>(AiDotNet.Helpers.TensorReferenceComparer<object>.Instance));
-        return layers;
-    }
-
-    private static void CollectTrainableLayersInto(object? obj, List<Interfaces.ITrainableLayer<T>> layers, HashSet<object> visited)
-    {
-        if (obj is null || !visited.Add(obj)) return;
-        if (obj is Interfaces.ITrainableLayer<T> trainable) layers.Add(trainable);
-
-        var type = obj.GetType();
-        if (type.IsPrimitive || type == typeof(string) || type.IsEnum) return;
-
-        foreach (var field in type.GetFields(
-            System.Reflection.BindingFlags.Instance |
-            System.Reflection.BindingFlags.NonPublic |
-            System.Reflection.BindingFlags.Public))
-        {
-            if (field.FieldType.IsPrimitive || field.FieldType.IsEnum ||
-                field.FieldType == typeof(string) || field.FieldType == typeof(Tensor<T>))
-                continue;
-
-            var val = field.GetValue(obj);
-            if (val is null) continue;
-
-            if (val is System.Collections.IEnumerable enumerable && val is not string)
-            {
-                foreach (var item in enumerable)
-                    CollectTrainableLayersInto(item, layers, visited);
-            }
-            else
-            {
-                CollectTrainableLayersInto(val, layers, visited);
-            }
-        }
     }
 
     /// <summary>
