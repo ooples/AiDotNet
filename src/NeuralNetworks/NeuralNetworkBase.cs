@@ -1247,8 +1247,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         try
         {
-            using var gpuResult = ForwardGpu(input);
-            result = gpuResult;
+            // Fix for #1625: the previous `using var gpuResult = ForwardGpu(input)` disposed
+            // the GPU tensor before the caller could read its values, so every Predict call
+            // returned all-zero output. The returned tensor's lifetime now belongs to the
+            // caller (which is how every other Predict path works — the result is the model's
+            // output, not an intermediate that can be safely freed).
+            result = ForwardGpu(input);
             return true;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException and not System.Threading.ThreadAbortException)
