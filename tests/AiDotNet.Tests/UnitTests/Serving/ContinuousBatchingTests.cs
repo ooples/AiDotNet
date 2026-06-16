@@ -515,6 +515,53 @@ public class ContinuousBatchingTests
         await Assert.ThrowsAsync<TaskCanceledException>(() => task);
     }
 
+    [Fact(Timeout = 60000)]
+    public async Task ContinuousBatcher_Decode_ForwardsFullContext_NotJustLastToken()
+    {
+        // Model whose prediction depends on the FULL context length: it peaks at the logit index
+        // equal to the current sequence length (clamped to the vocab). If decode forwarded only the
+        // last token, the model would always see a length-1 sequence and emit the same token every
+        // step; forwarding the full running context makes the generated ids increase with length.
+        const int vocab = 16;
+        Tensor<float> contextLengthModel(Tensor<float> input)
+        {
+            int seqLen = input.Shape[input.Shape.Length - 1];
+            int peak = Math.Min(seqLen, vocab - 1);
+            var logits = new Tensor<float>(new[] { 1, seqLen, vocab });
+            for (int p = 0; p < seqLen; p++)
+            {
+                logits[new[] { 0, p, peak }] = 100f;
+            }
+            return logits;
+        }
+
+        var config = new ContinuousBatcherConfig
+        {
+            AutoStart = false,
+            EosTokenId = 99, // out of range so generation runs to the token limit
+            EnableSpeculativeDecoding = false
+        };
+        using var batcher = new ContinuousBatcher<float>(config, contextLengthModel);
+
+        var request = new GenerationRequest<float>
+        {
+            PromptTokenIds = new List<int> { 0 },
+            MaxNewTokens = 4
+        };
+
+        var task = batcher.GenerateAsync(request);
+        for (int i = 0; i < 32 && !task.IsCompleted; i++)
+        {
+            batcher.Step();
+        }
+
+        var result = await task;
+
+        // Prompt length 1 -> first token 1, then 2, 3, 4 as the context grows. (A last-token-only
+        // decode would instead produce 1, 1, 1, 1.)
+        Assert.Equal(new[] { 1, 2, 3, 4 }, result.GeneratedTokens.ToArray());
+    }
+
     #endregion
 
     #region Configuration Tests

@@ -392,9 +392,14 @@ internal class ContinuousBatcher<T> : IDisposable
     {
         if (_model == null) return Array.Empty<int>();
 
-        // Create input tensor from last token only (incremental decoding)
-        int lastToken = sequence.TokenIds[^1];
-        var inputTokens = CreateInputTensor([lastToken]);
+        // Forward the full running sequence (prompt + tokens generated so far) so the model attends
+        // to the complete context. The model forward (_model) is stateless — it does not retain KV
+        // state across calls — so a last-token-only forward would discard all prior context and
+        // produce incorrect logits for any context-dependent model (e.g. a transformer LM). This
+        // matches the speculative path's TargetForward, which already forwards the full sequence.
+        // (A KV-cached incremental forward is a future optimization that would require a stateful
+        // model-forward contract; full-context decode is the correct behavior for a stateless one.)
+        var inputTokens = CreateInputTensor(sequence.TokenIds.ToArray());
 
         // Run model forward pass
         var logits = _model(inputTokens);
