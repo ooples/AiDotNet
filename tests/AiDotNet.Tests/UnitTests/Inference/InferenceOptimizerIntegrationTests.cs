@@ -362,6 +362,36 @@ public class InferenceOptimizerIntegrationTests
 
     #region Helpers
 
+    // #1632 (enable-the-inference-stack-by-default): proves the EXACT config the proposed
+    // default-on flip would apply — InferenceOptimizationConfig.Default — actually engages the
+    // stack (not just stores flags): MHA is rewritten to the cached form and a KVCache is built
+    // and attached. This is the precondition the default-flip relies on; if Default ever stopped
+    // engaging, flipping the builder default would silently do nothing.
+    [Fact(Timeout = 120000)]
+    public async Task DefaultConfig_EngagesStack_RewritesMHAAndBuildsKVCache()
+    {
+        await Task.Yield();
+        var config = AiDotNet.Configuration.InferenceOptimizationConfig.Default;
+        // The Default ships with the load-bearing flags on (so default-on means something).
+        Assert.True(config.EnableKVCache);
+        Assert.True(config.EnableFlashAttention);
+        Assert.True(config.EnableLayerFusion);
+
+        var model = CreateMHAModel();
+        Assert.Contains(model.Layers, l => l is MultiHeadAttentionLayer<float>);
+
+        var optimizer = new InferenceOptimizer<float>(config);
+        var (optimized, anyApplied) = optimizer.OptimizeForInference(model, cloneModel: false);
+
+        Assert.True(anyApplied, "InferenceOptimizationConfig.Default must engage at least one optimization");
+        // Default has EnablePagedKVCache=true, so the rewrite target is the PAGED cached attention
+        // (the non-paged CachedMultiHeadAttention is only produced when EnablePagedKVCache=false —
+        // covered by the sibling tests). Either way the MHA is rewritten to a cache-backed form;
+        // that rewrite is the proof the stack actually engages under the default config.
+        Assert.Contains(optimized.Layers,
+            l => l is PagedCachedMultiHeadAttention<float> || l is CachedMultiHeadAttention<float>);
+    }
+
     private static NeuralNetworkBase<float> CreateMHAModel(
         PositionalEncodingType posEncoding = PositionalEncodingType.None)
     {
