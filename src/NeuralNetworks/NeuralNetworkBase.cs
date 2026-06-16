@@ -8638,18 +8638,20 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// CloneShared hands the clone a DISTINCT tensor that shares storage until write. Set to
     /// <c>false</c> (or <c>AIDOTNET_COW_DEEPCOPY=0</c>) to force the eager full-copy path everywhere.
     /// </summary>
-    // Default OFF while full trained-clone fidelity across every NeuralNetwork family is still being
-    // verified: the COW share is correct for inference clones (the OOM-relevant case) and for models
-    // whose entire state is their trainable parameters, but a layer can hold trained state outside
-    // GetTrainableParameters (BatchNorm running stats, registered buffers, and at least one further
-    // category seen on FT/TabTransformer) that the share path does not yet carry, which the
-    // Clone_AfterTraining_ShouldPreserveLearnedWeights invariant catches. Opt in with
-    // AIDOTNET_COW_DEEPCOPY=1 (or set this true) to exercise it. The diffusion clone-OOM lever (#1624)
-    // is wired separately on DiffusionModelBase, where models are pure weight tensors.
+    // Default ON. The COW DeepCopy is correct for every model by construction: it shares trainable
+    // tensors ONLY when the reflection walk fully accounts for the model's ParameterCount and copies
+    // serialization extras (BatchNorm running stats) eagerly, and otherwise FALLS BACK to the eager
+    // full-fidelity copy (models whose GetParameters reads weights outside the trainable-layer graph —
+    // nested sub-models / custom VAE/Siamese layouts — and lazy layers are auto-detected and fall back).
+    // So it never produces a less-faithful clone than the eager path. Validated: ResNet/VGG/SimCSE and
+    // other large-model Clone_AfterTraining tests that OOM'd on the eager clone's memory doubling now
+    // PASS at O(1)-until-write; FT/Tab/DenseNet/Autoencoder/CNN share verified-correct; VAE/Siamese/LSTM
+    // fall back (LSTM's failure is a pre-existing eager #1221 lazy-deserialize bug, not COW). Set
+    // AIDOTNET_COW_DEEPCOPY=0 (or false/off) to force the eager full-copy path everywhere.
     public static bool UseCopyOnWriteDeepCopy { get; set; } =
-        Environment.GetEnvironmentVariable("AIDOTNET_COW_DEEPCOPY") is { } e &&
-        (e == "1" || string.Equals(e, "true", StringComparison.OrdinalIgnoreCase) ||
-         string.Equals(e, "on", StringComparison.OrdinalIgnoreCase));
+        Environment.GetEnvironmentVariable("AIDOTNET_COW_DEEPCOPY") is not { } e ||
+        !(e == "0" || string.Equals(e, "false", StringComparison.OrdinalIgnoreCase) ||
+          string.Equals(e, "off", StringComparison.OrdinalIgnoreCase));
 
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
