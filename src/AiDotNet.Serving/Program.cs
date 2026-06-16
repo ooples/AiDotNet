@@ -171,6 +171,7 @@ public class Program
         // Register services as singletons for thread-safe shared access
         builder.Services.AddSingleton<IModelRepository, ModelRepository>();
         AddConfiguredRequestBatcher(builder.Services);
+        builder.Services.AddSingleton<ITextGenerationService, TextGenerationService>();
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddSingleton<ITierResolver, ClaimsTierResolver>();
         builder.Services.AddSingleton<ITierPolicyProvider, DefaultTierPolicyProvider>();
