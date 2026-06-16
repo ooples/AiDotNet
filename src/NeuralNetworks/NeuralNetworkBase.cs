@@ -3122,7 +3122,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // be SILENTLY wrong if we replayed it blind. So compiled-by-default needs
             // a verify-then-trust gate (run eager once, compare, adopt compiled only
             // on parity; else stay eager for that model/shape) — tracked as #1622 L3b.
-            // Until that gate lands, eager is the safe default; callers can opt into
+            // NOTE for the L3b implementer: the gate canNOT just live here — almost
+            // every concrete model (all but ClipNeuralNetwork) OVERRIDES Predict and
+            // never calls this base method, so a base-only gate would cover ~1 model.
+            // L3b needs either a sealed Predict + virtual PredictCore refactor (single
+            // funnel for the gate) or per-model wiring of a shared verify helper.
+            // Until that lands, eager is the safe default; callers can opt into
             // compiled replay explicitly via CompileForward + PredictCompiled.
             var output = PredictEager(promoted);
 
