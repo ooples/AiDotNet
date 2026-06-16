@@ -262,7 +262,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public FullyConnectedLayer(int outputSize, IActivationFunction<T>? activationFunction = null)
-        : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new ReLUActivation<T>())
+        : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new IdentityActivation<T>())
     {
         if (outputSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(outputSize));
@@ -283,7 +283,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
     /// <param name="outputSize">The number of output neurons. Must be positive.</param>
     /// <param name="activationFunction">Activation applied after the linear transform. Defaults to ReLU.</param>
     public FullyConnectedLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null)
-        : base(new[] { inputSize }, new[] { outputSize }, activationFunction ?? new ReLUActivation<T>())
+        : base(new[] { inputSize }, new[] { outputSize }, activationFunction ?? new IdentityActivation<T>())
     {
         if (inputSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(inputSize));

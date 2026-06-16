@@ -211,7 +211,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public TimeDistributedLayer(LayerBase<T> innerLayer, IActivationFunction<T>? activationFunction = null, int[]? inputShape = null)
-        : base(CalculateInputShape(innerLayer, inputShape), CalculateOutputShape(innerLayer, inputShape), activationFunction ?? new ReLUActivation<T>())
+        : base(CalculateInputShape(innerLayer, inputShape), CalculateOutputShape(innerLayer, inputShape), activationFunction ?? new IdentityActivation<T>())
     {
         _innerLayer = innerLayer;
     }

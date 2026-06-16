@@ -364,7 +364,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
         : base(
             [-1, -1, -1],
             [-1, -1, outputChannels],
-            activationFunction ?? new ReLUActivation<T>())
+            activationFunction ?? new IdentityActivation<T>())
     {
         if (outputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(outputChannels));
         if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize));

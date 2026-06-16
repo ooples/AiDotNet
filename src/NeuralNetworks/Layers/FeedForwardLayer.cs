@@ -428,7 +428,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public FeedForwardLayer(int outputSize, IActivationFunction<T>? activationFunction = null)
-        : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new ReLUActivation<T>())
+        : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new IdentityActivation<T>())
     {
         if (outputSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(outputSize), outputSize, "Output size must be positive.");
@@ -489,7 +489,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public FeedForwardLayer(int outputSize, IVectorActivationFunction<T> activationFunction)
-        : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new ReLUActivation<T>())
+        : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new IdentityActivation<T>())
     {
         if (outputSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(outputSize), outputSize, "Output size must be positive.");

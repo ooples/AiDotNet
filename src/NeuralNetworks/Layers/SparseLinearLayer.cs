@@ -144,7 +144,7 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
         : base(
             [inputFeatures],
             [outputFeatures],
-            activationFunction ?? new ReLUActivation<T>())
+            activationFunction ?? new IdentityActivation<T>())
     {
         if (sparsity < 0 || sparsity >= 1.0)
         {

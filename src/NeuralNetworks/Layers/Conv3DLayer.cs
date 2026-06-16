@@ -257,7 +257,8 @@ public partial class Conv3DLayer<T> : LayerBase<T>
         int padding = 0,
         IActivationFunction<T>? activationFunction = null)
         : base(new[] { -1, -1, -1, -1 }, new[] { outputChannels, -1, -1, -1 },
-            activationFunction ?? new ReLUActivation<T>())
+            // #1629: default to IdentityActivation (no activation) instead of silently substituting ReLU.
+            activationFunction ?? new IdentityActivation<T>())
     {
         if (outputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(outputChannels));
         if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize));

@@ -149,7 +149,8 @@ public class BidirectionalLayer<T> : LayerBase<T>
         bool mergeMode = true,
         IActivationFunction<T>? activationFunction = null,
         IEngine? engine = null)
-        : base(innerLayer.GetInputShape(), CalculateOutputShape(innerLayer.GetOutputShape(), mergeMode), activationFunction ?? new ReLUActivation<T>())
+        // #1629: default to IdentityActivation (no activation) instead of silently substituting ReLU.
+        : base(innerLayer.GetInputShape(), CalculateOutputShape(innerLayer.GetOutputShape(), mergeMode), activationFunction ?? new IdentityActivation<T>())
     {
         _forwardLayer = innerLayer;
         _backwardLayer = innerLayer.Clone();

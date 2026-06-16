@@ -165,7 +165,7 @@ public class LambdaLayer<T> : LayerBase<T>
                        Func<Tensor<T>, Tensor<T>> forwardFunction,
                        Func<Tensor<T>, Tensor<T>, Tensor<T>>? backwardFunction = null,
                        IActivationFunction<T>? activationFunction = null)
-        : base(inputShape, outputShape, activationFunction ?? new ReLUActivation<T>())
+        : base(inputShape, outputShape, activationFunction ?? new IdentityActivation<T>())
     {
         _forwardFunction = forwardFunction;
         _backwardFunction = backwardFunction;
@@ -239,7 +239,7 @@ public class LambdaLayer<T> : LayerBase<T>
     public LambdaLayer(int[] inputShape, int[] outputShape,
                        Func<ComputationNode<T>, ComputationNode<T>> traceableExpression,
                        IActivationFunction<T>? activationFunction = null)
-        : base(inputShape, outputShape, activationFunction ?? new ReLUActivation<T>())
+        : base(inputShape, outputShape, activationFunction ?? new IdentityActivation<T>())
     {
         _traceableExpression = traceableExpression;
         // Create a forward function from the traceable expression for runtime use

@@ -356,7 +356,8 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     public DeconvolutionalLayer(int outputDepth, int kernelSize, int stride = 1, int padding = 0,
                                 IActivationFunction<T>? activationFunction = null)
         : base(new[] { -1, -1, -1 }, new[] { outputDepth, -1, -1 },
-               activationFunction ?? new ReLUActivation<T>())
+               // #1629: default to IdentityActivation (no activation) instead of silently substituting ReLU.
+               activationFunction ?? new IdentityActivation<T>())
     {
         if (outputDepth <= 0) throw new ArgumentOutOfRangeException(nameof(outputDepth));
         if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize));

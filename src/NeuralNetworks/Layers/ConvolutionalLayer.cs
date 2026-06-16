@@ -417,7 +417,8 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
                               IActivationFunction<T>? activationFunction = null,
                               IInitializationStrategy<T>? initializationStrategy = null,
                               IActivationFunction<T>? nonlinearityForInit = null)
-        : base(new[] { -1, -1, -1 }, new[] { outputDepth, -1, -1 }, activationFunction ?? new ReLUActivation<T>())
+        // #1629: default to IdentityActivation (no activation) instead of silently substituting ReLU.
+        : base(new[] { -1, -1, -1 }, new[] { outputDepth, -1, -1 }, activationFunction ?? new IdentityActivation<T>())
     {
         if (outputDepth <= 0) throw new ArgumentOutOfRangeException(nameof(outputDepth), "outputDepth must be positive.");
         if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize), "kernelSize must be positive.");

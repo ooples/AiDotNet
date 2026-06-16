@@ -166,7 +166,7 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>
         : base(
             [inputChannels],
             [outputChannels],
-            activationFunction ?? new ReLUActivation<T>())
+            activationFunction ?? new IdentityActivation<T>())
     {
         ValidateParameters(inputChannels, outputChannels, numNeighbors);
 

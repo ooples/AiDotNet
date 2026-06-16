@@ -436,7 +436,7 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
         : base(
             new[] { -1, -1 },
             new[] { -1, outputChannels },
-            activationFunction ?? new ReLUActivation<T>())
+            activationFunction ?? new IdentityActivation<T>())
     {
         if (outputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(outputChannels));
         if (spiralLength <= 0) throw new ArgumentOutOfRangeException(nameof(spiralLength));
@@ -468,7 +468,7 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
         : base(
             new[] { -1, inputChannels },
             new[] { -1, outputChannels },
-            activationFunction ?? new ReLUActivation<T>())
+            activationFunction ?? new IdentityActivation<T>())
     {
         if (inputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(inputChannels));
         if (outputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(outputChannels));
