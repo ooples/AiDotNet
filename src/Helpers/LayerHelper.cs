@@ -5066,12 +5066,14 @@ public static class LayerHelper<T>
         // Flatten
         yield return new FlattenLayer<T>();
 
-        // Classification head — outputs raw logits. Pair with CrossEntropyWithLogitsLoss<T>
-        // (multi-class) or BinaryCrossEntropyWithLogitsLoss<T> (binary). The probability-
-        // input variants (CrossEntropyLoss / BinaryCrossEntropyLoss) would silently produce
-        // wrong gradients here.
+        // Classification head — Softmax over the class logits, matching the EfficientNet paper
+        // (Tan & Le 2019 §3) and the codebase classifier convention (VGG and the other CNN heads
+        // all end in SoftmaxActivation). This pairs with the MultiClassClassification default loss
+        // CategoricalCrossEntropyLoss, which expects PROBABILITIES — the prior IdentityActivation
+        // (raw logits) against that probability loss produced a wrong gradient that diverged
+        // training. A softmax head also makes Predict return bounded class probabilities.
         yield return new DenseLayer<T>(configuration.NumClasses,
-            activationFunction: new IdentityActivation<T>());
+            activationFunction: new SoftmaxActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>
