@@ -20,8 +20,16 @@ public abstract class ClassificationModelTestBase : System.IDisposable
     /// </summary>
     public virtual void Dispose()
     {
-        DisposeCore();
-        ModelFamilyTestGcGate.ReclaimBetweenTests();
+        // Reclaim must be unconditional: a throwing derived DisposeCore() must not skip the
+        // shared GC gate, or heavy shards reintroduce cross-test memory buildup / OOM.
+        try
+        {
+            DisposeCore();
+        }
+        finally
+        {
+            ModelFamilyTestGcGate.ReclaimBetweenTests();
+        }
     }
 
     /// <summary>
