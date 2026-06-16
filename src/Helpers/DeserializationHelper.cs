@@ -2377,8 +2377,21 @@ public static class DeserializationHelper
             // ctor for each), and LayerBase.GetMetadata serializes whichever it holds
             // under ScalarActivationType / VectorActivationType. Restore both so a
             // vector-activation ResidualLayer doesn't silently round-trip to scalar/identity.
+            bool hasResidualScalarActivation = additionalParams?.ContainsKey("ScalarActivationType") == true;
+            bool hasResidualVectorActivation = additionalParams?.ContainsKey("VectorActivationType") == true;
             object? residualScalarActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", scalarActivationFuncType);
             object? residualVectorActivation = TryCreateActivationInstance(additionalParams, "VectorActivationType", vectorActivationFuncType);
+            // A present-but-unrestorable activation key means the saved model used an
+            // activation we can't reconstruct. Falling through would silently swap it for
+            // identity, deserializing a DIFFERENT model than was saved — reject instead.
+            if (hasResidualScalarActivation && residualScalarActivation is null)
+                throw new InvalidOperationException(
+                    $"ResidualLayer metadata contains ScalarActivationType='{additionalParams!["ScalarActivationType"]}' " +
+                    "but it could not be restored; refusing to silently substitute identity.");
+            if (hasResidualVectorActivation && residualVectorActivation is null)
+                throw new InvalidOperationException(
+                    $"ResidualLayer metadata contains VectorActivationType='{additionalParams!["VectorActivationType"]}' " +
+                    "but it could not be restored; refusing to silently substitute identity.");
 
             // Preferred path: reconstruct the inner layer by its REAL type from the
             // full type-name + I/O shapes + nested "Inner__" metadata written by
@@ -2388,12 +2401,20 @@ public static class DeserializationHelper
             // SetParameters throws "Expected N parameters, but got M" on Clone/DeepCopy.
             ILayer<T>? innerLayer = null;
             string? innerTypeName = null;
+            object? innerTypeObj = null;
             if (additionalParams != null
-                && additionalParams.TryGetValue("InnerLayerTypeName", out var innerTypeObj)
-                && innerTypeObj is string innerTypeStr
-                && !string.IsNullOrEmpty(innerTypeStr))
+                && additionalParams.TryGetValue("InnerLayerTypeName", out innerTypeObj))
             {
-                innerTypeName = innerTypeStr;
+                // The preferred metadata key is present, so an empty/non-string value is a
+                // HARD error: the legacy Dense fallback is only valid for older saves that
+                // never wrote InnerLayerTypeName at all. Silently rebuilding a named inner
+                // layer as Dense would deserialize the wrong architecture.
+                innerTypeName = innerTypeObj as string;
+                if (string.IsNullOrWhiteSpace(innerTypeName))
+                    throw new InvalidOperationException(
+                        "ResidualLayer metadata contains InnerLayerTypeName but it is empty or not a string; " +
+                        "refusing to silently rebuild it as a Dense layer.");
+
                 int[]? innerIn = TryGetIntArray(additionalParams, "InnerLayerInputShape");
                 int[]? innerOut = TryGetIntArray(additionalParams, "InnerLayerOutputShape");
                 // The preferred (type-name) metadata is present, so corrupt/missing
