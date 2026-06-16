@@ -4,6 +4,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
+[Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4)
 public class FreeInpaintModelTests : DiffusionModelTestBase<float>
 {
     // SD-based latent diffusion: 4 channels, 64x64 latent (512x512 images / 8x VAE)
