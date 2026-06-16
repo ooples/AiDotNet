@@ -3102,28 +3102,28 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // to one filter's pre-softmax distribution.
             var promoted = NormalizeInputBatchDim(input);
 
-            // Route through the eager forward instead of PredictCompiled. The
-            // compiled-plan cache in CompiledModelHost binds to the trace-time
-            // input tensor reference and replay reads stale data when called
-            // with a *different* tensor of the same shape (the canonical
-            // DifferentInputs / ScaledInput invariant failure: same shape,
-            // new values, but the cached plan returns the first call's
-            // output).
+            // Route through the eager forward instead of PredictCompiled.
             //
-            // Trade-off: this IS a per-call latency regression vs the prior
-            // compiled-by-default behavior. Eager re-runs each forward op
-            // through the engine instead of replaying a baked plan. The
-            // regression is correctness-driven — compiled replay was
-            // returning silently wrong outputs for the very common
-            // "same model, same shape, new values" inference pattern.
-            // A future Tensors-package release that adds value-aware
-            // compiled replay (re-key on a tensor data hash, or
-            // explicit re-trace on input change) can restore the
-            // compiled fast path as the default; until then,
-            // correctness wins. Callers who care about replay latency
-            // can opt back in via CompileForward + identical-tensor
-            // replay (their responsibility to feed the same tensor
-            // reference each call).
+            // HISTORY (corrected 2026-06, #1622 L3): an earlier revision of this
+            // comment claimed compiled replay binds the trace-time input as a
+            // constant and returns stale output for a *different* same-shape input.
+            // That is NO LONGER TRUE — CompiledModelHost.Predict rebinds the fresh
+            // input via plan.SetInputs(new[] { input }) before Execute() on both the
+            // hot path and the slow path, so replay reflects the current input's
+            // values. CompiledInferenceParityTests.{Mlp,Cnn}_CompiledReplay_
+            // DifferentSameShapeInput_IsNotStale pin this (trace on A, replay on B,
+            // assert eager(B)).
+            //
+            // The reason Predict still defaults to EAGER is a different, narrower
+            // risk: some model families compile a plan that succeeds but is
+            // NUMERICALLY WRONG (the AIsEval benchmark's "compiled 2/16 vs eager
+            // 4/16"; CompiledInferenceParityTests Defect 1 was one such CNN plan).
+            // A plan that compiles "successfully" but computes the wrong answer would
+            // be SILENTLY wrong if we replayed it blind. So compiled-by-default needs
+            // a verify-then-trust gate (run eager once, compare, adopt compiled only
+            // on parity; else stay eager for that model/shape) — tracked as #1622 L3b.
+            // Until that gate lands, eager is the safe default; callers can opt into
+            // compiled replay explicitly via CompileForward + PredictCompiled.
             var output = PredictEager(promoted);
 
             // If we promoted the input by prepending a unit batch dim,
