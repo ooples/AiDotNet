@@ -8828,6 +8828,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             return false;
         }
 
+        // Coverage guard: the share only transfers the tensors GetTrainableParameters exposes. If the
+        // model's total ParameterCount includes MORE than that — a model whose GetParameters reads
+        // weights NOT surfaced through a trainable layer (a nested sub-model's own parameters, a custom
+        // VAE/Siamese/RNN layout) — the share would be incomplete and the clone would diverge after
+        // training. Detect that cheaply (no flatten, side-effect-free) by comparing the walked tensor
+        // element count to ParameterCount, and fall back to the eager full-fidelity copy if they differ.
+        long walkedParamCount = 0;
+        for (int i = 0; i < srcLayers.Count; i++)
+        {
+            var tp = srcLayers[i].GetTrainableParameters();
+            for (int p = 0; p < tp.Count; p++) walkedParamCount += tp[p].Length;
+        }
+        if (walkedParamCount != ParameterCount)
+        {
+            (copy as IDisposable)?.Dispose();
+            return false;
+        }
+
         for (int i = 0; i < srcLayers.Count; i++)
         {
             var src = srcLayers[i];
