@@ -53,6 +53,12 @@ internal class ContinuousBatcher<T> : IDisposable
     internal int LastStepSpeculationTokens { get; private set; }
     internal string LastStepSpeculationReason { get; private set; } = string.Empty;
 
+    /// <summary>
+    /// Fraction of drafted tokens accepted by the target model, or null when speculative
+    /// decoding has not run for this batcher. Exposed for serving-layer telemetry.
+    /// </summary>
+    internal double? SpeculationAcceptanceRate => _speculativeDecoder?.AcceptanceRate;
+
     private readonly ConcurrentDictionary<long, TaskCompletionSource<GenerationResult<T>>> _pendingResults;
     private readonly ConcurrentQueue<SequenceState<T>> _incomingRequests;
 
@@ -226,53 +232,75 @@ internal class ContinuousBatcher<T> : IDisposable
         _totalIterations++;
         int tokensGenerated = 0;
 
-        // Separate prefill and decode sequences
+        // Partition the batch: sequences still needing prefill vs. those already decoding.
+        // decodeSequences is captured BEFORE prefill flips PrefillComplete, so a sequence
+        // prefilled this iteration emits exactly its prefill token now and only starts
+        // decoding on subsequent iterations. This honors MaxNewTokens exactly (a fresh
+        // sequence no longer both prefills and decodes within the same step).
         var prefillSequences = batch.Where(s => !s.PrefillComplete).ToList();
         var decodeSequences = batch.Where(s => s.PrefillComplete).ToList();
 
-        // Run prefill for new sequences
+        // Run prefill for new sequences and account for the first generated token.
         foreach (var seq in prefillSequences)
         {
-            RunPrefill(seq);
+            int? firstToken = RunPrefill(seq);
+            if (firstToken.HasValue)
+            {
+                tokensGenerated += AccountForToken(seq, firstToken.Value, useSpeculation);
+            }
         }
 
-        // Run decode step for all sequences
-        foreach (var seq in batch)
+        // Run a decode step for sequences that were already generating in prior iterations.
+        foreach (var seq in decodeSequences)
         {
-            if (seq.Status == SequenceStatus.Generating)
+            if (seq.Status != SequenceStatus.Generating)
+                continue;
+
+            var newTokens = useSpeculation ? RunDecodeStepSpeculative(seq) : RunDecodeStep(seq);
+            foreach (var newToken in newTokens)
             {
-                var newTokens = useSpeculation ? RunDecodeStepSpeculative(seq) : RunDecodeStep(seq);
-                if (newTokens.Count > 0)
-                {
-                    foreach (var newToken in newTokens)
-                    {
-                        tokensGenerated++;
-                        _totalTokensGenerated++;
-                        if (useSpeculation)
-                            LastStepSpeculationTokens++;
+                tokensGenerated += AccountForToken(seq, newToken, useSpeculation);
 
-                        // Fire token generated event
-                        TokenGenerated?.Invoke(this, new TokenGeneratedEventArgs<T>
-                        {
-                            Sequence = seq,
-                            TokenId = newToken
-                        });
-
-                        // Invoke callback if provided
-                        seq.Request.OnTokenGenerated?.Invoke(newToken);
-
-                        // Check for completion after each appended token
-                        if (seq.ShouldStop(_config.EosTokenId, seq.Request.StopTokenIds))
-                        {
-                            CompleteSequence(seq);
-                            break;
-                        }
-                    }
-                }
+                // Stop processing further tokens once the sequence has completed.
+                if (seq.Status == SequenceStatus.Completed)
+                    break;
             }
         }
 
         return tokensGenerated;
+    }
+
+    /// <summary>
+    /// Records a generated token: updates statistics, raises the streaming notification and
+    /// per-token callback, and completes the sequence when a stop condition is reached.
+    /// The token must already be appended to the sequence by the prefill/decode step that
+    /// produced it.
+    /// </summary>
+    /// <returns>The number of tokens accounted for (always 1).</returns>
+    private int AccountForToken(SequenceState<T> sequence, int tokenId, bool useSpeculation)
+    {
+        _totalTokensGenerated++;
+        if (useSpeculation)
+            LastStepSpeculationTokens++;
+
+        // Fire token-generated event (for streaming consumers).
+        TokenGenerated?.Invoke(this, new TokenGeneratedEventArgs<T>
+        {
+            Sequence = sequence,
+            TokenId = tokenId
+        });
+
+        // Invoke the per-token callback if one was provided.
+        sequence.Request.OnTokenGenerated?.Invoke(tokenId);
+
+        // Check for completion after the appended token.
+        if (sequence.Status != SequenceStatus.Completed &&
+            sequence.ShouldStop(_config.EosTokenId, sequence.Request.StopTokenIds))
+        {
+            CompleteSequence(sequence);
+        }
+
+        return 1;
     }
 
     /// <summary>
@@ -330,11 +358,17 @@ internal class ContinuousBatcher<T> : IDisposable
         }
     }
 
-    private void RunPrefill(SequenceState<T> sequence)
+    /// <summary>
+    /// Processes the full prompt in a single forward pass and emits the first generated token.
+    /// The token (if any) is appended to the sequence and returned so the caller can run the
+    /// shared per-token accounting; returns null when there is no model or no prompt tokens.
+    /// </summary>
+    private int? RunPrefill(SequenceState<T> sequence)
     {
         sequence.Status = SequenceStatus.Prefilling;
         sequence.GenerationStartedAt = DateTime.UtcNow;
 
+        int? firstToken = null;
         if (_model != null && sequence.TokenIds.Count > 0)
         {
             // Create input tensor from prompt tokens
@@ -346,10 +380,12 @@ internal class ContinuousBatcher<T> : IDisposable
             // Get next token from logits
             int nextToken = SampleFromLogits(logits, sequence.Request);
             sequence.AppendToken(nextToken);
+            firstToken = nextToken;
         }
 
         sequence.PrefillComplete = true;
         sequence.Status = SequenceStatus.Generating;
+        return firstToken;
     }
 
     private IReadOnlyList<int> RunDecodeStep(SequenceState<T> sequence)
