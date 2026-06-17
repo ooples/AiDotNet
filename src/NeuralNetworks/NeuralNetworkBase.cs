@@ -5449,7 +5449,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Auto policy (fp/bf16 masters), so it leaves StreamingStoreDtype at its default.
         bool isTrainingForThisAttempt = isTrainingOverride ?? IsTrainingMode;
         if (!isTrainingForThisAttempt)
-            options.StreamingStoreDtype = ResolveInferenceStoreDtype(paramCount, options.StreamingPoolMaxResidentBytes);
+            // Use effectiveCount, not paramCount: a lazy foundation model can cross the threshold
+            // via SafeEstimateStructuralParameterCount() while ParameterCount is still 0 pre-first-
+            // forward. Passing paramCount=0 would make ResolveInferenceStoreDtype fall back to Auto,
+            // so the int8-resident tier would never engage before the first forward.
+            options.StreamingStoreDtype = ResolveInferenceStoreDtype(effectiveCount, options.StreamingPoolMaxResidentBytes);
         // L3b (#1622): a foundation-scale model auto-enables the verify-then-trust
         // compiled forward path (PredictAccelerated) too, composing the compiled plan
         // with the quant-resident streamed weights configured just above (L1 + L3

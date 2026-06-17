@@ -158,9 +158,9 @@ internal sealed class VerifiedInferenceGate<T>
         {
             ValueHash = valueHash,
             Version = version,
-            Input = (T[])input.ToArray().Clone(),
+            Input = input.ToArray(),
             InputShape = (int[])input._shape.Clone(),
-            Output = (T[])output.ToArray().Clone(),
+            Output = output.ToArray(),
             OutputShape = (int[])output._shape.Clone(),
         };
     }
