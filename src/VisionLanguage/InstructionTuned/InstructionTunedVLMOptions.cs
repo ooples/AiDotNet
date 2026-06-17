@@ -61,4 +61,24 @@ public class InstructionTunedVLMOptions : GenerativeVLMOptions
 
     /// <summary>Gets or sets the system prompt for chat mode.</summary>
     public string SystemPrompt { get; set; } = "You are a helpful assistant.";
+
+    /// <summary>
+    /// Fail-fast validation of the size-related options before any layer is
+    /// allocated. Called by every InstructionTuned VLM ctor so a malformed
+    /// options bag (ImageSize = 0, MaxVisualTokens = 0, etc.) throws
+    /// <see cref="ArgumentOutOfRangeException"/> at the configuration site
+    /// rather than surfacing as an obscure shape exception ~ 200 MB of
+    /// weight tensors later. The exception's <c>ParamName</c> matches the
+    /// camelCase form of the offending option so callers can pattern-match
+    /// on it (the
+    /// <c>VisionLanguagePatchSizingReviewRegressionIntegrationTests</c>
+    /// regression suite depends on this contract).
+    /// </summary>
+    public void ValidateVisualSizing()
+    {
+        if (ImageSize <= 0)
+            throw new ArgumentOutOfRangeException("imageSize", ImageSize, "ImageSize must be positive.");
+        if (MaxVisualTokens <= 0)
+            throw new ArgumentOutOfRangeException("maxVisualTokens", MaxVisualTokens, "MaxVisualTokens must be positive.");
+    }
 }

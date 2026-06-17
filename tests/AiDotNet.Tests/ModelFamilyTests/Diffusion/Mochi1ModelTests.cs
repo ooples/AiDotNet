@@ -4,11 +4,11 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-public class Mochi1ModelTests : DiffusionModelTestBase
+public class Mochi1ModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 12, 32, 32];
     protected override int[] OutputShape => [1, 12, 32, 32];
 
-    protected override IDiffusionModel<double> CreateModel()
-        => new Mochi1Model<double>(seed: 42);
+    protected override IDiffusionModel<float> CreateModel()
+        => new Mochi1Model<float>(seed: 42);
 }

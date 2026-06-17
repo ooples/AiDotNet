@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Inherits all NN invariant tests and adds VL-specific invariants:
 /// image-only input, embedding diversity, bounded norms, and zero-image handling.
 /// </summary>
-public abstract class VisionLanguageTestBase : NeuralNetworkModelTestBase
+public abstract class VisionLanguageTestBase<T> : NeuralNetworkModelTestBase<T>
 {
     // =====================================================
     // VISION-LANGUAGE INVARIANT: Image Input → Finite Output
@@ -31,7 +31,8 @@ public abstract class VisionLanguageTestBase : NeuralNetworkModelTestBase
         Assert.True(output.Length > 0, "VL model produced empty output for image input.");
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.True(!double.IsNaN(output[i]) && !double.IsInfinity(output[i]),
+            double v = ConvertToDouble(output[i]);
+            Assert.True(!double.IsNaN(v) && !double.IsInfinity(v),
                 $"Output[{i}] is not finite — VL model failed on image input.");
         }
     }
@@ -59,7 +60,7 @@ public abstract class VisionLanguageTestBase : NeuralNetworkModelTestBase
         int minLen = Math.Min(emb1.Length, emb2.Length);
         for (int i = 0; i < minLen; i++)
         {
-            if (Math.Abs(emb1[i] - emb2[i]) > 1e-12)
+            if (Math.Abs(ConvertToDouble(emb1[i]) - ConvertToDouble(emb2[i])) > 1e-12)
             {
                 anyDifferent = true;
                 break;
@@ -88,7 +89,10 @@ public abstract class VisionLanguageTestBase : NeuralNetworkModelTestBase
 
         double normSq = 0;
         for (int i = 0; i < output.Length; i++)
-            normSq += output[i] * output[i];
+        {
+            double v = ConvertToDouble(output[i]);
+            normSq += v * v;
+        }
         double norm = Math.Sqrt(normSq);
 
         Assert.True(norm < 1e4,
@@ -113,8 +117,17 @@ public abstract class VisionLanguageTestBase : NeuralNetworkModelTestBase
         Assert.True(output.Length > 0, "VL model produced empty output for black image.");
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.False(double.IsNaN(output[i]),
-                $"Output[{i}] is NaN for all-zero image input.");
+            double v = ConvertToDouble(output[i]);
+            Assert.True(!double.IsNaN(v) && !double.IsInfinity(v),
+                $"Output[{i}] is not finite for all-zero image input.");
         }
     }
 }
+
+/// <summary>
+/// Double-precision binding of <see cref="VisionLanguageTestBase{T}"/>. Existing
+/// VL test classes extend this non-generic name and run in double unchanged; large
+/// (&gt;1B-param) VL models that cannot fit a double forward in the CPU test budget
+/// extend <c>VisionLanguageTestBase&lt;float&gt;</c> instead.
+/// </summary>
+public abstract class VisionLanguageTestBase : VisionLanguageTestBase<double> { }

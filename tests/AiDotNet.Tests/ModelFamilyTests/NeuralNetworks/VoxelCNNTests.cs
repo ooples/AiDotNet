@@ -4,7 +4,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class VoxelCNNTests : NeuralNetworkModelTestBase
+public class VoxelCNNTests : NeuralNetworkModelTestBase<float>
 {
     // VoxelCNN default: 32x32x32 voxels, 1 channel
     // Actual output is 128-dim from conv feature extraction
@@ -23,6 +23,6 @@ public class VoxelCNNTests : NeuralNetworkModelTestBase
     protected override int MoreDataLongIterations => 2;
     protected override double MoreDataTolerance => 0.5;
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new VoxelCNN<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new VoxelCNN<float>();
 }

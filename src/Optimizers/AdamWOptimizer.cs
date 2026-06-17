@@ -46,7 +46,7 @@ namespace AiDotNet.Optimizers;
 /// </example>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     /// <summary>
     /// The options specific to the AdamW optimizer.
@@ -142,6 +142,24 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// Gets whether AMSGrad variant is enabled.
     /// </summary>
     public bool UseAMSGrad => _options.UseAMSGrad;
+
+    /// <inheritdoc/>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        if (_options.UseAdaptiveLearningRate) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+        // AdamW + AMSGrad uses the same max-second-moment kernel; decoupled weight
+        // decay is carried in WeightDecay and applied by the AdamW update path.
+        config = new Fused.FusedOptimizerConfig(
+            _options.UseAMSGrad
+                ? Tensors.Engines.Compilation.OptimizerType.AMSGrad
+                : Tensors.Engines.Compilation.OptimizerType.AdamW,
+            (float)GetCurrentLearningRate(),
+            (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon,
+            (float)_options.WeightDecay, schedule);
+        return true;
+    }
 
     /// <summary>
     /// Performs the optimization process using the AdamW algorithm.
@@ -589,20 +607,72 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         T biasCorrection2 = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _tapeStep));
         T weightDecay = NumOps.FromDouble(_options.WeightDecay);
 
+        // GPU-RESIDENT ADAMW (env AIDOTNET_GPU_ADAM=1): see AdamOptimizer.Step for the rationale — run the
+        // update on the GPU (GpuOptimizer.TryAdamWStep -> backend.AdamWUpdate, decoupled weight decay) so grads
+        // never download. Moments are GPU-resident; falls back to the tensor-op path per-param otherwise. Gated off.
+        bool gpuAdam = typeof(T) == typeof(float) && !_options.UseAMSGrad
+            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
+            && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
+
         foreach (var param in context.Parameters)
         {
-            if (!context.Gradients.TryGetValue(param, out var grad))
+            // Cheap presence check — defer sparse→dense materialization until after
+            // the sparse fast path declines, so a sparse-only embedding param isn't
+            // ToDense'd into a full [vocab, dim] tensor that the scatter path below
+            // would then discard via `continue` (review #1526).
+            bool hasDenseGrad = context.Gradients.TryGetValue(param, out var denseGradLookup) && denseGradLookup is not null;
+            bool hasSparseGrad = SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param);
+            if (!hasDenseGrad && !hasSparseGrad)
                 continue;
 
             if (!_tapeM.TryGetValue(param, out var m))
             {
-                m = new Tensor<T>(param._shape);
+                m = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape);
+                if (gpuAdam) m.AsWritableSpan().Clear();
                 _tapeM[param] = m;
             }
             if (!_tapeV.TryGetValue(param, out var v))
             {
-                v = new Tensor<T>(param._shape);
+                v = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape);
+                if (gpuAdam) v.AsWritableSpan().Clear();
                 _tapeV[param] = v;
+            }
+
+            // Sparse-embedding scatter path (Tensors#553). Same rationale as the
+            // AdamOptimizer path — only the ~16 accessed rows of a 250 002-vocab
+            // embedding table receive real gradients per step, and touching m/v/θ
+            // on the other 249 986 rows is the actual bottleneck. AdamW differs
+            // from Adam only in decoupled weight decay (θ ← θ(1 − lr·wd) − step),
+            // which the helper applies per-row when weightDecay > 0. AMSGrad
+            // keeps the dense path (vMax invariant requires touching every row).
+            if (!_options.UseAMSGrad
+                && SparseEmbeddingOptimizerHelpers.TryApplyAdamSparse(
+                    param, m, v,
+                    NumOps.ToDouble(CurrentLearningRate),
+                    _options.Beta1, _options.Beta2,
+                    1.0 - Math.Pow(_options.Beta1, _tapeStep),
+                    1.0 - Math.Pow(_options.Beta2, _tapeStep),
+                    _options.Epsilon,
+                    weightDecay: _options.WeightDecay))
+            {
+                continue;
+            }
+
+            // Sparse path declined (AMSGrad / non-rank-2 / no sparse grads) — resolve
+            // the dense gradient now (ToDense only happens here, for a path that needs
+            // it). Reuse the lookup performed by the presence check above.
+            if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
+                continue;
+
+            // GPU-resident fused AdamW (no host download); falls back if any tensor isn't GPU-resident.
+            if (gpuAdam && param.Length == grad.Length)
+            {
+                if (AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryAdamWStep(
+                        (Tensor<float>)(object)param, (Tensor<float>)(object)grad,
+                        (Tensor<float>)(object)m, (Tensor<float>)(object)v,
+                        (float)NumOps.ToDouble(CurrentLearningRate), (float)_options.Beta1, (float)_options.Beta2,
+                        (float)_options.Epsilon, (float)_options.WeightDecay, _tapeStep))
+                    continue;
             }
 
             // m = beta1 * m + (1 - beta1) * grad
@@ -724,6 +794,12 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         _v = Vector<T>.Empty();
         _vMax = null;
         _t = 0;
+        // Clear the tape-side fast-path state so a reused optimizer instance does
+        // not carry stale moments / bias-correction step into the next run.
+        _tapeM.Clear();
+        _tapeV.Clear();
+        _tapeVMax.Clear();
+        _tapeStep = 0;
     }
 
     /// <summary>

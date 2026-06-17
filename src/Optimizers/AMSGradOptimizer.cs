@@ -285,14 +285,44 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
         T epsilon = NumOps.FromDouble(_options.Epsilon);
         T biasCorrection1 = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _tapeStep));
 
+        // GPU-resident step (AIDOTNET_GPU_ADAM=1); gated off, CPU fallback per-param when not GPU-resident.
+        bool gpuAdam = typeof(T) == typeof(float)
+            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
+            && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
+
         foreach (var param in context.Parameters)
         {
-            if (!context.Gradients.TryGetValue(param, out var grad))
+            // True sparse scatter AMSGrad: m + v + vMax + param at touched indices.
+            // vMax updates only at touched (untouched vMax stays at previous max — consistent
+            // with the sparse-history semantics for state buffers).
+            if (!gpuAdam && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            {
+                if (!_tapeM.TryGetValue(param, out var mSp)) { mSp = new Tensor<T>(param._shape); _tapeM[param] = mSp; }
+                if (!_tapeV.TryGetValue(param, out var vSp)) { vSp = new Tensor<T>(param._shape); _tapeV[param] = vSp; }
+                if (!_tapeVHat.TryGetValue(param, out var vHatSp)) { vHatSp = new Tensor<T>(param._shape); _tapeVHat[param] = vHatSp; }
+                double bc1 = 1.0 - Math.Pow(_options.Beta1, _tapeStep);
+                double bc2 = 1.0 - Math.Pow(_options.Beta2, _tapeStep);
+                if (SparseEmbeddingOptimizerHelpers.TryApplyAmsgradSparse(
+                        param, mSp, vSp, vHatSp,
+                        NumOps.ToDouble(CurrentLearningRate),
+                        _options.Beta1, _options.Beta2, bc1, bc2,
+                        _options.Epsilon, weightDecay: 0.0))
+                {
+                    continue;
+                }
+            }
+
+            if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
-            if (!_tapeM.TryGetValue(param, out var m)) { m = new Tensor<T>(param._shape); _tapeM[param] = m; }
-            if (!_tapeV.TryGetValue(param, out var v)) { v = new Tensor<T>(param._shape); _tapeV[param] = v; }
-            if (!_tapeVHat.TryGetValue(param, out var vHat)) { vHat = new Tensor<T>(param._shape); _tapeVHat[param] = vHat; }
+            if (!_tapeM.TryGetValue(param, out var m)) { m = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) m.AsWritableSpan().Clear(); _tapeM[param] = m; }
+            if (!_tapeV.TryGetValue(param, out var v)) { v = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) v.AsWritableSpan().Clear(); _tapeV[param] = v; }
+            if (!_tapeVHat.TryGetValue(param, out var vHat)) { vHat = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) vHat.AsWritableSpan().Clear(); _tapeVHat[param] = vHat; }
+
+            if (gpuAdam && param.Length == grad.Length
+                && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryAmsgradStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)m, (Tensor<float>)(object)v, (Tensor<float>)(object)vHat,
+                    (float)NumOps.ToDouble(CurrentLearningRate), (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon, 0f, _tapeStep))
+                continue;
 
             // m = beta1 * m + (1 - beta1) * grad
             Engine.TensorCopy(Engine.TensorAdd(Engine.TensorMultiplyScalar(m, beta1), Engine.TensorMultiplyScalar(grad, oneMinusBeta1)), m);

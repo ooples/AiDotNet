@@ -7,7 +7,7 @@ using Xunit.Abstractions;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class RecurrentNeuralNetworkTests : NeuralNetworkModelTestBase
+public class RecurrentNeuralNetworkTests : NeuralNetworkModelTestBase<float>
 {
     private readonly ITestOutputHelper _output;
 
@@ -21,7 +21,7 @@ public class RecurrentNeuralNetworkTests : NeuralNetworkModelTestBase
     protected override int[] InputShape => [4, 128];
     protected override int[] OutputShape => [1];
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new RecurrentNeuralNetwork<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new RecurrentNeuralNetwork<float>();
 
 }

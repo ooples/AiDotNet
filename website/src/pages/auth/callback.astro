@@ -205,11 +205,38 @@ const base = import.meta.env.BASE_URL;
                <pre class="mt-2 whitespace-pre-wrap break-words bg-red-100/40 dark:bg-red-900/30 p-2 rounded">${safe(details)}</pre>
              </details>`
           : '';
+
+        // "Report to support" mailto with diagnostic context pre-filled
+        // in the body. Previous error UIs told users to contact support
+        // without giving them a working channel — this guarantees a click
+        // sends an email with the headline, hint, technical details, page
+        // URL, user agent and timestamp pre-populated. mailto: is the
+        // lowest-common-denominator transport: works without JS, without
+        // third-party cookies, and without a feedback widget reaching out
+        // to an external service. The user can always edit before sending.
+        const ts = new Date().toISOString();
+        const body =
+          'Headline: ' + headline + '\n' +
+          (hint ? 'Hint: ' + hint + '\n' : '') +
+          (details ? 'Details:\n' + details + '\n' : '') +
+          'Page URL: ' + window.location.href + '\n' +
+          'Timestamp (UTC): ' + ts + '\n' +
+          'User Agent: ' + navigator.userAgent + '\n\n' +
+          'What I was trying to do:\n(please describe)\n';
+        const mailto =
+          'mailto:support@aidotnet.dev'
+          + '?subject=' + encodeURIComponent('[aidotnet.dev] Sign-in failed: ' + headline)
+          + '&body=' + encodeURIComponent(body);
+
         errorDiv.innerHTML = `
           <p class="font-semibold text-red-700 dark:text-red-300">${safe(headline)}</p>
           ${hintHtml}
           ${detailsHtml}
-          <p class="mt-3"><a href="${base}login/" class="underline font-medium">Back to login</a></p>
+          <p class="mt-3">
+            <a href="${base}login/" class="underline font-medium">Back to login</a>
+            <span class="mx-2 text-slate-400">·</span>
+            <a href="${mailto}" class="underline font-medium">Report to support</a>
+          </p>
         `;
         errorDiv.classList.remove('hidden');
       }

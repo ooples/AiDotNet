@@ -293,19 +293,55 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
     private (int Feature, T Threshold, T SDR) FindBestSplitForFeature(Matrix<T> x, Vector<T> y, int feature)
     {
         var featureValues = x.GetColumn(feature);
+        int n = featureValues.Length;
         var sortedIndices = featureValues.Select((value, index) => (value, index))
                                             .OrderBy(pair => pair.value)
                                             .Select(pair => pair.index)
                                             .ToArray();
-        var bestSplit = (Threshold: NumOps.Zero, SDR: NumOps.Zero);
 
-        for (int i = 1; i < sortedIndices.Length; i++)
+        // Standard-deviation-reduction split search only needs the variance of the TARGET on each
+        // side. Sweep candidate thresholds in feature-sorted order maintaining running left/right
+        // sum & sum-of-squares, so each split is O(1). The previous CalculateSDR rebuilt — and then
+        // discarded — two full feature sub-matrices for EVERY candidate threshold of EVERY feature
+        // at EVERY node, which dominated M5 training allocation. Nothing here copies the matrix.
+        T totalSum = NumOps.Zero, totalSumSq = NumOps.Zero;
+        for (int i = 0; i < n; i++)
         {
-            var threshold = NumOps.Divide(NumOps.Add(featureValues[sortedIndices[i - 1]], featureValues[sortedIndices[i]]), NumOps.FromDouble(2));
-            var sdr = CalculateSDR(x, y, feature, threshold);
+            var yi = y[i];
+            totalSum = NumOps.Add(totalSum, yi);
+            totalSumSq = NumOps.Add(totalSumSq, NumOps.Square(yi));
+        }
+
+        T totalVariance = VarianceFromMoments(totalSum, totalSumSq, n);
+        var bestSplit = (Threshold: NumOps.Zero, SDR: NumOps.Zero);
+        T leftSum = NumOps.Zero, leftSumSq = NumOps.Zero;
+
+        for (int i = 1; i < n; i++)
+        {
+            var yPrev = y[sortedIndices[i - 1]];
+            leftSum = NumOps.Add(leftSum, yPrev);
+            leftSumSq = NumOps.Add(leftSumSq, NumOps.Square(yPrev));
+
+            // No valid threshold between two equal feature values (sorted ascending).
+            if (!NumOps.GreaterThan(featureValues[sortedIndices[i]], featureValues[sortedIndices[i - 1]]))
+            {
+                continue;
+            }
+
+            int leftCount = i, rightCount = n - i;
+            T leftVariance = VarianceFromMoments(leftSum, leftSumSq, leftCount);
+            T rightVariance = VarianceFromMoments(
+                NumOps.Subtract(totalSum, leftSum), NumOps.Subtract(totalSumSq, leftSumSq), rightCount);
+
+            T weightedVariance = NumOps.Add(
+                NumOps.Multiply(NumOps.Divide(NumOps.FromDouble(leftCount), NumOps.FromDouble(n)), leftVariance),
+                NumOps.Multiply(NumOps.Divide(NumOps.FromDouble(rightCount), NumOps.FromDouble(n)), rightVariance));
+            T sdr = NumOps.Subtract(totalVariance, weightedVariance);
 
             if (NumOps.GreaterThan(sdr, bestSplit.SDR))
             {
+                var threshold = NumOps.Divide(
+                    NumOps.Add(featureValues[sortedIndices[i - 1]], featureValues[sortedIndices[i]]), NumOps.FromDouble(2));
                 bestSplit = (threshold, sdr);
             }
         }
@@ -314,47 +350,37 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
     }
 
     /// <summary>
-    /// Calculates the standard deviation reduction (SDR) for a potential split.
+    /// Computes the sample variance of a group of target values from its running sum and
+    /// sum-of-squares, used by the standard-deviation-reduction split search.
     /// </summary>
-    /// <param name="x">The feature matrix for the current node.</param>
-    /// <param name="y">The target vector for the current node.</param>
-    /// <param name="feature">The feature index for the split.</param>
-    /// <param name="threshold">The threshold value for the split.</param>
-    /// <returns>The standard deviation reduction value.</returns>
+    /// <param name="sum">The sum of the group's target values (Σx).</param>
+    /// <param name="sumSq">The sum of squares of the group's target values (Σx²).</param>
+    /// <param name="count">The number of values in the group.</param>
+    /// <returns>The sample variance (N-1 denominator), or zero for fewer than two values.</returns>
     /// <remarks>
     /// <para>
-    /// This method calculates how much a particular split reduces the variability in the target values. It computes
-    /// the total variance of the target values before splitting and the weighted average of the variances after splitting,
-    /// and returns the difference as the standard deviation reduction (SDR).
+    /// Matches <see cref="StatisticsHelper{T}.CalculateVariance(Vector{T})"/>'s definition but takes
+    /// pre-accumulated moments, so the split search can evaluate each candidate threshold in O(1)
+    /// without materializing per-side sub-vectors or sub-matrices of the data.
     /// </para>
-    /// <para><b>For Beginners:</b> This method measures how good a potential split is.
-    /// 
-    /// It works by:
-    /// - Calculating how spread out (variable) the target values are before splitting
-    /// - Splitting the data into two groups based on the feature and threshold
-    /// - Calculating how spread out the values are within each group
-    /// - Comparing the before and after spread to see how much improvement the split provides
-    /// 
-    /// A higher SDR value means the split does a better job of creating groups with similar values,
-    /// which leads to more accurate predictions.
+    /// <para><b>For Beginners:</b> Variance measures how spread out a group of numbers is. Instead
+    /// of collecting each group's numbers into a new list every time we test a split point (which is
+    /// slow and wasteful), we keep a running total of the numbers and of their squares, and compute
+    /// the spread directly from those two totals.
     /// </para>
     /// </remarks>
-    private T CalculateSDR(Matrix<T> x, Vector<T> y, int feature, T threshold)
+    private T VarianceFromMoments(T sum, T sumSq, int count)
     {
-        var (leftX, leftY, rightX, rightY) = SplitData(x, y, feature, threshold);
-        var totalVariance = StatisticsHelper<T>.CalculateVariance(y);
-        var leftVariance = StatisticsHelper<T>.CalculateVariance(leftY);
-        var rightVariance = StatisticsHelper<T>.CalculateVariance(rightY);
+        if (count < 2)
+        {
+            return NumOps.Zero;
+        }
 
-        var leftWeight = NumOps.Divide(NumOps.FromDouble(leftY.Length), NumOps.FromDouble(y.Length));
-        var rightWeight = NumOps.Divide(NumOps.FromDouble(rightY.Length), NumOps.FromDouble(y.Length));
-
-        var weightedVariance = NumOps.Add(
-            NumOps.Multiply(leftWeight, leftVariance),
-            NumOps.Multiply(rightWeight, rightVariance)
-        );
-
-        return NumOps.Subtract(totalVariance, weightedVariance);
+        // Sample variance with the same N-1 denominator as StatisticsHelper.CalculateVariance, from
+        // the running sum and sum-of-squares: Σ(x-μ)² = Σx² − count·μ².
+        var mean = NumOps.Divide(sum, NumOps.FromDouble(count));
+        var sumSquaredDeviations = NumOps.Subtract(sumSq, NumOps.Multiply(NumOps.FromDouble(count), NumOps.Square(mean)));
+        return NumOps.Divide(sumSquaredDeviations, NumOps.FromDouble(count - 1));
     }
 
     /// <summary>

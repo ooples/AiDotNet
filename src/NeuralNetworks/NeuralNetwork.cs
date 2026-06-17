@@ -244,6 +244,19 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        try
+        {
+            return PredictCore(input);
+        }
+        catch (Exception ex) when (IsGpuTransientFailure(ex))
+        {
+            // A sticky GPU fault tripped the circuit breaker (engine is now CPU); retry on CPU.
+            return PredictCore(input);
+        }
+    }
+
+    private Tensor<T> PredictCore(Tensor<T> input)
+    {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
@@ -374,7 +387,7 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
                 { "HiddenLayerSizes", Architecture.GetHiddenLayerSizes() },
                 { "TaskType", Architecture.TaskType.ToString() }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

@@ -25,8 +25,28 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <summary>
+    /// Describes this Nadam instance for the fused-compiled training kernel
+    /// (Tensors <c>OptimizerType.Nadam</c> — Nesterov-accelerated Adam). No
+    /// decoupled weight decay, so WeightDecay is 0. Declines (falls back to
+    /// eager) when an adaptive LR or an unmappable scheduler is configured.
+    /// Verified fused-vs-eager parity in FusedOptimizerParityTests.
+    /// </summary>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        if (_options.UseAdaptiveLearningRate) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+        config = new Fused.FusedOptimizerConfig(
+            Tensors.Engines.Compilation.OptimizerType.Nadam,
+            (float)GetCurrentLearningRate(),
+            (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon,
+            0f, schedule);
+        return true;
+    }
+
     /// <summary>
     /// The options specific to the Nadam optimizer.
     /// </summary>
@@ -146,6 +166,11 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
         _m = new Vector<T>(parameters.Length);
         _v = new Vector<T>(parameters.Length);
+        // Clear the tape-side moments / step so a reused optimizer instance starts a
+        // new run with fresh Nadam state instead of resuming the previous run's.
+        _tapeM.Clear();
+        _tapeV2.Clear();
+        _tapeStep = 0;
 
         InitializeAdaptiveParameters();
 
@@ -358,13 +383,40 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         T biasCorrectionV = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _tapeStep));
         T nesterovFactor = NumOps.Divide(oneMinusBeta1, biasCorrectionM);
 
+        // GPU-resident step (AIDOTNET_GPU_ADAM=1); gated off, CPU fallback per-param when not GPU-resident.
+        bool gpuAdam = typeof(T) == typeof(float)
+            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
+            && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
+
         foreach (var param in context.Parameters)
         {
-            if (!context.Gradients.TryGetValue(param, out var grad))
+            // True sparse scatter NAdam: m + v + param at touched indices only.
+            if (!gpuAdam && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            {
+                if (!_tapeM.TryGetValue(param, out var mSp)) { mSp = new Tensor<T>(param._shape); _tapeM[param] = mSp; }
+                if (!_tapeV2.TryGetValue(param, out var vSp)) { vSp = new Tensor<T>(param._shape); _tapeV2[param] = vSp; }
+                double bc1 = 1.0 - Math.Pow(_options.Beta1, _tapeStep);
+                double bc2 = 1.0 - Math.Pow(_options.Beta2, _tapeStep);
+                if (SparseEmbeddingOptimizerHelpers.TryApplyNadamSparse(
+                        param, mSp, vSp,
+                        NumOps.ToDouble(CurrentLearningRate),
+                        _options.Beta1, _options.Beta2, bc1, bc2,
+                        _options.Epsilon, weightDecay: 0.0))
+                {
+                    continue;
+                }
+            }
+
+            if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
-            if (!_tapeM.TryGetValue(param, out var m)) { m = new Tensor<T>(param._shape); _tapeM[param] = m; }
-            if (!_tapeV2.TryGetValue(param, out var v)) { v = new Tensor<T>(param._shape); _tapeV2[param] = v; }
+            if (!_tapeM.TryGetValue(param, out var m)) { m = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) m.AsWritableSpan().Clear(); _tapeM[param] = m; }
+            if (!_tapeV2.TryGetValue(param, out var v)) { v = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) v.AsWritableSpan().Clear(); _tapeV2[param] = v; }
+
+            if (gpuAdam && param.Length == grad.Length
+                && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryNadamStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)m, (Tensor<float>)(object)v,
+                    (float)NumOps.ToDouble(CurrentLearningRate), (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon, 0f, _tapeStep))
+                continue;
 
             // m = beta1 * m + (1 - beta1) * grad
             Engine.TensorCopy(Engine.TensorAdd(Engine.TensorMultiplyScalar(m, beta1), Engine.TensorMultiplyScalar(grad, oneMinusBeta1)), m);

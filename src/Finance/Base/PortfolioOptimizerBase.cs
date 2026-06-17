@@ -42,6 +42,15 @@ public abstract class PortfolioOptimizerBase<T> : FinancialModelBase<T>, IPortfo
     public int NumAssets => _numAssets;
 
     /// <summary>
+    /// Closed-form analytic mean-variance optimizer available as a training-free baseline / warm start
+    /// alongside the learned weights. Defaults to <see cref="AiDotNet.Finance.Portfolio.MarkowitzOptimizer{T}"/>;
+    /// assign a custom <see cref="IMeanVarianceOptimizer{T}"/> (shrinkage covariance, constrained QP, …)
+    /// to change the analytic solver.
+    /// </summary>
+    public IMeanVarianceOptimizer<T> AnalyticOptimizer { get; set; }
+        = AiDotNet.Finance.Portfolio.MarkowitzOptimizer<T>.Default;
+
+    /// <summary>
     /// Initializes a new instance of the PortfolioOptimizerBase class for training.
     /// </summary>
     /// <param name="architecture">The neural network architecture.</param>
@@ -232,6 +241,15 @@ public abstract class PortfolioOptimizerBase<T> : FinancialModelBase<T>, IPortfo
     {
         // Uses Forward directly to avoid recursion with OptimizePortfolio
         // (OptimizePortfolio may call Predict which calls Forecast which calls ForecastNative)
+        //
+        // Inference mode is REQUIRED: neural portfolio optimizers contain
+        // BatchNormalizationLayers, which in training mode normalize across the
+        // batch axis. A single-instance prediction (batch = 1) then normalizes
+        // each feature to its own value (~0 output) regardless of input, so every
+        // constant input collapses to the same allocation. Inference mode uses
+        // the running statistics instead, keeping BatchNorm affine.
+        SetTrainingMode(false);
+
         var current = input;
         foreach (var layer in Layers)
         {

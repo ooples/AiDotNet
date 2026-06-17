@@ -206,6 +206,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region LSTMNeuralNetwork Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task LSTMNeuralNetwork_Predict_ProducesOutput()
     {
@@ -229,6 +230,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "Output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task LSTMNeuralNetwork_Forward_ProducesNonZeroOutput()
     {
@@ -243,6 +245,13 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
         var network = new LSTMNeuralNetwork<float>(architecture, lossFunction: null, outputActivation: null);
         var input = CreateSequenceInput(8, 6);
+
+        // The LSTM layer is lazy-input (PyTorch-style): its gate weights are
+        // allocated on the first forward, which resolves the input feature count.
+        // Warm up once so the diagnostic block below (which reads WeightsFi /
+        // BiasI and does a manual matmul) sees materialized weights instead of
+        // the [0, 0] lazy placeholders.
+        network.Predict(input);
 
         // Debug: Print layer structure and trace forward pass
         var debugOutput = new System.Text.StringBuilder();
@@ -326,6 +335,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(hasNonZero, $"Output should have non-zero values\n\nDebug trace:\n{debugOutput}");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task LSTMNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -347,6 +357,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(paramCount > 0, "Parameter count should be positive");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task LSTMNeuralNetwork_GetModelMetadata_ReturnsValidData()
     {
@@ -373,6 +384,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region GRUNeuralNetwork Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task GRUNeuralNetwork_Predict_ProducesOutput()
     {
@@ -396,6 +408,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "Output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task GRUNeuralNetwork_Forward_ProducesNonZeroOutput()
     {
@@ -427,6 +440,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(hasNonZero, "Output should have non-zero values");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task GRUNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -448,6 +462,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(paramCount > 0, "Parameter count should be positive");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task GRUNeuralNetwork_GetModelMetadata_ReturnsValidData()
     {
@@ -474,6 +489,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region ResidualNeuralNetwork Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task ResidualNeuralNetwork_Predict_ProducesCorrectOutputShape()
     {
@@ -496,6 +512,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.Equal(10, output.Shape[^1]); // Last dimension is output classes
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task ResidualNeuralNetwork_Forward_ProducesNonZeroOutput()
     {
@@ -526,6 +543,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(hasNonZero, "Output should have non-zero values");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task ResidualNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -546,6 +564,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(paramCount > 0, "Parameter count should be positive");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task ResidualNeuralNetwork_GetModelMetadata_ReturnsValidData()
     {
@@ -571,6 +590,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region SiameseNetwork Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task SiameseNetwork_Predict_ProducesOutput()
     {
@@ -597,6 +617,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.Equal(new[] { 1, 32, 768 }, result.Shape.ToArray());
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task SiameseNetwork_GetModelMetadata_ReturnsValidData()
     {
@@ -624,6 +645,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region RadialBasisFunctionNetwork Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task RadialBasisFunctionNetwork_Predict_ProducesOutput()
     {
@@ -646,6 +668,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "Output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task RadialBasisFunctionNetwork_GetModelMetadata_ReturnsValidData()
     {
@@ -671,6 +694,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region EchoStateNetwork Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task EchoStateNetwork_Predict_ProducesOutput()
     {
@@ -694,6 +718,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "Output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task EchoStateNetwork_GetModelMetadata_ReturnsValidData()
     {
@@ -720,6 +745,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region HopfieldNetwork Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task HopfieldNetwork_Predict_ProducesOutput()
     {
@@ -742,6 +768,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "Output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task HopfieldNetwork_GetModelMetadata_ReturnsValidData()
     {
@@ -767,6 +794,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region SelfOrganizingMap Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task SelfOrganizingMap_Predict_ProducesOutput()
     {
@@ -789,6 +817,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "Output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task SelfOrganizingMap_GetModelMetadata_ReturnsValidData()
     {
@@ -814,6 +843,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region ExtremeLearningMachine Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task ExtremeLearningMachine_Predict_ProducesOutput()
     {
@@ -836,6 +866,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "Output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task ExtremeLearningMachine_GetModelMetadata_ReturnsValidData()
     {
@@ -935,6 +966,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region Autoencoder Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task Autoencoder_Predict_ProducesOutput()
     {
@@ -957,6 +989,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.Equal(64, output.Length);
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task Autoencoder_Predict_ProducesNonZeroOutput()
     {
@@ -978,6 +1011,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(HasNonZeroValues(output), "Output should have non-zero values");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task Autoencoder_GetParameterCount_ReturnsPositiveValue()
     {
@@ -998,6 +1032,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"Parameter count should be > 0, got {parameterCount}");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task Autoencoder_GetModelMetadata_ReturnsValidData()
     {
@@ -1019,6 +1054,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.NotNull(metadata.AdditionalInfo);
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task Autoencoder_EncodedSize_IsPositive()
     {
@@ -1044,6 +1080,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region VariationalAutoencoder Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task VariationalAutoencoder_Predict_ProducesOutput()
     {
@@ -1066,6 +1103,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.Equal(64, output.Length);
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task VariationalAutoencoder_GetParameterCount_ReturnsPositiveValue()
     {
@@ -1086,6 +1124,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"Parameter count should be > 0, got {parameterCount}");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task VariationalAutoencoder_LatentSize_IsCorrect()
     {
@@ -1111,6 +1150,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region Deep Belief Network Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task DeepBeliefNetwork_Predict_ProducesOutput()
     {
@@ -1135,6 +1175,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.NotNull(output);
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task DeepBeliefNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -1162,6 +1203,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region Restricted Boltzmann Machine Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task RestrictedBoltzmannMachine_Predict_ProducesOutput()
     {
@@ -1188,6 +1230,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.NotNull(output);
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task RestrictedBoltzmannMachine_GetParameterCount_ReturnsPositiveValue()
     {
@@ -1217,6 +1260,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region CapsuleNetwork Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task CapsuleNetwork_Predict_ProducesOutput()
     {
@@ -1240,6 +1284,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.NotNull(output);
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task CapsuleNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -1266,6 +1311,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region DeepQNetwork Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task DeepQNetwork_Predict_ProducesOutput()
     {
@@ -1287,6 +1333,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.NotNull(output);
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task DeepQNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -1311,6 +1358,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region LiquidStateMachine Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task LiquidStateMachine_Predict_ProducesOutput()
     {
@@ -1336,6 +1384,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.NotNull(output);
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task LiquidStateMachine_GetParameterCount_ReturnsPositiveValue()
     {
@@ -1364,6 +1413,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region SpikingNeuralNetwork Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task SpikingNeuralNetwork_Predict_ProducesOutput()
     {
@@ -1389,6 +1439,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.NotNull(output);
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task SpikingNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -1417,6 +1468,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region SparseNeuralNetwork Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task SparseNeuralNetwork_Predict_ProducesOutput()
     {
@@ -1438,6 +1490,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.NotNull(output);
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task SparseNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -1462,6 +1515,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region MemoryNetwork Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task MemoryNetwork_Predict_ProducesOutput()
     {
@@ -1488,6 +1542,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.NotNull(output);
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task MemoryNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -1515,6 +1570,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region MixtureOfExperts Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task MixtureOfExpertsNeuralNetwork_Predict_ProducesOutput()
     {
@@ -1544,6 +1600,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.NotNull(output);
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task MixtureOfExpertsNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -1641,6 +1698,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(discriminatorParams > 0, $"Discriminator parameter count should be > 0, got {discriminatorParams}");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task DCGAN_Predict_ProducesOutput()
     {
@@ -1669,6 +1727,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "DCGAN output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task DCGAN_GetParameterCount_ReturnsPositiveValue()
     {
@@ -1755,6 +1814,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(criticParams > 0, $"WGAN critic parameter count should be > 0, got {criticParams}");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task ConditionalGAN_Predict_ProducesOutput()
     {
@@ -1779,7 +1839,10 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             numConditionClasses: 10,
             InputType.OneDimensional);
 
-        var noiseInput = CreateRandomTensor([32]);
+        // The generator architecture's inputSize (32) is the FULL noise+condition width — Predict
+        // takes the NOISE only (latentDim = 32 - 10 = 22) and appends the one-hot condition
+        // internally (same convention as the parameterless ctor's 110 = 100 noise + 10 classes).
+        var noiseInput = CreateRandomTensor([22]);
 
         // Act
         var output = cgan.Predict(noiseInput);
@@ -1789,6 +1852,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "Conditional GAN output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task ConditionalGAN_GetParameterCount_ReturnsPositiveValue()
     {
@@ -1822,6 +1886,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(discriminatorParams > 0, $"Conditional GAN discriminator parameter count should be > 0, got {discriminatorParams}");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task CycleGAN_GetParameterCount_ReturnsPositiveValue()
     {
@@ -1874,6 +1939,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region Graph Neural Network Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task GraphNeuralNetwork_Predict_ProducesOutput()
     {
@@ -1897,6 +1963,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "GNN output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task GraphNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -1918,6 +1985,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"GNN parameter count should be > 0, got {parameterCount}");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task GraphAttentionNetwork_Predict_ProducesOutput()
     {
@@ -1940,6 +2008,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "GAT output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task GraphAttentionNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -1964,6 +2033,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region Vision Network Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task ConvolutionalNeuralNetwork_Predict_ProducesOutput()
     {
@@ -1988,6 +2058,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "CNN output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task ConvolutionalNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -2010,6 +2081,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"CNN parameter count should be > 0, got {parameterCount}");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task FeedForwardNeuralNetwork_Predict_ProducesOutput()
     {
@@ -2032,6 +2104,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "FFNN output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task FeedForwardNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -2052,6 +2125,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"FFNN parameter count should be > 0, got {parameterCount}");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task RecurrentNeuralNetwork_Predict_ProducesOutput()
     {
@@ -2076,6 +2150,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "RNN output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task RecurrentNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -2102,6 +2177,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region Specialized Network Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task AttentionNetwork_Predict_ProducesOutput()
     {
@@ -2124,6 +2200,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "AttentionNetwork output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task AttentionNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -2144,6 +2221,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"AttentionNetwork parameter count should be > 0, got {parameterCount}");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task NeuralTuringMachine_Predict_ProducesOutput()
     {
@@ -2175,6 +2253,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "NTM output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task NeuralTuringMachine_GetParameterCount_ReturnsPositiveValue()
     {
@@ -2375,6 +2454,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"BigGAN parameter count should be > 0, got {parameterCount}");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task InfoGAN_Predict_ProducesOutput()
     {
@@ -2426,6 +2506,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "InfoGAN output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task InfoGAN_GetParameterCount_ReturnsPositiveValue()
     {
@@ -2893,6 +2974,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region Additional Graph Neural Network Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task GraphSAGENetwork_Predict_ProducesOutput()
     {
@@ -2924,6 +3006,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "GraphSAGENetwork output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task GraphSAGENetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -2947,6 +3030,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"GraphSAGENetwork parameter count should be > 0, got {parameterCount}");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task GraphIsomorphismNetwork_Predict_ProducesOutput()
     {
@@ -2978,6 +3062,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "GraphIsomorphismNetwork output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task GraphIsomorphismNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -3005,6 +3090,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region Vision Architecture Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task VGGNetwork_Predict_ProducesOutput()
     {
@@ -3032,6 +3118,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "VGGNetwork output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task VGGNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -3056,6 +3143,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"VGGNetwork parameter count should be > 0, got {parameterCount}");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task ResNetNetwork_Predict_ProducesOutput()
     {
@@ -3083,6 +3171,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "ResNetNetwork output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task ResNetNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -3107,6 +3196,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"ResNetNetwork parameter count should be > 0, got {parameterCount}");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task DenseNetNetwork_Predict_ProducesOutput()
     {
@@ -3134,6 +3224,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "DenseNetNetwork output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task DenseNetNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -3158,6 +3249,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"DenseNetNetwork parameter count should be > 0, got {parameterCount}");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task EfficientNetNetwork_Predict_ProducesOutput()
     {
@@ -3185,6 +3277,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "EfficientNetNetwork output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task EfficientNetNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -3209,6 +3302,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"EfficientNetNetwork parameter count should be > 0, got {parameterCount}");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task MobileNetV2Network_Predict_ProducesOutput()
     {
@@ -3236,6 +3330,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "MobileNetV2Network output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task MobileNetV2Network_GetParameterCount_ReturnsPositiveValue()
     {
@@ -3260,6 +3355,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"MobileNetV2Network parameter count should be > 0, got {parameterCount}");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task MobileNetV3Network_Predict_ProducesOutput()
     {
@@ -3287,6 +3383,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "MobileNetV3Network output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task MobileNetV3Network_GetParameterCount_ReturnsPositiveValue()
     {
@@ -3311,6 +3408,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"MobileNetV3Network parameter count should be > 0, got {parameterCount}");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task VisionTransformer_Predict_ProducesOutput()
     {
@@ -3347,6 +3445,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "VisionTransformer output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task VisionTransformer_GetParameterCount_ReturnsPositiveValue()
     {
@@ -3384,6 +3483,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region Advanced Memory and Specialized Network Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task DifferentiableNeuralComputer_Predict_ProducesOutput()
     {
@@ -3414,6 +3514,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "DifferentiableNeuralComputer output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task DifferentiableNeuralComputer_GetParameterCount_ReturnsPositiveValue()
     {
@@ -3441,6 +3542,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"DifferentiableNeuralComputer parameter count should be > 0, got {parameterCount}");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task DeepBoltzmannMachine_Predict_ProducesOutput()
     {
@@ -3468,6 +3570,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "DeepBoltzmannMachine output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task DeepBoltzmannMachine_GetParameterCount_ReturnsPositiveValue()
     {
@@ -3492,6 +3595,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"DeepBoltzmannMachine parameter count should be > 0, got {parameterCount}");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task HyperbolicNeuralNetwork_Predict_ProducesOutput()
     {
@@ -3517,6 +3621,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "HyperbolicNeuralNetwork output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task HyperbolicNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -3539,6 +3644,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"HyperbolicNeuralNetwork parameter count should be > 0, got {parameterCount}");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task OctonionNeuralNetwork_Predict_ProducesOutput()
     {
@@ -3563,6 +3669,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "OctonionNeuralNetwork output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task OctonionNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -3584,6 +3691,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"OctonionNeuralNetwork parameter count should be > 0, got {parameterCount}");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task QuantumNeuralNetwork_Predict_ProducesOutput()
     {
@@ -3609,6 +3717,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "QuantumNeuralNetwork output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task QuantumNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -3635,6 +3744,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region HTMNetwork Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task HTMNetwork_Predict_ProducesOutput()
     {
@@ -3661,6 +3771,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "HTMNetwork output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task HTMNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -3685,6 +3796,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region HopeNetwork Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task HopeNetwork_Predict_ProducesOutput()
     {
@@ -3713,6 +3825,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "HopeNetwork output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task HopeNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -3737,6 +3850,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region NEAT Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task NEAT_Predict_ProducesOutput()
     {
@@ -3764,6 +3878,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "NEAT output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task NEAT_GetParameterCount_ReturnsPositiveValue()
     {
@@ -3823,6 +3938,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region OccupancyNeuralNetwork Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task OccupancyNeuralNetwork_Predict_ProducesOutput()
     {
@@ -3848,6 +3964,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "OccupancyNeuralNetwork output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task OccupancyNeuralNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -3872,6 +3989,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region GraphGenerationModel Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task GraphGenerationModel_Predict_ProducesOutput()
     {
@@ -3894,6 +4012,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "GraphGenerationModel output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task GraphGenerationModel_GetParameterCount_ReturnsPositiveValue()
     {
@@ -3914,6 +4033,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region UNet3D Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task UNet3D_Predict_ProducesOutput()
     {
@@ -3944,6 +4064,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "UNet3D output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task UNet3D_GetParameterCount_ReturnsPositiveValue()
     {
@@ -3970,6 +4091,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region VoxelCNN Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task VoxelCNN_Predict_ProducesOutput()
     {
@@ -3999,6 +4121,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "VoxelCNN output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task VoxelCNN_GetParameterCount_ReturnsPositiveValue()
     {
@@ -4025,6 +4148,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region MeshCNN Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task MeshCNN_Predict_ProducesOutput()
     {
@@ -4056,6 +4180,25 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "MeshCNN output should have elements");
     }
 
+    [Fact]
+    public void MeshCNN_Predict_EmptyEdges_ThrowsClearError()
+    {
+        // Arrange - valid adjacency, but an empty-mesh (0-edge) input. Without the
+        // guard the [0, features] input reshapes to a degenerate [1, 0, channels]
+        // tensor that fails downstream in pooling with an opaque error.
+        int maxAdjacent = 4;
+        var meshCnn = new MeshCNN<float>(numClasses: 4, inputFeatures: 5);
+        var edgeAdjacency = new int[4, maxAdjacent];
+        meshCnn.SetEdgeAdjacency(edgeAdjacency);
+
+        var emptyInput = CreateRandomTensor([0, 5]);
+
+        // Act + Assert - fails fast with a clear, actionable message.
+        var ex = Assert.Throws<ArgumentException>(() => meshCnn.Predict(emptyInput));
+        Assert.Contains("0 edges", ex.Message);
+    }
+
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task MeshCNN_GetParameterCount_ReturnsPositiveValue()
     {
@@ -4073,6 +4216,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region SpiralNet Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task SpiralNet_Predict_ProducesOutput()
     {
@@ -4104,14 +4248,23 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "SpiralNet output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task SpiralNet_GetParameterCount_ReturnsPositiveValue()
     {
-        // Arrange
+        // Arrange. SpiralNet's layers are lazy by design: SpiralConv / BatchNorm /
+        // GlobalPooling bind their shapes to the rank of the first real input
+        // (rank-2 [V, C] or rank-3 [B, V, C]), so ParameterCount reads 0 until a
+        // warm-up Predict materializes the weights — the documented pattern in
+        // SpiralNetTests.Parameters_ShouldBeNonEmpty. Ctor-time materialization
+        // was tried and reverted: it must guess an input rank, and a wrong guess
+        // mis-sizes BatchNorm so real Predicts collapse to constant output.
         var spiralNet = new SpiralNet<float>();
+        var warmupInput = CreateRandomTensor([64, 3]);
 
         // Act
-        int parameterCount = (int)spiralNet.ParameterCount;
+        spiralNet.Predict(warmupInput);
+        long parameterCount = spiralNet.ParameterCount;
 
         // Assert
         Assert.True(parameterCount > 0, $"SpiralNet parameter count should be > 0, got {parameterCount}");
@@ -4121,6 +4274,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region AudioVisualCorrespondenceNetwork Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task AudioVisualCorrespondenceNetwork_Predict_ProducesOutput()
     {
@@ -4148,6 +4302,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "AudioVisualCorrespondenceNetwork output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task AudioVisualCorrespondenceNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -4172,6 +4327,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
     #region AudioVisualEventLocalizationNetwork Tests
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task AudioVisualEventLocalizationNetwork_Predict_ProducesOutput()
     {
@@ -4199,6 +4355,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "AudioVisualEventLocalizationNetwork output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task AudioVisualEventLocalizationNetwork_GetParameterCount_ReturnsPositiveValue()
     {
@@ -4547,6 +4704,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"ImageBindNeuralNetwork parameter count should be > 0, got {parameterCount}");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task VideoCLIPNeuralNetwork_NativeMode_Predict_ProducesOutput()
     {
@@ -4586,6 +4744,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "VideoCLIPNeuralNetwork output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task VideoCLIPNeuralNetwork_NativeMode_GetParameterCount_ReturnsPositiveValue()
     {
@@ -4617,6 +4776,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(parameterCount > 0, $"VideoCLIPNeuralNetwork parameter count should be > 0, got {parameterCount}");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task UnifiedMultimodalNetwork_Predict_ProducesOutput()
     {
@@ -4646,6 +4806,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         Assert.True(output.Length > 0, "UnifiedMultimodalNetwork output should have elements");
     }
 
+    [Trait("Category", "ModelFamilyDuplicate")]
     [Fact(Timeout = 120000)]
     public async Task UnifiedMultimodalNetwork_GetParameterCount_ReturnsPositiveValue()
     {

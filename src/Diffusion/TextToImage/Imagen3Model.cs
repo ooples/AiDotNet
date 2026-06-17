@@ -306,20 +306,9 @@ public class Imagen3Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedPredictor = new SiTPredictor<T>();
-        clonedPredictor.SetParameters(_predictor.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: IMAGEN3_LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2);
-        clonedVae.SetParameters(_vae.GetParameters());
-
-        return new Imagen3Model<T>(
-            predictor: clonedPredictor,
-            vae: clonedVae,
+                        return new Imagen3Model<T>(
+            predictor: (SiTPredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner);
     }
 

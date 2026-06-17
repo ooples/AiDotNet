@@ -82,7 +82,12 @@ public class NoRegularization<T, TInput, TOutput> : RegularizationBase<T, TInput
     /// </remarks>
     public override Matrix<T> Regularize(Matrix<T> data)
     {
-        // Return a zero matrix - no regularization penalty to add
+        // No penalty. The matrix consumers (Ridge/Multiple/Polynomial/Multivariate/GAM)
+        // use this ADDITIVELY — `xTx.Add(Regularize(xTx))` — so the no-regularization
+        // contribution must be a ZERO matrix (xTx + 0 = xTx). Returning `data` here made
+        // "no regularization" compute xTx + xTx = 2·xTx, corrupting every closed-form fit.
+        // (Zero has been the established behavior since before this PR; CodeRabbit flagged
+        // the `return data` variant as a blocking correctness regression.)
         return new Matrix<T>(data.Rows, data.Columns);
     }
 

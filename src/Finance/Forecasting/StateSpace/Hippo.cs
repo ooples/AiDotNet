@@ -11,6 +11,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Layers.SSM;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors;
 using Microsoft.ML.OnnxRuntime;
@@ -89,12 +90,14 @@ public class Hippo<T> : ForecastingModelBase<T>
 
 
     #region Native Mode Fields
+    // Paper-faithful HiPPO stack (Gu et al. 2020): input embedding -> N diagonal
+    // state-space (S4D, HiPPO-LegS-initialized) layers with residual/norm/dropout
+    // -> mean-pool over time -> output head. See CreateDefaultHippoLayers.
     private DenseLayer<T>? _inputEmbedding;
-    private List<DenseLayer<T>>? _hippoBLayers;
-    private List<DenseLayer<T>>? _hippoALayers;
-    private List<DenseLayer<T>>? _hippoCLayers;
-    private List<DenseLayer<T>>? _hippoDLayers;
-    private List<LayerNormalizationLayer<T>>? _layerNorms;
+    private LayerNormalizationLayer<T>? _inputNorm;
+    private List<S4DLayer<T>> _ssmLayers = new();
+    private List<LayerNormalizationLayer<T>> _blockNorms = new();
+    private List<DropoutLayer<T>> _dropouts = new();
     private DenseLayer<T>? _outputProjection;
     #endregion
 
@@ -344,34 +347,32 @@ public class Hippo<T> : ForecastingModelBase<T>
     /// </remarks>
     private void ExtractLayerReferences()
     {
-        _inputEmbedding = Layers.OfType<DenseLayer<T>>().FirstOrDefault();
-        _layerNorms = Layers.OfType<LayerNormalizationLayer<T>>().ToList();
-        _outputProjection = Layers.OfType<DenseLayer<T>>().LastOrDefault();
+        // Idempotent: clear list-typed refs so a re-extract (after deserialize)
+        // rebinds rather than appending a doubled stack.
+        _ssmLayers.Clear();
+        _blockNorms.Clear();
+        _dropouts.Clear();
 
-        // Get all dense layers for HiPPO components
-        var allDense = Layers.OfType<DenseLayer<T>>().ToList();
-        _hippoBLayers = new List<DenseLayer<T>>();
-        _hippoALayers = new List<DenseLayer<T>>();
-        _hippoCLayers = new List<DenseLayer<T>>();
-        _hippoDLayers = new List<DenseLayer<T>>();
+        // Layer order produced by CreateDefaultHippoLayers:
+        //   [InputEmbedding Dense] ([InputNorm]) { S4DLayer ([BlockNorm]) [Dropout] }×N [OutputHead Dense]
+        var dense = Layers.OfType<DenseLayer<T>>().ToList();
+        _inputEmbedding = dense.FirstOrDefault();
+        _outputProjection = dense.LastOrDefault();
 
-        // Organize layers by their function in HiPPO blocks
-        if (allDense.Count > 2)
+        _ssmLayers = Layers.OfType<S4DLayer<T>>().ToList();
+        _dropouts = Layers.OfType<DropoutLayer<T>>().ToList();
+
+        var norms = Layers.OfType<LayerNormalizationLayer<T>>().ToList();
+        if (_useNormalization && norms.Count > 0)
         {
-            // Each HiPPO block has 5 dense layers: B, A1, A2, C, D
-            int layersPerBlock = 5;
-            for (int block = 0; block < _numLayers; block++)
-            {
-                int start = 1 + block * layersPerBlock; // Skip input embedding
-                if (start + 4 < allDense.Count)
-                {
-                    _hippoBLayers.Add(allDense[start]);
-                    _hippoALayers.Add(allDense[start + 1]); // First A
-                    // allDense[start + 2] is second A
-                    _hippoCLayers.Add(allDense[start + 3]);
-                    _hippoDLayers.Add(allDense[start + 4]);
-                }
-            }
+            // First norm is the input norm; the rest are per-block norms.
+            _inputNorm = norms[0];
+            _blockNorms = norms.Skip(1).ToList();
+        }
+        else
+        {
+            _inputNorm = null;
+            _blockNorms = new List<LayerNormalizationLayer<T>>();
         }
     }
 
@@ -551,6 +552,10 @@ public class Hippo<T> : ForecastingModelBase<T>
         _timescaleMin = reader.ReadDouble();
         _timescaleMax = reader.ReadDouble();
         _useNormalization = reader.ReadBoolean();
+
+        // Re-bind cached layer references so a deserialized/cloned model runs on
+        // the restored layers, not the construction-time random ones.
+        ExtractLayerReferences();
     }
 
     #endregion
@@ -742,14 +747,44 @@ public class Hippo<T> : ForecastingModelBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        var current = FlattenInput(input);
+        // input: [batch, contextLength, numFeatures]
+        int rank = input.Shape.Length;
+        int feat = input.Shape[rank - 1];
+        int seq = rank >= 2 ? input.Shape[rank - 2] : 1;
+        int batch = 1;
+        for (int d = 0; d < rank - 2; d++) batch *= input.Shape[d];
+        if (rank < 3) batch = 1;
 
-        foreach (var layer in Layers)
+        // Embed each time step's features into the model dimension.
+        // Reshape to [batch*seq, features] so the Dense maps the feature axis
+        // (every Engine op below stays on the autodiff tape).
+        var x2d = Engine.Reshape(input, new[] { batch * seq, feat });
+        if (_inputEmbedding is not null)
+            x2d = _inputEmbedding.Forward(x2d);                 // [batch*seq, modelDim]
+        var x = Engine.Reshape(x2d, new[] { batch, seq, _modelDimension });
+
+        if (_inputNorm is not null)
+            x = _inputNorm.Forward(x);
+
+        // HiPPO state-space stack: each S4D layer evolves the polynomial state
+        // across the sequence, wrapped in a residual connection + norm + dropout.
+        for (int i = 0; i < _ssmLayers.Count; i++)
         {
-            current = layer.Forward(current);
+            var residual = x;
+            x = _ssmLayers[i].Forward(x);                       // [batch, seq, modelDim]
+            x = Engine.TensorAdd(x, residual);
+            if (i < _blockNorms.Count)
+                x = _blockNorms[i].Forward(x);
+            if (i < _dropouts.Count)
+                x = _dropouts[i].Forward(x);
         }
 
-        return current;
+        // Mean-pool the SSM output over time -> [batch, modelDim], then project
+        // to the forecast horizon.
+        var pooled = Engine.ReduceMean(x, new[] { 1 }, false);  // [batch, modelDim]
+        return _outputProjection is not null
+            ? _outputProjection.Forward(pooled)                 // [batch, forecastHorizon]
+            : pooled;
     }
 
     /// <summary>

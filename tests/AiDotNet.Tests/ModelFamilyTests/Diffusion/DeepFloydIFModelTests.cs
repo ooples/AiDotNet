@@ -4,11 +4,16 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-public class DeepFloydIFModelTests : DiffusionModelTestBase
+/// <summary>
+/// DeepFloydIF test scaffold — see <see cref="DiffusionModelTestBase{TNum}"/>
+/// for the FP32 rationale. DeepFloyd IF at paper defaults OOMs in fresh-process
+/// probes at FP64 on the 16 GB CI host.
+/// </summary>
+public class DeepFloydIFModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 4, 64, 64];
     protected override int[] OutputShape => [1, 4, 64, 64];
 
-    protected override IDiffusionModel<double> CreateModel()
-        => new DeepFloydIFModel<double>(seed: 42);
+    protected override IDiffusionModel<float> CreateModel()
+        => new DeepFloydIFModel<float>(seed: 42);
 }

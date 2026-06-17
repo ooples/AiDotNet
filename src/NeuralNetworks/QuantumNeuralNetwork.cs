@@ -122,7 +122,12 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     public QuantumNeuralNetwork(NeuralNetworkArchitecture<T> architecture, int numQubits,
         PreprocessingPipeline<T, Tensor<T>, Tensor<T>>? preprocessingPipeline = null, ILossFunction<T>? lossFunction = null,
         QuantumNeuralNetworkOptions? options = null) :
-        base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
+        // The layer chain emits amplitudes and Predict reports the Born-rule
+        // measurement amplitude². Train on the measured (probability) objective via
+        // a loss that folds in the square, so the tape optimises exactly what
+        // inference reports (a plain MSE on amplitudes optimises the wrong thing —
+        // see BornRuleMseLoss and QuantumNeuralNetwork.Train).
+        base(architecture, lossFunction ?? new AiDotNet.LossFunctions.BornRuleMseLoss<T>())
     {
         _options = options ?? new QuantumNeuralNetworkOptions();
         Options = _options;
@@ -295,7 +300,23 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
             // but none of that happens here, so every training call failed
             // with "Backward pass must be called before updating parameters."
             _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-            TrainWithTape(input, expectedOutput, _trainOptimizer);
+
+            // Train on the measured (probability) objective directly. The model's
+            // loss (BornRuleMseLoss) folds in the Born-rule square, so the tape
+            // optimises ‖layers(√input)² − target‖² — exactly the quantity Predict
+            // reports — rather than a √target amplitude surrogate. Two prior bugs are
+            // fixed by this:
+            //   1. Input-domain mismatch: Predict feeds the layers the real part of
+            //      the prepared state (PrepareQuantumState applies √ to the input),
+            //      so training must too — hence preparedInput, not the raw input.
+            //   2. Surrogate/measured misalignment: minimising amplitude MSE to
+            //      √target does NOT monotonically reduce the measured probability
+            //      MSE (the square is non-linear), so the old amplitude surrogate +
+            //      a per-step measured-loss backtracking line search reverted nearly
+            //      every step and pinned the loss flat. Optimising the measured
+            //      objective directly removes both the surrogate and the backtracking.
+            var preparedInput = ExtractRealPart(PrepareQuantumState(input));
+            TrainWithTape(preparedInput, expectedOutput, _trainOptimizer);
         }
         finally
         {
@@ -330,7 +351,7 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
                 { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() },
                 { "NumberOfQubits", _numQubits }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

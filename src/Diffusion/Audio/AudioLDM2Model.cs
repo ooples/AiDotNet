@@ -934,16 +934,35 @@ public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        return new AudioLDM2Model<T>(
+        // The previous Clone() passed unet/audioVAE as null and let the
+        // constructor build fresh randomly-initialized sub-modules, dropping
+        // every learned weight on the original. That broke
+        // Clone_ShouldProduceIdenticalOutput (cloned Predict diverged from
+        // original Predict — same seed, totally different noise predictor
+        // weights). Per Liu et al. 2024 §3 the AudioLDM2 latent pipeline is
+        // <c>VAE + UNet + projection</c>, so the clone must carry the same
+        // weights across all three. Conditioners are treated as shared,
+        // upstream-frozen modules (CLAP / T5-GPT2 in the paper) and don't
+        // get deep-copied.
+        var unetClone = (UNetNoisePredictor<T>)_unet.Clone();
+        var vaeClone = (AudioVAE<T>)_audioVAE.Clone();
+
+        var clone = new AudioLDM2Model<T>(
             options: null,
             scheduler: null,
-            unet: null,
-            audioVAE: null,
+            unet: unetClone,
+            audioVAE: vaeClone,
             clapConditioner: _clapConditioner,
             languageConditioner: _languageConditioner,
             variant: _variant,
             sampleRate: SampleRate,
             defaultDurationSeconds: DefaultDurationSeconds);
+
+        // The projection layer is created fresh by InitializeLayers because
+        // its dimensions are derived from <c>_variant</c> and the conditioner
+        // dim, not passed in. Copy its weights/bias across explicitly.
+        clone._projectionLayer.SetParameters(_projectionLayer.GetParameters());
+        return clone;
     }
 
     #endregion

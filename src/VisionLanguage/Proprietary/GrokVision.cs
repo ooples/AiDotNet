@@ -62,8 +62,8 @@ public class GrokVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM<T>
     private readonly ITokenizer? _tokenizer; private bool _useNativeMode; private bool _disposed;
     private int _encoderLayerEnd;
 
-    public GrokVision(NeuralNetworkArchitecture<T> architecture, string modelPath, GrokVisionOptions? options = null) : base(architecture) { _options = options ?? new GrokVisionOptions(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
-    public GrokVision(NeuralNetworkArchitecture<T> architecture, GrokVisionOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new GrokVisionOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
+    public GrokVision(NeuralNetworkArchitecture<T> architecture, string modelPath, GrokVisionOptions? options = null) : base(architecture) { _options = options ?? new GrokVisionOptions(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); TryAutoEnableWeightStreaming(); }
+    public GrokVision(NeuralNetworkArchitecture<T> architecture, GrokVisionOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new GrokVisionOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); TryAutoEnableWeightStreaming(); }
 
     public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim; public string LanguageModelName => _options.LanguageModelName; public string Provider => _options.Provider;
     public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
@@ -117,6 +117,23 @@ public class GrokVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM<T>
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
+
+    // Lazy decoder/vision blocks report ParameterCount == 0 until the first
+    // forward, so weight streaming would engage too late and OOM a constrained
+    // runner; a coarse structural estimate (~12·d² per transformer block plus
+    // the token embedding) lets the auto-detector turn streaming on in the
+    // constructor. ONNX mode keeps weights in the external runtime → no estimate.
+    protected override long EstimateStructuralParameterCount()
+    {
+        if (!_useNativeMode) return 0L;
+        long visionDim = _options.VisionDim;
+        long decoderDim = _options.DecoderDim;
+        long vision = (long)_options.NumVisionLayers * 12L * visionDim * visionDim;
+        long decoder = (long)_options.NumDecoderLayers * 12L * decoderDim * decoderDim;
+        long embeddings = (long)_options.VocabSize * decoderDim;
+        return vision + decoder + embeddings;
+    }
+
     public override ModelMetadata<T> GetModelMetadata() {
         var m = new ModelMetadata<T> { Name = _useNativeMode ? "Grok-Vision-Native" : "Grok-Vision-ONNX", Description = "Grok Vision: reference implementation of xAI's real-time multimodal model.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Grok-Vision";

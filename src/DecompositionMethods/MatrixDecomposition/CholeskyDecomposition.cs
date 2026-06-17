@@ -279,15 +279,23 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
         int n = matrix.Rows;
         var L = new Matrix<T>(n, n);
 
+        // Reused offset-0 scratch buffers for the inner dot products. Copying each L[*, 0..j) slice
+        // to a fresh buffer start reproduces the array-element-0 alignment of the original's
+        // per-element vectors, so NumOps.Dot is bit-identical across frameworks. (A raw mid-row
+        // span starts at offset j*n / i*n, which shifts net10.0 SIMD alignment and changes rounding
+        // enough to fail near-singular KernelRidge/GP tests.) One pair of buffers per decomposition
+        // instead of O(n^2) sub-vector allocations — this is what removes the tens-of-GB churn.
+        var segI = new T[n];
+        var segJ = new T[n];
+
         for (int j = 0; j < n; j++)
         {
-            // VECTORIZED: compute diagonal element using dot product
+            // Diagonal: A[j,j] - Σ_{k<j} L[j,k]².
             T sum = NumOps.Zero;
             if (j > 0)
             {
-                var rowJ = L.GetRow(j);
-                var rowJSegment = new Vector<T>(rowJ.Take(j));
-                sum = rowJSegment.DotProduct(rowJSegment);
+                L.GetRowReadOnlySpan(j).Slice(0, j).CopyTo(segJ);
+                sum = NumOps.Dot(segJ.AsSpan(0, j), segJ.AsSpan(0, j));
             }
 
             T diagonalValue = NumOps.Subtract(matrix[j, j], sum);
@@ -297,27 +305,17 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
             }
             L[j, j] = NumOps.Sqrt(diagonalValue);
 
-            // VECTORIZED: compute off-diagonal elements using dot product
-            if (j > 0)
+            // Off-diagonal: (A[i,j] - Σ_{k<j} L[i,k]·L[j,k]) / L[j,j]. segJ already holds L[j, 0..j).
+            for (int i = j + 1; i < n; i++)
             {
-                var rowJ = L.GetRow(j);
-                var rowJSegment = new Vector<T>(rowJ.Take(j));
+                T offSum = NumOps.Zero;
+                if (j > 0)
+                {
+                    L.GetRowReadOnlySpan(i).Slice(0, j).CopyTo(segI);
+                    offSum = NumOps.Dot(segI.AsSpan(0, j), segJ.AsSpan(0, j));
+                }
 
-                for (int i = j + 1; i < n; i++)
-                {
-                    var rowI = L.GetRow(i);
-                    var rowISegment = new Vector<T>(rowI.Take(j));
-                    sum = rowISegment.DotProduct(rowJSegment);
-                    L[i, j] = NumOps.Divide(NumOps.Subtract(matrix[i, j], sum), L[j, j]);
-                }
-            }
-            else
-            {
-                // First column: no dot product needed
-                for (int i = j + 1; i < n; i++)
-                {
-                    L[i, j] = NumOps.Divide(matrix[i, j], L[j, j]);
-                }
+                L[i, j] = NumOps.Divide(NumOps.Subtract(matrix[i, j], offSum), L[j, j]);
             }
         }
 

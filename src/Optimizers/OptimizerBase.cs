@@ -350,6 +350,25 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     }
 
     /// <summary>
+    /// Determines whether <paramref name="model"/> takes a non-flat (multi-dimensional)
+    /// input — i.e. a neural network whose first layer's input shape has rank &gt; 1
+    /// (CNN depth×height×width, RNN/GRU/LSTM sequence-length×features, Vision Transformer,
+    /// ResNet, etc.). For such models "feature selection" (selecting a subset of input
+    /// columns) is meaningless: the optimizer derives feature indices from the flattened
+    /// per-sample size, but these models index features against the first axis of their
+    /// input shape, and subsetting a spatial/sequence tensor by flat column index would
+    /// break the shape contract. Used by <see cref="PrepareAndEvaluateSolutionCore"/> and
+    /// <see cref="ApplyFeatureSelection"/> to skip feature selection/subsetting entirely,
+    /// generalizing the embedding-only <see cref="IsEmbeddingBasedModel"/> handling. Fixes #1468.
+    /// </summary>
+    protected static bool HasNonFlatNeuralInput(IFullModel<T, TInput, TOutput> model)
+    {
+        return model is NeuralNetworks.NeuralNetworkBase<T> nn
+            && nn.Layers.Count > 0
+            && nn.Layers[0].GetInputShape() is { Length: > 1 };
+    }
+
+    /// <summary>
     /// Applies the selected features to a model.
     /// </summary>
     /// <param name="model">The model to apply feature selection to.</param>
@@ -362,7 +381,11 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         if (selectedFeatures == null || selectedFeatures.Count == 0)
             throw new ArgumentException("At least one feature must be selected.", nameof(selectedFeatures));
 
-        if (IsEmbeddingBasedModel(model))
+        // Embedding-based and multi-dimensional-input models (CNN/RNN/ViT/etc.) don't
+        // support feature subsetting — their "feature index" doesn't map to a flat column.
+        // Skip applying selection so SetActiveFeatureIndices isn't fed flat indices that
+        // exceed the first layer's input-shape axis (#1113 / #1468).
+        if (IsEmbeddingBasedModel(model) || HasNonFlatNeuralInput(model))
             return;
 
         // Apply features if model supports it
@@ -522,11 +545,18 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         // features — their "feature dimension" is the sequence length, and selecting a
         // random subset of token positions breaks the shape contract between input and
         // target. Fixes #1113 / #1121 — affects ALL optimizers via OptimizerBase.
+        //
+        // Multi-dimensional-input models (CNN/RNN/GRU/LSTM/ViT/ResNet/etc.) are the same
+        // case generalized: their input is a spatial/sequence tensor, not a flat feature
+        // vector, so column-subset feature selection doesn't apply. They use all features
+        // and skip data subsetting entirely (Step 4 below). Fixes #1468.
         int totalFeatures = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
+        bool hasNonFlatInput = HasNonFlatNeuralInput(solution);
         List<int> selectedFeaturesIndices;
 
         if (!InterfaceGuard.Parameterizable(solution).SupportsParameterInitialization
-            || IsEmbeddingBasedModel(solution))
+            || IsEmbeddingBasedModel(solution)
+            || hasNonFlatInput)
         {
             selectedFeaturesIndices = Enumerable.Range(0, totalFeatures).ToList();
         }
@@ -548,16 +578,33 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             return cachedStepData;
         }
 
-        // Step 4: Apply feature selection to input data
-        var selectedFeatures = ModelHelper<T, TInput, TOutput>.GetColumnVectors(
-            inputData.XTrain, [.. selectedFeaturesIndices]);
+        // Step 4: Apply feature selection to input data.
+        // Multi-dimensional-input models train on the FULL input: flat column indices don't
+        // map to a spatial/sequence tensor's feature axis (GetColumnVectors/SelectFeatures
+        // index axis 1, but totalFeatures is the flattened per-sample size), so subsetting
+        // would throw or corrupt the shape. The indices stay the flat identity range, which
+        // AiModelResult treats as a no-op at predict time. Fixes #1468.
+        List<Vector<T>> selectedFeatures;
+        TInput XTrainSubset, XValSubset, XTestSubset;
+        if (hasNonFlatInput)
+        {
+            selectedFeatures = new List<Vector<T>>();
+            XTrainSubset = inputData.XTrain;
+            XValSubset = inputData.XValidation;
+            XTestSubset = inputData.XTest;
+        }
+        else
+        {
+            selectedFeatures = ModelHelper<T, TInput, TOutput>.GetColumnVectors(
+                inputData.XTrain, [.. selectedFeaturesIndices]);
 
-        var XTrainSubset = OptimizerHelper<T, TInput, TOutput>.SelectFeatures(
-            inputData.XTrain, selectedFeaturesIndices);
-        var XValSubset = OptimizerHelper<T, TInput, TOutput>.SelectFeatures(
-            inputData.XValidation, selectedFeaturesIndices);
-        var XTestSubset = OptimizerHelper<T, TInput, TOutput>.SelectFeatures(
-            inputData.XTest, selectedFeaturesIndices);
+            XTrainSubset = OptimizerHelper<T, TInput, TOutput>.SelectFeatures(
+                inputData.XTrain, selectedFeaturesIndices);
+            XValSubset = OptimizerHelper<T, TInput, TOutput>.SelectFeatures(
+                inputData.XValidation, selectedFeaturesIndices);
+            XTestSubset = OptimizerHelper<T, TInput, TOutput>.SelectFeatures(
+                inputData.XTest, selectedFeaturesIndices);
+        }
 
         // Step 5: Create input data with selected features
         var subsetInputData = new OptimizationInputData<T, TInput, TOutput>
@@ -1243,14 +1290,29 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     protected void UpdateBestSolution(OptimizationStepData<T, TInput, TOutput> currentStepData, ref OptimizationStepData<T, TInput, TOutput> bestStepData)
     {
-        // If bestStepData has never been set by a real evaluation (empty SelectedFeatures
-        // and default fitness), always accept the first real result. This prevents a bug
-        // where the default FitnessScore of 0 is considered "better" than real evaluations
-        // by fitness calculators that treat lower scores as better.
-        bool bestIsUninitialized = bestStepData.SelectedFeatures.Count == 0
-            && NumOps.Equals(bestStepData.FitnessScore, NumOps.Zero);
-
-        if (bestIsUninitialized)
+        // If bestStepData has never been set by a real evaluation, always accept the
+        // first real result. This prevents a bug where the default FitnessScore of 0 is
+        // considered "better" than real evaluations by fitness calculators that treat
+        // lower scores as better.
+        //
+        // The uninitialized signal is "no solution recorded yet" (Solution is null until
+        // the first accept below sets it). It must NOT key off SelectedFeatures.Count == 0:
+        // multi-dimensional-input models (CNN/RNN/etc.) legitimately produce an empty
+        // SelectedFeatures list (feature subsetting doesn't apply — #1468), so a Count==0
+        // sentinel would treat every such step as uninitialized and overwrite a real best
+        // without a fitness comparison whenever the score is 0.
+        // Captured as a local and tested inline (not via an intermediate bool) so the
+        // compiler narrows it to non-null past this guard for the bestResult build below.
+        // Accept the first real evaluation unconditionally when the best slot is either
+        // unset (Solution null) OR still the throwaway placeholder from the parameterless
+        // OptimizationStepData ctor (default model + FitnessScore 0). Without the placeholder
+        // check, a real evaluation whose score can't beat the placeholder's 0 — an
+        // error-minimizing fitness, or a NaN/zero score produced under heavy parallel
+        // contention — would never replace it, leaking the throwaway default model out as the
+        // optimization result (observed as a Transformer build returning a 3-layer default
+        // NeuralNetwork only under parallel test execution).
+        var bestSolution = bestStepData.Solution;
+        if (bestSolution is null || bestStepData.IsUninitializedPlaceholder)
         {
             bestStepData.Solution = currentStepData.Solution;
             bestStepData.FitnessScore = currentStepData.FitnessScore;
@@ -1258,6 +1320,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             bestStepData.EvaluationData = currentStepData.EvaluationData;
             bestStepData.SelectedFeatures = currentStepData.SelectedFeatures;
             bestStepData.SelectedFeatureIndices = currentStepData.SelectedFeatureIndices;
+            bestStepData.IsUninitializedPlaceholder = false;
             return;
         }
 
@@ -1273,7 +1336,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
 
         var bestResult = new ModelResult<T, TInput, TOutput>
         {
-            Solution = bestStepData.Solution,
+            Solution = bestSolution,
             Fitness = bestStepData.FitnessScore,
             FitDetectionResult = bestStepData.FitDetectionResult,
             EvaluationData = bestStepData.EvaluationData,

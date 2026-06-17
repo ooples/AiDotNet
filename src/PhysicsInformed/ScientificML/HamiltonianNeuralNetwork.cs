@@ -103,7 +103,14 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         : this(new NeuralNetworkArchitecture<T>(
             inputType: Enums.InputType.OneDimensional,
             taskType: Enums.NeuralNetworkTaskType.Regression,
-            inputSize: DefaultStateDim * 2,
+            // The network input IS the full phase-space state vector (q, p), so
+            // its size must equal stateDim — the ctor enforces
+            // CalculatedInputSize == stateDim. The previous `DefaultStateDim * 2`
+            // made the input 4 while stateDim stayed 2, so the parameterless ctor
+            // always threw "input size (4) must match state dimension (2)".
+            // DefaultStateDim = 2 is the canonical 1-DOF Hamiltonian phase space
+            // (one position q + one momentum p).
+            inputSize: DefaultStateDim,
             outputSize: 1),
             stateDim: DefaultStateDim)
     {
@@ -148,6 +155,44 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             {
                 Layers.AddRange(Architecture.Layers);
                 ValidateCustomLayers(Layers);
+                // Chain-resolve lazy layers from the architecture's declared
+                // input shape. HamiltonianNeuralNetwork.ComputeHamiltonianGradient
+                // walks the layer stack via NeuralNetworkDerivatives, which
+                // reads `weights.Shape[0]` to size its per-layer activation
+                // buffers — on a lazy DenseLayer that read returns 0 and the
+                // derivative computation throws "Layer input size mismatch.
+                // Expected 0, got <stateDim>" on the very first probe (this
+                // is the HamiltonianNN_ComputeTimeDerivative /
+                // HamiltonianNN_Simulate failure in the Integration P-Q
+                // shard). The else-branch's CreateDefaultHamiltonianLayers
+                // already chain-resolves via LayerHelper's private
+                // ChainResolveLazyLayers; we inline the same walk here so
+                // user-supplied layer stacks also report concrete weight
+                // shapes before any Forward call.
+                var rootShape = Architecture.GetInputShape();
+                if (rootShape != null && rootShape.Length > 0
+                    && System.Linq.Enumerable.All(rootShape, d => d > 0))
+                {
+                    int[] running = rootShape;
+                    foreach (var layer in Layers)
+                    {
+                        if (layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> lb
+                            && !lb.IsShapeResolved)
+                        {
+                            try { lb.ResolveFromShape(running); }
+                            catch (Exception ex)
+                            {
+                                // Don't silently swallow: a failure here means the shape chain is
+                                // wrong, which would surface as an opaque error at first Forward.
+                                System.Diagnostics.Trace.TraceWarning(
+                                    "HamiltonianNeuralNetwork: failed pre-resolving {0} with shape [{1}] - {2}",
+                                    lb.GetType().Name, string.Join(",", running), ex.Message);
+                                throw;
+                            }
+                        }
+                        running = layer.GetOutputShape();
+                    }
+                }
             }
             else
             {

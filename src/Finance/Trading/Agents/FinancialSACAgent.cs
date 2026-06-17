@@ -157,21 +157,37 @@ public class FinancialSACAgent<T> : TradingAgentBase<T>
         if (ReplayBuffer.Count < TradingOptions.BatchSize) return NumOps.Zero;
 
         var batch = ReplayBuffer.Sample(TradingOptions.BatchSize);
-        T totalLoss = NumOps.Zero;
+        int n = batch.Count;
+        if (n == 0) return NumOps.Zero;
 
-        foreach (var exp in batch)
+        // One batched actor update over the whole minibatch instead of an autograd tape per
+        // experience (the per-sample loop dominated RL training time — see profiling).
+        int stateDim = batch[0].State.Length;
+        int actionDim = batch[0].Action.Length;
+
+        var statesData = new T[n * stateDim];
+        var actionsData = new T[n * actionDim];
+        for (int i = 0; i < n; i++)
         {
-            // Simplified SAC update logic - computing manual loss for tracking
-            T loss = (TradingOptions.LossFunction ?? throw new InvalidOperationException("LossFunction has not been initialized.")).CalculateLoss(
-                _actor.Predict(Tensor<T>.FromVector(exp.State)).ToVector(),
-                exp.Action);
+            var exp = batch[i];
+            for (int j = 0; j < stateDim; j++)
+            {
+                statesData[i * stateDim + j] = exp.State[j];
+            }
 
-            _actor.Train(Tensor<T>.FromVector(exp.State), Tensor<T>.FromVector(exp.Action));
-            totalLoss = NumOps.Add(totalLoss, loss);
+            for (int j = 0; j < actionDim; j++)
+            {
+                actionsData[i * actionDim + j] = exp.Action[j];
+            }
         }
 
+        var states = new Tensor<T>([n, stateDim], new Vector<T>(statesData));
+        var actions = new Tensor<T>([n, actionDim], new Vector<T>(actionsData));
+
+        _actor.Train(states, actions);
+
         UpdateTargetNetworks(0.005); // Polyak averaging
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(TradingOptions.BatchSize));
+        return NumOps.Zero;
     }
 
     /// <summary>

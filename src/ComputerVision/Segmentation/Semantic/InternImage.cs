@@ -449,7 +449,7 @@ public class InternImage<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
                 { "DecoderDim", _decoderDim }, { "DropRate", _dropRate },
                 { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

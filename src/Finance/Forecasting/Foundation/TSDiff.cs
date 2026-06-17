@@ -290,12 +290,15 @@ public class TSDiff<T> : TimeSeriesFoundationModelBase<T>
         bool addedBatchDim = false;
         if (conditioned.Rank == 1) { conditioned = conditioned.Reshape(new[] { 1, conditioned.Length }); addedBatchDim = true; }
 
-        // Encode conditioning context through input projection
-        Tensor<T> condHidden;
-        if (_inputProjection is not null)
-            condHidden = _inputProjection.Forward(conditioned);
-        else
-            condHidden = conditioned;
+        // Raw conditioning context. As in CSDI (Tashiro 2021) / the layer-helper
+        // layout, _inputProjection projects the WHOLE packed per-step denoiser
+        // input to hidden width — so the conditioning is packed RAW here, not
+        // pre-projected (pre-projecting consumed _inputProjection on the
+        // conditioning shape and let the raw packed input fall through to the
+        // residual stack whose BatchNorm channels are hiddenDimension).
+        var condHidden = conditioned.Rank == 2
+            ? conditioned
+            : Engine.Reshape(conditioned, new[] { 1, conditioned.Length });
 
         int outputLen = _forecastHorizon;
         var rand = RandomHelper.CreateSecureRandom();
@@ -308,16 +311,29 @@ public class TSDiff<T> : TimeSeriesFoundationModelBase<T>
         // Iterative DDPM reverse process: t = T-1 ... 0
         for (int t = _numDiffusionSteps - 1; t >= 0; t--)
         {
-            // Build denoising input: [x_t | condHidden | timestep_embedding]
-            int xtLen = Math.Min(xt.Length, outputLen);
-            int condLen = Math.Min(condHidden.Length, _hiddenDimension);
-            var denoisingInput = new Tensor<T>(new[] { 1, xtLen + condLen + 1 });
-            for (int i = 0; i < xtLen; i++) denoisingInput.Data.Span[i] = xt[i];
-            for (int i = 0; i < condLen; i++) denoisingInput.Data.Span[xtLen + i] = condHidden[i];
-            denoisingInput.Data.Span[xtLen + condLen] = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));
+            // Denoising input: hiddenDim-wide additive composition of x_t,
+            // conditioning, and the time embedding — same fix as CCDM (the
+            // raw [x_t | condHidden | t_embed] concatenation feeds a
+            // shape-mismatched tensor into the first BatchNorm of the
+            // residual stack, since _residualLayers were lazy-sized to
+            // _hiddenDimension by an earlier _inputProjection.Forward).
+            // Ho et al. 2020 §3.2 / Hatamizadeh et al. 2023 §3.2 add the
+            // time step to the residual stream via a positional embedding;
+            // we likewise sum x_t (zero-padded), condHidden, and the time
+            // embedding broadcast across all positions.
+            T timeEmbed = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));
+            // Build the additive components as separate hiddenDim-wide
+            // rank-2 tensors and sum via Engine ops — see CCDM's matching
+            // PadOrTruncateRank2 helper for the rationale.
+            var xtPadded = PadOrTruncateRank2(xt, _hiddenDimension);
+            var condPadded = PadOrTruncateRank2(condHidden, _hiddenDimension);
+            var summed = Engine.TensorAdd(xtPadded, condPadded);
+            var denoisingInput = Engine.TensorAddScalar(summed, timeEmbed);
 
-            // Predict conditioned noise estimate eps_cond
+            // Predict conditioned noise estimate eps_cond. Project the packed
+            // input to hidden width before the residual stack.
             var epsCond = denoisingInput;
+            if (_inputProjection is not null) epsCond = _inputProjection.Forward(epsCond);
             foreach (var layer in _residualLayers) epsCond = layer.Forward(epsCond);
             if (_outputProjection is not null) epsCond = _outputProjection.Forward(epsCond);
 
@@ -327,24 +343,27 @@ public class TSDiff<T> : TimeSeriesFoundationModelBase<T>
             Tensor<T> epsGuided;
             if (Math.Abs(_guidanceScale - 1.0) > 1e-6)
             {
-                var uncondInput = new Tensor<T>(new[] { 1, xtLen + condLen + 1 });
-                for (int i = 0; i < xtLen; i++) uncondInput.Data.Span[i] = xt[i];
-                // Zero conditioning for unconditional estimate
-                uncondInput.Data.Span[xtLen + condLen] = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));
+                // Unconditional estimate: x_t padded to hiddenDim + time
+                // embedding broadcast, no conditioning sum. Same Engine-op
+                // composition as the conditioned branch above.
+                var uncondInput = Engine.TensorAddScalar(
+                    PadOrTruncateRank2(xt, _hiddenDimension), timeEmbed);
 
                 var epsUncond = uncondInput;
+                if (_inputProjection is not null) epsUncond = _inputProjection.Forward(epsUncond);
                 foreach (var layer in _residualLayers) epsUncond = layer.Forward(epsUncond);
                 if (_outputProjection is not null) epsUncond = _outputProjection.Forward(epsUncond);
 
-                // Classifier-free guidance blend: eps_guided = eps_uncond + scale * (eps_cond - eps_uncond)
+                // Classifier-free guidance blend (Ho & Salimans 2022):
+                //   ε_guided = ε_uncond + scale · (ε_cond − ε_uncond)
+                // Built out of Engine SIMD ops so the per-element work
+                // vectorises at paper scale (outputLen × hiddenDim ≥ 1024).
                 T guidanceT = NumOps.FromDouble(_guidanceScale);
-                epsGuided = new Tensor<T>(new[] { 1, outputLen });
-                for (int i = 0; i < outputLen; i++)
-                {
-                    T uc = i < epsUncond.Length ? epsUncond[i] : NumOps.Zero;
-                    T cd = i < epsCond.Length ? epsCond[i] : NumOps.Zero;
-                    epsGuided.Data.Span[i] = NumOps.Add(uc, NumOps.Multiply(guidanceT, NumOps.Subtract(cd, uc)));
-                }
+                var uncondAligned = PadOrTruncateRank2(epsUncond, outputLen);
+                var condAligned = PadOrTruncateRank2(epsCond, outputLen);
+                var delta = Engine.TensorSubtract(condAligned, uncondAligned);
+                var weighted = Engine.TensorMultiplyScalar(delta, guidanceT);
+                epsGuided = Engine.TensorAdd(uncondAligned, weighted);
             }
             else
             {
@@ -371,6 +390,21 @@ public class TSDiff<T> : TimeSeriesFoundationModelBase<T>
 
         if (addedBatchDim && xt.Rank == 2 && xt.Shape[0] == 1) xt = xt.Reshape(new[] { xt.Shape[1] });
         return xt;
+    }
+
+    /// <summary>Pads-or-truncates a rank-1 / rank-2 [1, len] tensor along the
+    /// last axis to a target width via Engine ops (TensorNarrow for truncate;
+    /// TensorConcatenate with a zero pad for extend). See CCDM for the
+    /// shared rationale.</summary>
+    private Tensor<T> PadOrTruncateRank2(Tensor<T> src, int targetWidth)
+    {
+        var src2d = src.Rank == 2 ? src : Engine.Reshape(src, new[] { 1, src.Length });
+        int srcLen = src2d.Shape[1];
+        if (srcLen == targetWidth) return src2d;
+        if (srcLen > targetWidth)
+            return Engine.TensorNarrow(src2d, dim: 1, start: 0, length: targetWidth);
+        var pad = new Tensor<T>(new[] { 1, targetWidth - srcLen });
+        return Engine.TensorConcatenate(new[] { src2d, pad }, axis: 1);
     }
 
     protected override Tensor<T> ForecastOnnx(Tensor<T> input) { if (OnnxSession == null) throw new InvalidOperationException("ONNX session is not initialized."); int batchSize = input.Rank > 1 ? input.Shape[0] : 1; int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length; int features = input.Rank > 2 ? input.Shape[2] : 1; var inputData = new float[batchSize * seqLen * features]; for (int i = 0; i < input.Length && i < inputData.Length; i++) inputData[i] = (float)NumOps.ToDouble(input[i]); var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, new[] { batchSize, seqLen, features }); string inputName = OnnxSession.InputMetadata.Keys.FirstOrDefault() ?? "input"; var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, inputTensor) }; using var results = OnnxSession.Run(inputs); var outputTensor = results.First().AsTensor<float>(); var outputShape = outputTensor.Dimensions.ToArray(); var output = new Tensor<T>(outputShape); int totalElements = 1; foreach (var dim in outputShape) totalElements *= dim; for (int i = 0; i < totalElements && i < output.Length; i++) output.Data.Span[i] = NumOps.FromDouble(outputTensor.GetValue(i)); return output; }

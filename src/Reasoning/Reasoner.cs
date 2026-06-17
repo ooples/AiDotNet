@@ -1,3 +1,5 @@
+using AiDotNet.Agentic.Models;
+using AiDotNet.Agentic.Tools;
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.Reasoning.Strategies;
@@ -50,8 +52,8 @@ namespace AiDotNet.Reasoning;
 /// </remarks>
 internal class Reasoner<T> : IReasoner<T>
 {
-    private readonly IChatModel<T> _chatModel;
-    private readonly IEnumerable<ITool>? _tools;
+    private readonly IChatClient<T> _chatModel;
+    private readonly IEnumerable<IAgentTool>? _tools;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Reasoner{T}"/> class.
@@ -68,7 +70,7 @@ internal class Reasoner<T> : IReasoner<T>
     /// the reasoner can use to verify calculations or run code.
     /// </para>
     /// </remarks>
-    public Reasoner(IChatModel<T> chatModel, IEnumerable<ITool>? tools = null)
+    public Reasoner(IChatClient<T> chatModel, IEnumerable<IAgentTool>? tools = null)
     {
         Guard.NotNull(chatModel);
         _chatModel = chatModel;

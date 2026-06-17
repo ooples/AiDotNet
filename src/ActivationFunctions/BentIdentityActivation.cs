@@ -27,8 +27,15 @@ namespace AiDotNet.ActivationFunctions;
 [ActivationCategory(ActivationCategory.General)]
 [ActivationTask(ActivationTask.HiddenLayer)]
 [ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = false, Cost = ComputeCost.Medium)]
-public class BentIdentityActivation<T> : ActivationFunctionBase<T>
+public class BentIdentityActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivation
 {
+    /// <inheritdoc/>
+    bool Fused.IFusedActivation.TryGetFusedActivation(out AiDotNet.Tensors.Engines.FusedActivationType type)
+    {
+        type = AiDotNet.Tensors.Engines.FusedActivationType.BentIdentity;
+        return true;
+    }
+
     /// <summary>
     /// Indicates that this activation function supports operations on individual scalar values.
     /// </summary>

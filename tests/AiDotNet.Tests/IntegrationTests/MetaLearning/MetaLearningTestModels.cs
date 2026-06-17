@@ -13,7 +13,16 @@ using AiDotNet.Tensors;
 
 namespace AiDotNet.Tests.IntegrationTests.MetaLearning;
 
-internal class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<double>>, ICloneable
+// Implements IParameterizable explicitly — the meta-learning algorithms call
+// InterfaceGuard.Parameterizable on options.MetaModel and require the
+// runtime type to advertise IParameterizable<double, Matrix<double>, Vector<double>>.
+// Without this, every meta-learning algorithm test fails at ctor time with
+// "LinearVectorModel does not implement IParameterizable..." even though the
+// class already exposes GetParameters / SetParameters / ParameterCount.
+internal class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<double>>,
+    IParameterizable<double, Matrix<double>, Vector<double>>,
+    IGradientComputable<double, Matrix<double>, Vector<double>>,
+    ICloneable
 {
     private Vector<double> _parameters;
     private readonly int _inputFeatures;
@@ -270,7 +279,10 @@ internal class SecondOrderMatrixModel : LinearVectorModel, ISecondOrderGradientC
     }
 }
 
-internal class TensorEmbeddingModel : IFullModel<double, Matrix<double>, Tensor<double>>, ICloneable
+internal class TensorEmbeddingModel : IFullModel<double, Matrix<double>, Tensor<double>>,
+    IParameterizable<double, Matrix<double>, Tensor<double>>,
+    IGradientComputable<double, Matrix<double>, Tensor<double>>,
+    ICloneable
 {
     private Vector<double> _parameters;
     private readonly int _inputFeatures;

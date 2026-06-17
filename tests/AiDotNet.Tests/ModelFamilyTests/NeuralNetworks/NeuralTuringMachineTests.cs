@@ -4,11 +4,11 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class NeuralTuringMachineTests : NeuralNetworkModelTestBase
+public class NeuralTuringMachineTests : NeuralNetworkModelTestBase<float>
 {
     protected override int[] InputShape => [128];
     protected override int[] OutputShape => [1];
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new NeuralTuringMachine<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new NeuralTuringMachine<float>();
 }

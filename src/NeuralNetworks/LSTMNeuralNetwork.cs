@@ -1841,7 +1841,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
                 { "InputSize", Architecture.InputSize },
                 { "OutputSize", Architecture.OutputSize }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

@@ -50,8 +50,18 @@ public class CopulaSynthGenerator<T> : SyntheticTabularGeneratorBase<T>
 {
     private readonly CopulaSynthOptions<T> _options;
 
-    // Marginal parameters per feature
+    // Marginal parameters per feature: sorted observed values, used as the
+    // empirical quantile grid. For the probability-integral transform to be
+    // rank-preserving (and therefore correlation-preserving), the forward CDF
+    // and the inverse CDF MUST share one plotting-position grid — see
+    // EmpiricalCDF / InverseEmpiricalCDF.
     private double[][] _sortedValues = Array.Empty<double[]>();
+
+    // Per-feature column type, captured at fit time. Categorical and Discrete
+    // columns must NOT be linearly interpolated on the inverse transform —
+    // doing so leaks float noise into integer/categorical columns (the Copula
+    // failure mode). Continuous columns interpolate normally.
+    private ColumnDataType[] _columnTypes = Array.Empty<ColumnDataType>();
 
     // Gaussian copula: correlation matrix (Cholesky-decomposed for sampling)
     private double[,]? _choleskyCorr;
@@ -72,6 +82,16 @@ public class CopulaSynthGenerator<T> : SyntheticTabularGeneratorBase<T>
     {
         _numFeatures = data.Columns;
         int n = data.Rows;
+
+        // Capture per-column type so the inverse transform can snap categorical
+        // and discrete columns to valid values instead of interpolating between
+        // them. `columns` was previously accepted and ignored — that omission is
+        // exactly why float noise leaked into categorical columns.
+        _columnTypes = new ColumnDataType[_numFeatures];
+        for (int j = 0; j < _numFeatures; j++)
+        {
+            _columnTypes[j] = j < columns.Count ? columns[j].DataType : ColumnDataType.Continuous;
+        }
 
         // Step 1: Store sorted values per feature for empirical CDF/quantile
         _sortedValues = new double[_numFeatures][];
@@ -144,40 +164,89 @@ public class CopulaSynthGenerator<T> : SyntheticTabularGeneratorBase<T>
     }
 
     /// <summary>
-    /// Computes the empirical CDF value for a given feature and value.
-    /// P(X &lt;= x) approximated by the proportion of sorted values &lt;= x.
+    /// Forward empirical CDF for the probability-integral transform. The i-th
+    /// order statistic (0-based) is mapped to the Hazen plotting position
+    /// <c>(i + 0.5) / n</c>. This is the inverse of <see cref="InverseEmpiricalCDF"/>
+    /// on the SAME grid — the two MUST agree, or the round-trip
+    /// value→u→normal→…→normal→u→value stops being rank-preserving and the fitted
+    /// correlation bleeds off (the 0.82–0.93 degradation). Hazen positions sit
+    /// strictly inside (0, 1), so no boundary clamping is needed and the tails
+    /// are not squashed.
     /// </summary>
     private double EmpiricalCDF(int featureIndex, double value)
     {
         var sorted = _sortedValues[featureIndex];
         int n = sorted.Length;
         if (n == 0) return 0.5;
+        if (n == 1) return 0.5;
 
-        // Binary search for the position
-        int idx = Array.BinarySearch(sorted, value);
-        if (idx < 0) idx = ~idx;
-        else idx++; // Include the found element
-
-        return (double)idx / n;
+        // Rank = number of values strictly less than `value`, plus half the ties
+        // (mid-rank), so equal values map to a single shared plotting position and
+        // the transform stays monotone. Implemented via the two bisection bounds.
+        int lower = LowerBound(sorted, value); // first index >= value
+        int upper = UpperBound(sorted, value); // first index > value
+        double rank = (lower + upper) / 2.0;    // mid-rank of the tie block
+        return (rank + 0.5) / n;
     }
 
     /// <summary>
-    /// Inverse empirical CDF (quantile function): given probability u, returns value.
-    /// Uses linear interpolation between sorted values.
+    /// Inverse empirical CDF (quantile function) on the Hazen grid that
+    /// <see cref="EmpiricalCDF"/> uses: plotting position <c>(i + 0.5)/n</c> maps
+    /// back to <c>sorted[i]</c>. For Continuous columns we interpolate linearly
+    /// between adjacent order statistics; for Categorical and Discrete columns we
+    /// snap to the nearest order statistic (no interpolation) so the output is
+    /// always a value that actually occurred — fixing the float-into-categorical
+    /// leak (e.g. Education ∈ {0,1,2,3} can never come back as 1.7).
     /// </summary>
     private double InverseEmpiricalCDF(int featureIndex, double u)
     {
         var sorted = _sortedValues[featureIndex];
         int n = sorted.Length;
         if (n == 0) return 0;
+        if (n == 1) return sorted[0];
 
-        double idx = u * (n - 1);
-        int lo = (int)Math.Floor(idx);
-        int hi = Math.Min(lo + 1, n - 1);
-        lo = Math.Max(lo, 0);
+        bool snap = _columnTypes.Length > featureIndex
+            && _columnTypes[featureIndex] != ColumnDataType.Continuous;
 
-        double frac = idx - lo;
+        // Position on the Hazen grid: u = (pos + 0.5)/n  ⇒  pos = u*n - 0.5.
+        double pos = u * n - 0.5;
+        if (pos <= 0) return sorted[0];
+        if (pos >= n - 1) return sorted[n - 1];
+
+        int lo = (int)Math.Floor(pos);
+        int hi = lo + 1;
+        double frac = pos - lo;
+
+        if (snap)
+        {
+            // Discrete / categorical: pick the nearer order statistic. Never blend.
+            return frac < 0.5 ? sorted[lo] : sorted[hi];
+        }
         return sorted[lo] * (1 - frac) + sorted[hi] * frac;
+    }
+
+    /// <summary>First index i with sorted[i] &gt;= value (lower bound).</summary>
+    private static int LowerBound(double[] sorted, double value)
+    {
+        int lo = 0, hi = sorted.Length;
+        while (lo < hi)
+        {
+            int mid = lo + ((hi - lo) >> 1);
+            if (sorted[mid] < value) lo = mid + 1; else hi = mid;
+        }
+        return lo;
+    }
+
+    /// <summary>First index i with sorted[i] &gt; value (upper bound).</summary>
+    private static int UpperBound(double[] sorted, double value)
+    {
+        int lo = 0, hi = sorted.Length;
+        while (lo < hi)
+        {
+            int mid = lo + ((hi - lo) >> 1);
+            if (sorted[mid] <= value) lo = mid + 1; else hi = mid;
+        }
+        return lo;
     }
 
     /// <summary>

@@ -784,10 +784,13 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
             // Calculate how many dimensions to add at the front
             int dimsToAdd = expectedShape.Length - input.Rank;
 
-            // Validate trailing dimensions match
+            // Validate trailing dimensions match. Wildcard -1 in
+            // expectedShape (lazy generator spatial dims) accepts any
+            // concrete value — see ShapesMatch for the same rationale.
             for (int i = 0; i < input.Rank; i++)
             {
-                if (input.Shape[i] != expectedShape[dimsToAdd + i])
+                int expected = expectedShape[dimsToAdd + i];
+                if (expected != -1 && input.Shape[i] != expected)
                 {
                     throw new TensorShapeMismatchException(
                         $"Shape mismatch in RealESRGAN: Cannot expand [{string.Join(", ", input._shape)}] " +
@@ -795,11 +798,16 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
                 }
             }
 
-            // Expand input shape by adding dimensions of size 1 at the front
+            // Expand input shape by adding dimensions of size 1 at the front.
+            // For wildcard entries in expectedShape that the input doesn't
+            // cover (i.e. trailing positions filled with input.Shape[i]),
+            // we keep the input's concrete value; for the leading positions
+            // we DEFAULT wildcard -1 to 1 (the only sensible promotion is
+            // a batch / channel dim of 1).
             var expandedShape = new int[expectedShape.Length];
             for (int i = 0; i < dimsToAdd; i++)
             {
-                expandedShape[i] = expectedShape[i];
+                expandedShape[i] = expectedShape[i] == -1 ? 1 : expectedShape[i];
             }
             for (int i = 0; i < input.Rank; i++)
             {
@@ -882,6 +890,16 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         if (shape1.Length != shape2.Length) return false;
         for (int i = 0; i < shape1.Length; i++)
         {
+            // Treat -1 in EITHER shape as a wildcard. The RRDBNet generator
+            // is a fully-convolutional model whose spatial input dimensions
+            // are lazy (kernel weights only depend on input channels, not on
+            // H/W), so GeneratorRequired.GetInputShape() reports [C, -1, -1]
+            // until the first real forward resolves it. Concrete inputs
+            // arrive with real H/W and should be accepted for any H/W since
+            // conv layers don't care. Prior strict equality treated -1 as a
+            // sentinel to be compared literally, which rejected every
+            // concrete-shape input against a lazy-shape generator.
+            if (shape1[i] == -1 || shape2[i] == -1) continue;
             if (shape1[i] != shape2[i]) return false;
         }
         return true;

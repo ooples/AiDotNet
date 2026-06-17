@@ -457,24 +457,16 @@ public class RealESRGANModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedUnet = new UNetNoisePredictor<T>(
-            inputChannels: INPUT_CHANNELS,
-            outputChannels: LATENT_CHANNELS,
-            baseChannels: BASE_CHANNELS,
-            channelMultipliers: [1, 2, 4],
-            numResBlocks: 2,
-            attentionResolutions: [4, 2],
-            contextDim: CROSS_ATTENTION_DIM);
-        clonedUnet.SetParameters(_unet.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2,
-            latentScaleFactor: 0.18215);
-        clonedVae.SetParameters(_vae.GetParameters());
+        // Delegate to the predictor/VAE's own Clone implementations, which resolve
+        // their internal lazy shapes on BOTH source and clone before copying weights.
+        // Constructing a fresh predictor/VAE here and calling SetParameters with
+        // GetParameters from this re-hits the lazy-init bug: GetParameters() on a
+        // still-unresolved source under-counts the lazy DenseLayer params while the new
+        // constructor's ParameterCount is live (arch-derived), so the clone re-resolves
+        // on its first Predict and diverges from the original. Mirrors
+        // ImprovedConsistencyModel / SDXLTurbo / DDPM (PR #1555 / #1562).
+        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
+        var clonedVae = (StandardVAE<T>)_vae.Clone();
 
         return new RealESRGANModel<T>(
             unet: clonedUnet,

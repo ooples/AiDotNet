@@ -90,7 +90,22 @@ public class CodeBERT<T> : CodeModelBase<T>
         ITokenizer? tokenizer = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), tokenizer)
     {
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // AdamW (Loshchilov & Hutter 2019) at lr=1e-5 with weight decay 0.01 (the low end of
+        // the BERT fine-tuning range, Devlin 2018 App. A.3) —
+        // the standard BERT / RoBERTa optimizer (Devlin 2018; Liu 2019). With the
+        // final LayerNorm bounding the residual stream the gross blow-up is gone,
+        // but plain Adam still let the weights (and the loss) slowly drift up on
+        // longer runs. Decoupled weight decay regularizes the weights so training
+        // stays stable, and AMSGrad keeps the effective step shrinking near
+        // convergence.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-5,
+                WeightDecay = 0.01,
+                UseAMSGrad = true
+            });
         InitializeLayersCore();
     }
 
@@ -138,6 +153,30 @@ public class CodeBERT<T> : CodeModelBase<T>
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Empty body was a stub from the initial-scaffolding commit and is the
+        // direct cause of the Training_ShouldChangeParameters /
+        // GradientFlow_ShouldBeNonZeroAndFinite failures — Train returning
+        // without computing gradients or stepping the optimizer means
+        // parameters never move, gradient probes read all zeros, and the
+        // generated training-invariant suite tears down with "No parameters
+        // changed after training — gradients may all be zero." Route through
+        // TrainWithTape exactly like every other transformer-stack model in
+        // this project (CodeBERT is a BERT-class encoder per Feng et al. 2020
+        // "CodeBERT: A Pre-Trained Model for Programming and Natural
+        // Languages", arXiv:2002.08155; the trainable parameters are the
+        // embedding / position / transformer-encoder / output-projection
+        // weights the LayerFactory just stacked into Layers, and backprop
+        // via the tape is the same path BERT / Transformer / RoBERTa models
+        // use elsewhere in the codebase).
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override ModelMetadata<T> GetModelMetadata()

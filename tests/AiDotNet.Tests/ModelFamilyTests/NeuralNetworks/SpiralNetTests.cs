@@ -16,7 +16,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 /// SpiralNetOptions defaults to a 64-vertex fallback mesh for small-input testing
 /// (NumVertices = 64, InputFeatures = 3 = xyz coords).
 /// </summary>
-public class SpiralNetTests : NeuralNetworkModelTestBase
+public class SpiralNetTests : NeuralNetworkModelTestBase<float>
 {
     // [batch, num_vertices, in_features] matches SpiralNetOptions defaults
     // (NumVertices = 64, InputFeatures = 3). The base's default [1, 4] rank-2
@@ -28,8 +28,8 @@ public class SpiralNetTests : NeuralNetworkModelTestBase
     // Default output: ModelNet40 classification (NumClasses = 40 per Gong et al.).
     protected override int[] OutputShape => [1, 40];
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new SpiralNet<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new SpiralNet<float>();
 
     /// <summary>
     /// SpiralConvLayer is lazy — its weight tensor is constructed at [0, 0] in

@@ -182,6 +182,20 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     private readonly object _initLock = new();
 
     /// <summary>
+    /// Whether this predictor's lazy weight tensors have been materialized yet
+    /// (i.e. a forward pass, <see cref="GetParameters"/>, or
+    /// <see cref="SetParameters"/> has run). While <c>false</c> the predictor
+    /// holds no resident weights — its parameters are fully determined by its
+    /// construction config — so a clone can be produced by re-running the same
+    /// construction rather than copying a flat parameter vector. That matters
+    /// for foundation-scale configs (e.g. WanVideo-14B ≈ 15 B params) where the
+    /// flat <see cref="Vector{T}"/> copy path is both int.MaxValue-bounded and
+    /// far larger than host RAM. Callers that need a true deep copy of resolved
+    /// weights use <see cref="CopyParametersFrom"/> instead.
+    /// </summary>
+    public bool AreLayersInitialized => _layersInitialized;
+
+    /// <summary>
     /// Position embeddings (learnable).
     /// </summary>
     private Tensor<T>? _posEmbed;
@@ -473,21 +487,23 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
         EnsureLayersInitialized();
+        using var streaming = BeginWeightStreamingForward();
         _lastInput = noisySample;
 
         // Get timestep embedding
         var timeEmbed = GetTimestepEmbedding(timestep);
         timeEmbed = ProjectTimeEmbedding(timeEmbed);
 
-        return Forward(noisySample, timeEmbed, conditioning);
+        return streaming.Complete(Forward(noisySample, timeEmbed, conditioning));
     }
 
     /// <inheritdoc />
     public override Tensor<T> PredictNoiseWithEmbedding(Tensor<T> noisySample, Tensor<T> timeEmbedding, Tensor<T>? conditioning = null)
     {
         EnsureLayersInitialized();
+        using var streaming = BeginWeightStreamingForward();
         _lastInput = noisySample;
-        return Forward(noisySample, timeEmbedding, conditioning);
+        return streaming.Complete(Forward(noisySample, timeEmbedding, conditioning));
     }
 
     /// <summary>
@@ -816,8 +832,10 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         var kReshaped = ReshapeForHeads(k, batch, condSeqLen, _numHeads, headDim);
         var vReshaped = ReshapeForHeads(v, batch, condSeqLen, _numHeads, headDim);
 
-        // Compute attention scores: Q * K^T using batched matmul [batch*heads, seqLen, condSeqLen]
-        var kTransposed = Engine.TensorTranspose<T>(kReshaped);
+        // Compute attention scores: Q * K^T using batched matmul.
+        // K is batched [batch*heads, condSeqLen, headDim], so transpose only
+        // the last two dimensions to [batch*heads, headDim, condSeqLen].
+        var kTransposed = Engine.TensorPermute(kReshaped, new[] { 0, 2, 1 });
         var scores = Engine.TensorBatchMatMul<T>(qReshaped, kTransposed);
 
         // Scale scores
@@ -1151,6 +1169,66 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         target.SetParameters(source.GetParameters());
     }
 
+    private IEnumerable<ILayer<T>?> EnumerateAllLayers()
+    {
+        yield return _patchEmbed;
+        yield return _timeEmbed1;
+        yield return _timeEmbed2;
+        yield return _labelEmbed;
+        yield return _adaln_modulation;
+        foreach (var block in _blocks)
+        {
+            yield return block.Norm1;
+            yield return block.Attention;
+            yield return block.Norm2;
+            yield return block.MLP1;
+            yield return block.MLP2;
+            yield return block.AdaLNModulation;
+            yield return block.CrossAttnNorm;
+            yield return block.CrossAttnQ;
+            yield return block.CrossAttnK;
+            yield return block.CrossAttnV;
+            yield return block.CrossAttnOut;
+        }
+        yield return _finalNorm;
+        yield return _outputProj;
+    }
+
+    private bool HasMaterializedParameters()
+    {
+        if (!_layersInitialized) return false;
+
+        foreach (var layer in EnumerateAllLayers())
+        {
+            if (HasMaterializedParameters(layer))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool HasMaterializedParameters(ILayer<T>? layer)
+    {
+        if (layer is null) return false;
+
+        if (layer is ITrainableLayer<T> trainable)
+        {
+            foreach (var parameter in trainable.GetTrainableParameters())
+            {
+                if (parameter.Length > 0)
+                    return true;
+            }
+        }
+
+        foreach (var subLayer in layer.GetSubLayers())
+        {
+            if (HasMaterializedParameters(subLayer))
+                return true;
+        }
+
+        return false;
+    }
+
     /// <inheritdoc />
     public override long ParameterCount
     {
@@ -1204,9 +1282,78 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             mlpRatio: _mlpRatio,
             latentSpatialSize: _latentSpatialSize);
 
-        // Preserve trained weights
-        clone.SetParameters(GetParameters());
+        // Preserve trained/materialized weights without forcing a foundation-scale default
+        // constructor to allocate and copy billions of random parameters (HasMaterializedParameters
+        // gates the copy to a source that genuinely has allocated weights).
+        //
+        // The DiT's projection layers are LazyDense — they only ALLOCATE their weight tensors on
+        // the first forward, not in EnsureLayersInitialized. A fresh clone therefore has the layer
+        // STRUCTURE but unallocated weights, so CopyParametersFrom alone has nothing to copy INTO;
+        // the clone would re-initialize those tensors with a fresh RNG on its first real forward
+        // and diverge from the source (observed: ~50k fewer materialized params, divergent Predict).
+        // Run one throwaway forward at the canonical input shape to materialize EVERY weight tensor
+        // on the clone first (weight dims are fixed by config, so the probe's spatial size is
+        // irrelevant), then copy the source's trained values. The probe must materialize exactly the
+        // paths the source has materialized so CopyParametersFrom finds a target for every source
+        // weight. A null-conditioned probe only touches the unconditional path, so if the source was
+        // used WITH conditioning its class-embedding (_labelEmbed) and/or cross-attention K/V/Out
+        // projections are materialized — leaving the clone's equivalents lazy would let them re-init
+        // with fresh RNG on the first conditioned forward and diverge from the source.
+        // BuildProbeConditioning returns representative conditioning whenever a conditioned path is
+        // materialized on the source (and null otherwise, keeping those layers lazy on both).
+        if (HasMaterializedParameters())
+        {
+            var probe = new Tensor<T>(new[] { 1, _inputChannels, _latentSpatialSize, _latentSpatialSize });
+            clone.PredictNoise(probe, timestep: 0, conditioning: BuildProbeConditioning());
+            clone.CopyParametersFrom(this);
+            // The probe forward traced a compiled plan over the clone's random init; drop it so
+            // the next real forward re-traces against the copied weights.
+            clone.InvalidateCompiledPlans();
+        }
+        // else: source has no materialized weights — nothing to copy. The clone shares the same
+        // config and initializes lazily on first use; calling GetParameters() here would allocate
+        // the full (foundation-scale) parameter vector for nothing.
         return clone;
+    }
+
+    /// <summary>
+    /// Builds a representative conditioning tensor for the <see cref="Clone"/> probe forward,
+    /// matching whichever conditioned path the source has materialized so that path is allocated on
+    /// the clone before <see cref="CopyParametersFrom"/> runs. Returns <c>null</c> when no conditioned
+    /// path is materialized — the source's conditioned layers are lazy, so the clone's stay lazy too.
+    /// </summary>
+    private Tensor<T>? BuildProbeConditioning()
+    {
+        // Class-conditional DiT: a one-hot [1, numClasses] label materializes _labelEmbed.
+        if (_numClasses > 0 && _labelEmbed is { IsInitialized: true })
+        {
+            return new Tensor<T>(new[] { 1, _numClasses });
+        }
+
+        // Text/cross-attention DiT: a [1, 1, contextDim] context tensor materializes the per-block
+        // cross-attention K/V/Out projections.
+        if (_contextDim > 0 && HasMaterializedCrossAttention())
+        {
+            return new Tensor<T>(new[] { 1, 1, _contextDim });
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// True when any transformer block's cross-attention key projection has materialized its weights,
+    /// i.e. the source ran at least one conditioned (text/context) forward.
+    /// </summary>
+    private bool HasMaterializedCrossAttention()
+    {
+        foreach (var block in _blocks)
+        {
+            if (block.CrossAttnK is { IsInitialized: true })
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// <inheritdoc />
@@ -1219,59 +1366,42 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     public override bool SupportsCrossAttention => true;
 
     /// <summary>
-    /// Streams DiT's trainable weights per-layer, yielding from
-    /// <c>_patchEmbed</c>, the time-embedding MLPs, the AdaLN modulation
-    /// projection, every transformer block's sub-layers, and the final
-    /// norm + projection. Per-tensor streaming dodges the foundation-scale
-    /// buffer-allocation path in <see cref="GetParameters"/> that overflows
-    /// when total parameter count gets close to (or above) int.MaxValue —
-    /// each chunk is a single layer's parameter vector, well within the
-    /// per-tensor int contract documented in
-    /// <see cref="IParameterizable{T,TInput,TOutput}.ParameterCount"/>.
+    /// Streams DiT's materialized trainable tensors directly from each layer,
+    /// matching the PyTorch <c>nn.Module.parameters()</c> contract: yielded
+    /// tensors are the same objects used by forward/training, not flat copies.
+    /// Lazy paper-scale defaults may report a structural
+    /// <see cref="ParameterCount"/> before their tensors have been allocated;
+    /// in that state this iterator yields only already-materialized tensors
+    /// instead of forcing a multi-billion-parameter allocation.
     /// </summary>
     public override IEnumerable<Tensor<T>> GetParameterChunks()
     {
-        // Mirror ParameterCount's enumeration exactly — including
-        // EnsureLayersInitialized() to materialize lazy layers — so
-        // sum-of-chunks always equals ParameterCount.
         EnsureLayersInitialized();
-
-        IEnumerable<ILayer<T>?> EnumerateAllLayers()
-        {
-            yield return _patchEmbed;
-            yield return _timeEmbed1;
-            yield return _timeEmbed2;
-            yield return _labelEmbed;
-            yield return _adaln_modulation;
-            foreach (var block in _blocks)
-            {
-                yield return block.Norm1;
-                yield return block.Attention;
-                yield return block.Norm2;
-                yield return block.MLP1;
-                yield return block.MLP2;
-                yield return block.AdaLNModulation;
-                yield return block.CrossAttnNorm;
-                yield return block.CrossAttnQ;
-                yield return block.CrossAttnK;
-                yield return block.CrossAttnV;
-                yield return block.CrossAttnOut;
-            }
-            yield return _finalNorm;
-            yield return _outputProj;
-        }
 
         foreach (var layer in EnumerateAllLayers())
         {
-            if (layer is null) continue;
-            int len = layer.ParameterCount > int.MaxValue
-                ? throw new InvalidOperationException(
-                    $"Layer '{layer.GetType().Name}' has {layer.ParameterCount} parameters, " +
-                    $"exceeding int.MaxValue. Single-layer chunks must fit in int per the " +
-                    $"Vector.Length contract.")
-                : (int)layer.ParameterCount;
-            if (len == 0) continue;
-            yield return new Tensor<T>(new[] { len }, layer.GetParameters());
+            foreach (var parameter in EnumerateMaterializedParameters(layer))
+                yield return parameter;
+        }
+    }
+
+    private static IEnumerable<Tensor<T>> EnumerateMaterializedParameters(ILayer<T>? layer)
+    {
+        if (layer is null) yield break;
+
+        if (layer is ITrainableLayer<T> trainable)
+        {
+            foreach (var parameter in trainable.GetTrainableParameters())
+            {
+                if (parameter is null || parameter.Length == 0) continue;
+                yield return parameter;
+            }
+        }
+
+        foreach (var subLayer in layer.GetSubLayers())
+        {
+            foreach (var parameter in EnumerateMaterializedParameters(subLayer))
+                yield return parameter;
         }
     }
 

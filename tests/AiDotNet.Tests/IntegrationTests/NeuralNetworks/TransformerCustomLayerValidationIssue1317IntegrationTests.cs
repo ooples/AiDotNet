@@ -61,7 +61,12 @@ public class TransformerCustomLayerValidationIssue1317IntegrationTests
         };
 
         var ex = Assert.Throws<ArgumentException>(() => new Transformer<float>(CreateCustomLayerArchitecture(layers)));
-        Assert.Contains("Layer 0 is not compatible with Layer 1", ex.Message);
+        // The enriched validator diagnostic now injects type + shape info between the layer
+        // indices, e.g. "Layer 0 (ProjectingCustomLayer, output [..]) is not compatible with
+        // Layer 1 (..)." — assert the two structural tokens rather than the old monolithic
+        // substring (matches the Issue1323 regression guard's approach to the same upgrade).
+        Assert.Contains("Layer 0", ex.Message);
+        Assert.Contains("is not compatible with Layer 1", ex.Message);
     }
 
     [Fact]
@@ -86,7 +91,12 @@ public class TransformerCustomLayerValidationIssue1317IntegrationTests
         };
 
         var ex = Assert.Throws<ArgumentException>(() => new Transformer<float>(CreateCustomLayerArchitecture(layers)));
-        Assert.Contains("Layer 0 is not compatible with Layer 1", ex.Message);
+        // The enriched validator diagnostic now injects type + shape info between the layer
+        // indices, e.g. "Layer 0 (ProjectingCustomLayer, output [..]) is not compatible with
+        // Layer 1 (..)." — assert the two structural tokens rather than the old monolithic
+        // substring (matches the Issue1323 regression guard's approach to the same upgrade).
+        Assert.Contains("Layer 0", ex.Message);
+        Assert.Contains("is not compatible with Layer 1", ex.Message);
     }
 
     [Fact]
@@ -145,7 +155,12 @@ public class TransformerCustomLayerValidationIssue1317IntegrationTests
         };
 
         var ex = Assert.Throws<ArgumentException>(() => new Transformer<float>(CreateCustomLayerArchitecture(layers)));
-        Assert.Contains("Layer 0 is not compatible with Layer 1", ex.Message);
+        // The enriched validator diagnostic now injects type + shape info between the layer
+        // indices, e.g. "Layer 0 (ProjectingCustomLayer, output [..]) is not compatible with
+        // Layer 1 (..)." — assert the two structural tokens rather than the old monolithic
+        // substring (matches the Issue1323 regression guard's approach to the same upgrade).
+        Assert.Contains("Layer 0", ex.Message);
+        Assert.Contains("is not compatible with Layer 1", ex.Message);
     }
 
     [Fact]
@@ -196,8 +211,12 @@ public class TransformerCustomLayerValidationIssue1317IntegrationTests
     {
         var model = new Transformer<float>(CreateDefaultTransformerArchitecture());
 
-        Assert.Contains(model.Layers, layer => layer is MultiHeadAttentionLayer<float>);
-        Assert.Contains(model.Layers, layer => layer is LayerNormalizationLayer<float>);
+        // The default transformer encoder is now assembled as TransformerEncoderBlock
+        // composites (the canonical Pre-LN block: self-attention + FFN, each wrapped in
+        // a residual connection with LayerNorm — #1380). Self-attention and layer
+        // normalization live INSIDE that block rather than as separate top-level layers,
+        // so assert the standard encoder block is present (it encapsulates both).
+        Assert.Contains(model.Layers, layer => layer is TransformerEncoderBlock<float>);
     }
 
     [Fact]
@@ -231,7 +250,8 @@ public class TransformerCustomLayerValidationIssue1317IntegrationTests
         var arch = new TransformerArchitecture<float>(
             inputType: InputType.TwoDimensional,
             taskType: NeuralNetworkTaskType.SequenceClassification,
-            numEncoderLayers: 1,
+            // Custom layers: REPLACE the auto-built encoder, so numEncoderLayers must be 0 (#1382).
+            numEncoderLayers: 0,
             numDecoderLayers: 0,
             numHeads: heads,
             modelDimension: dModel,
@@ -283,7 +303,11 @@ public class TransformerCustomLayerValidationIssue1317IntegrationTests
         => new(
             inputType: inputType,
             taskType: NeuralNetworkTaskType.SequenceClassification,
-            numEncoderLayers: 1,
+            // A custom `layers:` list REPLACES the auto-built encoder, so the constructor (correctly,
+            // per #1382) rejects supplying both a custom list AND numEncoderLayers > 0. These tests
+            // build custom-layer-only stacks, so use 0 encoder layers when layers: is supplied; the
+            // default-architecture case (layers == null) keeps the standard single encoder layer.
+            numEncoderLayers: layers is null ? 1 : 0,
             numDecoderLayers: 0,
             numHeads: 2,
             modelDimension: 16,

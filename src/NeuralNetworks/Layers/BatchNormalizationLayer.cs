@@ -597,7 +597,19 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
         _lastInput = tapeActive ? null : input;
 
-        if (IsTrainingMode)
+        // A single-sample batch (batch size 1) has zero batch variance, so the
+        // training-mode normalization (x - mean)/sqrt(var + eps) collapses every
+        // feature to 0 → the output is a constant (≈ beta) that is INDEPENDENT of
+        // the input and of upstream parameters. Its gradient is therefore zero,
+        // which silently detaches the autodiff tape and stops the entire model
+        // from learning (surfaced by GradientFlow_ShouldBeNonZeroAndFinite on every
+        // BatchNorm model trained one sample at a time). Batch statistics are
+        // undefined for a single sample, so fall back to the affine
+        // running-statistics path — identical to inference — which is
+        // differentiable end-to-end and lets gradients reach the input and the
+        // affine parameters. Real training uses batch > 1 and is unaffected.
+        int effectiveBatchSize = input.Rank > 0 ? input.Shape[0] : 1;
+        if (IsTrainingMode && effectiveBatchSize > 1)
         {
             // Training: Use Engine.BatchNorm to compute batch stats and normalize
             // This is fully GPU accelerated
@@ -725,15 +737,18 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     {
         // Engine-accelerated batch normalization inference:
         // output = input * scale_broadcast + shift_broadcast
-        // Reshape scale/shift to [1, C, 1, 1, ...] for broadcasting across batch and spatial dims.
+        // The channel axis MUST mirror OnFirstForward's resolution rule (Ioffe & Szegedy 2015 §3):
+        //   rank 1 [F] / rank 3 [C, H, W] (unbatched image) — channels in axis 0
+        //   rank 2 [B, F] / rank >= 4 [B, C, H, W, ...]     — channels in axis 1
+        // Hardcoding axis 1 here broke unbatched rank-3 inputs: scale reshaped to [1, C, 1]
+        // against input [C, H, W] — "Tensors with shapes [64, 32, 32] and [1, 64, 1] cannot
+        // be broadcast" (surfaced by DenseNetNetwork.Predict on a [3, 32, 32] image).
         int rank = input.Shape.Length;
+        int channelAxis = rank == 1 || rank == 3 ? 0 : 1;
 
-        // Build broadcast shape: [1, C, 1, 1, ...]
         var broadcastShape = new int[rank];
-        broadcastShape[0] = 1;           // batch
-        broadcastShape[1] = scale.Length; // channels
-        for (int d = 2; d < rank; d++)
-            broadcastShape[d] = 1;       // spatial
+        for (int d = 0; d < rank; d++)
+            broadcastShape[d] = d == channelAxis ? scale.Length : 1;
 
         var scaleReshaped = Engine.Reshape(scale, broadcastShape);
         var shiftReshaped = Engine.Reshape(shift, broadcastShape);
@@ -949,6 +964,24 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         _inferenceScaleDirty = true;
     }
 
+    /// <summary>
+    /// Switches the layer between training and inference behavior. Switching modes invalidates the
+    /// cached inference scale/shift so the next inference forward recomputes them from the
+    /// <i>current</i> running statistics.
+    /// </summary>
+    /// <remarks>
+    /// Without this invalidation, a cache computed from an intermediate running mean/variance during
+    /// training could be reused after switching to eval — producing inference output that lags the
+    /// final running statistics. That stale cache also made a freshly deserialized clone (which
+    /// always recomputes from the restored running stats) diverge from the original on the very same
+    /// weights. Recomputing on every mode switch keeps inference deterministic and round-trip stable.
+    /// </remarks>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        _inferenceScaleDirty = true;
+    }
+
     private Tensor<T>? _gammaVelocity;
     private Tensor<T>? _betaVelocity;
 
@@ -1097,4 +1130,50 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         // Clear GPU cached tensors
         _lastInputGpu = null;
     }
+
+    #region ONNX Export
+
+    /// <summary>
+    /// Emits an ONNX <c>BatchNormalization</c> op using the layer's running
+    /// statistics (inference mode). 5 graph initializers are added: scale
+    /// (gamma), B (beta), mean (running_mean), var (running_variance).
+    /// </summary>
+    public override AiDotNet.Onnx.OnnxLayerOutputs ConvertToOnnx(
+        AiDotNet.Onnx.OnnxGraphBuilder builder,
+        AiDotNet.Onnx.OnnxLayerInputs inputs)
+    {
+        if (builder is null) throw new ArgumentNullException(nameof(builder));
+        if (inputs is null) throw new ArgumentNullException(nameof(inputs));
+
+        int n = _gamma.Shape[0];
+
+        float[] FlattenRank1(Tensor<T> t)
+        {
+            var arr = new float[t.Shape[0]];
+            for (int i = 0; i < t.Shape[0]; i++) arr[i] = (float)NumOps.ToDouble(t[i]);
+            return arr;
+        }
+
+        var scaleName = builder.AddFloatInitializer("bn_scale", FlattenRank1(_gamma), new[] { n });
+        var biasName  = builder.AddFloatInitializer("bn_B",     FlattenRank1(_beta),  new[] { n });
+        var meanName  = builder.AddFloatInitializer("bn_mean",  FlattenRank1(_runningMean), new[] { n });
+        var varName   = builder.AddFloatInitializer("bn_var",   FlattenRank1(_runningVariance), new[] { n });
+
+        var outputName = builder.NextTensorName("bn_out");
+        var node = builder.AddOp("BatchNormalization",
+            inputs: new[] { inputs.Primary, scaleName, biasName, meanName, varName },
+            outputs: new[] { outputName });
+
+        // Attach the epsilon attribute matching the layer's configured value.
+        node.Attribute.Add(new AiDotNet.Onnx.Protobuf.AttributeProto
+        {
+            Name = "epsilon",
+            Type = AiDotNet.Onnx.Protobuf.AttributeProto.Types.AttributeType.Float,
+            F = (float)NumOps.ToDouble(_epsilon),
+        });
+
+        return new AiDotNet.Onnx.OnnxLayerOutputs(outputName);
+    }
+
+    #endregion
 }

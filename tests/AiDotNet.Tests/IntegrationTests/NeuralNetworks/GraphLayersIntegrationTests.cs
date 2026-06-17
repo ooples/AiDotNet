@@ -248,14 +248,15 @@ public class GraphLayersIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GraphConvolutionalLayer_WithoutAdjacencyMatrix_ThrowsException()
     {
-        // Arrange
+        await Task.Yield();
+        // Strict PyTorch-Geometric contract: a GCN layer constructed without the implicit-identity
+        // opt-in REQUIRES a graph — Forward throws when none was set (Kipf & Welling 2017 §2). The
+        // opt-in path (implicitIdentityWhenUnset / EnableImplicitIdentityAdjacency) is tested separately.
         int inputFeatures = 8;
         int outputFeatures = 16;
-
         var layer = new GraphConvolutionalLayer<float>(inputFeatures, outputFeatures, (IActivationFunction<float>?)null);
         var nodeFeatures = CreateNodeFeatures(5, inputFeatures);
 
-        // Act & Assert
         Assert.Throws<InvalidOperationException>(() => layer.Forward(nodeFeatures));
     }
 

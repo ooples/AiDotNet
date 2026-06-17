@@ -930,7 +930,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
                 { "LatentCodeSize", _latentCodeSize },
                 { "MutualInfoCoefficient", NumOps.ToDouble(_mutualInfoCoefficient) }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

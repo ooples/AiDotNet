@@ -4,7 +4,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class RestrictedBoltzmannMachineTests : NeuralNetworkModelTestBase
+public class RestrictedBoltzmannMachineTests : NeuralNetworkModelTestBase<float>
 {
     // RBM default: visibleSize=128, hiddenSize=64
     protected override int[] InputShape => [128];
@@ -20,6 +20,6 @@ public class RestrictedBoltzmannMachineTests : NeuralNetworkModelTestBase
     // by orders of magnitude) while tolerating the paper's sampling noise.
     protected override double TrainingLossReductionTolerance => 0.1;
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new RestrictedBoltzmannMachine<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new RestrictedBoltzmannMachine<float>();
 }

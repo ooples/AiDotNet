@@ -4,7 +4,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class SPLADETests : NeuralNetworkModelTestBase
+public class SPLADETests : NeuralNetworkModelTestBase<float>
 {
     // SPLADE produces a sparse vocab-sized [VocabSize=30522] activation
     // vector (BERT vocabulary), not the architecture.OutputSize=768 it
@@ -12,6 +12,6 @@ public class SPLADETests : NeuralNetworkModelTestBase
     protected override int[] InputShape => [1];
     protected override int[] OutputShape => [30522];
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new SPLADE<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new SPLADE<float>();
 }

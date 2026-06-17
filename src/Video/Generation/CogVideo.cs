@@ -839,10 +839,10 @@ public class CogVideo<T> : NeuralNetworkBase<T>
         _latentWidth = reader.ReadInt32();
         _latentChannels = reader.ReadInt32();
 
-        // Reinitialize layers with the restored configuration
-        // This is necessary because the layer structure depends on these parameters
-        ClearLayers();
-        InitializeLayers();
+        // The layers (with their trained weights) are already reconstructed by the base
+        // DeserializeInternalUnchecked before this override runs, so do NOT clear +
+        // re-initialize them here — that would discard the deserialized weights and leave
+        // the model randomly initialized.
     }
 
     /// <inheritdoc/>

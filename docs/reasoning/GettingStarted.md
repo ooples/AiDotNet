@@ -207,10 +207,10 @@ Confidence: 95%
 ## Next Steps
 
 ### Learn More
-- [API Documentation](./ApiReference.md) - Complete API reference
+- [API Documentation](../reference/index.md) - Complete API reference
 - [Tutorials](./Tutorials.md) - Step-by-step guides
 - [Best Practices](./BestPractices.md) - Tips and patterns
-- [Benchmarks](./Benchmarks.md) - Evaluation guide
+- [Reasoning Benchmarks](./ProgramSynthesisBenchmarks.md) - Evaluation guide (program-synthesis suite)
 
 ### Try These Examples
 1. **Solve GSM8K Math Problems**: See `examples/GSM8KExample.cs`

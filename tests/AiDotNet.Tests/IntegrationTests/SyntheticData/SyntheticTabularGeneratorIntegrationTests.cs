@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.SyntheticData;
 using AiDotNet.Tensors;
 using Xunit;
@@ -106,6 +107,66 @@ public class SyntheticTabularGeneratorIntegrationTests
         var field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new MissingFieldException(instance.GetType().Name, fieldName);
         return (TField)field.GetValue(instance)!;
+    }
+
+    /// <summary>
+    /// Asserts that an auxiliary sub-network stored in a private field (one that lives outside the
+    /// base Layers collection) was preserved across serialize/deserialize: same parameter count,
+    /// element-wise equal, and not all-zero (i.e. it actually carried trained weights).
+    /// </summary>
+    private static void AssertAuxLayerPreserved(object original, object restored, string fieldName)
+    {
+        var orig = GetPrivateField<ILayer<double>>(original, fieldName);
+        var rest = GetPrivateField<ILayer<double>>(restored, fieldName);
+        Assert.NotNull(orig);
+        Assert.NotNull(rest);
+
+        var origParams = orig.GetParameters();
+        var restParams = rest.GetParameters();
+        Assert.Equal(origParams.Length, restParams.Length);
+        Assert.True(origParams.Length > 0, $"{fieldName} exposed no parameters to compare");
+
+        bool anyNonZero = false;
+        for (int i = 0; i < origParams.Length; i++)
+        {
+            Assert.Equal(origParams[i], restParams[i], 10);
+            if (origParams[i] != 0.0) anyNonZero = true;
+        }
+        Assert.True(anyNonZero, $"{fieldName} parameters were all zero — not actually trained");
+    }
+
+    /// <summary>
+    /// Asserts that every auxiliary layer in a private <c>List&lt;TLayer&gt;</c> field was preserved
+    /// (parameters and, for batch-norm, running-statistic extras) across serialize/deserialize.
+    /// </summary>
+    private static void AssertAuxLayerListPreserved<TLayer>(object original, object restored, string fieldName)
+        where TLayer : ILayer<double>
+    {
+        var origList = GetPrivateField<System.Collections.Generic.List<TLayer>>(original, fieldName);
+        var restList = GetPrivateField<System.Collections.Generic.List<TLayer>>(restored, fieldName);
+        Assert.NotNull(origList);
+        Assert.NotNull(restList);
+        Assert.Equal(origList.Count, restList.Count);
+        Assert.True(origList.Count > 0, $"{fieldName} was empty");
+
+        for (int l = 0; l < origList.Count; l++)
+        {
+            var op = origList[l].GetParameters();
+            var rp = restList[l].GetParameters();
+            Assert.Equal(op.Length, rp.Length);
+            for (int i = 0; i < op.Length; i++) Assert.Equal(op[i], rp[i], 10);
+
+            // For layers with non-trainable buffers (e.g. batch-norm running mean/variance), verify
+            // the serialization extras round-trip too — those drive inference/generation.
+            if (origList[l] is ILayerSerializationExtras<double> origExtras
+                && restList[l] is ILayerSerializationExtras<double> restExtras)
+            {
+                var oe = origExtras.GetExtraParameters();
+                var re = restExtras.GetExtraParameters();
+                Assert.Equal(oe.Length, re.Length);
+                for (int i = 0; i < oe.Length; i++) Assert.Equal(oe[i], re[i], 10);
+            }
+        }
     }
 
     /// <summary>
@@ -280,6 +341,46 @@ public class SyntheticTabularGeneratorIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task PATEGANGenerator_SaveLoad_PreservesAuxiliaryNetworks()
+    {
+        await Task.CompletedTask;
+        var (data, columns) = CreateTestData();
+        var arch = CreateArchitecture(TotalCols, TotalCols);
+        var options = new PATEGANOptions<double>
+        {
+            Seed = Seed,
+            EmbeddingDimension = 32,
+            GeneratorDimensions = [64, 64],
+            TeacherDimensions = [64, 64],
+            StudentDimensions = [64, 64],
+            BatchSize = 50,
+            VGMModes = 3,
+            NumTeachers = 3,
+            LaplaceScale = 0.5
+        };
+
+        var generator = new PATEGANGenerator<double>(arch, options);
+        generator.Fit(data, columns, FewEpochs);
+
+        byte[] bytes = generator.Serialize();
+        var restored = new PATEGANGenerator<double>(arch, options);
+        restored.Deserialize(bytes);
+
+        // The generator batch-norm layers live outside the base Layers collection; verify they
+        // (and the VGM transformer driving output activations) survive serialization.
+        AssertAuxLayerListPreserved<BatchNormalizationLayer<double>>(generator, restored, "_genBNLayers");
+
+        generator.SetTrainingMode(false);
+        restored.SetTrainingMode(false);
+        var probe = new Tensor<double>([options.EmbeddingDimension]);
+        for (int i = 0; i < probe.Length; i++) probe[i] = 0.1 * i;
+        var expected = generator.Predict(probe);
+        var actual = restored.Predict(probe);
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++) Assert.Equal(expected[i], actual[i], 8);
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task TableGANGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -306,8 +407,13 @@ public class SyntheticTabularGeneratorIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public void TableGANGenerator_ClassificationTargets_UseTransformedLabelSlice()
+    public async Task TableGANGenerator_ClassificationTargets_UseTransformedLabelSlice()
     {
+        // xUnit only honours [Fact(Timeout=...)] on async tests; yield once so
+        // this (otherwise synchronous) test is a valid awaitable and actually runs
+        // instead of erroring with "Tests marked with Timeout are only supported
+        // for async tests".
+        await Task.Yield();
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
         var options = new TableGANOptions<double>
@@ -381,6 +487,42 @@ public class SyntheticTabularGeneratorIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task OCTGANGenerator_SaveLoad_PreservesAuxiliaryNetworks()
+    {
+        await Task.CompletedTask;
+        var (data, columns) = CreateTestData();
+        var arch = CreateArchitecture(TotalCols, TotalCols);
+        var options = new OCTGANOptions<double>
+        {
+            Seed = Seed,
+            EmbeddingDimension = 32,
+            GeneratorDimensions = [64, 64],
+            DiscriminatorDimensions = [64, 64],
+            BatchSize = 50
+        };
+
+        var generator = new OCTGANGenerator<double>(arch, options);
+        generator.Fit(data, columns, FewEpochs);
+
+        byte[] bytes = generator.Serialize();
+        var restored = new OCTGANGenerator<double>(arch, options);
+        restored.Deserialize(bytes);
+
+        // The generator batch-norm layers live outside the base Layers collection; verify they
+        // (and the VGM transformer driving output activations) survive serialization.
+        AssertAuxLayerListPreserved<BatchNormalizationLayer<double>>(generator, restored, "_genBNLayers");
+
+        generator.SetTrainingMode(false);
+        restored.SetTrainingMode(false);
+        var probe = new Tensor<double>([options.EmbeddingDimension]);
+        for (int i = 0; i < probe.Length; i++) probe[i] = 0.1 * i;
+        var expected = generator.Predict(probe);
+        var actual = restored.Predict(probe);
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++) Assert.Equal(expected[i], actual[i], 8);
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task CausalGANGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -423,6 +565,44 @@ public class SyntheticTabularGeneratorIntegrationTests
 
         var generated = generator.Generate(GenSamples);
         ValidateGeneratedData(generated, GenSamples, TotalCols, "MisGAN");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MisGANGenerator_SaveLoad_PreservesAuxiliaryNetworks()
+    {
+        await Task.CompletedTask;
+        var (data, columns) = CreateTestData();
+        var arch = CreateArchitecture(TotalCols, TotalCols);
+        var options = new MisGANOptions<double>
+        {
+            Seed = Seed,
+            EmbeddingDimension = 32,
+            HiddenDimensions = [64, 64],
+            BatchSize = 50,
+            MissingRate = 0.1
+        };
+
+        var generator = new MisGANGenerator<double>(arch, options);
+        generator.Fit(data, columns, FewEpochs);
+
+        byte[] bytes = generator.Serialize();
+        var restored = new MisGANGenerator<double>(arch, options);
+        restored.Deserialize(bytes);
+
+        // The data-generator batch-norm layers (running mean/variance included) live outside the
+        // base Layers collection; verify they survive serialization, including their extras.
+        AssertAuxLayerListPreserved<BatchNormalizationLayer<double>>(generator, restored, "_dataGenBNLayers");
+
+        // And the eval-mode forward (used by Generate) must match exactly after restore — this also
+        // exercises the restored VGM transformer via ApplyOutputActivations.
+        generator.SetTrainingMode(false);
+        restored.SetTrainingMode(false);
+        var probe = new Tensor<double>([options.EmbeddingDimension]);
+        for (int i = 0; i < probe.Length; i++) probe[i] = 0.1 * i;
+        var expected = generator.Predict(probe);
+        var actual = restored.Predict(probe);
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++) Assert.Equal(expected[i], actual[i], 8);
     }
 
     [Fact(Timeout = 120000)]
@@ -507,6 +687,39 @@ public class SyntheticTabularGeneratorIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task TabDDPMGenerator_SaveLoad_PreservesAuxiliaryNetworks()
+    {
+        await Task.Yield();
+        var (data, columns) = CreateTestData();
+        var arch = CreateArchitecture(TotalCols, TotalCols);
+        var options = new TabDDPMOptions<double>
+        {
+            Seed = Seed,
+            MLPDimensions = [64, 64],
+            NumTimesteps = 10,
+            BatchSize = 50
+        };
+
+        var generator = new TabDDPMGenerator<double>(arch, options);
+        generator.Fit(data, columns, FewEpochs);
+
+        byte[] bytes = generator.Serialize();
+        var restored = new TabDDPMGenerator<double>(arch, options);
+        restored.Deserialize(bytes);
+
+        // The output heads and timestep projection live outside the base Layers collection;
+        // verify they survive serialization rather than reverting to fresh random weights.
+        AssertAuxLayerPreserved(generator, restored, "_numericalOutputHead");
+        AssertAuxLayerPreserved(generator, restored, "_categoricalOutputHead");
+        AssertAuxLayerPreserved(generator, restored, "_timestepProjection");
+
+        // End-to-end: the restored model must be able to generate valid data, which requires the
+        // column layout, quantile statistics and diffusion processes to have been restored.
+        var regenerated = restored.Generate(GenSamples);
+        ValidateGeneratedData(regenerated, GenSamples, TotalCols, "TabDDPM (restored)");
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task TabSynGenerator_FitAndGenerate_ProducesValidOutput()
     {
         var (data, columns) = CreateTestData();
@@ -530,6 +743,44 @@ public class SyntheticTabularGeneratorIntegrationTests
 
         var generated = generator.Generate(GenSamples);
         ValidateGeneratedData(generated, GenSamples, TotalCols, "TabSyn");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task TabSynGenerator_SaveLoad_PreservesAuxiliaryNetworks()
+    {
+        await Task.CompletedTask;
+        var (data, columns) = CreateTestData();
+        var arch = CreateArchitecture(TotalCols, TotalCols);
+        var options = new TabSynOptions<double>
+        {
+            Seed = Seed,
+            EncoderDimensions = [64, 64],
+            DecoderDimensions = [64, 64],
+            LatentDimension = 16,
+            DiffusionMLPDimensions = [64, 64],
+            DiffusionSteps = 10,
+            BatchSize = 50,
+            VGMModes = 3
+        };
+
+        var generator = new TabSynGenerator<double>(arch, options);
+        generator.Fit(data, columns, FewEpochs);
+
+        byte[] bytes = generator.Serialize();
+        var restored = new TabSynGenerator<double>(arch, options);
+        restored.Deserialize(bytes);
+
+        // The decoder, diffusion MLP and timestep projection live outside the base Layers
+        // collection; verify they survive serialization rather than reverting to random weights.
+        AssertAuxLayerPreserved(generator, restored, "_timestepProjection");
+        AssertAuxLayerListPreserved<ILayer<double>>(generator, restored, "_decoderLayers");
+        AssertAuxLayerListPreserved<ILayer<double>>(generator, restored, "_diffMLPLayers");
+
+        // End-to-end: the restored model must be able to generate valid data, which requires the
+        // VGM transformer and latent diffusion to have been restored (a null transformer would
+        // yield an empty/garbage result).
+        var regenerated = restored.Generate(GenSamples);
+        ValidateGeneratedData(regenerated, GenSamples, TotalCols, "TabSyn (restored)");
     }
 
     [Fact(Timeout = 120000)]

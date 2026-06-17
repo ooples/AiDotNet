@@ -478,6 +478,14 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
     {
+        // Sparse-by-default: walk any embedding params whose gradient lives
+        // only in the sparse list (Tensors stopped seeding dense alongside) and
+        // materialise via ToDense into context.Gradients before either the
+        // Newton-CG dict walk OR the flat-vector fallback reads from it.
+        // No-op for non-embedding params and for embedding params that
+        // already have a dense entry.
+        SparseEmbeddingOptimizerHelpers.MaterializeSparseIntoGradientsDict(context, Engine);
+
         // If HVP is available (context has forward/loss functions), use Newton-CG
         // which computes exact Hessian-vector products via the tape — O(n) per product
         // instead of O(n²) for full Hessian materialization.

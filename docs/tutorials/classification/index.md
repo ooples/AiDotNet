@@ -257,6 +257,6 @@ var result = await new AiModelBuilder<double, double[], double>()
 
 ## Next Steps
 
-- [Binary Classification Sample](/samples/classification/BinaryClassification/SentimentAnalysis/)
-- [Multi-class Classification Sample](/samples/classification/MultiClassification/IrisClassification/)
-- [Classification API Reference](/api/AiDotNet.Classification/)
+- [Binary Classification Sample](https://github.com/ooples/AiDotNet/tree/master/samples/classification/BinaryClassification/SentimentAnalysis/)
+- [Multi-class Classification Sample](https://github.com/ooples/AiDotNet/tree/master/samples/classification/MultiClassification/IrisClassification/)
+- [Classification API Reference](../../reference/index.md)

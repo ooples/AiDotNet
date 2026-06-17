@@ -839,6 +839,14 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 throw new ArgumentNullException($"inputs[{i}]", $"Input tensor at index {i} cannot be null.");
         }
 
+        // Resolve lazy shape state from the PRIMARY input before classifying the second input:
+        // the mask-vs-cross-attention heuristic and the masked/cross paths read _inputSize, which
+        // is the -1 sentinel until OnFirstForward fires. The single-input Forward resolves it, but
+        // this entry point never did — so valid cross-attention K/V was rejected as "ambiguous
+        // shape" (last dim compared against -1) and the masked path crashed reshaping to [.., -1].
+        // EnsureInitializedFromInput is idempotent (guarded by IsShapeResolved).
+        EnsureInitializedFromInput(inputs[0]);
+
         // Case 1: Standard self-attention with a single input
         if (inputs.Length == 1)
         {
@@ -861,9 +869,14 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             bool looksLikeMask = secondInput.Rank >= 3 &&
                                  secondInput.Shape[secondInput.Rank - 1] == secondInput.Shape[secondInput.Rank - 2];
 
-            // Cross-attention K/V must have embedding dimension matching this layer's input size
+            // Cross-attention K/V shares the query's embedding dimension (both are
+            // projected from the same feature width). Compare against the QUERY's
+            // last dim rather than _inputSize, which is still -1 (unresolved) on a
+            // lazy layer's first forward — using it made every cross-attention call
+            // throw "ambiguous shape" before the input size had been resolved.
+            int queryFeatureDim = primaryInput.Shape[primaryInput.Rank - 1];
             bool looksLikeCrossAttn = secondInput.Rank >= 2 &&
-                                      secondInput.Shape[secondInput.Rank - 1] == _inputSize;
+                                      secondInput.Shape[secondInput.Rank - 1] == queryFeatureDim;
 
             // Priority: If it looks like a mask (square last two dims, 3D+), treat as mask
             // Otherwise, if it has matching embedding dim, treat as cross-attention
@@ -882,7 +895,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             {
                 throw new ArgumentException(
                     $"Second input tensor has ambiguous shape {string.Join("x", secondInput._shape)}. " +
-                    $"Expected either a mask [batch, queryLen, keyLen] or cross-attention K/V [batch, seqLen, {_inputSize}].");
+                    $"Expected either a mask [batch, queryLen, keyLen] or cross-attention K/V [batch, seqLen, {queryFeatureDim}] (matching the query feature dim).");
             }
         }
 
@@ -912,6 +925,12 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>The output tensor after applying masked self-attention.</returns>
     private Tensor<T> ForwardMaskedAttention(Tensor<T> input, Tensor<T> mask)
     {
+        // Resolve _inputSize / allocate the Q/K/V projections when masked
+        // attention is the layer's FIRST forward (same lazy-init gap as the
+        // cross-attention entry point — without this the input reshape to
+        // [..., _inputSize] fails with _inputSize == -1).
+        EnsureInitializedFromInput(input);
+
         _lastInput = input;
         _lastMask = mask;
 
@@ -985,6 +1004,13 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>The output tensor after applying cross-attention.</returns>
     private Tensor<T> ForwardCrossAttention(Tensor<T> queryInput, Tensor<T> keyValueInput, Tensor<T>? mask)
     {
+        // Resolve _inputSize and allocate the Q/K/V projections from the query
+        // when cross-attention is the layer's FIRST forward. Without this the
+        // lazy layer keeps _inputSize = -1 and the Q reshape to
+        // [batch*seqLen, _inputSize] fails (the self-attention Forward path calls
+        // this, but the cross-attention entry point did not).
+        EnsureInitializedFromInput(queryInput);
+
         _lastWasCrossAttention = true;
         _lastUsedMask = mask != null;
         _lastMask = mask;

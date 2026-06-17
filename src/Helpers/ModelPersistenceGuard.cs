@@ -200,6 +200,14 @@ internal static class ModelPersistenceGuard
         return new TestTrialFilePathOverrideScope(previous);
     }
 
+    /// <summary>
+    /// The trial-file path override active for the current logical call context,
+    /// or <see langword="null"/> when no override is set (production / default path).
+    /// Test-only: lets a test that manipulates trial state directly target the same
+    /// isolated file the guard reads. Not a public API.
+    /// </summary>
+    internal static string? CurrentTestTrialFilePath => _testTrialFilePathOverride.Value;
+
     private sealed class TestTrialFilePathOverrideScope : IDisposable
     {
         private readonly string? _previous;

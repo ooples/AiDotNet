@@ -1928,7 +1928,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
                 { "LayerCount", Layers.Count },
                 { "ParameterCount", ParameterCount }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

@@ -170,7 +170,7 @@ public class FloRNN<T> : VideoDenoisingBase<T>
                 { "HiddenDim", _options.HiddenDim },
                 { "NumFlowScales", _options.NumFlowScales }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

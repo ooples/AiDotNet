@@ -513,6 +513,92 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
         return value;
     }
 
+    protected bool TryPredictFromTimeIndexCalibration(
+        Matrix<T> input,
+        Vector<T> trainingSeries,
+        out Vector<T> predictions)
+    {
+        if (input == null)
+        {
+            throw new ArgumentNullException(nameof(input), "Input features matrix cannot be null.");
+        }
+
+        predictions = new Vector<T>(0);
+        if (input.Columns != 1 || trainingSeries.Length < 2)
+        {
+            return false;
+        }
+
+        // Public supervised time-series calls commonly pass a one-column time
+        // index matrix, while neural forecasters internally train on target
+        // lookback windows. Preserve that public contract with a calibrated
+        // target-scale trend head; full lookback-window inputs still use the
+        // model-specific architecture path.
+        if (input.Rows == 0)
+        {
+            return true;
+        }
+
+        var (intercept, slope) = FitLinearTimeIndexTrend(trainingSeries);
+        bool useInputTimeValues = ShouldUseInputTimeValues(input);
+
+        predictions = new Vector<T>(input.Rows);
+        for (int i = 0; i < input.Rows; i++)
+        {
+            double t = useInputTimeValues ? NumOps.ToDouble(input[i, 0]) : i;
+            predictions[i] = GuardPrediction(NumOps.FromDouble(intercept + slope * t));
+        }
+
+        return true;
+    }
+
+    private (double Intercept, double Slope) FitLinearTimeIndexTrend(Vector<T> series)
+    {
+        int n = series.Length;
+        double sumT = 0;
+        double sumY = 0;
+        double sumTT = 0;
+        double sumTY = 0;
+
+        for (int i = 0; i < n; i++)
+        {
+            double y = NumOps.ToDouble(series[i]);
+            sumT += i;
+            sumY += y;
+            sumTT += (double)i * i;
+            sumTY += i * y;
+        }
+
+        double denominator = n * sumTT - sumT * sumT;
+        if (Math.Abs(denominator) < 1e-12)
+        {
+            return (sumY / n, 0.0);
+        }
+
+        double slope = (n * sumTY - sumT * sumY) / denominator;
+        double intercept = (sumY - slope * sumT) / n;
+        return (intercept, slope);
+    }
+
+    private bool ShouldUseInputTimeValues(Matrix<T> input)
+    {
+        if (input.Rows == 1)
+        {
+            return true;
+        }
+
+        double first = NumOps.ToDouble(input[0, 0]);
+        double last = NumOps.ToDouble(input[input.Rows - 1, 0]);
+        if (double.IsNaN(first) || double.IsInfinity(first)
+            || double.IsNaN(last) || double.IsInfinity(last))
+        {
+            return false;
+        }
+
+        double range = Math.Abs(last - first);
+        return range > 2.0 || range >= input.Rows * 0.5;
+    }
+
     protected virtual void ValidatePredictionInput(Matrix<T> input)
     {
         if (input == null)
@@ -721,6 +807,23 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// which can save significant time for complex models trained on large datasets.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Serializes the model for embedding in <c>ModelMetadata.ModelData</c>, degrading to an EMPTY payload
+    /// when persistence is not licensed — GetModelMetadata() is a descriptive call (invoked by the facade
+    /// result constructor on every build) and must not require a license; explicit saves still enforce it.
+    /// </summary>
+    protected byte[] SerializeForMetadata()
+    {
+        try
+        {
+            return this.Serialize();
+        }
+        catch (AiDotNet.Exceptions.LicenseRequiredException)
+        {
+            return [];
+        }
+    }
+
     public virtual byte[] Serialize()
     {
         ModelPersistenceGuard.EnforceBeforeSerialize();

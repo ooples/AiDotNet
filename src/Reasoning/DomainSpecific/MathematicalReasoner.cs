@@ -1,3 +1,5 @@
+using AiDotNet.Agentic.Models;
+using AiDotNet.Agentic.Tools;
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.Reasoning.Strategies;
@@ -49,7 +51,7 @@ namespace AiDotNet.Reasoning.DomainSpecific;
 [ResearchPaper("Chain-of-Thought Prompting Elicits Reasoning in Large Language Models", "https://doi.org/10.48550/arXiv.2201.11903", Year = 2022, Authors = "Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Brian Ichter, Fei Xia, Ed Chi, Quoc Le, Denny Zhou")]
 public class MathematicalReasoner<T> : IDomainReasoner<T>
 {
-    private readonly IChatModel<T> _chatModel;
+    private readonly IChatClient<T> _chatModel;
     private readonly ChainOfThoughtStrategy<T> _cotStrategy;
     private readonly SelfConsistencyStrategy<T> _selfConsistencyStrategy;
     private readonly CalculatorVerifier<T> _calculatorVerifier;
@@ -66,7 +68,7 @@ public class MathematicalReasoner<T> : IDomainReasoner<T>
     /// for verified mathematical reasoning.
     /// </para>
     /// </remarks>
-    public MathematicalReasoner(IChatModel<T> chatModel, IEnumerable<ITool>? tools = null)
+    public MathematicalReasoner(IChatClient<T> chatModel, IEnumerable<IAgentTool>? tools = null)
     {
         Guard.NotNull(chatModel);
         _chatModel = chatModel;

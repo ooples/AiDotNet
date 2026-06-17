@@ -507,12 +507,16 @@ public class LossFunctionDeepMathIntegrationTests2
     public async Task Jaccard_PartialOverlap_HandCalculated()
     {
         // predicted=[0.8, 0.2, 0.6], actual=[1.0, 0.0, 0.5]
-        // intersection = min(0.8,1)+min(0.2,0)+min(0.6,0.5) = 0.8+0+0.5 = 1.3
-        // union = max(0.8,1)+max(0.2,0)+max(0.6,0.5) = 1.0+0.2+0.6 = 1.8
-        // Jaccard loss = 1 - 1.3/1.8 = 1 - 0.7222... = 0.2777...
+        // JaccardLoss uses the PyTorch-style soft IoU formulation
+        // (intersection = Σ(p*a), union = Σp + Σa - Σ(p*a)) which is
+        // differentiable and matches the implementation's derivative — the
+        // min/max set-theoretic formula isn't directly differentiable.
+        // intersection = 0.8*1 + 0.2*0 + 0.6*0.5 = 1.1
+        // union       = (0.8+0.2+0.6) + (1.0+0.0+0.5) - 1.1 = 1.6 + 1.5 - 1.1 = 2.0
+        // Jaccard loss = 1 - 1.1/2.0 = 0.45
         var loss = new JaccardLoss<double>();
         double result = loss.CalculateLoss(V(0.8, 0.2, 0.6), V(1.0, 0.0, 0.5));
-        Assert.Equal(1.0 - 1.3 / 1.8, result, Tolerance);
+        Assert.Equal(1.0 - 1.1 / 2.0, result, Tolerance);
     }
 
     [Fact(Timeout = 120000)]

@@ -399,39 +399,10 @@ public class StableCascadeModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedPrior = new UNetNoisePredictor<T>(
-            inputChannels: CASCADE_LATENT_CHANNELS,
-            outputChannels: CASCADE_LATENT_CHANNELS,
-            baseChannels: 384,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocks: 3,
-            attentionResolutions: [4, 2, 1],
-            contextDim: CASCADE_CROSS_ATTENTION_DIM);
-        clonedPrior.SetParameters(_priorUnet.GetParameters());
-
-        var clonedDecoder = new UNetNoisePredictor<T>(
-            inputChannels: CASCADE_STAGE_B_LATENT_CHANNELS,
-            outputChannels: CASCADE_STAGE_B_LATENT_CHANNELS,
-            baseChannels: 320,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocks: 2,
-            attentionResolutions: [4, 2, 1],
-            contextDim: CASCADE_CROSS_ATTENTION_DIM);
-        clonedDecoder.SetParameters(_decoderUnet.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: CASCADE_STAGE_B_LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2,
-            latentScaleFactor: 0.3611);
-        clonedVae.SetParameters(_vae.GetParameters());
-
-        return new StableCascadeModel<T>(
-            priorUnet: clonedPrior,
-            decoderUnet: clonedDecoder,
-            vae: clonedVae,
+                                return new StableCascadeModel<T>(
+            priorUnet: (UNetNoisePredictor<T>)_priorUnet.Clone(),
+            decoderUnet: (UNetNoisePredictor<T>)_decoderUnet.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner);
     }
 

@@ -398,7 +398,14 @@ public class TransferLearningAlgorithmsIntegrationTests
     /// <summary>
     /// Mock implementation of IFullModel for testing transfer learning.
     /// </summary>
-    private class MockFullModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
+    // Declares IFeatureAware so the transfer layer can read the source model's feature count
+    // (RequiresCrossDomainTransfer checks `is IFeatureAware`). Real regression models implement it
+    // via RegressionBase; the mock has the methods and now declares the interface so cross-domain
+    // detection (source 3 features vs target 5) actually engages — matching production behavior.
+    private class MockFullModel<T> : IFullModel<T, Matrix<T>, Vector<T>>,
+        IParameterizable<T, Matrix<T>, Vector<T>>,
+        IGradientComputable<T, Matrix<T>, Vector<T>>,
+        IFeatureAware
     {
         private readonly int _featureCount;
         private Vector<T> _parameters;

@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.VisionLanguage.Robotics;
 
 namespace AiDotNet.VisionLanguage.Robotics;
@@ -46,6 +47,7 @@ public class HelixOptions : VisionLanguageActionOptions
         System1NumLayers = other.System1NumLayers;
         System1NumHeads = other.System1NumHeads;
         System1ToSystem2Ratio = other.System1ToSystem2Ratio;
+        WeightOffloadOptions = other.WeightOffloadOptions;
     }
 
     public HelixOptions()
@@ -82,4 +84,14 @@ public class HelixOptions : VisionLanguageActionOptions
     /// Default 22 — paper §4.1's S1:S2 = 200 Hz : ~9 Hz rate ratio.
     /// </summary>
     public int System1ToSystem2Ratio { get; set; } = 22;
+
+    /// <summary>
+    /// Optional weight-offload / streaming configuration. When non-null, the Helix
+    /// constructor calls <c>ConfigureWeightLifetime</c> so the ~6.7B paper-scale
+    /// weights are streamed (disk-backed or pinned-host) instead of held fully
+    /// resident — the same contract as <c>PaLMEOptions.WeightOffloadOptions</c>.
+    /// Null (default) keeps weights resident, matching the original paper-faithful
+    /// in-memory behaviour for callers with enough RAM.
+    /// </summary>
+    public GpuOffloadOptions? WeightOffloadOptions { get; set; }
 }

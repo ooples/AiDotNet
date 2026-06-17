@@ -547,6 +547,28 @@ public class InferenceOptimizationConfig
         }
     }
 
+    /// <summary>
+    /// Gets or sets whether freeze-time layer fusion (BatchNorm folding) is applied
+    /// when optimizing a model for inference. Default: <c>true</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// At inference a <c>BatchNormalization</c> layer is a fixed per-channel affine
+    /// transform: <c>y = γ·(x − μ)/√(σ² + ε) + β</c>. When it directly follows a
+    /// linear op with identity activation (the canonical Conv→BN→activation block in
+    /// ResNet/VGG/EfficientNet), it can be folded into that op's weights and bias with
+    /// no change in output: <c>W' = W·s</c>, <c>b' = (b − μ)·s + β</c> where
+    /// <c>s = γ/√(σ² + ε)</c>. The BatchNorm layer is then removed, eliminating a full
+    /// per-element pass and an intermediate tensor per such block.
+    /// </para>
+    /// <para><b>For Beginners:</b> This makes a trained CNN faster at prediction time
+    /// by absorbing the (now-constant) batch-norm math into the convolution itself.
+    /// It's lossless — the predictions are identical (to floating-point rounding) — so
+    /// it's enabled by default. It only triggers on models built for it (a convolution
+    /// with no activation, immediately followed by batch-norm).</para>
+    /// </remarks>
+    public bool EnableLayerFusion { get; set; } = true;
+
     #endregion
 }
 

@@ -5,6 +5,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
@@ -134,7 +135,26 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
             InputType.ThreeDimensional,
             nameof(EfficientNetNetwork<T>));
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Adam with a paper-faithful conservative LR. Tan & Le 2019
+        // "EfficientNet" §5.1 / Table 8 trains with RMSprop at LR
+        // 0.256 / batchSize=4096 (effective LR ~6e-5/sample). The
+        // codebase-wide AdamOptimizer default of 1e-3 is calibrated
+        // for small MLPs and explodes EfficientNet's deeply nested
+        // MBConv stack — verified by Training_ShouldReduceLoss
+        // observing loss go 0.33 → 6.79e80 over the default 30-iter
+        // memorization run. Pin LR=1e-4 + eps=1e-6 (Vaswani 2017
+        // §5.4 paper-standard for transformers / deep CNNs which
+        // raises eps over Kingma & Ba's 1e-8 default for fp32
+        // numerical stability) when no optimizer is explicitly
+        // supplied — matches the AdamW fine-tuning LRs used by
+        // EfficientNet-as-backbone papers (PaLI-V, Liu 2023).
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-4,
+                Epsilon = 1e-6,
+            });
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
         InitializeLayers();
@@ -386,7 +406,7 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
                 { "LayerCount", Layers.Count },
                 { "ParameterCount", GetParameterCount() }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

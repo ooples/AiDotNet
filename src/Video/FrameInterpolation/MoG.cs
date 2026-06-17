@@ -1,8 +1,10 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -132,6 +134,21 @@ public class MoG<T> : FrameInterpolationBase<T>
             Layers.AddRange(LayerHelper<T>.CreateDefaultFrameInterpolationLayers(
                 inputChannels: ch, inputHeight: h, inputWidth: w,
                 numFeatures: _options.NumFeatures));
+
+            // The shared factory's flat chain ends at 1/8 resolution (three
+            // stride-2 pyramid levels; its NOTE delegates upsampling back to
+            // the caller). MoG's generative refinement produces the
+            // intermediate frame at FULL resolution (MoG 2025 §3 — the
+            // diffusion decoder emits the frame itself, not a low-res
+            // feature map), so append a learnable coarse-to-fine ×8 decoder
+            // that returns the default Train/Predict chain to [ch, H, W].
+            for (int i = 0; i < 3; i++)
+            {
+                Layers.Add(new UpsamplingLayer<T>(2));
+                Layers.Add(new ConvolutionalLayer<T>(_options.NumFeatures, 3, 1, 1,
+                    new ReLUActivation<T>() as IActivationFunction<T>));
+            }
+            Layers.Add(new ConvolutionalLayer<T>(ch, 3, 1, 1));
         }
     }
 
@@ -216,11 +233,9 @@ public class MoG<T> : FrameInterpolationBase<T>
         _options.DropoutRate = r.ReadDouble();
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-        else if (_useNativeMode)
-        {
-            Layers.Clear();
-            InitializeLayers();
-        }
+        // Native-mode layers (with their trained weights) are already reconstructed by
+        // the base deserializer before this override runs; re-initializing here would
+        // discard them and leave the model randomly initialized.
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()

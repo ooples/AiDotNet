@@ -131,6 +131,19 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>
     private Tensor<T>? _lastHiddenPreProj;
     private int[]? _originalInputShape;
 
+    // Fixed (non-trainable) unit-gamma / zero-beta for the mLSTM output
+    // normalization. Beck et al. 2024 ("xLSTM", §2.3) normalize the mLSTM cell
+    // output before the up-projection so the covariance-cell signal — a product
+    // of sub-unit q/k/v projections that the max(|n·q|, 1) normalizer never
+    // up-scales — stays at unit scale. Without it, stacking N cells collapses the
+    // activations by ~5 orders of magnitude per layer (≈1e-77 by 4 layers), and
+    // the backward pass underflows to zero gradient everywhere so no parameter
+    // ever updates. Standardization (mean 0, var 1) with fixed gamma/beta keeps
+    // the layer output unit-scale without introducing extra trainable parameters
+    // (which would change the serialized parameter layout).
+    private Tensor<T>? _outputNormGamma;
+    private Tensor<T>? _outputNormBeta;
+
     // Gradients
     private Tensor<T>? _inputGateWeightsGradient;
     private Tensor<T>? _inputGateBiasGradient;
@@ -267,7 +280,10 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>
 
         _lastInput = input3D;
 
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        // Per-time-step outputs collected for a tape-connected concat (the previous
+        // pre-allocated tensor written with SetSlice detached the output from y_t,
+        // so the output-projection weights never received a gradient).
+        var outputList = new System.Collections.Generic.List<Tensor<T>>(seqLen);
         T scaleK = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
         // Matrix cell state per head: C[batch, head, headDim, headDim]
@@ -285,6 +301,18 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>
         var allHiddenPreProj = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
         var allCellStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
         var allNormStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension });
+
+        // Per-head stabilizer state m_t (Beck et al. 2024, "xLSTM" Appendix A.2,
+        // stabilized mLSTM). The input gate is exponential; left raw it overflows
+        // (the old code clamped exp to 4.85e8, which lets a single step dominate
+        // the covariance cell and makes training diverge). The running max
+        // m_t = max(log f_t + m_{t-1}, log i_t) rescales both gates into (0, 1] in
+        // log-space, so the cell stays well-conditioned and training is stable.
+        // Initialized to -inf so the first step carries no forget contribution.
+        var mState = new Tensor<T>(new[] { batchSize, _numHeads });
+        for (int bi = 0; bi < batchSize; bi++)
+            for (int hi = 0; hi < _numHeads; hi++)
+                mState[new[] { bi, hi }] = NumOps.FromDouble(-1e30);
 
         for (int t = 0; t < seqLen; t++)
         {
@@ -329,14 +357,22 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>
 
                 for (int bi = 0; bi < batchSize; bi++)
                 {
-                    // iGate is already exp(raw) from line 275 — don't double-apply exp
-                    T iVal = iGate[new[] { bi, dimStart }];
-                    T fVal = fGate[new[] { bi, dimStart }];
-                    T oVal = oGate[new[] { bi, dimStart }];
+                    // Stabilized exponential gating (Beck et al. 2024, mLSTM). Work in
+                    // log-space: m_t = max(log f_t + m_{t-1}, log i_t) rescales the
+                    // exponential input gate and the forget gate into (0, 1], so the
+                    // covariance-cell update never overflows and training stays stable.
+                    // The /max(|n·q|, 1) output normalizer below is exact in this
+                    // stabilized scale, so it is left unchanged.
+                    double logI = NumOps.ToDouble(iGateRaw[new[] { bi, dimStart }]);
+                    double fSig = NumOps.ToDouble(fGate[new[] { bi, dimStart }]);
+                    double logF = Math.Log(Math.Max(fSig, 1e-30));
+                    double mPrev = NumOps.ToDouble(mState[new[] { bi, hi }]);
+                    double mNew = Math.Max(logF + mPrev, logI);
+                    mState[new[] { bi, hi }] = NumOps.FromDouble(mNew);
 
-                    // Clamp exp gate to prevent overflow (already exp'd, just clamp the value)
-                    double iDouble = NumOps.ToDouble(iVal);
-                    if (iDouble > 4.85e8) iVal = NumOps.FromDouble(4.85e8); // exp(20) limit
+                    T iVal = NumOps.FromDouble(Math.Exp(logI - mNew));
+                    T fVal = NumOps.FromDouble(Math.Exp(logF + mPrev - mNew));
+                    T oVal = oGate[new[] { bi, dimStart }];
 
                     // Matrix cell update: C = f * C + i * (v outer k)
                     for (int di = 0; di < _headDimension; di++)
@@ -396,8 +432,46 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>
             var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
             y_t = Engine.TensorBroadcastAdd(y_t, outBias);
 
-            output.SetSlice(1, t, y_t);
+            outputList.Add(Engine.Reshape(y_t, new[] { batchSize, 1, _modelDimension }));
         }
+
+        // Assemble the [batch, seqLen, modelDim] output on the tape so gradients
+        // reach the output-projection weights (and bias).
+        var output = Engine.TensorConcatenate(outputList.ToArray(), axis: 1);
+
+        // Residual + output normalization — the xLSTM block (Beck et al. 2024,
+        // §2.3 / Fig. 3: each mLSTM cell lives in a normalized residual block).
+        //
+        // Two problems are fixed here together:
+        //  1. Gradient flow. The covariance-cell recurrence above is computed with
+        //     in-place scalar updates (the matrix state C_t / normalizer n_t are
+        //     inherently sequential), so it is OFF the autodiff tape: the gradient
+        //     cannot cross it to reach the input/gate/q/k/v projections or any
+        //     upstream layer. The residual skip `output + input` re-attaches the
+        //     block output to its input ON the tape, so gradients reach every
+        //     projection in this cell AND propagate to the layers below it.
+        //  2. Signal collapse. The cell output C_t q_t is a product of sub-unit
+        //     projections that the max(|n·q|, 1) normalizer never up-scales, so
+        //     stacking N cells shrinks the activations ~5 orders of magnitude per
+        //     layer (≈1e-77 by 4 layers) and the backward pass underflows to zero.
+        //     Normalizing the block output to unit scale stops the collapse.
+        //
+        // Fixed unit-gamma / zero-beta (created once) keeps the serialized
+        // parameter layout unchanged (no extra trainable tensors).
+        output = Engine.TensorAdd(output, input3D);
+        if (_outputNormGamma is null || _outputNormBeta is null)
+        {
+            var gamma = new Tensor<T>(new[] { _modelDimension });
+            var beta = new Tensor<T>(new[] { _modelDimension });
+            for (int j = 0; j < _modelDimension; j++)
+            {
+                gamma[j] = NumOps.One;
+                beta[j] = NumOps.Zero;
+            }
+            _outputNormGamma = gamma;
+            _outputNormBeta = beta;
+        }
+        output = Engine.LayerNorm(output, _outputNormGamma, _outputNormBeta, 1e-5, out _, out _);
 
         _lastCellStates = allCellStates;
         _lastNormStates = allNormStates;

@@ -29,6 +29,16 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// </summary>
     private GeneticAlgorithmOptimizerOptions<T, TInput, TOutput> _normalOptions;
     private int _configuredMinFeatures;
+    // Effective upper bound for the adaptive feature-selection range. Equals the
+    // user-configured MaximumFeatures when explicitly set; otherwise totalFeatures
+    // (set inside Optimize once XTrain is known). The adaptive update at
+    // UpdateFeatureSelectionParameters previously used `_normalOptions.MaximumFeatures`
+    // directly, which is 0 by default and made the "else" branch produce
+    // MinimumFeatures = -1 via `_normalOptions.MaximumFeatures - 1 = -1`. That negative
+    // bound then propagated through RandomlySelectFeatures, letting the optimizer pick
+    // 1- or 2-feature subsets of a 4-feature dataset and silently breaking Lasso/ENet
+    // builder roundtrips (Integration R).
+    private int _configuredMaxFeatures;
 
     /// <summary>
     /// Initializes a new instance of the NormalOptimizer class.
@@ -84,8 +94,15 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
             Options.MaximumFeatures = totalFeatures;
         if (Options.MinimumFeatures <= 0)
             Options.MinimumFeatures = Math.Max(1, totalFeatures);
-        // Store the configured minimum so adaptive updates don't go below it
+        // Store the configured bounds so adaptive updates don't drift past them.
+        // Capture them AFTER the default-fill above so the adaptive caps reflect
+        // the actual operating range (totalFeatures), not the user's pre-default
+        // zero. Without this, UpdateFeatureSelectionParameters' "else" branch
+        // wrote `MinimumFeatures = Math.Min(..., _normalOptions.MaximumFeatures - 1)`
+        // which is -1 when the user didn't configure a max, and that negative
+        // value cascaded into RandomlySelectFeatures' min/max as a 1..(N-1) range.
         _configuredMinFeatures = Options.MinimumFeatures;
+        _configuredMaxFeatures = Options.MaximumFeatures;
 
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>
         {
@@ -94,12 +111,45 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
         };
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
+        // When the feature bounds collapse to "always use every feature"
+        // (MinimumFeatures == MaximumFeatures == totalFeatures — the default for
+        // a plain regression with no feature-selection search configured), every
+        // SpawnIndividual produces the SAME full-feature configuration. For a
+        // deterministic model (closed-form regressions, etc.) each iteration then
+        // fits an identical solution with bit-identical fitness, so iterating to
+        // the early-stopping patience (10) just refits the same normal equations
+        // 10× on the full training set — the dominant cost in
+        // AiModelBuilder<MultipleRegression> at scale (issue #1447 P2). Detect a
+        // bit-identical fitness plateau and stop: two identical *current-iteration*
+        // scores in a row prove the search has converged on a deterministic optimum.
+        // Comparing the current iteration's fitness (not the running best) is what
+        // makes this safe for stochastic models: their per-iteration fitness varies
+        // run-to-run so they never see two identical scores in a row, whereas the
+        // running best stalls whenever an iteration merely fails to improve — which
+        // would otherwise trip the plateau break prematurely.
+        bool degenerateFeatureSearch =
+            Options.MaximumFeatures >= totalFeatures && Options.MinimumFeatures >= totalFeatures;
+        T lastIterationFitness = bestStepData.FitnessScore;
+        bool haveLastIterationFitness = false;
+
         for (int iteration = 0; iteration < Options.MaxIterations; iteration++)
         {
             var currentSolution = SpawnIndividual(inputData.XTrain);
             var currentStepData = EvaluateSolution(currentSolution, inputData);
 
             UpdateBestSolution(currentStepData, ref bestStepData);
+
+            // Converged-plateau short-circuit for the degenerate (no-search) case.
+            // Compare consecutive current-iteration fitnesses, not the running best.
+            T currentFitness = currentStepData.FitnessScore;
+            bool identicalToLast = haveLastIterationFitness
+                && NumOps.Equals(currentFitness, lastIterationFitness);
+            if (degenerateFeatureSearch && identicalToLast)
+            {
+                break;
+            }
+            lastIterationFitness = currentFitness;
+            haveLastIterationFitness = true;
 
             // Update adaptive parameters
             UpdateAdaptiveParameters(currentStepData, previousStepData);
@@ -172,12 +222,18 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
         if (FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
         {
             Options.MinimumFeatures = Math.Max(_configuredMinFeatures, Options.MinimumFeatures - 1);
-            Options.MaximumFeatures = Math.Min(Options.MaximumFeatures + 1, _normalOptions.MaximumFeatures);
+            Options.MaximumFeatures = Math.Min(Options.MaximumFeatures + 1, _configuredMaxFeatures);
         }
         else
         {
-            Options.MinimumFeatures = Math.Min(Options.MinimumFeatures + 1, _normalOptions.MaximumFeatures - 1);
-            Options.MaximumFeatures = Math.Max(Options.MaximumFeatures - 1, Options.MinimumFeatures + 1);
+            // Cap by _configuredMaxFeatures (not _normalOptions.MaximumFeatures): the
+            // latter is the raw user-configured value which is 0 when no feature search
+            // was requested, and `0 - 1 = -1` then makes the next-iteration RandomlySelectFeatures
+            // pick 1..(N-1)-feature subsets that destroy closed-form regression fits.
+            // _configuredMaxFeatures captured the effective bound (totalFeatures by default)
+            // after the Optimize-entry defaulting, so the adaptive range never escapes it.
+            Options.MinimumFeatures = Math.Min(Options.MinimumFeatures + 1, _configuredMaxFeatures);
+            Options.MaximumFeatures = Math.Max(Options.MaximumFeatures - 1, Options.MinimumFeatures);
         }
     }
 

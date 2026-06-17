@@ -68,6 +68,7 @@ public class MiniGPT4<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     public MiniGPT4(NeuralNetworkArchitecture<T> architecture, string modelPath, MiniGPT4Options? options = null) : base(architecture)
     {
         _options = options ?? new MiniGPT4Options();
+        _options.ValidateVisualSizing();
         SyncImageSizeWithArchitecture();
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
@@ -86,6 +87,7 @@ public class MiniGPT4<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     public MiniGPT4(NeuralNetworkArchitecture<T> architecture, MiniGPT4Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
     {
         _options = options ?? new MiniGPT4Options();
+        _options.ValidateVisualSizing();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
@@ -189,7 +191,8 @@ public class MiniGPT4<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 
         int blockSize = _options.DropoutRate > 0 ? 6 : 5;
         int qfBlockSize = _options.DropoutRate > 0 ? 8 : 7;
-        int visionLayerEnd = 1 + _options.NumVisionLayers * blockSize;
+        // 2 + ...: PatchEmbeddingLayer + pre-norm, then N×vision-block.
+        int visionLayerEnd = 2 + _options.NumVisionLayers * blockSize;
         int qfProj = _options.VisionDim != _options.QFormerDim ? 1 : 0;
         int qFormerLayerEnd = visionLayerEnd + qfProj + _options.NumQFormerLayers * qfBlockSize;
 

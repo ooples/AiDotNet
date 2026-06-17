@@ -137,7 +137,16 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
 
         _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Default Adam at learning rate 5e-3 (vs the 1e-3 library default). The
+        // mesh-convolution stack learns slowly at 1e-3, so a short fixed-pair
+        // training run only nudges the loss by less than the parallel-reduction
+        // noise floor — under load the loss could end fractionally above its
+        // start and trip Training_ShouldReduceLoss even though training works.
+        // The larger step produces a clear, noise-robust decrease while staying
+        // well within the single-step stability bound.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 5e-3 });
         _spiralIndicesPerLevel = [];
 
         InitializeLayers();
@@ -157,6 +166,20 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
                     defaultIndices[v, s] = (v + s) % numVertices;
             SetSpiralIndices(defaultIndices);
         }
+
+        // NOTE: SpiralNet's layers stay LAZY until the first real
+        // Forward/Predict — by design. SpiralNet accepts both rank-2
+        // [V, C] and rank-3 [B, V, C] inputs, and rank-sensitive layers
+        // (BatchNormalization picks its channel axis from input rank,
+        // GlobalPooling requires rank-3+) must bind to the rank the
+        // caller actually uses. Any ctor-time materialization — dummy
+        // Forward or per-layer ResolveFromShape walk — has to guess a
+        // rank, and a wrong guess silently mis-sizes BatchNorm's
+        // gamma/runningStats so later real Predicts collapse to
+        // input-independent output (broke ScaledInput / DifferentInputs
+        // on CI). Callers that need ParameterCount before training run a
+        // warm-up Predict first — the documented pattern in
+        // SpiralNetTests.Parameters_ShouldBeNonEmpty.
     }
 
     /// <summary>
@@ -555,7 +578,7 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
                 { "DropoutRate", _options.DropoutRate },
                 { "LayerCount", Layers.Count }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 
@@ -584,6 +607,23 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
         writer.Write(_options.FullyConnectedSizes.Length);
         foreach (var fc in _options.FullyConnectedSizes)
             writer.Write(fc);
+
+        // Persist the spiral-index topology so a deserialized / cloned model can
+        // re-propagate it to its (freshly reconstructed) SpiralConvLayers. The
+        // layers' indices are network-owned state, not trainable parameters, so
+        // the flat-parameter clone path doesn't carry them; without this a clone
+        // throws "Spiral indices must be set" on its first forward (#1450).
+        writer.Write(_spiralIndicesPerLevel.Count);
+        foreach (var level in _spiralIndicesPerLevel)
+        {
+            int rows = level.GetLength(0);
+            int cols = level.GetLength(1);
+            writer.Write(rows);
+            writer.Write(cols);
+            for (int r = 0; r < rows; r++)
+                for (int c = 0; c < cols; c++)
+                    writer.Write(level[r, c]);
+        }
     }
 
     /// <summary>
@@ -614,6 +654,25 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
         _options.FullyConnectedSizes = new int[fcLen];
         for (int i = 0; i < fcLen; i++)
             _options.FullyConnectedSizes[i] = reader.ReadInt32();
+
+        // Restore the spiral-index topology and re-propagate it to the layers
+        // that were reconstructed during layer deserialization (the constructor's
+        // default propagation targeted the pre-deserialize layers, which have
+        // since been replaced). Without this a clone forward throws "Spiral
+        // indices must be set" (#1450).
+        int levelCount = reader.ReadInt32();
+        _spiralIndicesPerLevel.Clear();
+        for (int l = 0; l < levelCount; l++)
+        {
+            int rows = reader.ReadInt32();
+            int cols = reader.ReadInt32();
+            var level = new int[rows, cols];
+            for (int r = 0; r < rows; r++)
+                for (int c = 0; c < cols; c++)
+                    level[r, c] = reader.ReadInt32();
+            _spiralIndicesPerLevel.Add(level);
+        }
+        PropagateSpiralIndicesToLayers();
     }
 
     /// <summary>

@@ -565,7 +565,7 @@ public class UPRNet<T> : FrameInterpolationBase<T>
                 { "LSTMHiddenDim", _options.LSTMHiddenDim },
                 { "Complexity", _options.NumPyramidLevels * _options.NumRecurrentIters }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

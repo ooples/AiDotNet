@@ -4,12 +4,17 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-public class CATDMModelTests : DiffusionModelTestBase
+/// <summary>
+/// CATDM test scaffold — see <see cref="DiffusionModelTestBase{TNum}"/>
+/// for the FP32 rationale. CATDM's SD-inpainting UNet at paper defaults
+/// allocates ≈12.3 GB at FP64 standalone.
+/// </summary>
+public class CATDMModelTests : DiffusionModelTestBase<float>
 {
     // SD-based latent diffusion: 4 channels, 64x64 latent (512x512 images / 8x VAE)
     protected override int[] InputShape => [1, 4, 64, 64];
     protected override int[] OutputShape => [1, 4, 64, 64];
 
-    protected override IDiffusionModel<double> CreateModel()
-        => new CATDMModel<double>(seed: 42);
+    protected override IDiffusionModel<float> CreateModel()
+        => new CATDMModel<float>(seed: 42);
 }

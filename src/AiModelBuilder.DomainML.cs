@@ -39,7 +39,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private IEmbeddingModel<T>? _configuredEmbeddingModel;
     private IScoringRule<T>? _configuredScoringRule;
     private IModelExplainer<T>? _configuredModelExplainer;
-    private IAgent<T>? _configuredRLAgent;
+    private IRLAgent<T>? _configuredRLAgent;
 
     /// <summary>
     /// Configures an audio effect for audio signal processing pipelines.
@@ -362,7 +362,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// for their actions in an environment. They're used for game playing, robotics, recommendation
     /// systems, and resource optimization. Available agents include DQN, PPO, SAC, and A2C.</para>
     /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureRLAgent(IAgent<T> agent)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureRLAgent(IRLAgent<T> agent)
     {
         _configuredRLAgent = agent;
         return this;

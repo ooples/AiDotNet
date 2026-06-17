@@ -57,6 +57,24 @@ public class TimeMoEBlockLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Persists the constructor arguments so the deserializer can rebuild this layer
+    /// at the same shape. Without this override the layer falls back to default values
+    /// and SetParameters throws "expected N parameters across sublayers, got M" because
+    /// MoE expert/intermediate counts drive total parameter count.
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        metadata["HiddenDim"] = _hiddenDim.ToString(ci);
+        metadata["NumHeads"] = _numHeads.ToString(ci);
+        metadata["IntermediateSize"] = _intermediateSize.ToString(ci);
+        metadata["NumExperts"] = _numExperts.ToString(ci);
+        metadata["TopK"] = _topK.ToString(ci);
+        return metadata;
+    }
+
+    /// <summary>
     /// Initializes a new <see cref="TimeMoEBlockLayer{T}"/>.
     /// </summary>
     /// <param name="hiddenDim">Per-token hidden dimension (the feature dim of the block input / output).</param>

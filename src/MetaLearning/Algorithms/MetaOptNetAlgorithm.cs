@@ -185,8 +185,10 @@ public class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
         foreach (var task in taskBatch.Tasks)
         {
             // Step 1: Extract embeddings from support and query sets
-            var supportEmbeddings = ExtractEmbeddings(task.SupportInput);
-            var queryEmbeddings = ExtractEmbeddings(task.QueryInput);
+            int supportN = Math.Max(1, task.NumWays * task.NumShots);
+            int queryN = Math.Max(1, task.NumWays * task.NumQueryPerClass);
+            var supportEmbeddings = ExtractEmbeddings(task.SupportInput, supportN);
+            var queryEmbeddings = ExtractEmbeddings(task.QueryInput, queryN);
 
             // Normalize embeddings if configured
             if (_metaOptNetOptions.NormalizeEmbeddings)
@@ -210,9 +212,13 @@ public class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
                 queryLogits = ScaleByTemperature(queryLogits, _temperature);
             }
 
-            // Step 5: Compute query loss
-            var queryPredictions = ConvertFromVector(queryLogits);
-            T taskLoss = ComputeLossFromOutput(queryPredictions, task.QueryOutput);
+            // Step 5: Compute query loss — paper-faithful softmax cross-entropy
+            // Lee et al. 2019 §3.1 trains the convex meta-classifier via softmax CE
+            // against one-hot labels; the generic LossFunction.CalculateLoss would
+            // compare flat [N×C] logits against [N] class indices and crash.
+            var queryLabelMatrix = ConvertToLabels(task.QueryOutput);
+            T taskLoss = ComputeSoftmaxCrossEntropy(
+                queryLogits, queryLabelMatrix, queryEmbeddings.Rows, _metaOptNetOptions.NumClasses);
             totalLoss = NumOps.Add(totalLoss, taskLoss);
 
             // Step 6: Compute gradients for encoder
@@ -318,7 +324,8 @@ public class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
         var featureEncoder = CloneModel();
 
         // Extract and normalize support embeddings
-        var supportEmbeddings = ExtractEmbeddings(task.SupportInput);
+        int supportNAdapt = Math.Max(1, task.NumWays * task.NumShots);
+        var supportEmbeddings = ExtractEmbeddings(task.SupportInput, supportNAdapt);
         if (_metaOptNetOptions.NormalizeEmbeddings)
         {
             supportEmbeddings = NormalizeEmbeddings(supportEmbeddings);
@@ -539,27 +546,38 @@ public class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
     #region Feature Extraction
 
     /// <summary>
-    /// Extracts embeddings from input.
+    /// Extracts embeddings from input, sized to <paramref name="expectedSamples"/> rows.
     /// </summary>
-    private Matrix<T> ExtractEmbeddings(TInput input)
+    /// <remarks>
+    /// Lee et al. 2019 (MetaOptNet) assume the feature encoder produces an [N, embDim] embedding
+    /// per sample. When the encoder produces fewer scalars than embDim × N (e.g., a 1-D regression
+    /// head used in mock tests), the remaining columns are zero-padded so the downstream ridge /
+    /// SVM / logistic solver still receives a well-formed [N, embDim] feature matrix.
+    /// </remarks>
+    private Matrix<T> ExtractEmbeddings(TInput input, int expectedSamples)
     {
+        int embDim = _metaOptNetOptions.EmbeddingDimension;
         var output = MetaModel.Predict(input);
         var vec = ConvertToVector(output);
 
-        if (vec == null)
+        if (vec == null || vec.Length == 0)
         {
-            return new Matrix<T>(1, _metaOptNetOptions.EmbeddingDimension);
+            return new Matrix<T>(Math.Max(1, expectedSamples), embDim);
         }
 
-        // Convert to matrix (assuming batch of samples)
-        int numSamples = Math.Max(1, vec.Length / _metaOptNetOptions.EmbeddingDimension);
-        var matrix = new Matrix<T>(numSamples, _metaOptNetOptions.EmbeddingDimension);
+        int numSamples = expectedSamples > 0
+            ? expectedSamples
+            : Math.Max(1, vec.Length / embDim);
 
+        int perSample = numSamples > 0 ? vec.Length / numSamples : 0;
+        int cols = Math.Min(perSample, embDim);
+
+        var matrix = new Matrix<T>(numSamples, embDim);
         for (int i = 0; i < numSamples; i++)
         {
-            for (int j = 0; j < _metaOptNetOptions.EmbeddingDimension; j++)
+            for (int j = 0; j < cols; j++)
             {
-                int idx = i * _metaOptNetOptions.EmbeddingDimension + j;
+                int idx = i * perSample + j;
                 matrix[i, j] = idx < vec.Length ? vec[idx] : NumOps.Zero;
             }
         }
@@ -705,22 +723,23 @@ public class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
     }
 
     /// <summary>
-    /// Computes gradient with respect to temperature.
+    /// Computes gradient with respect to temperature using paper-faithful softmax CE
+    /// (Lee et al. 2019), via finite differences.
     /// </summary>
     private T ComputeTemperatureGradient(Vector<T> logits, TOutput expectedOutput, T temperature)
     {
-        // Finite difference approximation
         double epsilon = 1e-5;
         T tempPlus = NumOps.Add(temperature, NumOps.FromDouble(epsilon));
 
         var scaledBase = ScaleByTemperature(logits, temperature);
         var scaledPerturbed = ScaleByTemperature(logits, tempPlus);
 
-        var predBase = ConvertFromVector(scaledBase);
-        var predPerturbed = ConvertFromVector(scaledPerturbed);
+        var labelMatrix = ConvertToLabels(expectedOutput);
+        int numClasses = Math.Max(1, _metaOptNetOptions.NumClasses);
+        int numSamples = Math.Max(1, logits.Length / numClasses);
 
-        T lossBase = ComputeLossFromOutput(predBase, expectedOutput);
-        T lossPerturbed = ComputeLossFromOutput(predPerturbed, expectedOutput);
+        T lossBase = ComputeSoftmaxCrossEntropy(scaledBase, labelMatrix, numSamples, numClasses);
+        T lossPerturbed = ComputeSoftmaxCrossEntropy(scaledPerturbed, labelMatrix, numSamples, numClasses);
 
         double grad = (NumOps.ToDouble(lossPerturbed) - NumOps.ToDouble(lossBase)) / epsilon;
         return NumOps.FromDouble(grad);
@@ -755,6 +774,41 @@ public class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
             for (int j = 0; j < logits.Columns; j++) result[i, j] = probs[j];
         }
         return result;
+    }
+
+    /// <summary>
+    /// Computes the per-sample averaged softmax cross-entropy between flattened logits
+    /// [numSamples × numClasses] and one-hot labels [numSamples, numClasses].
+    /// </summary>
+    private T ComputeSoftmaxCrossEntropy(Vector<T> flatLogits, Matrix<T> oneHotLabels, int numSamples, int numClasses)
+    {
+        if (numSamples <= 0)
+        {
+            return NumOps.Zero;
+        }
+
+        T total = NumOps.Zero;
+        T eps = NumOps.FromDouble(1e-12);
+
+        for (int i = 0; i < numSamples; i++)
+        {
+            var row = new Vector<T>(numClasses);
+            for (int c = 0; c < numClasses; c++)
+            {
+                int idx = i * numClasses + c;
+                row[c] = idx < flatLogits.Length ? flatLogits[idx] : NumOps.Zero;
+            }
+            var probs = Softmax(row);
+
+            for (int c = 0; c < numClasses; c++)
+            {
+                T y = i < oneHotLabels.Rows && c < oneHotLabels.Columns ? oneHotLabels[i, c] : NumOps.Zero;
+                T p = NumOps.Add(probs[c], eps);
+                total = NumOps.Subtract(total, NumOps.Multiply(y, NumOps.Log(p)));
+            }
+        }
+
+        return NumOps.Divide(total, NumOps.FromDouble(numSamples));
     }
 
     #endregion

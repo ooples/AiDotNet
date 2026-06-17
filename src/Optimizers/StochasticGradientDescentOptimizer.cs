@@ -30,7 +30,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     private StochasticGradientDescentOptimizerOptions<T, TInput, TOutput> _options;
 
@@ -65,6 +65,19 @@ public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBa
         : base(model, options ?? new())
     {
         _options = options ?? new();
+    }
+
+    /// <inheritdoc/>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        if (_options.UseAdaptiveLearningRate) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+        config = new Fused.FusedOptimizerConfig(
+            Tensors.Engines.Compilation.OptimizerType.SGD,
+            (float)GetCurrentLearningRate(),
+            0f, 0f, 0f, 0f, schedule);
+        return true;
     }
 
     /// <summary>
@@ -365,10 +378,32 @@ public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBa
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
     {
+        // GPU-resident step (AIDOTNET_GPU_ADAM=1); gated off, CPU fallback when not GPU-resident.
+        bool gpuAdam = typeof(T) == typeof(float)
+            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
+            && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
+
         foreach (var param in context.Parameters)
         {
-            if (context.Gradients.TryGetValue(param, out var grad))
+            // True sparse scatter plain SGD.
+            if (!gpuAdam && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
             {
+                if (SparseEmbeddingOptimizerHelpers.TryApplySgdSparse(
+                        param, velocity: null,
+                        NumOps.ToDouble(CurrentLearningRate),
+                        momentum: 0.0, weightDecay: 0.0))
+                {
+                    continue;
+                }
+            }
+
+            if (SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
+            {
+                if (gpuAdam && param.Length == grad.Length
+                    && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TrySgdStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad,
+                        (float)NumOps.ToDouble(CurrentLearningRate)))
+                    continue;
+
                 var update = Engine.TensorMultiplyScalar(grad, CurrentLearningRate);
                 Engine.TensorSubtractInPlace(param, update);
             }

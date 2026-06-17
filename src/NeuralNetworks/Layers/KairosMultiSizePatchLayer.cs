@@ -54,6 +54,23 @@ public class KairosMultiSizePatchLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Persists the constructor arguments so the deserializer can rebuild this layer
+    /// at the same shape. Without this override the layer is reconstructed with default
+    /// patch sizes and SetParameters throws "expected N parameters, got M" because the
+    /// number of per-patch-size DenseLayers (and the router width) drives total
+    /// parameter count.
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        metadata["ContextLength"] = _contextLength.ToString(ci);
+        metadata["HiddenDim"] = _hiddenDim.ToString(ci);
+        metadata["PatchSizes"] = string.Join(",", _patchSizes.Select(p => p.ToString(ci)));
+        return metadata;
+    }
+
+    /// <summary>
     /// Initializes a new <see cref="KairosMultiSizePatchLayer{T}"/>.
     /// </summary>
     /// <param name="contextLength">Input sequence length.</param>
@@ -112,12 +129,27 @@ public class KairosMultiSizePatchLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        // Support both [B, contextLength] and [contextLength] inputs.
+        // Support [contextLength], [B, contextLength], and [B, lookback, channels]
+        // inputs.
         bool addedBatch = false;
         if (input.Rank == 1)
         {
             input = Engine.Reshape(input, new[] { 1, input.Shape[0] });
             addedBatch = true;
+        }
+        else if (input.Rank > 2)
+        {
+            // Foundation-forecaster pipelines (Kairos.ForwardNative) hand this
+            // layer a rank-3 [B, lookback, channels] tensor. Per Kairos
+            // (Mixture-of-Size Encoder) the size-router weights the patch scales
+            // from the FULL flattened look-back window, so collapse the trailing
+            // axes into the contextLength axis -> [B, contextLength]. Without
+            // this the DenseLayer router binds to the trailing (channel) axis on
+            // the first forward, while SetParameters re-resolves it from
+            // contextLength on deserialize, so the two disagree and the
+            // serialization round-trip throws a parameter-count mismatch.
+            int b = input.Shape[0];
+            input = Engine.Reshape(input, new[] { b, input.Length / b });
         }
         int batchSize = input.Shape[0];
 

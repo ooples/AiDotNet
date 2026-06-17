@@ -29,8 +29,20 @@ namespace AiDotNet.ActivationFunctions;
 [ActivationCategory(ActivationCategory.General)]
 [ActivationTask(ActivationTask.HiddenLayer)]
 [ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = false, IsDifferentiable = true, Cost = ComputeCost.Low)]
-public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
+public class LeakyReLUActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivation
 {
+    /// <inheritdoc/>
+    // The fused LeakyReLU kernel hardcodes slope=0.01; only fuse when this
+    // instance's alpha matches, else fall back so the result stays exact.
+    // Tolerance is float-grade (1e-6), not 1e-12: when T is float the default
+    // 0.01 round-trips through ToDouble as 0.009999999776, which differs from
+    // the literal 0.01 by ~2.2e-10 — a 1e-12 guard would reject the *default*.
+    bool Fused.IFusedActivation.TryGetFusedActivation(out AiDotNet.Tensors.Engines.FusedActivationType type)
+    {
+        type = AiDotNet.Tensors.Engines.FusedActivationType.LeakyReLU;
+        return Math.Abs(NumOps.ToDouble(_alpha) - 0.01) < 1e-6;
+    }
+
     /// <summary>
     /// The slope coefficient for negative input values.
     /// </summary>
@@ -63,6 +75,21 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
     public LeakyReLUActivation(double alpha = 0.01)
     {
         _alpha = NumOps.FromDouble(alpha);
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the Leaky ReLU activation function with the
+    /// default slope (alpha = 0.01).
+    /// </summary>
+    /// <remarks>
+    /// An explicit parameterless constructor is required so the layer
+    /// (de)serialization layer, which reflectively reconstructs activation
+    /// functions via <see cref="System.Activator"/>, can recreate this activation
+    /// on a clone / load round-trip. A constructor with an all-defaulted parameter
+    /// is not treated as parameterless by <c>Activator.CreateInstance(Type)</c>.
+    /// </remarks>
+    public LeakyReLUActivation() : this(0.01)
+    {
     }
 
     /// <summary>

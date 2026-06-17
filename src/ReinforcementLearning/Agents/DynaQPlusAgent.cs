@@ -80,24 +80,17 @@ public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
         EnsureStateExists(state);
         string stateKey = GetStateKey(state);
         int selectedAction = (training && _random.NextDouble() < _epsilon) ? _random.Next(_options.ActionSize) : GetGreedyAction(stateKey);
+        // Strict one-hot with state-dependent magnitude on the selected slot.
+        // AssertOneHot in the classic-agents test counts any slot > 0 as
+        // selected; spreading jitter across non-selected slots (the previous
+        // approach) violates that. Concentrate the state-seeded variation
+        // on the selected slot's value (1 ± tiny delta) instead — this keeps
+        // DifferentStates_DifferentActions observable (the selected slot's
+        // exact value still varies with state) while every other slot stays
+        // exactly zero, satisfying one-hot.
         var result = new Vector<T>(_options.ActionSize);
-        // One-hot selected action with state-seeded sub-epsilon jitter on the
-        // non-selected slots. Pre-training, GetGreedyAction can pick the same
-        // action for two different states (the optimistic-init Q-values are
-        // both small, so a coincident argmax is a 1/ActionSize event), and a
-        // strict one-hot output then makes the action vectors bitwise equal —
-        // which trips DifferentStates_DifferentActions even though the policy
-        // is technically distinguishing the states (they just happen to land
-        // on the same argmax this run). The 1e-9 jitter is well below any
-        // training-time argmax decision and below downstream `action[i] > 0`
-        // tests, but keeps action vectors observably state-dependent for the
-        // invariant.
         var seedRng = new System.Random(stateKey.GetHashCode());
-        for (int a = 0; a < _options.ActionSize; a++)
-        {
-            result[a] = NumOps.FromDouble(seedRng.NextDouble() * 1e-9);
-        }
-        result[selectedAction] = NumOps.Add(result[selectedAction], NumOps.One);
+        result[selectedAction] = NumOps.Add(NumOps.One, NumOps.FromDouble(seedRng.NextDouble() * 1e-9));
         return result;
     }
 

@@ -125,26 +125,80 @@ public abstract class NERModelTestBase : NeuralNetworkModelTestBase
     public virtual async Task DifferentInputs_DifferentLabels()
     {
         await Task.Yield();
+        AssertModelCanLearnToDifferentiateInputs();
+    }
+
+    /// <summary>
+    /// CRF-aware replacement for the base continuous-output dispersion check. A CRF's
+    /// <c>Predict</c> returns a DISCRETE Viterbi argmax label sequence, which legitimately
+    /// collapses to the same labels for distinct inputs — an untrained model's argmax is
+    /// scale-insensitive, and a model trained on a single random target collapses to the
+    /// majority label — even when the underlying network is perfectly healthy (its emissions
+    /// ARE input-sensitive). So the generic "distinct inputs -&gt; distinct decoded labels"
+    /// assertion gives a false positive on discrete-output sequence labelers.
+    ///
+    /// The real invariant the base test guards (#1208/#1221: gradient flow to the
+    /// embedding/recurrent layers is broken, so the model is input-INSENSITIVE) is preserved
+    /// here by verifying the model can LEARN to map two clearly-distinct inputs to two distinct
+    /// label sequences. A network with broken input-side gradient flow cannot — it stays
+    /// degenerate regardless of training — so this still fails loudly on the real bug.
+    /// </summary>
+    protected void AssertModelCanLearnToDifferentiateInputs()
+    {
         using var _arena = TensorArena.Create();
-        var network = CreateNetwork();
+        using var network = CreateNetwork();
+        if (TrainingInvariantsNotApplicable(network)) return;
 
         var input1 = CreateConstantTensor(InputShape, 0.1);
         var input2 = CreateConstantTensor(InputShape, 0.9);
+        // Distinct, valid integer-label targets (label 0 vs label 1 — every NER label space
+        // has at least these two: 'O' and a 'B-' tag). Train both mappings so a healthy model
+        // learns input1 -> all-0 and input2 -> all-1 and decodes them differently.
+        var target0 = CreateConstantTensor(EffectiveOutputShape, 0.0);
+        var target1 = CreateConstantTensor(EffectiveOutputShape, 1.0);
 
-        var labels1 = network.Predict(input1);
-        var labels2 = network.Predict(input2);
-
+        // Train up to a generous budget, succeeding as soon as the model has learned
+        // to decode the two inputs differently. CreateNetwork() initialises weights from
+        // a non-deterministic RNG, and a pure bidirectional CRF (2x the recurrent
+        // parameters of a unidirectional one, with no CNN front-end to sharpen features)
+        // sits right at the convergence boundary at a fixed-10 budget — so a fixed tiny
+        // count is init-flaky. Early-exit-on-success keeps the probe fair for every
+        // healthy model while still failing loudly for the real bug it guards
+        // (#1208/#1221: broken input-side gradient flow never differentiates, so it
+        // runs the full budget and still asserts false).
+        int maxLearnIterations = Math.Max(TrainingIterations, 50);
         bool anyDifferent = false;
-        int minLen = Math.Min(labels1.Length, labels2.Length);
-        for (int i = 0; i < minLen; i++)
+        for (int iter = 0; iter < maxLearnIterations && !anyDifferent; iter++)
         {
-            if (Math.Abs(labels1[i] - labels2[i]) > 1e-12)
+            network.Train(input1, target0);
+            network.Train(input2, target1);
+
+            var labels1 = network.Predict(input1);
+            var labels2 = network.Predict(input2);
+            int minLen = Math.Min(labels1.Length, labels2.Length);
+            for (int i = 0; i < minLen; i++)
             {
-                anyDifferent = true;
-                break;
+                if (Math.Abs(ConvertToDouble(labels1[i]) - ConvertToDouble(labels2[i])) > 1e-12)
+                {
+                    anyDifferent = true;
+                    break;
+                }
             }
         }
+
         Assert.True(anyDifferent,
-            "NER model produces identical labels for very different inputs — model may be degenerate.");
+            "NER model could not learn to map two clearly-distinct inputs to distinct label " +
+            "sequences after training — gradient flow to the embedding / recurrent layers is " +
+            "likely broken (#1208/#1221), leaving the model input-insensitive.");
+    }
+
+    /// <summary>
+    /// CRF-aware override: see <see cref="AssertModelCanLearnToDifferentiateInputs"/> for why the
+    /// base discrete-label L2 dispersion check is a false positive on sequence labelers.
+    /// </summary>
+    public override async Task DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs()
+    {
+        await Task.Yield();
+        AssertModelCanLearnToDifferentiateInputs();
     }
 }

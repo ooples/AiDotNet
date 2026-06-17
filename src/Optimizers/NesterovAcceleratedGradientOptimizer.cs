@@ -313,9 +313,32 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
     {
+        // NOTE: this CPU "NAG" applies plain momentum (velocity = momentum*velocity
+        // + lr*grad; param -= velocity), whereas the CUDA nag_update kernel applies
+        // the true Nesterov look-ahead — they differ (parity harness ~9e-4 at step 1,
+        // growing over steps). GPU path NOT wired to avoid a silent behavior change;
+        // reconcile the kernel with this formula (or switch this to true Nesterov)
+        // before enabling.
         foreach (var param in context.Parameters)
         {
-            if (!context.Gradients.TryGetValue(param, out var grad))
+            // True sparse scatter NAG: velocity + param at touched indices only.
+            // Note: this AiDotNet "NAG" is actually plain SGD-momentum in formula
+            // (see comment above re: trust-ratio kernel divergence). Same wiring
+            // as MomentumOptimizer.
+            if (SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            {
+                if (!_tapeVelocity.TryGetValue(param, out var velSp)) { velSp = new Tensor<T>(param._shape); _tapeVelocity[param] = velSp; }
+                if (SparseEmbeddingOptimizerHelpers.TryApplySgdSparse(
+                        param, velSp,
+                        NumOps.ToDouble(CurrentLearningRate),
+                        NumOps.ToDouble(CurrentMomentum),
+                        weightDecay: 0.0))
+                {
+                    continue;
+                }
+            }
+
+            if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
             if (!_tapeVelocity.TryGetValue(param, out var vel)) { vel = new Tensor<T>(param._shape); _tapeVelocity[param] = vel; }

@@ -247,7 +247,7 @@ public class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        var c = input;
+        SetTrainingMode(false); var c = input;
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;

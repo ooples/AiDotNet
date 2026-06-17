@@ -391,6 +391,26 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     public int? RandomSeed { get; set; }
 
     /// <summary>
+    /// Assigns <see cref="RandomSeed"/> from the active
+    /// <see cref="LayerInitializationSeedScope"/> when no seed has been set yet.
+    /// Called from the root constructors so the seed is in place BEFORE a derived
+    /// constructor initializes its weights — closing the gap where weight init ran
+    /// against the process-shared <see cref="RandomHelper.ThreadSafeRandom"/>
+    /// (order-dependent) instead of the architecture's deterministic seed. A null
+    /// scope (no architecture seed requested) leaves <see cref="RandomSeed"/> null,
+    /// preserving the existing non-reproducible production default.
+    /// </summary>
+    private void AssignInitializationSeedFromScope()
+    {
+        if (RandomSeed is null)
+        {
+            int? scoped = LayerInitializationSeedScope.NextSeedOrNull();
+            if (scoped.HasValue)
+                RandomSeed = scoped;
+        }
+    }
+
+    /// <summary>
     /// Gets a value indicating whether this layer has been initialized.
     /// </summary>
     /// <remarks>
@@ -618,8 +638,118 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         if (!IsShapeResolved)
         {
             OnFirstForward(input);
+            RegisterStreamingWeightsWithPool();
         }
         EnsureInitialized();
+    }
+
+    /// <summary>
+    /// Registers this layer's just-materialized streaming weight tensors with
+    /// the process-wide <see cref="WeightRegistry"/> so they become evictable
+    /// LRU entries the moment they exist — not in a batched post-forward sweep.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Lazy layers in a foundation-scale model allocate their weights through
+    /// <see cref="AllocateLazyWeight"/> → <c>WeightRegistry.AllocateStreaming</c>
+    /// during the FIRST forward. That call only <em>reserves</em> pool budget; it
+    /// does not register the tensor, so the weight is resident-on-heap but absent
+    /// from the pool's eviction LRU. Without this hook, every layer's weight
+    /// accumulates on the GC heap as the forward walks the stack — the pool has
+    /// nothing registered to evict — and a multi-GB model OOMs mid-forward on a
+    /// memory-bounded runner even though weight streaming is "enabled". The
+    /// previous registration path only ran AFTER the full forward (and is bypassed
+    /// entirely by models with a custom <c>Predict</c>), i.e. far too late.
+    /// </para>
+    /// <para>
+    /// Registering here adds the freshly-initialized weight to the LRU and drops
+    /// its resident copy to the backing store; this layer's own immediately-
+    /// following matmul transparently rehydrates it, and the next layer's
+    /// allocation evicts it again once the resident budget is crossed — keeping
+    /// the resident set bounded across the whole forward. No-op unless streaming
+    /// was enabled for this layer (<see cref="UseStreamingAllocator"/>);
+    /// idempotent via the already-registered handle gate.
+    /// </para>
+    /// </remarks>
+    private void RegisterStreamingWeightsWithPool()
+    {
+        if (!UseStreamingAllocator) return;
+        foreach (var tensor in GetTrainableParameters())
+        {
+            if (tensor is null || tensor.Length == 0) continue;
+            // Only streaming-allocated tensors carry Lifetime.Streaming; skip
+            // anything already registered (handle assigned) to stay idempotent.
+            if (tensor.Lifetime != WeightLifetime.Streaming) continue;
+            if (tensor.StreamingPoolHandle >= 0) continue;
+            WeightRegistry.RegisterWeight(tensor);
+        }
+    }
+
+    // ── Shape-inference mode (single source of truth for lazy shape resolution) ─────
+    // When active, a leaf layer's Forward resolves its shape from the input (OnFirstForward)
+    // and returns a correctly-shaped, zero-filled placeholder WITHOUT materialising weights
+    // or running compute. A model can then run its real forward topology in this mode to
+    // resolve every layer's true shape exactly as the forward would (including skip
+    // concatenation, reshapes, etc.) — making ParameterCount / GetParameters / SetParameters
+    // / forward all agree, with no weight allocation. ThreadStatic: the resolution forward is
+    // synchronous and single-threaded, and normal forwards must never see it set.
+    [ThreadStatic]
+    private static bool _shapeInferenceActive;
+
+    /// <summary>
+    /// Whether the current thread is running a shape-only resolution forward. Leaf-layer
+    /// <c>Forward</c> overrides check this and return <see cref="ShapeInferenceOutput"/>
+    /// instead of materialising weights and computing. Off during all real forwards.
+    /// </summary>
+    internal static bool IsInferringShapes
+    {
+        get => _shapeInferenceActive;
+        set => _shapeInferenceActive = value;
+    }
+
+    /// <summary>
+    /// Resolves this layer's shape from <paramref name="input"/> (without allocating weights)
+    /// and returns a zero-filled tensor of the resulting forward output shape
+    /// (<c>[batch, ...OutputShape]</c>). Leaf layers call this at the top of <c>Forward</c>
+    /// when <see cref="IsInferringShapes"/> is set, so shapes propagate through the real
+    /// forward topology with no materialisation.
+    /// </summary>
+    protected virtual Tensor<T> ShapeInferenceOutput(Tensor<T> input)
+    {
+        if (!IsShapeResolved)
+        {
+            OnFirstForward(input);
+        }
+
+        // Default: forward output is [batch, ...OutputShape] — correct for layers like
+        // Conv/Deconv whose OutputShape carries the full per-sample output dims. Layers
+        // with a different shape contract (e.g. a rank-agnostic Dense that maps only the
+        // last axis) override this.
+        int batch = input.Shape.Length > 0 ? input.Shape[0] : 1;
+        int[] outShape = OutputShape;
+        var full = new int[outShape.Length + 1];
+        full[0] = batch;
+        System.Array.Copy(outShape, 0, full, 1, outShape.Length);
+        return new Tensor<T>(full);
+    }
+
+    /// <summary>
+    /// Runs <paramref name="resolve"/> with shape-inference mode active, guaranteeing the flag
+    /// is cleared afterward even on exception. Models call this around a dummy forward to
+    /// resolve all layer shapes as the single source of truth.
+    /// </summary>
+    internal static void RunShapeInference(Action resolve)
+    {
+        bool prior = _shapeInferenceActive;
+        _shapeInferenceActive = true;
+        try
+        {
+            resolve();
+        }
+        finally
+        {
+            _shapeInferenceActive = prior;
+        }
     }
 
     /// <summary>
@@ -781,6 +911,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     protected LayerBase(int[] inputShape, int[] outputShape)
     {
         _instanceId = Interlocked.Increment(ref _instanceCounter);
+        AssignInitializationSeedFromScope();
         InputShape = inputShape;
         InputShapes = [inputShape];
         OutputShape = outputShape;
@@ -866,6 +997,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     protected LayerBase(int[][] inputShapes, int[] outputShape)
     {
         _instanceId = Interlocked.Increment(ref _instanceCounter);
+        AssignInitializationSeedFromScope();
         InputShapes = inputShapes;
         // For multi-input layers, use the first input shape as the primary input shape
         // This ensures GetInputShape() always returns a valid (non-empty) shape
@@ -2078,14 +2210,19 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
             _preActivationCache.Push(input);
         }
 
+        // Route through the central ActivationHelper dispatch so the activation runs
+        // on tape-connected Engine kernels (the previous direct .Activate(Tensor)
+        // calls rebuild the tensor element-wise and detach the autodiff graph,
+        // stopping gradients reaching this layer's trainable parameters under
+        // tape-based training).
         if (VectorActivation != null)
         {
-            return VectorActivation.Activate(input);
+            return ActivationHelper.ApplyActivation(VectorActivation, input, Engine);
         }
 
         if (ScalarActivation != null)
         {
-            return ScalarActivation.Activate(input);
+            return ActivationHelper.ApplyActivation(ScalarActivation, input, Engine);
         }
 
         return input;
@@ -3257,6 +3394,68 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     public virtual IReadOnlyList<Tensor<T>> GetTrainableParameters() => _registeredTensors;
 
     /// <summary>
+    /// Registers a single custom autograd node on the active gradient tape for a layer whose
+    /// <see cref="Forward"/> is a manual (non-Engine-op) computation but which can supply a
+    /// hand-written backward. This is the layer-level analog of PyTorch's
+    /// <c>torch.autograd.Function</c>: the manual forward stays exactly as written (fast,
+    /// paper-faithful) and the supplied <paramref name="backward"/> delegate becomes a node on
+    /// the tape, so the layer's trainable parameters receive gradients under tape-based training
+    /// even though no <see cref="IEngine"/> op recorded them.
+    /// </summary>
+    /// <param name="output">The tensor returned by the manual forward — becomes the node's output.</param>
+    /// <param name="differentiableInputs">
+    /// The differentiable inputs to the node, in a fixed order the <paramref name="backward"/>
+    /// delegate mirrors. Conventionally <c>[layerInput, param0, param1, ...]</c> where the params
+    /// are exactly <see cref="GetTrainableParameters"/>. Non-differentiable inputs are omitted.
+    /// </param>
+    /// <param name="backward">
+    /// Given the gradient flowing into <paramref name="output"/>, returns the gradient w.r.t. each
+    /// entry of <paramref name="differentiableInputs"/> in the same order (use <c>null</c> for an
+    /// entry that receives no gradient). The hand-written gradient is taken as authoritative — it
+    /// must match the manual forward (verified by the finite-difference invariant).
+    /// </param>
+    /// <returns><paramref name="output"/> unchanged, for fluent use as the Forward return value.</returns>
+    /// <remarks>
+    /// No-op when no tape is recording (eager inference), so this adds zero overhead off the tape.
+    /// The node is recorded all-or-nothing: the layer's Forward must be wholly manual, otherwise
+    /// any Engine ops it also ran would double-count against this node's hand-written gradient.
+    /// </remarks>
+    protected Tensor<T> RegisterManualBackwardNode(
+        Tensor<T> output,
+        Tensor<T>[] differentiableInputs,
+        Func<Tensor<T>, Tensor<T>?[]> backward)
+    {
+        var tape = GradientTape<T>.Current;
+        if (tape is null) return output;
+
+        var entry = new TapeEntry<T>
+        {
+            OperationName = GetType().Name + ".ManualBackward",
+            Output = output,
+            InputCount = 0xFF,
+            InputsOverflow = differentiableInputs,
+            Backward = (gradOutput, inputs, _, _, eng, grads) =>
+            {
+                var inputGrads = backward(gradOutput);
+                for (int i = 0; i < inputs.Length && i < inputGrads.Length; i++)
+                {
+                    var g = inputGrads[i];
+                    if (g is null) continue;
+                    if (grads.TryGetValue(inputs[i], out var existing))
+                        eng.TensorAddInPlace(existing, g);
+                    else
+                        grads[inputs[i]] = g;
+                }
+            }
+        };
+        if (differentiableInputs.Length > 0) entry.Input0 = differentiableInputs[0];
+        if (differentiableInputs.Length > 1) entry.Input1 = differentiableInputs[1];
+        if (differentiableInputs.Length > 2) entry.Input2 = differentiableInputs[2];
+        tape.Record(entry);
+        return output;
+    }
+
+    /// <summary>
     /// Replaces this layer's trainable parameter tensors with the provided tensors.
     /// Used by <see cref="AiDotNet.Tensors.Engines.Autodiff.ParameterBuffer{T}"/> to replace
     /// independently-allocated tensors with views into a contiguous buffer.
@@ -4061,45 +4260,53 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// </summary>
     protected void InitializeLayerWeights(Tensor<T> tensor, int fanIn, int fanOut)
     {
-        if (InitializationStrategy is not null)
-        {
-            InitializationStrategy.InitializeWeights(tensor, fanIn, fanOut);
-            return;
-        }
-
-        // Closes #1383: when this layer has a RandomSeed pinned (set by
-        // LayerHelper from architecture.RandomSeed), build a FRESH seeded
-        // strategy per call rather than the process-shared
-        // DefaultStrategy singleton. The singleton wraps
-        // RandomHelper.ThreadSafeRandom whose per-thread Random state
-        // advances cumulatively across consecutive trainings — so two
-        // back-to-back trainings at the same architecture seed produce
-        // different initial weights without this branch.
+        // Closes #1383, #1539: when this layer has a RandomSeed pinned (set by
+        // LayerHelper from architecture.RandomSeed), drive initialization from a
+        // FRESH seeded RNG so init is reproducible / order-independent. This
+        // takes precedence over the configured strategy's own (process-shared)
+        // RNG even when the strategy is NON-LAZY — e.g. the He init that
+        // Conv1DLayer/ConvolutionalLayer use samples from
+        // RandomHelper.ThreadSafeRandom, whose per-thread state advances
+        // cumulatively across consecutive model constructions. Two back-to-back
+        // trainings at the same architecture seed must produce identical
+        // initial weights (flaky training invariants like
+        // MoreData_ShouldNotDegrade for conv-based models otherwise break).
+        // The lazy contract still works here because the WithSeededRandom /
+        // EagerInitializationStrategy branch below handles both lazy and
+        // non-lazy strategies uniformly when RandomSeed is set.
         if (RandomSeed.HasValue)
         {
-            // Mix the tensor shape (fanIn, fanOut) into the derivation
-            // alongside the layer's RandomSeed and the per-call counter.
-            // This defends the seeded path against the case where two
-            // different layer instances share the same RandomSeed value
-            // (uncommon — LayerHelper.CreateDefaultTransformerLayers
-            // assigns each layer a unique seed via seedRng.Next() — but
-            // possible if a consumer manually sets RandomSeed). Without
-            // shape-mixing, two layers at the same RandomSeed + same
-            // _initWeightsCallCounter index initializing weight tensors
-            // of the same fanIn × fanOut would land on bit-identical
-            // weights, breaking the symmetry the network architecture
-            // relies on. Different-shape tensors already differ via
-            // (fanIn, fanOut); same-shape tensors at the same call
-            // index across distinct layer instances now also differ
-            // via the counter, which is per-instance.
+            // Mix the tensor shape (fanIn, fanOut) into the derivation alongside
+            // the layer's RandomSeed and a per-instance call counter so two
+            // distinct layers (or two weight tensors in one layer) that share a
+            // RandomSeed value + shape don't land on bit-identical weights and
+            // break the symmetry the architecture relies on.
             int derived = unchecked((int)(
                 ((uint)RandomSeed.Value * 2654435761u)
                 ^ ((uint)fanIn * 40503u)
                 ^ ((uint)fanOut * 2654435789u)
                 ^ (uint)System.Threading.Interlocked.Increment(ref _initWeightsCallCounter)));
-            var seeded = new Initialization.EagerInitializationStrategy<T>(
-                AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(derived));
+            var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(derived);
+
+            // Preserve the configured distribution (He for conv layers, Xavier
+            // for dense, etc.) but drive it from the seeded RNG. A non-lazy
+            // strategy that supports re-seeding returns a seeded copy via
+            // WithSeededRandom; a lazy/null strategy defers to the seeded Xavier
+            // EagerInitializationStrategy (the lazy contract expects this path).
+            IInitializationStrategy<T> seeded =
+                (InitializationStrategy is Initialization.InitializationStrategyBase<T> sb
+                    && !InitializationStrategy.IsLazy)
+                    ? sb.WithSeededRandom(rng)
+                    : new Initialization.EagerInitializationStrategy<T>(rng);
             seeded.InitializeWeights(tensor, fanIn, fanOut);
+            return;
+        }
+
+        // No pinned seed: use the configured non-lazy strategy as-is (its own
+        // distribution + RNG), else the process default.
+        if (InitializationStrategy is not null && !InitializationStrategy.IsLazy)
+        {
+            InitializationStrategy.InitializeWeights(tensor, fanIn, fanOut);
             return;
         }
 
@@ -4116,6 +4323,40 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
             InitializationStrategy.InitializeBiases(tensor);
         else
             tensor.AsWritableSpan().Clear();
+    }
+
+    #endregion
+
+    #region ONNX Export
+
+    /// <summary>
+    /// Emits this layer as one or more ONNX nodes into <paramref name="builder"/>.
+    /// Overrides on individual layer types make those types ONNX-exportable; the
+    /// default implementation throws so unsupported layer types fail loudly with
+    /// a clear error message rather than silently producing a broken ONNX graph.
+    /// </summary>
+    /// <remarks>
+    /// This is part of the protobuf-based ONNX export path that lives alongside
+    /// the legacy <see cref="AiDotNet.Onnx.OnnxExporter"/> (which hand-rolls
+    /// protobuf bytes and is documented as proof-of-concept). New layer types
+    /// should override this method; the old exporter stays available until
+    /// parity tests confirm the new path matches its behavior for all currently
+    /// supported layer types.
+    /// </remarks>
+    /// <param name="builder">Graph the layer should write its nodes into.</param>
+    /// <param name="inputs">Named tensors flowing into this layer.</param>
+    /// <returns>Named tensors this layer produces (consumed by the next layer).</returns>
+    /// <exception cref="AiDotNet.Onnx.OnnxExportUnsupportedException">
+    /// Thrown when no override has been provided for this layer type.
+    /// </exception>
+    public virtual AiDotNet.Onnx.OnnxLayerOutputs ConvertToOnnx(
+        AiDotNet.Onnx.OnnxGraphBuilder builder,
+        AiDotNet.Onnx.OnnxLayerInputs inputs)
+    {
+        throw new AiDotNet.Onnx.OnnxExportUnsupportedException(
+            GetType().Name,
+            "Add a ConvertToOnnx override to this layer type, or use the legacy " +
+            "AiDotNet.Onnx.OnnxExporter for the subset of layers it supports.");
     }
 
     #endregion

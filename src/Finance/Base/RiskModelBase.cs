@@ -61,6 +61,30 @@ public abstract class RiskModelBase<T> : FinancialModelBase<T>, IRiskModel<T>
     public int TimeHorizon => _timeHorizon;
 
     /// <summary>
+    /// The risk-adjusted-performance calculator used by <see cref="ComputeRiskRatios"/>. Defaults to the
+    /// closed-form <see cref="AiDotNet.Finance.Risk.RiskRatios{T}"/>; assign a custom
+    /// <see cref="AiDotNet.Finance.Interfaces.IRiskRatioCalculator{T}"/> to change the Sharpe/Sortino/
+    /// Calmar conventions (annualization, downside threshold, …) without subclassing.
+    /// </summary>
+    public AiDotNet.Finance.Interfaces.IRiskRatioCalculator<T> RiskRatioCalculator { get; set; }
+        = AiDotNet.Finance.Risk.RiskRatios<T>.Default;
+
+    /// <summary>
+    /// Scores a realized periodic return series with the configured <see cref="RiskRatioCalculator"/>,
+    /// returning the annualized Sharpe, Sortino, and Calmar ratios.
+    /// </summary>
+    /// <remarks><b>For Beginners:</b> Given a list of period-by-period returns, this reports three
+    /// "reward per unit of risk" scores; higher is better. The default uses the standard formulas, but
+    /// you can plug in your own <see cref="AiDotNet.Finance.Interfaces.IRiskRatioCalculator{T}"/>.</remarks>
+    public (T Sharpe, T Sortino, T Calmar) ComputeRiskRatios(
+        System.Collections.Generic.IReadOnlyList<T> returns,
+        double riskFreePerPeriod = 0.0,
+        int periodsPerYear = 252)
+        => (RiskRatioCalculator.Sharpe(returns, riskFreePerPeriod, periodsPerYear),
+            RiskRatioCalculator.Sortino(returns, riskFreePerPeriod, periodsPerYear),
+            RiskRatioCalculator.Calmar(returns, periodsPerYear));
+
+    /// <summary>
     /// Initializes a new instance of the RiskModelBase class for training.
     /// </summary>
     /// <param name="architecture">The neural network architecture.</param>
@@ -264,6 +288,15 @@ public abstract class RiskModelBase<T> : FinancialModelBase<T>, IRiskModel<T>
         // Default forecasting implementation for risk models
         // Uses Forward directly to avoid recursion with CalculateRisk
         // (CalculateRisk calls Predict which calls Forecast which calls ForecastNative)
+        //
+        // Inference mode is REQUIRED: risk-model stacks contain
+        // BatchNormalizationLayers, which in training mode normalize across the
+        // batch axis. A single-instance prediction (batch = 1) then normalizes
+        // each feature to its own value (~0 output) regardless of input, so every
+        // constant input collapses to the same risk estimate. Inference mode uses
+        // the running statistics instead, keeping BatchNorm affine.
+        SetTrainingMode(false);
+
         var current = input;
         foreach (var layer in Layers)
         {

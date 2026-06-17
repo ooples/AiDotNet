@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>preview</LangVersion>
+    <!-- This is a manual benchmark harness, not a unit-test project. Exclude
+         it from coverage and keep it out of the default `dotnet test` run. -->
+    <IsTestProject>false</IsTestProject>
+
+    <!-- Memory fairness vs PyTorch-CPU (issue #1566). .NET Server GC commits a
+         heap segment per logical core and is reluctant to return memory to the
+         OS, so on a many-core box the process RSS balloons far above the actual
+         live set (measured: +48% RSS for an IDENTICAL managed heap, and it scales
+         with core count) — which is most of the headline "1.6 GB vs ~330 MB" gap.
+         PyTorch's allocator keeps a bounded, OS-returning footprint, so the fair
+         comparison is Workstation GC. Concurrent GC off keeps the steady-state
+         resident set tighter; GCConserveMemory biases the collector toward
+         returning memory to the OS. None of this changes throughput materially
+         for these small-to-medium models (compute is BLAS-bound, not GC-bound). -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Bias the GC toward releasing committed memory back to the OS (0-9; higher
+         = more aggressive). Set via runtimeconfig so it applies to the published
+         DLL path too, not just launchSettings. -->
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" Trim="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- LOCAL project reference (NOT a NuGet package). This is the whole point
+         of mirroring AIsEval in-repo: the harness links the working-tree
+         AiDotNet source, so it measures the CURRENT branch's behaviour — e.g.
+         the PR #1469 fused-training gate + FeedForwardNeuralNetwork.Predict ->
+         MlpForward wiring — without waiting for a NuGet publish. AIsEval, by
+         contrast, can only benchmark a released package. -->
+    <ProjectReference Include="..\..\src\AiDotNet.csproj" />
+  </ItemGroup>
+
+</Project>

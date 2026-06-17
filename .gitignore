@@ -466,3 +466,4 @@ debug-*.ps1
 temp-*.*
 *.tmp
 
+.ci-failures/

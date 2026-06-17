@@ -145,10 +145,22 @@ public class LSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         ValidateOptions();
         ApplyOptionsToBase();
 
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        // Lample et al. 2016 ("Neural Architectures for Named Entity Recognition", §4)
+        // trains the LSTM-CRF with SGD at learning rate 0.01, a learning-rate decay of
+        // 0.05, and a gradient clipping threshold of 5.0 — not an adaptive optimizer.
+        // Match the paper exactly: clipped SGD with the lr_t = lr_0 / (1 + 0.05*t) decay
+        // schedule. Early steps (high lr) learn an input-sensitive mapping while later
+        // steps (decayed lr) avoid both the divergence and the degenerate over-converged
+        // collapse that an adaptive optimizer or an undecayed rate produce here.
+        _optimizer = optimizer ?? new StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = _options.LearningRate
+                InitialLearningRate = _options.LearningRate,
+                EnableGradientClipping = true,
+                GradientClippingMethod = GradientClippingMethod.ByNorm,
+                MaxGradientNorm = 5.0,
+                LearningRateScheduler = new AiDotNet.LearningRateSchedulers.LambdaLRScheduler(
+                    _options.LearningRate, step => 1.0 / (1.0 + 0.05 * step))
             });
 
         InitializeLayers();
@@ -324,9 +336,15 @@ public class LSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     {
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         if (_optimizer is null) throw new InvalidOperationException("Optimizer is not initialized.");
-        SetTrainingMode(true);
-        try { TrainWithTape(input, expected); }
-        finally { SetTrainingMode(false); }
+        // Delegate to the shared CRF-aware training step on SequenceLabelingNERBase
+        // (the same path BiLSTMCRF / CNNBiLSTMCRF use). With a CRF in the stack this
+        // trains against the CRF negative log-likelihood (log-partition − gold-path
+        // score) — the objective from Lample et al. 2016 — instead of per-token
+        // cross-entropy on the raw emissions. It also preprocesses the tokens AND the
+        // gold labels to a consistent length, so the emission/label shapes always match.
+        // The previous direct TrainWithTape call optimized the wrong objective (which
+        // could increase loss with more steps) and skipped label preprocessing.
+        RunCrfAwareTrainStep(input, expected, _options.UseCRF, _optimizer);
     }
 
     /// <inheritdoc />
@@ -343,6 +361,17 @@ public class LSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// A BiLSTM-CRF processes the actual sequence length (Lample et al. 2016); the
+    /// stacked LSTM, the per-timestep emission projection, and the CRF are all
+    /// length-agnostic. MaxSequenceLength is an UPPER BOUND, not a target — so this
+    /// only TRUNCATES inputs longer than the bound and otherwise passes the sequence
+    /// through unchanged. (The previous behaviour padded every input UP to
+    /// MaxSequenceLength, which made a short [8, embDim] sequence emit a [256, numLabels]
+    /// output that no longer matched its [8, numLabels] gold labels.) Padding to a common
+    /// length is a batching concern handled by the caller with an accompanying mask, not
+    /// something to force on a single sequence here.
+    /// </remarks>
     protected override Tensor<T> PreprocessTokens(Tensor<T> rawEmbeddings)
     {
         int maxLen = _options.MaxSequenceLength;
@@ -355,28 +384,27 @@ public class LSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         {
             int batch = rawEmbeddings.Shape[0];
             int seqLen3 = rawEmbeddings.Shape[1];
-            if (seqLen3 == maxLen) return rawEmbeddings;
+            if (seqLen3 <= maxLen) return rawEmbeddings;
 
-            var padded3 = new Tensor<T>([batch, maxLen, embDim]);
-            int copyLen3 = Math.Min(seqLen3, maxLen);
+            // Truncate to the maximum supported length.
+            var truncated3 = new Tensor<T>([batch, maxLen, embDim]);
             for (int b = 0; b < batch; b++)
-                for (int s = 0; s < copyLen3; s++)
+                for (int s = 0; s < maxLen; s++)
                     for (int d = 0; d < embDim; d++)
-                        padded3[b, s, d] = rawEmbeddings[b, s, d];
-            return padded3;
+                        truncated3[b, s, d] = rawEmbeddings[b, s, d];
+            return truncated3;
         }
 
         // Rank-2 [seqLen, embDim]
         int seqLen = rawEmbeddings.Shape[0];
-        if (seqLen == maxLen) return rawEmbeddings;
+        if (seqLen <= maxLen) return rawEmbeddings;
 
-        var padded = new Tensor<T>([maxLen, embDim]);
-        int copyLen = Math.Min(seqLen, maxLen);
-        for (int s = 0; s < copyLen; s++)
+        var truncated = new Tensor<T>([maxLen, embDim]);
+        for (int s = 0; s < maxLen; s++)
             for (int d = 0; d < embDim; d++)
-                padded[s, d] = rawEmbeddings[s, d];
+                truncated[s, d] = rawEmbeddings[s, d];
 
-        return padded;
+        return truncated;
     }
 
 
@@ -465,14 +493,13 @@ public class LSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
 
         ApplyOptionsToBase();
 
+        // Native-mode layers (with their trained weights) are already reconstructed by
+        // the base DeserializeInternalUnchecked before this override runs, so do NOT
+        // clear + re-initialize them here — that would discard the deserialized weights
+        // and leave the model randomly initialized. Only an ONNX session needs rebuilding.
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
         {
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-        }
-        else if (_useNativeMode)
-        {
-            Layers.Clear();
-            InitializeLayers();
         }
     }
 

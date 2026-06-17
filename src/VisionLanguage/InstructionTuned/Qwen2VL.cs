@@ -87,6 +87,7 @@ public class Qwen2VL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     public Qwen2VL(NeuralNetworkArchitecture<T> architecture, Qwen2VLOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
     {
         _options = options ?? new Qwen2VLOptions();
+        _options.ValidateVisualSizing();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);

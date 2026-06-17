@@ -33,8 +33,26 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <summary>
+    /// Describes this Lion instance for the fused kernel (Tensors
+    /// <c>OptimizerType.Lion</c> = <c>LionUpdateSimd(lr, b1, b2, wd)</c>):
+    /// Beta1/Beta2 → β1/β2, WeightDecay → wd. No epsilon term. Declines (eager)
+    /// on adaptive LR or an unmappable scheduler. Parity-gated.
+    /// </summary>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        if (_options.UseAdaptiveLearningRate) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+        config = new Fused.FusedOptimizerConfig(
+            Tensors.Engines.Compilation.OptimizerType.Lion,
+            (float)GetCurrentLearningRate(),
+            (float)_options.Beta1, (float)_options.Beta2, 0f, (float)_options.WeightDecay, schedule);
+        return true;
+    }
+
     /// <summary>
     /// The options specific to the Lion optimizer.
     /// </summary>
@@ -351,12 +369,37 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var oneMinusBeta1 = NumOps.Subtract(NumOps.One, _currentBeta1);
         var oneMinusBeta2 = NumOps.Subtract(NumOps.One, _currentBeta2);
 
+        // GPU-resident step (AIDOTNET_GPU_ADAM=1): see AdamOptimizer.Step. Gated off; falls back to the CPU
+        // tensor-op path per-parameter when not GPU-resident.
+        bool gpuAdam = typeof(T) == typeof(float)
+            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
+            && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
+
         foreach (var param in context.Parameters)
         {
-            if (!context.Gradients.TryGetValue(param, out var grad))
+            // True sparse scatter Lion: m + param at touched indices only.
+            if (!gpuAdam && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            {
+                if (!_tapeMomentum.TryGetValue(param, out var mSp)) { mSp = new Tensor<T>(param._shape); _tapeMomentum[param] = mSp; }
+                if (SparseEmbeddingOptimizerHelpers.TryApplyLionSparse(
+                        param, mSp,
+                        NumOps.ToDouble(CurrentLearningRate),
+                        NumOps.ToDouble(_currentBeta1), NumOps.ToDouble(_currentBeta2),
+                        _options.WeightDecay))
+                {
+                    continue;
+                }
+            }
+
+            if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
-            if (!_tapeMomentum.TryGetValue(param, out var m)) { m = new Tensor<T>(param._shape); _tapeMomentum[param] = m; }
+            if (!_tapeMomentum.TryGetValue(param, out var m)) { m = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) m.AsWritableSpan().Clear(); _tapeMomentum[param] = m; }
+
+            if (gpuAdam && param.Length == grad.Length
+                && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryLionStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)m,
+                    (float)NumOps.ToDouble(CurrentLearningRate), (float)NumOps.ToDouble(_currentBeta1), (float)NumOps.ToDouble(_currentBeta2), (float)_options.WeightDecay))
+                continue;
 
             // Interpolate: c = beta1 * m + (1 - beta1) * grad
             var interpolated = Engine.TensorAdd(Engine.TensorMultiplyScalar(m, _currentBeta1), Engine.TensorMultiplyScalar(grad, oneMinusBeta1));
@@ -534,6 +577,8 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         base.Reset();
         _m = Vector<T>.Empty();
         _t = 0;
+        // Clear the tape-side fast-path momentum so a reused instance starts fresh.
+        _tapeMomentum.Clear();
     }
 
     /// <summary>

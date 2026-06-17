@@ -238,15 +238,23 @@ public class FinDiffGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        Tensor<T> prediction = Predict(input);
-        LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        Tensor<T> error = prediction.Subtract(expectedOutput);
-        UpdateNetworkParameters();
-    }
-
-    private void UpdateNetworkParameters()
-    {
-        _optimizer.UpdateParameters(Layers);
+        // ε-prediction diffusion training: the denoiser (all in Layers) maps the
+        // noisy input + timestep embedding to a noise prediction; the default
+        // regression loss (MSE) between that and the sampled target noise IS the
+        // DDPM/FinDiff training objective (Ho et al. 2020; Sattarov et al. 2023).
+        // TrainWithTape runs the forward on the autodiff tape and backpropagates
+        // through the denoiser before the optimizer step. The previous body called
+        // _optimizer.UpdateParameters(Layers) with no backward, so it threw
+        // "Backward pass must be called before updating parameters".
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc />
@@ -588,7 +596,7 @@ public class FinDiffGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
                 { "LayerCount", Layers.Count },
                 { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

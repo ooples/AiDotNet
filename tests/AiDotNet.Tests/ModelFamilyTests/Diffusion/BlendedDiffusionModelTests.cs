@@ -6,16 +6,16 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-public class BlendedDiffusionModelTests : DiffusionModelTestBase
+public class BlendedDiffusionModelTests : DiffusionModelTestBase<float>
 {
     // Per Avrahami et al. 2022: operates in latent space same as SD
     protected override int[] InputShape => [1, 4, 16, 16];
     protected override int[] OutputShape => [1, 4, 16, 16];
 
-    protected override IDiffusionModel<double> CreateModel()
+    protected override IDiffusionModel<float> CreateModel()
     {
         // Same SD-style architecture per paper, scaled for CPU testing
-        var unet = new UNetNoisePredictor<double>(
+        var unet = new UNetNoisePredictor<float>(
             inputChannels: 4,
             outputChannels: 4,
             baseChannels: 64,
@@ -27,7 +27,7 @@ public class BlendedDiffusionModelTests : DiffusionModelTestBase
             inputHeight: 16,
             seed: 42);
 
-        var vae = new StandardVAE<double>(
+        var vae = new StandardVAE<float>(
             inputChannels: 3,
             latentChannels: 4,
             baseChannels: 32,
@@ -36,7 +36,7 @@ public class BlendedDiffusionModelTests : DiffusionModelTestBase
             latentScaleFactor: 0.18215,
             seed: 42);
 
-        return new BlendedDiffusionModel<double>(
+        return new BlendedDiffusionModel<float>(
             unet: unet,
             vae: vae,
             seed: 42);

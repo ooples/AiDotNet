@@ -293,9 +293,21 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             Layers.AddRange(LayerHelper<T>.CreateDefaultAutoEncoderLayers(Architecture));
         }
 
-        // EncodedSize = latent dimension = input width of the first decoder layer.
-        // Decode() starts at Layers[Count/2], so its input shape is the latent handoff.
-        EncodedSize = Layers[Layers.Count / 2].GetInputShape()[0];
+        // EncodedSize = latent dimension = the bottleneck (narrowest) width in the
+        // encoder→decoder stack. A Dense layer's OUTPUT width is concrete at
+        // construction, whereas the middle layer's INPUT shape (the latent handoff)
+        // is only resolved on the first forward — reading it here left EncodedSize
+        // at -1 for the default lazy layer stack. The autoencoder bottleneck is the
+        // narrowest layer by construction, so take the smallest positive layer
+        // output width.
+        int latent = int.MaxValue;
+        foreach (var layer in Layers)
+        {
+            var outShape = layer.GetOutputShape();
+            if (outShape is not null && outShape.Length > 0 && outShape[0] > 0)
+                latent = Math.Min(latent, outShape[0]);
+        }
+        EncodedSize = latent == int.MaxValue ? 0 : latent;
     }
 
     /// <summary>
@@ -323,6 +335,44 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// This helps ensure your autoencoder is structured correctly before you start training it.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Compares two layer shapes for the autoencoder structural checks, treating an
+    /// unresolved dimension (a negative value such as -1) on either side as a wildcard.
+    /// </summary>
+    /// <remarks>
+    /// Lazily-constructed layers report unresolved dimensions as -1 until the first
+    /// forward pass resolves them — e.g. <see cref="Layers.DenseLayer{T}"/>'s input shape
+    /// is <c>[-1]</c> when built via the output-size-only constructor. The previous
+    /// <c>SequenceEqual</c> checks compared those -1 sentinels against resolved dimensions
+    /// and threw at construction, so a perfectly valid DenseLayer-based symmetric
+    /// autoencoder could not be built before training (#1468). Resolved dimensions are
+    /// still compared exactly, and any genuine shape mismatch surfaces at the first
+    /// forward pass.
+    /// </remarks>
+    private static bool ShapesCompatibleIgnoringUnresolved(int[] a, int[] b)
+    {
+        if (a.Length != b.Length)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < a.Length; i++)
+        {
+            // A negative dimension means "not yet resolved" — treat as a wildcard.
+            if (a[i] < 0 || b[i] < 0)
+            {
+                continue;
+            }
+
+            if (a[i] != b[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     protected override void ValidateCustomLayers(List<ILayer<T>> layers)
     {
         base.ValidateCustomLayers(layers);
@@ -333,7 +383,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Check if input and output layers have the same size
-        if (!Enumerable.SequenceEqual(layers[0].GetInputShape(), layers[layers.Count - 1].GetOutputShape()))
+        if (!ShapesCompatibleIgnoringUnresolved(layers[0].GetInputShape(), layers[layers.Count - 1].GetOutputShape()))
         {
             throw new ArgumentException("Input and output layer sizes must be the same for an autoencoder.");
         }
@@ -341,7 +391,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         // Ensure the architecture is symmetric
         for (int i = 0; i < layers.Count / 2; i++)
         {
-            if (!Enumerable.SequenceEqual(layers[i].GetOutputShape(), layers[layers.Count - 1 - i].GetInputShape()))
+            if (!ShapesCompatibleIgnoringUnresolved(layers[i].GetOutputShape(), layers[layers.Count - 1 - i].GetInputShape()))
             {
                 throw new ArgumentException($"Layer sizes must be symmetric. Mismatch at position {i} and {layers.Count - i - 1}");
             }

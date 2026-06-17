@@ -272,6 +272,32 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Eager constructor that allocates and initializes the weight/bias tensors
+    /// immediately for a known input size — the PyTorch <c>nn.Linear(in_features,
+    /// out_features)</c> convention. Use this when downstream consumers need
+    /// shape-resolved state before the first forward (parameter-count
+    /// introspection, LoRA wrapping, ONNX export). The other constructor stays
+    /// lazy and resolves the input size from the first forward.
+    /// </summary>
+    /// <param name="inputSize">The number of input neurons. Must be positive.</param>
+    /// <param name="outputSize">The number of output neurons. Must be positive.</param>
+    /// <param name="activationFunction">Activation applied after the linear transform. Defaults to ReLU.</param>
+    public FullyConnectedLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null)
+        : base(new[] { inputSize }, new[] { outputSize }, activationFunction ?? new ReLUActivation<T>())
+    {
+        if (inputSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputSize));
+        if (outputSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(outputSize));
+
+        _weights = new Tensor<T>([outputSize, inputSize]);
+        _biases = new Tensor<T>([outputSize]);
+        InitializeParameters();
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+    }
+
+    /// <summary>
     /// Resolves input feature size from input.Shape[^1] on first forward and allocates weights.
     /// </summary>
     protected override void OnFirstForward(Tensor<T> input)

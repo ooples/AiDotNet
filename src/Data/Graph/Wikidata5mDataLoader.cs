@@ -155,8 +155,10 @@ public class Wikidata5mDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
     {
         var features = LoadedFeatures ?? throw new InvalidOperationException("Features not loaded.");
         var labels = LoadedLabels ?? throw new InvalidOperationException("Labels not loaded.");
-        var nfs = (int[])features._shape; nfs[0] = indices.Length;
-        var nls = (int[])labels._shape; nls[0] = indices.Length;
+        // Clone the shape arrays — see KittiDataLoader.ExtractBatch for the
+        // SplitsData regression this avoids.
+        var nfs = (int[])features._shape.Clone(); nfs[0] = indices.Length;
+        var nls = (int[])labels._shape.Clone(); nls[0] = indices.Length;
         var bf = new Tensor<T>(nfs);
         var bl = new Tensor<T>(nls);
         for (int i = 0; i < indices.Length; i++)

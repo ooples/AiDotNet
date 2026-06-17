@@ -4,6 +4,8 @@ using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.VisionLanguage.Encoders;
+using AiDotNet.VisionLanguage.Robotics;
+using AiDotNet.VisionLanguage.ThreeD;
 
 namespace AiDotNet.Tools.ClipPerfHarness;
 
@@ -30,12 +32,22 @@ internal enum HarnessMode
     DfnClip,
     Hawk,
     Vit,
+    Helix,
+    Gpt4Point,
 }
 
 internal static class Program
 {
     private static int Main(string[] args)
     {
+        // Match the test assembly's ModuleInitializer (TestAssemblyDeterminismInit):
+        // ModelFamily invariant tests run CPU-only (AIDOTNET_DISABLE_GPU=1 +
+        // AiDotNetEngine.ResetToCpu()). Without this the harness silently runs on
+        // the DirectGpu/OpenCL engine, whose per-op host↔device copy + double→float
+        // conversion is a completely different (and misleading) hot path.
+        Environment.SetEnvironmentVariable("AIDOTNET_DISABLE_GPU", "1");
+        AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+
         HarnessMode mode = ParseMode(args);
 
         var swCtor = Stopwatch.StartNew();
@@ -85,11 +97,64 @@ internal static class Program
                 for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble();
                 break;
             }
+            case HarnessMode.Helix:
+            {
+                // Helix (Figure AI 2025): dual-system VLA. Native layer chain
+                // consumes post-patch-embedding token features [1, 4, VisionDim=1024]
+                // and runs vision encoder + System-2 VLM decoder (DecoderDim=4096,
+                // 32 layers) + System-1 visuomotor transformer → action head.
+                // Paper-scale ~7B params: this is the >120s double train step we
+                // are profiling.
+                var arch = new NeuralNetworkArchitecture<double>(
+                    inputType: InputType.ThreeDimensional,
+                    taskType: NeuralNetworkTaskType.Regression,
+                    inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 4);
+                Console.WriteLine($"[mode={mode}] Constructing Helix (paper-scale 7B VLA)...");
+                var helixOpts = new AiDotNet.VisionLanguage.Robotics.HelixOptions();
+                if (Environment.GetEnvironmentVariable("WEIGHT_STREAM") == "1")
+                {
+                    long capGb = long.TryParse(Environment.GetEnvironmentVariable("WEIGHT_STREAM_GB"), out var gb) && gb > 0 ? gb : 20;
+                    helixOpts.WeightOffloadOptions = new AiDotNet.Tensors.LinearAlgebra.GpuOffloadOptions
+                    {
+                        StreamingPoolMaxResidentBytes = capGb * 1024 * 1024 * 1024,
+                    };
+                    Console.WriteLine($"[stream] WeightOffloadOptions: disk streaming, {capGb}GB resident cap");
+                }
+                network = new Helix<double>(arch, helixOpts);
+                input = new Tensor<double>(new[] { 1, 4, 1024 });
+                for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble();
+                break;
+            }
+            case HarnessMode.Gpt4Point:
+            {
+                // GPT4Point (Qi et al. 2024): point-language VLM. Native layer
+                // chain consumes token features [1, 4, VisionDim=512] and runs the
+                // point-cloud VLM encoder + Q-Former + LLM decoder (DecoderDim=4096,
+                // 32 layers). Paper-scale ~7B params.
+                var arch = new NeuralNetworkArchitecture<double>(
+                    inputType: InputType.ThreeDimensional,
+                    taskType: NeuralNetworkTaskType.Regression,
+                    inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 4);
+                Console.WriteLine($"[mode={mode}] Constructing GPT4Point (paper-scale 7B VLA)...");
+                network = new GPT4Point<double>(arch);
+                input = new Tensor<double>(new[] { 1, 4, 512 });
+                for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble();
+                break;
+            }
             default:
                 throw new InvalidOperationException($"Unknown harness mode {mode}");
         }
         swCtor.Stop();
         Console.WriteLine($"  ctor: {swCtor.ElapsedMilliseconds} ms");
+
+        // Force the memory-bounded streaming training path (optimizer-in-backward
+        // + 8-bit Adam) regardless of model size — lets us validate the streaming
+        // path on a small model that trains in seconds.
+        if (Environment.GetEnvironmentVariable("STREAM_FORCE") == "1")
+        {
+            network.StreamingTraining = AiDotNet.Enums.StreamingTrainingMode.ForceOn;
+            Console.WriteLine("[stream] StreamingTraining = ForceOn");
+        }
 
         // Warm-up forward (matches the EffectiveOutputShape warm-up the
         // test base does). Pays first-touch lazy-init costs we don't want
@@ -107,12 +172,38 @@ internal static class Program
         var target = new Tensor<double>(outDims);
         for (int i = 0; i < target.Length; i++) target[i] = rng.NextDouble();
 
-        // Train 5 steps in a row — first step pays compile cost, subsequent
-        // steps replay the compiled plan. This matches the test's invariant
-        // pattern: warm probe + N training iterations + verification predict.
-        Console.WriteLine("[train] Train(input, target) — first step + 4 replays");
-        var trainStepMs = new long[5];
-        for (int s = 0; s < 5; s++)
+        // Paper-scale 7B VLA models (Helix, GPT4Point) take >100 s per double
+        // train step, so the 5-step + 2×10-rep benchmark below would run for
+        // hours. For these we run a SINGLE train step (enough for a sampling
+        // profiler to attribute the hot path) and skip the replay benchmarks.
+        bool heavy = mode is HarnessMode.Helix or HarnessMode.Gpt4Point;
+
+        // Forward-only profiling path for the paper-scale 7B VLA models: a full
+        // double train step exhausts memory (Adam moments ≈ 2× the 51 GB weight
+        // set), so to attribute the hot path we profile repeated Predicts — the
+        // forward already runs at ~4 GFLOP/s (10-40× under a many-core box), so
+        // its hot methods ARE the weak point to fix. Set HELIX_FWD_ONLY=1.
+        if (heavy && Environment.GetEnvironmentVariable("HELIX_FWD_ONLY") == "1")
+        {
+            Console.WriteLine("[fwd-only] Predict x4 (profiling forward hot path)");
+            for (int i = 0; i < 4; i++)
+            {
+                var swf = Stopwatch.StartNew();
+                _ = network.Predict(input);
+                swf.Stop();
+                Console.WriteLine($"  predict {i}: {swf.ElapsedMilliseconds} ms");
+            }
+            return 0;
+        }
+
+        int trainReps = heavy ? 1 : 5;
+
+        // Train trainReps steps in a row — first step pays compile cost,
+        // subsequent steps replay the compiled plan. This matches the test's
+        // invariant pattern: warm probe + N training iterations + verify predict.
+        Console.WriteLine($"[train] Train(input, target) — {trainReps} step(s)");
+        var trainStepMs = new long[trainReps];
+        for (int s = 0; s < trainReps; s++)
         {
             var sw = Stopwatch.StartNew();
             network.Train(input, target);
@@ -121,7 +212,18 @@ internal static class Program
             Console.WriteLine($"  train step {s}: {trainStepMs[s]} ms");
         }
         long swTrainTotal = 0;
-        for (int s = 0; s < 5; s++) swTrainTotal += trainStepMs[s];
+        for (int s = 0; s < trainReps; s++) swTrainTotal += trainStepMs[s];
+
+        if (heavy)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"SUMMARY [{mode}]:");
+            Console.WriteLine($"  ctor:    {swCtor.ElapsedMilliseconds} ms");
+            Console.WriteLine($"  warm:    {swWarm.ElapsedMilliseconds} ms");
+            Console.WriteLine($"  train:   {swTrainTotal} ms ({trainReps} step)");
+            Console.WriteLine($"  peakWS:  {Environment.WorkingSet / (1024 * 1024)} MB (process working set)");
+            return 0;
+        }
 
         // Sub-phase break-down for steady-state cost: forward (Predict)
         // versus full Train (forward + backward + optimizer step). Helps
@@ -180,8 +282,10 @@ internal static class Program
             "dfn" or "dfnclip" or "dfn-clip" => HarnessMode.DfnClip,
             "biomed" or "biomedclip" or "biomed-clip" => HarnessMode.BiomedClip,
             "vit" or "visiontransformer" or "vision-transformer" => HarnessMode.Vit,
+            "helix" => HarnessMode.Helix,
+            "gpt4point" or "gpt4pt" or "gpt-4-point" => HarnessMode.Gpt4Point,
             _ => throw new ArgumentException(
-                $"Unknown mode '{token}'. Valid modes: biomed, dfn, hawk, vit.", nameof(args)),
+                $"Unknown mode '{token}'. Valid modes: biomed, dfn, hawk, vit, helix, gpt4point.", nameof(args)),
         };
     }
 }

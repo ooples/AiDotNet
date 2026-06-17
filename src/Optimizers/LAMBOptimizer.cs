@@ -59,8 +59,29 @@ namespace AiDotNet.Optimizers;
 /// </example>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <summary>
+    /// Describes this LAMB instance for the fused kernel (Tensors
+    /// <c>OptimizerType.LAMB</c> = <c>LAMBUpdateSimd(lr, b1, b2, eps, wd)</c>):
+    /// Beta1/Beta2 → β1/β2, Epsilon → eps, WeightDecay → wd. Declines (eager) on
+    /// adaptive LR or an unmappable scheduler. Parity-gated — if AiDotNet's
+    /// trust-ratio clamp (MaxTrustRatio) differs from the kernel's the parity
+    /// test fails and this stays unwired.
+    /// </summary>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        if (_options.UseAdaptiveLearningRate) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+        config = new Fused.FusedOptimizerConfig(
+            Tensors.Engines.Compilation.OptimizerType.LAMB,
+            (float)GetCurrentLearningRate(),
+            (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon,
+            (float)_options.WeightDecay, schedule);
+        return true;
+    }
+
     /// <summary>
     /// The options specific to the LAMB optimizer.
     /// </summary>
@@ -530,9 +551,42 @@ public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             ? NumOps.FromDouble(1.0 - Math.Pow(_options.Beta2, _tapeStep))
             : NumOps.One;
 
+        // NOTE: the CUDA lamb_update kernel computes the layer-wise trust ratio
+        // (||w|| / ||update||) with a different convention than this CPU
+        // implementation (parity harness ~6e-4 at step 1), so the GPU-resident
+        // path is NOT wired for LAMB — it would silently change training dynamics.
+        // Reconcile the kernel's trust-ratio with this formula before enabling.
         foreach (var param in context.Parameters)
         {
-            if (!context.Gradients.TryGetValue(param, out var grad))
+            // True sparse fast path: scatter LAMB step at touched embedding-table rows
+            // only. ‖p‖₂ via one full-param read; Adam math + ‖update‖₂² collected only
+            // at touched indices. The trust ratio is exact since untouched indices have
+            // zero update so ‖update_sparse‖₂ = ‖update_dense‖₂.
+            //
+            // ClipTrustRatio bail: the helper has no way to honor a MaxTrustRatio clamp,
+            // so callers configured with ClipTrustRatio=true would get an un-clamped
+            // sparse step that diverges from the dense branch's clipped step. The
+            // helper itself also bails when WeightDecay != 0 (untouched rows would
+            // stop decaying); checking it here too lets the dense branch handle the
+            // weight-decay case without an extra helper-internal failure path.
+            if (SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param)
+                && !_options.ClipTrustRatio
+                && _options.WeightDecay == 0.0)
+            {
+                if (!_tapeM.TryGetValue(param, out var mSp)) { mSp = new Tensor<T>(param._shape); _tapeM[param] = mSp; }
+                if (!_tapeV.TryGetValue(param, out var vSp)) { vSp = new Tensor<T>(param._shape); _tapeV[param] = vSp; }
+                if (SparseEmbeddingOptimizerHelpers.TryApplyLambSparse(
+                        param, mSp, vSp,
+                        NumOps.ToDouble(baseLr),
+                        _options.Beta1, _options.Beta2,
+                        NumOps.ToDouble(biasCorrection1), NumOps.ToDouble(biasCorrection2),
+                        _options.Epsilon, _options.WeightDecay))
+                {
+                    continue;
+                }
+            }
+
+            if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
             if (!_tapeM.TryGetValue(param, out var m)) { m = new Tensor<T>(param._shape); _tapeM[param] = m; }

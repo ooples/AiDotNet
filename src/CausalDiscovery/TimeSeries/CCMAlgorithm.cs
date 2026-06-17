@@ -101,15 +101,31 @@ public class CCMAlgorithm<T> : TimeSeriesCausalBase<T>
                     for (int e = 0; e < embDim; e++)
                         embeddings[t, e] = data[t + (embDim - 1) * tau - e * tau, j];
 
-                // Cross-map at full and half library to test convergence
+                // CCM convergence (Sugihara et al. 2012, Science): an edge is accepted
+                // when cross-map skill ρ INCREASES as the library grows from a
+                // small size toward the full series and plateaus at a high value. The
+                // signature is measured from a SMALL fixed library (minLib) to the
+                // full library — not half-vs-full, where both endpoints scale with n and
+                // already sit on ρ's plateau, so the measured gain vanishes for large n.
+                double rhoSmall = ComputeCrossMapCorrelation(data, embeddings, i, minLib, embDim);
                 double rhoFull = ComputeCrossMapCorrelation(data, embeddings, i, validN, embDim);
-                double rhoHalf = ComputeCrossMapCorrelation(data, embeddings, i, validN / 2, embDim);
 
-                double convergence = rhoFull - rhoHalf;
-                // Accept edge if: convergence is positive (standard CCM) OR
-                // rhoFull is very high (near-perfect prediction, common for deterministic data)
-                const double highCorrelationThreshold = 0.95;
-                if ((convergence > _convergenceThreshold || rhoFull > highCorrelationThreshold) && rhoFull > _correlationThreshold)
+                double convergence = rhoFull - rhoSmall;
+                bool convergent = convergence > _convergenceThreshold && rhoFull > _correlationThreshold;
+
+                // Already-saturated regime: on deterministic or near-deterministic
+                // systems, the cross-mapping reaches its ceiling at the minimum
+                // library size already, so ρ_full - ρ_small ≈ 0 even though the
+                // causal coupling is overwhelmingly strong. Sugihara et al. 2012
+                // §SI.2 ("Convergence with library size") explicitly notes that
+                // for highly-coupled systems ρ saturates near 1 well below the
+                // full library; the convergence test is informative for noisy
+                // partial couplings, not for already-perfect couplings. Accept
+                // the edge when both ρ_small and ρ_full are above 0.95 AND
+                // ρ_full ≥ ρ_small (no degradation from increased library size).
+                bool saturatedConvergence = rhoSmall > 0.95 && rhoFull > 0.95 && convergence >= -1e-3;
+
+                if (convergent || saturatedConvergence)
                     result[i, j] = NumOps.FromDouble(rhoFull);
             }
 

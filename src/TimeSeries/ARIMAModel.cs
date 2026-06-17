@@ -813,7 +813,7 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
                 // Additional settings from options
                 { "LagOrder", _arimaOptions.LagOrder }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
 
         return metadata;

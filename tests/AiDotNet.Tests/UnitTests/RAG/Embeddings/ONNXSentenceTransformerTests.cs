@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
 using Xunit;
 using System.Threading.Tasks;
@@ -189,5 +190,77 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             // Act & Assert
             Assert.Throws<FileNotFoundException>(() => model.Embed("Testing custom dimension"));
         }
+
+#if NET10_0_OR_GREATER
+        // Regression for the token_type_ids shape bug: when a sentence-transformer
+        // ONNX (e.g. all-MiniLM-L6-v2) declares token_type_ids, the builder must emit
+        // an all-zeros int64 tensor with the SAME shape as input_ids — NOT an empty
+        // tensor (which made onnxruntime throw "Length of memory (0) must match
+        // product of dimensions (seqLen)").
+        [Fact(Timeout = 60000)]
+        public async Task BuildOnnxInputs_WhenTokenTypeIdsDeclared_ProducesZerosMatchingInputIdsLength()
+        {
+            await Task.Yield();
+            // Arrange
+            var inputIds = new long[] { 101, 7592, 2088, 102 };
+            var attentionMask = new long[] { 1, 1, 1, 1 };
+            var inputShape = new[] { 1, inputIds.Length };
+            var declared = new HashSet<string> { "input_ids", "attention_mask", "token_type_ids" };
+
+            // Act
+            var inputs = ONNXSentenceTransformer<double>.BuildOnnxInputs(
+                declared, inputIds, attentionMask, inputShape);
+
+            // Assert
+            var tokenTypeValue = inputs.Single(v => v.Name == "token_type_ids");
+            var tensor = tokenTypeValue.AsTensor<long>();
+            Assert.Equal(inputIds.Length, tensor.Length); // not 0
+            Assert.Equal(inputShape, tensor.Dimensions.ToArray());
+            foreach (var x in tensor)
+            {
+                Assert.Equal(0L, x); // single sentence => all segment 0
+            }
+        }
+
+        [Fact(Timeout = 60000)]
+        public async Task BuildOnnxInputs_WhenTokenTypeIdsNotDeclared_OmitsIt()
+        {
+            await Task.Yield();
+            // Arrange
+            var inputIds = new long[] { 101, 7592, 102 };
+            var attentionMask = new long[] { 1, 1, 1 };
+            var inputShape = new[] { 1, inputIds.Length };
+            var declared = new HashSet<string> { "input_ids", "attention_mask" };
+
+            // Act
+            var inputs = ONNXSentenceTransformer<double>.BuildOnnxInputs(
+                declared, inputIds, attentionMask, inputShape);
+
+            // Assert
+            Assert.DoesNotContain(inputs, v => v.Name == "token_type_ids");
+            Assert.Contains(inputs, v => v.Name == "input_ids");
+            Assert.Contains(inputs, v => v.Name == "attention_mask");
+        }
+
+        [Fact(Timeout = 60000)]
+        public async Task BuildOnnxInputs_AlwaysIncludesInputIdsWithCorrectShape()
+        {
+            await Task.Yield();
+            // Arrange
+            var inputIds = new long[] { 101, 7592, 2088, 999, 102 };
+            var attentionMask = new long[] { 1, 1, 1, 1, 1 };
+            var inputShape = new[] { 1, inputIds.Length };
+            var declared = new HashSet<string> { "input_ids" };
+
+            // Act
+            var inputs = ONNXSentenceTransformer<double>.BuildOnnxInputs(
+                declared, inputIds, attentionMask, inputShape);
+
+            // Assert
+            var idsTensor = inputs.Single(v => v.Name == "input_ids").AsTensor<long>();
+            Assert.Equal(inputIds.Length, idsTensor.Length);
+            Assert.Equal(inputShape, idsTensor.Dimensions.ToArray());
+        }
+#endif
     }
 }

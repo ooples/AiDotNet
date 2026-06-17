@@ -94,8 +94,8 @@ public class FinancialDQNAgent<T> : TradingAgentBase<T>
             inputType: AiDotNet.Enums.InputType.OneDimensional,
             taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
             inputSize: 10,
-            outputSize: 1),
-            options: new TradingAgentOptions<T>())
+            outputSize: 3),
+            options: new FinancialDQNAgentOptions<T> { StateSize = 10, ActionSize = 3 })
     {
     }
 
@@ -167,35 +167,64 @@ public class FinancialDQNAgent<T> : TradingAgentBase<T>
             return NumOps.Zero;
 
         var batch = ReplayBuffer.Sample(TradingOptions.BatchSize);
-        T totalLoss = NumOps.Zero;
+        int n = batch.Count;
+        if (n == 0) return NumOps.Zero;
 
-        foreach (var exp in batch)
+        // Batched DQN update: run the online and target Q-networks once over the whole minibatch,
+        // build the per-row TD target, then do ONE batched backward — instead of an autograd tape
+        // per experience (the per-sample loop dominated RL training time — see profiling).
+        int stateDim = batch[0].State.Length;
+        var gamma = NumOps.FromDouble(Convert.ToDouble(TradingOptions.DiscountFactor));
+
+        var statesData = new T[n * stateDim];
+        var nextStatesData = new T[n * stateDim];
+        for (int i = 0; i < n; i++)
         {
-            var currentQ = _qNetwork.Predict(Tensor<T>.FromVector(exp.State));
-            var nextQ = _targetNetwork.Predict(Tensor<T>.FromVector(exp.NextState));
-
-            int actionIdx = GetActionIndex(exp.Action);
-            T maxNextQ = GetMaxQ(nextQ);
-            
-            T target = exp.Done 
-                ? exp.Reward 
-                : NumOps.Add(exp.Reward, NumOps.Multiply(NumOps.FromDouble(Convert.ToDouble(TradingOptions.DiscountFactor)), maxNextQ));
-
-            var expectedOutput = currentQ.ToVector().Clone();
-            expectedOutput[actionIdx] = target;
-
-            T loss = (TradingOptions.LossFunction ?? throw new InvalidOperationException("LossFunction has not been initialized.")).CalculateLoss(currentQ.ToVector(), expectedOutput);
-            totalLoss = NumOps.Add(totalLoss, loss);
-
-            _qNetwork.Train(Tensor<T>.FromVector(exp.State), Tensor<T>.FromVector(expectedOutput));
+            var exp = batch[i];
+            for (int j = 0; j < stateDim; j++)
+            {
+                statesData[i * stateDim + j] = exp.State[j];
+                nextStatesData[i * stateDim + j] = exp.NextState[j];
+            }
         }
+
+        var states = new Tensor<T>([n, stateDim], new Vector<T>(statesData));
+        var nextStates = new Tensor<T>([n, stateDim], new Vector<T>(nextStatesData));
+
+        var currentQ = _qNetwork.Predict(states).ToVector();        // [n * actionCount], row-major
+        var nextQ = _targetNetwork.Predict(nextStates).ToVector();  // [n * actionCount]
+        int actionCount = currentQ.Length / n;
+
+        // Targets = current Q with the taken-action slot overwritten by reward + gamma * max_a' Q'.
+        var expectedData = currentQ.Clone();
+        for (int i = 0; i < n; i++)
+        {
+            T maxNextQ = nextQ[i * actionCount];
+            for (int a = 1; a < actionCount; a++)
+            {
+                var q = nextQ[i * actionCount + a];
+                if (NumOps.GreaterThan(q, maxNextQ))
+                {
+                    maxNextQ = q;
+                }
+            }
+
+            var exp = batch[i];
+            T target = exp.Done
+                ? exp.Reward
+                : NumOps.Add(exp.Reward, NumOps.Multiply(gamma, maxNextQ));
+            expectedData[i * actionCount + GetActionIndex(exp.Action)] = target;
+        }
+
+        var expected = new Tensor<T>([n, actionCount], expectedData);
+        _qNetwork.Train(states, expected);
 
         if (RandomHelper.CreateSecureRandom().Next(TradingOptions.TargetUpdateFrequency) == 0)
         {
             UpdateTargetNetwork();
         }
 
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(TradingOptions.BatchSize));
+        return NumOps.Zero;
     }
 
     /// <summary>

@@ -185,11 +185,195 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
 
         ValidateInputShape(input, "prediction");
 
+        // Fused fast path: a pure stack of dense layers with fused-eligible scalar
+        // activations runs as ONE IEngine.MlpForward call instead of a per-layer
+        // tape/dispatch walk — the kernel the AiDotNet.Tensors MLP micro-benchmarks
+        // beat PyTorch-CPU on. Falls back to the generic Forward for any layer the
+        // kernel can't represent (non-dense, vector activation, unmapped activation,
+        // mixed hidden activations) or if the kernel declines (e.g. active tape).
+        if (TryFusedDensePredict(input, out var fused))
+        {
+            IsTrainingMode = true;
+            return fused;
+        }
+
         var predictions = Forward(input);
 
         IsTrainingMode = true;
 
         return predictions;
+    }
+
+    /// <summary>
+    /// Attempts the fused multi-layer-perceptron inference kernel for a pure
+    /// dense+activation stack. Returns false (and the caller uses the generic
+    /// per-layer <see cref="Forward"/>) whenever the stack isn't representable by
+    /// <c>IEngine.MlpForward</c>. Activation→kernel mapping is open/closed: each
+    /// activation that has an exact fused equivalent implements
+    /// <see cref="ActivationFunctions.Fused.IFusedActivation"/>; there is no switch.
+    /// </summary>
+    private bool TryFusedDensePredict(Tensor<T> input, out Tensor<T> output)
+    {
+        output = Tensor<T>.Empty();
+        var layers = Layers;
+        if (layers is null || layers.Count == 0) return false;
+
+        var weights = new List<Tensor<T>>(layers.Count);
+        var biases = new List<Tensor<T>?>(layers.Count);
+        var hiddenActivation = Tensors.Engines.FusedActivationType.None;
+        bool hiddenActivationSet = false;
+        var outputActivation = Tensors.Engines.FusedActivationType.None;
+
+        for (int i = 0; i < layers.Count; i++)
+        {
+            if (layers[i] is not Layers.DenseLayer<T> dense) return false;
+            // Vector activations aren't covered by the scalar fused kernels.
+            if (dense.VectorActivation is not null) return false;
+
+            Tensors.Engines.FusedActivationType act;
+            if (dense.ScalarActivation is null)
+                act = Tensors.Engines.FusedActivationType.None;
+            else if (dense.ScalarActivation is ActivationFunctions.Fused.IFusedActivation fused
+                     && fused.TryGetFusedActivation(out var ft))
+                act = ft;
+            else
+                return false; // activation has no exact fused equivalent (or custom param)
+
+            if (i == layers.Count - 1)
+            {
+                outputActivation = act;
+            }
+            else if (!hiddenActivationSet)
+            {
+                hiddenActivation = act;
+                hiddenActivationSet = true;
+            }
+            else if (hiddenActivation != act)
+            {
+                // MlpForward applies a single hidden activation to every non-final
+                // layer; a stack with mixed hidden activations can't use it.
+                return false;
+            }
+
+            // DenseLayer initializes its weights lazily on first Forward. On a
+            // fresh network's very first inference the weights are still the [0,0]
+            // sentinel, which MlpForward would reject. Bail to the generic Forward
+            // (which runs the lazy shape resolution); subsequent inferences, with
+            // weights materialized, take the fused path.
+            var w = dense.GetWeights();
+            if (w.Rank != 2 || w.Shape[0] == 0 || w.Shape[1] == 0) return false;
+            weights.Add(w);
+            biases.Add(dense.GetBiases());
+        }
+
+        try
+        {
+            // Flagship compiled-inference tier (float only): replay a cached, self-tuned
+            // CompiledMlp plan (array-based, near-zero per-call allocation, per-layer
+            // managed-vs-native kernel selection) instead of the Tensor-based MlpForward.
+            // At the kernel level CompiledMlp.Run beats torch.compile (~0.11 ms vs
+            // ~0.22 ms at bs1 on the AIsEval MLP); MlpForward's per-call Tensor/dispatch
+            // overhead is what loses. Falls through to MlpForward when ineligible.
+            if (typeof(T) == typeof(float)
+                && TryCompiledMlpPredict(input, weights, biases, hiddenActivation, outputActivation, out output))
+            {
+                return true;
+            }
+
+            output = AiDotNet.Tensors.Engines.AiDotNetEngine.Current.MlpForward(
+                input, weights, biases, hiddenActivation, outputActivation);
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            // MlpForward is forward-only and throws under an active GradientTape;
+            // fall back to the generic path rather than failing the prediction.
+            output = Tensor<T>.Empty();
+            return false;
+        }
+    }
+
+    // ── Compiled-inference plan cache (float pure-dense fast path) ────────────
+    private AiDotNet.Tensors.Engines.Compilation.CompiledMlp? _compiledMlpPlan;
+    private float[][]? _compiledMlpWeightRefs;   // backing arrays the plan was built from
+    private int _compiledMlpMaxBatch;
+
+    /// <summary>
+    /// Runs the pure-dense float stack through the cached <c>CompiledMlp</c> plan.
+    /// Returns false when the input shape isn't a contiguous rank-1/2 batch the plan
+    /// can replay (caller then uses <c>MlpForward</c>). The plan is (re)built when it's
+    /// absent, the batch exceeds the buffers it was sized for, or any layer's weight
+    /// backing array was reallocated — the same frozen-weights-during-inference contract
+    /// as the MlpForward path (which likewise relies on SgemmWithCachedB's
+    /// identity-keyed pack), plus a reallocation guard the cached plan requires.
+    /// </summary>
+    private bool TryCompiledMlpPredict(
+        Tensor<T> input,
+        List<Tensor<T>> weights,
+        List<Tensor<T>?> biases,
+        Tensors.Engines.FusedActivationType hiddenActivation,
+        Tensors.Engines.FusedActivationType outputActivation,
+        out Tensor<T> output)
+    {
+        output = Tensor<T>.Empty();
+
+        // Only contiguous rank-1 ([features]) or rank-2 ([batch, features]) inputs map
+        // to the plan's [batch, features] array contract.
+        if (!input.IsContiguous || input.Rank < 1 || input.Rank > 2) return false;
+        int batch = input.Rank == 2 ? input.Shape[0] : 1;
+        int inFeatures = input.Shape[input.Rank - 1];
+        if (batch < 1) return false;
+
+        int layerCount = weights.Count;
+        var wRefs = new float[layerCount][];
+        for (int i = 0; i < layerCount; i++)
+            wRefs[i] = (float[])(object)weights[i].GetDataArray();
+        if (wRefs[0].Length < (long)inFeatures * weights[0].Shape[1]) return false;
+
+        bool rebuild = _compiledMlpPlan is null
+            || batch > _compiledMlpMaxBatch
+            || _compiledMlpWeightRefs is null
+            || _compiledMlpWeightRefs.Length != layerCount;
+        if (!rebuild)
+        {
+            for (int i = 0; i < layerCount; i++)
+                if (!ReferenceEquals(_compiledMlpWeightRefs![i], wRefs[i])) { rebuild = true; break; }
+        }
+
+        if (rebuild)
+        {
+            var inF = new int[layerCount];
+            var outF = new int[layerCount];
+            var bArrs = new float[]?[layerCount];
+            for (int i = 0; i < layerCount; i++)
+            {
+                inF[i] = weights[i].Shape[0];
+                outF[i] = weights[i].Shape[1];
+                var b = biases[i];
+                bArrs[i] = b is null ? null : (float[])(object)b.GetDataArray();
+            }
+            // Size buffers for at least this batch; grow (never shrink) so cycling
+            // batch sizes doesn't thrash. maxBatch caps the ping-pong scratch.
+            int maxBatch = Math.Max(batch, _compiledMlpMaxBatch);
+            _compiledMlpPlan = Tensors.Engines.Compilation.CompiledMlp.Create(
+                wRefs, bArrs, inF, outF, hiddenActivation, outputActivation, maxBatch);
+            _compiledMlpWeightRefs = wRefs;
+            _compiledMlpMaxBatch = maxBatch;
+        }
+
+        var plan = _compiledMlpPlan!;
+        if (inFeatures != plan.InputFeatures) return false;
+
+        var inputArr = (float[])(object)input.GetDataArray();
+        // Array lengths are int in C#; compute the output element count in a checked int so an
+        // oversized batch×features product throws OverflowException rather than silently wrapping
+        // (the prior (long) length forced an int-narrowing conversion at the array creation site).
+        var outArr = new float[checked(batch * plan.OutputFeatures)];
+        plan.Run(inputArr, batch, outArr);
+
+        var resultShape = input.Rank == 2 ? new[] { batch, plan.OutputFeatures } : new[] { plan.OutputFeatures };
+        output = (Tensor<T>)(object)new Tensor<float>(outArr, resultShape);
+        return true;
     }
 
     /// <summary>
@@ -337,7 +521,7 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
                 { "TaskType", Architecture.TaskType.ToString() },
                 { "ParameterCount", GetParameterCount() }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

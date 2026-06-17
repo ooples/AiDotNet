@@ -316,22 +316,9 @@ public class MeissonicModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedPredictor = new EMMDiTPredictor<T>(
-            inputChannels: MEISSONIC_LATENT_CHANNELS,
-            contextDim: MEISSONIC_CONTEXT_DIM);
-        clonedPredictor.SetParameters(_predictor.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: MEISSONIC_LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2);
-        clonedVae.SetParameters(_vae.GetParameters());
-
-        return new MeissonicModel<T>(
-            predictor: clonedPredictor,
-            vae: clonedVae,
+                        return new MeissonicModel<T>(
+            predictor: (EMMDiTPredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner);
     }
 

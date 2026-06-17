@@ -106,10 +106,21 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     private bool _embeddingInitialized = true;
 
     /// <summary>
-    /// Projection weights for continuous input (lazy initialized).
-    /// Used when input contains continuous values instead of integer token indices.
+    /// Projection weights for continuous input. Lazily *sized* on the first
+    /// continuous Forward (the input feature width is not known at construction),
+    /// but kept non-nullable: it starts as a zero-sized <c>[0,0]</c> placeholder and
+    /// is materialized on demand — the same pattern <see cref="_embeddingTensor"/>
+    /// uses, and the direct analog of PyTorch's <c>nn.LazyLinear</c>
+    /// UninitializedParameter (which materializes on first forward and then appears
+    /// in <c>parameters()</c>). It is marked <c>Optional</c> so the generated
+    /// GetTrainableParameters/SetTrainableParameters omit it while it is still the
+    /// empty placeholder (token-index mode never materializes it) and re-include it
+    /// once continuous-input Forward sizes it. Exposing the empty placeholder as a
+    /// trainable parameter previously made it a permanently "stuck" param that could
+    /// never receive a gradient update on the fused training path (#1331).
     /// </summary>
-    private Tensor<T>? _projectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Optional = true)]
+    private Tensor<T> _projectionWeights;
 
     private Tensor<T>? _projectionWeightsGradient;
     private bool _lastInputWasContinuous;
@@ -229,6 +240,18 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// When <c>true</c>, the token-embedding lookup output is multiplied by
+    /// <c>sqrt(embeddingDimension)</c> (Vaswani et al. 2017 §3.4). This scales the
+    /// (small, Glorot-initialised) embeddings up so they are not drowned out by the
+    /// fixed-magnitude sinusoidal positional encoding that is added immediately after,
+    /// preserving token identity through the encoder. Opt-in (default <c>false</c>) so
+    /// existing models that use the embedding as a plain lookup are unaffected; the
+    /// transformer builder sets it for embeddings paired with positional encoding.
+    /// Only applies in Indices (token-ID) mode; ignored for continuous projection input.
+    /// </summary>
+    public bool ScaleBySqrtDimension { get; set; } = false;
+
+    /// <summary>
     /// Gets a value indicating whether this layer can execute on GPU.
     /// </summary>
     /// <value>
@@ -250,7 +273,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// </remarks>
     public override long ParameterCount
         => _vocabularySize * _embeddingDimension +
-           (_projectionWeights?.Length ?? 0);
+           _projectionWeights.Length;
 
     /// <summary>
     /// Returns layer-specific metadata for serialization.
@@ -268,6 +291,8 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         // tensor may be a [0,0] lazy placeholder before first Forward.
         metadata["VocabularySize"] = _vocabularySize.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["EmbeddingDimension"] = _embeddingDimension.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["InputMode"] = _inputMode.ToString();
+        metadata["ScaleBySqrtDimension"] = ScaleBySqrtDimension ? "true" : "false";
         return metadata;
     }
 
@@ -321,6 +346,11 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         // runs on the first Forward / GetParameters / SetParameters call.
         _embeddingTensor = new Tensor<T>([0, 0]);
         _embeddingInitialized = false;
+
+        // Continuous-projection weights start as a zero-sized placeholder and are
+        // materialized (sized from the input feature width) on the first continuous
+        // Forward — mirrors the lazy _embeddingTensor and PyTorch's LazyLinear.
+        _projectionWeights = new Tensor<T>([0, 0]);
     }
 
     /// <summary>
@@ -346,6 +376,17 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             _embeddingTensor = AllocateLazyWeight([_vocabularySize, _embeddingDimension]);
             InitializeParameters();
             RegisterTrainableParameter(_embeddingTensor, PersistentTensorRole.Embeddings);
+            // The projection weights are a continuous-input-mode feature: they stay a
+            // [0,0] placeholder for token-id (discrete) embedding and are only
+            // materialized + registered when Forward sees continuous input (see the
+            // RegisterTrainableParameter calls after the TensorAllocator.Rent below).
+            // The field is [TrainableParameter(Optional = true)], so the generated
+            // GetTrainableParameters/SetTrainableParameters already skip it while empty
+            // (#1331). Keep _registeredTensors in sync with that view by only registering
+            // it here once it actually holds weights; otherwise it would surface as a
+            // permanently "stuck" trainable param on the fused training path.
+            if (_projectionWeights.Length > 0)
+                RegisterTrainableParameter(_projectionWeights, PersistentTensorRole.Weights);
             _embeddingInitialized = true;
         }
     }
@@ -579,23 +620,30 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             // Project from input features to embedding dimension
             int inputFeatures = input.Shape[input.Rank - 1];
 
-            // Create projection weights if needed (lazy initialization).
-            // If the input feature dimension changes between calls, return the previously
-            // rented buffer to the pool before renting a new one — otherwise the old buffer
-            // is leaked from the allocator's free list and degrades pooling efficiency over
-            // long runs that see varying input shapes.
-            if (_projectionWeights == null || _projectionWeights.Shape[0] != inputFeatures)
+            // Materialize/size projection weights on demand (lazy sizing). The
+            // placeholder is zero-sized ([0,0]); if the input feature dimension
+            // changes between calls, return the previously rented buffer to the pool
+            // before renting a new one — otherwise the old buffer is leaked from the
+            // allocator's free list and degrades pooling over long runs with varying
+            // input shapes.
+            if (_projectionWeights.Length == 0 || _projectionWeights.Shape[0] != inputFeatures)
             {
-                if (_projectionWeights != null)
+                if (_projectionWeights.Length > 0)
                     TensorAllocator.Return(_projectionWeights);
                 _projectionWeights = TensorAllocator.Rent<T>([inputFeatures, embeddingDim]);
                 InitializeProjectionWeights(_projectionWeights, inputFeatures, embeddingDim);
+                // Keep the registered trainable tensor in sync with the materialized
+                // projection so tape-based training sees the real weights.
+                RegisterTrainableParameter(_projectionWeights, PersistentTensorRole.Weights);
             }
 
-            // Flatten input to 2D [total_samples, inputFeatures] for projection
+            // Flatten input to 2D [total_samples, inputFeatures] for projection.
+            // Engine.TensorMatMul (not instance MatrixMultiply) so the projection
+            // weights stay on the autodiff tape and receive gradients under
+            // tape-based training.
             int totalSamples = input.Length / inputFeatures;
             var input2D = Engine.Reshape(input, [totalSamples, inputFeatures]);
-            flatOutput = input2D.MatrixMultiply(_projectionWeights);
+            flatOutput = Engine.TensorMatMul(input2D, _projectionWeights);
         }
         else
         {
@@ -695,7 +743,20 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             outputShape[^1] = embeddingDim;
         }
 
-        return Engine.Reshape(flatOutput, outputShape);
+        var reshaped = Engine.Reshape(flatOutput, outputShape);
+
+        // Vaswani §3.4 embedding scale (opt-in, token-ID mode only). TapeMultiplyScalar
+        // records the op on the autodiff tape, so the embedding-table gradient is scaled
+        // automatically during backprop (this layer is fully tape-based — no custom
+        // Backward override to maintain). In eager inference (NoGradScope) it is a plain
+        // value multiply.
+        if (ScaleBySqrtDimension && !isContinuousInput)
+        {
+            T sqrtDim = NumOps.Sqrt(NumOps.FromDouble(embeddingDim));
+            reshaped = AiDotNet.Helpers.TensorTapeOps.TapeMultiplyScalar(Engine, reshaped, sqrtDim);
+        }
+
+        return reshaped;
     }
 
     /// <summary>
@@ -764,12 +825,13 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             // Return the previously rented buffer to the pool before renting a replacement
             // when the input feature dimension changes between calls — see comment above
             // the matching block in the non-GPU forward path for details.
-            if (_projectionWeights == null || _projectionWeights.Shape[0] != inputFeatures)
+            if (_projectionWeights.Length == 0 || _projectionWeights.Shape[0] != inputFeatures)
             {
-                if (_projectionWeights != null)
+                if (_projectionWeights.Length > 0)
                     TensorAllocator.Return(_projectionWeights);
                 _projectionWeights = TensorAllocator.Rent<T>([inputFeatures, embeddingDim]);
                 InitializeProjectionWeights(_projectionWeights, inputFeatures, embeddingDim);
+                RegisterTrainableParameter(_projectionWeights, PersistentTensorRole.Weights);
             }
 
             // Flatten input to 2D [totalSamples, inputFeatures] for projection
@@ -833,6 +895,18 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
 
         // Perform GPU embedding lookup - keeps result on GPU
         var gpuOutput = gpuEngine.EmbeddingLookupGpu(_embeddingTensor, flatIndices);
+
+        // Vaswani §3.4 embedding scale — apply on the GPU path too so behavior is
+        // backend-independent (the CPU Forward above applies the identical scale). Routed
+        // through TapeMultiplyScalar, which dispatches to the active engine (GPU here) and
+        // records the op on the autodiff tape, so the embedding-table gradient is scaled the
+        // same way regardless of device. Without this the token-index GPU path returned
+        // UNSCALED embeddings, making a model trained/served on GPU diverge from CPU.
+        if (ScaleBySqrtDimension && !isContinuousInput)
+        {
+            T sqrtDim = NumOps.Sqrt(NumOps.FromDouble(embeddingDim));
+            gpuOutput = AiDotNet.Helpers.TensorTapeOps.TapeMultiplyScalar(Engine, gpuOutput, sqrtDim);
+        }
 
         return gpuOutput;
     }
@@ -907,7 +981,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             _embeddingTensor = Engine.TensorSubtract(_embeddingTensor, scaledGradient);
         }
 
-        if (_projectionWeightsGradient != null && _projectionWeights != null)
+        if (_projectionWeightsGradient != null && _projectionWeights.Length > 0)
         {
             var scaledProjectionGradient = Engine.TensorMultiplyScalar(_projectionWeightsGradient, learningRate);
             _projectionWeights = Engine.TensorSubtract(_projectionWeights, scaledProjectionGradient);
@@ -915,7 +989,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_embeddingTensor);
-        if (_projectionWeights != null)
+        if (_projectionWeights.Length > 0)
         {
             Engine.InvalidatePersistentTensor(_projectionWeights);
         }
@@ -954,7 +1028,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
 
         // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
         var embeddingParams = Vector<T>.FromMemory(_embeddingTensor.Data);
-        if (_projectionWeights == null)
+        if (_projectionWeights.Length == 0)
         {
             return embeddingParams;
         }
@@ -1018,7 +1092,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         int projectionCount = parameters.Length - expectedParams;
         if (projectionCount == 0)
         {
-            _projectionWeights = null;
+            _projectionWeights = new Tensor<T>([0, 0]);
             // Notify GPU that tensor data has changed
             Engine.InvalidatePersistentTensor(_embeddingTensor);
             return;
@@ -1034,7 +1108,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_embeddingTensor);
-        if (_projectionWeights != null)
+        if (_projectionWeights.Length > 0)
         {
             Engine.InvalidatePersistentTensor(_projectionWeights);
         }
@@ -1211,7 +1285,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         int embeddingParamCount = _embeddingTensor.Shape[0] * _embeddingTensor.Shape[1];
 
         // In continuous (projection) mode: _embeddingGradient is null, _projectionWeightsGradient holds gradients
-        if (_embeddingGradient == null && _projectionWeightsGradient != null && _projectionWeights != null)
+        if (_embeddingGradient == null && _projectionWeightsGradient != null && _projectionWeights.Length > 0)
         {
             // Return zeros for embedding params + actual projection gradients
             var embZeros = new Vector<T>(embeddingParamCount);
@@ -1226,7 +1300,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         // Discrete embedding mode: return embedding gradients (+ projection if present)
         // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
         var embGrad = Vector<T>.FromMemory(_embeddingGradient.Data);
-        if (_projectionWeightsGradient == null || _projectionWeights == null)
+        if (_projectionWeightsGradient == null || _projectionWeights.Length == 0)
             return embGrad;
         return Vector<T>.Concatenate(embGrad, Vector<T>.FromMemory(_projectionWeightsGradient.Data));
     }

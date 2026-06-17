@@ -11,8 +11,36 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Tests mathematical invariants: trend recovery, translation equivariance,
 /// training-vs-test error, residual analysis, and extrapolation consistency.
 /// </summary>
-public abstract class TimeSeriesModelTestBase
+public abstract class TimeSeriesModelTestBase : System.IDisposable
 {
+    /// <summary>
+    /// Reclaim memory between tests (shared model-family teardown). xUnit constructs a fresh
+    /// test-class instance per test and calls Dispose() afterward, so this clears the
+    /// InferenceWeightCache and compacts the LOH between model classes — keeping committed memory
+    /// from accumulating across a shard. Pure hygiene; no test-observable behavior change.
+    /// </summary>
+    public virtual void Dispose()
+    {
+        // Reclaim must be unconditional: a throwing derived DisposeCore() must not skip the
+        // shared GC gate, or heavy shards reintroduce cross-test memory buildup / OOM.
+        try
+        {
+            DisposeCore();
+        }
+        finally
+        {
+            ModelFamilyTestGcGate.ReclaimBetweenTests();
+        }
+    }
+
+    /// <summary>
+    /// Override in a derived test class to add its own teardown while preserving the
+    /// shared <see cref="ModelFamilyTestGcGate.ReclaimBetweenTests"/> call.
+    /// </summary>
+    protected virtual void DisposeCore()
+    {
+    }
+
     protected abstract IFullModel<double, Matrix<double>, Vector<double>> CreateModel();
 
     protected virtual int TrainLength => 100;
@@ -125,6 +153,11 @@ public abstract class TimeSeriesModelTestBase
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
+        // Non-forecasting models (anomaly detectors whose Predict returns ±1 labels, spectral
+        // analysers returning frequencies) have no forecast of the target to score, so an R²
+        // against the series is meaningless for them — the same gate the other five forecasting
+        // invariants here already apply; R² simply omitted it.
+        if (!IsForecastingModel) return;
         // Stationary models (MA) cannot capture trends — skip this test for them
         if (!CanCaptureTrend) return;
 

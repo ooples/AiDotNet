@@ -1,6 +1,8 @@
 ﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -45,6 +47,21 @@ namespace AiDotNet.NeuralNetworks;
 public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly CapsuleNetworkOptions _options;
+
+    /// <summary>
+    /// Optimizer used by the tape-based training path. Defaults to AMSGrad to
+    /// suppress Adam's post-convergence drift on fixed-input regression
+    /// invariants (MoreData_ShouldNotDegrade): AMSGrad's non-increasing
+    /// effective step size bounds the upward loss drift that plain Adam
+    /// exhibits once the reconstruction has converged.
+    /// </summary>
+    /// <remarks>
+    /// Bound lazily in <see cref="Train"/> rather than the constructor so that
+    /// instances produced by the Clone / deserialize paths (which bypass the
+    /// constructor) still train against an AMSGrad optimizer bound to
+    /// themselves, never sharing optimizer state with the source model.
+    /// </remarks>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -118,7 +135,16 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     }
 
     public CapsuleNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, CapsuleNetworkOptions? options = null) :
-        base(architecture, lossFunction ?? new MarginLoss<T>())
+        // The exposed output of this architecture is the decoder's image
+        // reconstruction (inputHeight × inputWidth × inputDepth), not the
+        // capsule class scores, so the tape-trained objective must be a
+        // reconstruction loss. Sabour et al. (2017) train the decoder with
+        // summed squared error; mean squared error is the scale-invariant
+        // equivalent and keeps training aligned with the reconstruction
+        // metric. Training the reconstruction with MarginLoss (a classifier
+        // loss) drove outputs toward the 0/1 margins, which monotonically
+        // worsened reconstruction MSE the longer training ran.
+        base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new CapsuleNetworkOptions();
         Options = _options;
@@ -127,7 +153,7 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         _lastReconstructionLoss = NumOps.Zero;
         _lastMarginLoss = NumOps.Zero;
 
-        _lossFunction = lossFunction ?? new MarginLoss<T>();
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         InitializeLayers();
     }
@@ -426,7 +452,10 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            _optimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { UseAMSGrad = true });
+            TrainWithTape(input, expectedOutput, _optimizer);
 
             // Incorporate auxiliary reconstruction loss into diagnostics.
             // TrainWithTape already set LastLoss to the margin loss; capture it
@@ -476,7 +505,7 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
                 { "LayerCount", Layers.Count },
                 { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

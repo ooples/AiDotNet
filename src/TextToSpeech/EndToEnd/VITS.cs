@@ -182,7 +182,7 @@ public class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        var c = input;
+        SetTrainingMode(false); var c = input;
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
@@ -225,7 +225,8 @@ public class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
         {
             Name = _useNativeMode ? "VITS-Native" : "VITS-ONNX",
             Description = "VITS: Conditional VAE with Adversarial Learning for End-to-End TTS (Kim et al., 2021)",
-            FeatureCount = _options.HiddenDim
+            FeatureCount = _options.HiddenDim,
+            AdditionalInfo = new Dictionary<string, object> { ["HiddenDim"] = _options.HiddenDim, ["Mode"] = _useNativeMode ? "Native" : "ONNX" }
         };
     }
 

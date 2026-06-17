@@ -97,6 +97,10 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly GraphPooling _poolingType;
     private Tensor<T>? _cachedAdjacencyMatrix;
+    // Opt-in (EnableImplicitIdentityAdjacency): mirrors the GraphConvolutionalLayer
+    // implicitIdentityWhenUnset ctor flag at the model level. Default is strict (throw on a
+    // missing graph); when enabled, Predict/Train build an identity sized to the input.
+    private bool _implicitIdentityWhenUnset;
     // Tracks whether _cachedAdjacencyMatrix came from EnsureDefaultAdjacencyForInput
     // (auto-inferred identity) vs an explicit SetAdjacencyMatrix call. Explicit
     // matrices are sticky — caller knows the graph; auto-inferred ones must be
@@ -631,6 +635,25 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
 
         return Forward(input);
     }
+    /// <summary>
+    /// Enables implicit self-loops-only (identity) tolerance for this model and its graph layers —
+    /// the model-level analogue of GraphConvolutionalLayer's implicitIdentityWhenUnset ctor flag.
+    /// Default is strict (Predict/Train throw on a missing graph); this is an explicit opt-in for
+    /// scaffold / clone / deserialize paths, propagated to the GCN layers so direct-layer paths
+    /// (e.g. GetNamedLayerActivations) tolerate too.
+    /// </summary>
+    public void EnableImplicitIdentityAdjacency()
+    {
+        _implicitIdentityWhenUnset = true;
+        foreach (var layer in Layers)
+        {
+            if (layer is NeuralNetworks.Layers.GraphConvolutionalLayer<T> gcn)
+            {
+                gcn.EnableImplicitIdentityAdjacency();
+            }
+        }
+    }
+
 
     /// <summary>
     /// Auto-creates an identity adjacency matrix when none has been set,
@@ -647,6 +670,17 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
     /// </summary>
     private void EnsureDefaultAdjacencyForInput(Tensor<T> input)
     {
+        if (_cachedAdjacencyMatrix is null && !_implicitIdentityWhenUnset)
+        {
+            // PyTorch-Geometric contract: the graph is REQUIRED — call SetAdjacencyMatrix() with
+            // the real structure before Predict/Train. Implicit-identity tolerance is opt-in
+            // (EnableImplicitIdentityAdjacency / the layer's implicitIdentityWhenUnset), never a
+            // silent default that would let a GCN ignore all graph structure unnoticed.
+            throw new InvalidOperationException(
+                "Adjacency matrix must be set before Predict/Train: call SetAdjacencyMatrix() with " +
+                "the graph structure. Graph neural networks have no meaningful default graph.");
+        }
+
         if (input.Rank < 1) return; // can't infer; let Forward throw with a clear shape error
         int numNodes = input.Shape[0];
 
@@ -765,13 +799,25 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
     /// </summary>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new GraphClassificationModel<T>(
+        var clone = new GraphClassificationModel<T>(
             architecture: Architecture,
             hiddenDim: HiddenDim,
             embeddingDim: EmbeddingDim,
             numGnnLayers: NumGnnLayers,
             dropoutRate: DropoutRate,
             poolingType: _poolingType);
+        // Graph STATE is model state in this stateful-adjacency design, so a clone of a configured
+        // model must stay usable: carry the implicit-identity opt-in and any explicit adjacency.
+        if (_implicitIdentityWhenUnset)
+        {
+            clone.EnableImplicitIdentityAdjacency();
+        }
+        else if (_cachedAdjacencyMatrix is not null)
+        {
+            clone.SetAdjacencyMatrix(_cachedAdjacencyMatrix);
+        }
+
+        return clone;
     }
 
     #endregion

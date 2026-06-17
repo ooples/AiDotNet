@@ -3,7 +3,6 @@ global using Formatting = Newtonsoft.Json.Formatting;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using AiDotNet.AdversarialRobustness.Safety;
-using AiDotNet.Agents;
 using AiDotNet.Benchmarking;
 using AiDotNet.Benchmarking.Models;
 using AiDotNet.CheckpointManagement;
@@ -27,7 +26,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
 using AiDotNet.Interpretability.Explainers;
 using AiDotNet.Interpretability.Helpers;
-using AiDotNet.LanguageModels;
+using AiDotNet.Agentic.Models;
+using AiDotNet.Agentic.Models.Connectors;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
@@ -527,46 +527,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal ILoRAConfiguration<T>? LoRAConfiguration { get; private set; }
 
     /// <summary>
-    /// Gets the agent configuration used during model building.
-    /// </summary>
-    /// <value>Agent configuration containing API keys and settings, or null if agent assistance wasn't used.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> If you enabled agent assistance during model building with ConfigureAgentAssistance(),
-    /// this property stores the configuration. The API key is stored here so you can use AskAsync() on the trained
-    /// model without providing the key again.
-    ///
-    /// Note: API keys are NOT serialized when saving the model to disk for security reasons.
-    /// </para>
-    /// </remarks>
-    [JsonIgnore]
-    internal AgentConfiguration<T>? AgentConfig { get; private set; }
-
-    /// <summary>
-    /// Gets the agent's recommendations made during model building.
-    /// </summary>
-    /// <value>Agent recommendations including suggested models and reasoning, or null if agent assistance wasn't used.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> If you used agent assistance during building, this contains all the recommendations
-    /// the agent made, such as:
-    /// - Which model type to use (e.g., "RidgeRegression")
-    /// - Why that model was chosen
-    /// - Suggested hyperparameter values
-    ///
-    /// You can examine these recommendations to understand why the agent made certain choices.
-    ///
-    /// Example:
-    /// <code>
-    /// if (result.AgentRecommendation != null)
-    /// {
-    ///     Console.WriteLine($"Agent selected: {result.AgentRecommendation.SuggestedModelType}");
-    ///     Console.WriteLine($"Reasoning: {result.AgentRecommendation.ModelSelectionReasoning}");
-    /// }
-    /// </code>
-    /// </para>
-    /// </remarks>
-    internal AgentRecommendation<T, TInput, TOutput>? AgentRecommendation { get; private set; }
-
-    /// <summary>
     /// Gets the deployment configuration for model export, caching, versioning, A/B testing, and telemetry.
     /// </summary>
     /// <value>Deployment configuration aggregating all deployment-related settings, or null if not configured.</value>
@@ -801,37 +761,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     internal IPromptTemplate? PromptTemplate { get; private set; }
 
-    /// <summary>
-    /// Gets or sets the prompt chain used for multi-step inference workflows.
-    /// </summary>
-    /// <value>An implementation of IPromptChain for sequential prompt processing, or null if not configured.</value>
-    /// <remarks>
-    /// <para>
-    /// Prompt chains enable complex multi-step workflows where the output of one prompt
-    /// becomes the input to the next. This supports patterns like:
-    /// - Sequential processing (translate → summarize → format)
-    /// - Conditional branching based on intermediate results
-    /// - Parallel execution of independent steps
-    /// - Map-reduce patterns for processing multiple items
-    /// </para>
-    /// <para><b>For Beginners:</b> A prompt chain is like an assembly line where each step does one thing.
-    ///
-    /// Example workflow:
-    /// <code>
-    /// // Chain: Translate → Summarize → Format
-    /// Step 1: Translate document from Spanish to English
-    /// Step 2: Summarize the translated document
-    /// Step 3: Format the summary as bullet points
-    /// </code>
-    ///
-    /// Each step takes the previous step's output as input, making complex tasks manageable.
-    /// Chains can also:
-    /// - Run steps in parallel when they don't depend on each other
-    /// - Branch based on conditions (if sentiment is negative, escalate)
-    /// - Loop over collections (summarize each chapter)
-    /// </para>
-    /// </remarks>
-    internal IChain<string, string>? PromptChain { get; private set; }
 
     /// <summary>
     /// Gets or sets the prompt optimizer used for automatic prompt improvement.
@@ -1360,10 +1289,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // Fine-tuning and adaptation
         LoRAConfiguration = options.LoRAConfiguration;
 
-        // Agent assistance
-        AgentConfig = options.AgentConfig;
-        AgentRecommendation = options.AgentRecommendation;
-
         // Deployment
         DeploymentConfiguration = options.DeploymentConfiguration;
         JitCompiledFunction = options.JitCompiledFunction;
@@ -1408,7 +1333,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         // Prompt Engineering
         PromptTemplate = options.PromptTemplate;
-        PromptChain = options.PromptChain;
         PromptOptimizer = options.PromptOptimizer;
         FewShotExampleSelector = options.FewShotExampleSelector;
         PromptAnalyzer = options.PromptAnalyzer;
@@ -1522,16 +1446,54 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <returns>A structured benchmark report.</returns>
     /// <remarks>
     /// <para>
+    /// Forwarding overload for callers that don't supply a chat client (suites
+    /// such as classification / regression metrics don't need one). Delegates
+    /// to the full overload below with <c>chatClient: null</c>.
+    /// </para>
+    /// </remarks>
+    public Task<BenchmarkReport> EvaluateBenchmarksAsync(
+        BenchmarkingOptions? options = null,
+        CancellationToken cancellationToken = default)
+        => EvaluateBenchmarksAsync(options, chatClient: null, cancellationToken);
+
+    /// <summary>
+    /// Forwarding overload for callers that supply only a chat client (reasoning /
+    /// generative suites with default options). Delegates to the full overload with
+    /// <c>options: null</c>. Restores the <c>EvaluateBenchmarksAsync(chatClient: ...)</c>
+    /// facade for back-compat.
+    /// </summary>
+    /// <param name="chatClient">Chat client used by reasoning / generative suites.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A structured benchmark report.</returns>
+    public Task<BenchmarkReport> EvaluateBenchmarksAsync(
+        IChatClient<T>? chatClient,
+        CancellationToken cancellationToken = default)
+        => EvaluateBenchmarksAsync(options: null, chatClient, cancellationToken);
+
+    /// <summary>
+    /// Runs benchmark suites against this model using the unified benchmark runner,
+    /// with an optional chat client for reasoning / generative benchmark suites.
+    /// </summary>
+    /// <param name="options">Benchmarking options (suites, sample size, failure policy).</param>
+    /// <param name="chatClient">Chat client used by reasoning / generative suites. <c>null</c>
+    /// is valid for non-generative suites (classification / regression metrics); reasoning
+    /// suites that need text generation will reject a null chat client up front in
+    /// <see cref="BenchmarkRunner"/>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A structured benchmark report.</returns>
+    /// <remarks>
+    /// <para>
     /// This method is facade-first: users select benchmark suites via enums and receive a structured report.
     /// It avoids requiring users to manually wire up benchmark implementations.
     /// </para>
     /// </remarks>
     public async Task<BenchmarkReport> EvaluateBenchmarksAsync(
-        BenchmarkingOptions? options = null,
+        BenchmarkingOptions? options,
+        IChatClient<T>? chatClient,
         CancellationToken cancellationToken = default)
     {
         var effectiveOptions = options ?? new BenchmarkingOptions();
-        var report = await BenchmarkRunner.RunAsync(this, effectiveOptions, cancellationToken).ConfigureAwait(false);
+        var report = await BenchmarkRunner.RunAsync(this, effectiveOptions, chatClient, cancellationToken).ConfigureAwait(false);
 
         if (effectiveOptions.AttachReportToResult)
         {
@@ -1929,34 +1891,60 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // Re-assert the builder's determinism policy on this thread.
         AiDotNet.Tensors.Engines.AiDotNetEngine.SetDeterministicMode(!AllowNondeterminism);
 
-        var dataForPrediction = newData;
-        if (SafetyFilter != null && newData is Vector<T> vectorInput && typeof(TInput) == typeof(Vector<T>))
-        {
-            var validation = SafetyFilter.ValidateInput(vectorInput);
-            if (!validation.IsValid)
-            {
-                var issues = validation.Issues.Count > 0
-                    ? string.Join("; ", validation.Issues.Select(i => $"{i.Type}:{i.Severity}"))
-                    : "Unknown safety validation failure.";
-                throw new InvalidOperationException($"Safety validation failed: {issues}");
-            }
+        // Apply input preprocessing FIRST (when configured) so transformers such as
+        // SimpleImputer can replace NaN / missing values before the safety finiteness
+        // check runs. Otherwise a configured imputer never sees the NaN it exists to fix,
+        // and Predict throws "Safety validation failed: InvalidValue:Critical" on exactly
+        // the input the pipeline was meant to repair. Safety then validates the data the
+        // model actually receives. With no preprocessing configured this is a no-op
+        // (preprocessedInput == newData), so non-pipeline behaviour is unchanged.
+        var preprocessedInput = PreprocessingInfo?.IsFitted == true
+            ? PreprocessingInfo.TransformFeatures(newData)
+            : newData;
 
-            if (validation.SanitizedInput != null)
+        var dataForPrediction = preprocessedInput;
+        if (SafetyFilter != null && preprocessedInput is Vector<T> vectorInput && typeof(TInput) == typeof(Vector<T>))
+        {
+            // Fast path for the default numeric SafetyFilter — single-call analog of the
+            // ValidateAndSanitizeMatrix fast path (#1447 / #1458). SafetyFilter<T>.ValidateInput
+            // builds a ConvertToText string over every element THREE times (directly + inside
+            // DetectJailbreak + IdentifyHarmfulContent) then runs English-phrase jailbreak/
+            // harmful-content regexes that can never match numeric stringifications. The only
+            // verdicts that apply to a numeric input vector are input-length and finiteness;
+            // when the vector is within MaxInputLength and all-finite, ValidateInput returns
+            // IsValid with no sanitization (the default filter never sets SanitizedInput), so
+            // the per-call text scan is pure cost. Skip it for clean data; any violation falls
+            // through to the full ValidateInput so the exact diagnostic/throw is preserved.
+            // Custom ISafetyFilter implementations always take the per-call path below.
+            if (!(SafetyFilter is SafetyFilter<T> defaultInputFilter
+                  && IsCleanForDefaultVectorInputFilter(vectorInput, defaultInputFilter)))
             {
-                var sanitized = validation.SanitizedInput;
-                dataForPrediction = Unsafe.As<Vector<T>, TInput>(ref sanitized);
+                var validation = SafetyFilter.ValidateInput(vectorInput);
+                if (!validation.IsValid)
+                {
+                    var issues = validation.Issues.Count > 0
+                        ? string.Join("; ", validation.Issues.Select(i => $"{i.Type}:{i.Severity}"))
+                        : "Unknown safety validation failure.";
+                    throw new InvalidOperationException($"Safety validation failed: {issues}");
+                }
+
+                if (validation.SanitizedInput != null)
+                {
+                    var sanitized = validation.SanitizedInput;
+                    dataForPrediction = Unsafe.As<Vector<T>, TInput>(ref sanitized);
+                }
             }
         }
-        else if (SafetyFilter != null && newData is Matrix<T> matrixInput && typeof(TInput) == typeof(Matrix<T>))
+        else if (SafetyFilter != null && preprocessedInput is Matrix<T> matrixInput && typeof(TInput) == typeof(Matrix<T>))
         {
             var sanitizedMatrix = ValidateAndSanitizeMatrix(matrixInput);
             dataForPrediction = Unsafe.As<Matrix<T>, TInput>(ref sanitizedMatrix);
         }
 
-        // Transform input using preprocessing pipeline if configured
-        var normalizedNewData = PreprocessingInfo?.IsFitted == true
-            ? PreprocessingInfo.TransformFeatures(dataForPrediction)
-            : dataForPrediction;
+        // Input preprocessing was already applied above (before the safety check) so a
+        // configured imputer can repair NaN/missing values; feed the (possibly safety-
+        // sanitized) preprocessed data straight to feature selection + inference.
+        var normalizedNewData = dataForPrediction;
 
         // Apply feature selection if the optimizer selected a subset of features during training.
         // Without this, the model receives all columns but was trained on a subset, causing
@@ -2026,11 +2014,22 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         if (SafetyFilter != null && denormalized is Vector<T> vectorOutput && typeof(TOutput) == typeof(Vector<T>))
         {
-            var filtered = SafetyFilter.FilterOutput(vectorOutput);
-            if (filtered.WasModified || !filtered.IsSafe)
+            // Fast path for the default numeric SafetyFilter — single-call analog of the
+            // FilterMatrixOutput fast path (#1447 / #1458). SafetyFilter<T>.FilterOutput's
+            // only check is IdentifyHarmfulContent, which stringifies the vector
+            // (ConvertToText) and regex-matches English harmful-content phrases —
+            // meaningless on a numeric prediction vector, so it never modifies numeric
+            // output (a match would have been a spurious false-positive block). Skip the
+            // ConvertToText + regex for the default filter and return the output unchanged.
+            // Custom ISafetyFilter implementations keep the per-call path.
+            if (SafetyFilter is not SafetyFilter<T>)
             {
-                var filteredOutput = filtered.FilteredOutput;
-                return Unsafe.As<Vector<T>, TOutput>(ref filteredOutput);
+                var filtered = SafetyFilter.FilterOutput(vectorOutput);
+                if (filtered.WasModified || !filtered.IsSafe)
+                {
+                    var filteredOutput = filtered.FilteredOutput;
+                    return Unsafe.As<Vector<T>, TOutput>(ref filteredOutput);
+                }
             }
         }
         else if (SafetyFilter != null && denormalized is Matrix<T> matrixOutput && typeof(TOutput) == typeof(Matrix<T>))
@@ -2146,7 +2145,58 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             _featureSelectionState = 2;
         }
 
+        // Rank-1 single feature vector: SelectFeatures' tensor path requires
+        // rank>=2 (batch axis + feature axis), but a 1D tensor is an unambiguous
+        // per-sample feature vector with no batch axis — gather the selected
+        // indices directly into a new 1D tensor. This lets callers do
+        // result.Predict(singleVector) with feature selection configured
+        // (e.g. a permutation or column subset) without first wrapping to
+        // [1, features]. Bounds were validated in the state==0 block above.
+        if (input is Tensor<T> tensorInput && tensorInput.Shape.Length == 1)
+        {
+            var selected = new Tensor<T>(new[] { featureIndices.Count });
+            for (int j = 0; j < featureIndices.Count; j++)
+                selected[j] = tensorInput[featureIndices[j]];
+            return (TInput)(object)selected;
+        }
+
         return Helpers.OptimizerHelper<T, TInput, TOutput>.SelectFeatures(input, featureIndices);
+    }
+
+    /// <summary>
+    /// Returns true when the default numeric <see cref="SafetyFilter{T}"/> would pass
+    /// <paramref name="input"/> through unchanged — i.e. input validation is disabled, or
+    /// the vector is within <see cref="SafetyFilterOptions{T}.MaxInputLength"/> and contains
+    /// no NaN/Infinity. In that case <see cref="SafetyFilter{T}.ValidateInput"/> returns a
+    /// valid result with no sanitization, so its per-call text scan can be skipped. Any
+    /// violation returns false so the caller falls through to the full per-call validation
+    /// for the exact diagnostic. Mirrors the matrix fast path in
+    /// <see cref="ValidateAndSanitizeMatrix"/> (#1447 / #1458).
+    /// </summary>
+    private static bool IsCleanForDefaultVectorInputFilter(Vector<T> input, SafetyFilter<T> filter)
+    {
+        var opts = filter.GetOptions();
+        if (!opts.EnableInputValidation)
+        {
+            return true;
+        }
+
+        if (input.Length > opts.MaxInputLength)
+        {
+            return false;
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        for (int i = 0; i < input.Length; i++)
+        {
+            double d = numOps.ToDouble(input[i]);
+            if (double.IsNaN(d) || double.IsInfinity(d))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private Matrix<T> ValidateAndSanitizeMatrix(Matrix<T> input)
@@ -2159,6 +2209,50 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         if (input.Rows == 0 || input.Columns == 0)
         {
             return input;
+        }
+
+        // Vectorized fast path for the default numeric safety filter. The per-row
+        // ValidateInput below runs text-based jailbreak/pattern detection
+        // (ConvertToText stringifies every element, then DetectJailbreak regex-
+        // matches the result) plus a SafetyValidationResult + List allocation PER
+        // ROW. That machinery is meaningless on a numeric feature matrix yet costs
+        // O(rows × cols) string building + regex per row — ~4.4 s on the AIsEval
+        // 48k×10 LargeSet, the dominant term in AiModelBuilder<MultipleRegression>
+        // Predict (issue #1447 P2; PyTorch's equivalent predict is ~0.4 s with no
+        // such scan). For SafetyFilter<T> the only verdicts that apply to numeric
+        // input are input-length and finiteness, so check those in a single pass:
+        // if every row is within MaxInputLength and all elements are finite, the
+        // per-row path would return the input unchanged — so return it directly.
+        // Any violation falls through to the detailed per-row path, preserving the
+        // exact row-level diagnostic and sanitization for genuinely bad data.
+        if (SafetyFilter is SafetyFilter<T> defaultFilter)
+        {
+            var opts = defaultFilter.GetOptions();
+            if (!opts.EnableInputValidation)
+            {
+                return input;
+            }
+            if (input.Columns <= opts.MaxInputLength)
+            {
+                var numOps = MathHelper.GetNumericOperations<T>();
+                bool allFinite = true;
+                for (int i = 0; i < input.Rows && allFinite; i++)
+                {
+                    for (int j = 0; j < input.Columns; j++)
+                    {
+                        double d = numOps.ToDouble(input[i, j]);
+                        if (double.IsNaN(d) || double.IsInfinity(d))
+                        {
+                            allFinite = false;
+                            break;
+                        }
+                    }
+                }
+                if (allFinite)
+                {
+                    return input;
+                }
+            }
         }
 
         bool anySanitized = false;
@@ -2208,6 +2302,23 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         }
 
         if (output.Rows == 0 || output.Columns == 0)
+        {
+            return output;
+        }
+
+        // Vectorized fast path for the default safety filter — mirrors the input
+        // ValidateAndSanitizeMatrix fast path (issue #1447 / safety-filter
+        // generalization). SafetyFilter<T>.FilterOutput's only check is
+        // IdentifyHarmfulContent, which stringifies the row (ConvertToText) and
+        // regex-matches harmful-content patterns. That is text-output moderation —
+        // meaningless on a numeric prediction matrix, yet it allocates a result +
+        // builds a string + runs regex PER ROW, the same O(rows) tax the input
+        // path had. For a numeric matrix output the default filter has nothing to
+        // do, so return it unchanged. (A false-positive harmful-content match on
+        // stringified numbers would have been a spurious block; skipping it is
+        // also the correct outcome.) Custom ISafetyFilter implementations keep the
+        // per-row path below.
+        if (SafetyFilter is SafetyFilter<T>)
         {
             return output;
         }
@@ -2983,8 +3094,18 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     }
 
     /// <summary>
-    /// Gets the number of parameters in the underlying model.
+    /// Gets the number of parameters in the underlying model, or 0 when the model
+    /// has no trainable parameter vector (e.g. tree-based models).
     /// </summary>
+    /// <remarks>
+    /// Derived/query property — returns 0 for non-parameterizable models instead of
+    /// throwing, mirroring <see cref="SanitizeParameters"/>'s <c>TryParameterizable</c>
+    /// pattern. This prevents <see cref="Serialize"/> (which JSON-serializes this facade)
+    /// from failing on models without a parameter vector; the model's own state is
+    /// persisted separately via <c>SerializedModelData</c>. Marked <c>[JsonIgnore]</c>
+    /// because it is derived from <c>Model</c>, not independent serializable state.
+    /// </remarks>
+    [JsonIgnore]
     public long ParameterCount
     {
         get
@@ -2994,11 +3115,12 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 return 0;
             }
 
-            return InterfaceGuard.Parameterizable(Model).ParameterCount;
+            return InterfaceGuard.TryParameterizable(Model)?.ParameterCount ?? 0;
         }
     }
 
     /// <inheritdoc/>
+    [JsonIgnore]
     public bool SupportsParameterInitialization => ParameterCount > 0;
 
     /// <inheritdoc/>
@@ -3052,8 +3174,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             LoRAConfiguration = LoRAConfiguration,
             CrossValidationResult = CrossValidationResult,
             AutoMLSummary = AutoMLSummary,
-            AgentConfig = AgentConfig,
-            AgentRecommendation = AgentRecommendation,
             DeploymentConfiguration = DeploymentConfiguration,
             // JIT compilation is parameter-specific, don't copy
             InferenceOptimizationConfig = InferenceOptimizationConfig,
@@ -3068,7 +3188,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             Tokenizer = Tokenizer,
             TokenizationConfig = TokenizationConfig,
             PromptTemplate = PromptTemplate,
-            PromptChain = PromptChain,
             PromptOptimizer = PromptOptimizer,
             FewShotExampleSelector = FewShotExampleSelector,
             PromptAnalyzer = PromptAnalyzer,
@@ -4800,8 +4919,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             LoRAConfiguration = LoRAConfiguration,
             CrossValidationResult = CrossValidationResult,
             AutoMLSummary = AutoMLSummary,
-            AgentConfig = AgentConfig,
-            AgentRecommendation = AgentRecommendation,
             DeploymentConfiguration = DeploymentConfiguration,
             // JIT compilation is model-specific, don't copy
             InferenceOptimizationConfig = InferenceOptimizationConfig,
@@ -4816,7 +4933,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             Tokenizer = Tokenizer,
             TokenizationConfig = TokenizationConfig,
             PromptTemplate = PromptTemplate,
-            PromptChain = PromptChain,
             PromptOptimizer = PromptOptimizer,
             FewShotExampleSelector = FewShotExampleSelector,
             PromptAnalyzer = PromptAnalyzer,
@@ -5012,8 +5128,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 LoRAConfiguration = deserializedObject.LoRAConfiguration;
                 CrossValidationResult = deserializedObject.CrossValidationResult;
                 AutoMLSummary = deserializedObject.AutoMLSummary;
-                AgentConfig = deserializedObject.AgentConfig;
-                AgentRecommendation = deserializedObject.AgentRecommendation;
                 DeploymentConfiguration = deserializedObject.DeploymentConfiguration;
                 // Weight-streaming telemetry — preserve through deserialize so
                 // a saved-and-loaded result keeps the report that was produced
@@ -5607,7 +5721,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Attaches prompt engineering components to this result.
     /// </summary>
     /// <param name="promptTemplate">The prompt template for formatting prompts.</param>
-    /// <param name="promptChain">The chain for multi-step prompt execution.</param>
     /// <param name="promptOptimizer">The optimizer for improving prompt quality.</param>
     /// <param name="fewShotExampleSelector">The selector for choosing relevant few-shot examples.</param>
     /// <param name="promptAnalyzer">The analyzer for prompt metrics and validation.</param>
@@ -5617,14 +5730,12 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     internal void AttachPromptEngineering(
         IPromptTemplate? promptTemplate,
-        IChain<string, string>? promptChain,
         IPromptOptimizer<T>? promptOptimizer,
         IFewShotExampleSelector<T>? fewShotExampleSelector,
         IPromptAnalyzer? promptAnalyzer,
         IPromptCompressor? promptCompressor)
     {
         PromptTemplate = promptTemplate;
-        PromptChain = promptChain;
         PromptOptimizer = promptOptimizer;
         FewShotExampleSelector = fewShotExampleSelector;
         PromptAnalyzer = promptAnalyzer;
@@ -5834,95 +5945,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         return PromptCompressor.CompressWithMetrics(prompt, options ?? CompressionOptions.Default);
     }
 
-    /// <summary>
-    /// Executes a prompt chain synchronously with the given input.
-    /// </summary>
-    /// <param name="input">The initial input to the chain.</param>
-    /// <returns>The output string from the chain execution.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when no prompt chain is configured.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method executes a multi-step prompt workflow where each step's output becomes
-    /// the next step's input. Chains enable complex workflows like translation followed
-    /// by summarization, or analysis followed by formatting.
-    /// </para>
-    /// <para><b>For Beginners:</b> A prompt chain runs multiple AI steps in sequence.
-    ///
-    /// Instead of doing everything in one big prompt, chains break tasks into steps:
-    /// <code>
-    /// // Chain example: Translate → Summarize → Extract Keywords
-    /// // Step 1: Translate document from Spanish to English
-    /// // Step 2: Summarize the translated document
-    /// // Step 3: Extract key points as bullet points
-    /// </code>
-    ///
-    /// Each step takes the previous step's output as input.
-    ///
-    /// Benefits of chains:
-    /// - Simpler prompts (each does one thing well)
-    /// - Better quality (specialized prompts perform better)
-    /// - Easier debugging (inspect intermediate results)
-    /// - Flexible workflows (add/remove/modify steps)
-    ///
-    /// Example:
-    /// <code>
-    /// string spanishDocument = "Documento en español...";
-    /// string result = modelResult.RunChain(spanishDocument);
-    ///
-    /// // Result is available in the returned value
-    /// </code>
-    /// </para>
-    /// </remarks>
-    public string RunChain(string input)
-    {
-        if (PromptChain == null)
-            throw new InvalidOperationException(
-                "No prompt chain configured. Use ConfigurePromptChain() in AiModelBuilder.");
-
-        return PromptChain.Run(input);
-    }
-
-    /// <summary>
-    /// Executes a prompt chain asynchronously with the given input.
-    /// </summary>
-    /// <param name="input">The initial input to the chain.</param>
-    /// <param name="cancellationToken">Token to cancel the operation.</param>
-    /// <returns>A task that resolves to the output string from the chain execution.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when no prompt chain is configured.</exception>
-    /// <remarks>
-    /// <para>
-    /// Async version of RunChain for non-blocking execution. Essential for chains
-    /// that make API calls to language models or perform other I/O operations.
-    /// </para>
-    /// <para><b>For Beginners:</b> Same as RunChain but doesn't block your program.
-    ///
-    /// Use this version when:
-    /// - Running in a web application (keeps server responsive)
-    /// - Processing many documents in parallel
-    /// - Making actual API calls to language models
-    ///
-    /// Example:
-    /// <code>
-    /// string result = await modelResult.RunChainAsync("Input text...");
-    /// // Result is available in the returned value
-    /// </code>
-    ///
-    /// For parallel processing:
-    /// <code>
-    /// var documents = new[] { "Doc 1", "Doc 2", "Doc 3" };
-    /// var tasks = documents.Select(doc => modelResult.RunChainAsync(doc));
-    /// var results = await Task.WhenAll(tasks);
-    /// </code>
-    /// </para>
-    /// </remarks>
-    public Task<string> RunChainAsync(string input, CancellationToken cancellationToken = default)
-    {
-        if (PromptChain == null)
-            throw new InvalidOperationException(
-                "No prompt chain configured. Use ConfigurePromptChain() in AiModelBuilder.");
-
-        return PromptChain.RunAsync(input, cancellationToken);
-    }
 
     /// <summary>
     /// Evaluates a reasoning benchmark using the configured facade (prompt chain or agent reasoning).
@@ -5932,18 +5954,17 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <param name="sampleSize">Optional number of problems to evaluate (null for all).</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>The benchmark evaluation result.</returns>
+    /// <param name="chatClient">The chat client used to answer each benchmark problem.</param>
     /// <remarks>
     /// <para>
     /// This method hides the benchmark wiring so users don't have to manually provide a
-    /// <c>Func&lt;string, Task&lt;string&gt;&gt;</c>. The default evaluation path is:
+    /// <c>Func&lt;string, Task&lt;string&gt;&gt;</c>: each benchmark problem is sent to the supplied
+    /// <paramref name="chatClient"/> and the model's text reply is scored.
     /// </para>
-    /// <list type="bullet">
-    /// <item><description>Use <see cref="PromptChain"/> (via <see cref="RunChainAsync"/>) when configured.</description></item>
-    /// <item><description>Otherwise, use agent reasoning (via <see cref="QuickReasonAsync"/>) when configured.</description></item>
-    /// </list>
     /// </remarks>
     public Task<AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult<TScore>> EvaluateBenchmarkAsync<TScore>(
         IBenchmark<TScore> benchmark,
+        IChatClient<T> chatClient,
         int? sampleSize = null,
         CancellationToken cancellationToken = default)
     {
@@ -5952,21 +5973,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             throw new ArgumentNullException(nameof(benchmark));
         }
 
-        Func<string, Task<string>> evaluateFunction;
+        Guard.NotNull(chatClient);
 
-        if (PromptChain != null)
-        {
-            evaluateFunction = problem => RunChainAsync(problem, cancellationToken);
-        }
-        else if (AgentConfig != null && AgentConfig.IsEnabled)
-        {
-            evaluateFunction = problem => QuickReasonAsync(problem, cancellationToken);
-        }
-        else
-        {
-            throw new InvalidOperationException(
-                "Benchmark evaluation requires either a prompt chain (ConfigurePromptChain) or agent assistance (ConfigureAgentAssistance).");
-        }
+        Func<string, Task<string>> evaluateFunction =
+            problem => chatClient.GenerateResponseAsync(problem, cancellationToken);
 
         return benchmark.EvaluateAsync(evaluateFunction, sampleSize, cancellationToken);
     }
@@ -6169,11 +6179,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <returns>True if a prompt compressor is configured; otherwise, false.</returns>
     public bool HasPromptCompressor => PromptCompressor != null;
 
-    /// <summary>
-    /// Checks whether a prompt chain is configured and available for use.
-    /// </summary>
-    /// <returns>True if a prompt chain is configured; otherwise, false.</returns>
-    public bool HasPromptChain => PromptChain != null;
 
     /// <summary>
     /// Checks whether a few-shot example selector is configured and available for use.
@@ -6633,25 +6638,18 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     public async Task<ReasoningResult<T>> ReasonAsync(
         string problem,
+        IChatClient<T> chatClient,
         ReasoningMode mode = ReasoningMode.Auto,
         ReasoningConfig? config = null,
         CancellationToken cancellationToken = default)
     {
-        if (AgentConfig == null || !AgentConfig.IsEnabled)
-        {
-            throw new InvalidOperationException(
-                "Reasoning requires agent configuration. Use ConfigureAgentAssistance() during model building " +
-                "to set up the LLM provider and API key required for reasoning capabilities.");
-        }
+        Guard.NotNull(chatClient);
 
         // Use stored config if none provided
         var effectiveConfig = config ?? ReasoningConfig ?? new ReasoningConfig();
 
-        // Create chat model from agent config
-        var chatModel = CreateChatModelFromAgentConfig();
-
         // Create internal Reasoner and delegate
-        var reasoner = new Reasoner<T>(chatModel);
+        var reasoner = new Reasoner<T>(chatClient);
         return await reasoner.SolveAsync(problem, mode, effectiveConfig, cancellationToken);
     }
 
@@ -6680,16 +6678,11 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     public async Task<string> QuickReasonAsync(
         string problem,
+        IChatClient<T> chatClient,
         CancellationToken cancellationToken = default)
     {
-        if (AgentConfig == null || !AgentConfig.IsEnabled)
-        {
-            throw new InvalidOperationException(
-                "Reasoning requires agent configuration. Use ConfigureAgentAssistance() during model building.");
-        }
-
-        var chatModel = CreateChatModelFromAgentConfig();
-        var reasoner = new Reasoner<T>(chatModel);
+        Guard.NotNull(chatClient);
+        var reasoner = new Reasoner<T>(chatClient);
         return await reasoner.QuickSolveAsync(problem, cancellationToken);
     }
 
@@ -6727,16 +6720,11 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     public async Task<ReasoningResult<T>> DeepReasonAsync(
         string problem,
+        IChatClient<T> chatClient,
         CancellationToken cancellationToken = default)
     {
-        if (AgentConfig == null || !AgentConfig.IsEnabled)
-        {
-            throw new InvalidOperationException(
-                "Reasoning requires agent configuration. Use ConfigureAgentAssistance() during model building.");
-        }
-
-        var chatModel = CreateChatModelFromAgentConfig();
-        var reasoner = new Reasoner<T>(chatModel);
+        Guard.NotNull(chatClient);
+        var reasoner = new Reasoner<T>(chatClient);
         return await reasoner.DeepSolveAsync(problem, cancellationToken);
     }
 
@@ -6776,43 +6764,13 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     public async Task<ReasoningResult<T>> ReasonWithConsensusAsync(
         string problem,
+        IChatClient<T> chatClient,
         int numAttempts = 5,
         CancellationToken cancellationToken = default)
     {
-        if (AgentConfig == null || !AgentConfig.IsEnabled)
-        {
-            throw new InvalidOperationException(
-                "Reasoning requires agent configuration. Use ConfigureAgentAssistance() during model building.");
-        }
-
-        var chatModel = CreateChatModelFromAgentConfig();
-        var reasoner = new Reasoner<T>(chatModel);
+        Guard.NotNull(chatClient);
+        var reasoner = new Reasoner<T>(chatClient);
         return await reasoner.SolveWithConsensusAsync(problem, numAttempts, cancellationToken);
-    }
-
-    /// <summary>
-    /// Creates a chat model from the agent configuration.
-    /// </summary>
-    private IChatModel<T> CreateChatModelFromAgentConfig()
-    {
-        if (AgentConfig == null)
-            throw new InvalidOperationException("Agent configuration is required.");
-
-        var apiKey = AgentKeyResolver.ResolveApiKey(
-            AgentConfig.ApiKey,
-            AgentConfig,
-            AgentConfig.Provider);
-
-        return AgentConfig.Provider switch
-        {
-            LLMProvider.OpenAI => new OpenAIChatModel<T>(apiKey),
-            LLMProvider.Anthropic => new AnthropicChatModel<T>(apiKey),
-            LLMProvider.AzureOpenAI => new AzureOpenAIChatModel<T>(
-                AgentConfig.AzureEndpoint ?? throw new InvalidOperationException("Azure endpoint required"),
-                apiKey,
-                AgentConfig.AzureDeployment ?? "gpt-4"),
-            _ => throw new ArgumentException($"Unknown provider: {AgentConfig.Provider}")
-        };
     }
 
     #endregion

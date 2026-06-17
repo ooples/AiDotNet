@@ -150,9 +150,20 @@ public class WavLM<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
         int count = layerOutputs.Count;
         for (int li = 0; li < count; li++)
         {
-            double w = layerWeights is not null && li < layerWeights.Length ? NumOps.ToDouble(layerWeights[li]) : 1.0 / count;
-            for (int i = 0; i < result.Length && i < layerOutputs[li].Length; i++)
-                result[i] = NumOps.Add(result[i], NumOps.FromDouble(NumOps.ToDouble(layerOutputs[li][i]) * w));
+            T w = layerWeights is not null && li < layerWeights.Length
+                ? layerWeights[li]
+                : NumOps.FromDouble(1.0 / count);
+            var layerOut = layerOutputs[li];
+            if (layerOut.Length == result.Length && layerOut.Rank == result.Rank)
+            {
+                var scaled = Engine.TensorMultiplyScalar(layerOut, w);
+                result = Engine.TensorAdd(result, scaled);
+            }
+            else
+            {
+                for (int i = 0; i < result.Length && i < layerOut.Length; i++)
+                    result[i] = NumOps.Add(result[i], NumOps.Multiply(layerOut[i], w));
+            }
         }
         return result;
     }

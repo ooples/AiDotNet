@@ -1,6 +1,9 @@
 using System.Linq;
 using System.Runtime;
+using System.Threading;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -8,6 +11,29 @@ using System.Threading.Tasks;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
+
+/// <summary>
+/// Non-generic shim: <c>DiffusionModelTestBase</c> is the existing inheritance
+/// target for ~60 diffusion test classes, all of which assume the underlying
+/// model is <see cref="IDiffusionModel{T}"/> with <c>T = double</c>. The
+/// generic <see cref="DiffusionModelTestBase{TNum}"/> carries all the actual
+/// test invariants; this shim binds them to FP64 so existing inheritors keep
+/// working with zero call-site changes. Paper-scale diffusion models (e.g.
+/// <c>SDXLInpainting</c> at default 320-baseChannels 2048-contextDim UNet,
+/// 2.6 B parameters) inherit from <see cref="DiffusionModelTestBase{TNum}"/>
+/// with <c>TNum = float</c> directly — FP64 doubles the per-tensor memory
+/// footprint and pushes the 2.6 B-param SDXL UNet past the 16 GB RAM ceiling
+/// of CI hosts (verified at construction: <c>SDXLInpaintingModel&lt;double&gt;</c>
+/// OOMs in the 1.28 B-element kernel allocation; <c>SDXLInpaintingModel&lt;float&gt;</c>
+/// fits in ~3.8 GB managed heap). FP32 is also the production-canonical type
+/// for diffusion-model weights (SD/SDXL/Flux/SD3 paper checkpoints are FP32
+/// master / FP16 working), so paper-scale tests using <c>&lt;float&gt;</c> mirror
+/// the actual deployment configuration rather than an FP64 test-only path
+/// that would be silently incorrect.
+/// </summary>
+public abstract class DiffusionModelTestBase : DiffusionModelTestBase<double>
+{
+}
 
 /// <summary>
 /// Base test class for diffusion models implementing IDiffusionModel&lt;double&gt;.
@@ -25,7 +51,8 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// model (via <c>using var model = CreateModel()</c>), reclaiming the rented
 /// weight buffers returned to the TensorAllocator pool on Dispose.
 /// </remarks>
-public abstract class DiffusionModelTestBase : IAsyncLifetime
+public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
+    where TNum : struct, IEquatable<TNum>, IFormattable
 {
     /// <summary>
     /// Static lock serializing concurrent teardowns. xunit parallelizes across
@@ -36,10 +63,77 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
     /// mode-set → collect → wait → mode-set → collect sequence keeps LOH
     /// compaction deterministic per teardown.
     /// </summary>
-    private static readonly object _lohCompactionGate = new();
+    // Uses the shared non-generic ModelFamilyTestGcGate: a static field here (inside the
+    // generic DiffusionModelTestBase<TNum>) would be per-closed-type, letting <float>/<double>
+    // teardowns race on the process-global GCSettings. Shared with the NeuralNetworks base.
 
-    /// <summary>Before-test hook. No-op — the base has no ambient state to initialize.</summary>
-    public Task InitializeAsync() => Task.CompletedTask;
+    /// <summary>
+    /// Caps concurrent foundation-scale diffusion tests to avoid BLAS thread-
+    /// pool oversubscription when many SD-UNet-scale Predicts run in parallel
+    /// on the same machine. xUnit's parallelizeTestCollections=true puts one
+    /// test class per core; if 16 of them are simultaneously inside an FP64
+    /// SD-UNet forward (each wanting all 16 cores via OpenBLAS), every test
+    /// gets ~1 core and the per-step latency multiplies by 4-8×, blowing the
+    /// 120 s <c>[Fact(Timeout)]</c> envelope even though each test fits the
+    /// budget in isolation. See <c>tools/ConsistencyModelPerfDiag</c> for the
+    /// measurement that motivated this (issue #1305 ConsistencyModel:
+    /// 76 s isolated vs 120 s under-contention timeout).
+    /// </summary>
+    private const int HeavyConcurrencyCap = 2;
+
+    /// <summary>
+    /// Element-count threshold above which a test counts as "heavy" and gates
+    /// through <see cref="_heavyTestGate"/>. 16,384 = the latent-shape product
+    /// for the canonical SD pipeline at [1, 4, 64, 64]; everything at or above
+    /// this scale uses an SD-UNet-class noise predictor whose FP64 forward
+    /// saturates the BLAS thread pool. Smaller-scale diffusion tests (tabular
+    /// [1, 4] or single-channel [1, 1, 16, 16]) bypass the gate so they can
+    /// stay fully parallel.
+    /// </summary>
+    private const int HeavyInputElementThreshold = 16_384;
+
+    private static readonly SemaphoreSlim _heavyTestGate =
+        new(HeavyConcurrencyCap, HeavyConcurrencyCap);
+
+    /// <summary>
+    /// Per-test-instance flag tracking whether this instance acquired
+    /// <see cref="_heavyTestGate"/>. Only released in <see cref="DisposeAsync"/>
+    /// if acquired here, so a failure during InitializeAsync (gate not yet
+    /// acquired) can't trigger a release-without-acquire.
+    /// </summary>
+    private bool _heavyGateAcquired;
+
+    /// <summary>
+    /// Before-test hook. Acquires the heavy-diffusion gate if this test's
+    /// <see cref="InputShape"/> implies foundation-scale (≥ 16,384 elements).
+    /// </summary>
+    public async Task InitializeAsync()
+    {
+        if (IsHeavyScale(InputShape))
+        {
+            await _heavyTestGate.WaitAsync().ConfigureAwait(false);
+            _heavyGateAcquired = true;
+        }
+    }
+
+    /// <summary>
+    /// True when the supplied input shape implies foundation-scale work
+    /// (SD-UNet or larger). Computed from product-of-dims so a future
+    /// [1, 16, 32, 32] (Flux/SD3) or [1, 8, 64, 64] (CogVideo) shape
+    /// auto-gates without any per-class plumbing.
+    /// </summary>
+    private static bool IsHeavyScale(int[] shape)
+    {
+        if (shape is null || shape.Length == 0) return false;
+        long elements = 1;
+        foreach (int d in shape)
+        {
+            if (d <= 0) return false;
+            elements *= d;
+            if (elements >= HeavyInputElementThreshold) return true;
+        }
+        return false;
+    }
 
     /// <summary>
     /// After-test hook. Forces a blocking compacting Gen-2 GC (with explicit
@@ -57,29 +151,51 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
     /// <see cref="GCLargeObjectHeapCompactionMode.CompactOnce"/> on the next
     /// Gen-2 pass forces LOH compaction; the mode auto-resets to Default
     /// after each use, so this is scoped per-teardown. The entire sequence
-    /// runs under <see cref="_lohCompactionGate"/> so parallel teardowns
+    /// runs under <see cref="ModelFamilyTestGcGate.LohCompaction"/> so parallel teardowns
     /// don't race on the process-global flag.
     /// </remarks>
     public Task DisposeAsync()
     {
-        lock (_lohCompactionGate)
+        try
         {
-            // First pass: compacting Gen-2 + LOH reclaims everything unreachable
-            // including the just-Disposed model's weight tensors.
-            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-            GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
-            GC.WaitForPendingFinalizers();
-
-            // Second pass: finalizer-released memory (e.g. GPU-pool return paths)
-            // and any LOH allocations from finalizers.
-            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-            GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
+            // Shared with every model-family base: clears InferenceWeightCache + compacting Gen-2
+            // collect, serialized on the process-global LOH-compaction gate.
+            ModelFamilyTestGcGate.ReclaimBetweenTests();
+        }
+        finally
+        {
+            if (_heavyGateAcquired)
+            {
+                _heavyTestGate.Release();
+                _heavyGateAcquired = false;
+            }
         }
         return Task.CompletedTask;
     }
 
 
-    protected abstract IDiffusionModel<double> CreateModel();
+    protected abstract IDiffusionModel<TNum> CreateModel();
+
+    /// <summary>
+    /// Numeric-operation handle for <typeparamref name="TNum"/> — used by helpers
+    /// that need to construct tensor elements from doubles (e.g. random fills,
+    /// constant fills) without hard-coding the element type. The
+    /// double-precision codebase pattern is direct assignment to a double; the
+    /// generic equivalent goes through <see cref="INumericOperations{T}.FromDouble"/>.
+    /// </summary>
+    protected static readonly INumericOperations<TNum> _numOps =
+        MathHelper.GetNumericOperations<TNum>();
+
+    /// <summary>
+    /// Converts a <typeparamref name="TNum"/> tensor element to <c>double</c>
+    /// for assertion / Math.* arithmetic. Centralized so every test method
+    /// uses the same boundary conversion (rather than scattering
+    /// <c>Convert.ToDouble</c> calls). The runtime <c>(double)(object)val</c>
+    /// boxing fallback is the standard pattern for generic numeric →
+    /// well-known-type conversion in this codebase (see
+    /// <c>ModelTestHelpers.cs</c> for the broader pattern).
+    /// </summary>
+    protected static double ToDouble(TNum v) => Convert.ToDouble(v);
 
     protected virtual int[] InputShape => [1, 4];
     protected virtual int[] OutputShape => [1, 4];
@@ -92,26 +208,44 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
     /// </summary>
     protected virtual int TrainingIterations => 10;
 
-    protected Tensor<double> CreateRandomTensor(int[] shape, Random rng)
+    protected Tensor<TNum> CreateRandomTensor(int[] shape, Random rng)
     {
-        var tensor = new Tensor<double>(shape);
+        var tensor = new Tensor<TNum>(shape);
         for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = rng.NextDouble();
+            tensor[i] = _numOps.FromDouble(rng.NextDouble());
         return tensor;
     }
 
-    protected Tensor<double> CreateConstantTensor(int[] shape, double value)
+    protected Tensor<TNum> CreateConstantTensor(int[] shape, double value)
     {
-        var tensor = new Tensor<double>(shape);
+        var tensor = new Tensor<TNum>(shape);
+        var typed = _numOps.FromDouble(value);
         for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = value;
+            tensor[i] = typed;
         return tensor;
     }
 
     // =====================================================
     // MATHEMATICAL INVARIANT: Training Should Reduce Prediction Error
-    // After training on a fixed (input, target) pair, the predict output
-    // should move closer to the target — verifying gradient flow works.
+    //
+    // Per DDPM (Ho et al. 2020, Algorithm 1), diffusion training minimizes the
+    // MEAN squared error between the true noise ε and the model's predicted noise
+    // ε_θ(√ᾱₜ·x₀ + √(1−ᾱₜ)·ε, t). There is NO supervised "target output" in
+    // diffusion — the data point is the clean sample x₀, noise is added, and the
+    // model predicts that noise. So the valid, paper-faithful "training reduces
+    // error" check is: does the noise-prediction MSE at a FIXED probe (x₀, ε, t)
+    // go down (or at least not up) after training?
+    //
+    // The earlier formulation measured MSE(Generate(x₀), random_target). That is
+    // not a paper quantity and is causally unrelated to the training objective:
+    // `Train` ignores the target argument (it self-samples noise, exactly per the
+    // paper), so Generate(x₀) drifts toward the model's own learned denoising
+    // fixed point — away from an arbitrary random target — for ANY model whose
+    // sampler genuinely depends on its weights. Expressive models (e.g. the
+    // attention-UNet Imagen2 config) therefore "failed" that check while training
+    // perfectly correctly (output bounded, converges to a fixed point). The probe
+    // below measures the actual objective and only fails if training makes
+    // noise-prediction WORSE — a real gradient-sign / divergence bug.
     // =====================================================
 
     [Fact(Timeout = 120000)]
@@ -121,25 +255,37 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var model = CreateModel();
-        var input = CreateRandomTensor(InputShape, rng);
-        var target = CreateRandomTensor(OutputShape, rng);
 
-        // Initial error
-        var initialOutput = model.Predict(input);
-        double initialError = ComputeMSE(initialOutput, target);
+        // Treat the random tensor as the clean sample x₀ (the diffusion data point).
+        var x0 = CreateRandomTensor(InputShape, rng);
 
-        // Train
+        // Fixed noise-prediction probe held constant across the before/after
+        // measurement: a single (noise ε, timestep t) so we compare like-for-like.
+        // (Per-step Train uses a random t internally, so raw per-step loss values
+        // are confounded by timestep magnitude; a fixed probe is not.) Mid-range t.
+        int probeT = System.Math.Max(1, model.Scheduler.TrainTimesteps / 2);
+        var probeNoiseVec = new Vector<TNum>(x0.Length);
+        for (int i = 0; i < probeNoiseVec.Length; i++)
+            probeNoiseVec[i] = _numOps.FromDouble(rng.NextDouble() * 2.0 - 1.0);
+        var noisyProbe = new Tensor<TNum>(x0._shape, model.Scheduler.AddNoise(x0.ToVector(), probeNoiseVec, probeT));
+        var probeNoise = new Tensor<TNum>(x0._shape, probeNoiseVec);
+
+        double errBefore = ComputeMSE(model.PredictNoise(noisyProbe, probeT), probeNoise);
+
+        // Train on x₀ (the diffusion data point). The target argument is unused by
+        // the diffusion training path per the paper; pass x₀ for clarity.
         for (int i = 0; i < TrainingIterations; i++)
-            model.Train(input, target);
+            model.Train(x0, x0);
 
-        // Final error
-        var finalOutput = model.Predict(input);
-        double finalError = ComputeMSE(finalOutput, target);
+        double errAfter = ComputeMSE(model.PredictNoise(noisyProbe, probeT), probeNoise);
 
-        if (!double.IsNaN(initialError) && !double.IsNaN(finalError))
+        if (!double.IsNaN(errBefore) && !double.IsNaN(errAfter))
         {
-            Assert.True(finalError <= initialError + 1e-6,
-                $"Training did not reduce error: initial={initialError:F6}, final={finalError:F6}.");
+            Assert.True(errAfter <= errBefore + 1e-6,
+                $"Training increased the noise-prediction error: before={errBefore:F6}, after={errAfter:F6}. " +
+                "DDPM training (Ho et al. 2020, Alg. 1) minimizes MSE(ε, ε_θ); after training on x₀ the model " +
+                "must predict the noise at a fixed (x₀, ε, t) probe at least as well as before — an increase " +
+                "indicates a gradient-sign error, divergence, or first-step explosion in the training path.");
         }
     }
 
@@ -166,7 +312,7 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
         int minLen = Math.Min(output1.Length, output2.Length);
         for (int i = 0; i < minLen; i++)
         {
-            if (Math.Abs(output1[i] - output2[i]) > 1e-12)
+            if (Math.Abs(ToDouble(output1[i]) - ToDouble(output2[i])) > 1e-12)
             {
                 anyDifferent = true;
                 break;
@@ -190,9 +336,9 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
         using var model = CreateModel();
 
         var input = CreateRandomTensor(InputShape, rng);
-        var scaledInput = new Tensor<double>(InputShape);
+        var scaledInput = new Tensor<TNum>(InputShape);
         for (int i = 0; i < input.Length; i++)
-            scaledInput[i] = input[i] * 10.0;
+            scaledInput[i] = _numOps.FromDouble(ToDouble(input[i]) * 10.0);
 
         var output1 = model.Predict(input);
         var output2 = model.Predict(scaledInput);
@@ -201,7 +347,7 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
         int minLen = Math.Min(output1.Length, output2.Length);
         for (int i = 0; i < minLen; i++)
         {
-            if (Math.Abs(output1[i] - output2[i]) > 1e-10)
+            if (Math.Abs(ToDouble(output1[i]) - ToDouble(output2[i])) > 1e-10)
             {
                 anyDifferent = true;
                 break;
@@ -247,8 +393,9 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
         Assert.True(output.Length > 0, "Output should not be empty.");
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.False(double.IsNaN(output[i]), $"Output[{i}] is NaN.");
-            Assert.False(double.IsInfinity(output[i]), $"Output[{i}] is Infinity.");
+            var v = ToDouble(output[i]);
+            Assert.False(double.IsNaN(v), $"Output[{i}] is NaN.");
+            Assert.False(double.IsInfinity(v), $"Output[{i}] is Infinity.");
         }
     }
 
@@ -271,8 +418,9 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
         var output = model.Predict(input);
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.False(double.IsNaN(output[i]), $"Output[{i}] is NaN after training.");
-            Assert.False(double.IsInfinity(output[i]), $"Output[{i}] is Infinity after training.");
+            var v = ToDouble(output[i]);
+            Assert.False(double.IsNaN(v), $"Output[{i}] is NaN after training.");
+            Assert.False(double.IsInfinity(v), $"Output[{i}] is Infinity after training.");
         }
     }
 
@@ -287,40 +435,39 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
-        var rng = ModelTestHelpers.CreateSeededRandom();
         using var model = CreateModel();
-        var baseInput = CreateRandomTensor(InputShape, rng);
 
-        // Predict at different "noise levels" by scaling input
-        // Low noise (near-original), medium noise, high noise
-        double[] scales = new double[] { 0.1, 0.5, 1.0, 2.0 };
-        double[] outputMagnitudes = new double[scales.Length];
+        // The noise schedule is the SCHEDULER's signal-retention curve: the cumulative product
+        // of alphas (the fraction of the original signal retained at timestep t) must not
+        // increase as t grows, because every step only adds noise. Equivalently the noise
+        // fraction 1 - alpha_cumprod is monotonically non-decreasing. That is the actual
+        // "noise schedule is monotonic" invariant this test is named for, and it holds for
+        // every correctly-configured scheduler (DDPM/cosine/linear/flow-matching).
+        //
+        // (The previous proxy scaled the model's INPUT and checked the OUTPUT magnitude. That
+        // is architecturally invalid for input-normalizing noise predictors such as DiT — its
+        // LayerNorm removes the input scale, so the denoised sample's magnitude is independent
+        // of the input scale by design. Every DiT-based diffusion model failed the old proxy
+        // for that reason, not because of a real bug.)
+        var scheduler = model.Scheduler;
+        int n = scheduler.TrainTimesteps;
+        if (n < 2) return;
 
-        for (int s = 0; s < scales.Length; s++)
-        {
-            var noisyInput = new Tensor<double>(InputShape);
-            for (int i = 0; i < baseInput.Length; i++)
-                noisyInput[i] = baseInput[i] * scales[s];
-
-            var output = model.Predict(noisyInput);
-
-            double magnitude = 0;
-            for (int i = 0; i < output.Length; i++)
-                magnitude += output[i] * output[i];
-            outputMagnitudes[s] = Math.Sqrt(magnitude / Math.Max(1, output.Length));
-        }
-
-        // Check monotonicity: allow at most 1 violation out of 3 transitions
+        double prevSignal = ToDouble(scheduler.GetAlphaCumulativeProduct(0));
         int violations = 0;
-        for (int i = 1; i < outputMagnitudes.Length; i++)
+        double worst = 0;
+        for (int t = 1; t < n; t++)
         {
-            if (outputMagnitudes[i] < outputMagnitudes[i - 1] - 1e-10)
-                violations++;
+            double signal = ToDouble(scheduler.GetAlphaCumulativeProduct(t));
+            double increase = signal - prevSignal;
+            if (increase > 1e-9) { violations++; worst = Math.Max(worst, increase); }
+            prevSignal = signal;
         }
 
-        Assert.True(violations <= 1,
-            $"Noise schedule not monotonic: magnitudes = [{string.Join(", ", outputMagnitudes.Select(m => m.ToString("F4")))}]. " +
-            $"Found {violations} violations (max allowed: 1).");
+        Assert.True(violations == 0,
+            $"Noise schedule not monotonic: alpha-cumulative-product (signal retention) increased " +
+            $"with timestep at {violations} step(s) (worst +{worst:E3}); it must be non-increasing " +
+            "as noise accumulates.");
     }
 
     // =====================================================
@@ -341,8 +488,9 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
 
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.True(Math.Abs(output[i]) < 1e6,
-                $"Output[{i}] = {output[i]:E4} exceeds bound of 1e6. " +
+            var v = ToDouble(output[i]);
+            Assert.True(Math.Abs(v) < 1e6,
+                $"Output[{i}] = {v:E4} exceeds bound of 1e6. " +
                 "Diffusion model is producing unbounded output.");
         }
     }
@@ -364,7 +512,7 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
         var out2 = model.Predict(input);
 
         for (int i = 0; i < out1.Length; i++)
-            Assert.Equal(out1[i], out2[i], 12); // Tensors 0.16.0 deterministic BLAS — exact match expected
+            Assert.Equal(ToDouble(out1[i]), ToDouble(out2[i]), 12); // Tensors 0.16.0 deterministic BLAS — exact match expected
     }
 
     [Fact(Timeout = 120000)]
@@ -382,7 +530,7 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
 
         Assert.Equal(original.Length, clonedOutput.Length);
         for (int i = 0; i < original.Length; i++)
-            Assert.Equal(original[i], clonedOutput[i]);
+            Assert.Equal(ToDouble(original[i]), ToDouble(clonedOutput[i]));
     }
 
     [Fact(Timeout = 120000)]
@@ -422,14 +570,14 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
         Assert.NotNull(model.Scheduler);
     }
 
-    private double ComputeMSE(Tensor<double> output, Tensor<double> target)
+    private double ComputeMSE(Tensor<TNum> output, Tensor<TNum> target)
     {
         double mse = 0;
         int len = Math.Min(output.Length, target.Length);
         if (len == 0) return double.NaN;
         for (int i = 0; i < len; i++)
         {
-            double diff = output[i] - target[i];
+            double diff = ToDouble(output[i]) - ToDouble(target[i]);
             mse += diff * diff;
         }
         return mse / len;

@@ -37,9 +37,9 @@ namespace AiDotNet.TextToSpeech.Latest;
 public class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly MegaTTS2Options _options; public override ModelOptions GetOptions() => _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
-    public MegaTTS2(NeuralNetworkArchitecture<T> architecture, string modelPath, MegaTTS2Options? options = null) : base(architecture) { _options = options ?? new MegaTTS2Options(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.HiddenDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); InitializeLayers(); }
-    public MegaTTS2(NeuralNetworkArchitecture<T> architecture, MegaTTS2Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new MegaTTS2Options(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.HiddenDim; InitializeLayers(); }
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
+    public MegaTTS2(NeuralNetworkArchitecture<T> architecture, string modelPath, MegaTTS2Options? options = null) : base(architecture) { _options = options is null ? new MegaTTS2Options() : new MegaTTS2Options(options); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.HiddenDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); InitializeLayers(); }
+    public MegaTTS2(NeuralNetworkArchitecture<T> architecture, MegaTTS2Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options is null ? new MegaTTS2Options() : new MegaTTS2Options(options); _useNativeMode = true; _optimizer = optimizer ?? CreateDefaultOptimizer(); base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.HiddenDim; InitializeLayers(); }
     int ITtsModel<T>.SampleRate => _options.SampleRate; public int MaxTextLength => _options.MaxTextLength; public new int HiddenDim => _options.HiddenDim; public int NumFlowSteps => _options.NumFlowSteps;
     /// <summary>
     /// Synthesizes speech from text.
@@ -54,14 +54,42 @@ public class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
         return PostprocessAudio(output);
     }
     protected override Tensor<T> PreprocessText(string text) { int len = Math.Min(text.Length, _options.MaxTextLength); var t = new Tensor<T>([len]); for (int i = 0; i < len; i++) t[i] = NumOps.FromDouble(text[i] / 128.0); return t; } protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultProprietaryTTSLayers(_options.EncoderDim, _options.DecoderDim, _options.NumEncoderLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate)); }
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); try { TrainWithTape(input, expected); } finally { SetTrainingMode(false); } }
+    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultAcousticModelLayers(_options.EncoderDim, _options.DecoderDim, _options.HiddenDim, _options.NumEncoderLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, _options.VocabSize)); }
+    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); bool prev = IsTrainingMode; SetTrainingMode(false); try { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; } finally { SetTrainingMode(prev); } }
+    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); try { TrainWithTape(input, expected, _optimizer); } finally { SetTrainingMode(false); } }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    public override ModelMetadata<T> GetModelMetadata() { return new ModelMetadata<T> { Name = _useNativeMode ? "MegaTTS2-Native" : "MegaTTS2-ONNX", Description = "MegaTTS2 TTS", FeatureCount = _options.HiddenDim }; }
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.SampleRate); writer.Write(_options.DecoderDim); writer.Write(_options.DropoutRate); writer.Write(_options.EncoderDim); writer.Write(_options.NumDecoderLayers); writer.Write(_options.NumEncoderLayers); writer.Write(_options.NumHeads); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = reader.ReadInt32();  _options.DecoderDim = reader.ReadInt32(); _options.DropoutRate = reader.ReadDouble(); _options.EncoderDim = reader.ReadInt32(); _options.NumDecoderLayers = reader.ReadInt32(); _options.NumEncoderLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32();  base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.HiddenDim; if (!_useNativeMode && _options.ModelPath is {} p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is {} mp && !string.IsNullOrEmpty(mp)) return new MegaTTS2<T>(Architecture, mp, _options); return new MegaTTS2<T>(Architecture, _options); }
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "MegaTTS2-Native" : "MegaTTS2-ONNX",
+            Description = "MegaTTS2 TTS",
+            FeatureCount = _options.HiddenDim
+        };
+        // Metadata_ShouldExist requires non-empty AdditionalInfo + non-null ModelData.
+        m.AdditionalInfo["NetworkType"] = _useNativeMode ? "MegaTTS2-Native" : "MegaTTS2-ONNX";
+        m.AdditionalInfo["EncoderDim"] = _options.EncoderDim;
+        m.AdditionalInfo["DecoderDim"] = _options.DecoderDim;
+        m.AdditionalInfo["NumEncoderLayers"] = _options.NumEncoderLayers;
+        m.AdditionalInfo["NumDecoderLayers"] = _options.NumDecoderLayers;
+        m.AdditionalInfo["NumHeads"] = _options.NumHeads;
+        m.AdditionalInfo["LayerCount"] = Layers.Count;
+        if (_useNativeMode)
+        {
+            m.ModelData = this.Serialize();
+        }
+        return m;
+    }
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.SampleRate); writer.Write(_options.DecoderDim); writer.Write(_options.DropoutRate); writer.Write(_options.EncoderDim); writer.Write(_options.NumDecoderLayers); writer.Write(_options.NumEncoderLayers); writer.Write(_options.NumHeads); writer.Write(_options.MelChannels); writer.Write(_options.HopSize); writer.Write(_options.HiddenDim); writer.Write(_options.MaxTextLength); writer.Write(_options.VocabSize); writer.Write(_options.LearningRate); writer.Write(_options.WeightDecay); }
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = reader.ReadInt32(); _options.DecoderDim = reader.ReadInt32(); _options.DropoutRate = reader.ReadDouble(); _options.EncoderDim = reader.ReadInt32(); _options.NumDecoderLayers = reader.ReadInt32(); _options.NumEncoderLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); if (reader.BaseStream.Position < reader.BaseStream.Length) _options.MelChannels = reader.ReadInt32(); if (reader.BaseStream.Position < reader.BaseStream.Length) _options.HopSize = reader.ReadInt32(); if (reader.BaseStream.Position < reader.BaseStream.Length) _options.HiddenDim = reader.ReadInt32(); if (reader.BaseStream.Position < reader.BaseStream.Length) _options.MaxTextLength = reader.ReadInt32(); if (reader.BaseStream.Position < reader.BaseStream.Length) _options.VocabSize = reader.ReadInt32(); if (reader.BaseStream.Position < reader.BaseStream.Length) _options.LearningRate = reader.ReadDouble(); if (reader.BaseStream.Position < reader.BaseStream.Length) _options.WeightDecay = reader.ReadDouble(); base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.HiddenDim; if (!_useNativeMode && _options.ModelPath is {} p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); if (_useNativeMode) _optimizer = CreateDefaultOptimizer(); }
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is {} mp && !string.IsNullOrEmpty(mp)) return new MegaTTS2<T>(Architecture, mp, new MegaTTS2Options(_options)); return new MegaTTS2<T>(Architecture, new MegaTTS2Options(_options)); }
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(MegaTTS2<T>)); }
+    private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+        => new(this, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = _options.LearningRate,
+            WeightDecay = _options.WeightDecay,
+            UseAdaptiveLearningRate = false
+        });
     protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
 }

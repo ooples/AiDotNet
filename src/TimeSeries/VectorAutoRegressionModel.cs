@@ -1272,7 +1272,7 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
                 { "NumberOfObservations", _residuals.Rows + _varOptions.Lag },
                 { "NumberOfParameters", _varOptions.OutputDimension * (_varOptions.OutputDimension * _varOptions.Lag + 1) }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
 
         // Add residual statistics if available

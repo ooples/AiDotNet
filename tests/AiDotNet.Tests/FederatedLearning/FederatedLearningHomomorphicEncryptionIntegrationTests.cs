@@ -1,4 +1,5 @@
 using AiDotNet.Data.Loaders;
+using AiDotNet.FederatedLearning.Cryptography;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tests.Helpers;
@@ -43,7 +44,7 @@ public class FederatedLearningHomomorphicEncryptionIntegrationTests
             .ConfigureDataLoader(loader)
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
-            .ConfigureFederatedLearning(flOptions)
+            .ConfigureFederatedLearning(flOptions, homomorphicEncryptionProvider: new SealHomomorphicEncryptionProvider<double>())
             .BuildAsync();
 
         var metadata = result.GetFederatedLearningMetadata();
@@ -91,7 +92,7 @@ public class FederatedLearningHomomorphicEncryptionIntegrationTests
             .ConfigureDataLoader(loader)
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
-            .ConfigureFederatedLearning(flOptions)
+            .ConfigureFederatedLearning(flOptions, homomorphicEncryptionProvider: new SealHomomorphicEncryptionProvider<double>())
             .BuildAsync();
 
         var metadata = result.GetFederatedLearningMetadata();

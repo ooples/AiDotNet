@@ -39,13 +39,13 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <TreatWarningsAsErrors>True</TreatWarningsAsErrors>
     <!-- AIDN diagnostics visible as warnings until models are annotated (issue #958) -->
-    <WarningsNotAsErrors>$(WarningsNotAsErrors);AIDN001;AIDN010;AIDN011;AIDN012;AIDN020;AIDN050;AIDN051;AIDN052</WarningsNotAsErrors>
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);AIDN001;AIDN010;AIDN011;AIDN012;AIDN020;AIDN050;AIDN051;AIDN052;NU1603;NU1605;NU1608</WarningsNotAsErrors>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
     <TreatWarningsAsErrors>True</TreatWarningsAsErrors>
     <!-- AIDN diagnostics visible as warnings until models are annotated (issue #958) -->
-    <WarningsNotAsErrors>$(WarningsNotAsErrors);AIDN001;AIDN010;AIDN011;AIDN012;AIDN020;AIDN050;AIDN051;AIDN052</WarningsNotAsErrors>
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);AIDN001;AIDN010;AIDN011;AIDN012;AIDN020;AIDN050;AIDN051;AIDN052;NU1603;NU1605;NU1608</WarningsNotAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
@@ -57,6 +57,9 @@
     <InternalsVisibleTo Include="AiDotNetBenchmarkTests" />
     <InternalsVisibleTo Include="HarmonicEngine" />
     <InternalsVisibleTo Include="HarmonicEngine.Tests" />
+    <!-- ConsistencyModelPerfDiag reads UNetNoisePredictor.ForwardProfilingSink
+         (internal diagnostics plumbing); without this it can't see the sink. -->
+    <InternalsVisibleTo Include="ConsistencyModelPerfDiag" />
   </ItemGroup>
 
   <!-- Exclude other projects from this build -->
@@ -93,18 +96,23 @@
 
 	  <PackageReference Include="Google.Protobuf" />
 	  <PackageReference Include="Microsoft.CSharp" />
-	  <PackageReference Include="Microsoft.Data.Sqlite" />
+	  <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
+	  <!-- Microsoft.Data.Sqlite extracted to the opt-in AiDotNet.Storage.Sqlite
+	       metapackage in audit-2026-05 phase 2c (finding #14). Core code used it
+	       only in NeuralProgramSynthesizer for precise SQL validation, which now
+	       delegates to an optional ISqlSyntaxValidator (SqlSyntaxValidation.Validator)
+	       and falls back to generic validation when none is registered. The
+	       SQLite-backed validator ships in AiDotNet.Storage.Sqlite.
+	  <PackageReference Include="Microsoft.Data.Sqlite" /> -->
 	  <PackageReference Include="Microsoft.ML.OnnxRuntime" />
-	  <!-- Microsoft.Research.SEALNet (homomorphic encryption). Used by exactly
-	       one file (src/FederatedLearning/Cryptography/SealHomomorphicEncryptionProvider.cs),
-	       BUT InMemoryFederatedTrainer.cs:183 hard-codes `new SealHomomorphicEncryptionProvider<T>()`
-	       as the default provider when useHomomorphicEncryption=true. Extracting SEAL to its own
-	       package would create a circular project reference unless we also refactor
-	       InMemoryFederatedTrainer to take an IHomomorphicEncryptionProvider factory at
-	       construction time (or fail loudly when useHomomorphicEncryption=true without a factory).
-	       That refactor is a contract change for federated-training callers and is tracked as a
-	       Phase 2b sub-follow-up. SEAL remains a direct dep of core until then. -->
-	  <PackageReference Include="Microsoft.Research.SEALNet" />
+	  <!-- Microsoft.Research.SEALNet (homomorphic encryption) extracted to the
+	       opt-in AiDotNet.Privacy.HE metapackage in audit-2026-05 phase 2c
+	       (finding #14). SealHomomorphicEncryptionProvider moved there; the
+	       IHomomorphicEncryptionProvider<T> interface + HomomorphicEncryptionProviderBase
+	       stay in core. InMemoryFederatedTrainer no longer constructs SEAL by default —
+	       it requires an IHomomorphicEncryptionProvider<T> to be supplied when HE is
+	       enabled, and fails loudly otherwise. SEAL is no longer a core dependency.
+	  <PackageReference Include="Microsoft.Research.SEALNet" /> -->
 	  <PackageReference Include="Newtonsoft.Json" />
 	  <!-- MatFileHandler — read .mat split/annotation files (SVHN, Stanford Cars, Flowers-102) -->
 	  <PackageReference Include="MatFileHandler" />
@@ -116,7 +124,8 @@
 	       package's transitive dependency surface. -->
 	  <!-- SharpZipLib — bzip2 decompression for .tar.bz2 archives (LJSpeech) -->
 	  <PackageReference Include="SharpZipLib" />
-	  <PackageReference Include="StackExchange.Redis" />
+	  <!-- StackExchange.Redis lives only in the opt-in AiDotNet.Storage.Redis
+	       metapackage; the core package must not pull it transitively. -->
 	  <PackageReference Include="System.ValueTuple" />
 	  <PackageReference Include="TreeSitter.DotNet" />
 	  <PackageReference Include="FftSharp" />
@@ -131,10 +140,15 @@
 	  <PackageReference Include="SixLabors.ImageSharp" />
 	</ItemGroup>
 
-	<!-- Npgsql EF Core requires .NET 10+ -->
+	<!-- Npgsql.EntityFrameworkCore.PostgreSQL removed from core in audit-2026-05
+	     phase 2c (finding #14): no code under src/ (excluding the separate
+	     AiDotNet.Serving project, which declares its own Npgsql reference)
+	     uses EF Core or Npgsql. A PostgreSQL-backed IVectorStore/IModelRegistry,
+	     if added, belongs in a separate AiDotNet.Storage.PostgreSQL metapackage
+	     that ProjectReferences core — not in core's transitive surface.
 	<ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
 	  <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
-	</ItemGroup>
+	</ItemGroup> -->
 
 	<!-- System.Net.Http only for .NET Framework (built-in for .NET Core/.NET 5+) -->
 	<ItemGroup Condition="'$(TargetFramework)' == 'net471'">
@@ -171,6 +185,26 @@
 	  <None Remove="AiDotNet.Storage.Elasticsearch\**\*" />
 	</ItemGroup>
 
+	<!-- Exclude the opt-in AiDotNet.Storage.Postgres / AiDotNet.Storage.Redis metapackages (graph checkpointers). -->
+	<ItemGroup>
+	  <Compile Remove="AiDotNet.Storage.Postgres\**\*.cs" />
+	  <EmbeddedResource Remove="AiDotNet.Storage.Postgres\**\*" />
+	  <None Remove="AiDotNet.Storage.Postgres\**\*" />
+	  <Compile Remove="AiDotNet.Storage.Redis\**\*.cs" />
+	  <EmbeddedResource Remove="AiDotNet.Storage.Redis\**\*" />
+	  <None Remove="AiDotNet.Storage.Redis\**\*" />
+	</ItemGroup>
+
+	<!-- Exclude the opt-in metapackages extracted in audit-2026-05 phase 2c (finding #14). -->
+	<ItemGroup>
+	  <Compile Remove="AiDotNet.Privacy.HE\**\*.cs" />
+	  <EmbeddedResource Remove="AiDotNet.Privacy.HE\**\*" />
+	  <None Remove="AiDotNet.Privacy.HE\**\*" />
+	  <Compile Remove="AiDotNet.Storage.Sqlite\**\*.cs" />
+	  <EmbeddedResource Remove="AiDotNet.Storage.Sqlite\**\*" />
+	  <None Remove="AiDotNet.Storage.Sqlite\**\*" />
+	</ItemGroup>
+
 	<!-- Exclude the AiDotNet.Playground project files from this project -->
 	<ItemGroup>
 	  <Compile Remove="AiDotNet.Playground\**\*.cs" />
@@ -186,9 +220,7 @@
 
 	<!-- Source generator for auto-generating YAML configuration mappings -->
 	<ItemGroup>
-	  <ProjectReference Include="AiDotNet.Generators\AiDotNet.Generators.csproj"
-	                     OutputItemType="Analyzer"
-	                     ReferenceOutputAssembly="false" />
+	  <ProjectReference Include="AiDotNet.Generators\AiDotNet.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
 	</ItemGroup>
 
 	<!-- Exclude the source generator project files from this project's compilation -->

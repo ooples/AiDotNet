@@ -196,11 +196,27 @@ public class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
             }
         }
 
+        // Weighted layer-output sum: result = Σ_li weights[li] · layerOutputs[li].
+        // Each layer's add becomes a vectorised TensorMultiplyScalar +
+        // TensorAdd when shapes line up — common case is identical
+        // [seq, hiddenDim] tensors. Falls back to the prior scalar
+        // min-length loop on shape mismatch (kept identical behaviour for
+        // any caller that ships layer outputs of different lengths).
         var result = new Tensor<T>(layerOutputs[0].Shape.ToArray());
         for (int li = 0; li < count; li++)
         {
-            for (int i = 0; i < result.Length && i < layerOutputs[li].Length; i++)
-                result[i] = NumOps.Add(result[i], NumOps.FromDouble(NumOps.ToDouble(layerOutputs[li][i]) * weights[li]));
+            T wT = NumOps.FromDouble(weights[li]);
+            if (layerOutputs[li].Length == result.Length
+                && layerOutputs[li]._shape.SequenceEqual(result._shape))
+            {
+                var scaled = Engine.TensorMultiplyScalar(layerOutputs[li], wT);
+                result = Engine.TensorAdd(result, scaled);
+            }
+            else
+            {
+                for (int i = 0; i < result.Length && i < layerOutputs[li].Length; i++)
+                    result[i] = NumOps.Add(result[i], NumOps.Multiply(layerOutputs[li][i], wT));
+            }
         }
         return result;
     }

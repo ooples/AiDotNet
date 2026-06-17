@@ -97,8 +97,18 @@ public class WeibullAFT<T> : SurvivalModelBase<T>
     }
 
     /// <summary>
-    /// Fits the Weibull AFT model using Newton-Raphson optimization.
+    /// Fits the Weibull AFT model by maximizing the log-likelihood.
     /// </summary>
+    /// <remarks>
+    /// Uses gradient ascent with Armijo backtracking line search to guarantee
+    /// monotonic likelihood increase. Plain gradient ascent on the Weibull AFT
+    /// likelihood is unstable because the gradient contains exp(z) terms that
+    /// blow up when z &gt; 0 — the original lr=0.1 step diverged the parameters to
+    /// ~1e4 magnitudes on standard test data (Intercept exploded from ~2 to
+    /// ~9000), making S(t) collapse to 1 for every finite t. The line search
+    /// guarantees the next parameter set produces a non-decreasing log-
+    /// likelihood, which is the textbook stability guarantee for AFT MLE.
+    /// </remarks>
     protected override void FitSurvivalCore(Matrix<T> x, Vector<T> times, Vector<int> events)
     {
         int n = x.Rows;
@@ -114,43 +124,43 @@ public class WeibullAFT<T> : SurvivalModelBase<T>
         for (int i = 0; i < n; i++)
             logTimes[i] = Math.Log(Math.Max(1e-10, NumOps.ToDouble(times[i])));
 
-        // Initialize intercept as mean of log times
-        Intercept = NumOps.FromDouble(logTimes.Average());
+        // Initial intercept = mean of log times (location estimate).
+        // Initial scale uses the moment-matching estimate for the Gumbel
+        // distribution of z = (logT - η)/σ in the Weibull AFT family:
+        // Var(z) = π²/6 ⇒ σ ≈ sqrt(6/π²) * sd(log times). Clamped away from
+        // zero so the first gradient evaluation doesn't blow up.
+        double mean = logTimes.Average();
+        Intercept = NumOps.FromDouble(mean);
+        double sumSq = 0.0;
+        for (int i = 0; i < n; i++) { double d = logTimes[i] - mean; sumSq += d * d; }
+        double sdLogTimes = Math.Sqrt(sumSq / Math.Max(1, n - 1));
+        Scale = NumOps.FromDouble(Math.Max(0.1, sdLogTimes * Math.Sqrt(6.0) / Math.PI));
 
-        // Newton-Raphson / gradient descent optimization
-        double learningRate = 0.1;
-        double prevLogLik = double.NegativeInfinity;
+        double prevLogLik = ComputeLogLikelihood(x, logTimes, events, NumOps.ToDouble(Intercept), NumOps.ToDouble(Scale), Coefficients);
 
         for (int iter = 0; iter < MaxIterations; iter++)
         {
             double scale = NumOps.ToDouble(Scale);
             double intercept = NumOps.ToDouble(Intercept);
 
-            // Compute log-likelihood and gradients
-            double logLik = 0;
+            // Compute gradients at the current parameters.
             var gradBeta = new double[p];
             double gradIntercept = 0;
             double gradScale = 0;
 
             for (int i = 0; i < n; i++)
             {
-                // Compute linear predictor
                 double eta = intercept;
                 for (int j = 0; j < p; j++)
                     eta += NumOps.ToDouble(Coefficients[j]) * NumOps.ToDouble(x[i, j]);
 
-                // Standardized residual
-                double z = (logTimes[i] - eta) / scale;
+                // Clip z to [-30, 30] so exp(z) stays in [1e-13, 1e13] and the
+                // gradient terms don't overflow on extreme outliers.
+                double z = Math.Max(-30.0, Math.Min(30.0, (logTimes[i] - eta) / scale));
                 double expZ = Math.Exp(z);
 
                 if (events[i] == 1)
                 {
-                    // Event: add log density
-                    logLik += z - Math.Log(scale) - expZ;
-
-                    // Gradients for events
-                    // dlogL/d(eta) = (-1/sigma)(1-exp(z)) → negate to get accumulation direction
-                    // dlogL/d(sigma) = [-z(1-exp(z)) - 1]/sigma
                     double dLogLik_dZ = 1 - expZ;
                     gradIntercept -= dLogLik_dZ / scale;
                     gradScale -= (z * (1 - expZ) + 1) / scale;
@@ -160,10 +170,6 @@ public class WeibullAFT<T> : SurvivalModelBase<T>
                 }
                 else
                 {
-                    // Censored: add log survival
-                    logLik += -expZ;
-
-                    // Gradients for censored
                     gradIntercept += expZ / scale;
                     gradScale += z * expZ / scale;
 
@@ -172,20 +178,56 @@ public class WeibullAFT<T> : SurvivalModelBase<T>
                 }
             }
 
-            // Check convergence
-            if (Math.Abs(logLik - prevLogLik) < Tolerance)
-                break;
-            prevLogLik = logLik;
+            // Average per-sample so step sizes don't scale with n.
+            gradIntercept /= n;
+            gradScale /= n;
+            for (int j = 0; j < p; j++) gradBeta[j] /= n;
 
-            // Update parameters (normalize gradients by sample size for stable convergence)
-            Intercept = NumOps.FromDouble(intercept + learningRate * gradIntercept / n);
-            Scale = NumOps.FromDouble(Math.Max(0.01, scale + learningRate * gradScale / n));
+            // Armijo backtracking line search: start at step=1, halve until
+            // the new log-likelihood is strictly greater than the current one
+            // (or step underflows). Guarantees monotonic improvement on a
+            // concave objective.
+            double gradNormSq = gradIntercept * gradIntercept + gradScale * gradScale;
+            for (int j = 0; j < p; j++) gradNormSq += gradBeta[j] * gradBeta[j];
+            if (gradNormSq < Tolerance * Tolerance) break;
 
-            for (int j = 0; j < p; j++)
+            double step = 1.0;
+            double newLogLik = prevLogLik;
+            double newIntercept = intercept;
+            double newScale = scale;
+            var newBeta = new double[p];
+            bool accepted = false;
+            for (int backtrack = 0; backtrack < 30; backtrack++)
             {
-                Coefficients[j] = NumOps.FromDouble(
-                    NumOps.ToDouble(Coefficients[j]) + learningRate * gradBeta[j] / n);
+                newIntercept = intercept + step * gradIntercept;
+                newScale = Math.Max(0.01, scale + step * gradScale);
+                for (int j = 0; j < p; j++)
+                    newBeta[j] = NumOps.ToDouble(Coefficients[j]) + step * gradBeta[j];
+
+                var trialCoeffs = new Vector<T>(p);
+                for (int j = 0; j < p; j++) trialCoeffs[j] = NumOps.FromDouble(newBeta[j]);
+                newLogLik = ComputeLogLikelihood(x, logTimes, events, newIntercept, newScale, trialCoeffs);
+
+                if (newLogLik > prevLogLik + 1e-12 * Math.Abs(prevLogLik))
+                {
+                    accepted = true;
+                    break;
+                }
+                step *= 0.5;
             }
+
+            if (!accepted) break;
+
+            Intercept = NumOps.FromDouble(newIntercept);
+            Scale = NumOps.FromDouble(newScale);
+            for (int j = 0; j < p; j++) Coefficients[j] = NumOps.FromDouble(newBeta[j]);
+
+            if (Math.Abs(newLogLik - prevLogLik) < Tolerance)
+            {
+                prevLogLik = newLogLik;
+                break;
+            }
+            prevLogLik = newLogLik;
         }
 
         // Store event times for prediction
@@ -206,6 +248,26 @@ public class WeibullAFT<T> : SurvivalModelBase<T>
                 BaselineSurvivalFunction[t] = NumOps.FromDouble(survival);
             }
         }
+    }
+
+    private double ComputeLogLikelihood(Matrix<T> x, double[] logTimes, Vector<int> events, double intercept, double scale, Vector<T> coeffs)
+    {
+        int n = x.Rows;
+        int p = x.Columns;
+        double logLik = 0.0;
+        double logScale = Math.Log(scale);
+        for (int i = 0; i < n; i++)
+        {
+            double eta = intercept;
+            for (int j = 0; j < p; j++)
+                eta += NumOps.ToDouble(coeffs[j]) * NumOps.ToDouble(x[i, j]);
+            double z = Math.Max(-30.0, Math.Min(30.0, (logTimes[i] - eta) / scale));
+            double expZ = Math.Exp(z);
+            logLik += events[i] == 1
+                ? z - logScale - expZ      // log density (event)
+                : -expZ;                    // log survival (censored)
+        }
+        return logLik;
     }
 
     /// <summary>

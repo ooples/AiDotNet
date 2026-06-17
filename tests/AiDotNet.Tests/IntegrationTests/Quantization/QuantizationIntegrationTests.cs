@@ -1622,7 +1622,11 @@ public class QuantizationIntegrationTests
     /// Simple test model for quantization testing.
     /// Implements all IFullModel interface members.
     /// </summary>
-    private class SimpleTestModel<T> : IFullModel<T, T[], T[]>
+    // Implements IParameterizable explicitly — quantizer calibration calls
+    // InterfaceGuard.Parameterizable(model) and requires the runtime type
+    // to advertise IParameterizable<T, T[], T[]>. Members already exist.
+    private class SimpleTestModel<T> : IFullModel<T, T[], T[]>,
+        IParameterizable<T, T[], T[]>
     {
         private Vector<T> _parameters;
         private readonly ModelMetadata<T> _metadata = new();

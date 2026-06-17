@@ -75,7 +75,10 @@ public class JambaLanguageModel<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         JambaOptions? options = null)
         : base(architecture,
-            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.TextGeneration))
+            // The LM head emits raw vocabulary logits. Match PyTorch's
+            // nn.CrossEntropyLoss contract by applying log-softmax inside
+            // the loss instead of treating logits as probabilities.
+            lossFunction ?? new LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new JambaOptions();
         Options = _options;
@@ -150,7 +153,7 @@ public class JambaLanguageModel<T> : NeuralNetworkBase<T>
                 { "MaxSeqLength", _maxSeqLength },
                 { "LayerCount", Layers.Count }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

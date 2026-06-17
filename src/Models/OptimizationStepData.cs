@@ -44,6 +44,18 @@ public class OptimizationStepData<T, TInput, TOutput>
     public IFullModel<T, TInput, TOutput> Solution { get; set; }
 
     /// <summary>
+    /// True only for the placeholder instance produced by the parameterless constructor,
+    /// whose <see cref="Solution"/> is a throwaway default model (never a real evaluation).
+    /// Optimizers seed their "best so far" slot with such a placeholder; the best-solution
+    /// update logic uses this flag to always accept the FIRST real evaluation, instead of
+    /// fitness-comparing against the placeholder's default <c>FitnessScore = 0</c> — which
+    /// a real evaluation can fail to beat (e.g. an error-minimizing score, or a NaN/zero
+    /// score produced under heavy parallel contention), leaking the throwaway default model
+    /// out as the optimization result.
+    /// </summary>
+    internal bool IsUninitializedPlaceholder { get; set; }
+
+    /// <summary>
     /// Gets or sets the list of selected feature vectors for this optimization step.
     /// </summary>
     /// <value>A list of Vector&lt;T&gt; objects representing the selected features.</value>
@@ -298,5 +310,10 @@ public class OptimizationStepData<T, TInput, TOutput>
         XValSubset = x;
         XTestSubset = x;
         Solution = ModelHelper<T, TInput, TOutput>.CreateDefaultModel();
+
+        // Mark this as the throwaway placeholder so UpdateBestSolution always replaces it
+        // with the first real evaluation rather than fitness-comparing against the default
+        // model / FitnessScore = 0 above. See IsUninitializedPlaceholder.
+        IsUninitializedPlaceholder = true;
     }
 }

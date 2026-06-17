@@ -186,7 +186,14 @@ public class EfficientSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
-        if (input.Shape.Length < 4) throw new ArgumentException($"Tape-based training requires rank >= 4, got rank {input.Shape.Length}. Reshape to [batch, channels, height, width].", nameof(input));
+        if (input.Shape.Length == 3) input = AddBatchDimension(input);
+        if (expectedOutput.Shape.Length == 3) expectedOutput = AddBatchDimension(expectedOutput);
+        if (input.Shape.Length != 4) throw new ArgumentException($"Tape-based training requires rank 3 (CHW) or rank 4 (NCHW), got rank {input.Shape.Length}.", nameof(input));
+        if (expectedOutput.Shape.Length != 4) throw new ArgumentException($"Tape-based training target requires rank 3 (CHW) or rank 4 (NCHW), got rank {expectedOutput.Shape.Length}.", nameof(expectedOutput));
+        if (input.Shape[0] != expectedOutput.Shape[0])
+            throw new ArgumentException(
+                $"Input batch size ({input.Shape[0]}) must match target batch size ({expectedOutput.Shape[0]}).",
+                nameof(expectedOutput));
         SetTrainingMode(true);
         try
         {
@@ -282,7 +289,7 @@ public class EfficientSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "EfficientSAM" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
-        ModelData = this.Serialize()
+        ModelData = SerializeForMetadata()
     };
 
     /// <summary>

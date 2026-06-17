@@ -18,10 +18,12 @@ public class NestedLearningDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task AssociativeMemory_SingleAssociation_MatrixIsScaledOuterProduct()
     {
-        // Hebbian rule: W += lr * target * input^T
-        // With lr=0.01 (hardcoded in Associate), input=[1,0], target=[0,1]:
-        // W += 0.01 * [0,1]^T * [1,0] = 0.01 * [[0*1, 0*0], [1*1, 1*0]]
-        //    = [[0, 0], [0.01, 0]]
+        // Modern continuous Hopfield (Ramsauer et al. 2021): Associate stores the
+        // (key=input, value=target) pair, and GetAssociationMatrix returns the
+        // outer-product sum W = Σ value ⊗ key. There is no Hebbian learning rate —
+        // the association strength lives in the softmax retrieval temperature, not
+        // the matrix — so the outer product is UNSCALED. With input=[1,0],
+        // target=[0,1]:  W = [0,1]^T ⊗ [1,0] = [[0,0],[1,0]]
         var mem = new AssociativeMemory<double>(dimension: 2);
         var input = new Vector<double>(new double[] { 1.0, 0.0 });
         var target = new Vector<double>(new double[] { 0.0, 1.0 });
@@ -31,16 +33,17 @@ public class NestedLearningDeepMathIntegrationTests
         var W = mem.GetAssociationMatrix();
         Assert.Equal(0.0, W[0, 0], Tolerance);
         Assert.Equal(0.0, W[0, 1], Tolerance);
-        Assert.Equal(0.01, W[1, 0], Tolerance);
+        Assert.Equal(1.0, W[1, 0], Tolerance);
         Assert.Equal(0.0, W[1, 1], Tolerance);
     }
 
     [Fact(Timeout = 120000)]
     public async Task AssociativeMemory_TwoAssociations_MatrixAccumulatesOuterProducts()
     {
-        // First: W += 0.01 * [0,1]^T * [1,0] = [[0,0],[0.01,0]]
-        // Second: W += 0.01 * [1,0]^T * [0,1] = [[0,0.01],[0,0]]
-        // Total: W = [[0, 0.01], [0.01, 0]]
+        // Outer-product sum W = Σ value ⊗ key over the stored pairs (unscaled):
+        // First:  [0,1]^T ⊗ [1,0] = [[0,0],[1,0]]
+        // Second: [1,0]^T ⊗ [0,1] = [[0,1],[0,0]]
+        // Total:  W = [[0, 1], [1, 0]]
         var mem = new AssociativeMemory<double>(dimension: 2);
 
         mem.Associate(
@@ -52,17 +55,17 @@ public class NestedLearningDeepMathIntegrationTests
 
         var W = mem.GetAssociationMatrix();
         Assert.Equal(0.0, W[0, 0], Tolerance);
-        Assert.Equal(0.01, W[0, 1], Tolerance);
-        Assert.Equal(0.01, W[1, 0], Tolerance);
+        Assert.Equal(1.0, W[0, 1], Tolerance);
+        Assert.Equal(1.0, W[1, 0], Tolerance);
         Assert.Equal(0.0, W[1, 1], Tolerance);
     }
 
     [Fact(Timeout = 120000)]
     public async Task AssociativeMemory_SameInputTarget_DiagonalUpdate()
     {
-        // Associate [1,0] with [1,0]: W += 0.01 * [1,0]^T * [1,0] = [[0.01, 0], [0, 0]]
-        // Associate [0,1] with [0,1]: W += 0.01 * [0,1]^T * [0,1] = [[0, 0], [0, 0.01]]
-        // Total: W = [[0.01, 0], [0, 0.01]] = 0.01 * I
+        // Associate [1,0]->[1,0]: [1,0]^T ⊗ [1,0] = [[1,0],[0,0]]
+        // Associate [0,1]->[0,1]: [0,1]^T ⊗ [0,1] = [[0,0],[0,1]]
+        // Total (unscaled outer-product sum): W = [[1,0],[0,1]] = I
         var mem = new AssociativeMemory<double>(dimension: 2);
 
         mem.Associate(
@@ -73,10 +76,10 @@ public class NestedLearningDeepMathIntegrationTests
             new Vector<double>(new double[] { 0.0, 1.0 }));
 
         var W = mem.GetAssociationMatrix();
-        Assert.Equal(0.01, W[0, 0], Tolerance);
+        Assert.Equal(1.0, W[0, 0], Tolerance);
         Assert.Equal(0.0, W[0, 1], Tolerance);
         Assert.Equal(0.0, W[1, 0], Tolerance);
-        Assert.Equal(0.01, W[1, 1], Tolerance);
+        Assert.Equal(1.0, W[1, 1], Tolerance);
     }
 
     #endregion
@@ -86,11 +89,8 @@ public class NestedLearningDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task AssociativeMemory_Retrieve_MatrixMultiply_HandComputed()
     {
-        // After associations building W = [[0, 0.01], [0.01, 0]]:
-        // Retrieve([1, 0]) = W * [1, 0] = [0, 0.01]
-        // Retrieve([0, 1]) = W * [0, 1] = [0.01, 0]
-        // Note: cosine similarity of [1,0] with stored [1,0] = 1.0 > 0.8 → blending!
-        // But for orthogonal query [0,1] vs stored [1,0], similarity = 0 → no blending
+        // Ramsauer retrieval: result = softmax(β · Kᵀq) · V over stored memories.
+        // Stored: (key=[1,0], value=[0,1]) and (key=[0,1], value=[1,0]).
         var mem = new AssociativeMemory<double>(dimension: 2);
 
         mem.Associate(
@@ -100,53 +100,55 @@ public class NestedLearningDeepMathIntegrationTests
             new Vector<double>(new double[] { 0.0, 1.0 }),
             new Vector<double>(new double[] { 1.0, 0.0 }));
 
-        // Query orthogonal to both stored inputs won't trigger blending
-        // W * [1,1] = [0+0.01, 0.01+0] = [0.01, 0.01]
-        // But [1,1] has cosine similarity with [1,0] = 1/sqrt(2) ≈ 0.707 < 0.8
-        // and with [0,1] = 1/sqrt(2) ≈ 0.707 < 0.8
-        // So pure matrix retrieval: [0.01, 0.01]
+        // Query [1,1] scores both keys equally (k·q = 1 for both), so softmax is
+        // [0.5, 0.5] regardless of the temperature β. The retrieval is the equal
+        // blend of the two values: 0.5·[0,1] + 0.5·[1,0] = [0.5, 0.5].
         var query = new Vector<double>(new double[] { 1.0, 1.0 });
         var result = mem.Retrieve(query);
-        Assert.Equal(0.01, result[0], Tolerance);
-        Assert.Equal(0.01, result[1], Tolerance);
+        Assert.Equal(0.5, result[0], Tolerance);
+        Assert.Equal(0.5, result[1], Tolerance);
     }
 
     [Fact(Timeout = 120000)]
     public async Task AssociativeMemory_Retrieve_ExactMatch_TriggersBlending()
     {
-        // Associate [1,0] with [0,1], so memory stores input=[1,0], target=[0,1]
-        // W = [[0,0],[0.01,0]]
-        // Retrieve with query=[1,0] (same as stored input):
-        //   cosine_sim([1,0], [1,0]) = 1.0 > 0.8 → blending triggered
-        //   matrix_result = W * [1,0] = [0, 0.01]
-        //   buffer_match = [0, 1] (the stored target)
-        //   blended = 0.7 * [0, 0.01] + 0.3 * [0, 1] = [0, 0.007 + 0.3] = [0, 0.307]
+        // Single stored memory (key=[1,0], value=[0,1]). With one memory the
+        // softmax over keys is [1] for ANY query, so Ramsauer retrieval returns
+        // exactly the stored value [0,1] — querying with the exact key is the
+        // attractor fixed point (Ramsauer et al. 2021, Theorem 4).
         var mem = new AssociativeMemory<double>(dimension: 2);
         mem.Associate(
             new Vector<double>(new double[] { 1.0, 0.0 }),
             new Vector<double>(new double[] { 0.0, 1.0 }));
 
         var result = mem.Retrieve(new Vector<double>(new double[] { 1.0, 0.0 }));
-        Assert.Equal(0.0, result[0], Tolerance);
-        Assert.Equal(0.307, result[1], Tolerance);
+        // The softmax normalizes with /(sumExp + 1e-10) for numerical stability,
+        // so a single memory's weight is 1/(1+1e-10) ≈ 1 - 1e-10 rather than
+        // exactly 1; allow that stability epsilon (1e-9 covers it comfortably).
+        const double SoftmaxEpsTolerance = 1e-9;
+        Assert.Equal(0.0, result[0], SoftmaxEpsTolerance);
+        Assert.Equal(1.0, result[1], SoftmaxEpsTolerance);
     }
 
     [Fact(Timeout = 120000)]
     public async Task AssociativeMemory_Retrieve_OrthogonalQuery_NoBlending()
     {
-        // Associate [1,0] with [0,1]
-        // W = [[0,0],[0.01,0]]
-        // Retrieve with query=[0,1] (orthogonal to stored input [1,0]):
-        //   cosine_sim([0,1], [1,0]) = 0.0 < 0.8 → no blending
-        //   result = W * [0,1] = [0, 0]
+        // Single stored memory (key=[1,0], value=[0,1]). Unlike a linear Hebbian
+        // matrix (where an orthogonal query would zero out), Ramsauer retrieval is
+        // softmax over keys: with a single memory the softmax is [1] regardless of
+        // the query, so even an orthogonal query [0,1] still retrieves the stored
+        // value [0,1]. The temperature only matters once ≥2 memories compete.
         var mem = new AssociativeMemory<double>(dimension: 2);
         mem.Associate(
             new Vector<double>(new double[] { 1.0, 0.0 }),
             new Vector<double>(new double[] { 0.0, 1.0 }));
 
         var result = mem.Retrieve(new Vector<double>(new double[] { 0.0, 1.0 }));
-        Assert.Equal(0.0, result[0], Tolerance);
-        Assert.Equal(0.0, result[1], Tolerance);
+        // Single-memory softmax weight is 1/(1+1e-10) ≈ 1 - 1e-10 (the stability
+        // epsilon in the normalizer), so allow 1e-9 around the stored value.
+        const double SoftmaxEpsTolerance = 1e-9;
+        Assert.Equal(0.0, result[0], SoftmaxEpsTolerance);
+        Assert.Equal(1.0, result[1], SoftmaxEpsTolerance);
     }
 
     #endregion
@@ -156,7 +158,12 @@ public class NestedLearningDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task AssociativeMemory_Update_CustomLearningRate_HandComputed()
     {
-        // Update with lr=0.5: W += 0.5 * [1,0]^T * [1,0] = [[0.5, 0], [0, 0]]
+        // Update on a NEW key stores the full (unscaled) value — the learning rate
+        // only modulates the blend when a near-duplicate key (cosine > 0.99)
+        // already exists, so that retrieval returns actual stored values rather
+        // than lr-shrunk ones. Update([1,0], [1,0], lr=0.5) therefore stores the
+        // pair as-is, giving W = [1,0]^T ⊗ [1,0] = [[1,0],[0,0]] (lr is not applied
+        // to a first/unique association).
         var mem = new AssociativeMemory<double>(dimension: 2);
         mem.Update(
             new Vector<double>(new double[] { 1.0, 0.0 }),
@@ -164,7 +171,7 @@ public class NestedLearningDeepMathIntegrationTests
             0.5);
 
         var W = mem.GetAssociationMatrix();
-        Assert.Equal(0.5, W[0, 0], Tolerance);
+        Assert.Equal(1.0, W[0, 0], Tolerance);
         Assert.Equal(0.0, W[0, 1], Tolerance);
         Assert.Equal(0.0, W[1, 0], Tolerance);
         Assert.Equal(0.0, W[1, 1], Tolerance);
@@ -222,9 +229,8 @@ public class NestedLearningDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task AssociativeMemory_IdentityRetrieval_AfterStandardBasisAssociations()
     {
-        // Associate each standard basis vector with itself using Update(lr=1.0)
-        // This creates W = I (identity matrix)
-        // Retrieving any vector should return itself (W*v = v)
+        // Associate each standard basis vector with itself using Update(lr=1.0).
+        // The outer-product sum is W = Σ e_i ⊗ e_i = I (identity matrix).
         var dim = 3;
         var mem = new AssociativeMemory<double>(dimension: dim);
 
@@ -245,13 +251,26 @@ public class NestedLearningDeepMathIntegrationTests
             }
         }
 
-        // Retrieve with arbitrary vector: W * v = I * v = v
-        // Note: no memories in buffer (Update doesn't add to buffer), so no blending
+        // Ramsauer retrieval over the 3 orthonormal memories is
+        // result = softmax(β · [q·e0, q·e1, q·e2]) · [e0; e1; e2], which (because
+        // the values ARE the basis) equals the softmax distribution itself — a
+        // convex combination, not the raw query. So the result is a probability
+        // distribution: every component in (0,1), components sum to 1, and the
+        // ordering follows the scores (q2=0.8 > q0=0.5 > q1=-0.3 → result[2] >
+        // result[0] > result[1]). The dominant basis is the one most aligned with
+        // the query (e2), demonstrating content-addressable recall.
         var query = new Vector<double>(new double[] { 0.5, -0.3, 0.8 });
         var result = mem.Retrieve(query);
-        Assert.Equal(0.5, result[0], Tolerance);
-        Assert.Equal(-0.3, result[1], Tolerance);
-        Assert.Equal(0.8, result[2], Tolerance);
+
+        double sum = result[0] + result[1] + result[2];
+        Assert.Equal(1.0, sum, Tolerance);
+        for (int i = 0; i < dim; i++)
+        {
+            Assert.True(result[i] > 0.0 && result[i] < 1.0,
+                $"result[{i}]={result[i]} must be a softmax weight in (0,1)");
+        }
+        Assert.True(result[2] > result[0], "e2 (highest score) must dominate e0");
+        Assert.True(result[0] > result[1], "e0 (higher score) must exceed e1");
     }
 
     #endregion

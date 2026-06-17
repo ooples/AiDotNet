@@ -648,6 +648,15 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     /// </remarks>
     private Tensor<T> PredictNative(Tensor<T> input)
     {
+        // Inference mode is REQUIRED here: the encoder stack contains
+        // BatchNormalizationLayers, which in training mode normalize across the
+        // batch axis. A single-instance prediction (batch = 1) then has each
+        // feature's batch-mean equal to its own value, so the normalized output
+        // is ~0 regardless of the input and every constant input collapses to the
+        // same prediction. Inference mode uses the running statistics instead, so
+        // BatchNorm stays affine and the input level propagates.
+        SetTrainingMode(false);
+
         var current = input;
         foreach (var layer in Layers)
         {

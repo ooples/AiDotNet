@@ -214,24 +214,26 @@ public class LayerHelperIntegrationTests
 
         var layers = LayerHelper<double>.CreateDefaultAttentionLayers(architecture).ToList();
 
-        // Should contain: Input, Embedding, PositionalEncoding, 3x(MHA + LayerNorm + 2xDense + LayerNorm) + Dense
-        Assert.True(layers.Count >= 10, $"Expected at least 10 attention layers, got {layers.Count}");
-
-        // Should contain multi-head attention layers
-        Assert.Contains(layers, l => l is MultiHeadAttentionLayer<double>);
-
-        // Should contain layer normalization
-        Assert.Contains(layers, l => l is LayerNormalizationLayer<double>);
-
-        // Should contain embedding layer
-        Assert.Contains(layers, l => l is EmbeddingLayer<double>);
-
-        // Should contain positional encoding
-        Assert.Contains(layers, l => l is PositionalEncodingLayer<double>);
-
-        // 3 transformer blocks -> 3 MHA layers
-        int mhaCount = layers.Count(l => l is MultiHeadAttentionLayer<double>);
-        Assert.Equal(3, mhaCount);
+        // Paper-faithful Vaswani et al. 2017 ("Attention Is All You Need" §3.1)
+        // stack: Input + Embedding + PositionalEncoding + 3 × TransformerEncoderLayer
+        // + DenseLayer. Each TransformerEncoderLayer is a SELF-CONTAINED composite
+        // implementing the paper's sub-layer residuals (LayerNorm(x + SelfAttention(x))
+        // then LayerNorm(h + FFN(h))) and serializes / clones as one layer. Earlier
+        // assertion counted MHA + LayerNorm + Dense sub-layers individually under
+        // the assumption they were emitted flat at the top level; with the encoder
+        // composite that flat structure is gone and MHA / LayerNorm live INSIDE
+        // each TransformerEncoderLayer. The invariants worth asserting at this
+        // level are the layer-stack shape and the presence of the paper-canonical
+        // composite — internal MHA / LayerNorm counts are covered by
+        // TransformerEncoderLayer's own tests.
+        // Input + Embedding + PositionalEncoding + 3 × TransformerEncoderLayer
+        // + DenseLayer = 7 layers.
+        Assert.Equal(7, layers.Count);
+        Assert.IsType<InputLayer<double>>(layers[0]);
+        Assert.IsType<EmbeddingLayer<double>>(layers[1]);
+        Assert.IsType<PositionalEncodingLayer<double>>(layers[2]);
+        Assert.Equal(3, layers.Count(l => l is TransformerEncoderLayer<double>));
+        Assert.IsType<DenseLayer<double>>(layers[^1]);
     }
 
     #endregion
@@ -1076,16 +1078,22 @@ public class LayerHelperIntegrationTests
 
         var layers = LayerHelper<double>.CreateDefaultOccupancyLayers(architecture).ToList();
 
-        // Dense(10,64) + BN(64) + Dropout + Dense(64,32) + BN(32) + Dropout + Dense(32,16) + Dense(16,1) = 8
-        Assert.Equal(8, layers.Count);
-
-        // Should contain BatchNormalization and Dropout
-        Assert.Contains(layers, l => l is BatchNormalizationLayer<double>);
-        Assert.Contains(layers, l => l is DropoutLayer<double>);
-
-        // Output layer should have output size 1 (binary)
-        var lastDense = layers.OfType<DenseLayer<double>>().Last();
-        var outputShape = lastDense.GetOutputShape();
+        // Paper-faithful Occupancy Network decoder per Mescheder et al.
+        // CVPR 2019 ("Occupancy Networks: Learning 3D Reconstruction in
+        // Function Space", arXiv:1812.03828): a single composite
+        // OccupancyNetworkDecoder layer carrying the linear point
+        // embedding, pre-activation Conditional-ResNet blocks, and the
+        // conditional-norm → ReLU → sigmoid occupancy head. The decoder
+        // is intentionally one layer (not a flat Dense+BN+Dropout stack);
+        // each Conditional-ResNet block is internal to the composite so
+        // the per-point evaluation gets the paper's full sub-layer
+        // structure without the stack-level layers losing the
+        // conditioning. The earlier assertion (`Equal(8, layers.Count)`
+        // — Dense+BN+Dropout × 2 + Dense + Dense) was from the
+        // pre-paper-rewrite default stack.
+        Assert.Single(layers);
+        var decoder = Assert.IsType<OccupancyNetworkDecoder<double>>(layers[0]);
+        var outputShape = decoder.GetOutputShape();
         int outputSize = outputShape.Aggregate(1, (a, b) => a * b);
         Assert.Equal(1, outputSize);
     }
@@ -1110,9 +1118,18 @@ public class LayerHelperIntegrationTests
         // Should contain multi-head attention
         Assert.Contains(layers, l => l is MultiHeadAttentionLayer<double>);
 
-        // Should contain BatchNormalization and Dropout
-        Assert.Contains(layers, l => l is BatchNormalizationLayer<double>);
-        Assert.Contains(layers, l => l is DropoutLayer<double>);
+        // Normalization is LayerNormalization (Ba et al. 2016, NIPS-LLD),
+        // not BatchNormalization — LayerNorm normalizes a single sample's
+        // hidden dim and stays well-defined at batch size 1, where BN's
+        // batch-statistics collapse (σ² = 0) and divide-by-eps produces
+        // nonsense activations. Memorization-style training runs at
+        // batch = 1 so the head MUST use LayerNorm to remain trainable.
+        // Dropout is intentionally removed from the head: per-step mask
+        // randomness exceeds the gradient signal on the 100-iter
+        // memorization probe and stalls loss at the BCE-ln(2) baseline
+        // (#1304 cluster-6 follow-up). Earlier assertion (BatchNorm +
+        // Dropout) was for the pre-paper-rewrite default stack.
+        Assert.Contains(layers, l => l is LayerNormalizationLayer<double>);
     }
 
     [Fact(Timeout = 120000)]

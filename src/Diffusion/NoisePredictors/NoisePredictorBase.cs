@@ -7,6 +7,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 
@@ -360,6 +361,216 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
             shapeMode: AiDotNet.NeuralNetworks.SymbolicShapeMode.BatchDynamic,
             modelIdentity: GetType().FullName ?? GetType().Name);
     }
+
+    #region Transparent Weight Streaming (Tensors #602 / issue #430)
+
+    // 0 = not engaged, 1 = engaged. Int (not bool) so the engage transition can be claimed
+    // atomically via Interlocked.CompareExchange — concurrent callers on the same instance
+    // then can't both reconfigure the process-global WeightRegistry.
+    private int _streamingEngaged;
+
+    // 0 = no successful weight registration yet, 1 = resolved lazy weights have
+    // been registered with the streaming pool at least once.
+    private int _streamingWeightsRegistered;
+
+    /// <summary>
+    /// Parameter-count threshold above which <see cref="MaybeEngageWeightStreaming"/>
+    /// engages disk-backed weight streaming for the denoising forward loop. 500 M
+    /// is the same memory-pressure inflection point <c>NeuralNetworkBase</c> uses.
+    /// </summary>
+    private const long DefaultStreamingThresholdParams = 500_000_000L;
+
+    /// <summary>
+    /// Test/diagnostic override for <see cref="DefaultStreamingThresholdParams"/> so
+    /// controlled-scale tests can exercise the streaming path without a
+    /// foundation-scale model. <c>null</c> ⇒ use the default. Process-global.
+    /// </summary>
+    internal static long? StreamingThresholdOverride { get; set; }
+
+    /// <summary>
+    /// Test/diagnostic override for the streaming pool's resident-byte cap so a
+    /// small model can be forced to page (the auto-cap is sized for foundation
+    /// models). <c>null</c> ⇒ use <see cref="ComputeResidentCapBytes"/>.
+    /// </summary>
+    internal static long? StreamingResidentCapOverride { get; set; }
+
+    /// <summary>
+    /// Engages transparent weight streaming for this predictor when it is large
+    /// enough to pressure host RAM. Idempotent — runs at most once per instance.
+    /// <para>
+    /// When engaged it configures the process-wide <see cref="WeightRegistry"/> for
+    /// transparent auto-eviction and flags every owned layer to allocate its lazy
+    /// weights through the disk-backed streaming pool. Combined with
+    /// <see cref="RegisterResolvedStreamingWeights"/> (called after the first
+    /// forward resolves weights), the multi-step denoising loop then keeps only a
+    /// bounded resident set: each weight auto-rehydrates on access and the
+    /// symmetric owner-drop evicts cold ones.
+    /// </para>
+    /// <para>
+    /// <b>Safety guard.</b> The registry is process-global and
+    /// <see cref="WeightRegistry.Configure"/> throws on a pool that already has
+    /// live handles. So this only engages when the registry is empty — if another
+    /// model currently owns a streaming session, this predictor runs resident
+    /// rather than clobbering it. The common single-model inference path sees an
+    /// empty registry.
+    /// </para>
+    /// </summary>
+    protected void MaybeEngageWeightStreaming()
+    {
+        if (System.Threading.Volatile.Read(ref _streamingEngaged) != 0) return;
+
+        long threshold = StreamingThresholdOverride ?? DefaultStreamingThresholdParams;
+        if (ParameterCount <= threshold) return;
+
+        // Don't reconfigure (or clobber) a registry another model is using.
+        if (WeightRegistry.GetStreamingReport().RegisteredEntryCount > 0) return;
+
+        // Atomically claim engagement: if a concurrent call on this same instance already
+        // won the race, that thread owns the WeightRegistry.Configure below and this one
+        // returns (runs resident) rather than reconfiguring the process-global registry.
+        if (System.Threading.Interlocked.CompareExchange(ref _streamingEngaged, 1, 0) != 0) return;
+
+        WeightRegistry.Configure(new GpuOffloadOptions
+        {
+            StreamingPoolMaxResidentBytes = StreamingResidentCapOverride ?? ComputeResidentCapBytes(),
+            TransparentAutoEviction = true,
+        });
+
+        // ReflectInstanceLayers (not EnumerateLayers) so the engagement works for
+        // ANY predictor without requiring an EnumerateLayers override — it walks
+        // owned layer fields recursively, including those inside the DiT block list.
+        foreach (var layer in ReflectInstanceLayers(this))
+        {
+            if (layer is LayerBase<T> lb) lb.UseStreamingAllocator = true;
+        }
+    }
+
+    /// <summary>
+    /// Starts a predictor forward that may need transparent weight streaming.
+    /// The returned scope registers resolved lazy weights on successful completion
+    /// and releases any in-flight streaming reservations if the first forward fails.
+    /// </summary>
+    protected WeightStreamingForwardScope BeginWeightStreamingForward()
+    {
+        MaybeEngageWeightStreaming();
+        return new WeightStreamingForwardScope(this);
+    }
+
+    /// <summary>
+    /// Registers this predictor's now-resolved weights with the streaming pool,
+    /// dropping their resident in-memory copies to disk-backed storage. No-op
+    /// unless <see cref="MaybeEngageWeightStreaming"/> engaged. Called after the
+    /// first forward resolves the lazy weights, so from the second forward on the
+    /// transparent auto-rehydrate + owner-drop keep the resident set bounded.
+    /// </summary>
+    protected void RegisterResolvedStreamingWeights()
+    {
+        if (System.Threading.Volatile.Read(ref _streamingEngaged) == 0) return;
+
+        foreach (var layer in ReflectInstanceLayers(this))
+        {
+            if (layer is not LayerBase<T> lb) continue;
+            foreach (var tensor in lb.GetTrainableParameters())
+            {
+                // Skip placeholders (lazy weights not yet resolved) and tensors
+                // already registered (idempotent across forwards).
+                if (tensor is null || tensor.Length == 0 || tensor.StreamingPoolHandle >= 0) continue;
+                tensor.Lifetime = WeightLifetime.Streaming;
+                WeightRegistry.RegisterWeight(tensor);
+            }
+        }
+
+        System.Threading.Volatile.Write(ref _streamingWeightsRegistered, 1);
+    }
+
+    private void ReleaseStreamingWeights(bool includeRegistered)
+    {
+        if (System.Threading.Volatile.Read(ref _streamingEngaged) == 0) return;
+
+        foreach (var layer in ReflectInstanceLayers(this))
+        {
+            if (layer is not LayerBase<T> lb) continue;
+            foreach (var tensor in lb.GetTrainableParameters())
+            {
+                if (tensor is null || tensor.Lifetime != WeightLifetime.Streaming) continue;
+                if (!includeRegistered && tensor.StreamingPoolHandle >= 0) continue;
+
+                try
+                {
+                    WeightRegistry.UnregisterWeight(tensor);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"NoisePredictorBase: failed to release streaming weight " +
+                        $"from {layer.GetType().Name}: {ex.GetType().Name}: {ex.Message}");
+                }
+            }
+        }
+
+        if (includeRegistered)
+        {
+            System.Threading.Volatile.Write(ref _streamingWeightsRegistered, 0);
+        }
+    }
+
+    /// <summary>
+    /// Per-forward streaming guard used by concrete predictors. Call
+    /// <see cref="Complete"/> with the final output immediately before returning.
+    /// </summary>
+    protected sealed class WeightStreamingForwardScope : IDisposable
+    {
+        private readonly NoisePredictorBase<T> _owner;
+        private bool _completed;
+
+        internal WeightStreamingForwardScope(NoisePredictorBase<T> owner)
+        {
+            _owner = owner;
+        }
+
+        public Tensor<T> Complete(Tensor<T> result)
+        {
+            _owner.RegisterResolvedStreamingWeights();
+            _completed = true;
+            return result;
+        }
+
+        public void Dispose()
+        {
+            if (!_completed)
+            {
+                var firstForwardDidNotRegister =
+                    System.Threading.Volatile.Read(ref _owner._streamingWeightsRegistered) == 0;
+                _owner.ReleaseStreamingWeights(includeRegistered: firstForwardDidNotRegister);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Resident-byte cap for the streaming pool: half the host's available managed
+    /// memory, clamped to [512 MiB, 8 GiB]. Big enough for several layers' working
+    /// set (so a single op never needs more than the cap), small enough to leave
+    /// headroom for activations and runtime on a 16 GB host.
+    /// </summary>
+    private static long ComputeResidentCapBytes()
+    {
+        long cap;
+#if NET5_0_OR_GREATER
+        long avail = 0;
+        try { avail = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes; } catch { /* fall through */ }
+        cap = avail > 0 ? avail / 2 : 4L * 1024 * 1024 * 1024;
+#else
+        // GCMemoryInfo isn't available on net471; use a conservative fixed cap.
+        cap = 4L * 1024 * 1024 * 1024;
+#endif
+        const long min = 512L * 1024 * 1024;
+        const long max = 8L * 1024 * 1024 * 1024;
+        if (cap < min) cap = min;
+        if (cap > max) cap = max;
+        return cap;
+    }
+
+    #endregion
 
     #region Lazy Layer Factories
 
@@ -1064,6 +1275,8 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     {
         if (_disposed || !disposing) return;
         _disposed = true;
+
+        ReleaseStreamingWeights(includeRegistered: true);
 
         _compileHost.Dispose();
 

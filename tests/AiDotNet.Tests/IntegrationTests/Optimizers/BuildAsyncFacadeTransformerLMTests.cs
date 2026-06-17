@@ -496,18 +496,19 @@ public class BuildAsyncFacadeTransformerLMTests
             for (int s = 0; s < CtxLen; s++) sampleX[0, s] = xTrain[i, s];
             var pred = model.Predict(sampleX);
 
-            // Softmax(pred) → entropy
-            float maxL = float.NegativeInfinity;
-            for (int v = 0; v < VocabSize; v++) if (pred[0, v] > maxL) maxL = pred[0, v];
-            double sumExp = 0;
-            for (int v = 0; v < VocabSize; v++) sumExp += Math.Exp(pred[0, v] - maxL);
-            double logZ = maxL + Math.Log(sumExp);
+            // The SequenceClassification Transformer ends in a SoftmaxActivation layer,
+            // so Predict ALREADY returns a probability distribution (sums to 1). Compute
+            // the entropy of that distribution DIRECTLY — do NOT apply softmax again.
+            // The previous softmax(pred) double-applied softmax: at large vocab (V=256)
+            // that compresses a genuinely-learned peak (e.g. p[target]=0.075, 19× above
+            // the 1/V=0.0039 uniform) back toward uniform, making the entropy gap read
+            // ~0 and falsely tripping the "fixture not learnable" precondition even
+            // though the model trained correctly (#1380 measurement bug).
             double entropy = 0;
             for (int v = 0; v < VocabSize; v++)
             {
-                double logP = pred[0, v] - logZ;
-                double p = Math.Exp(logP);
-                if (p > 0) entropy -= p * logP;
+                double p = pred[0, v];
+                if (p > 0) entropy -= p * Math.Log(p);
             }
             sumEntropy += entropy;
             countSamples++;

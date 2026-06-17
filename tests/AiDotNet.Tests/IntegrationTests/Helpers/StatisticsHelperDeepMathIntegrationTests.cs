@@ -440,11 +440,28 @@ public class StatisticsHelperDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task FTest_DegreesOfFreedom_AreCorrect()
     {
-        var g1 = new Vector<double>(new double[] { 1, 2, 3 }); // n=3
-        var g2 = new Vector<double>(new double[] { 4, 5, 6, 7 }); // n=4
+        // Textbook two-sample F-test puts the LARGER sample variance in the
+        // numerator (so F ≥ 1 by construction). The degrees of freedom must
+        // follow whichever group's variance ended up in the numerator —
+        // df_num = n_larger-var - 1, df_denom = n_smaller-var - 1.
+        // For g1 = {1, 2, 3} (sample var ≈ 1.0, n=3) vs g2 = {4, 5, 6, 7}
+        // (sample var ≈ 1.67, n=4), the LARGER variance is g2's, so g2
+        // lands in the numerator with df_num = 4 - 1 = 3 and g1 in the
+        // denominator with df_denom = 3 - 1 = 2.
+        //
+        // The earlier assertion (df_num = 2 from n_left - 1, df_denom = 3
+        // from n_right - 1) was from the pre-fix implementation that
+        // hard-wired numerator/denominator to leftY/rightY regardless of
+        // which variance was larger — that produced the wrong F
+        // distribution (and wrong CI quantiles) whenever rightVariance >
+        // leftVariance. The source's current arithmetic is the
+        // statistically correct one; see comment at
+        // StatisticsHelper<T>.FTest line 913-920.
+        var g1 = new Vector<double>(new double[] { 1, 2, 3 }); // var ≈ 1.0
+        var g2 = new Vector<double>(new double[] { 4, 5, 6, 7 }); // var ≈ 1.67 (larger)
         var result = StatisticsHelper<double>.FTest(g1, g2);
-        Assert.Equal(2, result.NumeratorDegreesOfFreedom); // 3-1
-        Assert.Equal(3, result.DenominatorDegreesOfFreedom); // 4-1
+        Assert.Equal(3, result.NumeratorDegreesOfFreedom); // g2's n - 1
+        Assert.Equal(2, result.DenominatorDegreesOfFreedom); // g1's n - 1
     }
 
     [Fact(Timeout = 120000)]
