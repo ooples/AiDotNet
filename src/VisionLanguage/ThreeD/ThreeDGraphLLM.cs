@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -8,7 +9,6 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
-using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.ThreeD;
 
@@ -54,19 +54,83 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("3DGraphLLM: Combining Semantic Graphs and Large Language Models for 3D Scene Understanding", "https://arxiv.org/abs/2412.18450", Year = 2025, Authors = "Rygalev et al.")]
+[ResearchPaper(
+    "3DGraphLLM: Combining Semantic Graphs and Large Language Models for 3D Scene Understanding",
+    "https://arxiv.org/abs/2412.18450",
+    Year = 2025,
+    Authors = "Rygalev et al."
+)]
 public class ThreeDGraphLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
 {
-    private readonly ThreeDGraphLLMOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly ThreeDGraphLLMOptions _options;
+
+    public override ModelOptions GetOptions() => _options;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer; private bool _useNativeMode; private bool _disposed;
+    private readonly ITokenizer? _tokenizer;
+    private bool _useNativeMode;
+    private bool _disposed;
     private int _encoderLayerEnd;
 
-    public ThreeDGraphLLM(NeuralNetworkArchitecture<T> architecture, string modelPath, ThreeDGraphLLMOptions? options = null) : base(architecture) { _options = options ?? new ThreeDGraphLLMOptions(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
-    public ThreeDGraphLLM(NeuralNetworkArchitecture<T> architecture, ThreeDGraphLLMOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new ThreeDGraphLLMOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
+    public ThreeDGraphLLM(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        ThreeDGraphLLMOptions? options = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new ThreeDGraphLLMOptions();
+        _useNativeMode = false;
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
 
-    public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim; public int MaxPoints => _options.MaxPoints; public int PointChannels => _options.PointChannels;
-    public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
+    public ThreeDGraphLLM(
+        NeuralNetworkArchitecture<T> architecture,
+        ThreeDGraphLLMOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new ThreeDGraphLLMOptions();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    public int EmbeddingDimension => _options.DecoderDim;
+    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageChannels => 3;
+    public int MaxGenerationLength => _options.MaxGenerationLength;
+    public int DecoderEmbeddingDim => _options.DecoderDim;
+    public int MaxPoints => _options.MaxPoints;
+    public int PointChannels => _options.PointChannels;
+
+    public Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(p));
+        var c = p;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            c = Layers[i].Forward(c);
+        return L2Normalize(c);
+    }
+
     /// <summary>
     /// Generates from 2D image using 3DGraphLLM's scene graph approach.
     /// Per the paper (2024), the system constructs a 3D scene graph from
@@ -78,9 +142,11 @@ public class ThreeDGraphLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLangua
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(p);
         var encoderOut = p;
-        for (int i = 0; i < _encoderLayerEnd; i++) encoderOut = Layers[i].Forward(encoderOut);
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            encoderOut = Layers[i].Forward(encoderOut);
 
         // Fuse visual features with prompt tokens via ConcatenateTensors
         Tensor<T> fusedInput;
@@ -95,9 +161,11 @@ public class ThreeDGraphLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLangua
         }
 
         var output = fusedInput;
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++) output = Layers[i].Forward(output);
+        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
+            output = Layers[i].Forward(output);
         return output;
     }
+
     /// <summary>
     /// Processes 3D point cloud using 3DGraphLLM's scene graph approach. Per the
     /// paper (2024), the system constructs a 3D scene graph from point clouds:
@@ -116,7 +184,8 @@ public class ThreeDGraphLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLangua
         int totalValues = pointCloud.Length;
         int channels = _options.PointChannels;
         int numPoints = Math.Min(totalValues / Math.Max(1, channels), _options.MaxPoints);
-        if (numPoints == 0) numPoints = Math.Min(totalValues, _options.MaxPoints);
+        if (numPoints == 0)
+            numPoints = Math.Min(totalValues, _options.MaxPoints);
         int maxNodes = _options.MaxGraphNodes;
         int encoderDim = _options.PointEncoderDim;
 
@@ -130,15 +199,16 @@ public class ThreeDGraphLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLangua
         for (int p = 0; p < numPoints; p++)
         {
             int baseIdx = p * channels;
-            if (baseIdx + 2 >= totalValues) break;
+            if (baseIdx + 2 >= totalValues)
+                break;
 
             double x = NumOps.ToDouble(pointCloud[baseIdx]);
             double y = NumOps.ToDouble(pointCloud[baseIdx + 1]);
             double z = NumOps.ToDouble(pointCloud[baseIdx + 2]);
 
-            int nodeId = Math.Abs(
-                (int)(x * 3.0) * 7919 ^ (int)(y * 3.0) * 7907 ^ (int)(z * 3.0) * 7901
-            ) % maxNodes;
+            int nodeId =
+                Math.Abs((int)(x * 3.0) * 7919 ^ (int)(y * 3.0) * 7907 ^ (int)(z * 3.0) * 7901)
+                % maxNodes;
 
             nodePositions[nodeId, 0] += x;
             nodePositions[nodeId, 1] += y;
@@ -158,8 +228,10 @@ public class ThreeDGraphLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLangua
         {
             if (nodeCounts[n] > 0)
             {
-                for (int d = 0; d < 3; d++) nodePositions[n, d] /= nodeCounts[n];
-                for (int d = 0; d < encoderDim; d++) nodeFeatures[n][d] /= nodeCounts[n];
+                for (int d = 0; d < 3; d++)
+                    nodePositions[n, d] /= nodeCounts[n];
+                for (int d = 0; d < encoderDim; d++)
+                    nodeFeatures[n][d] /= nodeCounts[n];
                 activeNodes++;
             }
         }
@@ -175,7 +247,8 @@ public class ThreeDGraphLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLangua
 
             for (int i = 0; i < maxNodes; i++)
             {
-                if (nodeCounts[i] == 0) continue;
+                if (nodeCounts[i] == 0)
+                    continue;
 
                 // Self-feature
                 for (int d = 0; d < encoderDim; d++)
@@ -183,7 +256,8 @@ public class ThreeDGraphLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLangua
 
                 for (int j = 0; j < maxNodes; j++)
                 {
-                    if (i == j || nodeCounts[j] == 0) continue;
+                    if (i == j || nodeCounts[j] == 0)
+                        continue;
 
                     double dx = nodePositions[j, 0] - nodePositions[i, 0];
                     double dy = nodePositions[j, 1] - nodePositions[i, 1];
@@ -191,7 +265,8 @@ public class ThreeDGraphLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLangua
                     double dist = Math.Sqrt(dx * dx + dy * dy + dz * dz);
 
                     // Only connect nearby nodes (spatial neighborhood)
-                    if (dist > 3.0) continue;
+                    if (dist > 3.0)
+                        continue;
 
                     // Edge features encode spatial relationship type
                     double edgeWeight = Math.Exp(-dist);
@@ -203,8 +278,9 @@ public class ThreeDGraphLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLangua
                     {
                         double edgeMsg = nodeFeatures[j][d] * edgeWeight;
                         // Modulate by spatial relationship
-                        double relBias = Math.Sin(verticalRel * (d + 1)) * 0.05 +
-                                         Math.Cos(horizontalRel * (d + 1)) * 0.05;
+                        double relBias =
+                            Math.Sin(verticalRel * (d + 1)) * 0.05
+                            + Math.Cos(horizontalRel * (d + 1)) * 0.05;
                         newFeatures[i][d] += edgeMsg + relBias;
                     }
                 }
@@ -225,12 +301,14 @@ public class ThreeDGraphLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLangua
         double totalWeight = 0;
         for (int n = 0; n < maxNodes; n++)
         {
-            if (nodeCounts[n] == 0) continue;
+            if (nodeCounts[n] == 0)
+                continue;
             double weight = nodeCounts[n];
             totalWeight += weight;
             for (int d = 0; d < encoderDim; d++)
                 graphTokens[d] = NumOps.FromDouble(
-                    NumOps.ToDouble(graphTokens[d]) + nodeFeatures[n][d] * weight);
+                    NumOps.ToDouble(graphTokens[d]) + nodeFeatures[n][d] * weight
+                );
         }
         if (totalWeight > 1e-8)
             for (int d = 0; d < encoderDim; d++)
@@ -260,21 +338,104 @@ public class ThreeDGraphLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLangua
 
         return output;
     }
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; } else { Layers.AddRange(LayerHelper<T>.CreateDefaultPointCloudVLMLayers(512, _options.DecoderDim, _options.NumVisionLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate)); ComputeEncoderDecoderBoundary(); } }
-    private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; _encoderLayerEnd = _options.NumVisionLayers * lpb + 4; }
-    private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode)
+            return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            _encoderLayerEnd = Layers.Count / 2;
+        }
+        else
+        {
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultPointCloudVLMLayers(
+                    512,
+                    _options.DecoderDim,
+                    _options.NumVisionLayers,
+                    _options.NumDecoderLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate
+                )
+            );
+            ComputeEncoderDecoderBoundary();
+        }
+    }
+
+    private void ComputeEncoderDecoderBoundary()
+    {
+        int lpb = _options.DropoutRate > 0 ? 6 : 5;
+        _encoderLayerEnd = _options.NumVisionLayers * lpb + 4;
+    }
+
+    private Tensor<T> TokenizeText(string text)
+    {
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
+        var encoding = _tokenizer.Encode(text);
+        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
+        var tokens = new Tensor<T>([seqLen]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        return tokens;
+    }
+
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
+        var c = input;
+        foreach (var l in Layers)
+            c = l.Forward(c);
+        return c;
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        TrainWithTape(input, expected);
+        SetTrainingMode(false);
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "3DGraphLLM-Native" : "3DGraphLLM-ONNX", Description = "3DGraphLLM: 3D scene graph as LLM input for spatial reasoning.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "3DGraphLLM-Native" : "3DGraphLLM-ONNX",
+            Description = "3DGraphLLM: 3D scene graph as LLM input for spatial reasoning.",
+            FeatureCount = _options.DecoderDim,
+            Complexity = _options.NumVisionLayers + _options.NumDecoderLayers,
+        };
         m.AdditionalInfo["Architecture"] = "3DGraphLLM";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;
     }
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) {
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
         writer.Write(_useNativeMode);
         writer.Write(_options.ModelPath ?? string.Empty);
         writer.Write(_options.ImageSize);
@@ -285,10 +446,13 @@ public class ThreeDGraphLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLangua
         writer.Write(_options.NumHeads);
         writer.Write(_options.MaxPoints);
     }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) {
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
         _useNativeMode = reader.ReadBoolean();
         string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionDim = reader.ReadInt32();
         _options.DecoderDim = reader.ReadInt32();
@@ -296,9 +460,28 @@ public class ThreeDGraphLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLangua
         _options.NumDecoderLayers = reader.ReadInt32();
         _options.NumHeads = reader.ReadInt32();
         _options.MaxPoints = reader.ReadInt32();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new ThreeDGraphLLM<T>(Architecture, mp, _options); return new ThreeDGraphLLM<T>(Architecture, _options); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(ThreeDGraphLLM<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new ThreeDGraphLLM<T>(Architecture, mp, _options);
+        return new ThreeDGraphLLM<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(ThreeDGraphLLM<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
 }

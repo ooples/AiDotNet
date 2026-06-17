@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -8,7 +9,6 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
-using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.VideoLanguage;
 
@@ -53,19 +53,87 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("LLaVA-NeXT: A Strong Zero-shot Video Understanding Model", "https://arxiv.org/abs/2408.03303", Year = 2024, Authors = "Zhang et al.")]
+[ResearchPaper(
+    "LLaVA-NeXT: A Strong Zero-shot Video Understanding Model",
+    "https://arxiv.org/abs/2408.03303",
+    Year = 2024,
+    Authors = "Zhang et al."
+)]
 public class LLaVANeXTVideo<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {
-    private readonly LLaVANeXTVideoOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly LLaVANeXTVideoOptions _options;
+
+    public override ModelOptions GetOptions() => _options;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer; private bool _useNativeMode; private bool _disposed;
+    private readonly ITokenizer? _tokenizer;
+    private bool _useNativeMode;
+    private bool _disposed;
     private int _encoderLayerEnd;
 
-    public LLaVANeXTVideo(NeuralNetworkArchitecture<T> architecture, string modelPath, LLaVANeXTVideoOptions? options = null) : base(architecture) { _options = options ?? new LLaVANeXTVideoOptions(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
-    public LLaVANeXTVideo(NeuralNetworkArchitecture<T> architecture, LLaVANeXTVideoOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new LLaVANeXTVideoOptions(); if (architecture.InputType == InputType.FourDimensional && architecture.InputHeight > 0) { _options = new LLaVANeXTVideoOptions(_options) { ImageSize = architecture.InputHeight }; } _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
+    public LLaVANeXTVideo(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        LLaVANeXTVideoOptions? options = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new LLaVANeXTVideoOptions();
+        _useNativeMode = false;
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
 
-    public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim; public string LanguageModelName => _options.LanguageModelName; public int MaxFrames => _options.MaxFrames;
-    public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
+    public LLaVANeXTVideo(
+        NeuralNetworkArchitecture<T> architecture,
+        LLaVANeXTVideoOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new LLaVANeXTVideoOptions();
+        if (architecture.InputType == InputType.FourDimensional && architecture.InputHeight > 0)
+        {
+            _options = new LLaVANeXTVideoOptions(_options) { ImageSize = architecture.InputHeight };
+        }
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    public int EmbeddingDimension => _options.DecoderDim;
+    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageChannels => 3;
+    public int MaxGenerationLength => _options.MaxGenerationLength;
+    public int DecoderEmbeddingDim => _options.DecoderDim;
+    public string LanguageModelName => _options.LanguageModelName;
+    public int MaxFrames => _options.MaxFrames;
+
+    public Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(p));
+        var c = p;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            c = Layers[i].Forward(c);
+        return L2Normalize(c);
+    }
+
     /// <summary>
     /// Generates from a single image using LLaVA-NeXT-Video's AnyRes dynamic resolution processing.
     /// For a single image, the full AnyRes pipeline applies: the image is processed at its native
@@ -76,7 +144,8 @@ public class LLaVANeXTVideo<T> : VisionLanguageModelBase<T>, IVideoLanguageModel
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(p);
 
         int dim = _options.DecoderDim;
 
@@ -102,6 +171,7 @@ public class LLaVANeXTVideo<T> : VisionLanguageModelBase<T>, IVideoLanguageModel
             output = Layers[i].Forward(output);
         return output;
     }
+
     /// <summary>
     /// Generates output from video frames using LLaVA-NeXT-Video's AnyRes + temporal pooling.
     /// Per the paper (ByteDance 2024), each frame is processed at dynamic high-resolution via
@@ -114,7 +184,8 @@ public class LLaVANeXTVideo<T> : VisionLanguageModelBase<T>, IVideoLanguageModel
     {
         ThrowIfDisposed();
         int count = Math.Min(frames.Count, _options.MaxFrames);
-        if (count == 0) throw new ArgumentException("At least one frame is required.", nameof(frames));
+        if (count == 0)
+            throw new ArgumentException("At least one frame is required.", nameof(frames));
 
         // Step 1: Encode each frame (AnyRes dynamic resolution is handled in EncodeImage)
         var frameFeatures = new Tensor<T>[count];
@@ -127,7 +198,8 @@ public class LLaVANeXTVideo<T> : VisionLanguageModelBase<T>, IVideoLanguageModel
         // In the paper, the ViT produces a grid of tokens per frame.
         // We treat the feature dimension as a linearized spatial grid and pool temporally.
         int gridSize = (int)Math.Sqrt(dim); // Approximate spatial grid side
-        if (gridSize * gridSize > dim) gridSize = (int)Math.Floor(Math.Sqrt(dim));
+        if (gridSize * gridSize > dim)
+            gridSize = (int)Math.Floor(Math.Sqrt(dim));
         int spatialTokens = gridSize * gridSize;
 
         var pooled = new Tensor<T>([dim]);
@@ -155,21 +227,110 @@ public class LLaVANeXTVideo<T> : VisionLanguageModelBase<T>, IVideoLanguageModel
             output = Layers[i].Forward(output);
         return output;
     }
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; } else { Layers.AddRange(LayerHelper<T>.CreateDefaultVideoTemporalVLMLayers(_options.VisionDim, _options.VisionDim, _options.DecoderDim, _options.NumVisionLayers, 2, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, imageHeight: _options.ImageSize, imageWidth: _options.ImageSize, imageChannels: 3, patchSize: 16)); ComputeEncoderDecoderBoundary(); } }
-    private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb + 2 * lpb + 2; }
-    private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode)
+            return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            _encoderLayerEnd = Layers.Count / 2;
+        }
+        else
+        {
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultVideoTemporalVLMLayers(
+                    _options.VisionDim,
+                    _options.VisionDim,
+                    _options.DecoderDim,
+                    _options.NumVisionLayers,
+                    2,
+                    _options.NumDecoderLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate,
+                    imageHeight: _options.ImageSize,
+                    imageWidth: _options.ImageSize,
+                    imageChannels: 3,
+                    patchSize: 16
+                )
+            );
+            ComputeEncoderDecoderBoundary();
+        }
+    }
+
+    private void ComputeEncoderDecoderBoundary()
+    {
+        int lpb = _options.DropoutRate > 0 ? 6 : 5;
+        _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb + 2 * lpb + 2;
+    }
+
+    private Tensor<T> TokenizeText(string text)
+    {
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
+        var encoding = _tokenizer.Encode(text);
+        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
+        var tokens = new Tensor<T>([seqLen]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        return tokens;
+    }
+
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
+        var c = input;
+        foreach (var l in Layers)
+            c = l.Forward(c);
+        return c;
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        TrainWithTape(input, expected);
+        SetTrainingMode(false);
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "LLaVA-NeXT-Video-Native" : "LLaVA-NeXT-Video-ONNX", Description = "LLaVA-NeXT-Video: average pooling for frame token reduction.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "LLaVA-NeXT-Video-Native" : "LLaVA-NeXT-Video-ONNX",
+            Description = "LLaVA-NeXT-Video: average pooling for frame token reduction.",
+            FeatureCount = _options.DecoderDim,
+            Complexity = _options.NumVisionLayers + _options.NumDecoderLayers,
+        };
         m.AdditionalInfo["Architecture"] = "LLaVA-NeXT-Video";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;
     }
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) {
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
         writer.Write(_useNativeMode);
         writer.Write(_options.ModelPath ?? string.Empty);
         writer.Write(_options.ImageSize);
@@ -180,10 +341,13 @@ public class LLaVANeXTVideo<T> : VisionLanguageModelBase<T>, IVideoLanguageModel
         writer.Write(_options.NumHeads);
         writer.Write(_options.MaxFrames);
     }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) {
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
         _useNativeMode = reader.ReadBoolean();
         string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionDim = reader.ReadInt32();
         _options.DecoderDim = reader.ReadInt32();
@@ -191,9 +355,28 @@ public class LLaVANeXTVideo<T> : VisionLanguageModelBase<T>, IVideoLanguageModel
         _options.NumDecoderLayers = reader.ReadInt32();
         _options.NumHeads = reader.ReadInt32();
         _options.MaxFrames = reader.ReadInt32();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new LLaVANeXTVideo<T>(Architecture, mp, _options); return new LLaVANeXTVideo<T>(Architecture, _options); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(LLaVANeXTVideo<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new LLaVANeXTVideo<T>(Architecture, mp, _options);
+        return new LLaVANeXTVideo<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(LLaVANeXTVideo<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
 }

@@ -51,7 +51,12 @@ namespace AiDotNet.VisionLanguage.Document;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("OCR-free Document Understanding Transformer", "https://arxiv.org/abs/2111.15664", Year = 2022, Authors = "Kim et al.")]
+[ResearchPaper(
+    "OCR-free Document Understanding Transformer",
+    "https://arxiv.org/abs/2111.15664",
+    Year = 2022,
+    Authors = "Kim et al."
+)]
 public class Donut<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly DonutOptions _options;
@@ -65,14 +70,21 @@ public class Donut<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<
     public override ModelOptions GetOptions() => _options;
 
     public Donut()
-        : this(new NeuralNetworkArchitecture<T>(
-            inputType: InputType.TwoDimensional,
-            taskType: NeuralNetworkTaskType.MultiClassClassification,
-            inputHeight: 960, inputWidth: 720, outputSize: 50265))
-    {
-    }
+        : this(
+            new NeuralNetworkArchitecture<T>(
+                inputType: InputType.TwoDimensional,
+                taskType: NeuralNetworkTaskType.MultiClassClassification,
+                inputHeight: 960,
+                inputWidth: 720,
+                outputSize: 50265
+            )
+        ) { }
 
-    public Donut(NeuralNetworkArchitecture<T> architecture, string modelPath, DonutOptions? options = null)
+    public Donut(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        DonutOptions? options = null
+    )
         : base(architecture)
     {
         _options = options ?? new DonutOptions();
@@ -90,16 +102,26 @@ public class Donut<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<
         InitializeLayers();
     }
 
-    public Donut(NeuralNetworkArchitecture<T> architecture, DonutOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    public Donut(
+        NeuralNetworkArchitecture<T> architecture,
+        DonutOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
         : base(architecture)
     {
         _options = options ?? new DonutOptions();
         _useNativeMode = true;
         // Donut (Kim et al. 2022 §4) fine-tunes with a low learning rate (~1e-4); the
         // AdamW default of 1e-3 overshoots on the first step. Use the paper-faithful rate.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4 });
+        _optimizer =
+            optimizer
+            ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = 1e-4,
+                }
+            );
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
@@ -166,6 +188,7 @@ public class Donut<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<
 
         return output;
     }
+
     public Tensor<T> ExtractText(Tensor<T> documentImage)
     {
         ThrowIfDisposed();
@@ -180,7 +203,8 @@ public class Donut<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
@@ -188,9 +212,17 @@ public class Donut<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<
         }
         else
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultDocumentOCRLayers(
-                _options.VisionDim, _options.DecoderDim, _options.NumVisionLayers,
-                _options.NumDecoderLayers, _options.NumHeads, 2048, _options.DropoutRate));
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultDocumentOCRLayers(
+                    _options.VisionDim,
+                    _options.DecoderDim,
+                    _options.NumVisionLayers,
+                    _options.NumDecoderLayers,
+                    _options.NumHeads,
+                    2048,
+                    _options.DropoutRate
+                )
+            );
             ComputeEncoderDecoderBoundary();
         }
     }
@@ -200,7 +232,9 @@ public class Donut<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<
         int lpb = _options.DropoutRate > 0 ? 6 : 5;
         // encoder = patch embedding (1) + leading LayerNorm (1) + numVisionLayers blocks
         // + optional vision->decoder projection
-        _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb
+        _encoderLayerEnd =
+            2
+            + _options.NumVisionLayers * lpb
             + (_options.VisionDim != _options.DecoderDim ? 1 : 0);
     }
 
@@ -259,15 +293,17 @@ public class Donut<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<
         var m = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "Donut-Native" : "Donut-ONNX",
-            Description = "Donut: OCR-free document understanding transformer using Swin encoder + BART decoder.",
+            Description =
+                "Donut: OCR-free document understanding transformer using Swin encoder + BART decoder.",
             FeatureCount = _options.DecoderDim,
-            Complexity = _options.NumVisionLayers + _options.NumDecoderLayers
+            Complexity = _options.NumVisionLayers + _options.NumDecoderLayers,
         };
         m.AdditionalInfo["Architecture"] = "Donut";
         m.AdditionalInfo["OcrFree"] = _options.IsOcrFree.ToString();
         m.AdditionalInfo["EncoderType"] = _options.EncoderType;
         return m;
     }
+
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_useNativeMode);
@@ -282,11 +318,13 @@ public class Donut<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<
         writer.Write(_options.MaxOutputTokens);
         writer.Write(_options.EncoderType ?? string.Empty);
     }
+
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         _useNativeMode = reader.ReadBoolean();
         string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionDim = reader.ReadInt32();
         _options.DecoderDim = reader.ReadInt32();
@@ -323,7 +361,8 @@ public class Donut<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<
 
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         base.Dispose(disposing);
     }

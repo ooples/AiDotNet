@@ -53,19 +53,82 @@ namespace AiDotNet.VisionLanguage.Document;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("mPLUG-DocOwl: Modularized Multimodal Large Language Model for Document Understanding", "https://arxiv.org/abs/2307.02499", Year = 2023, Authors = "Ye et al.")]
+[ResearchPaper(
+    "mPLUG-DocOwl: Modularized Multimodal Large Language Model for Document Understanding",
+    "https://arxiv.org/abs/2307.02499",
+    Year = 2023,
+    Authors = "Ye et al."
+)]
 public class MPLUGDocOwl<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
-    private readonly MPLUGDocOwlOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly MPLUGDocOwlOptions _options;
+
+    public override ModelOptions GetOptions() => _options;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer; private bool _useNativeMode; private bool _disposed;
+    private readonly ITokenizer? _tokenizer;
+    private bool _useNativeMode;
+    private bool _disposed;
     private int _encoderLayerEnd;
 
-    public MPLUGDocOwl(NeuralNetworkArchitecture<T> architecture, string modelPath, MPLUGDocOwlOptions? options = null) : base(architecture) { _options = options ?? new MPLUGDocOwlOptions(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
-    public MPLUGDocOwl(NeuralNetworkArchitecture<T> architecture, MPLUGDocOwlOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new MPLUGDocOwlOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
+    public MPLUGDocOwl(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        MPLUGDocOwlOptions? options = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new MPLUGDocOwlOptions();
+        _useNativeMode = false;
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
 
-    public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim; public bool IsOcrFree => _options.IsOcrFree;
-    public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
+    public MPLUGDocOwl(
+        NeuralNetworkArchitecture<T> architecture,
+        MPLUGDocOwlOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new MPLUGDocOwlOptions();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    public int EmbeddingDimension => _options.DecoderDim;
+    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageChannels => 3;
+    public int MaxGenerationLength => _options.MaxGenerationLength;
+    public int DecoderEmbeddingDim => _options.DecoderDim;
+    public bool IsOcrFree => _options.IsOcrFree;
+
+    public Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(p));
+        var c = p;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            c = Layers[i].Forward(c);
+        return L2Normalize(c);
+    }
+
     /// <summary>
     /// Generates text from a document image using mPLUG-DocOwl's visual abstractor pipeline.
     /// Per the paper (Alibaba, 2023), mPLUG-DocOwl uses a modular architecture:
@@ -106,24 +169,122 @@ public class MPLUGDocOwl<T> : VisionLanguageModelBase<T>, IDocumentUnderstanding
 
         return output;
     }
-    public Tensor<T> ExtractText(Tensor<T> documentImage) { ThrowIfDisposed(); return GenerateFromImage(documentImage, "Extract all text from this document."); }
-    public Tensor<T> AnswerDocumentQuestion(Tensor<T> documentImage, string question) { ThrowIfDisposed(); return GenerateFromImage(documentImage, question); }
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; } else { Layers.AddRange(LayerHelper<T>.CreateDefaultDocumentOCRLayers(_options.VisionDim, _options.DecoderDim, _options.NumVisionLayers, _options.NumDecoderLayers, _options.NumHeads, 2048, _options.DropoutRate)); ComputeEncoderDecoderBoundary(); } }
-    private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + (_options.VisionDim != _options.DecoderDim ? 1 : 0); }
-    private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
+    public Tensor<T> ExtractText(Tensor<T> documentImage)
+    {
+        ThrowIfDisposed();
+        return GenerateFromImage(documentImage, "Extract all text from this document.");
+    }
+
+    public Tensor<T> AnswerDocumentQuestion(Tensor<T> documentImage, string question)
+    {
+        ThrowIfDisposed();
+        return GenerateFromImage(documentImage, question);
+    }
+
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode)
+            return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            _encoderLayerEnd = Layers.Count / 2;
+        }
+        else
+        {
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultDocumentOCRLayers(
+                    _options.VisionDim,
+                    _options.DecoderDim,
+                    _options.NumVisionLayers,
+                    _options.NumDecoderLayers,
+                    _options.NumHeads,
+                    2048,
+                    _options.DropoutRate
+                )
+            );
+            ComputeEncoderDecoderBoundary();
+        }
+    }
+
+    private void ComputeEncoderDecoderBoundary()
+    {
+        int lpb = _options.DropoutRate > 0 ? 6 : 5;
+        _encoderLayerEnd =
+            1
+            + _options.NumVisionLayers * lpb
+            + (_options.VisionDim != _options.DecoderDim ? 1 : 0);
+    }
+
+    private Tensor<T> TokenizeText(string text)
+    {
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
+        var encoding = _tokenizer.Encode(text);
+        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
+        var tokens = new Tensor<T>([seqLen]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        return tokens;
+    }
+
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
+        var c = input;
+        foreach (var l in Layers)
+            c = l.Forward(c);
+        return c;
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        TrainWithTape(input, expected);
+        SetTrainingMode(false);
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "mPLUG-DocOwl-Native" : "mPLUG-DocOwl-ONNX", Description = "mPLUG-DocOwl: modular MLLM for document understanding with visual abstractor.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "mPLUG-DocOwl-Native" : "mPLUG-DocOwl-ONNX",
+            Description =
+                "mPLUG-DocOwl: modular MLLM for document understanding with visual abstractor.",
+            FeatureCount = _options.DecoderDim,
+            Complexity = _options.NumVisionLayers + _options.NumDecoderLayers,
+        };
         m.AdditionalInfo["Architecture"] = "mPLUG-DocOwl";
         m.AdditionalInfo["OcrFree"] = _options.IsOcrFree.ToString();
         m.AdditionalInfo["AbstractorDim"] = _options.AbstractorDim.ToString();
         return m;
     }
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) {
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
         writer.Write(_useNativeMode);
         writer.Write(_options.ModelPath ?? string.Empty);
         writer.Write(_options.ImageSize);
@@ -137,10 +298,13 @@ public class MPLUGDocOwl<T> : VisionLanguageModelBase<T>, IDocumentUnderstanding
         writer.Write(_options.AbstractorDim);
         writer.Write(_options.NumAbstractorLayers);
     }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) {
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
         _useNativeMode = reader.ReadBoolean();
         string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionDim = reader.ReadInt32();
         _options.DecoderDim = reader.ReadInt32();
@@ -151,9 +315,28 @@ public class MPLUGDocOwl<T> : VisionLanguageModelBase<T>, IDocumentUnderstanding
         _options.MaxOutputTokens = reader.ReadInt32();
         _options.AbstractorDim = reader.ReadInt32();
         _options.NumAbstractorLayers = reader.ReadInt32();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new MPLUGDocOwl<T>(Architecture, mp, _options); return new MPLUGDocOwl<T>(Architecture, _options); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(MPLUGDocOwl<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new MPLUGDocOwl<T>(Architecture, mp, _options);
+        return new MPLUGDocOwl<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(MPLUGDocOwl<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
 }

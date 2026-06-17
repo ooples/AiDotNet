@@ -70,6 +70,7 @@ public class JanusProOptions : UnifiedVisionOptions
     // options for the same pattern).
 
     private int _numGenerationTokens = 576;
+
     /// <summary>
     /// Number of VQ tokens emitted by the generation path. Janus-Pro uses 576 (a 24×24 grid) for the
     /// default 384×384 output (paper §3.3 — patch size 16, output 384 → 24×24). Must be positive.
@@ -77,22 +78,36 @@ public class JanusProOptions : UnifiedVisionOptions
     public int NumGenerationTokens
     {
         get => _numGenerationTokens;
-        set => _numGenerationTokens = value > 0
-            ? value
-            : throw new ArgumentOutOfRangeException(nameof(NumGenerationTokens), value, "Must be > 0.");
+        set =>
+            _numGenerationTokens =
+                value > 0
+                    ? value
+                    : throw new ArgumentOutOfRangeException(
+                        nameof(NumGenerationTokens),
+                        value,
+                        "Must be > 0."
+                    );
     }
 
     private int _codebookEmbeddingDim = 8;
+
     /// <summary>Dimensionality of each VQ codebook entry's continuous embedding. Janus-Pro paper Table 1: 8. Must be positive.</summary>
     public int CodebookEmbeddingDim
     {
         get => _codebookEmbeddingDim;
-        set => _codebookEmbeddingDim = value > 0
-            ? value
-            : throw new ArgumentOutOfRangeException(nameof(CodebookEmbeddingDim), value, "Must be > 0.");
+        set =>
+            _codebookEmbeddingDim =
+                value > 0
+                    ? value
+                    : throw new ArgumentOutOfRangeException(
+                        nameof(CodebookEmbeddingDim),
+                        value,
+                        "Must be > 0."
+                    );
     }
 
     private double _cfgScale = 7.0;
+
     /// <summary>
     /// Classifier-free guidance scale used during generation (Ho &amp; Salimans 2022). Janus-Pro paper uses
     /// 5–7 depending on prompt; 7.0 is the default for high-fidelity outputs. Must be finite and positive
@@ -105,8 +120,11 @@ public class JanusProOptions : UnifiedVisionOptions
         set
         {
             if (double.IsNaN(value) || double.IsInfinity(value) || value <= 0)
-                throw new ArgumentOutOfRangeException(nameof(CfgScale), value,
-                    "Must be a finite positive number. Paper uses 5-7.");
+                throw new ArgumentOutOfRangeException(
+                    nameof(CfgScale),
+                    value,
+                    "Must be a finite positive number. Paper uses 5-7."
+                );
             _cfgScale = value;
         }
     }

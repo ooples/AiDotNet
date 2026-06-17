@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -10,7 +11,6 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
-using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.Robotics;
 
@@ -78,15 +78,22 @@ namespace AiDotNet.VisionLanguage.Robotics;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("GR00T N1: An Open Foundation Model for Generalist Humanoid Robots", "https://arxiv.org/abs/2503.14734", Year = 2025, Authors = "NVIDIA")]
+[ResearchPaper(
+    "GR00T N1: An Open Foundation Model for Generalist Humanoid Robots",
+    "https://arxiv.org/abs/2503.14734",
+    Year = 2025,
+    Authors = "NVIDIA"
+)]
 public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly GR00TN1Options _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+
     // Not readonly: DeserializeNetworkSpecificData rebuilds the tokenizer from the
     // serialized VocabSize so a model saved with a different vocab restores correctly.
     private ITokenizer _tokenizer;
     private readonly GR00TFlowMatchingActionHead<T> _actionHead;
+
     // Learned instruction-token embedding table — replaces the previous
     // deterministic sinusoidal fabrication in EmbedInstructionTokens. GR00T N1's
     // System-2 VLM consumes learned text embeddings (NVIDIA 2025, §3.1); synthetic
@@ -105,15 +112,22 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 
     public override ModelOptions GetOptions() => _options;
 
-    public GR00TN1(NeuralNetworkArchitecture<T> architecture, string modelPath, GR00TN1Options? options = null) : base(architecture)
+    public GR00TN1(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        GR00TN1Options? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new GR00TN1Options();
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
-        if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
-        if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options.ModelPath = modelPath;
         OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
@@ -122,7 +136,12 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         InitializeLayers();
     }
 
-    public GR00TN1(NeuralNetworkArchitecture<T> architecture, GR00TN1Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    public GR00TN1(
+        NeuralNetworkArchitecture<T> architecture,
+        GR00TN1Options? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new GR00TN1Options();
         _useNativeMode = true;
@@ -151,9 +170,11 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     {
         ThrowIfDisposed();
         var preprocessed = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(preprocessed));
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(preprocessed));
         var hidden = preprocessed;
-        for (int i = 0; i < _encoderLayerEnd; i++) hidden = Layers[i].Forward(hidden);
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            hidden = Layers[i].Forward(hidden);
         return L2Normalize(hidden);
     }
 
@@ -161,7 +182,8 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     {
         ThrowIfDisposed();
         var preprocessed = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(preprocessed);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(preprocessed);
         return System2Forward(preprocessed, prompt ?? string.Empty);
     }
 
@@ -194,14 +216,18 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     public Tensor<T> System1Velocity(Tensor<T> noisyAction, double t, Tensor<T> system2Latent)
     {
         ThrowIfDisposed();
-        if (noisyAction is null) throw new ArgumentNullException(nameof(noisyAction));
-        if (system2Latent is null) throw new ArgumentNullException(nameof(system2Latent));
+        if (noisyAction is null)
+            throw new ArgumentNullException(nameof(noisyAction));
+        if (system2Latent is null)
+            throw new ArgumentNullException(nameof(system2Latent));
 
         // DiT-AdaLN conditioning: concatenate [noisy_action, time_embedding, latent] and run through
         // the System-1 transformer stack. Time is encoded as a sinusoidal frequency embedding so the
         // velocity field can be queried at any t in [0, 1].
         var timeEmbed = SinusoidalTimeEmbedding(t, _options.System1HiddenDim);
-        var conditioned = noisyAction.ConcatenateTensors(timeEmbed).ConcatenateTensors(system2Latent);
+        var conditioned = noisyAction
+            .ConcatenateTensors(timeEmbed)
+            .ConcatenateTensors(system2Latent);
 
         var hidden = conditioned;
         for (int i = _system2EndLayerIndex; i < Layers.Count; i++)
@@ -210,7 +236,8 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         // Action-head output is the velocity at the same shape as the noisy action.
         var velocity = new Tensor<T>([noisyAction.Length]);
         int copyLen = Math.Min(velocity.Length, hidden.Length);
-        for (int d = 0; d < copyLen; d++) velocity[d] = hidden[d];
+        for (int d = 0; d < copyLen; d++)
+            velocity[d] = hidden[d];
         return velocity;
     }
 
@@ -238,8 +265,10 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     {
         return new HelixDualSystemRunner<T>(
             system2Forward: (obs, instr) => System2Forward(PreprocessImage(obs), instr),
-            system1Forward: (obs, latent) => _actionHead.GenerateHorizon(_options.ActionDimension, 1, latent),
-            system2TicksValid: Math.Max(1, _options.System1ToSystem2Ratio));
+            system1Forward: (obs, latent) =>
+                _actionHead.GenerateHorizon(_options.ActionDimension, 1, latent),
+            system2TicksValid: Math.Max(1, _options.System1ToSystem2Ratio)
+        );
     }
 
     private GR00TFlowMatchingActionHead<T> BuildActionHead()
@@ -247,12 +276,14 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         return new GR00TFlowMatchingActionHead<T>(
             velocityNetwork: (xt, t, latent) => System1Velocity(xt, t, latent),
             numIntegrationSteps: _options.FlowMatchingSteps,
-            seed: _options.Seed);
+            seed: _options.Seed
+        );
     }
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
@@ -264,15 +295,18 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         }
 
         // System 2: vision encoder + Eagle-2 LLM decoder via the standard robotics factory.
-        Layers.AddRange(LayerHelper<T>.CreateDefaultRoboticsActionLayers(
-            visionDim: _options.VisionDim,
-            decoderDim: _options.DecoderDim,
-            actionDim: _options.DecoderDim,
-            numVisionLayers: _options.NumVisionLayers,
-            numDecoderLayers: _options.NumDecoderLayers,
-            numActionLayers: 2,
-            numHeads: _options.NumHeads,
-            dropoutRate: _options.DropoutRate));
+        Layers.AddRange(
+            LayerHelper<T>.CreateDefaultRoboticsActionLayers(
+                visionDim: _options.VisionDim,
+                decoderDim: _options.DecoderDim,
+                actionDim: _options.DecoderDim,
+                numVisionLayers: _options.NumVisionLayers,
+                numDecoderLayers: _options.NumDecoderLayers,
+                numActionLayers: 2,
+                numHeads: _options.NumHeads,
+                dropoutRate: _options.DropoutRate
+            )
+        );
 
         // S2 latent emission head.
         IActivationFunction<T> identity = new IdentityActivation<T>();
@@ -289,12 +323,18 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         int s1FfnDim = s1Dim * 4;
         for (int i = 0; i < _options.System1NumLayers; i++)
         {
-            Layers.Add(new MultiHeadAttentionLayer<T>(_options.System1NumHeads, s1Dim / Math.Max(1, _options.System1NumHeads)));
+            Layers.Add(
+                new MultiHeadAttentionLayer<T>(
+                    _options.System1NumHeads,
+                    s1Dim / Math.Max(1, _options.System1NumHeads)
+                )
+            );
             Layers.Add(new LayerNormalizationLayer<T>());
             Layers.Add(new DenseLayer<T>(s1FfnDim, gelu));
             Layers.Add(new DenseLayer<T>(s1Dim, identity));
             Layers.Add(new LayerNormalizationLayer<T>());
-            if (_options.DropoutRate > 0) Layers.Add(new DropoutLayer<T>(_options.DropoutRate));
+            if (_options.DropoutRate > 0)
+                Layers.Add(new DropoutLayer<T>(_options.DropoutRate));
         }
         Layers.Add(new DenseLayer<T>(_options.ActionDimension, identity));
     }
@@ -316,7 +356,8 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     /// </summary>
     private Tensor<T> EmbedInstructionTokens(Tensor<T> instructionTokens)
     {
-        if (instructionTokens.Length == 0) return new Tensor<T>([_options.DecoderDim]);
+        if (instructionTokens.Length == 0)
+            return new Tensor<T>([_options.DecoderDim]);
         return _tokenEmbedding.Forward(instructionTokens);
     }
 
@@ -337,26 +378,31 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 
     private Tensor<T> TokenizeText(string text)
     {
-        if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized.");
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
         var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
         return tokens;
     }
 
     public override Tensor<T> Predict(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
         var hidden = input;
-        foreach (var layer in Layers) hidden = layer.Forward(hidden);
+        foreach (var layer in Layers)
+            hidden = layer.Forward(hidden);
         return hidden;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
         TrainWithTape(input, expected);
         SetTrainingMode(false);
@@ -364,7 +410,8 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 
     public override void UpdateParameters(Vector<T> parameters)
     {
-        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
         int idx = 0;
         foreach (var layer in Layers)
         {
@@ -394,7 +441,8 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         get
         {
             long total = 0;
-            foreach (var layer in Layers) total += layer.ParameterCount;
+            foreach (var layer in Layers)
+                total += layer.ParameterCount;
             return total + _tokenEmbedding.ParameterCount;
         }
     }
@@ -405,10 +453,13 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     {
         var baseParams = base.GetParameters();
         var embedParams = _tokenEmbedding.GetParameters();
-        if (embedParams.Length == 0) return baseParams;
+        if (embedParams.Length == 0)
+            return baseParams;
         var combined = new Vector<T>(baseParams.Length + embedParams.Length);
-        for (int i = 0; i < baseParams.Length; i++) combined[i] = baseParams[i];
-        for (int i = 0; i < embedParams.Length; i++) combined[baseParams.Length + i] = embedParams[i];
+        for (int i = 0; i < baseParams.Length; i++)
+            combined[i] = baseParams[i];
+        for (int i = 0; i < embedParams.Length; i++)
+            combined[baseParams.Length + i] = embedParams[i];
         return combined;
     }
 
@@ -429,26 +480,32 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         // base.SetParameters ran. Compute the true layer total once and pick
         // the matching layout explicitly.
         int layerCount = 0;
-        foreach (var layer in Layers) layerCount += (int)layer.ParameterCount;
+        foreach (var layer in Layers)
+            layerCount += (int)layer.ParameterCount;
 
         if (parameters.Length != layerCount && parameters.Length != layerCount + embedCount)
             throw new ArgumentException(
                 $"Expected {layerCount} (layers-only) or {layerCount + embedCount} (layers + embedding) parameters, got {parameters.Length}.",
-                nameof(parameters));
+                nameof(parameters)
+            );
 
         var baseSlice = new Vector<T>(layerCount);
-        for (int i = 0; i < layerCount; i++) baseSlice[i] = parameters[i];
+        for (int i = 0; i < layerCount; i++)
+            baseSlice[i] = parameters[i];
         base.SetParameters(baseSlice);
 
         if (embedCount > 0 && parameters.Length == layerCount + embedCount)
         {
             var embedSlice = new Vector<T>(embedCount);
-            for (int i = 0; i < embedCount; i++) embedSlice[i] = parameters[layerCount + i];
+            for (int i = 0; i < embedCount; i++)
+                embedSlice[i] = parameters[layerCount + i];
             _tokenEmbedding.SetParameters(embedSlice);
         }
     }
 
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
     public override ModelMetadata<T> GetModelMetadata()
@@ -456,9 +513,11 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         var meta = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "GR00T-N1-Native" : "GR00T-N1-ONNX",
-            Description = "GR00T N1: dual-system VLA with SigLIP + Eagle-2 reasoning and flow-matching DiT action head (NVIDIA 2025, arXiv:2503.14734).",
+            Description =
+                "GR00T N1: dual-system VLA with SigLIP + Eagle-2 reasoning and flow-matching DiT action head (NVIDIA 2025, arXiv:2503.14734).",
             FeatureCount = _options.DecoderDim,
-            Complexity = _options.NumVisionLayers + _options.NumDecoderLayers + _options.System1NumLayers,
+            Complexity =
+                _options.NumVisionLayers + _options.NumDecoderLayers + _options.System1NumLayers,
         };
         meta.AdditionalInfo["Architecture"] = "GR00T-N1";
         meta.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
@@ -511,7 +570,8 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     {
         _useNativeMode = reader.ReadBoolean();
         string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionDim = reader.ReadInt32();
         _options.DecoderDim = reader.ReadInt32();
@@ -544,9 +604,10 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         {
             if (embedCount != (int)_tokenEmbedding.ParameterCount)
                 throw new InvalidOperationException(
-                    $"Serialized GR00T-N1 token-embedding parameter count ({embedCount:N0}) does not match " +
-                    $"the embedding rebuilt from the deserialized VocabSize={_options.VocabSize}/" +
-                    $"DecoderDim={_options.DecoderDim} ({_tokenEmbedding.ParameterCount:N0}). The stream is corrupt.");
+                    $"Serialized GR00T-N1 token-embedding parameter count ({embedCount:N0}) does not match "
+                        + $"the embedding rebuilt from the deserialized VocabSize={_options.VocabSize}/"
+                        + $"DecoderDim={_options.DecoderDim} ({_tokenEmbedding.ParameterCount:N0}). The stream is corrupt."
+                );
             var embedParams = new Vector<T>(embedCount);
             for (int i = 0; i < embedCount; i++)
                 embedParams[i] = NumOps.FromDouble(reader.ReadDouble());
@@ -566,12 +627,14 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 
     private void ThrowIfDisposed()
     {
-        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(GR00TN1<T>));
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(GR00TN1<T>));
     }
 
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         base.Dispose(disposing);
     }

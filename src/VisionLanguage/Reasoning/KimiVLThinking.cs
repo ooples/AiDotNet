@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -8,7 +9,6 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
-using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.Reasoning;
 
@@ -53,19 +53,83 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Kimi-VL Technical Report", "https://arxiv.org/abs/2504.07491", Year = 2025, Authors = "Moonshot AI")]
+[ResearchPaper(
+    "Kimi-VL Technical Report",
+    "https://arxiv.org/abs/2504.07491",
+    Year = 2025,
+    Authors = "Moonshot AI"
+)]
 public class KimiVLThinking<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
 {
-    private readonly KimiVLThinkingOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly KimiVLThinkingOptions _options;
+
+    public override ModelOptions GetOptions() => _options;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer; private bool _useNativeMode; private bool _disposed;
+    private readonly ITokenizer? _tokenizer;
+    private bool _useNativeMode;
+    private bool _disposed;
     private int _encoderLayerEnd;
 
-    public KimiVLThinking(NeuralNetworkArchitecture<T> architecture, string modelPath, KimiVLThinkingOptions? options = null) : base(architecture) { _options = options ?? new KimiVLThinkingOptions(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
-    public KimiVLThinking(NeuralNetworkArchitecture<T> architecture, KimiVLThinkingOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new KimiVLThinkingOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
+    public KimiVLThinking(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        KimiVLThinkingOptions? options = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new KimiVLThinkingOptions();
+        _useNativeMode = false;
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
 
-    public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim; public string LanguageModelName => _options.LanguageModelName; public string ReasoningApproach => _options.ReasoningApproach;
-    public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
+    public KimiVLThinking(
+        NeuralNetworkArchitecture<T> architecture,
+        KimiVLThinkingOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new KimiVLThinkingOptions();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    public int EmbeddingDimension => _options.DecoderDim;
+    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageChannels => 3;
+    public int MaxGenerationLength => _options.MaxGenerationLength;
+    public int DecoderEmbeddingDim => _options.DecoderDim;
+    public string LanguageModelName => _options.LanguageModelName;
+    public string ReasoningApproach => _options.ReasoningApproach;
+
+    public Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(p));
+        var c = p;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            c = Layers[i].Forward(c);
+        return L2Normalize(c);
+    }
+
     /// <summary>
     /// Generates text from image using Kimi-VL-Thinking's RL-aligned long thinking pipeline.
     /// Per the Kimi-VL Technical Report (Moonshot AI, 2025), the Thinking variant adds:
@@ -107,7 +171,22 @@ public class KimiVLThinking<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
 
         return output;
     }
-    public Tensor<T> Chat(Tensor<T> image, IEnumerable<(string Role, string Content)> conversationHistory, string userMessage) { ThrowIfDisposed(); var sb = new System.Text.StringBuilder(); sb.Append(_options.SystemPrompt); foreach (var (role, content) in conversationHistory) sb.Append($"\n{role}: {content}"); sb.Append($"\nUser: {userMessage}\nAssistant:"); return GenerateFromImage(image, sb.ToString()); }
+
+    public Tensor<T> Chat(
+        Tensor<T> image,
+        IEnumerable<(string Role, string Content)> conversationHistory,
+        string userMessage
+    )
+    {
+        ThrowIfDisposed();
+        var sb = new System.Text.StringBuilder();
+        sb.Append(_options.SystemPrompt);
+        foreach (var (role, content) in conversationHistory)
+            sb.Append($"\n{role}: {content}");
+        sb.Append($"\nUser: {userMessage}\nAssistant:");
+        return GenerateFromImage(image, sb.ToString());
+    }
+
     /// <summary>
     /// Generates extended reasoning using Kimi-VL-Thinking's RL-aligned long thinking chains.
     /// Per the paper (Moonshot AI, 2025), Thinking mode produces:
@@ -166,8 +245,11 @@ public class KimiVLThinking<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
                     {
                         int vIdx = (d * samples + s + step * 19 + e * 5) % visDim;
                         double visVal = NumOps.ToDouble(visualFeatures[vIdx]);
-                        double qVal = NumOps.ToDouble(questionTokens[(s + step * 3) % qLen]) / _options.VocabSize;
-                        routerScore += (visVal * 0.6 + qVal * 0.4) * Math.Sin((e + 1) * (step + 1) * 0.3);
+                        double qVal =
+                            NumOps.ToDouble(questionTokens[(s + step * 3) % qLen])
+                            / _options.VocabSize;
+                        routerScore +=
+                            (visVal * 0.6 + qVal * 0.4) * Math.Sin((e + 1) * (step + 1) * 0.3);
                     }
                     routerScore /= samples;
 
@@ -180,8 +262,9 @@ public class KimiVLThinking<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
                         for (int v = 0; v < patches; v++)
                         {
                             int vIdx = (v + e * 9 + step * 23) % visDim;
-                            expertVal += NumOps.ToDouble(visualFeatures[vIdx]) *
-                                (1.0 + Math.Cos((e + 1) * (d + 1) * 0.003) * 0.25);
+                            expertVal +=
+                                NumOps.ToDouble(visualFeatures[vIdx])
+                                * (1.0 + Math.Cos((e + 1) * (d + 1) * 0.003) * 0.25);
                         }
                         bestOutput = expertVal / patches;
                     }
@@ -193,15 +276,18 @@ public class KimiVLThinking<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
                 double reflectionFactor = 1.0;
                 if (step > 0)
                 {
-                    double consistency = 1.0 - Math.Abs(bestOutput - prevStepState[d]) /
-                        (Math.Abs(bestOutput) + Math.Abs(prevStepState[d]) + 1e-8);
+                    double consistency =
+                        1.0
+                        - Math.Abs(bestOutput - prevStepState[d])
+                            / (Math.Abs(bestOutput) + Math.Abs(prevStepState[d]) + 1e-8);
                     // If inconsistent, reduce contribution (backtrack partially)
                     reflectionFactor = 0.5 + 0.5 * consistency;
                 }
 
                 // Accumulate reasoning with reflection-modulated update
-                thinkingState[d] = thinkingState[d] * (1.0 - stepWeight * 0.3 * reflectionFactor) +
-                    (bestOutput + qEmb * 0.15) * stepWeight * reflectionFactor;
+                thinkingState[d] =
+                    thinkingState[d] * (1.0 - stepWeight * 0.3 * reflectionFactor)
+                    + (bestOutput + qEmb * 0.15) * stepWeight * reflectionFactor;
             }
         }
 
@@ -216,12 +302,15 @@ public class KimiVLThinking<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
 
         return output;
     }
+
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
-            Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2;
+            Layers.AddRange(Architecture.Layers);
+            _encoderLayerEnd = Layers.Count / 2;
         }
         else
         {
@@ -229,29 +318,122 @@ public class KimiVLThinking<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
             // custom Architecture.Layers stacks don't consume patch options, so
             // don't reject them on those values.
             ValidatePatchOptions();
-            Layers.AddRange(LayerHelper<T>.CreateDefaultCrossAttentionResamplerVLMLayers(_options.VisionDim, _options.VisionDim, _options.DecoderDim, _options.NumVisionLayers, 4, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, patchSize: ComputePatchSize()));
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultCrossAttentionResamplerVLMLayers(
+                    _options.VisionDim,
+                    _options.VisionDim,
+                    _options.DecoderDim,
+                    _options.NumVisionLayers,
+                    4,
+                    _options.NumDecoderLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate,
+                    patchSize: ComputePatchSize()
+                )
+            );
             ComputeEncoderDecoderBoundary();
         }
         ValidateEncoderDecoderBoundary();
     }
+
     private int ComputePatchSize()
     {
         ValidatePatchOptions();
         double targetTokensPerSide = Math.Sqrt(_options.MaxVisualTokens);
         return Math.Max(1, (int)Math.Ceiling(_options.ImageSize / targetTokensPerSide));
     }
-    private void ValidatePatchOptions() { if (_options.ImageSize <= 0) throw new ArgumentOutOfRangeException(nameof(_options.ImageSize), _options.ImageSize, "ImageSize must be greater than 0."); if (_options.MaxVisualTokens <= 0) throw new ArgumentOutOfRangeException(nameof(_options.MaxVisualTokens), _options.MaxVisualTokens, "MaxVisualTokens must be greater than 0."); }
+
+    private void ValidatePatchOptions()
+    {
+        if (_options.ImageSize <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(_options.ImageSize),
+                _options.ImageSize,
+                "ImageSize must be greater than 0."
+            );
+        if (_options.MaxVisualTokens <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(_options.MaxVisualTokens),
+                _options.MaxVisualTokens,
+                "MaxVisualTokens must be greater than 0."
+            );
+    }
+
     // +2 leading layers from the helper: PatchEmbedding + LayerNorm.
-    private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; int resamplerLpb = _options.DropoutRate > 0 ? 8 : 7; _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb + 4 * resamplerLpb + 1; }
-    private void ValidateEncoderDecoderBoundary() { if (_encoderLayerEnd <= 0 || _encoderLayerEnd > Layers.Count) throw new InvalidOperationException($"Invalid encoder boundary {_encoderLayerEnd} for {Layers.Count} layers."); }
-    private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+    private void ComputeEncoderDecoderBoundary()
+    {
+        int lpb = _options.DropoutRate > 0 ? 6 : 5;
+        int resamplerLpb = _options.DropoutRate > 0 ? 8 : 7;
+        _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb + 4 * resamplerLpb + 1;
+    }
+
+    private void ValidateEncoderDecoderBoundary()
+    {
+        if (_encoderLayerEnd <= 0 || _encoderLayerEnd > Layers.Count)
+            throw new InvalidOperationException(
+                $"Invalid encoder boundary {_encoderLayerEnd} for {Layers.Count} layers."
+            );
+    }
+
+    private Tensor<T> TokenizeText(string text)
+    {
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
+        var encoding = _tokenizer.Encode(text);
+        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
+        var tokens = new Tensor<T>([seqLen]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        return tokens;
+    }
+
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
+        var c = input;
+        foreach (var l in Layers)
+            c = l.Forward(c);
+        return c;
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        TrainWithTape(input, expected);
+        SetTrainingMode(false);
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Kimi-VL-Thinking-Native" : "Kimi-VL-Thinking-ONNX", Description = "Kimi-VL-Thinking: long chain-of-thought reasoning with RL alignment.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "Kimi-VL-Thinking-Native" : "Kimi-VL-Thinking-ONNX",
+            Description = "Kimi-VL-Thinking: long chain-of-thought reasoning with RL alignment.",
+            FeatureCount = _options.DecoderDim,
+            Complexity = _options.NumVisionLayers + _options.NumDecoderLayers,
+        };
         m.AdditionalInfo["Architecture"] = "Kimi-VL-Thinking";
         m.AdditionalInfo["ReasoningApproach"] = _options.ReasoningApproach;
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
@@ -259,7 +441,9 @@ public class KimiVLThinking<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
         m.AdditionalInfo["LongThinking"] = _options.EnableLongThinking.ToString();
         return m;
     }
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) {
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
         writer.Write(_useNativeMode);
         writer.Write(_options.ModelPath ?? string.Empty);
         writer.Write(_options.ImageSize);
@@ -274,10 +458,13 @@ public class KimiVLThinking<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
         writer.Write(_options.ActiveParameters);
         writer.Write(_options.EnableLongThinking);
     }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) {
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
         _useNativeMode = reader.ReadBoolean();
         string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionDim = reader.ReadInt32();
         _options.DecoderDim = reader.ReadInt32();
@@ -289,9 +476,28 @@ public class KimiVLThinking<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
         _options.TotalParameters = reader.ReadInt32();
         _options.ActiveParameters = reader.ReadInt32();
         _options.EnableLongThinking = reader.ReadBoolean();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new KimiVLThinking<T>(Architecture, mp, _options); return new KimiVLThinking<T>(Architecture, _options); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(KimiVLThinking<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new KimiVLThinking<T>(Architecture, mp, _options);
+        return new KimiVLThinking<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(KimiVLThinking<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
 }

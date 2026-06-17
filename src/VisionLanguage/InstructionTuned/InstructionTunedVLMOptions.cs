@@ -48,7 +48,8 @@ public class InstructionTunedVLMOptions : GenerativeVLMOptions
     }
 
     /// <summary>Gets or sets the instruction-tuned architecture type.</summary>
-    public InstructionTunedArchitectureType InstructionArchitectureType { get; set; } = InstructionTunedArchitectureType.MLPProjection;
+    public InstructionTunedArchitectureType InstructionArchitectureType { get; set; } =
+        InstructionTunedArchitectureType.MLPProjection;
 
     /// <summary>Gets or sets the MLP projection hidden dimension (for MLP connector models).</summary>
     public int ProjectionDim { get; set; } = 4096;
@@ -77,8 +78,16 @@ public class InstructionTunedVLMOptions : GenerativeVLMOptions
     public void ValidateVisualSizing()
     {
         if (ImageSize <= 0)
-            throw new ArgumentOutOfRangeException("imageSize", ImageSize, "ImageSize must be positive.");
+            throw new ArgumentOutOfRangeException(
+                "imageSize",
+                ImageSize,
+                "ImageSize must be positive."
+            );
         if (MaxVisualTokens <= 0)
-            throw new ArgumentOutOfRangeException("maxVisualTokens", MaxVisualTokens, "MaxVisualTokens must be positive.");
+            throw new ArgumentOutOfRangeException(
+                "maxVisualTokens",
+                MaxVisualTokens,
+                "MaxVisualTokens must be positive."
+            );
     }
 }

@@ -56,20 +56,80 @@ namespace AiDotNet.VisionLanguage.Generative;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("PaLI-3 Vision Language Models: Smaller, Faster, Stronger", "https://arxiv.org/abs/2310.09199", Year = 2023, Authors = "Chen et al.")]
+[ResearchPaper(
+    "PaLI-3 Vision Language Models: Smaller, Faster, Stronger",
+    "https://arxiv.org/abs/2310.09199",
+    Year = 2023,
+    Authors = "Chen et al."
+)]
 public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
-    private readonly PaLI3Options _options; public override ModelOptions GetOptions() => _options;
+    private readonly PaLI3Options _options;
+
+    public override ModelOptions GetOptions() => _options;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer; private bool _useNativeMode; private bool _disposed;
+    private readonly ITokenizer? _tokenizer;
+    private bool _useNativeMode;
+    private bool _disposed;
     private int _encoderLayerEnd;
 
-    public PaLI3(NeuralNetworkArchitecture<T> architecture, string modelPath, PaLI3Options? options = null) : base(architecture) { _options = options ?? new PaLI3Options(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
-    public PaLI3(NeuralNetworkArchitecture<T> architecture, PaLI3Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new PaLI3Options(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
+    public PaLI3(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        PaLI3Options? options = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new PaLI3Options();
+        _useNativeMode = false;
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
 
-    public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim;
+    public PaLI3(
+        NeuralNetworkArchitecture<T> architecture,
+        PaLI3Options? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new PaLI3Options();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
 
-    public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = TokenizeIfNCHW(p); for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
+    public int EmbeddingDimension => _options.DecoderDim;
+    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageChannels => 3;
+    public int MaxGenerationLength => _options.MaxGenerationLength;
+    public int DecoderEmbeddingDim => _options.DecoderDim;
+
+    public Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(p));
+        var c = TokenizeIfNCHW(p);
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            c = Layers[i].Forward(c);
+        return L2Normalize(c);
+    }
 
     /// <summary>
     /// Generates text using PaLI-3's efficient SigLIP-based architecture.
@@ -88,7 +148,8 @@ public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(p);
 
         // Step 1: SigLIP ViT encoder (sigmoid-based contrastive pretraining)
         var encoderOut = TokenizeIfNCHW(p);
@@ -116,21 +177,59 @@ public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; }
-        else { Layers.AddRange(LayerHelper<T>.CreateDefaultEncoderDecoderVLMLayers(_options.VisionDim, _options.DecoderDim, _options.NumVisionLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate)); ComputeEncoderDecoderBoundary(); }
+        if (!_useNativeMode)
+            return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            _encoderLayerEnd = Layers.Count / 2;
+        }
+        else
+        {
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultEncoderDecoderVLMLayers(
+                    _options.VisionDim,
+                    _options.DecoderDim,
+                    _options.NumVisionLayers,
+                    _options.NumDecoderLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate
+                )
+            );
+            ComputeEncoderDecoderBoundary();
+        }
     }
 
-    private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + (_options.VisionDim != _options.DecoderDim ? 1 : 0); }
-    private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
+    private void ComputeEncoderDecoderBoundary()
+    {
+        int lpb = _options.DropoutRate > 0 ? 6 : 5;
+        _encoderLayerEnd =
+            1
+            + _options.NumVisionLayers * lpb
+            + (_options.VisionDim != _options.DecoderDim ? 1 : 0);
+    }
+
+    private Tensor<T> TokenizeText(string text)
+    {
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
+        var encoding = _tokenizer.Encode(text);
+        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
+        var tokens = new Tensor<T>([seqLen]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        return tokens;
+    }
 
     public override Tensor<T> Predict(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
         SetTrainingMode(false);
         var c = TokenizeIfNCHW(input);
-        foreach (var l in Layers) c = l.Forward(c);
+        foreach (var l in Layers)
+            c = l.Forward(c);
         return c;
     }
 
@@ -138,11 +237,17 @@ public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
 
     private Tensor<T> TokenizeIfNCHW(Tensor<T> input) =>
         PatchEmbedHelper.TokenizeImageNCHWToBSC(
-            input, _options.VisionDim, _options.ImageSize, ref _patchEmbed, Engine);
+            input,
+            _options.VisionDim,
+            _options.ImageSize,
+            ref _patchEmbed,
+            Engine
+        );
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
         try
         {
@@ -179,10 +284,13 @@ public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
     /// </summary>
     private void EnsurePatchEmbedForParameterVector(int paramVectorLength)
     {
-        if (_patchEmbed is not null) return;
+        if (_patchEmbed is not null)
+            return;
         int layerSum = 0;
-        foreach (var l in Layers) layerSum += (int)l.ParameterCount;
-        if (paramVectorLength <= layerSum) return;
+        foreach (var l in Layers)
+            layerSum += (int)l.ParameterCount;
+        if (paramVectorLength <= layerSum)
+            return;
 
         var probe = new Tensor<T>(new[] { 1, 3, _options.ImageSize, _options.ImageSize });
         TokenizeIfNCHW(probe);
@@ -196,8 +304,7 @@ public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
     // _patchEmbed.ParameterCount extra slots from the front, shifting every
     // Layer's slice and corrupting weights.
     public override long ParameterCount =>
-        (_patchEmbed?.ParameterCount ?? 0) +
-        (int)Layers.Sum(l => l.ParameterCount);
+        (_patchEmbed?.ParameterCount ?? 0) + (int)Layers.Sum(l => l.ParameterCount);
 
     public override Vector<T> GetParameters()
     {
@@ -209,11 +316,13 @@ public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
         if (patchLen > 0)
         {
             var patchParams = _patchEmbed!.GetParameters();
-            for (int i = 0; i < patchParams.Length; i++) result[idx++] = patchParams[i];
+            for (int i = 0; i < patchParams.Length; i++)
+                result[idx++] = patchParams[i];
         }
         foreach (var p in perLayer)
         {
-            for (int i = 0; i < p.Length; i++) result[idx++] = p[i];
+            for (int i = 0; i < p.Length; i++)
+                result[idx++] = p[i];
         }
         return result;
     }
@@ -246,7 +355,8 @@ public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
 
     public override void UpdateParameters(Vector<T> parameters)
     {
-        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
         EnsurePatchEmbedForParameterVector(parameters.Length);
         int idx = 0;
         if (_patchEmbed is not null)
@@ -258,25 +368,87 @@ public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
                 idx += pc;
             }
         }
-        foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
     }
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "PaLI-3-Native" : "PaLI-3-ONNX", Description = "PaLI-3 Vision Language Models: Smaller, Faster, Stronger (Chen et al., 2023)", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "PaLI-3"; m.AdditionalInfo["GenerativeType"] = _options.ArchitectureType.ToString(); return m; }
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.VisionDim); writer.Write(_options.DecoderDim); writer.Write(_options.NumVisionLayers); writer.Write(_options.NumDecoderLayers); writer.Write(_options.NumHeads); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.VisionDim = reader.ReadInt32(); _options.DecoderDim = reader.ReadInt32(); _options.NumVisionLayers = reader.ReadInt32(); _options.NumDecoderLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new PaLI3<T>(Architecture, mp, _options); return new PaLI3<T>(Architecture, _options); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(PaLI3<T>)); }
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "PaLI-3-Native" : "PaLI-3-ONNX",
+            Description =
+                "PaLI-3 Vision Language Models: Smaller, Faster, Stronger (Chen et al., 2023)",
+            FeatureCount = _options.DecoderDim,
+            Complexity = _options.NumVisionLayers + _options.NumDecoderLayers,
+        };
+        m.AdditionalInfo["Architecture"] = "PaLI-3";
+        m.AdditionalInfo["GenerativeType"] = _options.ArchitectureType.ToString();
+        return m;
+    }
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_useNativeMode);
+        writer.Write(_options.ModelPath ?? string.Empty);
+        writer.Write(_options.ImageSize);
+        writer.Write(_options.VisionDim);
+        writer.Write(_options.DecoderDim);
+        writer.Write(_options.NumVisionLayers);
+        writer.Write(_options.NumDecoderLayers);
+        writer.Write(_options.NumHeads);
+    }
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _useNativeMode = reader.ReadBoolean();
+        string mp = reader.ReadString();
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
+        _options.ImageSize = reader.ReadInt32();
+        _options.VisionDim = reader.ReadInt32();
+        _options.DecoderDim = reader.ReadInt32();
+        _options.NumVisionLayers = reader.ReadInt32();
+        _options.NumDecoderLayers = reader.ReadInt32();
+        _options.NumHeads = reader.ReadInt32();
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new PaLI3<T>(Architecture, mp, _options);
+        return new PaLI3<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(PaLI3<T>));
+    }
+
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         if (disposing)
         {
             // _patchEmbed lives outside Layers; dispose it explicitly so the
             // conv's weights/buffers get released alongside the rest of the
             // model rather than leaking until GC.
-            if (_patchEmbed is IDisposable pe) pe.Dispose();
+            if (_patchEmbed is IDisposable pe)
+                pe.Dispose();
         }
         base.Dispose(disposing);
     }
