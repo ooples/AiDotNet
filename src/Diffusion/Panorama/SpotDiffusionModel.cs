@@ -62,7 +62,14 @@ public class SpotDiffusionModel<T> : LatentDiffusionModelBase<T>
         NeuralNetworkArchitecture<T>? architecture = null, DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null, UNetNoisePredictor<T>? predictor = null,
         StandardVAE<T>? vae = null, IConditioningModule<T>? conditioner = null, int? seed = null)
-        : base(options ?? new DiffusionModelOptions<T> { TrainTimesteps = 1000, BetaStart = 0.00085, BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear },
+        // Propagate `seed` into the options so the base model's RandomGenerator is
+        // deterministic. Without Seed set, the base falls back to a non-deterministic
+        // secure RNG, and the training-timestep sampling (DiffusionModelBase.Train →
+        // RandomGenerator.Next(TrainTimesteps)) varies every run — making
+        // Training_ShouldReducePredictionError flaky (the 5-step probe passed or
+        // failed by luck of the draw, depending on which timesteps were trained).
+        // `seed` previously only seeded layer-weight init, not the training RNG.
+        : base(options ?? new DiffusionModelOptions<T> { TrainTimesteps = 1000, BetaStart = 0.00085, BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear, Seed = seed },
             scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()), architecture)
     {
         _conditioner = conditioner;
@@ -108,7 +115,17 @@ public class SpotDiffusionModel<T> : LatentDiffusionModelBase<T>
 
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new SpotDiffusionModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
+        // Clone the ACTUAL predictor/VAE: passing neither rebuilt the default foundation-scale UNet
+        // (~643 M params) while the source may hold a small/custom predictor (~10 M), so
+        // SetParameters threw "Expected 643774499 parameters, got 10342915". See MultiDiffusionModel.
+        var clone = new SpotDiffusionModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner,
+            seed: RandomGenerator.Next());
         if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         return clone;
     }

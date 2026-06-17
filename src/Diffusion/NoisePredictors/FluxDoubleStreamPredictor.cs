@@ -186,6 +186,8 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
                 $"FluxDoubleStreamPredictor requires spatial dims divisible by patchSize ({PatchSize}); got {height}×{width}.",
                 nameof(noisySample));
 
+        using var streaming = BeginWeightStreamingForward();
+
         // Patchify: [B, C, H, W] → [B, numTokens, patchDim].
         var tokens = Patchify(input4d, PatchSize);
 
@@ -202,7 +204,7 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
 
         if (wasUnbatched)
             output = output.Reshape(new[] { channels, height, width });
-        return output;
+        return streaming.Complete(output);
     }
 
     /// <summary>

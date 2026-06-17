@@ -180,7 +180,16 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     public MemoryNetwork(NeuralNetworkArchitecture<T> architecture, int memorySize, int embeddingSize, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null, ILossFunction<T>? lossFunction = null, MemoryNetworkOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // End-to-End Memory Networks (Sukhbaatar et al. 2015, §4.2) train the read/write
+        // projections with SGD at LR 0.01 (annealed). The framework-wide AdamOptimizer default of
+        // 1e-3 is calibrated for plain MLPs and is too conservative for the memory-attention path
+        // here: the read is a softmax-weighted average over the (fixed) memory, so the gradient
+        // reaching the key/value/output projections is small, and at 1e-3 the loss moved only ~0.1%
+        // over 100 steps (below the 1% memorization bar). A paper-aligned 1e-2 gives the projections
+        // enough step size to actually memorize.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-2 });
         _options = options ?? new MemoryNetworkOptions();
         Options = _options;
         _memorySize = memorySize;

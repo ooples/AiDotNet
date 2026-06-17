@@ -172,6 +172,8 @@ public class SiTPredictor<T> : NoisePredictorBase<T>
         int hp = h / patchSize;
         int wp = w / patchSize;
 
+        using var streaming = BeginWeightStreamingForward();
+
         // Patchify: [B, C, H, W] → [B, hp, patchSize, wp, patchSize, C] via
         // permute, then flatten to [B, hp*wp, C*patchSize*patchSize].
         var permuted = Engine.TensorPermute(noisySample, new[] { 0, 2, 3, 1 }).Contiguous();
@@ -187,7 +189,7 @@ public class SiTPredictor<T> : NoisePredictorBase<T>
         var outPatched = Engine.Reshape(outTokens, new[] { b, hp, wp, patchSize, patchSize, c });
         var outOrdered = Engine.TensorPermute(outPatched, new[] { 0, 1, 3, 2, 4, 5 }).Contiguous();
         var outBhwc = Engine.Reshape(outOrdered, new[] { b, h, w, c });
-        return Engine.TensorPermute(outBhwc, new[] { 0, 3, 1, 2 }).Contiguous();
+        return streaming.Complete(Engine.TensorPermute(outBhwc, new[] { 0, 3, 1, 2 }).Contiguous());
     }
 
     /// <inheritdoc />

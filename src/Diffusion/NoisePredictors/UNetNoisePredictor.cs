@@ -497,6 +497,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
         EnsureLayersInitialized();
+        using var streaming = BeginWeightStreamingForward();
         _preserveMaterializedParameters = true;
         _lastInput = noisySample;
 
@@ -510,7 +511,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         var output = PredictCompiledForward(noisySample, timeEmbed, conditioning);
 
         _lastOutput = output;
-        return output;
+        return streaming.Complete(output);
     }
 
     /// <summary>
@@ -631,6 +632,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     public override Tensor<T> PredictNoiseWithEmbedding(Tensor<T> noisySample, Tensor<T> timeEmbedding, Tensor<T>? conditioning = null)
     {
         EnsureLayersInitialized();
+        using var streaming = BeginWeightStreamingForward();
         _preserveMaterializedParameters = true;
         _lastInput = noisySample;
 
@@ -642,7 +644,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         SaveForwardState(skips, timeEmbed);
 
         _lastOutput = output;
-        return output;
+        return streaming.Complete(output);
     }
 
     /// <summary>

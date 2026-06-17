@@ -4241,8 +4241,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         _streamingPoolSetAccessScheduleMethod?.Invoke(pool, new object[] { order });
     }
 
+    // WeightRegistry.SetStreamingExecutionTraining takes a Nullable<bool>
+    // (true=training, false=inference, null=unknown), so the reflected lookup
+    // must request typeof(bool?) — a typeof(bool) probe finds no overload and
+    // silently returns null, which left the execution-mode hint permanently
+    // "unknown" and disabled both bf16-Auto store selection AND the zero-copy
+    // mmap inference fast path for every model. Fall back to a name-only lookup
+    // so an older package that still declared the bool overload keeps working.
     private static readonly MethodInfo? StreamingExecutionTrainingMethod =
         typeof(WeightRegistry).GetMethod(
+            "SetStreamingExecutionTraining",
+            BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
+            binder: null,
+            types: new[] { typeof(bool?) },
+            modifiers: null)
+        ?? typeof(WeightRegistry).GetMethod(
             "SetStreamingExecutionTraining",
             BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
             binder: null,
@@ -4251,7 +4264,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     private static void SetStreamingExecutionTrainingIfSupported(bool isTraining)
     {
-        StreamingExecutionTrainingMethod?.Invoke(null, new object[] { isTraining });
+        StreamingExecutionTrainingMethod?.Invoke(null, new object?[] { isTraining });
     }
 
     private static void CollectStreamingHandles(ILayer<T> layer, System.Collections.Generic.List<long> order)
@@ -5111,7 +5124,26 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         long threshold = _streamingThresholdOverride ?? s_streamingThresholdParams;
 
-        if (paramCount < threshold)
+        // Lazy models (Transformer/VLM decoders built from FullyConnected /
+        // MultiHeadAttention layers that resolve their input dim on first
+        // forward) report ParameterCount == 0 here because no weight tensor
+        // has materialized yet. Relying on the post-first-forward retry is
+        // too late: that first forward is exactly what allocates the entire
+        // (multi-GB) weight set on the GC heap and OOMs on a memory-bounded
+        // runner BEFORE the retry can engage streaming. So when the
+        // materialized count is below threshold, fall back to the model's
+        // structural estimate (computed from its architecture/options, no
+        // materialization required) so streaming turns on in the ctor and
+        // the lazy weights stream as they materialize. See
+        // EstimateStructuralParameterCount.
+        long effectiveCount = paramCount;
+        if (effectiveCount < threshold)
+        {
+            long structural = SafeEstimateStructuralParameterCount();
+            if (structural > effectiveCount) effectiveCount = structural;
+        }
+
+        if (effectiveCount < threshold)
         {
             // Below threshold. For lazy models (Transformer, etc.),
             // ParameterCount may legitimately report 0 here because
@@ -5134,8 +5166,46 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // parameterless ctor so any future field additions inherit the
         // Tensors-side default rather than getting frozen at the value we
         // pinned today.
-        var options = new GpuOffloadOptions();
+        var options = new GpuOffloadOptions
+        {
+            // Auto-detect only fires for foundation-scale models (paramCount or
+            // structural estimate over the threshold), and the model-family /
+            // inference paths drive a single forward at a time. Transparent
+            // auto-eviction lets a layer's first-forward Materialize drop cold
+            // weights once the resident budget is crossed, so the full weight
+            // set never has to be simultaneously resident — without it, a lazy
+            // foundation model materializes every layer on the GC heap during
+            // the first forward and OOMs a memory-bounded runner even though
+            // streaming was "enabled". Safe here because auto-detect targets
+            // single-threaded foundation-scale inference (see
+            // GpuOffloadOptions.TransparentAutoEviction remarks); the streaming
+            // training path manages its own residency explicitly.
+            TransparentAutoEviction = true,
+        };
+        // Cap the resident budget conservatively. The Tensors default
+        // (0.7 × available, ceiling 16 GB) is tuned for "model is a fraction of
+        // RAM"; for a foundation model whose weights approach the machine's
+        // total RAM (e.g. a ~15 GB float model on a 16 GB runner) a 0.7 budget
+        // leaves no room for activations, the rehydrated active weight, GEMM
+        // scratch, and the framework, so the forward still OOMs even with
+        // streaming. Holding the resident weight set to ~0.4 × available leaves
+        // generous headroom for everything else while keeping enough weights
+        // hot to avoid thrashing. Only lowers the budget — never raises it
+        // above the Tensors default — so large-RAM hosts are unaffected.
+        long availableForBudget = ResolveAvailableMemoryForStreaming();
+        if (availableForBudget > 0)
+        {
+            long conservative = Math.Max(1L * 1024 * 1024 * 1024, (long)(availableForBudget * 0.25));
+            if (conservative < options.StreamingPoolMaxResidentBytes)
+                options.StreamingPoolMaxResidentBytes = conservative;
+        }
         ConfigureWeightLifetime(options);
+        // Declare the default (inference) execution mode so the zero-copy mmap
+        // fast path is eligible immediately — a freshly-built model is in
+        // inference mode until Train() flips it via SetTrainingMode(true), which
+        // forwards the training state here and correctly disables zero-copy
+        // (training writes weights; the mmap alias is read-only).
+        SetStreamingExecutionTrainingIfSupported(IsTrainingMode);
         _streamingEngagedByAutoDetect = true;
         _streamingAutoDetectFinalized = true;
     }
@@ -5148,6 +5218,78 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     protected virtual IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
         => System.Linq.Enumerable.Empty<LayerBase<T>?>();
+
+    /// <summary>
+    /// Structural estimate of this model's trainable parameter count, computed
+    /// from its architecture/options WITHOUT materializing any lazy weight
+    /// tensors. Returns 0 by default (meaning "no estimate available — rely on
+    /// the materialized <see cref="ParameterCount"/>").
+    /// </summary>
+    /// <remarks>
+    /// Foundation-scale models built from lazy layers (large Transformer/VLM
+    /// decoders) report <see cref="ParameterCount"/> == 0 until the first
+    /// forward materializes their weights. That is too late for the weight-
+    /// streaming auto-detector: the first forward is what allocates the full
+    /// multi-GB weight set on the GC heap and OOMs a memory-bounded runner.
+    /// Overriding this lets <see cref="TryAutoEnableWeightStreaming"/> engage
+    /// streaming in the constructor so those weights stream as they
+    /// materialize. The estimate only needs to be accurate enough to land on
+    /// the correct side of the streaming threshold — a coarse lower bound from
+    /// the dominant layers (decoder depth × hidden² , etc.) is sufficient.
+    /// </remarks>
+    protected virtual long EstimateStructuralParameterCount() => 0L;
+
+    /// <summary>
+    /// Best-effort query of the memory ceiling the process can actually use —
+    /// the GC heap hard limit when one is configured (containers / constrained
+    /// CI runners), else physical RAM. Used to size the weight-streaming
+    /// resident budget conservatively. Returns 0 when unavailable so the caller
+    /// keeps the streaming pool's own default.
+    /// </summary>
+    private static long ResolveAvailableMemoryForStreaming()
+    {
+#if NET5_0_OR_GREATER
+        try
+        {
+            long avail = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
+            return avail > 0 ? avail : 0L;
+        }
+        catch
+        {
+            return 0L;
+        }
+#else
+        // net471: no portable available-memory query — let the streaming pool
+        // keep its own default budget.
+        return 0L;
+#endif
+    }
+
+    /// <summary>
+    /// Calls <see cref="EstimateStructuralParameterCount"/> defensively: the
+    /// override runs during construction (before subclass fields may be fully
+    /// set) and must never break auto-detect, so any failure degrades to 0
+    /// ("no estimate").
+    /// </summary>
+    private long SafeEstimateStructuralParameterCount()
+    {
+        try
+        {
+            long est = EstimateStructuralParameterCount();
+            return est > 0 ? est : 0L;
+        }
+        catch (Exception ex) when (
+            ex is InvalidOperationException ||
+            ex is NullReferenceException ||
+            ex is OverflowException ||
+            ex is ArithmeticException)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[NeuralNetworkBase] EstimateStructuralParameterCount threw " +
+                $"{ex.GetType().Name}: {ex.Message}; treating as no estimate.");
+            return 0L;
+        }
+    }
 
     /// <summary>
     /// Override-point for subclasses that own raw trainable
@@ -7804,7 +7946,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// is a no-op on the CPU engine (GpuEngine is null); the CPU flush below is
     /// always live. Mirrors the OnParametersUpdated contract.
     /// </remarks>
-    private void InvalidateWeightCachesAfterSuccessfulWeightUpdate()
+    protected void InvalidateWeightCachesAfterSuccessfulWeightUpdate()
     {
         GpuEngine?.InvalidateAllWeightCaches();
         // CPU-side mirror of the same contract: the CPU engine's inference

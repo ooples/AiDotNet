@@ -369,6 +369,10 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     // then can't both reconfigure the process-global WeightRegistry.
     private int _streamingEngaged;
 
+    // 0 = no successful weight registration yet, 1 = resolved lazy weights have
+    // been registered with the streaming pool at least once.
+    private int _streamingWeightsRegistered;
+
     /// <summary>
     /// Parameter-count threshold above which <see cref="MaybeEngageWeightStreaming"/>
     /// engages disk-backed weight streaming for the denoising forward loop. 500 M
@@ -442,6 +446,17 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     }
 
     /// <summary>
+    /// Starts a predictor forward that may need transparent weight streaming.
+    /// The returned scope registers resolved lazy weights on successful completion
+    /// and releases any in-flight streaming reservations if the first forward fails.
+    /// </summary>
+    protected WeightStreamingForwardScope BeginWeightStreamingForward()
+    {
+        MaybeEngageWeightStreaming();
+        return new WeightStreamingForwardScope(this);
+    }
+
+    /// <summary>
     /// Registers this predictor's now-resolved weights with the streaming pool,
     /// dropping their resident in-memory copies to disk-backed storage. No-op
     /// unless <see cref="MaybeEngageWeightStreaming"/> engaged. Called after the
@@ -462,6 +477,71 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
                 if (tensor is null || tensor.Length == 0 || tensor.StreamingPoolHandle >= 0) continue;
                 tensor.Lifetime = WeightLifetime.Streaming;
                 WeightRegistry.RegisterWeight(tensor);
+            }
+        }
+
+        System.Threading.Volatile.Write(ref _streamingWeightsRegistered, 1);
+    }
+
+    private void ReleaseStreamingWeights(bool includeRegistered)
+    {
+        if (System.Threading.Volatile.Read(ref _streamingEngaged) == 0) return;
+
+        foreach (var layer in ReflectInstanceLayers(this))
+        {
+            if (layer is not LayerBase<T> lb) continue;
+            foreach (var tensor in lb.GetTrainableParameters())
+            {
+                if (tensor is null || tensor.Lifetime != WeightLifetime.Streaming) continue;
+                if (!includeRegistered && tensor.StreamingPoolHandle >= 0) continue;
+
+                try
+                {
+                    WeightRegistry.UnregisterWeight(tensor);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"NoisePredictorBase: failed to release streaming weight " +
+                        $"from {layer.GetType().Name}: {ex.GetType().Name}: {ex.Message}");
+                }
+            }
+        }
+
+        if (includeRegistered)
+        {
+            System.Threading.Volatile.Write(ref _streamingWeightsRegistered, 0);
+        }
+    }
+
+    /// <summary>
+    /// Per-forward streaming guard used by concrete predictors. Call
+    /// <see cref="Complete"/> with the final output immediately before returning.
+    /// </summary>
+    protected sealed class WeightStreamingForwardScope : IDisposable
+    {
+        private readonly NoisePredictorBase<T> _owner;
+        private bool _completed;
+
+        internal WeightStreamingForwardScope(NoisePredictorBase<T> owner)
+        {
+            _owner = owner;
+        }
+
+        public Tensor<T> Complete(Tensor<T> result)
+        {
+            _owner.RegisterResolvedStreamingWeights();
+            _completed = true;
+            return result;
+        }
+
+        public void Dispose()
+        {
+            if (!_completed)
+            {
+                var firstForwardDidNotRegister =
+                    System.Threading.Volatile.Read(ref _owner._streamingWeightsRegistered) == 0;
+                _owner.ReleaseStreamingWeights(includeRegistered: firstForwardDidNotRegister);
             }
         }
     }
@@ -1206,6 +1286,8 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     {
         if (_disposed || !disposing) return;
         _disposed = true;
+
+        ReleaseStreamingWeights(includeRegistered: true);
 
         _compileHost.Dispose();
 

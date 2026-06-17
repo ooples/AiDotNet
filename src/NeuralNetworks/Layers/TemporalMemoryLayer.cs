@@ -210,8 +210,15 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeCellStates()
     {
-        // Use Fill for efficient initialization
-        CellStates.Fill(NumOps.Zero);
+        // Canonical HTM bursting: an active column with no learned prediction
+        // activates ALL of its cells (Hawkins & Ahmad 2016 §3). Initialise every
+        // cell to a uniform 1/CellsPerColumn so a freshly-active column passes its
+        // activation through to the forward output (keeping the forward sensitive
+        // to WHICH columns the spatial pooler activated) until learning sharpens
+        // which cell represents which temporal context. A zero init made the
+        // forward emit all-zeros (output = columnMask * cellStates = 0) for every
+        // input, collapsing the network to a constant readout.
+        CellStates.Fill(NumOps.FromDouble(1.0 / CellsPerColumn));
     }
 
     /// <summary>
@@ -338,40 +345,34 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
         var weakenDelta = new Tensor<T>([ColumnCount, CellsPerColumn]);
         weakenDelta.Fill(NumOps.FromDouble(0.05));
 
-        var zeroTensor = new Tensor<T>([ColumnCount, CellsPerColumn]);
-        zeroTensor.Fill(NumOps.Zero);
-
-        // For active columns (mask == 1): strengthen active cells
-        // activeCellMask = (CellStates == 1) to identify which cells are active
-        var activeCellMask = Engine.TensorEquals(CellStates, NumOps.One);
-
-        // strengthenAmount = activeCellMask * strengthenDelta (only apply to active cells)
-        var strengthenAmount = Engine.TensorMultiply(activeCellMask, strengthenDelta);
-
-        // For inactive columns (mask == 0): weaken all cells
-        // inactiveMask = 1 - columnMask
+        // For inactive columns (columnMask == 0): weaken all cells toward 0.
         var inactiveMask = Engine.TensorSubtract(onesTensor, columnMask);
-
-        // weakenAmount = inactiveMask * weakenDelta
         var weakenAmount = Engine.TensorMultiply(inactiveMask, weakenDelta);
 
-        // Apply strengthening for active columns: CellStates += columnMask * strengthenAmount
-        var activeContribution = Engine.TensorMultiply(columnMask, strengthenAmount);
+        // For active columns (columnMask == 1): strengthen ALL their cells. This
+        // is the Hebbian reinforcement of the bursting representation (Hawkins &
+        // Ahmad 2016 §3-§4). The previous code gated strengthening on
+        // (CellStates == 1), which was NEVER true after the zero init, so cells
+        // were only ever weakened — driving CellStates negative until a column
+        // sum went negative and the per-column sum-normalization below divided by
+        // the 1e-10 floor, exploding to ~1e9 → Inf → NaN (a root cause of the
+        // "Predict became non-finite after N Train calls" failures).
+        var activeContribution = Engine.TensorMultiply(columnMask, strengthenDelta);
         CellStates = Engine.TensorAdd(CellStates, activeContribution);
-
-        // Apply weakening for inactive columns: CellStates -= weakenAmount
         CellStates = Engine.TensorSubtract(CellStates, weakenAmount);
 
-        // Normalize cell states per column using ReduceSum along axis 1
-        // Sum along cells (axis 1) to get [ColumnCount, 1] sums
-        var columnSums = Engine.ReduceSum(CellStates, [1], keepDims: true);
-
-        // Avoid division by zero: where sum is zero, keep original values
-        var safeSums = Engine.TensorMax(columnSums, NumOps.FromDouble(1e-10));
-
-        // Normalize: CellStates = CellStates / safeSums (broadcast division)
-        // safeSums shape [numColumns, 1] broadcasts across [numColumns, cellsPerColumn]
-        CellStates = Engine.TensorBroadcastDivide(CellStates, safeSums);
+        // Clamp cell activations to [burst floor, 1]. The floor (= the
+        // 1/CellsPerColumn bursting level) keeps an active column ALWAYS able to
+        // fire: in HTM an active column with no specific prediction bursts all its
+        // cells (Hawkins & Ahmad 2016 §3), so cells never decay to a hard zero.
+        // Without the floor, Hebbian training on one input decayed every other
+        // column's cells to 0, so a DIFFERENT input later activated columns whose
+        // cells were 0 and the forward emitted nothing — making post-training
+        // output input-invariant. The floor preserves input sensitivity after
+        // training while learned-context cells still strengthen toward 1. This
+        // also replaces the non-canonical sum-to-1 normalization that produced NaN.
+        T burstFloor = NumOps.FromDouble(1.0 / CellsPerColumn);
+        CellStates = Engine.TensorClamp(CellStates, burstFloor, NumOps.One);
     }
 
     /// <summary>

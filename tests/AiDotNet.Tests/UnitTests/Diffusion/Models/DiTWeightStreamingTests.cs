@@ -35,6 +35,7 @@ namespace AiDotNet.Tests.UnitTests.Diffusion.Models;
 /// other diffusion test forwards a DiT model, so the global override window
 /// doesn't race a neighbour.</para>
 /// </summary>
+[Collection("WeightStreaming-Singleton")]
 public class DiTWeightStreamingTests
 {
     private const int InputChannels = 4;
