@@ -20,7 +20,7 @@ namespace AiDotNet.Inference;
 /// For concurrent serving, create one sequence per request (distinct <see cref="SequenceId"/> values).
 /// </para>
 /// </remarks>
-internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
+internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInferenceLayer<T>
 {
     private readonly int _headCount;
     private readonly int _headDimension;
@@ -177,6 +177,30 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
             return statelessOutput;
         }
 
+        // Single-sequence legacy path: use the instance's SequenceId/position and advance it.
+        var legacyOutput = ComputePagedAttention(input, SequenceId, _currentPosition);
+        _currentPosition += input.Shape[1];
+        _lastOutput = legacyOutput;
+        return legacyOutput;
+    }
+
+    /// <inheritdoc/>
+    public Tensor<T> ForwardWithContext(Tensor<T> input, InferenceForwardContext ctx)
+    {
+        if (!InferenceMode || Kernel == null)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(PagedCachedMultiHeadAttention<T>)}.ForwardWithContext requires inference mode with a paged KV kernel.");
+        }
+
+        // Concurrency-safe: sequence id + start position come from the per-call context; no shared
+        // instance fields are mutated (no _currentPosition/_lastInput/_lastOutput writes), so many
+        // sequences can drive one shared layer + KV cache at once, isolated by sequence id.
+        return ComputePagedAttention(input, ctx.SequenceId, ctx.Position);
+    }
+
+    private Tensor<T> ComputePagedAttention(Tensor<T> input, long sequenceId, int startPosition)
+    {
         // Inference mode: update cache and compute attention token-by-token.
         // This supports both prefill (seqLen>1) and decode (seqLen==1) by iterating tokens.
         if (input.Shape.Length < 3)
@@ -201,6 +225,12 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
         }
 
         var output = new Tensor<T>([batchSize, seqLen, embDim]);
+
+        // Callers (Forward / ForwardWithContext) only invoke this in inference mode with a kernel,
+        // but capture a non-null local so the per-token kernel calls are flow-checked.
+        var kernel = Kernel
+            ?? throw new InvalidOperationException(
+                $"{nameof(PagedCachedMultiHeadAttention<T>)}: paged KV kernel is not initialized.");
 
         var activation = ScalarActivation
             ?? throw new InvalidOperationException(
@@ -276,6 +306,10 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
                 var valueSpan = valueBuf.AsSpan(0, projDim);
                 var attnOutput = attnBuf.AsSpan(0, projDim);
 
+                // Position advances locally from the supplied start; the instance _currentPosition
+                // is NOT touched here, so concurrent sequences (each with their own context) do not
+                // collide on position state.
+                int position = startPosition;
                 for (int t = 0; t < seqLen; t++)
                 {
                     for (int d = 0; d < embDim; d++)
@@ -303,16 +337,16 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
                         // Step 2: Apply RoPE to Q and K
                         if (_ropeLayer != null)
                         {
-                            ApplyRoPEToSpan(querySpan, _currentPosition);
-                            ApplyRoPEToSpan(keySpan, _currentPosition);
+                            ApplyRoPEToSpan(querySpan, position);
+                            ApplyRoPEToSpan(keySpan, position);
                         }
 
                         // Step 3: Update cache and compute attention via kernel
-                        Kernel.UpdateCache(keySpan, valueSpan, SequenceId, _currentPosition, LayerIndex);
-                        Kernel.ComputeTiledPagedAttention(querySpan, SequenceId, LayerIndex, attnOutput,
+                        kernel.UpdateCache(keySpan, valueSpan, sequenceId, position, LayerIndex);
+                        kernel.ComputeTiledPagedAttention(querySpan, sequenceId, LayerIndex, attnOutput,
                             1.0f / MathF.Sqrt(_headDimension),
                             alibiSlopes: alibiSlopes,
-                            queryPosition: _currentPosition);
+                            queryPosition: position);
 
                         // Step 4: Output projection
                         if (useQuantized)
@@ -326,27 +360,27 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
                     }
                     else if (useQuantized)
                     {
-                        Kernel.ForwardQuantized(
+                        kernel.ForwardQuantized(
                             hiddenStates: hidden,
                             wQ: qWeightsQ,
                             wK: qWeightsK,
                             wV: qWeightsV,
                             wO: qWeightsO,
-                            sequenceId: SequenceId,
-                            position: _currentPosition,
+                            sequenceId: sequenceId,
+                            position: position,
                             layer: LayerIndex,
                             output: tokenOut);
                     }
                     else
                     {
-                        Kernel.Forward(
+                        kernel.Forward(
                             hiddenStates: hidden,
                             wQ: wQ,
                             wK: wK,
                             wV: wV,
                             wO: wO,
-                            sequenceId: SequenceId,
-                            position: _currentPosition,
+                            sequenceId: sequenceId,
+                            position: position,
                             layer: LayerIndex,
                             output: tokenOut);
                     }
@@ -376,7 +410,6 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
             pool.Return(tokenOutBuffer);
         }
 
-        _lastOutput = output;
         return output;
     }
 
