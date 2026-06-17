@@ -236,19 +236,25 @@ public class AcceleratedInferenceTests : IDisposable
     }
 
     [Fact]
-    public void Training_DisablesAcceleration_AndClearsVerdicts()
+    public void Training_ClearsGate_AndOptOutDisengages()
     {
         var net = BuildMlp();
         var input = MakeInput(55);
 
-        net.ForceAutoCompiledInferenceForTesting(true);
+        net.ForceAutoCompiledInferenceForTesting(true); // explicit opt-in
         _ = net.PredictAccelerated(input);
         Assert.True(net.AutoCompiledInferenceEngaged);
         Assert.NotEqual(0, net.CompiledVerdictForTesting(new[] { 1, InputDim }));
 
+        // Entering training clears the stale verdict/memo cache (weights are about to change). The
+        // explicit opt-in persists (it is the user's standing intent for inference), but the cache is
+        // dropped so a later inference forward re-verifies against the new weights.
         net.SetTrainingMode(true);
+        Assert.Equal(0, net.CompiledVerdictForTesting(new[] { 1, InputDim }));
+
+        // Explicit opt-out fully disengages the path.
+        net.EnableInferenceAcceleration(false);
         Assert.False(net.AutoCompiledInferenceEngaged);
-        Assert.Equal(0, net.CompiledVerdictForTesting(new[] { 1, InputDim })); // verdicts + memo cleared
     }
 
     [Fact]
@@ -262,17 +268,17 @@ public class AcceleratedInferenceTests : IDisposable
         // weights at reduced precision (the accepted foundation-scale memory tradeoff).
         var net = BuildMlp(seed: 99);
         net.ApplyAutoDetectThresholdOverride(1);
-        // SetTrainingMode(false) is the universal funnel that runs weight-streaming auto-detect and
-        // latches the auto-compiled eligibility; call it explicitly so the test does not depend on a
-        // particular model's Predict override calling it.
+        // SetTrainingMode(false) runs the weight-streaming auto-detect (foundation-scale at threshold 1)
+        // and puts the model in inference mode. Assert auto-engagement HERE — before any Predict, since
+        // FeedForward's Predict restores training mode on exit (the auto path requires eval).
         net.SetTrainingMode(false);
-        var input = MakeInput(66);
+        Assert.True(net.AutoCompiledInferenceEngaged,
+            "a foundation-scale (over-threshold) inference model must auto-engage the compiled path with no opt-in");
 
+        var input = MakeInput(66);
         var out1 = net.Predict(input);
         var out2 = net.Predict(input);
 
-        Assert.True(net.AutoCompiledInferenceEngaged,
-            "a foundation-scale (over-threshold) inference model must auto-engage the compiled path");
         foreach (var x in out1.AsSpan().ToArray())
             Assert.False(float.IsNaN(x) || float.IsInfinity(x), "auto-engaged streamed forward must be finite");
         Assert.Equal(out1.Shape, out2.Shape);
