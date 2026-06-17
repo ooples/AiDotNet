@@ -1,4 +1,5 @@
 ﻿
+using AiDotNet.Initialization;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.Tensors.Engines;
@@ -33,7 +34,9 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
 {
     private readonly int _headCount;
     private readonly int _headDimension;
+    private readonly int _embeddingDimension;
     private readonly FlashAttentionConfig _config;
+    private bool _isInitialized = true;
 
     // Positional encoding support
     private RotaryPositionalEncodingLayer<T>? _ropeLayer;
@@ -67,6 +70,11 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
     /// Gets whether this layer supports training.
     /// </summary>
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets whether the lazy projection tensors have been allocated.
+    /// </summary>
+    public override bool IsInitialized => _isInitialized;
 
     /// <summary>
     /// Gets the number of attention heads.
@@ -108,7 +116,8 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
         int embeddingDimension,
         int headCount,
         FlashAttentionConfig? config = null,
-        IActivationFunction<T>? activationFunction = null)
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base(
             [sequenceLength, embeddingDimension],
             [sequenceLength, embeddingDimension],
@@ -123,17 +132,31 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
 
         _headCount = headCount;
         _headDimension = embeddingDimension / headCount;
+        _embeddingDimension = embeddingDimension;
         _config = config ?? FlashAttentionConfig.Default;
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
-        // Initialize projection weights as Tensor<T> [embedDim, embedDim].
-        _queryWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-        _keyWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-        _valueWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-        _outputWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-        _outputBias = new Tensor<T>([embeddingDimension]);
+        if (initializationStrategy is { IsLazy: true })
+        {
+            _queryWeights = new Tensor<T>([0, 0]);
+            _keyWeights = new Tensor<T>([0, 0]);
+            _valueWeights = new Tensor<T>([0, 0]);
+            _outputWeights = new Tensor<T>([0, 0]);
+            _outputBias = new Tensor<T>([0]);
+            _isInitialized = false;
+        }
+        else
+        {
+            // Initialize projection weights as Tensor<T> [embedDim, embedDim].
+            _queryWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
+            _keyWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
+            _valueWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
+            _outputWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
+            _outputBias = new Tensor<T>([embeddingDimension]);
 
-        InitializeParameters();
-        RegisterAttentionParameters();
+            InitializeParameters();
+            RegisterAttentionParameters();
+        }
     }
 
     /// <summary>
@@ -144,7 +167,8 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
         int embeddingDimension,
         int headCount,
         FlashAttentionConfig? config,
-        IVectorActivationFunction<T>? vectorActivationFunction)
+        IVectorActivationFunction<T>? vectorActivationFunction,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base(
             [sequenceLength, embeddingDimension],
             [sequenceLength, embeddingDimension],
@@ -159,16 +183,30 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
 
         _headCount = headCount;
         _headDimension = embeddingDimension / headCount;
+        _embeddingDimension = embeddingDimension;
         _config = config ?? FlashAttentionConfig.Default;
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
-        _queryWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-        _keyWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-        _valueWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-        _outputWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
-        _outputBias = new Tensor<T>([embeddingDimension]);
+        if (initializationStrategy is { IsLazy: true })
+        {
+            _queryWeights = new Tensor<T>([0, 0]);
+            _keyWeights = new Tensor<T>([0, 0]);
+            _valueWeights = new Tensor<T>([0, 0]);
+            _outputWeights = new Tensor<T>([0, 0]);
+            _outputBias = new Tensor<T>([0]);
+            _isInitialized = false;
+        }
+        else
+        {
+            _queryWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
+            _keyWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
+            _valueWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
+            _outputWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
+            _outputBias = new Tensor<T>([embeddingDimension]);
 
-        InitializeParameters();
-        RegisterAttentionParameters();
+            InitializeParameters();
+            RegisterAttentionParameters();
+        }
     }
 
     /// <summary>
@@ -182,6 +220,27 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
+    }
+
+    private void EnsureWeightsAllocated()
+    {
+        if (_isInitialized) return;
+
+        lock (InitializationLock)
+        {
+            if (_isInitialized) return;
+
+            _queryWeights = AllocateLazyWeight([_embeddingDimension, _embeddingDimension]);
+            _keyWeights = AllocateLazyWeight([_embeddingDimension, _embeddingDimension]);
+            _valueWeights = AllocateLazyWeight([_embeddingDimension, _embeddingDimension]);
+            _outputWeights = AllocateLazyWeight([_embeddingDimension, _embeddingDimension]);
+            _outputBias = AllocateLazyWeight([_embeddingDimension]);
+
+            InitializeParameters();
+            RegisterAttentionParameters();
+
+            _isInitialized = true;
+        }
     }
 
     /// <summary>
@@ -268,6 +327,8 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureWeightsAllocated();
+
         _originalInputShape = input._shape;
         var input3D = NormalizeTo3D(input, out int batchSize, out int sequenceLength, out int embeddingDimension);
 
@@ -396,13 +457,17 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override long ParameterCount => _queryWeights.Length * 4 + _outputBias.Length;
+    public override long ParameterCount => _isInitialized
+        ? _queryWeights.Length * 4 + _outputBias.Length
+        : (4L * _embeddingDimension * _embeddingDimension) + _embeddingDimension;
 
     /// <summary>
     /// Gets all layer parameters as a single vector.
     /// </summary>
     public override Vector<T> GetParameters()
     {
+        EnsureWeightsAllocated();
+
         int weightLen = _queryWeights.Length; // embed × embed
         int totalParams = weightLen * 4 + _outputBias.Length;
         var parameters = new Vector<T>(totalParams);
@@ -437,6 +502,8 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
     /// </summary>
     public override void SetParameters(Vector<T> parameters)
     {
+        EnsureWeightsAllocated();
+
         int weightLen = _queryWeights.Length;
         int expectedParams = weightLen * 4 + _outputBias.Length;
         if (parameters.Length != expectedParams)
@@ -492,20 +559,36 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the query projection weights (for external access/debugging).
     /// </summary>
-    public Tensor<T> GetQueryWeights() => _queryWeights;
+    public Tensor<T> GetQueryWeights()
+    {
+        EnsureWeightsAllocated();
+        return _queryWeights;
+    }
 
     /// <summary>
     /// Gets the key projection weights.
     /// </summary>
-    public Tensor<T> GetKeyWeights() => _keyWeights;
+    public Tensor<T> GetKeyWeights()
+    {
+        EnsureWeightsAllocated();
+        return _keyWeights;
+    }
 
     /// <summary>
     /// Gets the value projection weights.
     /// </summary>
-    public Tensor<T> GetValueWeights() => _valueWeights;
+    public Tensor<T> GetValueWeights()
+    {
+        EnsureWeightsAllocated();
+        return _valueWeights;
+    }
 
     /// <summary>
     /// Gets the output projection weights.
     /// </summary>
-    public Tensor<T> GetOutputWeights() => _outputWeights;
+    public Tensor<T> GetOutputWeights()
+    {
+        EnsureWeightsAllocated();
+        return _outputWeights;
+    }
 }

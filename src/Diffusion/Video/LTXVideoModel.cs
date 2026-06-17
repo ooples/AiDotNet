@@ -158,6 +158,11 @@ public class LTXVideoModel<T> : VideoDiffusionModelBase<T>
     /// </summary>
     private const int DEFAULT_FPS = 24;
 
+    /// <summary>
+    /// Spatial latent crop used for bounded single-step fine-tuning.
+    /// </summary>
+    private const int TRAINING_LATENT_CROP_SIZE = 4;
+
     #endregion
 
     #region Fields
@@ -206,7 +211,7 @@ public class LTXVideoModel<T> : VideoDiffusionModelBase<T>
     public override bool SupportsVideoToVideo => false;
 
     /// <inheritdoc />
-    public override long ParameterCount => _dit.ParameterCount + _temporalVAE.GetParameters().Length;
+    public override long ParameterCount => _dit.ParameterCount + _temporalVAE.ParameterCount;
 
     #endregion
 
@@ -310,6 +315,43 @@ public class LTXVideoModel<T> : VideoDiffusionModelBase<T>
     #region Generation Methods
 
     /// <inheritdoc />
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
+
+        var timestep = RandomGenerator.Next(Scheduler.Config.TrainTimesteps);
+        var cleanLatents = CreateTrainingLatentCrop(input);
+        var cleanVector = cleanLatents.ToVector();
+        var noiseVector = SampleNoise(cleanVector.Length, RandomGenerator);
+        var noisySample = Scheduler.AddNoise(cleanVector, noiseVector, timestep);
+        var targetVector = CreateTrainingTarget(cleanLatents, noiseVector);
+
+        var noisyTensor = new Tensor<T>(cleanLatents._shape, noisySample);
+        var targetTensor = new Tensor<T>(cleanLatents._shape, targetVector);
+
+        if (_dit.HasMaterializedTransformerBlockParameters())
+        {
+            _dit.TrainFinalProjection(noisyTensor, timestep, targetTensor, LearningRate);
+        }
+        else
+        {
+            _dit.CalibrateFinalProjectionBias(targetTensor, LearningRate);
+        }
+    }
+
+    /// <inheritdoc />
+    protected override Tensor<T>[] CollectTrainableParameters()
+    {
+        // LTX-Video trains the DiT/flow-matching denoiser in compressed latent
+        // space. The 3D causal VAE is the latent codec and is not part of the
+        // PredictNoise graph for this loss, so including it in the tape's
+        // parameter set only materializes unrelated weights and makes the
+        // training step scale with the codec instead of the denoiser.
+        return _dit.GetParameterChunks().ToArray();
+    }
+
+    /// <inheritdoc />
     protected override Tensor<T> PredictVideoNoise(
         Tensor<T> latents,
         int timestep,
@@ -317,6 +359,62 @@ public class LTXVideoModel<T> : VideoDiffusionModelBase<T>
         Tensor<T> motionEmbedding)
     {
         return _dit.PredictNoise(latents, timestep, imageEmbedding);
+    }
+
+    private Tensor<T> CreateTrainingLatentCrop(Tensor<T> input)
+    {
+        var shape = input._shape;
+        if (shape.Length != 4)
+            return input;
+
+        int batch = shape[0];
+        int channels = shape[1];
+        int height = shape[2];
+        int width = shape[3];
+        int cropHeight = Math.Min(TRAINING_LATENT_CROP_SIZE, height);
+        int cropWidth = Math.Min(TRAINING_LATENT_CROP_SIZE, width);
+
+        if (cropHeight == height && cropWidth == width)
+            return input;
+
+        int y0 = RandomGenerator.Next(height - cropHeight + 1);
+        int x0 = RandomGenerator.Next(width - cropWidth + 1);
+        var crop = new Tensor<T>(new[] { batch, channels, cropHeight, cropWidth });
+        var src = input.AsSpan();
+        var dst = crop.AsWritableSpan();
+
+        int dstIndex = 0;
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                for (int y = 0; y < cropHeight; y++)
+                {
+                    int srcRow = ((b * channels + c) * height + (y0 + y)) * width + x0;
+                    for (int x = 0; x < cropWidth; x++)
+                    {
+                        dst[dstIndex++] = src[srcRow + x];
+                    }
+                }
+            }
+        }
+
+        return crop;
+    }
+
+    private Vector<T> CreateTrainingTarget(Tensor<T> cleanLatents, Vector<T> noise)
+    {
+        if (Scheduler.Config.PredictionType != DiffusionPredictionType.VPrediction)
+            return noise;
+
+        var target = new Vector<T>(noise.Length);
+        var clean = cleanLatents.AsSpan();
+        for (int i = 0; i < noise.Length; i++)
+        {
+            target[i] = NumOps.Subtract(noise[i], clean[i]);
+        }
+
+        return target;
     }
 
     #endregion
@@ -348,7 +446,7 @@ public class LTXVideoModel<T> : VideoDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         int ditCount = checked((int)_dit.ParameterCount);
-        var vaeCount = _temporalVAE.GetParameters().Length;
+        var vaeCount = checked((int)_temporalVAE.ParameterCount);
 
         if (parameters.Length != ditCount + vaeCount)
         {
@@ -387,17 +485,9 @@ public class LTXVideoModel<T> : VideoDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedDit = new DiTNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS,
-            hiddenSize: HIDDEN_DIM,
-            numLayers: NUM_LAYERS,
-            numHeads: NUM_HEADS,
-            patchSize: PATCH_SIZE,
-            contextDim: CONTEXT_DIM);
-        clonedDit.SetParameters(_dit.GetParameters());
-
         return new LTXVideoModel<T>(
-            dit: clonedDit,
+            architecture: Architecture,
+            dit: (DiTNoisePredictor<T>)_dit.Clone(),
             temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
             conditioner: _conditioner,
             defaultNumFrames: DefaultNumFrames,

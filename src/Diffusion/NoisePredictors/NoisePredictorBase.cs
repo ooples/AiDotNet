@@ -5,6 +5,7 @@ using AiDotNet.Extensions;
 using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
+using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -426,11 +427,24 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         // returns (runs resident) rather than reconfiguring the process-global registry.
         if (System.Threading.Interlocked.CompareExchange(ref _streamingEngaged, 1, 0) != 0) return;
 
-        WeightRegistry.Configure(new GpuOffloadOptions
+        try
         {
-            StreamingPoolMaxResidentBytes = StreamingResidentCapOverride ?? ComputeResidentCapBytes(),
-            TransparentAutoEviction = true,
-        });
+            WeightRegistry.Configure(new GpuOffloadOptions
+            {
+                StreamingPoolMaxResidentBytes = StreamingResidentCapOverride ?? ComputeResidentCapBytes(),
+                TransparentAutoEviction = true,
+            });
+        }
+        catch (InvalidOperationException ex) when (
+            ex.Message.Contains("existing streaming pool", StringComparison.OrdinalIgnoreCase))
+        {
+            // The registry is process-global. If it is already mid-flight
+            // (registered entries or outstanding AllocateStreaming reservations
+            // from another model), preserve correctness by running this predictor
+            // resident instead of failing every later large-DiT test in the shard.
+            System.Threading.Volatile.Write(ref _streamingEngaged, 0);
+            return;
+        }
 
         // ReflectInstanceLayers (not EnumerateLayers) so the engagement works for
         // ANY predictor without requiring an EnumerateLayers override — it walks
@@ -602,6 +616,38 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
 
         return new MultiHeadAttentionLayer<T>(headCount, embeddingDimension / headCount,
             activation, InitializationStrategies<T>.Lazy);
+    }
+
+    /// <summary>
+    /// Creates a <see cref="FlashAttentionLayer{T}"/> with lazy Q/K/V/O weight
+    /// allocation. This keeps DiT-style transformer stacks cheap to construct
+    /// while using the standard projected multi-head attention form during
+    /// training/inference.
+    /// </summary>
+    protected static FlashAttentionLayer<T> LazyFlashAttention(
+        int sequenceLength,
+        int embeddingDimension,
+        int headCount,
+        IActivationFunction<T>? activation = null)
+    {
+        if (sequenceLength <= 0) throw new ArgumentOutOfRangeException(nameof(sequenceLength), "sequenceLength must be positive.");
+        if (embeddingDimension <= 0) throw new ArgumentOutOfRangeException(nameof(embeddingDimension), "embeddingDimension must be positive.");
+        if (headCount <= 0) throw new ArgumentOutOfRangeException(nameof(headCount), "headCount must be positive.");
+        if (embeddingDimension % headCount != 0)
+        {
+            throw new ArgumentException(
+                $"embeddingDimension ({embeddingDimension}) must be evenly divisible by " +
+                $"headCount ({headCount}); got remainder {embeddingDimension % headCount}.",
+                nameof(embeddingDimension));
+        }
+
+        return new FlashAttentionLayer<T>(
+            sequenceLength: sequenceLength,
+            embeddingDimension: embeddingDimension,
+            headCount: headCount,
+            config: AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.MemoryEfficient,
+            activationFunction: activation,
+            initializationStrategy: InitializationStrategies<T>.Lazy);
     }
 
     /// <summary>

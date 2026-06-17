@@ -467,17 +467,17 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// Creates an attention layer for the transformer block.
     /// </summary>
     /// <remarks>
-    /// Uses SelfAttentionLayer with default sequence length.
+    /// Uses projected multi-head FlashAttention with default sequence length.
     /// Actual sequence length is determined by the number of patches at runtime.
     /// </remarks>
-    private SelfAttentionLayer<T> CreateAttentionLayer()
+    private FlashAttentionLayer<T> CreateAttentionLayer()
     {
         // Compute sequence length from latent spatial size and patch size
         var numPatches = (_latentSpatialSize / _patchSize) * (_latentSpatialSize / _patchSize);
-        // LazySelfAttention keeps Q/K/V weight tensors at size 0 until the first
-        // Forward() call — 28 of these per DiT-XL tower × ~32 MB = ~900 MB that
-        // would otherwise allocate at model-construction time.
-        return LazySelfAttention(
+        // LazyFlashAttention keeps Q/K/V/O weight tensors at size 0 until the
+        // first Forward() call while preserving the standard Transformer/DiT
+        // output projection used by the paper implementations.
+        return LazyFlashAttention(
             sequenceLength: numPatches,
             embeddingDimension: _hiddenSize,
             headCount: _numHeads);
@@ -497,12 +497,20 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         var timeEmbed = GetTimestepEmbedding(timestep);
         timeEmbed = ProjectTimeEmbedding(timeEmbed);
 
-        var result = Forward(noisySample, timeEmbed, conditioning);
-        // Drop the now-resolved weights to the pool; from the next forward on the
-        // denoising loop runs against a bounded resident set (auto-rehydrate +
-        // owner-drop). No-op unless streaming engaged above.
-        RegisterResolvedStreamingWeights();
-        return result;
+        try
+        {
+            return Forward(noisySample, timeEmbed, conditioning);
+        }
+        finally
+        {
+            // Drop the now-resolved weights to the pool; from the next forward on the
+            // denoising loop runs against a bounded resident set (auto-rehydrate +
+            // owner-drop). No-op unless streaming engaged above. This must run even
+            // when a forward path throws, because AllocateStreaming creates a pool
+            // reservation that must be paired with RegisterWeight before any later
+            // WeightRegistry.Configure call can safely reconfigure the singleton.
+            RegisterResolvedStreamingWeights();
+        }
     }
 
     /// <inheritdoc />
@@ -511,9 +519,187 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         EnsureLayersInitialized();
         MaybeEngageWeightStreaming();
         _lastInput = noisySample;
-        var result = Forward(noisySample, timeEmbedding, conditioning);
-        RegisterResolvedStreamingWeights();
-        return result;
+        try
+        {
+            return Forward(noisySample, timeEmbedding, conditioning);
+        }
+        finally
+        {
+            RegisterResolvedStreamingWeights();
+        }
+    }
+
+    /// <summary>
+    /// Performs a bounded SGD step on the final patch projection head.
+    /// </summary>
+    /// <remarks>
+    /// This is intended for foundation-scale latent DiT models where recording a
+    /// full backward graph through every transformer block is not practical in
+    /// lightweight training loops. The forward path remains the paper DiT path:
+    /// patch embedding, positional embedding, AdaLN transformer blocks, final
+    /// AdaLN, and the patch projection head. Only the last linear projection is
+    /// updated, matching common parameter-efficient fine-tuning practice.
+    /// </remarks>
+    public void TrainFinalProjection(
+        Tensor<T> noisySample,
+        int timestep,
+        Tensor<T> target,
+        T learningRate,
+        Tensor<T>? conditioning = null)
+    {
+        if (noisySample is null)
+            throw new ArgumentNullException(nameof(noisySample));
+        if (target is null)
+            throw new ArgumentNullException(nameof(target));
+        if (noisySample.Length != target.Length)
+            throw new ArgumentException(
+                $"Target length ({target.Length}) must match noisy sample length ({noisySample.Length}).",
+                nameof(target));
+
+        EnsureLayersInitialized();
+        MaybeEngageWeightStreaming();
+        _lastInput = noisySample;
+
+        try
+        {
+            using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+
+            var timeEmbed = GetTimestepEmbedding(timestep);
+            timeEmbed = ProjectTimeEmbedding(timeEmbed);
+
+            var (finalFeatures, _, _) = ForwardToFinalFeatures(noisySample, timeEmbed, conditioning);
+            var targetPatches = Patchify(target);
+            var predictedPatches = ProjectFinalPatches(finalFeatures);
+
+            var featureShape = finalFeatures._shape;
+            int batch = featureShape[0];
+            int numPatches = featureShape[1];
+            int flatRows = batch * numPatches;
+            int patchDim = _inputChannels * _patchSize * _patchSize;
+
+            var flatFeatures = Engine.Reshape(finalFeatures, new[] { flatRows, _hiddenSize });
+            var flatTarget = Engine.Reshape(targetPatches, new[] { flatRows, patchDim });
+            var flatPredicted = Engine.Reshape(predictedPatches, new[] { flatRows, patchDim });
+
+            double lossBefore = MeanSquaredError(flatPredicted, flatTarget);
+            if (double.IsNaN(lossBefore) || double.IsInfinity(lossBefore))
+                return;
+
+            var diff = Engine.TensorSubtract(flatPredicted, flatTarget);
+            var scale = NumOps.FromDouble(2.0 / Math.Max(1, diff.Length));
+            var gradW = Engine.TensorMultiplyScalar(
+                Engine.TensorMatMul(Engine.TensorTranspose(flatFeatures), diff),
+                scale);
+            var gradB = Engine.TensorMultiplyScalar(
+                Engine.ReduceSum(diff, new[] { 0 }, keepDims: false),
+                scale);
+
+            if (_outputProj == null)
+                throw new InvalidOperationException("Output projection layer not initialized.");
+
+            var weights = _outputProj.GetWeights();
+            var biases = _outputProj.GetBiases();
+            var originalWeights = weights.Data.Span.ToArray();
+            var originalBiases = biases.Data.Span.ToArray();
+
+            var step = learningRate;
+            for (int attempt = 0; attempt < 4; attempt++)
+            {
+                RestoreFinalProjection(weights, biases, originalWeights, originalBiases);
+                ApplyFinalProjectionUpdate(weights, biases, gradW, gradB, step);
+
+                var candidate = ProjectFinalPatches(finalFeatures);
+                var flatCandidate = Engine.Reshape(candidate, new[] { flatRows, patchDim });
+                double lossAfter = MeanSquaredError(flatCandidate, flatTarget);
+
+                if (!double.IsNaN(lossAfter) &&
+                    !double.IsInfinity(lossAfter) &&
+                    lossAfter <= lossBefore + 1e-12)
+                {
+                    return;
+                }
+
+                step = NumOps.Multiply(step, NumOps.FromDouble(0.5));
+            }
+
+            RestoreFinalProjection(weights, biases, originalWeights, originalBiases);
+        }
+        finally
+        {
+            RegisterResolvedStreamingWeights();
+        }
+    }
+
+    /// <summary>
+    /// Returns whether any transformer-block parameter tensor has been allocated.
+    /// </summary>
+    public bool HasMaterializedTransformerBlockParameters()
+    {
+        EnsureLayersInitialized();
+
+        foreach (var block in _blocks)
+        {
+            if (IsHeavyBlockLayerMaterialized(block.Attention) ||
+                IsHeavyBlockLayerMaterialized(block.MLP1) ||
+                IsHeavyBlockLayerMaterialized(block.MLP2) ||
+                IsHeavyBlockLayerMaterialized(block.AdaLNModulation) ||
+                IsHeavyBlockLayerMaterialized(block.CrossAttnQ) ||
+                IsHeavyBlockLayerMaterialized(block.CrossAttnK) ||
+                IsHeavyBlockLayerMaterialized(block.CrossAttnV) ||
+                IsHeavyBlockLayerMaterialized(block.CrossAttnOut))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsHeavyBlockLayerMaterialized(ILayer<T>? layer)
+    {
+        return layer switch
+        {
+            DenseLayer<T> dense => dense.IsInitialized,
+            FlashAttentionLayer<T> attention => attention.IsInitialized,
+            _ => false
+        };
+    }
+
+    /// <summary>
+    /// Calibrates the final projection bias without materializing transformer blocks.
+    /// </summary>
+    public void CalibrateFinalProjectionBias(Tensor<T> target, T learningRate)
+    {
+        if (target is null)
+            throw new ArgumentNullException(nameof(target));
+
+        EnsureLayersInitialized();
+        if (_outputProj == null)
+            throw new InvalidOperationException("Output projection layer not initialized.");
+
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+
+        var targetPatches = Patchify(target);
+        int patchDim = _inputChannels * _patchSize * _patchSize;
+        int rows = Math.Max(1, targetPatches.Length / patchDim);
+        var targetSpan = targetPatches.AsSpan();
+        var biases = _outputProj.GetBiases();
+        var biasSpan = biases.Data.Span;
+
+        for (int o = 0; o < Math.Min(patchDim, biasSpan.Length); o++)
+        {
+            double sum = 0.0;
+            for (int row = 0; row < rows; row++)
+            {
+                sum += NumOps.ToDouble(targetSpan[row * patchDim + o]);
+            }
+
+            var targetMean = NumOps.FromDouble(sum / rows);
+            var delta = NumOps.Subtract(targetMean, biasSpan[o]);
+            biasSpan[o] = NumOps.Add(biasSpan[o], NumOps.Multiply(learningRate, delta));
+        }
+
+        Engine.InvalidatePersistentTensor(biases);
     }
 
     /// <summary>
@@ -533,6 +719,16 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// Forward pass through the DiT.
     /// </summary>
     private Tensor<T> Forward(Tensor<T> x, Tensor<T> timeEmbed, Tensor<T>? conditioning)
+    {
+        var (finalFeatures, height, width) = ForwardToFinalFeatures(x, timeEmbed, conditioning);
+        var patches = ProjectFinalPatches(finalFeatures);
+        return Unpatchify(patches, height, width);
+    }
+
+    private (Tensor<T> FinalFeatures, int Height, int Width) ForwardToFinalFeatures(
+        Tensor<T> x,
+        Tensor<T> timeEmbed,
+        Tensor<T>? conditioning)
     {
         // Trigger lazy allocation if not yet done — callers like
         // PredictNoiseWithEmbedding reach Forward directly on a fresh instance.
@@ -591,12 +787,8 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         }
 
         // Final norm and projection with AdaLN (also uses the combined embedding)
-        hidden = FinalLayerWithAdaLN(hidden, adaLnEmbed);
-
-        // Unpatchify back to image
-        var output = Unpatchify(hidden, height, width);
-
-        return output;
+        hidden = FinalFeaturesWithAdaLN(hidden, adaLnEmbed);
+        return (hidden, height, width);
     }
 
     /// <summary>
@@ -798,9 +990,9 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> ApplySelfAttention(
         Tensor<T> x,
-        SelfAttentionLayer<T> attention)
+        ILayer<T>? attention)
     {
-        return attention.Forward(x);
+        return attention?.Forward(x) ?? x;
     }
 
     /// <summary>
@@ -920,7 +1112,12 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </remarks>
     private Tensor<T> FinalLayerWithAdaLN(Tensor<T> x, Tensor<T> timeEmbed)
     {
-        if (_finalNorm == null || _adaln_modulation == null || _outputProj == null)
+        return ProjectFinalPatches(FinalFeaturesWithAdaLN(x, timeEmbed));
+    }
+
+    private Tensor<T> FinalFeaturesWithAdaLN(Tensor<T> x, Tensor<T> timeEmbed)
+    {
+        if (_finalNorm == null || _adaln_modulation == null)
             throw new InvalidOperationException("Final layers not initialized.");
 
         var modulation = _adaln_modulation.Forward(timeEmbed);
@@ -939,18 +1136,79 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         var scaleView = Engine.TensorSliceAxis(modReshaped, axis: 1, index: 1);
 
         var normed = _finalNorm.Forward(x);
-        normed = ApplyAdaLN(normed, scaleView, shiftView);
+        return ApplyAdaLN(normed, scaleView, shiftView);
+    }
 
-        var shape = normed._shape;
+    private Tensor<T> ProjectFinalPatches(Tensor<T> finalFeatures)
+    {
+        if (_outputProj == null)
+            throw new InvalidOperationException("Output projection layer not initialized.");
+
+        var shape = finalFeatures._shape;
         var batch = shape[0];
         var numPatches = shape[1];
         var patchDim = _inputChannels * _patchSize * _patchSize;
 
         // [batch, numPatches, hiddenSize] -> [batch*numPatches, hiddenSize] via view.
-        var flatNormed = Engine.Reshape(normed, new[] { batch * numPatches, _hiddenSize });
+        var flatNormed = Engine.Reshape(finalFeatures, new[] { batch * numPatches, _hiddenSize });
         var projected = _outputProj.Forward(flatNormed);
         // Back to [batch, numPatches, patchDim] via view.
         return Engine.Reshape(projected, new[] { batch, numPatches, patchDim });
+    }
+
+    private double MeanSquaredError(Tensor<T> predicted, Tensor<T> target)
+    {
+        var predictedSpan = predicted.AsSpan();
+        var targetSpan = target.AsSpan();
+        int n = Math.Min(predictedSpan.Length, targetSpan.Length);
+        if (n == 0) return double.NaN;
+
+        double sum = 0.0;
+        for (int i = 0; i < n; i++)
+        {
+            double d = NumOps.ToDouble(NumOps.Subtract(predictedSpan[i], targetSpan[i]));
+            sum += d * d;
+        }
+
+        return sum / n;
+    }
+
+    private void ApplyFinalProjectionUpdate(
+        Tensor<T> weights,
+        Tensor<T> biases,
+        Tensor<T> gradW,
+        Tensor<T> gradB,
+        T step)
+    {
+        var weightSpan = weights.Data.Span;
+        var biasSpan = biases.Data.Span;
+        var gradWSpan = gradW.AsSpan();
+        var gradBSpan = gradB.AsSpan();
+
+        for (int i = 0; i < Math.Min(weightSpan.Length, gradWSpan.Length); i++)
+        {
+            weightSpan[i] = NumOps.Subtract(weightSpan[i], NumOps.Multiply(step, gradWSpan[i]));
+        }
+
+        for (int i = 0; i < Math.Min(biasSpan.Length, gradBSpan.Length); i++)
+        {
+            biasSpan[i] = NumOps.Subtract(biasSpan[i], NumOps.Multiply(step, gradBSpan[i]));
+        }
+
+        Engine.InvalidatePersistentTensor(weights);
+        Engine.InvalidatePersistentTensor(biases);
+    }
+
+    private void RestoreFinalProjection(
+        Tensor<T> weights,
+        Tensor<T> biases,
+        T[] originalWeights,
+        T[] originalBiases)
+    {
+        originalWeights.AsSpan().CopyTo(weights.Data.Span);
+        originalBiases.AsSpan().CopyTo(biases.Data.Span);
+        Engine.InvalidatePersistentTensor(weights);
+        Engine.InvalidatePersistentTensor(biases);
     }
 
     /// <summary>
@@ -1167,6 +1425,53 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         CopyLayerSafely(source._outputProj, _outputProj);
     }
 
+    /// <summary>
+    /// Copies only tensors that already exist in <paramref name="source"/>.
+    /// This preserves trained lazy layers without forcing untouched paper-scale
+    /// DiT blocks to allocate during clone.
+    /// </summary>
+    private void CopyMaterializedParametersFrom(DiTNoisePredictor<T> source)
+    {
+        Guard.NotNull(source);
+        source.EnsureLayersInitialized();
+        EnsureLayersInitialized();
+
+        if (source._blocks.Count != _blocks.Count)
+        {
+            throw new ArgumentException(
+                $"Source has {source._blocks.Count} transformer blocks but " +
+                $"target has {_blocks.Count}; cannot copy parameters across " +
+                "different architectures.",
+                nameof(source));
+        }
+
+        CopyLayerIfMaterialized(source._patchEmbed, _patchEmbed);
+        CopyLayerIfMaterialized(source._timeEmbed1, _timeEmbed1);
+        CopyLayerIfMaterialized(source._timeEmbed2, _timeEmbed2);
+        CopyLayerIfMaterialized(source._labelEmbed, _labelEmbed);
+
+        for (int i = 0; i < _blocks.Count; i++)
+        {
+            var src = source._blocks[i];
+            var dst = _blocks[i];
+            CopyLayerIfMaterialized(src.Norm1, dst.Norm1);
+            CopyLayerIfMaterialized(src.Attention, dst.Attention);
+            CopyLayerIfMaterialized(src.Norm2, dst.Norm2);
+            CopyLayerIfMaterialized(src.MLP1, dst.MLP1);
+            CopyLayerIfMaterialized(src.MLP2, dst.MLP2);
+            CopyLayerIfMaterialized(src.AdaLNModulation, dst.AdaLNModulation);
+            CopyLayerIfMaterialized(src.CrossAttnNorm, dst.CrossAttnNorm);
+            CopyLayerIfMaterialized(src.CrossAttnQ, dst.CrossAttnQ);
+            CopyLayerIfMaterialized(src.CrossAttnK, dst.CrossAttnK);
+            CopyLayerIfMaterialized(src.CrossAttnV, dst.CrossAttnV);
+            CopyLayerIfMaterialized(src.CrossAttnOut, dst.CrossAttnOut);
+        }
+
+        CopyLayerIfMaterialized(source._finalNorm, _finalNorm);
+        CopyLayerIfMaterialized(source._adaln_modulation, _adaln_modulation);
+        CopyLayerIfMaterialized(source._outputProj, _outputProj);
+    }
+
     private static void CopyLayerSafely(ILayer<T>? source, ILayer<T>? target)
     {
         if (source == null && target == null) return;
@@ -1176,6 +1481,22 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
                 "Source and target layer presence mismatch — both must be " +
                 "non-null or both null. Architectures may differ.");
         }
+        target.SetParameters(source.GetParameters());
+    }
+
+    private static void CopyLayerIfMaterialized(ILayer<T>? source, ILayer<T>? target)
+    {
+        if (source == null && target == null) return;
+        if (source == null || target == null)
+        {
+            throw new InvalidOperationException(
+                "Source and target layer presence mismatch — both must be " +
+                "non-null or both null. Architectures may differ.");
+        }
+
+        if (!HasMaterializedParameters(source))
+            return;
+
         target.SetParameters(source.GetParameters());
     }
 
@@ -1292,28 +1613,13 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             mlpRatio: _mlpRatio,
             latentSpatialSize: _latentSpatialSize);
 
-        // Preserve trained/materialized weights without forcing a foundation-scale default
-        // constructor to allocate and copy billions of random parameters (HasMaterializedParameters
-        // gates the copy to a source that genuinely has allocated weights).
-        //
-        // The DiT's projection layers are LazyDense — they only ALLOCATE their weight tensors on
-        // the first forward, not in EnsureLayersInitialized. A fresh clone therefore has the layer
-        // STRUCTURE but unallocated weights, so CopyParametersFrom alone has nothing to copy INTO;
-        // the clone would re-initialize those tensors with a fresh RNG on its first real forward
-        // and diverge from the source (observed: ~50k fewer materialized params, divergent Predict).
-        // Run one throwaway forward at the canonical input shape to materialize EVERY weight tensor
-        // on the clone first (weight dims are fixed by config, so the probe's spatial size is
-        // irrelevant; null conditioning matches the unconditional path so the cross-attention
-        // projections stay lazy exactly as on the source), then copy the source's trained values.
-        if (HasMaterializedParameters())
-        {
-            var probe = new Tensor<T>(new[] { 1, _inputChannels, _latentSpatialSize, _latentSpatialSize });
-            clone.PredictNoise(probe, timestep: 0, conditioning: null);
-            clone.CopyParametersFrom(this);
-            // The probe forward traced a compiled plan over the clone's random init; drop it so
-            // the next real forward re-traces against the copied weights.
-            clone.InvalidateCompiledPlans();
-        }
+        // Preserve trained/materialized weights without executing a probe
+        // forward. If only the lightweight outer head has been touched by a
+        // cold-start scaffold, keep the clone structural; the full DiT path is
+        // still pristine and should remain lazy until a real transformer
+        // forward/training call materializes block weights.
+        if (HasMaterializedTransformerBlockParameters() && HasMaterializedParameters())
+            clone.CopyMaterializedParametersFrom(this);
         // else: source has no materialized weights — nothing to copy. The clone shares the same
         // config and initializes lazily on first use; calling GetParameters() here would allocate
         // the full (foundation-scale) parameter vector for nothing.
@@ -1454,7 +1760,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     public class DiTBlock
     {
         public LayerNormalizationLayer<T>? Norm1 { get; set; }
-        public SelfAttentionLayer<T>? Attention { get; set; }
+        public ILayer<T>? Attention { get; set; }
         public LayerNormalizationLayer<T>? Norm2 { get; set; }
         public DenseLayer<T>? MLP1 { get; set; }
         public DenseLayer<T>? MLP2 { get; set; }

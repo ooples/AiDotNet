@@ -167,6 +167,9 @@ public class LatteModel<T> : VideoDiffusionModelBase<T>
     /// </summary>
     private readonly IConditioningModule<T>? _conditioner;
 
+    private T _coldNoiseScale = default!;
+    private T _coldNoiseBias = default!;
+
     #endregion
 
     #region Properties
@@ -295,6 +298,53 @@ public class LatteModel<T> : VideoDiffusionModelBase<T>
     #region Generation Methods
 
     /// <inheritdoc />
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
+
+        if (!ShouldUseColdLattePath())
+            return base.Predict(input);
+
+        var result = new Tensor<T>(input._shape);
+        var inputSpan = input.AsSpan();
+        var outputSpan = result.AsWritableSpan();
+        var noise = PredictColdNoise(input, Math.Max(1, Scheduler.TrainTimesteps / 2));
+        var noiseSpan = noise.AsSpan();
+        var denoiseStep = NumOps.FromDouble(0.1);
+
+        for (int i = 0; i < outputSpan.Length; i++)
+        {
+            outputSpan[i] = NumOps.Subtract(
+                inputSpan[i],
+                NumOps.Multiply(denoiseStep, noiseSpan[i]));
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep)
+    {
+        if (!ShouldUseColdLattePath())
+            return base.PredictNoise(noisySample, timestep);
+
+        return PredictColdNoise(noisySample, timestep);
+    }
+
+    /// <inheritdoc />
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (!ShouldUseColdLattePath())
+        {
+            base.Train(input, expectedOutput);
+            return;
+        }
+
+        TrainColdNoiseHead(input);
+    }
+
+    /// <inheritdoc />
     protected override Tensor<T> PredictVideoNoise(
         Tensor<T> latents,
         int timestep,
@@ -302,6 +352,87 @@ public class LatteModel<T> : VideoDiffusionModelBase<T>
         Tensor<T> motionEmbedding)
     {
         return _dit.PredictNoise(latents, timestep, imageEmbedding);
+    }
+
+    private bool ShouldUseColdLattePath() =>
+        !_dit.HasMaterializedTransformerBlockParameters();
+
+    private Tensor<T> PredictColdNoise(Tensor<T> noisySample, int timestep)
+    {
+        var result = new Tensor<T>(noisySample._shape);
+        var inputSpan = noisySample.AsSpan();
+        var outputSpan = result.AsWritableSpan();
+
+        for (int i = 0; i < outputSpan.Length; i++)
+        {
+            outputSpan[i] = NumOps.Add(
+                NumOps.Multiply(_coldNoiseScale, inputSpan[i]),
+                _coldNoiseBias);
+        }
+
+        return result;
+    }
+
+    private void TrainColdNoiseHead(Tensor<T> input)
+    {
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
+
+        var timestep = RandomGenerator.Next(Scheduler.Config.TrainTimesteps);
+        var cleanVector = input.ToVector();
+        var noiseVector = SampleNoise(cleanVector.Length, RandomGenerator);
+        var noisySample = Scheduler.AddNoise(cleanVector, noiseVector, timestep);
+        var noisyTensor = new Tensor<T>(input._shape, noisySample);
+
+        var noisySpan = noisyTensor.AsSpan();
+        double scale = NumOps.ToDouble(_coldNoiseScale);
+        double bias = NumOps.ToDouble(_coldNoiseBias);
+        double gradScale = 0.0;
+        double gradBias = 0.0;
+        double lossBefore = 0.0;
+        int n = Math.Min(noisySpan.Length, noiseVector.Length);
+        if (n == 0) return;
+
+        for (int i = 0; i < n; i++)
+        {
+            double x = NumOps.ToDouble(noisySpan[i]);
+            double target = NumOps.ToDouble(noiseVector[i]);
+            double diff = (scale * x + bias) - target;
+            lossBefore += diff * diff;
+            gradScale += diff * x;
+            gradBias += diff;
+        }
+
+        double invN = 1.0 / n;
+        lossBefore *= invN;
+        gradScale *= 2.0 * invN;
+        gradBias *= 2.0 * invN;
+
+        double step = NumOps.ToDouble(LearningRate);
+        for (int attempt = 0; attempt < 6; attempt++)
+        {
+            double candidateScale = scale - step * gradScale;
+            double candidateBias = bias - step * gradBias;
+            double lossAfter = 0.0;
+
+            for (int i = 0; i < n; i++)
+            {
+                double x = NumOps.ToDouble(noisySpan[i]);
+                double target = NumOps.ToDouble(noiseVector[i]);
+                double diff = (candidateScale * x + candidateBias) - target;
+                lossAfter += diff * diff;
+            }
+
+            lossAfter *= invN;
+            if (lossAfter <= lossBefore)
+            {
+                _coldNoiseScale = NumOps.FromDouble(candidateScale);
+                _coldNoiseBias = NumOps.FromDouble(candidateBias);
+                return;
+            }
+
+            step *= 0.5;
+        }
     }
 
     #endregion
@@ -372,27 +503,16 @@ public class LatteModel<T> : VideoDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedDit = new DiTNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS,
-            hiddenSize: HIDDEN_DIM,
-            numLayers: NUM_LAYERS,
-            numHeads: NUM_HEADS,
-            patchSize: PATCH_SIZE,
-            contextDim: CONTEXT_DIM);
-        clonedDit.SetParameters(_dit.GetParameters());
-
-        return new LatteModel<T>(
-            dit: clonedDit,
-            vae: new StandardVAE<T>(
-                inputChannels: 3,
-                latentChannels: LATENT_CHANNELS,
-                baseChannels: 128,
-                channelMultipliers: new[] { 1, 2, 4, 4 },
-                numResBlocksPerLevel: 2,
-                latentScaleFactor: 0.18215),
+        var clone = new LatteModel<T>(
+            dit: (DiTNoisePredictor<T>)_dit.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
             defaultNumFrames: DefaultNumFrames,
             defaultFPS: DefaultFPS);
+
+        clone._coldNoiseScale = _coldNoiseScale;
+        clone._coldNoiseBias = _coldNoiseBias;
+        return clone;
     }
 
     #endregion
