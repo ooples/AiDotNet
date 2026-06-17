@@ -17,14 +17,24 @@ using AiDotNet.Tokenization.Interfaces;
 namespace AiDotNet.NeuralNetworks
 {
     /// <summary>
-    /// Siamese Neural Network implementation for dual-encoder comparison and similarity learning.
+    /// Sentence-BERT (SBERT) style shared sentence-encoder tower: a transformer encoder
+    /// that maps a tokenized input to a fixed-size embedding (default 768-d, BERT vocab
+    /// 30522, max length 512) for semantic similarity and retrieval.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations (typically float or double).</typeparam>
     /// <remarks>
     /// <para>
-    /// A Siamese Neural Network consists of two identical subnetworks (sharing the same parameters) 
-    /// that process two different inputs. The outputs are typically compared using a distance metric 
-    /// and optimized via contrastive or triplet loss.
+    /// This implements the SHARED ENCODER of a Siamese/dual-encoder setup (Reimers &amp; Gurevych
+    /// 2019, "Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks"): the same encoder
+    /// is applied independently to each sentence, and the resulting embeddings are compared by a
+    /// distance/cosine metric. <see cref="Predict"/> returns the encoder embedding for one input;
+    /// pair training (contrastive/triplet) compares two such embeddings.
+    /// </para>
+    /// <para>
+    /// NOTE: this is distinct from <see cref="SiameseNetwork{T}"/>, which is the
+    /// pair-in / similarity-score-out VERIFICATION network of Koch et al. 2015 (twin subnetwork +
+    /// L1-distance sigmoid head). This class is the sentence-embedding ENCODER tower; that class
+    /// is the end-to-end pair verifier.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> A Siamese Network is like having two identical twins who think exactly 
@@ -49,7 +59,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelTask(ModelTask.Classification)]
     [ModelComplexity(ModelComplexity.Medium)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ResearchPaper("Siamese Neural Networks for One-shot Image Recognition", "https://www.cs.cmu.edu/~rsalakh/oneshot/papers/Siamese%20Neural%20Networks%20for%20One-Shot%20Image%20Recognition.pdf")]
+    [ResearchPaper("Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks", "https://arxiv.org/abs/1908.10084", Year = 2019, Authors = "Nils Reimers, Iryna Gurevych")]
     public class SiameseNeuralNetwork<T> : NeuralNetworkBase<T>, IEmbeddingModel<T>
     {
         private readonly SiameseNeuralNetworkOptions _options;
