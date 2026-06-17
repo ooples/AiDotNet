@@ -124,6 +124,9 @@ public class MotionDiffuseModel<T> : LatentDiffusionModelBase<T>
         // default-scale model and SetParameters(GetParameters()), which mismatches an injected non-default
         // variant and re-randomizes the clone's unmaterialized lazy weights.
         return new MotionDiffuseModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
             predictor: (SiTPredictor<T>)_predictor.Clone(),
             vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner);

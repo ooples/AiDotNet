@@ -336,6 +336,9 @@ public class HiDreamModel<T> : LatentDiffusionModelBase<T>
         // Lazy-preserving Clone: delegate to the predictor's and VAE's own Clone() (trained weights
         // preserved); the variant is carried through directly, so no derived MMDiT-X variant is needed.
         return new HiDreamModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
             predictor: (MMDiTXNoisePredictor<T>)_predictor.Clone(),
             vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,

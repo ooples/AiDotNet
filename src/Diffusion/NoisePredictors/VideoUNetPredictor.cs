@@ -478,6 +478,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
+        using var streaming = BeginWeightStreamingForward();
         _lastInput = noisySample;
 
         // Compute timestep embedding
@@ -485,16 +486,17 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         timeEmbed = ProjectTimeEmbedding(timeEmbed);
 
         // Forward pass
-        return ForwardVideoUNet(noisySample, timeEmbed, conditioning, imageCondition: null);
+        return streaming.Complete(ForwardVideoUNet(noisySample, timeEmbed, conditioning, imageCondition: null));
     }
 
     /// <inheritdoc />
     public override Tensor<T> PredictNoiseWithEmbedding(Tensor<T> noisySample, Tensor<T> timeEmbedding, Tensor<T>? conditioning = null)
     {
+        using var streaming = BeginWeightStreamingForward();
         _lastInput = noisySample;
 
         var timeEmbed = ProjectTimeEmbedding(timeEmbedding);
-        return ForwardVideoUNet(noisySample, timeEmbed, conditioning, imageCondition: null);
+        return streaming.Complete(ForwardVideoUNet(noisySample, timeEmbed, conditioning, imageCondition: null));
     }
 
     /// <summary>
@@ -516,12 +518,13 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             throw new InvalidOperationException("This predictor does not support image conditioning.");
         }
 
+        using var streaming = BeginWeightStreamingForward();
         _lastInput = noisySample;
 
         var timeEmbed = GetTimestepEmbedding(timestep);
         timeEmbed = ProjectTimeEmbedding(timeEmbed);
 
-        return ForwardVideoUNet(noisySample, timeEmbed, textConditioning, imageCondition);
+        return streaming.Complete(ForwardVideoUNet(noisySample, timeEmbed, textConditioning, imageCondition));
     }
 
     /// <summary>

@@ -206,6 +206,10 @@ public class FlagDiTPredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
+        // Page weights through the streaming pool for the duration of this forward (master's #1610
+        // weight-streaming wiring), preserved here across this model's paper-faithful Flag-DiT rewrite.
+        using var streaming = BeginWeightStreamingForward();
+
         // Promote a single [C,H,W] sample to [1,C,H,W] so patchify's batch axis is uniform.
         var x = noisySample.Rank == 3
             ? Engine.Reshape(noisySample, new[] { 1, noisySample.Shape[0], noisySample.Shape[1], noisySample.Shape[2] })
@@ -228,9 +232,9 @@ public class FlagDiTPredictor<T> : NoisePredictorBase<T>
         var patches = _outputProj.Forward(hidden);        // [B, seq, patchDim]
         var output = Unpatchify(patches, height, width);  // [B, C, H, W]
 
-        return noisySample.Rank == 3
+        return streaming.Complete(noisySample.Rank == 3
             ? Engine.Reshape(output, new[] { _inputChannels, height, width })
-            : output;
+            : output);
     }
 
     /// <inheritdoc />

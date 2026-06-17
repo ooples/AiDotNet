@@ -26566,7 +26566,7 @@ public static class LayerHelper<T>
     /// skip-concat, so the loop below and ODISE's skip-indexing MUST agree — both reference
     /// this single constant (ODISE.DecoderStageLayerCount aliases it) rather than a literal.
     /// </summary>
-    public const int ODISEDecoderStageLayerCount = 5;
+    internal const int ODISEDecoderStageLayerCount = 5;
 
     /// <summary>
     /// Builds the ODISE decoder: an SD-U-Net-style transposed-conv upsampling ladder that

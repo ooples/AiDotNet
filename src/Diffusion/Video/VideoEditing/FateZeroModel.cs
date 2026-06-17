@@ -106,7 +106,7 @@ public class FateZeroModel<T> : VideoDiffusionModelBase<T>
     private void InitializeLayers(
         VideoUNetPredictor<T>? predictor,
         TemporalVAE<T>? temporalVAE,
-        int? seed = null)
+        int? seed)
     {
         _predictor = predictor ?? new VideoUNetPredictor<T>(
             inputChannels: LATENT_CHANNELS,
@@ -125,7 +125,8 @@ public class FateZeroModel<T> : VideoDiffusionModelBase<T>
             numTemporalLayers: 3,
             temporalKernelSize: 3,
             causalMode: false,
-            latentScaleFactor: 0.18215);
+            latentScaleFactor: 0.18215,
+            seed: seed);
     }
 
     protected override Tensor<T> PredictVideoNoise(

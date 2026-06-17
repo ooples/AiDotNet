@@ -18,7 +18,27 @@ public abstract class ClassificationModelTestBase : System.IDisposable
     /// InferenceWeightCache and compacts the LOH between model classes — keeping committed memory
     /// from accumulating across a shard. Pure hygiene; no test-observable behavior change.
     /// </summary>
-    public void Dispose() => ModelFamilyTestGcGate.ReclaimBetweenTests();
+    public virtual void Dispose()
+    {
+        // Reclaim must be unconditional: a throwing derived DisposeCore() must not skip the
+        // shared GC gate, or heavy shards reintroduce cross-test memory buildup / OOM.
+        try
+        {
+            DisposeCore();
+        }
+        finally
+        {
+            ModelFamilyTestGcGate.ReclaimBetweenTests();
+        }
+    }
+
+    /// <summary>
+    /// Override in a derived test class to add its own teardown while preserving the
+    /// shared <see cref="ModelFamilyTestGcGate.ReclaimBetweenTests"/> call.
+    /// </summary>
+    protected virtual void DisposeCore()
+    {
+    }
 
     protected abstract IFullModel<double, Matrix<double>, Vector<double>> CreateModel();
 

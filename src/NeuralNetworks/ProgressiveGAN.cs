@@ -501,7 +501,7 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
 
         // Fake images - generate from Gaussian noise
         var noise = GenerateGaussianNoise(batchSize);
-        var fakeImages = Generator.Predict(noise);
+        var fakeImages = Generator.Predict(ProjectLatentToGeneratorInputShape(noise));
         var fakeOutput = Discriminator.Predict(fakeImages);
         var fakeSum = fakeOutput.Sum(); // Vectorized sum
         var fakeLoss = NumOps.Divide(fakeSum.GetFlat(0), batchSizeT);
@@ -552,7 +552,7 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
         Discriminator.SetTrainingMode(true);
 
         var generatorNoise = GenerateGaussianNoise(batchSize);
-        var generatedImages = Generator.Predict(generatorNoise);
+        var generatedImages = Generator.Predict(ProjectLatentToGeneratorInputShape(generatorNoise));
         var generatorOutput = Discriminator.Predict(generatedImages);
 
         var genSum = generatorOutput.Sum(); // Vectorized sum

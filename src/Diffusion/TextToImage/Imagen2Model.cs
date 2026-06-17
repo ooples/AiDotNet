@@ -271,8 +271,12 @@ public class Imagen2Model<T> : LatentDiffusionModelBase<T>
         int baseChannels = _isImagen3 ? 384 : 320;
         int contextDim = _isImagen3 ? 4096 : CROSS_ATTENTION_DIM;
 
-                        return new Imagen2Model<T>(
-            unet: (UNetNoisePredictor<T>)_unet.Clone(), vae: (StandardVAE<T>)_vae.Clone(),
+        return new Imagen2Model<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            unet: (UNetNoisePredictor<T>)_unet.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner, isImagen3: _isImagen3);
     }
 

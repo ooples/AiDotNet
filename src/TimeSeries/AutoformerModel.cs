@@ -1402,11 +1402,16 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         // separate manual projection that could diverge from what was actually trained.
         // ForwardEngine produces the full forecast horizon (PredictSingle reads element 0).
         var output = ForwardEngine(input);
+        // Fail fast on a short forecast: silently repeating the last value (or zero-filling)
+        // would mask a broken [ForecastHorizon, 1] output contract and return fabricated steps.
+        if (output.Length < forecastHorizon)
+        {
+            throw new InvalidOperationException(
+                $"ForwardEngine returned {output.Length} values, expected at least {forecastHorizon}.");
+        }
         for (int h = 0; h < forecastHorizon; h++)
         {
-            predictions[h] = h < output.Length
-                ? output[h]
-                : (output.Length > 0 ? output[output.Length - 1] : _numOps.Zero);
+            predictions[h] = output[h];
         }
 
         return predictions;
