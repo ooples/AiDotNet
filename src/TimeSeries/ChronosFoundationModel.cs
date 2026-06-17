@@ -485,16 +485,19 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         // allocating a dense [vocab × embDim] tensor (~1 MB, LOH) every sample.
         _dTokenEmbBuf ??= new Tensor<T>(new[] { _vocabularySize, _options.EmbeddingDim });
         var dTokenEmbeddings = _dTokenEmbBuf;
-        if (_prevTokenRows != null)
-        {
-            foreach (int r in _prevTokenRows)
-                for (int i = 0; i < _options.EmbeddingDim; i++)
-                    dTokenEmbeddings[r, i] = _numOps.Zero;
-        }
 
-        for (int t = 0; t < seqLen; t++)
+        // Zero exactly the rows that could hold stale gradient — the previously-written rows plus the
+        // current tokens — visiting each row once. A HashSet de-duplicates rows shared between the two
+        // sets (and duplicate tokens within the sequence), avoiding the redundant re-zeroing the prior
+        // two-pass version did.
+        var rowsToZero = new HashSet<int>(tokens);
+        if (_prevTokenRows != null)
+            foreach (int r in _prevTokenRows)
+                rowsToZero.Add(r);
+
+        foreach (int r in rowsToZero)
             for (int i = 0; i < _options.EmbeddingDim; i++)
-                dTokenEmbeddings[tokens[t], i] = _numOps.Zero;
+                dTokenEmbeddings[r, i] = _numOps.Zero;
 
         for (int t = 0; t < seqLen; t++)
         {
