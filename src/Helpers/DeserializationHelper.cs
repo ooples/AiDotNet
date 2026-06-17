@@ -2371,19 +2371,109 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(ResidualLayer<>))
         {
-            // ResidualLayer wraps an inner DenseLayer. Reconstruct inner layer from metadata.
-            int innerInputSize = TryGetInt(additionalParams, "InnerInputSize") ?? inputShape[0];
-            int innerOutputSize = TryGetInt(additionalParams, "InnerOutputSize") ?? inputShape[0];
+            var scalarActivationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            var vectorActivationFuncType = typeof(IVectorActivationFunction<>).MakeGenericType(typeof(T));
+            // ResidualLayer can carry EITHER a scalar or a vector activation (it has a
+            // ctor for each), and LayerBase.GetMetadata serializes whichever it holds
+            // under ScalarActivationType / VectorActivationType. Restore both so a
+            // vector-activation ResidualLayer doesn't silently round-trip to scalar/identity.
+            bool hasResidualScalarActivation = additionalParams?.ContainsKey("ScalarActivationType") == true;
+            bool hasResidualVectorActivation = additionalParams?.ContainsKey("VectorActivationType") == true;
+            object? residualScalarActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", scalarActivationFuncType);
+            object? residualVectorActivation = TryCreateActivationInstance(additionalParams, "VectorActivationType", vectorActivationFuncType);
+            // A present-but-unrestorable activation key means the saved model used an
+            // activation we can't reconstruct. Falling through would silently swap it for
+            // identity, deserializing a DIFFERENT model than was saved — reject instead.
+            if (hasResidualScalarActivation && residualScalarActivation is null)
+                throw new InvalidOperationException(
+                    $"ResidualLayer metadata contains ScalarActivationType='{additionalParams!["ScalarActivationType"]}' " +
+                    "but it could not be restored; refusing to silently substitute identity.");
+            if (hasResidualVectorActivation && residualVectorActivation is null)
+                throw new InvalidOperationException(
+                    $"ResidualLayer metadata contains VectorActivationType='{additionalParams!["VectorActivationType"]}' " +
+                    "but it could not be restored; refusing to silently substitute identity.");
 
-            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-            object? innerActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-            var innerLayer = new DenseLayer<T>(innerOutputSize, innerActivation as IActivationFunction<T>);
-            // Eagerly resolve so ValidateInnerLayer sees concrete matching shapes.
-            innerLayer.ResolveFromShape(new[] { innerInputSize });
+            // Preferred path: reconstruct the inner layer by its REAL type from the
+            // full type-name + I/O shapes + nested "Inner__" metadata written by
+            // ResidualLayer.GetMetadata. This round-trips ANY inner layer (Conv,
+            // Dense, …) instead of assuming a DenseLayer — without it, a ResidualLayer
+            // wrapping a ConvolutionalLayer rebuilds as a wrong-sized DenseLayer and
+            // SetParameters throws "Expected N parameters, but got M" on Clone/DeepCopy.
+            ILayer<T>? innerLayer = null;
+            string? innerTypeName = null;
+            object? innerTypeObj = null;
+            if (additionalParams != null
+                && additionalParams.TryGetValue("InnerLayerTypeName", out innerTypeObj))
+            {
+                // The preferred metadata key is present, so an empty/non-string value is a
+                // HARD error: the legacy Dense fallback is only valid for older saves that
+                // never wrote InnerLayerTypeName at all. Silently rebuilding a named inner
+                // layer as Dense would deserialize the wrong architecture. The pattern match
+                // narrows innerTypeName to non-null on net471 too (string.IsNullOrWhiteSpace
+                // there lacks the [NotNullWhen] annotation the compiler would otherwise use).
+                if (innerTypeObj is not string innerTypeStr || string.IsNullOrWhiteSpace(innerTypeStr))
+                    throw new InvalidOperationException(
+                        "ResidualLayer metadata contains InnerLayerTypeName but it is empty or not a string; " +
+                        "refusing to silently rebuild it as a Dense layer.");
+                innerTypeName = innerTypeStr;
 
-            // Create ResidualLayer directly to avoid constructor ambiguity
-            object? residualActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-            instance = new ResidualLayer<T>(innerLayer, residualActivation as IActivationFunction<T>);
+                int[]? innerIn = TryGetIntArray(additionalParams, "InnerLayerInputShape");
+                int[]? innerOut = TryGetIntArray(additionalParams, "InnerLayerOutputShape");
+                // The preferred (type-name) metadata is present, so corrupt/missing
+                // inner shapes must be a HARD error — falling through to the legacy
+                // Dense fallback would silently rebuild a Conv/other inner as the wrong
+                // Dense architecture. The legacy fallback is only for saves that never
+                // wrote InnerLayerTypeName at all.
+                if (innerIn is not { Length: > 0 } || innerOut is not { Length: > 0 })
+                    throw new InvalidOperationException(
+                        $"ResidualLayer metadata names inner layer '{innerTypeName}' but its " +
+                        "InnerLayerInputShape/InnerLayerOutputShape is missing or unparseable; " +
+                        "refusing to silently rebuild it as a Dense layer.");
+                {
+                    // Strip the "Inner__" prefix so the inner layer's own metadata
+                    // (FilterSize/Stride/Padding/ScalarActivationType/…) is read by
+                    // CreateLayerFromType's per-type branch verbatim.
+                    var innerParams = new Dictionary<string, object>();
+                    foreach (var kv in additionalParams)
+                    {
+                        if (kv.Key.StartsWith("Inner__", StringComparison.Ordinal))
+                            innerParams[kv.Key.Substring("Inner__".Length)] = kv.Value;
+                    }
+
+                    var built = CreateLayerFromType<T>(innerTypeName, innerIn, innerOut, innerParams);
+                    if (built is LayerBase<T> builtBase
+                        && !builtBase.IsShapeResolved
+                        && System.Array.TrueForAll(innerIn, d => d > 0))
+                    {
+                        try { builtBase.ResolveFromShape(innerIn); }
+                        catch (Exception resolveEx)
+                        {
+                            System.Diagnostics.Trace.TraceWarning(
+                                $"DeserializationHelper: ResolveFromShape on reconstructed ResidualLayer inner " +
+                                $"'{innerTypeName}' with shape [{string.Join(",", innerIn)}] failed: {resolveEx.Message}");
+                        }
+                    }
+                    innerLayer = built;
+                }
+            }
+
+            if (innerLayer is null)
+            {
+                // Legacy fallback: older saves stored only a scalar Dense size.
+                int innerInputSize = TryGetInt(additionalParams, "InnerInputSize") ?? inputShape[0];
+                int innerOutputSize = TryGetInt(additionalParams, "InnerOutputSize") ?? inputShape[0];
+                object? innerActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", scalarActivationFuncType);
+                var denseInner = new DenseLayer<T>(innerOutputSize, innerActivation as IActivationFunction<T>);
+                // Eagerly resolve so ValidateInnerLayer sees concrete matching shapes.
+                denseInner.ResolveFromShape(new[] { innerInputSize });
+                innerLayer = denseInner;
+            }
+
+            // Create ResidualLayer directly to avoid constructor ambiguity. Prefer the
+            // vector-activation ctor when a vector activation was serialized; else scalar.
+            instance = residualVectorActivation is IVectorActivationFunction<T> residualVectorAct
+                ? new ResidualLayer<T>(innerLayer, residualVectorAct)
+                : new ResidualLayer<T>(innerLayer, residualScalarActivation as IActivationFunction<T>);
         }
         else if (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".MambaBlock`1"))
         {

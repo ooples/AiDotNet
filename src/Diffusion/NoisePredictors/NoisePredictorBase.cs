@@ -46,6 +46,19 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     private readonly AiDotNet.NeuralNetworks.CompiledModelHost<T> _compileHost;
 
     /// <summary>
+    /// Verify-then-trust gate (#1622 L3b) shared with <c>NeuralNetworkBase</c>: the per-step
+    /// <see cref="PredictCompiled"/> call a diffusion denoising loop makes runs eager once per shape to
+    /// confirm the compiled plan matches, then replays the trusted plan for the remaining 50+ steps —
+    /// the dominant inference cost of a foundation-scale diffusion model. Output stays numerically
+    /// identical to eager (rejected/unverified shapes fall back to eager). Process-wide opt-out via
+    /// <c>AIDOTNET_DISABLE_AUTO_COMPILE=1</c>.
+    /// </summary>
+    private readonly AiDotNet.NeuralNetworks.VerifiedInferenceGate<T> _inferenceGate = new();
+
+    private static readonly bool s_autoCompileDisabled =
+        string.Equals(System.Environment.GetEnvironmentVariable("AIDOTNET_DISABLE_AUTO_COMPILE"), "1", System.StringComparison.Ordinal);
+
+    /// <summary>
     /// Monotonic layer-graph version. Concrete predictors bump this via
     /// <see cref="InvalidateCompiledPlans"/> after lazy-init expands tensor shapes
     /// or after <see cref="SetParameters"/> swaps weights. The host drops stale
@@ -230,8 +243,23 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// </summary>
     /// <param name="input">Shape key for the compile cache.</param>
     /// <param name="eagerFallback">The eager forward pass (traced, replayed, or fallback).</param>
-    protected Tensor<T> PredictCompiled(Tensor<T> input, Func<Tensor<T>> eagerFallback) =>
-        _compileHost.Predict(input, _layerStructureVersion, eagerFallback);
+    protected Tensor<T> PredictCompiled(Tensor<T> input, Func<Tensor<T>> eagerFallback)
+    {
+        // Direct compile host when the verify gate is opted out.
+        if (s_autoCompileDisabled)
+            return _compileHost.Predict(input, _layerStructureVersion, eagerFallback);
+
+        // #1622 L3b: front the compile host with the verify-then-trust gate so a compiled plan is
+        // adopted for a shape only after it matches the eager forward — then replayed for the rest of
+        // the denoising loop. Output stays numerically identical to eager (rejected shapes stay eager).
+        return _inferenceGate.Run(
+            input,
+            _layerStructureVersion,
+            eager: eagerFallback,
+            compiled: () => _compileHost.Predict(input, _layerStructureVersion, eagerFallback),
+            onDecision: (enabled, reason) => AiDotNet.Helpers.InferenceDiagnostics.RecordDecision(
+                area: "NoisePredictorBase", feature: "AutoCompiledInference", enabled: enabled, reason: reason));
+    }
 
     /// <summary>
     /// Async overload of <see cref="PredictCompiled"/> — routes through
@@ -265,6 +293,9 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         // immediately — important when the caller is invalidating because the
         // old graph holds memory we want to reclaim now.
         _compileHost.Invalidate();
+        // The gate's verdicts/memo are version-scoped (stale entries are ignored after the bump), but
+        // clear eagerly so the memo's retained input/output clones are released now too.
+        _inferenceGate.Clear();
     }
 
     /// <summary>
@@ -369,6 +400,10 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     // then can't both reconfigure the process-global WeightRegistry.
     private int _streamingEngaged;
 
+    // 0 = no successful weight registration yet, 1 = resolved lazy weights have
+    // been registered with the streaming pool at least once.
+    private int _streamingWeightsRegistered;
+
     /// <summary>
     /// Parameter-count threshold above which <see cref="MaybeEngageWeightStreaming"/>
     /// engages disk-backed weight streaming for the denoising forward loop. 500 M
@@ -442,6 +477,17 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     }
 
     /// <summary>
+    /// Starts a predictor forward that may need transparent weight streaming.
+    /// The returned scope registers resolved lazy weights on successful completion
+    /// and releases any in-flight streaming reservations if the first forward fails.
+    /// </summary>
+    protected WeightStreamingForwardScope BeginWeightStreamingForward()
+    {
+        MaybeEngageWeightStreaming();
+        return new WeightStreamingForwardScope(this);
+    }
+
+    /// <summary>
     /// Registers this predictor's now-resolved weights with the streaming pool,
     /// dropping their resident in-memory copies to disk-backed storage. No-op
     /// unless <see cref="MaybeEngageWeightStreaming"/> engaged. Called after the
@@ -462,6 +508,71 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
                 if (tensor is null || tensor.Length == 0 || tensor.StreamingPoolHandle >= 0) continue;
                 tensor.Lifetime = WeightLifetime.Streaming;
                 WeightRegistry.RegisterWeight(tensor);
+            }
+        }
+
+        System.Threading.Volatile.Write(ref _streamingWeightsRegistered, 1);
+    }
+
+    private void ReleaseStreamingWeights(bool includeRegistered)
+    {
+        if (System.Threading.Volatile.Read(ref _streamingEngaged) == 0) return;
+
+        foreach (var layer in ReflectInstanceLayers(this))
+        {
+            if (layer is not LayerBase<T> lb) continue;
+            foreach (var tensor in lb.GetTrainableParameters())
+            {
+                if (tensor is null || tensor.Lifetime != WeightLifetime.Streaming) continue;
+                if (!includeRegistered && tensor.StreamingPoolHandle >= 0) continue;
+
+                try
+                {
+                    WeightRegistry.UnregisterWeight(tensor);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"NoisePredictorBase: failed to release streaming weight " +
+                        $"from {layer.GetType().Name}: {ex.GetType().Name}: {ex.Message}");
+                }
+            }
+        }
+
+        if (includeRegistered)
+        {
+            System.Threading.Volatile.Write(ref _streamingWeightsRegistered, 0);
+        }
+    }
+
+    /// <summary>
+    /// Per-forward streaming guard used by concrete predictors. Call
+    /// <see cref="Complete"/> with the final output immediately before returning.
+    /// </summary>
+    protected sealed class WeightStreamingForwardScope : IDisposable
+    {
+        private readonly NoisePredictorBase<T> _owner;
+        private bool _completed;
+
+        internal WeightStreamingForwardScope(NoisePredictorBase<T> owner)
+        {
+            _owner = owner;
+        }
+
+        public Tensor<T> Complete(Tensor<T> result)
+        {
+            _owner.RegisterResolvedStreamingWeights();
+            _completed = true;
+            return result;
+        }
+
+        public void Dispose()
+        {
+            if (!_completed)
+            {
+                var firstForwardDidNotRegister =
+                    System.Threading.Volatile.Read(ref _owner._streamingWeightsRegistered) == 0;
+                _owner.ReleaseStreamingWeights(includeRegistered: firstForwardDidNotRegister);
             }
         }
     }
@@ -1195,6 +1306,8 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     {
         if (_disposed || !disposing) return;
         _disposed = true;
+
+        ReleaseStreamingWeights(includeRegistered: true);
 
         _compileHost.Dispose();
 

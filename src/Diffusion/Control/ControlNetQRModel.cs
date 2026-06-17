@@ -165,10 +165,21 @@ public class ControlNetQRModel<T> : LatentDiffusionModelBase<T>
         // (preserves materialized weights, reconstructs from actual config) instead of rebuilding a
         // default-scale model and SetParameters(GetParameters()), which mismatches an injected non-default
         // variant and re-randomizes the clone's unmaterialized lazy weights.
-        return new ControlNetQRModel<T>(
+        var clone = new ControlNetQRModel<T>(
             baseUNet: (UNetNoisePredictor<T>)_baseUNet.Clone(),
             vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner);
+
+        // The control-branch encoder is a separate trainable component (counted
+        // in ParameterCount/GetParameters); the constructor builds a fresh one,
+        // so transfer this model's trained weights into the clone explicitly —
+        // otherwise the clone silently loses the control-branch state.
+        if (_controlEncoder.ParameterCount > 0)
+        {
+            clone._controlEncoder.SetParameters(_controlEncoder.GetParameters());
+        }
+
+        return clone;
     }
 
     /// <inheritdoc />

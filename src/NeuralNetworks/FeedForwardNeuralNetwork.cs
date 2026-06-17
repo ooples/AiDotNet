@@ -197,7 +197,7 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
             return fused;
         }
 
-        var predictions = Forward(input);
+        var predictions = Accelerate(input, () => Forward(input));
 
         IsTrainingMode = true;
 

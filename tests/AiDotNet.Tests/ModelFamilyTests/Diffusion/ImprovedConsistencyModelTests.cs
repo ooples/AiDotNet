@@ -11,6 +11,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 /// the cumulative LOH residual pushes it past 16 GB. FP32 brings the footprint
 /// to ≈3.7 GB — safe to share the process with sibling tests.
 /// </summary>
+[Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4)
 public class ImprovedConsistencyModelTests : DiffusionModelTestBase<float>
 {
     // SD-based latent diffusion: 4 channels, 64x64 latent (512x512 images / 8x VAE)

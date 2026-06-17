@@ -1519,139 +1519,152 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         // Clamp temperature to valid range
         temperature = Math.Max(0.1, Math.Min(temperature, 2.0));
 
-        // Initialize generated tokens with BOS token or prompt tokens
-        List<int> generatedTokens;
+        // Initialize the prefix with BOS token or prompt tokens.
+        List<int> prefix;
         if (prompt is not null && prompt.Length > 0)
         {
             var encoded = _tokenizer.Encode(prompt);
-            generatedTokens = new List<int>(encoded.TokenIds);
+            prefix = new List<int>(encoded.TokenIds);
         }
         else
         {
-            // Start with BOS token (usually token ID 1 for BERT-style tokenizers)
-            generatedTokens = [1];
+            // Resolve BOS from the configured tokenizer — BLIP-2 supports OPT/Flan-T5/custom
+            // tokenizers whose BOS is not the BERT-style id 1.
+            prefix = [GetBosTokenIdNative()];
         }
 
-        // Special token IDs
-        int eosTokenId = 2;  // EOS token
-        int padTokenId = 0;  // PAD token
+        // Resolve EOS/PAD from the configured tokenizer rather than hard-coding BERT ids:
+        // a mismatched EOS makes generation run to the full budget, and suppressing a wrong
+        // PAD id can drop a valid token. PAD is optional → null means "no suppression".
+        int eosTokenId = GetEosTokenIdNative();
+        int? padTokenId = GetPadTokenIdNative();
 
-        // Autoregressive generation loop
-        var random = Tensors.Helpers.RandomHelper.CreateSeededRandom(
-            Tensors.Helpers.RandomHelper.ThreadSafeRandom.Next());
+        // Running token sequence (prefix + emitted). The shared AutoregressiveDecoder owns the loop +
+        // temperature sampling + EOS stop + PAD suppression; the closure runs the per-step decoder
+        // forward (embed -> project to LM hidden -> decoder layers cross-attending visual features ->
+        // last-position LM head) and returns the next-token logits. Bounded by both maxLength (steps)
+        // and the model's max sequence length.
+        var seq = new List<int>(prefix);
+        int budget = Math.Max(0, Math.Min(maxLength, _maxSequenceLength - prefix.Count));
+        var options = new Generation.SamplingOptions { Temperature = temperature };
 
-        for (int step = 0; step < maxLength && generatedTokens.Count < _maxSequenceLength; step++)
-        {
-            // Create input tensor for current sequence
-            var inputTensor = Tensor<T>.CreateDefault([generatedTokens.Count], NumOps.Zero);
-            for (int i = 0; i < generatedTokens.Count; i++)
+        var newTokens = Generation.AutoregressiveDecoder<T>.Decode(
+            stepLogits: prev =>
             {
-                inputTensor[i] = NumOps.FromDouble(generatedTokens[i]);
-            }
+                if (prev.HasValue) seq.Add(prev.Value);
+                int seqLen = seq.Count;
 
-            // Get token embeddings
-            var embeddings = _textTokenEmbedding.Forward(inputTensor);
+                // Create input tensor for current sequence
+                var inputTensor = Tensor<T>.CreateDefault([seqLen], NumOps.Zero);
+                for (int i = 0; i < seqLen; i++)
+                {
+                    inputTensor[i] = NumOps.FromDouble(seq[i]);
+                }
 
-            // Reshape embeddings to [seqLen, hiddenDim] for decoder
-            int seqLen = generatedTokens.Count;
-            var decoderInput = Tensor<T>.CreateDefault([seqLen, _lmHiddenDim], NumOps.Zero);
+                // Get token embeddings
+                var embeddings = _textTokenEmbedding.Forward(inputTensor);
 
-            // Project embeddings to LM hidden dimension if needed
-            int embDim = embeddings.Shape.Length > 1 ? embeddings.Shape[1] : _qformerHiddenDim;
-            for (int i = 0; i < seqLen; i++)
-            {
-                // Simple projection: pad or truncate to match _lmHiddenDim
+                // Reshape embeddings to [seqLen, hiddenDim] for decoder, projecting to LM hidden dim
+                var decoderInput = Tensor<T>.CreateDefault([seqLen, _lmHiddenDim], NumOps.Zero);
+                int embDim = embeddings.Shape.Length > 1 ? embeddings.Shape[1] : _qformerHiddenDim;
+                for (int i = 0; i < seqLen; i++)
+                {
+                    for (int j = 0; j < _lmHiddenDim; j++)
+                    {
+                        if (j < embDim)
+                        {
+                            decoderInput[i, j] = embeddings.Shape.Length > 1 ? embeddings[i, j] : embeddings[i];
+                        }
+                        else
+                        {
+                            decoderInput[i, j] = NumOps.Zero;
+                        }
+                    }
+                }
+
+                // Pass through decoder layers with visual features as encoder output
+                var decoderOutput = decoderInput;
+                foreach (var decoderLayer in _lmDecoderLayers)
+                {
+                    decoderOutput = decoderLayer.Forward(decoderOutput, features);
+                }
+
+                // Get logits for last position only, then project to vocabulary via LM head
+                var lastPositionHidden = Tensor<T>.CreateDefault([_lmHiddenDim], NumOps.Zero);
                 for (int j = 0; j < _lmHiddenDim; j++)
                 {
-                    if (j < embDim)
-                    {
-                        decoderInput[i, j] = embeddings.Shape.Length > 1 ? embeddings[i, j] : embeddings[i];
-                    }
-                    else
-                    {
-                        decoderInput[i, j] = NumOps.Zero;
-                    }
+                    lastPositionHidden[j] = decoderOutput[seqLen - 1, j];
                 }
-            }
 
-            // Pass through decoder layers with visual features as encoder output
-            var decoderOutput = decoderInput;
-            foreach (var decoderLayer in _lmDecoderLayers)
-            {
-                decoderOutput = decoderLayer.Forward(decoderOutput, features);
-            }
-
-            // Get logits for last position only
-            var lastPositionHidden = Tensor<T>.CreateDefault([_lmHiddenDim], NumOps.Zero);
-            for (int j = 0; j < _lmHiddenDim; j++)
-            {
-                lastPositionHidden[j] = decoderOutput[seqLen - 1, j];
-            }
-
-            // Project to vocabulary via LM head
-            var logits = _lmHead.Forward(lastPositionHidden);
-
-            // Apply temperature scaling
-            var scaledLogits = new T[_vocabularySize];
-            for (int i = 0; i < _vocabularySize; i++)
-            {
-                scaledLogits[i] = NumOps.Divide(logits[i], NumOps.FromDouble(temperature));
-            }
-
-            // Compute softmax probabilities
-            T maxLogit = scaledLogits[0];
-            for (int i = 1; i < _vocabularySize; i++)
-            {
-                if (NumOps.GreaterThan(scaledLogits[i], maxLogit))
+                var logits = _lmHead.Forward(lastPositionHidden);
+                var v = new Vector<T>(_vocabularySize);
+                for (int i = 0; i < _vocabularySize; i++)
                 {
-                    maxLogit = scaledLogits[i];
+                    v[i] = logits[i];
                 }
-            }
+                return v;
+            },
+            maxNewTokens: budget,
+            options: options,
+            isEndToken: t => t == eosTokenId,
+            suppressToken: t => padTokenId.HasValue && t == padTokenId.Value);
 
-            T sumExp = NumOps.Zero;
-            var probs = new T[_vocabularySize];
-            for (int i = 0; i < _vocabularySize; i++)
-            {
-                probs[i] = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Subtract(scaledLogits[i], maxLogit))));
-                sumExp = NumOps.Add(sumExp, probs[i]);
-            }
-
-            for (int i = 0; i < _vocabularySize; i++)
-            {
-                probs[i] = NumOps.Divide(probs[i], sumExp);
-            }
-
-            // Sample from distribution
-            double randVal = random.NextDouble();
-            double cumSum = 0.0;
-            int nextToken = 0;
-            for (int i = 0; i < _vocabularySize; i++)
-            {
-                cumSum += NumOps.ToDouble(probs[i]);
-                if (randVal <= cumSum)
-                {
-                    nextToken = i;
-                    break;
-                }
-            }
-
-            // Check for EOS token
-            if (nextToken == eosTokenId)
-            {
-                break;
-            }
-
-            // Skip PAD tokens
-            if (nextToken == padTokenId)
-            {
-                continue;
-            }
-
-            generatedTokens.Add(nextToken);
-        }
+        var generatedTokens = new List<int>(prefix);
+        generatedTokens.AddRange(newTokens);
 
         // Decode generated tokens to text
         return _tokenizer.Decode(generatedTokens);
+    }
+
+    /// <summary>
+    /// Resolves the BOS token id from the configured tokenizer (BOS → CLS fallback), so native
+    /// generation works across OPT/Flan-T5/BERT-style tokenizers rather than assuming a fixed id.
+    /// </summary>
+    private int GetBosTokenIdNative()
+    {
+        var specialTokens = _tokenizer.SpecialTokens;
+        if (specialTokens is not null && !string.IsNullOrEmpty(specialTokens.BosToken))
+        {
+            return _tokenizer.Vocabulary.GetTokenId(specialTokens.BosToken);
+        }
+        if (specialTokens is not null && !string.IsNullOrEmpty(specialTokens.ClsToken))
+        {
+            return _tokenizer.Vocabulary.GetTokenId(specialTokens.ClsToken);
+        }
+        return 1; // BERT-style default BOS
+    }
+
+    /// <summary>
+    /// Resolves the EOS token id from the configured tokenizer (EOS → SEP fallback). A correct
+    /// EOS is what lets generation stop early instead of running to the full token budget.
+    /// </summary>
+    private int GetEosTokenIdNative()
+    {
+        var specialTokens = _tokenizer.SpecialTokens;
+        if (specialTokens is not null && !string.IsNullOrEmpty(specialTokens.EosToken))
+        {
+            return _tokenizer.Vocabulary.GetTokenId(specialTokens.EosToken);
+        }
+        if (specialTokens is not null && !string.IsNullOrEmpty(specialTokens.SepToken))
+        {
+            return _tokenizer.Vocabulary.GetTokenId(specialTokens.SepToken);
+        }
+        return 2; // default EOS
+    }
+
+    /// <summary>
+    /// Resolves the PAD token id from the configured tokenizer, or null when the tokenizer
+    /// defines no PAD token — in which case no token is suppressed (suppressing a guessed PAD id
+    /// could silently drop a valid token).
+    /// </summary>
+    private int? GetPadTokenIdNative()
+    {
+        var specialTokens = _tokenizer.SpecialTokens;
+        if (specialTokens is not null && !string.IsNullOrEmpty(specialTokens.PadToken))
+        {
+            return _tokenizer.Vocabulary.GetTokenId(specialTokens.PadToken);
+        }
+        return null;
     }
 
     /// <summary>
@@ -1865,9 +1878,12 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        // For BLIP-2, prediction depends on the task
-        // Default: return Q-Former features
-        return ExtractQFormerFeatures(input);
+        return Accelerate(input, () =>
+        {
+            // For BLIP-2, prediction depends on the task
+            // Default: return Q-Former features
+            return ExtractQFormerFeatures(input);
+        });
     }
 
     /// <summary>

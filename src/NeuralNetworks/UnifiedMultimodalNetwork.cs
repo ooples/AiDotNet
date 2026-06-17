@@ -156,7 +156,14 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         _numTransformerLayers = numTransformerLayers;
         _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSeededRandom(42);
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
-        _optimizer = optimizer ?? new Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // AdamW (decoupled weight decay) is the canonical optimizer for multimodal transformers:
+        // Lumina-T2X (Gao et al. 2024) and its Gemma 2B text encoder both train with AdamW +
+        // weight decay 0.01. Plain Adam has no mechanism to bound the classification-head logits,
+        // so under CrossEntropyWithLogitsLoss the logits inflate without limit as training
+        // continues (correct-class logit → +∞, others → −∞). Decoupled weight decay establishes a
+        // stable equilibrium where the logit magnitude — and therefore the loss — plateaus instead
+        // of drifting, which is the paper-faithful behaviour for a regularized transformer.
+        _optimizer = optimizer ?? new Optimizers.AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         SupportedInputModalities = new List<ModalityType>
         {
@@ -1102,7 +1109,18 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         var pooled = transformed.Rank == 3
             ? transformed.Reshape(new[] { transformed.Shape[0], transformed.Shape[2] })
             : transformed;
-        return _classificationHead.Forward(pooled);
+        // The classification head emits raw logits; CrossEntropyWithLogitsLoss applies
+        // log-softmax internally during training (so ForwardForTraining returns logits).
+        // The INFERENCE prediction of a multi-class classifier, however, is the class
+        // probability DISTRIBUTION — softmax over the class axis (Goodfellow et al. 2016
+        // §6.2.2; standard for every softmax-classifier head). Returning the normalized
+        // distribution rather than unbounded logits is both the paper-faithful contract
+        // (Predict yields P(class | input), summing to 1) and numerically well-behaved:
+        // because softmax saturates toward the one-hot target as the correct-class logit
+        // grows, the output cannot drift past the target, so continued training converges
+        // monotonically instead of inflating without bound.
+        var logits = _classificationHead.Forward(pooled);
+        return Engine.Softmax(logits, axis: -1);
     }
 
     /// <summary>True iff the two tensors are element-wise broadcastable

@@ -70,6 +70,42 @@ public class TinyBERTNERTests : TransformerNERTestBase
 
     /// <summary>
     /// Same uniform-input-collapse rationale as
+    /// <see cref="DifferentInputs_ShouldProduceDifferentOutputs"/>: the base
+    /// TransformerNERTestBase probes with <c>CreateConstantTensor(0.3)</c> vs
+    /// <c>CreateConstantTensor(0.7)</c>, but LayerNorm normalises each uniform
+    /// token vector to the SAME zero-mean/unit-var pattern regardless of the
+    /// constant's value (a constant per-token vector has zero variance → the
+    /// LayerNorm output is the bias for any constant), so the encoder collapses
+    /// to identical output for 0.3 and 0.7 — a pre-training architectural
+    /// artifact, not broken attention. This manual scaffold must carry the same
+    /// random-input override the auto-scaffold emits for the TransformerNER
+    /// family (mirrors the three sibling overrides above); varied random inputs
+    /// exercise the per-position attention routing the assertion intends.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public override async Task ContextualSensitivity_DifferentContext_DifferentLabels()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        using var network = CreateNetwork();
+        var rng1 = ModelTestHelpers.CreateSeededRandom();
+        var rng2 = ModelTestHelpers.CreateSeededRandom(seed: 1729);
+        var input1 = CreateRandomTensor(InputShape, rng1);
+        var input2 = CreateRandomTensor(InputShape, rng2);
+        var labels1 = network.Predict(input1);
+        var labels2 = network.Predict(input2);
+        bool anyDifferent = false;
+        int minLen = System.Math.Min(labels1.Length, labels2.Length);
+        for (int i = 0; i < minLen; i++)
+        {
+            if (System.Math.Abs(labels1[i] - labels2[i]) > 1e-12) { anyDifferent = true; break; }
+        }
+        Assert.True(anyDifferent,
+            "TinyBERT NER produces identical labels for distinct random contexts — attention may be broken.");
+    }
+
+    /// <summary>
+    /// Same uniform-input-collapse rationale as
     /// <see cref="DifferentInputs_ShouldProduceDifferentOutputs"/>. The
     /// NER base test uses the same constant-tensor pattern that produces
     /// uniform attention output regardless of input value.

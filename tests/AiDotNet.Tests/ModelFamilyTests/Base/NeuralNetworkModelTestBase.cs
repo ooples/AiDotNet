@@ -3,9 +3,60 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System.Threading.Tasks;
+using System.Runtime;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
+
+/// <summary>
+/// Process-wide lock guarding the teardown LOH-compaction critical section, which mutates the
+/// PROCESS-GLOBAL <see cref="System.Runtime.GCSettings.LargeObjectHeapCompactionMode"/>. It is a
+/// NON-generic holder on purpose: a static field inside a generic base (e.g.
+/// <c>NeuralNetworkModelTestBase&lt;T&gt;</c>) gets a SEPARATE instance per closed type
+/// (<c>&lt;float&gt;</c> vs <c>&lt;double&gt;</c>), which would let parallel teardowns across type
+/// boundaries enter the "lock" concurrently and race on the global GC flag. Every model-family test
+/// base (NeuralNetworks + Diffusion) serializes on this single object.
+/// </summary>
+internal static class ModelFamilyTestGcGate
+{
+    internal static readonly object LohCompaction = new();
+
+    /// <summary>
+    /// Between-test memory reclaim shared by EVERY model-family test base (NeuralNetworks, Diffusion,
+    /// Classification, Regression, TimeSeries, Clustering). Two retention sources let committed memory
+    /// accumulate across a shard's model classes until a heavy shard OOM-kills the 16 GB CI runner even
+    /// though each model is disposed:
+    /// <list type="number">
+    /// <item><b>InferenceWeightCache</b> — fused-MlpForward / SgemmWithCachedB / Conv2D-kernel packs key
+    /// derived weight forms by the weight ARRAY's object identity, pinning disposed models' tensors.</item>
+    /// <item><b>LOH not compacted</b> — plain GC.Collect() sweeps but does not compact the LOH; under
+    /// DOTNET_GCHeapHardLimit (the CI cap) committed-but-free LOH counts against the limit.</item>
+    /// </list>
+    /// This clears the cache and runs a compacting Gen-2 collect, serialized on
+    /// <see cref="LohCompaction"/> because <c>GCSettings.LargeObjectHeapCompactionMode</c> is
+    /// process-global. Pure hygiene — changes no assertion, scale, iteration count, or timeout. On the
+    /// light classical-ML bases the heap is small, so the compacting collect is cheap.
+    /// </summary>
+    internal static void ReclaimBetweenTests()
+    {
+        // Drop process-wide weight-derived caches that pin the disposed model's tensors.
+        AiDotNet.Tensors.Engines.InferenceWeightCache.InvalidateAll();
+
+        lock (LohCompaction)
+        {
+            // First pass: compacting Gen-2 + LOH reclaims everything unreachable, including the
+            // just-disposed model's weight tensors.
+            System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
+            GC.WaitForPendingFinalizers();
+
+            // Second pass: reclaim finalizer-released memory (pool return paths) + any LOH allocations
+            // made by finalizers.
+            System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
+        }
+    }
+}
 
 /// <summary>
 /// Base test class for neural network models implementing INeuralNetworkModel&lt;double&gt;.
@@ -184,11 +235,28 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// tensor allocations that, without GC pressure between xunit test methods,
     /// stack up in the shared-process runner and OOM before the job ever finishes.
     /// </summary>
+    /// <remarks>
+    /// Two retention sources made the heavy NeuralNetworks shards (O-R, etc.)
+    /// accumulate committed memory across model classes until the 16 GB CI runner
+    /// died mid-shard ("runner has received a shutdown signal"), even though each
+    /// model is <c>using</c>-disposed:
+    /// <list type="number">
+    /// <item><b>InferenceWeightCache</b> \u2014 the fused-MlpForward / SgemmWithCachedB /
+    /// Conv2D-kernel cache keys derived weight forms by the weight ARRAY's object
+    /// identity, so it pins the just-disposed model's weight tensors and they can't
+    /// be collected. Cleared here.</item>
+    /// <item><b>LOH not compacted</b> \u2014 model weight/activation arrays are far above
+    /// the 85 KB LOH threshold; plain <see cref="GC.Collect()"/> sweeps the LOH but
+    /// leaves it fragmented/committed. Under <c>DOTNET_GCHeapHardLimit</c> (the CI
+    /// 16 GB cap) committed-but-free LOH counts against the limit, so the runner OOMs
+    /// even though the live set is small. A compacting Gen-2 collect returns it.</item>
+    /// </list>
+    /// This is pure between-test memory hygiene \u2014 it changes no assertion, scale,
+    /// iteration count, or timeout. Mirrors the proven DiffusionModelTestBase teardown.
+    /// </remarks>
     public virtual Task DisposeAsync()
     {
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
+        ModelFamilyTestGcGate.ReclaimBetweenTests();
         return Task.CompletedTask;
     }
 
@@ -280,9 +348,10 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 
-        // Measure initial loss (MSE)
+        // Measure initial loss (model's objective — MSE for most families, the model's own loss for
+        // raw-logit cross-entropy LMs where MSE is meaningless; see MeasureLoss).
         var initialOutput = network.Predict(input);
-        double initialLoss = ComputeMSE(initialOutput, target);
+        double initialLoss = MeasureLoss(network, initialOutput, target);
 
         // Train
         for (int i = 0; i < TrainingIterations * 3; i++)
@@ -290,7 +359,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         // Measure final loss
         var finalOutput = network.Predict(input);
-        double finalLoss = ComputeMSE(finalOutput, target);
+        double finalLoss = MeasureLoss(network, finalOutput, target);
 
         if (!double.IsNaN(initialLoss) && !double.IsNaN(finalLoss))
         {
@@ -963,12 +1032,12 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         for (int i = 0; i < shortIters; i++)
             network1.Train(input, target);
-        double lossShort = ComputeMSE(network1.Predict(input), target);
+        double lossShort = MeasureLoss(network1, network1.Predict(input), target);
 
         // Train network2 for the "long" iteration count (default 200)
         for (int i = 0; i < longIters; i++)
             network2.Train(input2, target2);
-        double lossLong = ComputeMSE(network2.Predict(input2), target2);
+        double lossLong = MeasureLoss(network2, network2.Predict(input2), target2);
 
         // Training divergence → NaN loss is the exact failure mode this invariant
         // should catch. Fail fast instead of skipping the assertion.
@@ -1003,6 +1072,21 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// </summary>
     protected virtual double TrainingErrorMultiplier => 3.0;
 
+    /// <summary>
+    /// True when <see cref="TrainingError_ShouldNotExceedTestError"/> is a
+    /// load-bearing invariant for this model. Override to false for models whose
+    /// <c>Train()</c> is NOT supervised gradient-descent fitting of a fixed
+    /// (input, target) pair — e.g. HTM, whose Hebbian spatial-pooler / temporal-
+    /// memory learning plus homeostatic boosting continuously re-codes the
+    /// input's sparse representation (Cui, Ahmad &amp; Hawkins 2017), so the model
+    /// cannot — and by design does not — fit a fixed training target tighter than
+    /// an arbitrary test target. This is the same paper-faithful rationale the HTM
+    /// test applies to Training_ShouldReduceLoss / MoreData / ScaledInput. Narrow
+    /// opt-out (mirrors NEAT's <c>OptimizerStepParamL2InvariantApplicable</c>) so
+    /// gradient-trained models keep asserting this invariant. Default true.
+    /// </summary>
+    protected virtual bool TrainingErrorInvariantApplicable => true;
+
     [Fact(Timeout = 120000)]
     public async Task TrainingError_ShouldNotExceedTestError()
     {
@@ -1011,19 +1095,20 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
         if (TrainingInvariantsNotApplicable(network)) return;
+        if (!TrainingErrorInvariantApplicable) return;
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 
         for (int i = 0; i < TrainingIterations * 3; i++)
             network.Train(input, target);
 
-        double trainMSE = ComputeMSE(network.Predict(input), target);
+        double trainMSE = MeasureLoss(network, network.Predict(input), target);
         var testInput = CreateRandomTensor(InputShape, ModelTestHelpers.CreateSeededRandom(99));
         // CreateRandomTargetTensor for the same reason the trainTarget
         // a few lines above uses it — type-constrained families (NER /
         // CRF) need legal label values.
         var testTarget = CreateRandomTargetTensor(EffectiveOutputShape, ModelTestHelpers.CreateSeededRandom(99));
-        double testMSE = ComputeMSE(network.Predict(testInput), testTarget);
+        double testMSE = MeasureLoss(network, network.Predict(testInput), testTarget);
 
         if (!double.IsNaN(trainMSE) && !double.IsNaN(testMSE))
         {
@@ -1158,6 +1243,21 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// </summary>
     protected virtual double OptimizerStepL2UpperBound => 2.0;
 
+    /// <summary>
+    /// True when the single-step parameter-L2 bound applies. The invariant assumes a
+    /// GRADIENT-OPTIMIZER step on a FIXED-topology network, where one update should not
+    /// move the weight-vector norm more than ~2×. It does NOT apply to topology-AUGMENTING
+    /// evolutionary models (NEAT, Stanley &amp; Miikkulainen 2002): there is no "optimizer
+    /// step" — one Train call evolves a population for many generations and ADDS
+    /// connections/nodes by design, so <c>GetParameters()</c> grows in LENGTH and the L2
+    /// norm necessarily increases with the complexifying genome. Bounding it to 2× would
+    /// contradict the paper's core "Augmenting Topologies" mechanism. Override to
+    /// <c>false</c> for such models (their weight-magnitude stability is still exercised by
+    /// the bounded per-connection weight clamp in the model itself, and convergence by
+    /// <see cref="Training_ShouldReduceLoss"/> / <c>LossStrictlyDecreasesOnMemorizationTask</c>).
+    /// </summary>
+    protected virtual bool OptimizerStepParamL2InvariantApplicable => true;
+
     [Fact(Timeout = 120000)]
     public async Task OptimizerStep_ParamL2_DoesNotExplode()
     {
@@ -1166,6 +1266,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
         if (TrainingInvariantsNotApplicable(network)) return;
+        if (!OptimizerStepParamL2InvariantApplicable) return;
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 
@@ -1435,6 +1536,32 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             mse += diff * diff;
         }
         return mse / len;
+    }
+
+    /// <summary>
+    /// Trajectory-loss metric for the training-invariant tests. For models whose head emits RAW LOGITS
+    /// trained with cross-entropy-with-logits (RWKV4 / Eagle / Finch and any other model that wires
+    /// <see cref="CrossEntropyWithLogitsLoss{T}"/>), MSE against the (random) target is a meaningless
+    /// signal: it GROWS as the correct-class logits grow during HEALTHY training, so legitimately
+    /// successful training reads as "loss increased / degraded". For those models we measure the
+    /// model's OWN training objective — which decreases as the model is optimized, the correct
+    /// semantics for "training reduces loss" and "more data should not degrade". Every other family
+    /// keeps <see cref="ComputeMSE"/> byte-identical, since this branch only triggers when the model's
+    /// loss function is cross-entropy-with-logits.
+    /// </summary>
+    protected double MeasureLoss(INeuralNetworkModel<T> network, Tensor<T> output, Tensor<T> target)
+    {
+        if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn
+            && nn.DefaultLossFunction is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T> ce)
+        {
+            int len = Math.Min(output.Length, target.Length);
+            if (len == 0) return double.NaN;
+            var predicted = new Vector<T>(len);
+            var actual = new Vector<T>(len);
+            for (int i = 0; i < len; i++) { predicted[i] = output[i]; actual[i] = target[i]; }
+            return ConvertToDouble(ce.CalculateLoss(predicted, actual));
+        }
+        return ComputeMSE(output, target);
     }
 
     /// <summary>

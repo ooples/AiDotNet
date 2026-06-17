@@ -43,10 +43,16 @@ namespace AiDotNet.VisionLanguage.Foundational;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("An Empirical Study of Training End-to-End Vision-and-Language Transformers", "https://arxiv.org/abs/2111.02387", Year = 2022, Authors = "Dou et al.")]
+[ResearchPaper(
+    "An Empirical Study of Training End-to-End Vision-and-Language Transformers",
+    "https://arxiv.org/abs/2111.02387",
+    Year = 2022,
+    Authors = "Dou et al."
+)]
 public class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly METEROptions _options;
+
     public override ModelOptions GetOptions() => _options;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -56,7 +62,12 @@ public class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
 
     private readonly List<ILayer<T>> _textCoAttnLayers = new List<ILayer<T>>();
 
-    public METER(NeuralNetworkArchitecture<T> architecture, string modelPath, METEROptions? options = null) : base(architecture)
+    public METER(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        METEROptions? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new METEROptions();
         SyncImageSizeWithArchitecture();
@@ -74,7 +85,12 @@ public class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
         InitializeLayers();
     }
 
-    public METER(NeuralNetworkArchitecture<T> architecture, METEROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    public METER(
+        NeuralNetworkArchitecture<T> architecture,
+        METEROptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new METEROptions();
         SyncImageSizeWithArchitecture();
@@ -91,7 +107,8 @@ public class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
     {
         int h = Architecture.InputHeight;
         int w = Architecture.InputWidth;
-        if (h > 0 && w > 0 && h == w) _options.ImageSize = h;
+        if (h > 0 && w > 0 && h == w)
+            _options.ImageSize = h;
     }
 
     public int EmbeddingDimension => _options.FusionDim;
@@ -104,9 +121,11 @@ public class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p));
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(p));
         var c = p;
-        foreach (var l in Layers) c = l.Forward(c);
+        foreach (var l in Layers)
+            c = l.Forward(c);
         return L2Normalize(c);
     }
 
@@ -114,10 +133,12 @@ public class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(p);
 
         var visionOut = p;
-        foreach (var l in Layers) visionOut = l.Forward(visionOut);
+        foreach (var l in Layers)
+            visionOut = l.Forward(visionOut);
 
         // Run the text stream first, then dispatch each co-attention block
         // with both modalities so vision→text and text→vision actually
@@ -141,7 +162,8 @@ public class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
         int textEnd = textProjEnd + _options.NumTextLayers * blockSize;
 
         // Text encoder (pre-norm + projection + N self-attn blocks).
-        for (int i = 0; i < textEnd; i++) textState = _textCoAttnLayers[i].Forward(textState);
+        for (int i = 0; i < textEnd; i++)
+            textState = _textCoAttnLayers[i].Forward(textState);
 
         // Co-attention fusion blocks: bidirectional cross-attention between
         // the two modality streams. Each block layout matches the factory:
@@ -153,7 +175,11 @@ public class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
         //   [5] DenseLayer FFN2                 on textState
         //   [6] LayerNorm                       on textState
         //   [7] (DropoutLayer)                  on textState (optional)
-        for (int blockStart = textEnd; blockStart < _textCoAttnLayers.Count; blockStart += coAttnBlockSize)
+        for (
+            int blockStart = textEnd;
+            blockStart < _textCoAttnLayers.Count;
+            blockStart += coAttnBlockSize
+        )
         {
             var preText = textState;
             var preVision = visionOut;
@@ -166,7 +192,8 @@ public class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
             textState = _textCoAttnLayers[blockStart + 4].Forward(textState);
             textState = _textCoAttnLayers[blockStart + 5].Forward(textState);
             textState = _textCoAttnLayers[blockStart + 6].Forward(textState);
-            if (coAttnBlockSize == 8) textState = _textCoAttnLayers[blockStart + 7].Forward(textState);
+            if (coAttnBlockSize == 8)
+                textState = _textCoAttnLayers[blockStart + 7].Forward(textState);
         }
 
         return visionOut.ConcatenateTensors(textState);
@@ -200,7 +227,8 @@ public class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture is DualStreamArchitecture<T> dual)
         {
             Layers.AddRange(dual.VisionLayers);
@@ -210,19 +238,29 @@ public class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
         }
 
         int blockSize = _options.DropoutRate > 0 ? 6 : 5;
-        int visionLayerEnd = 1 + _options.NumVisionLayers * blockSize
+        int visionLayerEnd =
+            1
+            + _options.NumVisionLayers * blockSize
             + (_options.VisionDim != _options.FusionDim ? 1 : 0);
 
         var allLayers = LayerHelper<T>.CreateDefaultDualStreamFusionLayers(
-            _options.VisionDim, _options.TextDim, _options.FusionDim,
-            _options.NumVisionLayers, _options.NumTextLayers, _options.NumCrossAttentionLayers,
-            _options.NumHeads, _options.DropoutRate);
+            _options.VisionDim,
+            _options.TextDim,
+            _options.FusionDim,
+            _options.NumVisionLayers,
+            _options.NumTextLayers,
+            _options.NumCrossAttentionLayers,
+            _options.NumHeads,
+            _options.DropoutRate
+        );
 
         int idx = 0;
         foreach (var layer in allLayers)
         {
-            if (idx < visionLayerEnd) Layers.Add(layer);
-            else _textCoAttnLayers.Add(layer);
+            if (idx < visionLayerEnd)
+                Layers.Add(layer);
+            else
+                _textCoAttnLayers.Add(layer);
             idx++;
         }
 
@@ -231,51 +269,73 @@ public class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
 
     private Tensor<T> TokenizeText(string text)
     {
-        if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized.");
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
         var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
         return tokens;
     }
 
     public override Tensor<T> Predict(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
         SetTrainingMode(false);
         var c = PreprocessImage(input);
-        foreach (var l in Layers) c = l.Forward(c);
+        foreach (var l in Layers)
+            c = l.Forward(c);
         return c;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
         // Pass _optimizer through to TrainWithTape so the configured
         // (or defaulted) AdamW is used instead of the base class's
         // GetOrCreateBaseOptimizer default. See BridgeTower.Train for
         // full rationale.
-        try { TrainWithTape(PreprocessImage(input), expected, _optimizer); }
-        finally { SetTrainingMode(false); }
+        try
+        {
+            TrainWithTape(PreprocessImage(input), expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
     {
-        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
         int idx = 0;
-        foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
         // Co-attention stream is part of the trainable graph (registered
         // via RegisterAuxiliaryEncoderStream and surfaced through
         // GetExtraTrainableLayers), so its parameter slices live alongside
         // the vision encoder's in the flat parameter vector.
-        foreach (var l in _textCoAttnLayers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+        foreach (var l in _textCoAttnLayers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
     }
 
     /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-        => EnumerateAuxiliaryStreamTrainableLayers();
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
+        EnumerateAuxiliaryStreamTrainableLayers();
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
@@ -287,9 +347,13 @@ public class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
         var m = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "METER-Native" : "METER-ONNX",
-            Description = "METER: An Empirical Study of Training End-to-End Vision-and-Language Transformers (Dou et al., CVPR 2022)",
+            Description =
+                "METER: An Empirical Study of Training End-to-End Vision-and-Language Transformers (Dou et al., CVPR 2022)",
             FeatureCount = _options.FusionDim,
-            Complexity = _options.NumVisionLayers + _options.NumTextLayers + _options.NumCrossAttentionLayers
+            Complexity =
+                _options.NumVisionLayers
+                + _options.NumTextLayers
+                + _options.NumCrossAttentionLayers,
         };
         m.AdditionalInfo["Architecture"] = "METER";
         m.AdditionalInfo["FusionType"] = _options.FusionType.ToString();
@@ -314,7 +378,8 @@ public class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
     {
         _useNativeMode = reader.ReadBoolean();
         string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionDim = reader.ReadInt32();
         _options.TextDim = reader.ReadInt32();
@@ -336,14 +401,19 @@ public class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
 
     private void ThrowIfDisposed()
     {
-        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(METER<T>));
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(METER<T>));
     }
 
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
-        if (disposing) { OnnxModel?.Dispose(); }
+        if (disposing)
+        {
+            OnnxModel?.Dispose();
+        }
         base.Dispose(disposing);
     }
 }

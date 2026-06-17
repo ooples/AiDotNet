@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -8,7 +9,6 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
-using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.Robotics;
 
@@ -52,19 +52,83 @@ namespace AiDotNet.VisionLanguage.Robotics;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("pi0: A Vision-Language-Action Flow Model for General Robot Control", "https://arxiv.org/abs/2410.24164", Year = 2024, Authors = "Black et al.")]
+[ResearchPaper(
+    "pi0: A Vision-Language-Action Flow Model for General Robot Control",
+    "https://arxiv.org/abs/2410.24164",
+    Year = 2024,
+    Authors = "Black et al."
+)]
 public class PiZero<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
-    private readonly PiZeroOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly PiZeroOptions _options;
+
+    public override ModelOptions GetOptions() => _options;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer; private bool _useNativeMode; private bool _disposed;
+    private readonly ITokenizer? _tokenizer;
+    private bool _useNativeMode;
+    private bool _disposed;
     private int _encoderLayerEnd;
 
-    public PiZero(NeuralNetworkArchitecture<T> architecture, string modelPath, PiZeroOptions? options = null) : base(architecture) { _options = options ?? new PiZeroOptions(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
-    public PiZero(NeuralNetworkArchitecture<T> architecture, PiZeroOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new PiZeroOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
+    public PiZero(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        PiZeroOptions? options = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new PiZeroOptions();
+        _useNativeMode = false;
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
 
-    public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim; public string LanguageModelName => _options.LanguageModelName; public int ActionDimension => _options.ActionDimension;
-    public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
+    public PiZero(
+        NeuralNetworkArchitecture<T> architecture,
+        PiZeroOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new PiZeroOptions();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    public int EmbeddingDimension => _options.DecoderDim;
+    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageChannels => 3;
+    public int MaxGenerationLength => _options.MaxGenerationLength;
+    public int DecoderEmbeddingDim => _options.DecoderDim;
+    public string LanguageModelName => _options.LanguageModelName;
+    public int ActionDimension => _options.ActionDimension;
+
+    public Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(p));
+        var c = p;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            c = Layers[i].Forward(c);
+        return L2Normalize(c);
+    }
+
     /// <summary>
     /// Generates from image using pi-zero's PaliGemma VLM backbone + flow matching conditioning.
     /// The VLM processes visual observation and instruction to produce a conditioning signal
@@ -74,42 +138,35 @@ public class PiZero<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(p);
 
         int dim = _options.DecoderDim;
         var encoderOut = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             encoderOut = Layers[i].Forward(encoderOut);
 
-
         // Fuse visual features with prompt tokens via ConcatenateTensors
 
         Tensor<T> fusedInput;
 
         if (prompt is not null)
-
         {
-
             var promptTokens = TokenizeText(prompt);
 
             fusedInput = encoderOut.ConcatenateTensors(promptTokens);
-
         }
-
         else
-
         {
-
             fusedInput = encoderOut;
-
         }
-
 
         var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
         return output;
     }
+
     /// <summary>
     /// Predicts action using pi-zero's flow matching formulation. Per the paper
     /// (Physical Intelligence 2024), the VLM backbone (PaliGemma) produces a
@@ -177,8 +234,8 @@ public class PiZero<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
             int dimIdx = t % actionDim;
             int stepIdx = t / actionDim;
             // Structured initial noise seeded by conditioning
-            actionTrajectory[t] = condPerDim[dimIdx] * 0.01 *
-                Math.Sin((stepIdx + 1) * Math.PI / (horizon + 1));
+            actionTrajectory[t] =
+                condPerDim[dimIdx] * 0.01 * Math.Sin((stepIdx + 1) * Math.PI / (horizon + 1));
         }
 
         // ODE integration: Euler method over flow steps from t=0 to t=1
@@ -194,8 +251,7 @@ public class PiZero<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 
                 // Learned velocity field: v(x_t, t, c)
                 // Direction: toward conditioned target
-                double target = condPerDim[dimIdx] *
-                    Math.Exp(-0.05 * stepIdx); // Temporal decay
+                double target = condPerDim[dimIdx] * Math.Exp(-0.05 * stepIdx); // Temporal decay
 
                 // Optimal transport velocity: (target - current) / (1 - t)
                 double remainingTime = Math.Max(1e-6, 1.0 - t);
@@ -213,21 +269,106 @@ public class PiZero<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 
         return actions;
     }
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; } else { Layers.AddRange(LayerHelper<T>.CreateDefaultRoboticsActionLayers(_options.VisionDim, _options.DecoderDim, 256, _options.NumVisionLayers, _options.NumDecoderLayers, 2, _options.NumHeads, _options.DropoutRate)); ComputeEncoderDecoderBoundary(); } }
-    private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 2; }
-    private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode)
+            return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            _encoderLayerEnd = Layers.Count / 2;
+        }
+        else
+        {
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultRoboticsActionLayers(
+                    _options.VisionDim,
+                    _options.DecoderDim,
+                    256,
+                    _options.NumVisionLayers,
+                    _options.NumDecoderLayers,
+                    2,
+                    _options.NumHeads,
+                    _options.DropoutRate
+                )
+            );
+            ComputeEncoderDecoderBoundary();
+        }
+    }
+
+    private void ComputeEncoderDecoderBoundary()
+    {
+        int lpb = _options.DropoutRate > 0 ? 6 : 5;
+        _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 2;
+    }
+
+    private Tensor<T> TokenizeText(string text)
+    {
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
+        var encoding = _tokenizer.Encode(text);
+        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
+        var tokens = new Tensor<T>([seqLen]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        return tokens;
+    }
+
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
+        var c = input;
+        foreach (var l in Layers)
+            c = l.Forward(c);
+        return c;
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        TrainWithTape(input, expected);
+        SetTrainingMode(false);
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "pi-zero-Native" : "pi-zero-ONNX", Description = "pi-zero: PaliGemma VLM with action expert for 8 robot embodiments.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "pi-zero-Native" : "pi-zero-ONNX",
+            Description = "pi-zero: PaliGemma VLM with action expert for 8 robot embodiments.",
+            FeatureCount = _options.DecoderDim,
+            Complexity = _options.NumVisionLayers + _options.NumDecoderLayers,
+        };
         m.AdditionalInfo["Architecture"] = "pi-zero";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;
     }
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) {
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
         writer.Write(_useNativeMode);
         writer.Write(_options.ModelPath ?? string.Empty);
         writer.Write(_options.ImageSize);
@@ -238,10 +379,13 @@ public class PiZero<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         writer.Write(_options.NumHeads);
         writer.Write(_options.ActionDimension);
     }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) {
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
         _useNativeMode = reader.ReadBoolean();
         string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionDim = reader.ReadInt32();
         _options.DecoderDim = reader.ReadInt32();
@@ -249,9 +393,28 @@ public class PiZero<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         _options.NumDecoderLayers = reader.ReadInt32();
         _options.NumHeads = reader.ReadInt32();
         _options.ActionDimension = reader.ReadInt32();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new PiZero<T>(Architecture, mp, _options); return new PiZero<T>(Architecture, _options); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(PiZero<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new PiZero<T>(Architecture, mp, _options);
+        return new PiZero<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(PiZero<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
 }

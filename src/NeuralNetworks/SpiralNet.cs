@@ -519,7 +519,7 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
             throw new InvalidOperationException(
                 "Spiral indices must be set via SetSpiralIndices before calling Predict.");
         }
-        return Forward(input);
+        return Accelerate(input, () => Forward(input));
     }
 
     /// <summary>

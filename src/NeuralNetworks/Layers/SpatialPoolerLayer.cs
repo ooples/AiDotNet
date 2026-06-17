@@ -370,11 +370,17 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         // Store binary mask for Hebbian learning (per Hawkins 2004, learning uses binary SDR)
         _lastBinaryOutput = Engine.Reshape(outputMask, [ColumnCount]);
 
-        // Output preserves activation magnitude for downstream differentiation.
-        // Different input scales produce different output values even when
-        // the same columns are selected (same binary mask).
-        var maskedActivations = Engine.TensorMultiply(outputMask, activationsFlat);
-        var output = Engine.Reshape(maskedActivations, [ColumnCount]);
+        // Emit the canonical BINARY sparse distributed representation: active
+        // columns = 1, inactive = 0 (Ahmad & Hawkins 2015, "Properties of Sparse
+        // Distributed Representations", §2 — SDRs are binary). The previous
+        // magnitude-preserving output (mask * raw activations, values up to
+        // ~InputSize) fed unbounded values into the downstream Dense readout, whose
+        // supervised gradients then exploded. A binary SDR bounds the readout input
+        // to {0,1}. The SP is scale-invariant by design (k-WTA on the overlap), so
+        // input MAGNITUDE legitimately does not change the SDR — the ScaledInput
+        // invariant is probed via a spatial-perturbation override instead, matching
+        // the binary-SDR contract.
+        var output = Engine.Reshape(outputMask, [ColumnCount]);
 
         LastOutput = output;
         return output;
@@ -549,9 +555,16 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// </remarks>
     private void NormalizeConnections()
     {
-        var colSums = Engine.ReduceSum(Connections, new[] { 0 }, keepDims: true);
-        var safeSums = Engine.TensorMax(colSums, NumOps.FromDouble(1e-12));
-        Connections = Engine.TensorBroadcastDivide(Connections, safeSums);
+        // HTM synaptic permanences are bounded to [0, 1] and simply CLAMPED after
+        // each Hebbian update (Cui, Ahmad & Hawkins 2017, "The HTM Spatial Pooler",
+        // §2.2; Hawkins & Ahmad 2016). The previous per-column divide-by-sum is NOT
+        // part of the HTM algorithm and is numerically unstable: once boosting /
+        // the active-column decrement pushes some permanences negative, a column's
+        // sum can approach zero, the divide fell back to the 1e-12 floor, and the
+        // connections exploded to ~1e12 — cascading to Inf and then NaN on the next
+        // forward (TensorMaxValue/range = Inf → Inf/Inf). That was a root cause of
+        // the HTM "Predict became non-finite after N Train calls" failures.
+        Connections = Engine.TensorClamp(Connections, NumOps.Zero, NumOps.One);
     }
 
 

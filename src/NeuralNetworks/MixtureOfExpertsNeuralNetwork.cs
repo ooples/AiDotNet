@@ -301,7 +301,7 @@ public class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
             nameof(MixtureOfExpertsNeuralNetwork<T>), "prediction");
 
         // Perform forward pass
-        var predictions = Forward(input);
+        var predictions = Accelerate(input, () => Forward(input));
 
         IsTrainingMode = true;
 

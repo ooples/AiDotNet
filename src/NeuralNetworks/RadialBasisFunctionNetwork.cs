@@ -366,13 +366,16 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
         }
 
         // Forward pass through each layer in the network
-        Tensor<T> currentOutput = input;
-        foreach (var layer in Layers)
+        return Accelerate(input, () =>
         {
-            currentOutput = layer.Forward(currentOutput);
-        }
+            Tensor<T> currentOutput = input;
+            foreach (var layer in Layers)
+            {
+                currentOutput = layer.Forward(currentOutput);
+            }
 
-        return currentOutput;
+            return currentOutput;
+        });
     }
 
     /// <summary>

@@ -138,6 +138,20 @@ public class NEAT<T> : NeuralNetworkBase<T>
     private T _mutationRate { get; set; }
 
     /// <summary>
+    /// Per-instance deterministic RNG for the evolutionary search (selection,
+    /// crossover, mutation). Seeded from the architecture's RandomSeed when present.
+    /// </summary>
+    private readonly Random _rng;
+
+    // Faithful NEAT weight-mutation constants (Stanley & Miikkulainen 2002 §3.1;
+    // NEAT-Python's weight_mutate_power / weight_replace_rate / weight_max_value).
+    // A small perturbation power plus a hard clamp keep connection weights bounded
+    // so weights cannot random-walk to ever-larger magnitudes across generations.
+    private const double WeightPerturbPower = 0.5;
+    private const double WeightReplaceRate = 0.1;
+    private const double WeightCap = 8.0;
+
+    /// <summary>
     /// Gets or sets the probability of crossover occurring during reproduction.
     /// </summary>
     /// <remarks>
@@ -231,6 +245,18 @@ public class NEAT<T> : NeuralNetworkBase<T>
         _mutationRate = NumOps.FromDouble(mutationRate);
         _crossoverRate = NumOps.FromDouble(crossoverRate);
         _innovationNumber = 0;
+        // Deterministic, per-instance evolution RNG. NEAT's selection / crossover /
+        // mutation all draw from this stream; seeding it from the architecture's
+        // RandomSeed makes a NEAT run reproducible (the standard NEAT-Python contract —
+        // every config carries a seed). Without it the evolution drew from the
+        // process-shared RandomHelper.ThreadSafeRandom, whose state advances with
+        // unrelated prior work, so a NEAT invariant could pass in isolation yet flake
+        // when interleaved with other tests. When no seed is set (the production
+        // default) it falls back to the shared RNG, preserving non-reproducible
+        // production behaviour.
+        _rng = Architecture.RandomSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(Architecture.RandomSeed.Value)
+            : RandomHelper.ThreadSafeRandom;
         _population = InitializePopulation();
     }
 
@@ -432,7 +458,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
 
             while (newPopulation.Count < _populationSize)
             {
-                if (NumOps.LessThan(NumOps.FromDouble(Random.NextDouble()), _crossoverRate))
+                if (NumOps.LessThan(NumOps.FromDouble(_rng.NextDouble()), _crossoverRate))
                 {
                     var parent1 = SelectParent();
                     var parent2 = SelectParent();
@@ -491,11 +517,11 @@ public class NEAT<T> : NeuralNetworkBase<T>
         // and keep the running argmax inline. No allocations, no LINQ.
         const int tournamentSize = 3;
         int n = _population.Count;
-        var best = _population[Random.Next(n)];
+        var best = _population[_rng.Next(n)];
         var bestFitness = best.Fitness;
         for (int i = 1; i < tournamentSize; i++)
         {
-            var candidate = _population[Random.Next(n)];
+            var candidate = _population[_rng.Next(n)];
             if (NumOps.GreaterThan(candidate.Fitness, bestFitness))
             {
                 best = candidate;
@@ -623,10 +649,10 @@ public class NEAT<T> : NeuralNetworkBase<T>
         var connections = genome.Connections;
         int count = connections.Count;
 
-        if (NumOps.LessThan(NumOps.FromDouble(Random.NextDouble()), _mutationRate) && count > 0)
+        if (NumOps.LessThan(NumOps.FromDouble(_rng.NextDouble()), _mutationRate) && count > 0)
         {
             // Add new node
-            var connection = connections[Random.Next(count)];
+            var connection = connections[_rng.Next(count)];
 
             // First-free-node-id scan including the bias node — without the
             // explicit biasNodeId floor below, the first add-node mutation
@@ -657,11 +683,11 @@ public class NEAT<T> : NeuralNetworkBase<T>
             count = connections.Count;
         }
 
-        if (NumOps.LessThan(NumOps.FromDouble(Random.NextDouble()), _mutationRate))
+        if (NumOps.LessThan(NumOps.FromDouble(_rng.NextDouble()), _mutationRate))
         {
             // Add new connection
-            int fromNode = Random.Next(Architecture.InputSize + Architecture.OutputSize);
-            int toNode = Random.Next(Architecture.InputSize, Architecture.InputSize + Architecture.OutputSize);
+            int fromNode = _rng.Next(Architecture.InputSize + Architecture.OutputSize);
+            int toNode = _rng.Next(Architecture.InputSize, Architecture.InputSize + Architecture.OutputSize);
             bool exists = false;
             for (int i = 0; i < count; i++)
             {
@@ -682,12 +708,37 @@ public class NEAT<T> : NeuralNetworkBase<T>
 
         // Mutate weights — index loop so JIT can elide the List<T>.Enumerator
         // bounds check overhead the foreach pays per step.
+        T perturbPower = NumOps.FromDouble(WeightPerturbPower);
+        T replaceRate = NumOps.FromDouble(WeightReplaceRate);
+        T weightCap = NumOps.FromDouble(WeightCap);
+        T negWeightCap = NumOps.FromDouble(-WeightCap);
         for (int i = 0; i < count; i++)
         {
-            if (NumOps.LessThan(NumOps.FromDouble(Random.NextDouble()), _mutationRate))
+            if (NumOps.LessThan(NumOps.FromDouble(_rng.NextDouble()), _mutationRate))
             {
                 var conn = connections[i];
-                conn.Weight = NumOps.Add(conn.Weight, RandomWeight());
+                // Faithful NEAT weight mutation (Stanley & Miikkulainen 2002 §3.1; the
+                // same scheme as NEAT-Python's weight_mutate_power / weight_replace_rate /
+                // weight_max_value): with the per-connection mutation probability, EITHER
+                // replace the weight with a fresh random value (small replace rate) OR
+                // nudge it by a SMALL perturbation, then CLAMP to a bounded range. The
+                // previous `weight += RandomWeight()` added a full uniform[-1,1] every
+                // time — an UNBOUNDED RANDOM WALK whose variance grows with the number of
+                // perturbations, so weight magnitudes drift without limit across
+                // generations. A small perturbation power plus a hard clamp keep the
+                // weights bounded, matching the paper's bounded-weight evolutionary search.
+                if (NumOps.LessThan(NumOps.FromDouble(_rng.NextDouble()), replaceRate))
+                {
+                    conn.Weight = RandomWeight();
+                }
+                else
+                {
+                    T perturbation = NumOps.Multiply(
+                        NumOps.FromDouble(_rng.NextDouble() * 2 - 1), perturbPower);
+                    conn.Weight = NumOps.Add(conn.Weight, perturbation);
+                }
+                if (NumOps.GreaterThan(conn.Weight, weightCap)) conn.Weight = weightCap;
+                else if (NumOps.LessThan(conn.Weight, negWeightCap)) conn.Weight = negWeightCap;
             }
         }
     }
@@ -719,7 +770,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// </remarks>
     private T RandomWeight()
     {
-        return NumOps.FromDouble(Random.NextDouble() * 2 - 1);
+        return NumOps.FromDouble(_rng.NextDouble() * 2 - 1);
     }
 
     /// <summary>

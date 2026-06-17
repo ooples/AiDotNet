@@ -68,8 +68,18 @@ internal sealed class JanusVQCodebook<T>
     /// <param name="embeddingDim">Per-code embedding dimensionality. Default 8 (Janus-Pro).</param>
     public JanusVQCodebook(int codebookSize = 16384, int embeddingDim = 8)
     {
-        if (codebookSize <= 0) throw new ArgumentOutOfRangeException(nameof(codebookSize), codebookSize, "codebookSize must be positive.");
-        if (embeddingDim <= 0) throw new ArgumentOutOfRangeException(nameof(embeddingDim), embeddingDim, "embeddingDim must be positive.");
+        if (codebookSize <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(codebookSize),
+                codebookSize,
+                "codebookSize must be positive."
+            );
+        if (embeddingDim <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(embeddingDim),
+                embeddingDim,
+                "embeddingDim must be positive."
+            );
 
         CodebookSize = codebookSize;
         EmbeddingDim = embeddingDim;
@@ -83,8 +93,8 @@ internal sealed class JanusVQCodebook<T>
         var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1234);
         double scale = 1.0 / Math.Sqrt(embeddingDim);
         for (int id = 0; id < codebookSize; id++)
-            for (int d = 0; d < embeddingDim; d++)
-                _codebook[id, d] = (rng.NextDouble() * 2.0 - 1.0) * scale;
+        for (int d = 0; d < embeddingDim; d++)
+            _codebook[id, d] = (rng.NextDouble() * 2.0 - 1.0) * scale;
 
         _isLoaded = false;
     }
@@ -93,7 +103,8 @@ internal sealed class JanusVQCodebook<T>
     /// Returns the codebook entry for a token ID as a tensor. Token IDs outside the codebook are clamped.
     /// </summary>
     public Tensor<T> Lookup(int tokenId)
-    {        int safeId = Math.Max(0, Math.Min(CodebookSize - 1, tokenId));
+    {
+        int safeId = Math.Max(0, Math.Min(CodebookSize - 1, tokenId));
         var embed = new Tensor<T>([EmbeddingDim]);
         for (int d = 0; d < EmbeddingDim; d++)
             embed[d] = _numOps.FromDouble(_codebook[safeId, d]);
@@ -105,9 +116,14 @@ internal sealed class JanusVQCodebook<T>
     /// Equivalent to the encoder-side VQ step in van den Oord et al. 2017.
     /// </summary>
     public int Quantize(Tensor<T> continuousEmbedding)
-    {        if (continuousEmbedding is null) throw new ArgumentNullException(nameof(continuousEmbedding));
+    {
+        if (continuousEmbedding is null)
+            throw new ArgumentNullException(nameof(continuousEmbedding));
         if (continuousEmbedding.Length != EmbeddingDim)
-            throw new ArgumentException($"continuousEmbedding has length {continuousEmbedding.Length} but codebook expects {EmbeddingDim}.", nameof(continuousEmbedding));
+            throw new ArgumentException(
+                $"continuousEmbedding has length {continuousEmbedding.Length} but codebook expects {EmbeddingDim}.",
+                nameof(continuousEmbedding)
+            );
 
         int bestId = 0;
         double bestDist = double.PositiveInfinity;
@@ -119,7 +135,11 @@ internal sealed class JanusVQCodebook<T>
                 double v = _numOps.ToDouble(continuousEmbedding[d]) - _codebook[id, d];
                 dist += v * v;
             }
-            if (dist < bestDist) { bestDist = dist; bestId = id; }
+            if (dist < bestDist)
+            {
+                bestDist = dist;
+                bestId = id;
+            }
         }
         return bestId;
     }
@@ -133,12 +153,19 @@ internal sealed class JanusVQCodebook<T>
     /// <param name="gridWidth">Number of columns in the token grid.</param>
     /// <returns>Tensor of shape <c>[gridHeight, gridWidth, EmbeddingDim]</c> flattened as <c>[gridHeight * gridWidth * EmbeddingDim]</c>.</returns>
     public Tensor<T> LookupGrid(int[] tokenIds, int gridHeight, int gridWidth)
-    {        if (tokenIds is null) throw new ArgumentNullException(nameof(tokenIds));
-        if (gridHeight <= 0) throw new ArgumentOutOfRangeException(nameof(gridHeight));
-        if (gridWidth <= 0) throw new ArgumentOutOfRangeException(nameof(gridWidth));
+    {
+        if (tokenIds is null)
+            throw new ArgumentNullException(nameof(tokenIds));
+        if (gridHeight <= 0)
+            throw new ArgumentOutOfRangeException(nameof(gridHeight));
+        if (gridWidth <= 0)
+            throw new ArgumentOutOfRangeException(nameof(gridWidth));
         int expected = gridHeight * gridWidth;
         if (tokenIds.Length != expected)
-            throw new ArgumentException($"tokenIds has length {tokenIds.Length} but grid expects {expected}.", nameof(tokenIds));
+            throw new ArgumentException(
+                $"tokenIds has length {tokenIds.Length} but grid expects {expected}.",
+                nameof(tokenIds)
+            );
 
         var grid = new Tensor<T>([gridHeight * gridWidth * EmbeddingDim]);
         for (int y = 0; y < gridHeight; y++)
@@ -148,7 +175,9 @@ internal sealed class JanusVQCodebook<T>
                 int idx = y * gridWidth + x;
                 int safeId = Math.Max(0, Math.Min(CodebookSize - 1, tokenIds[idx]));
                 for (int d = 0; d < EmbeddingDim; d++)
-                    grid[(y * gridWidth + x) * EmbeddingDim + d] = _numOps.FromDouble(_codebook[safeId, d]);
+                    grid[(y * gridWidth + x) * EmbeddingDim + d] = _numOps.FromDouble(
+                        _codebook[safeId, d]
+                    );
             }
         }
         return grid;
@@ -160,12 +189,16 @@ internal sealed class JanusVQCodebook<T>
     /// </summary>
     public void LoadCodebook(double[,] codebook)
     {
-        if (codebook is null) throw new ArgumentNullException(nameof(codebook));
+        if (codebook is null)
+            throw new ArgumentNullException(nameof(codebook));
         if (codebook.GetLength(0) != CodebookSize || codebook.GetLength(1) != EmbeddingDim)
-            throw new ArgumentException($"codebook shape ({codebook.GetLength(0)}×{codebook.GetLength(1)}) does not match expected ({CodebookSize}×{EmbeddingDim}).", nameof(codebook));
+            throw new ArgumentException(
+                $"codebook shape ({codebook.GetLength(0)}×{codebook.GetLength(1)}) does not match expected ({CodebookSize}×{EmbeddingDim}).",
+                nameof(codebook)
+            );
         for (int i = 0; i < CodebookSize; i++)
-            for (int d = 0; d < EmbeddingDim; d++)
-                _codebook[i, d] = codebook[i, d];
+        for (int d = 0; d < EmbeddingDim; d++)
+            _codebook[i, d] = codebook[i, d];
         _isLoaded = true;
     }
 }

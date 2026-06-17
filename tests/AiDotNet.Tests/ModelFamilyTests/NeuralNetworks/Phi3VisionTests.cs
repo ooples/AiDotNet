@@ -29,6 +29,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 // ~4.7 TFLOP; in double on CPU that exceeds the 120s test budget even though the
 // underlying layers already use optimal fused GEMM/SDPA kernels. The paper itself
 // runs in fp16/bf16, never double, so float is both faster and more paper-faithful.
+[Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4): serialized so its forward gets the whole machine
 public class Phi3VisionTests : VisionLanguageTestBase<float>
 {
     // Paper-faithful image size (336×336 RGB per Phi-3-Vision §3 and

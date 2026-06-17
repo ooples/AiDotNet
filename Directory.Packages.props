@@ -154,10 +154,15 @@
          gated on: Dense -> LayerNorm -> GELU -> Dense now routes its between-matmul ops through the
          FP16-native path instead of the eager FP32 fallback. 0.96.0 supersedes master's 0.95.2;
          Native packages coreleased in lockstep at 0.96.0. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.96.1" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.96.1" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.96.1" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.96.1" />
+    <!-- 0.96.3: carried the FP16 non-Adam fused-optimizer fix —
+         FusedOptimizerIntegrationTests.Fp16Activations_NonAdamFusedOptimizer_DescendsLoss
+         (FP16 RMSprop) was a training no-op (bit-identical first/last loss) on 0.96.1; fixed there. -->
+    <!-- 0.97.2: latest published (from master); supersedes 0.96.3.
+         Native packages coreleased in lockstep at 0.97.2. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.97.2" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.97.2" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.97.2" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.97.2" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.9" />

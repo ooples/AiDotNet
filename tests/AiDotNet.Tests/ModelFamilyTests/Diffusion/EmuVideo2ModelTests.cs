@@ -4,6 +4,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
+[Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4)
 public class EmuVideo2ModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 16, 32, 32];

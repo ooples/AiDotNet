@@ -239,13 +239,16 @@ public class SAINTNetwork<T> : NeuralNetworkBase<T>
             return gpuResult;
 
         // CPU path: forward pass through each layer sequentially
-        Tensor<T> currentOutput = input;
-        foreach (var layer in Layers)
+        return Accelerate(input, () =>
         {
-            currentOutput = layer.Forward(currentOutput);
-        }
+            Tensor<T> currentOutput = input;
+            foreach (var layer in Layers)
+            {
+                currentOutput = layer.Forward(currentOutput);
+            }
 
-        return currentOutput;
+            return currentOutput;
+        });
     }
 
     /// <summary>

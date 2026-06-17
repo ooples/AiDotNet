@@ -83,13 +83,20 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Sigmoid Loss for Language Image Pre-Training", "https://arxiv.org/abs/2303.15343", Year = 2023, Authors = "Zhai et al.")]
+[ResearchPaper(
+    "Sigmoid Loss for Language Image Pre-Training",
+    "https://arxiv.org/abs/2303.15343",
+    Year = 2023,
+    Authors = "Zhai et al."
+)]
 public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     #region Fields
 
     private readonly SigLIPOptions _options;
+
     public override ModelOptions GetOptions() => _options;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -102,7 +109,11 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
     /// <summary>
     /// Creates a SigLIP model in ONNX inference mode from a pre-trained model file.
     /// </summary>
-    public SigLIP(NeuralNetworkArchitecture<T> architecture, string imageEncoderModelPath, SigLIPOptions? options = null)
+    public SigLIP(
+        NeuralNetworkArchitecture<T> architecture,
+        string imageEncoderModelPath,
+        SigLIPOptions? options = null
+    )
         : base(architecture)
     {
         _options = options ?? new SigLIPOptions();
@@ -113,9 +124,15 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
         base.EmbeddingDim = _options.VisionEmbeddingDim;
 
         if (string.IsNullOrWhiteSpace(imageEncoderModelPath))
-            throw new ArgumentException("Image encoder model path cannot be null or empty.", nameof(imageEncoderModelPath));
+            throw new ArgumentException(
+                "Image encoder model path cannot be null or empty.",
+                nameof(imageEncoderModelPath)
+            );
         if (!File.Exists(imageEncoderModelPath))
-            throw new FileNotFoundException($"ONNX model not found: {imageEncoderModelPath}", imageEncoderModelPath);
+            throw new FileNotFoundException(
+                $"ONNX model not found: {imageEncoderModelPath}",
+                imageEncoderModelPath
+            );
 
         _options.ImageEncoderModelPath = imageEncoderModelPath;
         OnnxImageEncoder = new OnnxModel<T>(imageEncoderModelPath, _options.OnnxOptions);
@@ -134,8 +151,11 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
     /// <summary>
     /// Creates a SigLIP model in native training mode.
     /// </summary>
-    public SigLIP(NeuralNetworkArchitecture<T> architecture, SigLIPOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    public SigLIP(
+        NeuralNetworkArchitecture<T> architecture,
+        SigLIPOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
         : base(architecture)
     {
         _options = options ?? new SigLIPOptions();
@@ -257,7 +277,8 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
     /// <inheritdoc />
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
@@ -266,10 +287,13 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
 
         // ViT patch embedding + dual-stream split (vision in Layers, text in TextEncoderLayers).
         int patchSize = Math.Max(1, _options.ImageSize / 16);
-        Layers.Add(new PatchEmbeddingLayer<T>(
-            patchSize: patchSize,
-            embeddingDim: _options.VisionEmbeddingDim,
-            expectedInputChannels: 3));
+        Layers.Add(
+            new PatchEmbeddingLayer<T>(
+                patchSize: patchSize,
+                embeddingDim: _options.VisionEmbeddingDim,
+                expectedInputChannels: 3
+            )
+        );
 
         int blockSize = _options.DropoutRate > 0 ? 6 : 5;
         int visionLayerCount = 2 + _options.NumVisionLayers * blockSize;
@@ -282,8 +306,10 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
                 numTextLayers: _options.NumTextLayers,
                 numVisionHeads: _options.NumVisionHeads,
                 numTextHeads: _options.NumTextHeads,
-                dropoutRate: _options.DropoutRate),
-            visionLayerCount);
+                dropoutRate: _options.DropoutRate
+            ),
+            visionLayerCount
+        );
     }
 
     /// <inheritdoc />
@@ -303,7 +329,8 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
         try
         {
@@ -316,13 +343,14 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
     }
 
     /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-        => EnumerateTextEncoderTrainableLayers();
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
+        EnumerateTextEncoderTrainableLayers();
 
     /// <inheritdoc />
     public override void UpdateParameters(Vector<T> parameters)
     {
-        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
         int idx = 0;
         foreach (var layer in Layers)
         {
@@ -333,8 +361,8 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
     }
 
     /// <inheritdoc />
-    protected override Tensor<T> PreprocessImage(Tensor<T> image)
-        => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
     /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
@@ -350,7 +378,7 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
                 ? "SigLIP 2: Multilingual Vision-Language Encoders with Improved Semantic Understanding (2025)"
                 : "SigLIP: Sigmoid Loss for Language Image Pre-Training (Zhai et al., ICCV 2023)",
             FeatureCount = _options.ProjectionDim,
-            Complexity = _options.NumVisionLayers + _options.NumTextLayers
+            Complexity = _options.NumVisionLayers + _options.NumTextLayers,
         };
         meta.AdditionalInfo["Architecture"] = name;
         meta.AdditionalInfo["VisionEncoder"] = _options.VisionEncoderVariant.ToString();
@@ -387,9 +415,11 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
     {
         _useNativeMode = reader.ReadBoolean();
         string imgPath = reader.ReadString();
-        if (!string.IsNullOrEmpty(imgPath)) _options.ImageEncoderModelPath = imgPath;
+        if (!string.IsNullOrEmpty(imgPath))
+            _options.ImageEncoderModelPath = imgPath;
         string txtPath = reader.ReadString();
-        if (!string.IsNullOrEmpty(txtPath)) _options.TextEncoderModelPath = txtPath;
+        if (!string.IsNullOrEmpty(txtPath))
+            _options.TextEncoderModelPath = txtPath;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionEmbeddingDim = reader.ReadInt32();
         _options.TextEmbeddingDim = reader.ReadInt32();
@@ -413,7 +443,11 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
     /// <inheritdoc />
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        if (!_useNativeMode && _options.ImageEncoderModelPath is { } mp && !string.IsNullOrEmpty(mp))
+        if (
+            !_useNativeMode
+            && _options.ImageEncoderModelPath is { } mp
+            && !string.IsNullOrEmpty(mp)
+        )
             return new SigLIP<T>(Architecture, mp, _options);
         return new SigLIP<T>(Architecture, _options);
     }
@@ -443,7 +477,8 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
     {
         int h = Architecture.InputHeight;
         int w = Architecture.InputWidth;
-        if (h > 0 && w > 0 && h == w) _options.ImageSize = h;
+        if (h > 0 && w > 0 && h == w)
+            _options.ImageSize = h;
     }
 
     private Tensor<T> ForwardVisionEncoder(Tensor<T> input)
@@ -464,7 +499,8 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
 
     private void ThrowIfDisposed()
     {
-        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(SigLIP<T>));
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(SigLIP<T>));
     }
 
     #endregion
@@ -474,9 +510,14 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
-        if (disposing) { OnnxImageEncoder?.Dispose(); OnnxTextEncoder?.Dispose(); }
+        if (disposing)
+        {
+            OnnxImageEncoder?.Dispose();
+            OnnxTextEncoder?.Dispose();
+        }
         base.Dispose(disposing);
     }
 

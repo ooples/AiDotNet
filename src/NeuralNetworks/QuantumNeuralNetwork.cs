@@ -122,7 +122,12 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     public QuantumNeuralNetwork(NeuralNetworkArchitecture<T> architecture, int numQubits,
         PreprocessingPipeline<T, Tensor<T>, Tensor<T>>? preprocessingPipeline = null, ILossFunction<T>? lossFunction = null,
         QuantumNeuralNetworkOptions? options = null) :
-        base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
+        // The layer chain emits amplitudes and Predict reports the Born-rule
+        // measurement amplitude². Train on the measured (probability) objective via
+        // a loss that folds in the square, so the tape optimises exactly what
+        // inference reports (a plain MSE on amplitudes optimises the wrong thing —
+        // see BornRuleMseLoss and QuantumNeuralNetwork.Train).
+        base(architecture, lossFunction ?? new AiDotNet.LossFunctions.BornRuleMseLoss<T>())
     {
         _options = options ?? new QuantumNeuralNetworkOptions();
         Options = _options;
@@ -248,19 +253,22 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
             throw new ArgumentException($"Input has {inputElements} elements but expected {expectedElements} elements.");
         }
 
-        // Simulate quantum state preparation
-        var quantumState = PrepareQuantumState(workingInput);
-
-        // Apply quantum layers
-        foreach (var layer in Layers)
+        return Accelerate(input, () =>
         {
-            var realInput = ExtractRealPart(quantumState);
-            var realOutput = layer.Forward(realInput);
-            quantumState = ConvertToComplexTensor(realOutput);
-        }
+            // Simulate quantum state preparation
+            var quantumState = PrepareQuantumState(workingInput);
 
-        // Measure the quantum state to get classical output
-        return MeasureQuantumState(quantumState);
+            // Apply quantum layers
+            foreach (var layer in Layers)
+            {
+                var realInput = ExtractRealPart(quantumState);
+                var realOutput = layer.Forward(realInput);
+                quantumState = ConvertToComplexTensor(realOutput);
+            }
+
+            // Measure the quantum state to get classical output
+            return MeasureQuantumState(quantumState);
+        });
     }
 
     /// <summary>
@@ -287,9 +295,6 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
 
         try
         {
-            var beforeParameters = GetParameters();
-            double beforeLoss = ComputeMeasuredLoss(input, expectedOutput);
-
             // Use the tape-based training path like other networks. The previous
             // imperative implementation ran Predict() and then called the
             // optimizer's UpdateParameters(Layers), which dispatched to each
@@ -299,118 +304,26 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
             // with "Backward pass must be called before updating parameters."
             _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
-            // Predict() exposes measured probabilities via Born's rule
-            // (probability = amplitude^2). The layer-chain tape trains raw
-            // real amplitudes, so map probability-space targets back to
-            // amplitudes before the supervised step.
-            var amplitudeTarget = ConvertMeasurementTargetToAmplitudeTarget(expectedOutput);
-            TrainWithTape(input, amplitudeTarget, _trainOptimizer);
-
-            AcceptMeasuredLossStepOrBacktrack(input, expectedOutput, beforeParameters, beforeLoss);
+            // Train on the measured (probability) objective directly. The model's
+            // loss (BornRuleMseLoss) folds in the Born-rule square, so the tape
+            // optimises ‖layers(√input)² − target‖² — exactly the quantity Predict
+            // reports — rather than a √target amplitude surrogate. Two prior bugs are
+            // fixed by this:
+            //   1. Input-domain mismatch: Predict feeds the layers the real part of
+            //      the prepared state (PrepareQuantumState applies √ to the input),
+            //      so training must too — hence preparedInput, not the raw input.
+            //   2. Surrogate/measured misalignment: minimising amplitude MSE to
+            //      √target does NOT monotonically reduce the measured probability
+            //      MSE (the square is non-linear), so the old amplitude surrogate +
+            //      a per-step measured-loss backtracking line search reverted nearly
+            //      every step and pinned the loss flat. Optimising the measured
+            //      objective directly removes both the surrogate and the backtracking.
+            var preparedInput = ExtractRealPart(PrepareQuantumState(input));
+            TrainWithTape(preparedInput, expectedOutput, _trainOptimizer);
         }
         finally
         {
             SetTrainingMode(false);
-        }
-    }
-
-    private Tensor<T> ConvertMeasurementTargetToAmplitudeTarget(Tensor<T> target)
-    {
-        var transformed = new Tensor<T>(target._shape);
-
-        for (int i = 0; i < target.Length; i++)
-        {
-            var value = target[i];
-            if (NumOps.LessThan(value, NumOps.Zero))
-            {
-                value = NumOps.Zero;
-            }
-
-            transformed[i] = NumOps.Sqrt(value);
-        }
-
-        return transformed;
-    }
-
-    private void AcceptMeasuredLossStepOrBacktrack(
-        Tensor<T> input,
-        Tensor<T> expectedOutput,
-        Vector<T> beforeParameters,
-        double beforeLoss)
-    {
-        const double acceptanceTolerance = 1e-8;
-
-        double proposedLoss = ComputeMeasuredLoss(input, expectedOutput);
-        if (!double.IsNaN(proposedLoss) && proposedLoss <= beforeLoss + acceptanceTolerance)
-        {
-            return;
-        }
-
-        var proposedParameters = GetParameters();
-
-        // Backtracking line search over the proposed surrogate-gradient update.
-        // Quantum measurement is nonlinear in the underlying amplitudes, so an
-        // otherwise valid surrogate step can overshoot the measured objective.
-        for (double stepScale = 0.5; stepScale >= 1.0 / 1_048_576.0; stepScale *= 0.5)
-        {
-            SetParameters(InterpolateParameters(beforeParameters, proposedParameters, stepScale));
-            double candidateLoss = ComputeMeasuredLoss(input, expectedOutput);
-            if (!double.IsNaN(candidateLoss) && candidateLoss <= beforeLoss + acceptanceTolerance)
-            {
-                return;
-            }
-        }
-
-        SetParameters(beforeParameters);
-    }
-
-    private Vector<T> InterpolateParameters(Vector<T> start, Vector<T> end, double stepScale)
-    {
-        var result = new Vector<T>(start.Length);
-        var scale = NumOps.FromDouble(stepScale);
-
-        for (int i = 0; i < start.Length; i++)
-        {
-            result[i] = NumOps.Add(
-                start[i],
-                NumOps.Multiply(NumOps.Subtract(end[i], start[i]), scale));
-        }
-
-        return result;
-    }
-
-    private double ComputeMeasuredLoss(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        bool wasTraining = IsTrainingMode;
-        if (wasTraining)
-        {
-            SetTrainingMode(false);
-        }
-
-        try
-        {
-            var prediction = Predict(input);
-            int length = Math.Min(prediction.Length, expectedOutput.Length);
-            if (length == 0)
-            {
-                return double.NaN;
-            }
-
-            double sum = 0.0;
-            for (int i = 0; i < length; i++)
-            {
-                double diff = NumOps.ToDouble(prediction[i]) - NumOps.ToDouble(expectedOutput[i]);
-                sum += diff * diff;
-            }
-
-            return sum / length;
-        }
-        finally
-        {
-            if (wasTraining)
-            {
-                SetTrainingMode(true);
-            }
         }
     }
 

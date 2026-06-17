@@ -265,7 +265,13 @@ public class PhotoMakerModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-                        return new PhotoMakerModel<T>(unet: (UNetNoisePredictor<T>)_unet.Clone(), vae: (StandardVAE<T>)_vae.Clone(), conditioner: _conditioner);
+        return new PhotoMakerModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            unet: (UNetNoisePredictor<T>)_unet.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner);
     }
 
     #endregion

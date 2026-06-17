@@ -431,15 +431,17 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
+        using var streaming = BeginWeightStreamingForward();
         var timeEmbed = GetTimestepEmbedding(timestep);
         timeEmbed = ProjectTimeEmbedding(timeEmbed);
-        return Forward(noisySample, timeEmbed, conditioning);
+        return streaming.Complete(Forward(noisySample, timeEmbed, conditioning));
     }
 
     /// <inheritdoc />
     public override Tensor<T> PredictNoiseWithEmbedding(Tensor<T> noisySample, Tensor<T> timeEmbedding, Tensor<T>? conditioning = null)
     {
-        return Forward(noisySample, timeEmbedding, conditioning);
+        using var streaming = BeginWeightStreamingForward();
+        return streaming.Complete(Forward(noisySample, timeEmbedding, conditioning));
     }
 
     private Tensor<T> ProjectTimeEmbedding(Tensor<T> timeEmbed)

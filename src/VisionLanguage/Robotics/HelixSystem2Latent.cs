@@ -40,8 +40,14 @@ public sealed class HelixSystem2Latent<T>
 
     public HelixSystem2Latent(Tensor<T> latent, int producedAtTick, int validForTicks)
     {
-        if (latent is null) throw new ArgumentNullException(nameof(latent));
-        if (validForTicks <= 0) throw new ArgumentOutOfRangeException(nameof(validForTicks), validForTicks, "validForTicks must be positive.");
+        if (latent is null)
+            throw new ArgumentNullException(nameof(latent));
+        if (validForTicks <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(validForTicks),
+                validForTicks,
+                "validForTicks must be positive."
+            );
 
         Latent = latent;
         ProducedAtTick = producedAtTick;

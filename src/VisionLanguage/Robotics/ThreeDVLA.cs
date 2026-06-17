@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -8,7 +9,6 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
-using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.Robotics;
 
@@ -54,19 +54,83 @@ namespace AiDotNet.VisionLanguage.Robotics;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("3D-VLA: A 3D Vision-Language-Action Generative World Model", "https://arxiv.org/abs/2403.09631", Year = 2024, Authors = "Zhen et al.")]
+[ResearchPaper(
+    "3D-VLA: A 3D Vision-Language-Action Generative World Model",
+    "https://arxiv.org/abs/2403.09631",
+    Year = 2024,
+    Authors = "Zhen et al."
+)]
 public class ThreeDVLA<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
-    private readonly ThreeDVLAOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly ThreeDVLAOptions _options;
+
+    public override ModelOptions GetOptions() => _options;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer; private bool _useNativeMode; private bool _disposed;
+    private readonly ITokenizer? _tokenizer;
+    private bool _useNativeMode;
+    private bool _disposed;
     private int _encoderLayerEnd;
 
-    public ThreeDVLA(NeuralNetworkArchitecture<T> architecture, string modelPath, ThreeDVLAOptions? options = null) : base(architecture) { _options = options ?? new ThreeDVLAOptions(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
-    public ThreeDVLA(NeuralNetworkArchitecture<T> architecture, ThreeDVLAOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new ThreeDVLAOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
+    public ThreeDVLA(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        ThreeDVLAOptions? options = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new ThreeDVLAOptions();
+        _useNativeMode = false;
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
 
-    public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim; public string LanguageModelName => _options.LanguageModelName; public int ActionDimension => _options.ActionDimension;
-    public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
+    public ThreeDVLA(
+        NeuralNetworkArchitecture<T> architecture,
+        ThreeDVLAOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new ThreeDVLAOptions();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    public int EmbeddingDimension => _options.DecoderDim;
+    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageChannels => 3;
+    public int MaxGenerationLength => _options.MaxGenerationLength;
+    public int DecoderEmbeddingDim => _options.DecoderDim;
+    public string LanguageModelName => _options.LanguageModelName;
+    public int ActionDimension => _options.ActionDimension;
+
+    public Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(p));
+        var c = p;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            c = Layers[i].Forward(c);
+        return L2Normalize(c);
+    }
+
     /// <summary>
     /// Generates from image using 3D-VLA's generative world model approach.
     /// The VLA processes visual observation and language instruction, projecting into a 3D-aware
@@ -77,42 +141,35 @@ public class ThreeDVLA<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(p);
 
         int dim = _options.DecoderDim;
         var encoderOut = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             encoderOut = Layers[i].Forward(encoderOut);
 
-
         // Fuse visual features with prompt tokens via ConcatenateTensors
 
         Tensor<T> fusedInput;
 
         if (prompt is not null)
-
         {
-
             var promptTokens = TokenizeText(prompt);
 
             fusedInput = encoderOut.ConcatenateTensors(promptTokens);
-
         }
-
         else
-
         {
-
             fusedInput = encoderOut;
-
         }
-
 
         var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
         return output;
     }
+
     /// <summary>
     /// Predicts action using 3D-VLA's generative world model approach. Per the
     /// paper (UMass 2024), 3D-VLA connects a VLA model to a 3D generative world
@@ -246,21 +303,107 @@ public class ThreeDVLA<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 
         return result;
     }
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; } else { Layers.AddRange(LayerHelper<T>.CreateDefaultRoboticsActionLayers(_options.VisionDim, _options.DecoderDim, 256, _options.NumVisionLayers, _options.NumDecoderLayers, 2, _options.NumHeads, _options.DropoutRate)); ComputeEncoderDecoderBoundary(); } }
-    private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 2; }
-    private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode)
+            return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            _encoderLayerEnd = Layers.Count / 2;
+        }
+        else
+        {
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultRoboticsActionLayers(
+                    _options.VisionDim,
+                    _options.DecoderDim,
+                    256,
+                    _options.NumVisionLayers,
+                    _options.NumDecoderLayers,
+                    2,
+                    _options.NumHeads,
+                    _options.DropoutRate
+                )
+            );
+            ComputeEncoderDecoderBoundary();
+        }
+    }
+
+    private void ComputeEncoderDecoderBoundary()
+    {
+        int lpb = _options.DropoutRate > 0 ? 6 : 5;
+        _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 2;
+    }
+
+    private Tensor<T> TokenizeText(string text)
+    {
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
+        var encoding = _tokenizer.Encode(text);
+        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
+        var tokens = new Tensor<T>([seqLen]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        return tokens;
+    }
+
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
+        var c = input;
+        foreach (var l in Layers)
+            c = l.Forward(c);
+        return c;
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        TrainWithTape(input, expected);
+        SetTrainingMode(false);
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "3D-VLA-Native" : "3D-VLA-ONNX", Description = "3D-VLA: connects vision-language-action to 3D world via generative world model.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "3D-VLA-Native" : "3D-VLA-ONNX",
+            Description =
+                "3D-VLA: connects vision-language-action to 3D world via generative world model.",
+            FeatureCount = _options.DecoderDim,
+            Complexity = _options.NumVisionLayers + _options.NumDecoderLayers,
+        };
         m.AdditionalInfo["Architecture"] = "3D-VLA";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;
     }
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) {
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
         writer.Write(_useNativeMode);
         writer.Write(_options.ModelPath ?? string.Empty);
         writer.Write(_options.ImageSize);
@@ -271,10 +414,13 @@ public class ThreeDVLA<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         writer.Write(_options.NumHeads);
         writer.Write(_options.ActionDimension);
     }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) {
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
         _useNativeMode = reader.ReadBoolean();
         string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionDim = reader.ReadInt32();
         _options.DecoderDim = reader.ReadInt32();
@@ -282,9 +428,28 @@ public class ThreeDVLA<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         _options.NumDecoderLayers = reader.ReadInt32();
         _options.NumHeads = reader.ReadInt32();
         _options.ActionDimension = reader.ReadInt32();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new ThreeDVLA<T>(Architecture, mp, _options); return new ThreeDVLA<T>(Architecture, _options); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(ThreeDVLA<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new ThreeDVLA<T>(Architecture, mp, _options);
+        return new ThreeDVLA<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(ThreeDVLA<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
 }
