@@ -393,7 +393,9 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAwareInf
                         output[0, t, d] = activation.Activate(value);
                     }
 
-                    _currentPosition++;
+                    // Advance the LOCAL position (the per-call context owns position now). The legacy
+                    // Forward path advances the instance _currentPosition itself after this returns.
+                    position++;
                 }
             }
             finally
