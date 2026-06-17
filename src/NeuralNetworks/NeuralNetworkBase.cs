@@ -7632,7 +7632,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// is a no-op on the CPU engine (GpuEngine is null); the CPU flush below is
     /// always live. Mirrors the OnParametersUpdated contract.
     /// </remarks>
-    private void InvalidateWeightCachesAfterSuccessfulWeightUpdate()
+    protected void InvalidateWeightCachesAfterSuccessfulWeightUpdate()
     {
         GpuEngine?.InvalidateAllWeightCaches();
         // CPU-side mirror of the same contract: the CPU engine's inference
