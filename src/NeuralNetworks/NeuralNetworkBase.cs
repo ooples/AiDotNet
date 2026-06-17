@@ -3093,15 +3093,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // first PredictEager call. Idempotent once finalized.
         TryAutoEnableWeightStreaming();
 
-        // L3b (#1622): latch the auto compiled-inference path for foundation-scale
-        // models. We are guaranteed to be in inference mode here (the flip above ran),
-        // so keying on _streamingEngagedByAutoDetect (set iff the model is over the
-        // foundation-scale threshold and the user didn't opt out of auto-streaming) is
-        // correct regardless of whether the streaming auto-detect first finalized from a
-        // training- or inference-mode call. Idempotent. Cleared again on SetTrainingMode(true).
-        if (_streamingEngagedByAutoDetect && !s_autoCompileDisabled)
-            _autoCompiledInferenceEnabled = true;
-
         try
         {
             // Universal batch-dim auto-promotion (mirrors the Train path).
@@ -3151,9 +3142,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // value-hash memo. Output is numerically identical to PredictEager for
             // every input, so it is safe as the base-Predict default for the models
             // that route here; small models / training stay eager.
-            var output = _autoCompiledInferenceEnabled
-                ? PredictAccelerated(promoted)
-                : PredictEager(promoted);
+            // PredictAccelerated is itself gated (it falls straight through to PredictEager unless the
+            // acceleration is engaged), so calling it unconditionally here costs nothing when off.
+            var output = PredictAccelerated(promoted);
 
             // If we promoted the input by prepending a unit batch dim,
             // squeeze the same dim back off the output so callers
@@ -3986,7 +3977,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <see cref="SetTrainingMode"/> off <see cref="WeightStreamingAutoDetected"/>;
     /// cleared when training is (re)enabled. Small models and training stay eager.
     /// </summary>
-    private volatile bool _autoCompiledInferenceEnabled;
+    private volatile bool _inferenceAccelerationOptIn;
 
     /// <summary>
     /// Process-wide opt-out for the auto compiled-inference path. Set
@@ -3997,8 +3988,32 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     private static readonly bool s_autoCompileDisabled =
         string.Equals(Environment.GetEnvironmentVariable("AIDOTNET_DISABLE_AUTO_COMPILE"), "1", StringComparison.Ordinal);
 
-    /// <summary>Whether the auto compiled-inference path is currently engaged for this model. Diagnostic/test hook.</summary>
-    internal bool AutoCompiledInferenceEngaged => _autoCompiledInferenceEnabled;
+    /// <summary>
+    /// Whether the verify-then-trust compiled-inference path is currently engaged for this model:
+    /// either the caller explicitly opted in (<see cref="EnableInferenceAcceleration"/>) — which works
+    /// for a model of ANY size — or the model is foundation-scale (over the weight-streaming threshold)
+    /// in inference mode, where it auto-engages with zero config. Never during the global opt-out.
+    /// </summary>
+    private bool InferenceAccelerationEngaged =>
+        !s_autoCompileDisabled
+        && (_inferenceAccelerationOptIn || (_streamingEngagedByAutoDetect && !IsTrainingMode));
+
+    /// <summary>Whether the compiled-inference path is currently engaged for this model. Diagnostic/test hook.</summary>
+    internal bool AutoCompiledInferenceEngaged => InferenceAccelerationEngaged;
+
+    /// <summary>
+    /// Opts this model into the #1622 verify-then-trust compiled-inference path regardless of size, the
+    /// industry-standard explicit "compile this model" gesture (cf. <c>torch.compile</c>). Foundation-
+    /// scale models auto-engage without this; small/medium models that are served repeatedly (the case
+    /// where the one-time per-shape verification amortizes) call this once to opt in. Output stays
+    /// numerically identical to eager. No effect under the <c>AIDOTNET_DISABLE_AUTO_COMPILE</c> opt-out.
+    /// </summary>
+    /// <param name="enabled">True to enable (default); false to opt back out.</param>
+    public void EnableInferenceAcceleration(bool enabled = true)
+    {
+        _inferenceAccelerationOptIn = enabled;
+        if (!enabled) _inferenceGate.Clear();
+    }
 
     /// <summary>Count of value-memo hits (identical-input short-circuits) on the accelerated path. Diagnostic/test hook.</summary>
     internal long AcceleratedMemoHits => _inferenceGate.MemoHits;
@@ -4007,11 +4022,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     internal long AcceleratedVerifyCount => _inferenceGate.VerifyCount;
 
     /// <summary>
-    /// Forces the verify-then-trust compiled inference path on/off for this model, bypassing the
-    /// foundation-scale auto-detect gate. Test hook only — production enablement flows through
-    /// <see cref="TryAutoEnableWeightStreaming"/> + <see cref="Predict"/>.
+    /// Forces the verify-then-trust compiled inference path on/off for this model. Test hook —
+    /// equivalent to <see cref="EnableInferenceAcceleration"/>.
     /// </summary>
-    internal void ForceAutoCompiledInferenceForTesting(bool enabled) => _autoCompiledInferenceEnabled = enabled;
+    internal void ForceAutoCompiledInferenceForTesting(bool enabled) => _inferenceAccelerationOptIn = enabled;
 
     /// <summary>
     /// Returns the current verify-then-trust verdict for an input shape at the live structure
@@ -4068,18 +4082,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (input is null) throw new ArgumentNullException(nameof(input));
         if (eagerForward is null) throw new ArgumentNullException(nameof(eagerForward));
 
-        // Self-latch for foundation-scale eval so a wrapped model engages without depending on the
-        // base Predict / SetTrainingMode latch (overriding models may manage mode themselves). Only in
-        // inference mode (training mutates weights → plans/memo would be stale) and only when weight-
-        // streaming auto-detect already flagged this model as foundation-scale.
-        if (!_autoCompiledInferenceEnabled
-            && _streamingEngagedByAutoDetect && !s_autoCompileDisabled && !IsTrainingMode)
-            _autoCompiledInferenceEnabled = true;
-
-        // Not engaged → behave exactly like the plain eager forward (no gate, no trace, no overhead).
-        // (Training safety is already enforced upstream: the self-latch above only engages in eval, and
-        // SetTrainingMode(true) clears the flag + the gate — so the flag is never set during training.)
-        if (!_autoCompiledInferenceEnabled)
+        // Not engaged (small model with no opt-in, or training) → behave exactly like the plain eager
+        // forward: no gate, no trace, no overhead, so wrapping any model is always safe. Engagement is
+        // computed each call (explicit opt-in for any size, or foundation-scale auto in eval).
+        if (!InferenceAccelerationEngaged)
             return eagerForward();
 
         return _inferenceGate.Run(
@@ -4641,21 +4647,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         if (isTraining)
         {
-            // Entering training invalidates the inference acceleration state: weights
-            // will change, so the verify-then-trust verdicts and the value memo (keyed
-            // to the current weights) are stale. Turn the auto-compiled path off and
-            // clear the gate; a later return to inference re-verifies from scratch.
-            _autoCompiledInferenceEnabled = false;
+            // Entering training invalidates the inference-acceleration state: weights will change, so
+            // the verify-then-trust verdicts and the value memo (keyed to the current weights) are
+            // stale. Clear the gate; a later inference forward re-verifies from scratch. Engagement
+            // itself is computed (InferenceAccelerationEngaged excludes training), so nothing to unset.
             _inferenceGate.Clear();
-        }
-        else if (_streamingEngagedByAutoDetect && !s_autoCompileDisabled)
-        {
-            // L3b (#1622): switching a foundation-scale model into inference latches the
-            // auto-compiled eligibility. SetTrainingMode is the universal funnel every
-            // Predict override calls, so this marks eligibility even for models that
-            // override Predict (the base-Predict routing only reaches non-overriding
-            // models; overriding families opt their forward into PredictAccelerated).
-            _autoCompiledInferenceEnabled = true;
         }
 
         if (SupportsTraining)
