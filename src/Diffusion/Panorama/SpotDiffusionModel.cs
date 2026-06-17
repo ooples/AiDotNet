@@ -62,7 +62,14 @@ public class SpotDiffusionModel<T> : LatentDiffusionModelBase<T>
         NeuralNetworkArchitecture<T>? architecture = null, DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null, UNetNoisePredictor<T>? predictor = null,
         StandardVAE<T>? vae = null, IConditioningModule<T>? conditioner = null, int? seed = null)
-        : base(options ?? new DiffusionModelOptions<T> { TrainTimesteps = 1000, BetaStart = 0.00085, BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear },
+        // Propagate `seed` into the options so the base model's RandomGenerator is
+        // deterministic. Without Seed set, the base falls back to a non-deterministic
+        // secure RNG, and the training-timestep sampling (DiffusionModelBase.Train →
+        // RandomGenerator.Next(TrainTimesteps)) varies every run — making
+        // Training_ShouldReducePredictionError flaky (the 5-step probe passed or
+        // failed by luck of the draw, depending on which timesteps were trained).
+        // `seed` previously only seeded layer-weight init, not the training RNG.
+        : base(options ?? new DiffusionModelOptions<T> { TrainTimesteps = 1000, BetaStart = 0.00085, BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear, Seed = seed },
             scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()), architecture)
     {
         _conditioner = conditioner;

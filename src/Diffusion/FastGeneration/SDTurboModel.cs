@@ -187,7 +187,11 @@ public class SDTurboModel<T> : LatentDiffusionModelBase<T>
                 BetaSchedule = BetaSchedule.ScaledLinear,
                 // SDTurbo paper (Sauer et al. 2023, "Adversarial Diffusion Distillation"):
                 // single-step generation by design.
-                DefaultInferenceSteps = 1
+                DefaultInferenceSteps = 1,
+                // Propagate `seed` so the base RandomGenerator (training-timestep
+                // sampling) is deterministic instead of a non-deterministic secure RNG
+                // (see SpotDiffusionModel for the detailed rationale).
+                Seed = seed
             },
             scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
             architecture)
