@@ -375,15 +375,6 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// Indicates whether the network is being trained.
     /// </summary>
     private bool _isTraining = false;
-    /// <summary>
-    /// Number of Train() calls since training began. Compared against
-    /// <see cref="_warmupPeriod"/> to decide whether the current reservoir
-    /// state should join the ridge-regression sample set or be discarded as
-    /// washout (Jaeger 2001 §3.4 / Lukoševičius 2012 §6.4: drop the initial
-    /// transient so the readout fits the reservoir's asymptotic regime).
-    /// Reset alongside the collected-states lists at the start of training.
-    /// </summary>
-    private int _warmupStepsConsumed;
 
     /// <summary>
     /// Leaking rate for controlling the update speed of reservoir neurons.
@@ -796,6 +787,51 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Resets the reservoir and drives the (static) input until the reservoir settles onto its
+    /// input-driven fixed point, leaving the result in <see cref="_currentState"/>.
+    /// </summary>
+    /// <remarks>
+    /// This is the SINGLE canonical state-derivation procedure shared by both <see cref="Train"/>
+    /// and <see cref="Predict"/>. ESN ridge-regression (Jaeger 2001 §3.4) is only correct when the
+    /// state the readout is fitted on is the same state inference reproduces for that input. The
+    /// previous implementation broke this: <see cref="Train"/> drove the reservoir CONTINUOUSLY
+    /// across calls (collecting the full transient trajectory x₁…x_N) while <see cref="Predict"/>
+    /// reset and took a single step (x₁). Because x₁ is only one of N collected constraints, more
+    /// training diluted its weight in the fitted readout, so the readout fit x₁ ever more loosely
+    /// and Predict's loss ROSE with more iterations — the MoreData_ShouldNotDegrade failure.
+    /// Deriving the state by reset + settle-to-fixed-point in BOTH paths makes the collected state a
+    /// deterministic function of the input alone (x*), so the readout is fitted on and evaluated at
+    /// exactly the same state and repeated training monotonically refines the same fit. The echo
+    /// state property (spectral radius &lt; 1) guarantees convergence; <c>_warmupPeriod</c> (when
+    /// set) forces a minimum settle so the recurrent reservoir contributes, and the cap bounds cost.
+    /// </remarks>
+    private void SettleReservoirState(Vector<T> input)
+    {
+        for (int i = 0; i < _reservoirSize; i++)
+            _currentState[i] = NumOps.Zero;
+
+        const int maxSettleSteps = 200;
+        int minSteps = Math.Max(1, _warmupPeriod);
+        T convergenceTol = NumOps.FromDouble(1e-6);
+
+        for (int step = 0; step < maxSettleSteps; step++)
+        {
+            Vector<T> previousState = _currentState.Clone();
+            UpdateReservoirState(input);
+
+            if (step + 1 < minSteps) continue;
+
+            T maxDelta = NumOps.Zero;
+            for (int i = 0; i < _reservoirSize; i++)
+            {
+                T delta = NumOps.Abs(NumOps.Subtract(_currentState[i], previousState[i]));
+                if (NumOps.GreaterThan(delta, maxDelta)) maxDelta = delta;
+            }
+            if (NumOps.LessThan(maxDelta, convergenceTol)) break;
+        }
+    }
+
+    /// <summary>
     /// Computes the output based on the current reservoir state.
     /// </summary>
     /// <returns>The output vector.</returns>
@@ -1163,10 +1199,6 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        // Reset reservoir state for deterministic inference
-        for (int i = 0; i < _reservoirSize; i++)
-            _currentState[i] = NumOps.Zero;
-
         // Extract input as vector
         Vector<T> inputVector = input.ToVector();
 
@@ -1176,8 +1208,9 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
             throw new ArgumentException($"Input vector length ({inputVector.Length}) does not match expected input size ({_inputSize}).");
         }
 
-        // Update reservoir state
-        UpdateReservoirState(inputVector);
+        // Derive the reservoir state via the SAME reset+settle procedure Train collects on, so the
+        // readout is evaluated on exactly the state it was fitted on (see SettleReservoirState).
+        SettleReservoirState(inputVector);
 
         // Compute output
         Vector<T> outputVector = ComputeOutput();
@@ -1273,7 +1306,6 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
             _isTraining = true;
             _collectedStates.Clear();
             _collectedTargets.Clear();
-            _warmupStepsConsumed = 0;
         }
 
         Vector<T> inputVector = input.ToVector();
@@ -1288,28 +1320,13 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
             throw new ArgumentException($"Target vector length ({targetVector.Length}) does not match expected output size ({_outputSize}).");
         }
 
-        // Drive the reservoir on EVERY call so the recurrent state evolves —
-        // the reservoir's "memory" of past inputs is the whole point of an
-        // ESN (Jaeger 2001 §3.4). But only ADD this state to the regression
-        // sample set after the warmup period has elapsed: per Lukoševičius
-        // 2012 §6.4 the initial transient (washout) reflects the random
-        // initial state, not the input-driven attractor, so including it
-        // biases the readout. SetWarmupPeriod was a dead knob before this
-        // gate — the previous implementation accumulated every step,
-        // washout included.
-        UpdateReservoirState(inputVector);
-        if (_warmupStepsConsumed < _warmupPeriod)
-        {
-            _warmupStepsConsumed++;
-            // Update LastLoss against the current (unchanged) readout so
-            // callers polling it during warmup get a sensible value rather
-            // than stale-from-previous-training noise.
-            Vector<T> warmupPrediction = ComputeOutput();
-            LastLoss = _lossFunction.CalculateLoss(warmupPrediction, targetVector);
-            return;
-        }
-        // Clone so subsequent UpdateReservoirState calls (next Train iteration)
-        // don't mutate samples we've already collected.
+        // Derive this sample's reservoir state with the SAME reset+settle procedure Predict uses
+        // (see SettleReservoirState). Resetting per sample makes the collected state a deterministic
+        // function of the input — the exact state inference reproduces — instead of the continuous,
+        // accumulation-order-dependent trajectory the previous implementation collected (which
+        // Predict never reproduced, so loss grew with more training). The settle discards the
+        // initial transient per Lukoševičius 2012 §6.4.
+        SettleReservoirState(inputVector);
         _collectedStates.Add(_currentState.Clone());
         _collectedTargets.Add(targetVector.Clone());
 
@@ -1341,74 +1358,122 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         if (numSamples == 0) return;
 
         int readoutFeatureCount = _reservoirSize + 1; // reservoir state plus bias feature
-        Matrix<T> X = new Matrix<T>(numSamples, readoutFeatureCount);
-        Matrix<T> Y = new Matrix<T>(numSamples, _outputSize);
-        for (int i = 0; i < numSamples; i++)
-        {
-            for (int j = 0; j < _reservoirSize; j++)
-            {
-                X[i, j] = _collectedStates[i][j];
-            }
-            X[i, _reservoirSize] = NumOps.One;
-            for (int j = 0; j < _outputSize; j++)
-            {
-                Y[i, j] = _collectedTargets[i][j];
-            }
-        }
 
-        // Ridge regression per Jaeger 2001 §3.4 / Lukoševičius 2012 §6.2,
-        // dual form:
-        //   W = X^T · (X X^T + λI)^{-1} · Y
-        // Mathematically identical to the primal form
-        //   W = (X^T X + λI)^{-1} · X^T · Y
-        // but the dual inverts the (numSamples × numSamples) Gram matrix
-        // X X^T + λI instead of the (reservoirSize × reservoirSize)
-        // matrix X^T X + λI. For ESN training the Gram matrix is
-        // positive definite as long as λ > 0 — even when the reservoir
-        // X includes the constant bias feature, which is the standard ESN
-        // readout design-matrix form: the bias is trained by the same ridge
-        // solve as the reservoir-to-output weights instead of being patched
-        // on afterward by a different objective. The dual form's
-        // conditioning depends on sample count, not reservoir dimensionality,
-        // so it stays well-conditioned for iterative sequence training.
-        Matrix<T> XXt = X.Multiply(X.Transpose());
-        Matrix<T> regularized = XXt.Clone();
-        for (int i = 0; i < numSamples; i++)
-        {
-            regularized[i, i] = NumOps.Add(regularized[i, i], _regularization);
-        }
-        Matrix<T> inverse = ComputeInverse(regularized);
-        Matrix<T> innerY = inverse.Multiply(Y);  // (numSamples × outputSize)
-        Matrix<T> weights = X.Transpose().Multiply(innerY);  // ((reservoirSize + bias) × outputSize)
+        // Ridge regression per Jaeger 2001 §3.4 / Lukoševičius 2012 §6.2, PRIMAL normal-equation
+        // form  W = (XᵀX + λI)⁻¹ XᵀY, accumulated and solved in DOUBLE precision regardless of T.
+        //
+        // Two reasons for the primal form + double solve:
+        //  • Primal inverts the (readoutFeatureCount × readoutFeatureCount) normal matrix XᵀX + λI
+        //    (size fixed by the reservoir, NOT the sample count). With state derived by reset+settle
+        //    (SettleReservoirState), repeated identical inputs add IDENTICAL rows; the dual Gram
+        //    X Xᵀ + λI (numSamples²) then becomes rank-deficient and grows with every Train call,
+        //    producing garbage readouts. XᵀX + λI is positive definite for any λ > 0 regardless of
+        //    duplicate rows (λI lifts the null space).
+        //  • Forming the normal matrix squares the condition number, and with many duplicate
+        //    fixed-point rows the conditioning reaches ~‖x*‖²·N/λ ≈ 1e8 — beyond float's ~7 digits,
+        //    which made the readout explode (memorization loss 1e-5 → 2.4). Accumulating and solving
+        //    in double gives ~15 digits, comfortably covering that range; the result is cast back
+        //    to T. The constant bias feature is solved jointly (standard ESN readout design matrix).
+        int n = readoutFeatureCount;
+        double lambda = Convert.ToDouble(_regularization);
+        double[,] a = new double[n, n];        // XᵀX + λI
+        double[,] b = new double[n, _outputSize]; // XᵀY
 
-        // Safety net — even SVD can produce NaN/Inf on completely
-        // degenerate inputs (all-zero reservoir, etc.). Keep the
-        // previous readout in that case rather than poisoning the
-        // model. Belt-and-suspenders alongside the per-σ skip above.
-        for (int i = 0; i < readoutFeatureCount; i++)
+        for (int s = 0; s < numSamples; s++)
         {
-            for (int j = 0; j < _outputSize; j++)
+            var state = _collectedStates[s];
+            var tgt = _collectedTargets[s];
+            // Build the augmented feature row x̃ = [state…, 1] in double.
+            for (int i = 0; i < n; i++)
             {
-                double w = Convert.ToDouble(weights[i, j]);
-                if (double.IsNaN(w) || double.IsInfinity(w))
+                double xi = i < _reservoirSize ? Convert.ToDouble(state[i]) : 1.0;
+                for (int j = i; j < n; j++)
                 {
-                    return;
+                    double xj = j < _reservoirSize ? Convert.ToDouble(state[j]) : 1.0;
+                    a[i, j] += xi * xj;
                 }
+                for (int j = 0; j < _outputSize; j++)
+                    b[i, j] += xi * Convert.ToDouble(tgt[j]);
             }
         }
+        // Mirror the symmetric upper triangle into the lower, then add λ to the diagonal.
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = i + 1; j < n; j++)
+                a[j, i] = a[i, j];
+            a[i, i] += lambda;
+        }
+
+        double[,]? weights = SolveLinearSystemDouble(a, b); // (n × outputSize)
+        if (weights is null) return; // singular/degenerate — keep the previous readout
+
+        // Safety net: a degenerate solve can still surface NaN/Inf. Keep the previous readout
+        // rather than poisoning the model.
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < _outputSize; j++)
+                if (double.IsNaN(weights[i, j]) || double.IsInfinity(weights[i, j]))
+                    return;
 
         for (int i = 0; i < _reservoirSize; i++)
-        {
             for (int j = 0; j < _outputSize; j++)
+                _outputWeights[i, j] = NumOps.FromDouble(weights[i, j]);
+
+        for (int j = 0; j < _outputSize; j++)
+            _outputBias[j] = NumOps.FromDouble(weights[_reservoirSize, j]);
+    }
+
+    /// <summary>
+    /// Solves the symmetric positive-definite system <c>A · W = B</c> in double precision via
+    /// Gauss-Jordan elimination with partial pivoting, returning <c>W</c> (or <c>null</c> if A is
+    /// singular). Used by the ESN ridge readout solve so the conditioning of the (squared) normal
+    /// matrix is handled at full double precision even when the model's numeric type T is float.
+    /// </summary>
+    private static double[,]? SolveLinearSystemDouble(double[,] a, double[,] b)
+    {
+        int n = a.GetLength(0);
+        int m = b.GetLength(1);
+
+        // Augment [A | B] and run Gauss-Jordan with partial pivoting.
+        double[,] aug = new double[n, n + m];
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n; j++) aug[i, j] = a[i, j];
+            for (int j = 0; j < m; j++) aug[i, n + j] = b[i, j];
+        }
+
+        for (int col = 0; col < n; col++)
+        {
+            int pivotRow = col;
+            double maxAbs = Math.Abs(aug[col, col]);
+            for (int r = col + 1; r < n; r++)
             {
-                _outputWeights[i, j] = weights[i, j];
+                double v = Math.Abs(aug[r, col]);
+                if (v > maxAbs) { maxAbs = v; pivotRow = r; }
+            }
+            if (maxAbs < 1e-300) return null; // singular
+
+            if (pivotRow != col)
+                for (int j = 0; j < n + m; j++)
+                    (aug[col, j], aug[pivotRow, j]) = (aug[pivotRow, j], aug[col, j]);
+
+            double pivot = aug[col, col];
+            for (int j = 0; j < n + m; j++) aug[col, j] /= pivot;
+
+            for (int r = 0; r < n; r++)
+            {
+                if (r == col) continue;
+                double factor = aug[r, col];
+                if (factor == 0.0) continue;
+                for (int j = 0; j < n + m; j++)
+                    aug[r, j] -= factor * aug[col, j];
             }
         }
 
-        for (int j = 0; j < _outputSize; j++)
-        {
-            _outputBias[j] = weights[_reservoirSize, j];
-        }
+        double[,] result = new double[n, m];
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < m; j++)
+                result[i, j] = aug[i, n + j];
+        return result;
     }
 
     /// <summary>

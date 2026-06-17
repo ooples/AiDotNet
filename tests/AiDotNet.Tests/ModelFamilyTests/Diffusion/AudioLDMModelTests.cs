@@ -5,15 +5,15 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-// AudioLDM is a latent diffusion model whose Predict() runs Generate +
-// VAE.Decode (latent → mel-spec). Inheriting from AudioDiffusionTestBase
-// (→ LatentDiffusionTestBase → DiffusionModelTestBase) picks up the
-// latent-aware overrides for OutputShape_ShouldMatchInputShape and
-// NoiseSchedule_ShouldBeMonotonic, plus the audio-specific invariants
-// (AudioLength_ShouldBeReasonable, SpectralEnergy_ShouldBeFinite). The
-// previous direct inheritance from DiffusionModelTestBase made both
-// invariants spuriously fail because they assumed single-forward-pass
-// shape semantics that don't hold for VAE-decoded output.
+// AudioLDM is a latent diffusion model. Its Predict() denoises and returns the LATENT
+// (model-forward semantics, like an SD UNet forward); the VAE-decoded mel-spectrogram is
+// produced by Generate() (the pipeline call). So the latent-space contract output.Length ==
+// input.Length holds, exactly as for every other latent diffusion model (e.g. AudioLDM2).
+// Inheriting from AudioDiffusionTestBase (→ LatentDiffusionTestBase → DiffusionModelTestBase)
+// adds the latent-space invariants (DenoisingProgress_Monotonic, LatentSpace_IsContinuous,
+// OutputBounded_AfterDenoising) and the audio-specific invariants
+// (AudioLength_ShouldBeReasonable, SpectralEnergy_ShouldBeFinite) on top of the shared
+// DiffusionModelTestBase contract.
 public class AudioLDMModelTests : AudioDiffusionTestBase
 {
     // AudioLDM (Liu et al. 2023, Table 7) operates in an 8-channel latent

@@ -245,14 +245,19 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>A combined vector containing both embeddings.</returns>
     private Vector<T> CombineEmbeddings(Vector<T> embedding1, Vector<T> embedding2)
     {
-        var combined = new Vector<T>(embedding1.Length * 2);
-        for (int i = 0; i < embedding1.Length; i++)
-        {
-            combined[i] = embedding1[i];
-            combined[i + embedding1.Length] = embedding2[i];
-        }
-
-        return combined;
+        // Koch et al. 2015 (§3.2): the verification head is a single sigmoid unit
+        // over the COMPONENT-WISE L1 DISTANCE between the twin embeddings,
+        //   p = sigmoid( Σ_j α_j · |h1_j − h2_j| ),
+        // where the α_j are the output layer's learned weights. Feeding the L1
+        // distance |h1 − h2| (NOT a concatenation [h1; h2]) is what makes the
+        // similarity SYMMETRIC — sim(a, b) = sim(b, a) — which is the defining
+        // property of a Siamese metric. A concatenation head learns α·h1 + β·h2,
+        // an asymmetric function that no longer measures a distance.
+        var diff = (Vector<T>)Engine.Subtract(embedding1, embedding2);
+        var l1 = new Vector<T>(diff.Length);
+        for (int i = 0; i < diff.Length; i++)
+            l1[i] = NumOps.Abs(diff[i]);
+        return l1;
     }
 
     /// <summary>
@@ -614,12 +619,14 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         var emb1 = _subnetwork.ForwardForTraining(input1);
         var emb2 = _subnetwork.ForwardForTraining(input2);
 
-        // Combine the two embeddings and run the similarity head. Concat
-        // along the trailing feature axis so the output layer sees twice the
-        // embedding width — matching CombineEmbeddings' shape contract.
-        int featureAxis = emb1.Rank - 1;
-        var combined = Engine.TensorConcatenate(new[] { emb1, emb2 }, featureAxis);
-        return _outputLayer.Forward(combined);
+        // Koch et al. 2015 verification head: component-wise L1 distance
+        // |emb1 − emb2| into the single sigmoid unit, p = sigmoid(Σ α_j |h1_j −
+        // h2_j|). TensorSubtract + TensorAbs are both tape-tracked (AbsBackward =
+        // grad · sign), so gradients flow back into the shared subnetwork. This
+        // matches CombineEmbeddings' shape contract (embedding width, not 2×) and
+        // keeps the similarity symmetric in the pair — see CombineEmbeddings.
+        var l1 = Engine.TensorAbs(Engine.TensorSubtract(emb1, emb2));
+        return _outputLayer.Forward(l1);
     }
 
     /// <summary>

@@ -347,11 +347,17 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
     private Tensor<T> BatchedMatMul3Dx2D(Tensor<T> input3D, Tensor<T> weights2D, int batch, int rows, int cols, int outputCols)
     {
         // Flatten batch dimension: [batch, rows, cols] -> [batch * rows, cols]
-        var flattened = input3D.Reshape([batch * rows, cols]);
+        // Use Engine.Reshape (NOT Tensor.Reshape): the gradient tape only records Engine ops, so a
+        // plain Tensor.Reshape here severs the tape edge around the MLP matmul. The downstream
+        // gradient then never reaches Engine.TensorMatMul, so _mlpWeights1/_mlpWeights2 received
+        // ZERO gradient and never updated — the GIN Training_ShouldChangeParameters / GradientFlow /
+        // LossStrictlyDecreases failures. The rest of Forward already uses Engine.Reshape; this
+        // helper was the lone non-recording reshape on the gradient path.
+        var flattened = Engine.Reshape(input3D, [batch * rows, cols]);
         // Standard 2D matmul: [batch * rows, cols] @ [cols, output_cols] -> [batch * rows, output_cols]
         var result = Engine.TensorMatMul(flattened, weights2D);
         // Unflatten: [batch * rows, output_cols] -> [batch, rows, output_cols]
-        return result.Reshape([batch, rows, outputCols]);
+        return Engine.Reshape(result, [batch, rows, outputCols]);
     }
 
     /// <summary>

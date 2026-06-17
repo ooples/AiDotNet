@@ -299,6 +299,16 @@ public class AdversarialImageEvaluator<T> : NeuralNetworkBase<T>, IImageSafetyMo
         Description = "Feature-squeezing ensemble adversarial-image detector (Xu et al. 2018).",
         FeatureCount = FeatureCount,
         Complexity = 1,
+        // Populate AdditionalInfo (the canonical InputShape/OutputShape/hyperparameter report) and
+        // ModelData — an empty shell fails the Metadata_ShouldExist invariant every model is held to.
+        AdditionalInfo = new System.Collections.Generic.Dictionary<string, object>
+        {
+            { "FeatureCount", FeatureCount },
+            { "DetectionThreshold", _threshold },
+            { "InputShape", Architecture.GetInputShape() },
+            { "OutputShape", Architecture.GetOutputShape() },
+        },
+        ModelData = SerializeForMetadata(),
     };
 
     /// <inheritdoc />
