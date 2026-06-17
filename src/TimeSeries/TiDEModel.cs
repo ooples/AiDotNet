@@ -152,8 +152,27 @@ public class TiDEModel<T> : TimeSeriesModelBase<T>
             }
         }
 
-        ModelParameters = new Vector<T>(1);
-        ModelParameters[0] = NumOps.FromDouble(ParameterCount);
+        ModelParameters = FlattenParameters();
+    }
+
+    /// <summary>
+    /// Flattens every learned weight (<c>_w1</c>, <c>_b1</c>, <c>_w2</c>, <c>_b2</c>, <c>_wr</c>,
+    /// <c>_br</c>) into a single contiguous vector, in the same layout <see cref="ParameterCount"/>
+    /// describes. This is the real parameter set the base-class contract expects for model inspection,
+    /// checkpointing, and parameter transfer — not a one-element placeholder.
+    /// </summary>
+    private Vector<T> FlattenParameters()
+    {
+        var flat = new T[ParameterCount];
+        int k = 0;
+        for (int i = 0; i < _h; i++)
+            for (int j = 0; j < _l; j++) { flat[k++] = NumOps.FromDouble(_w1[i][j]); }
+        for (int i = 0; i < _h; i++) { flat[k++] = NumOps.FromDouble(_b1[i]); }
+        for (int i = 0; i < _h; i++) { flat[k++] = NumOps.FromDouble(_w2[i]); }
+        flat[k++] = NumOps.FromDouble(_b2);
+        for (int j = 0; j < _l; j++) { flat[k++] = NumOps.FromDouble(_wr[j]); }
+        flat[k] = NumOps.FromDouble(_br);
+        return new Vector<T>(flat);
     }
 
     public override T PredictSingle(Vector<T> input)
