@@ -161,17 +161,32 @@ public class WordCharEmbeddingLayer<T> : LayerBase<T>
                 nameof(input));
 
         // Build one-hot encodings (constants; no gradient w.r.t. indices). The linear layers then
-        // project them, which is an embedding lookup that the gradient tape can train.
+        // project them, which is an embedding lookup that the gradient tape can train. PAD (index 0)
+        // is masked: padded sequence rows and padded character slots must NOT contribute trainable
+        // features, and they must NOT be averaged into the character pooling, or short words and
+        // padding rows would learn a spurious PAD embedding.
         var wordOneHot = new Tensor<T>([seq, _wordVocabSize]);
         var charOneHot = new Tensor<T>([seq, _maxWordLength, _charVocabSize]);
+        var tokenMask = new Tensor<T>([seq, OutputEmbeddingDim]); // 1 on real tokens, 0 on PAD rows
+        var charCounts = new int[seq];                            // real (non-PAD) chars per word
         for (int s = 0; s < seq; s++)
         {
-            int wordId = ClampIndex(input[s, 0], _wordVocabSize);
-            wordOneHot[s, wordId] = NumOps.One;
+            int wordId = NormalizeIndex(input[s, 0], _wordVocabSize);
+            if (wordId > 0) // 0 == PAD: leave the row's one-hot empty and the mask zero
+            {
+                wordOneHot[s, wordId] = NumOps.One;
+                for (int d = 0; d < OutputEmbeddingDim; d++)
+                    tokenMask[s, d] = NumOps.One;
+            }
+
             for (int c = 0; c < _maxWordLength; c++)
             {
-                int charId = ClampIndex(input[s, 1 + c], _charVocabSize);
-                charOneHot[s, c, charId] = NumOps.One;
+                int charId = NormalizeIndex(input[s, 1 + c], _charVocabSize);
+                if (charId > 0) // 0 == PAD char: skip
+                {
+                    charOneHot[s, c, charId] = NumOps.One;
+                    charCounts[s]++;
+                }
             }
         }
 
@@ -180,25 +195,46 @@ public class WordCharEmbeddingLayer<T> : LayerBase<T>
 
         // Character stream: [seq, maxWordLength, charVocab] -> [seq, maxWordLength, charEmbeddingDim]
         // -> char BiLSTM (words as batch, characters as time) -> [seq, maxWordLength, charHiddenDim]
-        // -> mean-pool over the character axis -> [seq, charHiddenDim].
-        // Pool and concat go through the tape-tracked op family (ReduceSum / TensorMultiplyScalar /
+        // -> mean-pool over the REAL characters only -> [seq, charHiddenDim].
+        // Pool, mask and concat go through the tape-tracked op family (TensorMultiply / ReduceSum /
         // TensorConcatenate) so the gradient flows back into the character BiLSTM and both embedding
         // tables. (Engine.ReduceMax / Engine.Concat are NOT autodiff nodes — using them here would
         // silently sever the gradient and freeze the embeddings.)
         var charEmb = _charEmbedding.Forward(charOneHot);
         var charBi = _charBiLstm.Forward(charEmb);
-        var charSum = Engine.ReduceSum(charBi, [1], keepDims: false);
-        var charFeat = Engine.TensorMultiplyScalar(charSum, NumOps.FromDouble(1.0 / _maxWordLength));
 
-        // Concatenate the two streams per token: [seq, wordEmbeddingDim + charHiddenDim].
-        return Engine.TensorConcatenate([wordFeat, charFeat], axis: 1);
+        // Zero the padded character positions before pooling, and divide by the real char count so a
+        // 3-letter word isn't diluted by maxWordLength-3 zero rows.
+        // charBi has shape [seq, maxWordLength, charHiddenDim] (BiLSTM output, merged directions).
+        var charMask = new Tensor<T>([seq, _maxWordLength, _charHiddenDim]);
+        for (int s = 0; s < seq; s++)
+            for (int c = 0; c < Math.Min(charCounts[s], _maxWordLength); c++)
+                for (int d = 0; d < _charHiddenDim; d++)
+                    charMask[s, c, d] = NumOps.One;
+
+        var charSum = Engine.ReduceSum(Engine.TensorMultiply(charBi, charMask), [1], keepDims: false);
+        var charScale = new Tensor<T>([seq, _charHiddenDim]);
+        for (int s = 0; s < seq; s++)
+        {
+            T inv = NumOps.FromDouble(1.0 / Math.Max(1, charCounts[s]));
+            for (int d = 0; d < _charHiddenDim; d++)
+                charScale[s, d] = inv;
+        }
+        var charFeat = Engine.TensorMultiply(charSum, charScale);
+
+        // Concatenate the two streams per token, then mask PAD rows to zero: [seq, wordEmbeddingDim + charHiddenDim].
+        var fused = Engine.TensorConcatenate([wordFeat, charFeat], axis: 1);
+        return Engine.TensorMultiply(fused, tokenMask);
     }
 
-    private int ClampIndex(T value, int vocabSize)
+    private int NormalizeIndex(T value, int vocabSize)
     {
         int idx = (int)Math.Round(NumOps.ToDouble(value));
-        if (idx < 0) return 0;
-        if (idx >= vocabSize) return 0;
+        if (idx < 0)
+            throw new ArgumentOutOfRangeException(nameof(value), "Packed indices must be non-negative.");
+        // Out-of-range positive ids map to UNK (index 1), NOT PAD (index 0) — an unseen token is
+        // "unknown", not "absent". Falls back to PAD only for a degenerate size-1 vocabulary.
+        if (idx >= vocabSize) return vocabSize > 1 ? 1 : 0;
         return idx;
     }
 

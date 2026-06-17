@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Linq;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -9,6 +10,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tokenization.Vocabulary;
 
 namespace AiDotNet.NER.SequenceLabeling;
 
@@ -62,7 +64,9 @@ namespace AiDotNet.NER.SequenceLabeling;
 public class WordCharBiLSTMCRF<T> : SequenceLabelingNERBase<T>
 {
     private readonly BiLSTMCRFOptions _options;
-    private readonly NerTextEncoder _encoder;
+    // Not readonly: deserialization rebuilds the encoder from the persisted vocabularies so a
+    // round-tripped model maps tokens/characters back to the same embedding-row ids.
+    private NerTextEncoder _encoder;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private WordCharEmbeddingLayer<T>? _embeddingFrontEnd;
 
@@ -343,6 +347,17 @@ public class WordCharBiLSTMCRF<T> : SequenceLabelingNERBase<T>
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
+        // Validate the FULL vector length up front: slicing per layer would otherwise silently ignore
+        // trailing data, making a partial/mismatched checkpoint or optimizer-state load appear to succeed.
+        int expected = 0;
+        foreach (var layer in Layers)
+            expected = checked(expected + (int)layer.ParameterCount);
+
+        if (parameters.Length != expected)
+            throw new ArgumentException(
+                $"Expected {expected} parameters, but got {parameters.Length}.",
+                nameof(parameters));
+
         int idx = 0;
         foreach (var layer in Layers)
         {
@@ -386,6 +401,12 @@ public class WordCharBiLSTMCRF<T> : SequenceLabelingNERBase<T>
         w.Write(_options.LearningRate);
         w.Write(_options.LabelNames.Length);
         foreach (var label in _options.LabelNames) w.Write(label);
+
+        // Persist the encoder vocabularies: the model owns embedding rows keyed by these token/char ids,
+        // so without them a round-tripped model can't map text back to the same rows it was trained on.
+        w.Write(_encoder.MaxWordLength);
+        WriteVocabulary(w, _encoder.WordVocabulary);
+        WriteVocabulary(w, _encoder.CharVocabulary);
     }
 
     /// <inheritdoc/>
@@ -411,6 +432,36 @@ public class WordCharBiLSTMCRF<T> : SequenceLabelingNERBase<T>
         MaxSequenceLength = _options.MaxSequenceLength;
         UseCRF = _options.UseCRF;
         LabelNames = _options.LabelNames;
+
+        // Restore the encoder vocabularies so token/char -> embedding-row mapping matches training.
+        int maxWordLength = r.ReadInt32();
+        var wordVocab = ReadVocabulary(r);
+        var charVocab = ReadVocabulary(r);
+        _encoder = NerTextEncoder.FromVocabularies(wordVocab, charVocab, maxWordLength);
+    }
+
+    private static void WriteVocabulary(BinaryWriter w, Vocabulary vocabulary)
+    {
+        // Write in ascending id order so the reconstructed vocabulary preserves the exact id assignments.
+        var entries = vocabulary.TokenToId.OrderBy(kvp => kvp.Value).ToArray();
+        w.Write(entries.Length);
+        foreach (var kvp in entries)
+        {
+            w.Write(kvp.Key);
+            w.Write(kvp.Value);
+        }
+    }
+
+    private static Vocabulary ReadVocabulary(BinaryReader r)
+    {
+        int count = r.ReadInt32();
+        var entries = new Dictionary<string, int>(count);
+        for (int i = 0; i < count; i++)
+        {
+            string token = r.ReadString();
+            entries[token] = r.ReadInt32();
+        }
+        return new Vocabulary(entries, NerTextEncoder.UnkToken);
     }
 
     /// <inheritdoc/>

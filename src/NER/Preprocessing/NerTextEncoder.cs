@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.RegularExpressions;
 using AiDotNet.Tokenization.Vocabulary;
 
@@ -111,7 +110,7 @@ public sealed class NerTextEncoder
                 if (string.IsNullOrEmpty(token)) continue;
                 wordVocab.AddToken(token.ToLowerInvariant());
                 foreach (var ch in token)
-                    charVocab.AddToken(ch.ToString(CultureInfo.InvariantCulture));
+                    charVocab.AddToken(ch.ToString());
             }
         }
 
@@ -141,8 +140,25 @@ public sealed class NerTextEncoder
             packed[rowBase] = _wordVocab.GetTokenId(token.ToLowerInvariant());
             int charCount = Math.Min(token.Length, MaxWordLength);
             for (int c = 0; c < charCount; c++)
-                packed[rowBase + 1 + c] = _charVocab.GetTokenId(token[c].ToString(CultureInfo.InvariantCulture));
+                packed[rowBase + 1 + c] = _charVocab.GetTokenId(token[c].ToString());
         }
         return packed;
+    }
+
+    /// <summary>
+    /// Reconstructs an encoder from already-built vocabularies — used when deserializing a
+    /// <see cref="AiDotNet.NER.SequenceLabeling.WordCharBiLSTMCRF{T}"/> so the restored model maps
+    /// tokens/characters back to the exact same embedding-row ids it was trained with.
+    /// </summary>
+    /// <param name="wordVocab">The word vocabulary (must reserve [PAD]=0, [UNK]=1).</param>
+    /// <param name="charVocab">The character vocabulary (must reserve [PAD]=0, [UNK]=1).</param>
+    /// <param name="maxWordLength">Maximum characters encoded per word.</param>
+    /// <returns>An encoder backed by the supplied vocabularies.</returns>
+    internal static NerTextEncoder FromVocabularies(Vocabulary wordVocab, Vocabulary charVocab, int maxWordLength)
+    {
+        if (wordVocab is null) throw new ArgumentNullException(nameof(wordVocab));
+        if (charVocab is null) throw new ArgumentNullException(nameof(charVocab));
+        if (maxWordLength <= 0) throw new ArgumentOutOfRangeException(nameof(maxWordLength));
+        return new NerTextEncoder(wordVocab, charVocab, maxWordLength);
     }
 }

@@ -105,22 +105,25 @@ public class WordCharBiLSTMCRFTests
     {
         var model = BuildModel();
 
-        // Snapshot the embedding front-end parameters BEFORE training. If the per-timestep LSTM
-        // input slice severs the tape (the bug this PR fixes), gradient never reaches these tables
-        // and they stay byte-for-byte at their random initialization.
-        var embedBefore = model.EmbeddingFrontEnd!.GetParameters().Clone();
+        // Snapshot specifically the WORD embedding table BEFORE training. Use WordEmbedding (not the
+        // whole front-end, whose parameters include the character BiLSTM) so the assertion can ONLY
+        // pass if the word table itself trains — if the per-timestep LSTM slice severed the tape (the
+        // bug this PR fixes), gradient would never reach the word table and it would stay byte-for-byte
+        // at its random initialization.
+        var wordEmbedBefore = model.EmbeddingFrontEnd!.WordEmbedding.GetParameters().Clone();
         double accBefore = TokenAccuracy(model);
 
         TrainEpochs(model, epochs: 150);
+        model.SetTrainingMode(false); // evaluate deterministically, not in training mode
 
-        var embedAfter = model.EmbeddingFrontEnd!.GetParameters();
+        var wordEmbedAfter = model.EmbeddingFrontEnd!.WordEmbedding.GetParameters();
         double maxDelta = 0;
-        for (int i = 0; i < embedBefore.Length; i++)
-            maxDelta = Math.Max(maxDelta, Math.Abs(embedAfter[i] - embedBefore[i]));
+        for (int i = 0; i < wordEmbedBefore.Length; i++)
+            maxDelta = Math.Max(maxDelta, Math.Abs(wordEmbedAfter[i] - wordEmbedBefore[i]));
 
         Assert.True(maxDelta > 1e-4,
-            $"Embedding tables did not change after training (max delta {maxDelta:E3}) — gradient is " +
-            "not reaching the embeddings, so the per-timestep LSTM slice is not tape-tracked.");
+            $"Word embedding table did not change after training (max delta {maxDelta:E3}) — gradient is " +
+            "not reaching the word embeddings end-to-end (per-timestep LSTM slice not tape-tracked).");
 
         double accAfter = TokenAccuracy(model);
         Assert.True(accAfter > accBefore,
@@ -167,9 +170,12 @@ public class WordCharBiLSTMCRFTests
         Assert.Equal(MaxSeqLen, encoded.Shape[0]);
         Assert.Equal(1 + model.Encoder.MaxWordLength, encoded.Shape[1]);
 
-        // Known training words landed in the vocabulary (index > 0 = not the [UNK]/pad slot).
-        Assert.True(model.Encoder.WordVocabulary.TokenToId.ContainsKey("alice"));
-        Assert.True(model.Encoder.WordVocabulary.TokenToId.ContainsKey("smith"));
+        // Known training words landed in the vocabulary as REAL entries — id must be past the reserved
+        // PAD(0)/UNK(1) slots, not merely present (ContainsKey would still pass if a bug mapped them to 0/1).
+        Assert.True(model.Encoder.WordVocabulary.TokenToId.TryGetValue("alice", out var aliceId));
+        Assert.True(aliceId > 1, $"Expected 'alice' to be a real vocabulary entry, got id {aliceId}.");
+        Assert.True(model.Encoder.WordVocabulary.TokenToId.TryGetValue("smith", out var smithId));
+        Assert.True(smithId > 1, $"Expected 'smith' to be a real vocabulary entry, got id {smithId}.");
     }
 
     private static void AssertBioValid(string[] tags)
