@@ -4,6 +4,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
+[Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4)
 public class UdioModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 64, 32, 32];

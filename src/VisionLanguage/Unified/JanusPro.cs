@@ -1,5 +1,7 @@
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -10,8 +12,6 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
-using AiDotNet.Extensions;
-using System.Diagnostics.CodeAnalysis;
 
 namespace AiDotNet.VisionLanguage.Unified;
 
@@ -74,18 +74,25 @@ namespace AiDotNet.VisionLanguage.Unified;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Janus-Pro: Unified Multimodal Understanding and Generation with Data and Model Scaling", "https://arxiv.org/abs/2501.17811", Year = 2025, Authors = "Chen et al.")]
+[ResearchPaper(
+    "Janus-Pro: Unified Multimodal Understanding and Generation with Data and Model Scaling",
+    "https://arxiv.org/abs/2501.17811",
+    Year = 2025,
+    Authors = "Chen et al."
+)]
 public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {
     private readonly JanusProOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer _tokenizer;
+
     // Non-readonly so DeserializeNetworkSpecificData can rebuild it
     // after NumVisualTokens / CodebookEmbeddingDim are overwritten —
     // otherwise the codebook stays at the constructor-time
     // dimensions and a deserialised model has shape mismatches every
     // time GenerateImage tries to look up an embedding.
     private JanusVQCodebook<T> _vqCodebook;
+
     // Learned generation-path modules — replace the previous deterministic
     // placeholders (sinusoidal prompt fabrication, fixed-cosine codebook
     // projection, fixed sin/cos pixel decode). Rebuilt in
@@ -101,7 +108,12 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
     private bool _disposed;
     private int _encoderLayerEnd;
 
-    [MemberNotNull(nameof(_tokenEmbedding), nameof(_codebookProjection), nameof(_pixelDecoderHidden), nameof(_pixelDecoderOut))]
+    [MemberNotNull(
+        nameof(_tokenEmbedding),
+        nameof(_codebookProjection),
+        nameof(_pixelDecoderHidden),
+        nameof(_pixelDecoderOut)
+    )]
     private void BuildGenerationModules()
     {
         // Typed locals so DenseLayer's IActivationFunction vs IVectorActivationFunction
@@ -129,24 +141,39 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
     /// Test code accesses it via InternalsVisibleTo.</summary>
     internal JanusVQCodebook<T> VQCodebook => _vqCodebook;
 
-    public JanusPro(NeuralNetworkArchitecture<T> architecture, string modelPath, JanusProOptions? options = null) : base(architecture)
+    public JanusPro(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        JanusProOptions? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new JanusProOptions();
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
-        if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
-        if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options.ModelPath = modelPath;
         OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
-        _vqCodebook = new JanusVQCodebook<T>(codebookSize: _options.NumVisualTokens, embeddingDim: _options.CodebookEmbeddingDim);
+        _vqCodebook = new JanusVQCodebook<T>(
+            codebookSize: _options.NumVisualTokens,
+            embeddingDim: _options.CodebookEmbeddingDim
+        );
         BuildGenerationModules();
         InitializeLayers();
     }
 
-    public JanusPro(NeuralNetworkArchitecture<T> architecture, JanusProOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    public JanusPro(
+        NeuralNetworkArchitecture<T> architecture,
+        JanusProOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new JanusProOptions();
         _useNativeMode = true;
@@ -155,7 +182,10 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
-        _vqCodebook = new JanusVQCodebook<T>(codebookSize: _options.NumVisualTokens, embeddingDim: _options.CodebookEmbeddingDim);
+        _vqCodebook = new JanusVQCodebook<T>(
+            codebookSize: _options.NumVisualTokens,
+            embeddingDim: _options.CodebookEmbeddingDim
+        );
         BuildGenerationModules();
         InitializeLayers();
     }
@@ -176,9 +206,11 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
     {
         ThrowIfDisposed();
         var preprocessed = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(preprocessed));
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(preprocessed));
         var hidden = preprocessed;
-        for (int i = 0; i < _encoderLayerEnd; i++) hidden = Layers[i].Forward(hidden);
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            hidden = Layers[i].Forward(hidden);
         return L2Normalize(hidden);
     }
 
@@ -191,13 +223,16 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
     {
         ThrowIfDisposed();
         var preprocessed = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(preprocessed);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(preprocessed);
 
         var visual = preprocessed;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visual = Layers[i].Forward(visual);
 
-        var fused = prompt is null ? visual : visual.ConcatenateTensors(EmbedPromptTokens(TokenizeText(prompt)));
+        var fused = prompt is null
+            ? visual
+            : visual.ConcatenateTensors(EmbedPromptTokens(TokenizeText(prompt)));
         var output = fused;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
@@ -214,9 +249,10 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         ThrowIfDisposed();
         if (string.IsNullOrWhiteSpace(textDescription))
             throw new ArgumentException(
-                "Text description cannot be null, empty, or whitespace. " +
-                "Janus-Pro generation requires a non-empty prompt to condition on.",
-                nameof(textDescription));
+                "Text description cannot be null, empty, or whitespace. "
+                    + "Janus-Pro generation requires a non-empty prompt to condition on.",
+                nameof(textDescription)
+            );
         // The codebook→decoder projection and the VQ-VAE pixel decoder are now
         // genuine learnable modules (_codebookProjection / _pixelDecoderHidden /
         // _pixelDecoderOut), but meaningful image generation still requires the VQ
@@ -226,13 +262,15 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         // ONNX mode below uses the bundled ONNX graph and is fine.
         if (!IsOnnxMode && !_vqCodebook.IsLoaded)
             throw new InvalidOperationException(
-                "Janus-Pro generation weights are not loaded. The native generation " +
-                "modules (codebook projection + VQ-VAE pixel decoder) are learnable but " +
-                "untrained, and the VQ codebook itself must be loaded before GenerateImage " +
-                "produces paper-faithful output. Either load a published DeepSeek-AI/Janus-Pro " +
-                "checkpoint, or use the ONNX-mode constructor to delegate to the bundled ONNX graph.");
+                "Janus-Pro generation weights are not loaded. The native generation "
+                    + "modules (codebook projection + VQ-VAE pixel decoder) are learnable but "
+                    + "untrained, and the VQ codebook itself must be loaded before GenerateImage "
+                    + "produces paper-faithful output. Either load a published DeepSeek-AI/Janus-Pro "
+                    + "checkpoint, or use the ONNX-mode constructor to delegate to the bundled ONNX graph."
+            );
         var conditionalTokens = TokenizeText(textDescription);
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(conditionalTokens);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(conditionalTokens);
 
         var conditionalEmbed = EmbedPromptTokens(conditionalTokens);
 
@@ -268,7 +306,10 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         return DetokenizeVQTokens(visualTokenIds);
     }
 
-    private int GreedyCodebookTokenWithCfg(Tensor<T> conditionalLogits, Tensor<T> unconditionalLogits)
+    private int GreedyCodebookTokenWithCfg(
+        Tensor<T> conditionalLogits,
+        Tensor<T> unconditionalLogits
+    )
     {
         int codebookStart = _options.VocabSize;
         int codebookSize = _vqCodebook.CodebookSize;
@@ -277,7 +318,10 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         // If the layer stack does not extend to the codebook window (small VocabSize, e.g.
         // in tests), fall back to the entire output vector as a codebook-proxy.
         int searchStart = codebookEnd > codebookStart ? codebookStart : 0;
-        int searchEnd = codebookEnd > codebookStart ? codebookEnd : Math.Min(conditionalLogits.Length, codebookSize);
+        int searchEnd =
+            codebookEnd > codebookStart
+                ? codebookEnd
+                : Math.Min(conditionalLogits.Length, codebookSize);
 
         double cfgScale = _options.CfgScale;
         int bestId = 0;
@@ -287,7 +331,8 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         for (int idx = searchStart; idx < searchEnd; idx++)
         {
             double cond = NumOps.ToDouble(conditionalLogits[idx]);
-            double uncond = idx < unconditionalLogits.Length ? NumOps.ToDouble(unconditionalLogits[idx]) : 0.0;
+            double uncond =
+                idx < unconditionalLogits.Length ? NumOps.ToDouble(unconditionalLogits[idx]) : 0.0;
             double guided = uncond + cfgScale * (cond - uncond);
             if (guided > bestScore)
             {
@@ -321,7 +366,8 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         // token stream may carry trailing tokens that don't complete another
         // full grid row, and rounding up would demand more tokens than exist.
         int gridSize = (int)Math.Floor(Math.Sqrt(visualTokenIds.Length));
-        if (gridSize <= 0) gridSize = 24;
+        if (gridSize <= 0)
+            gridSize = 24;
 
         // LookupGrid requires an exact gridSize×gridSize token count, so pass
         // precisely the leading square block (explicit, not a silent truncation).
@@ -334,7 +380,11 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         else
         {
             gridTokenIds = new int[gridTokenCount];
-            Array.Copy(visualTokenIds, gridTokenIds, Math.Min(gridTokenCount, visualTokenIds.Length));
+            Array.Copy(
+                visualTokenIds,
+                gridTokenIds,
+                Math.Min(gridTokenCount, visualTokenIds.Length)
+            );
         }
 
         // Look up each token's codebook embedding to form an [gridSize, gridSize, embedDim] feature map.
@@ -346,7 +396,8 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         // (embedDim -> hidden(ReLU) -> 3), then nearest-neighbour upsampled across its output patch.
         // Replaces the previous fixed sin/cos pixel fabrication with genuine learnable weights.
         int patchSize = outSize / gridSize;
-        if (patchSize < 1) patchSize = 1;
+        if (patchSize < 1)
+            patchSize = 1;
 
         int outPixels = outSize * outSize * 3;
         var result = new Tensor<T>([outPixels]);
@@ -359,7 +410,8 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
                 int baseEmbed = gridIdx * embedDim;
 
                 var cellEmbed = new Tensor<T>([embedDim]);
-                for (int e = 0; e < embedDim; e++) cellEmbed[e] = embedGrid[baseEmbed + e];
+                for (int e = 0; e < embedDim; e++)
+                    cellEmbed[e] = embedGrid[baseEmbed + e];
 
                 var rgb = _pixelDecoderOut.Forward(_pixelDecoderHidden.Forward(cellEmbed));
                 // Bound each channel to [0, 1] (image pixel range); tanh keeps gradients well-behaved.
@@ -373,16 +425,18 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
                     {
                         int imgY = gy * patchSize + py;
                         int imgX = gx * patchSize + px;
-                        if (imgY >= outSize || imgX >= outSize) continue;
+                        if (imgY >= outSize || imgX >= outSize)
+                            continue;
                         int pixelIdx = (imgY * outSize + imgX) * 3;
-                        if (pixelIdx + 2 >= outPixels) continue;
+                        if (pixelIdx + 2 >= outPixels)
+                            continue;
 
                         // Bilinear-style smoothing: 1.0 at patch centre, slightly reduced at edges.
                         double cx = (px + 0.5) / patchSize - 0.5;
                         double cy = (py + 0.5) / patchSize - 0.5;
                         double smooth = 1.0 - 0.15 * (cx * cx + cy * cy);
 
-                        result[pixelIdx]     = NumOps.FromDouble(r * smooth);
+                        result[pixelIdx] = NumOps.FromDouble(r * smooth);
                         result[pixelIdx + 1] = NumOps.FromDouble(g * smooth);
                         result[pixelIdx + 2] = NumOps.FromDouble(b * smooth);
                     }
@@ -402,13 +456,15 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
     /// </summary>
     private Tensor<T> EmbedPromptTokens(Tensor<T> tokenIds)
     {
-        if (tokenIds.Length == 0) return new Tensor<T>([_options.DecoderDim]);
+        if (tokenIds.Length == 0)
+            return new Tensor<T>([_options.DecoderDim]);
         return _tokenEmbedding.Forward(tokenIds);
     }
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
@@ -417,22 +473,27 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
             return;
         }
 
-        Layers.AddRange(LayerHelper<T>.CreateDefaultUnifiedBidirectionalLayers(
-            visionDim: _options.VisionDim,
-            sharedDim: _options.DecoderDim,
-            understandingDim: _options.DecoderDim,
-            generationDim: _options.DecoderDim,
-            numEncoderLayers: _options.NumVisionLayers,
-            numUnderstandingLayers: _options.NumDecoderLayers / 2,
-            numGenerationLayers: _options.NumDecoderLayers / 2,
-            numHeads: _options.NumHeads,
-            dropoutRate: _options.DropoutRate));
+        Layers.AddRange(
+            LayerHelper<T>.CreateDefaultUnifiedBidirectionalLayers(
+                visionDim: _options.VisionDim,
+                sharedDim: _options.DecoderDim,
+                understandingDim: _options.DecoderDim,
+                generationDim: _options.DecoderDim,
+                numEncoderLayers: _options.NumVisionLayers,
+                numUnderstandingLayers: _options.NumDecoderLayers / 2,
+                numGenerationLayers: _options.NumDecoderLayers / 2,
+                numHeads: _options.NumHeads,
+                dropoutRate: _options.DropoutRate
+            )
+        );
 
         // Vocabulary + codebook projection head: text tokens occupy [0, VocabSize), codebook tokens
         // occupy [VocabSize, VocabSize + NumVisualTokens), so the LLM head can emit either modality.
         IActivationFunction<T> headActivation = new IdentityActivation<T>();
         Layers.Add(new LayerNormalizationLayer<T>());
-        Layers.Add(new DenseLayer<T>(_options.VocabSize + _options.NumVisualTokens, headActivation));
+        Layers.Add(
+            new DenseLayer<T>(_options.VocabSize + _options.NumVisualTokens, headActivation)
+        );
 
         ComputeEncoderDecoderBoundary();
         ValidateEncoderDecoderBoundary(_encoderLayerEnd);
@@ -441,31 +502,39 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
     private void ComputeEncoderDecoderBoundary()
     {
         int layersPerBlock = TransformerBlockLayerCount(_options.DropoutRate);
-        _encoderLayerEnd = 1 + _options.NumVisionLayers * layersPerBlock + (_options.VisionDim != _options.DecoderDim ? 1 : 0);
+        _encoderLayerEnd =
+            1
+            + _options.NumVisionLayers * layersPerBlock
+            + (_options.VisionDim != _options.DecoderDim ? 1 : 0);
     }
 
     private Tensor<T> TokenizeText(string text)
     {
-        if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized.");
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
         var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
         return tokens;
     }
 
     public override Tensor<T> Predict(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
         var hidden = input;
-        foreach (var layer in Layers) hidden = layer.Forward(hidden);
+        foreach (var layer in Layers)
+            hidden = layer.Forward(hidden);
         return hidden;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
         TrainWithTape(input, expected);
         SetTrainingMode(false);
@@ -478,11 +547,18 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
     /// and cannot join the sequential Layers walk that Predict runs image tensors through.
     /// </summary>
     private ILayer<T>[] GenerationModules() =>
-        new ILayer<T>[] { _tokenEmbedding, _codebookProjection, _pixelDecoderHidden, _pixelDecoderOut };
+        new ILayer<T>[]
+        {
+            _tokenEmbedding,
+            _codebookProjection,
+            _pixelDecoderHidden,
+            _pixelDecoderOut,
+        };
 
     public override void UpdateParameters(Vector<T> parameters)
     {
-        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
         int idx = 0;
         foreach (var layer in Layers)
         {
@@ -514,8 +590,10 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         get
         {
             long total = 0;
-            foreach (var layer in Layers) total += layer.ParameterCount;
-            foreach (var module in GenerationModules()) total += module.ParameterCount;
+            foreach (var layer in Layers)
+                total += layer.ParameterCount;
+            foreach (var module in GenerationModules())
+                total += module.ParameterCount;
             return total;
         }
     }
@@ -536,13 +614,16 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
             moduleParams.Add(p);
             moduleTotal += p.Length;
         }
-        if (moduleTotal == 0) return baseParams;
+        if (moduleTotal == 0)
+            return baseParams;
 
         var combined = new Vector<T>(baseParams.Length + moduleTotal);
         int idx = 0;
-        for (int i = 0; i < baseParams.Length; i++) combined[idx++] = baseParams[i];
+        for (int i = 0; i < baseParams.Length; i++)
+            combined[idx++] = baseParams[i];
         foreach (var p in moduleParams)
-            for (int i = 0; i < p.Length; i++) combined[idx++] = p[i];
+            for (int i = 0; i < p.Length; i++)
+                combined[idx++] = p[i];
         return combined;
     }
 
@@ -555,7 +636,8 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
     public override void SetParameters(Vector<T> parameters)
     {
         int moduleTotal = 0;
-        foreach (var module in GenerationModules()) moduleTotal += (int)module.ParameterCount;
+        foreach (var module in GenerationModules())
+            moduleTotal += (int)module.ParameterCount;
 
         // Derive the layer-side size from the actual Layers walk, NOT from
         // parameters.Length − moduleTotal. The subtraction form silently corrupts a
@@ -565,16 +647,19 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         // out of the layer region. Compute the true layer total and pick the matching layout
         // explicitly (mirrors Helix.SetParameters).
         int layerCount = 0;
-        foreach (var layer in Layers) layerCount += (int)layer.ParameterCount;
+        foreach (var layer in Layers)
+            layerCount += (int)layer.ParameterCount;
 
         if (parameters.Length != layerCount && parameters.Length != layerCount + moduleTotal)
             throw new ArgumentException(
-                $"Expected {layerCount} (layers-only) or {layerCount + moduleTotal} " +
-                $"(layers + generation modules) parameters, got {parameters.Length}.",
-                nameof(parameters));
+                $"Expected {layerCount} (layers-only) or {layerCount + moduleTotal} "
+                    + $"(layers + generation modules) parameters, got {parameters.Length}.",
+                nameof(parameters)
+            );
 
         var baseSlice = new Vector<T>(layerCount);
-        for (int i = 0; i < layerCount; i++) baseSlice[i] = parameters[i];
+        for (int i = 0; i < layerCount; i++)
+            baseSlice[i] = parameters[i];
         base.SetParameters(baseSlice);
 
         if (moduleTotal > 0 && parameters.Length == layerCount + moduleTotal)
@@ -583,16 +668,20 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
             foreach (var module in GenerationModules())
             {
                 int count = (int)module.ParameterCount;
-                if (count == 0) continue;
+                if (count == 0)
+                    continue;
                 var slice = new Vector<T>(count);
-                for (int i = 0; i < count; i++) slice[i] = parameters[idx + i];
+                for (int i = 0; i < count; i++)
+                    slice[i] = parameters[idx + i];
                 module.SetParameters(slice);
                 idx += count;
             }
         }
     }
 
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
     public override ModelMetadata<T> GetModelMetadata()
@@ -600,7 +689,8 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         var meta = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "Janus-Pro-Native" : "Janus-Pro-ONNX",
-            Description = "Janus-Pro: unified multimodal understanding + generation via decoupled vision encoders (Chen et al. DeepSeek 2025, arXiv:2501.17811).",
+            Description =
+                "Janus-Pro: unified multimodal understanding + generation via decoupled vision encoders (Chen et al. DeepSeek 2025, arXiv:2501.17811).",
             FeatureCount = _options.DecoderDim,
             Complexity = _options.NumVisionLayers + _options.NumDecoderLayers,
         };
@@ -652,7 +742,8 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
     {
         _useNativeMode = reader.ReadBoolean();
         string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionDim = reader.ReadInt32();
         _options.DecoderDim = reader.ReadInt32();
@@ -675,7 +766,8 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         // checkpoint load via VQCodebook.LoadCodebook(...).
         _vqCodebook = new JanusVQCodebook<T>(
             codebookSize: _options.NumVisualTokens,
-            embeddingDim: _options.CodebookEmbeddingDim);
+            embeddingDim: _options.CodebookEmbeddingDim
+        );
         // Rebuild the learned generation modules against the just-deserialized
         // dimensions (same rationale as _vqCodebook above), then restore their
         // TRAINED parameters written by SerializeNetworkSpecificData — without
@@ -685,7 +777,8 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         foreach (var module in GenerationModules())
         {
             int count = reader.ReadInt32();
-            if (count <= 0) continue;
+            if (count <= 0)
+                continue;
             // Validate the serialized count against the freshly-rebuilt module before reading
             // `count` doubles off the stream. A non-lazy module (ParameterCount already > 0 after
             // BuildGenerationModules) whose stored count differs means the saved model's
@@ -697,9 +790,10 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
             long expected = module.ParameterCount;
             if (expected > 0 && count != expected)
                 throw new InvalidOperationException(
-                    $"JanusPro generation-module parameter count mismatch on deserialize: stream has " +
-                    $"{count} but the rebuilt {module.GetType().Name} expects {expected}. The saved " +
-                    $"model's generation-module configuration is incompatible with this build.");
+                    $"JanusPro generation-module parameter count mismatch on deserialize: stream has "
+                        + $"{count} but the rebuilt {module.GetType().Name} expects {expected}. The saved "
+                        + $"model's generation-module configuration is incompatible with this build."
+                );
             var p = new Vector<T>(count);
             for (int i = 0; i < count; i++)
                 p[i] = NumOps.FromDouble(reader.ReadDouble());
@@ -720,12 +814,14 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 
     private void ThrowIfDisposed()
     {
-        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(JanusPro<T>));
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(JanusPro<T>));
     }
 
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         base.Dispose(disposing);
     }

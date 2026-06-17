@@ -1015,12 +1015,15 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        // VGG-style Dense encoder: simple sequential forward through all layers
-        // per Arandjelovic & Zisserman 2017
-        Tensor<T> current = input;
-        foreach (var layer in Layers)
-            current = layer.Forward(current);
-        return current;
+        return Accelerate(input, () =>
+        {
+            // VGG-style Dense encoder: simple sequential forward through all layers
+            // per Arandjelovic & Zisserman 2017
+            Tensor<T> current = input;
+            foreach (var layer in Layers)
+                current = layer.Forward(current);
+            return current;
+        });
     }
 
     /// <inheritdoc/>

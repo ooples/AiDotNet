@@ -3106,29 +3106,45 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // to one filter's pre-softmax distribution.
             var promoted = NormalizeInputBatchDim(input);
 
-            // Route through the eager forward instead of PredictCompiled. The
-            // compiled-plan cache in CompiledModelHost binds to the trace-time
-            // input tensor reference and replay reads stale data when called
-            // with a *different* tensor of the same shape (the canonical
-            // DifferentInputs / ScaledInput invariant failure: same shape,
-            // new values, but the cached plan returns the first call's
-            // output).
+            // Route through the eager forward instead of PredictCompiled.
             //
-            // Trade-off: this IS a per-call latency regression vs the prior
-            // compiled-by-default behavior. Eager re-runs each forward op
-            // through the engine instead of replaying a baked plan. The
-            // regression is correctness-driven — compiled replay was
-            // returning silently wrong outputs for the very common
-            // "same model, same shape, new values" inference pattern.
-            // A future Tensors-package release that adds value-aware
-            // compiled replay (re-key on a tensor data hash, or
-            // explicit re-trace on input change) can restore the
-            // compiled fast path as the default; until then,
-            // correctness wins. Callers who care about replay latency
-            // can opt back in via CompileForward + identical-tensor
-            // replay (their responsibility to feed the same tensor
-            // reference each call).
-            var output = PredictEager(promoted);
+            // HISTORY (corrected 2026-06, #1622 L3): an earlier revision of this
+            // comment claimed compiled replay binds the trace-time input as a
+            // constant and returns stale output for a *different* same-shape input.
+            // That is NO LONGER TRUE — CompiledModelHost.Predict rebinds the fresh
+            // input via plan.SetInputs(new[] { input }) before Execute() on both the
+            // hot path and the slow path, so replay reflects the current input's
+            // values. CompiledInferenceParityTests.{Mlp,Cnn}_CompiledReplay_
+            // DifferentSameShapeInput_IsNotStale pin this (trace on A, replay on B,
+            // assert eager(B)).
+            //
+            // The reason Predict still defaults to EAGER is a different, narrower
+            // risk: some model families compile a plan that succeeds but is
+            // NUMERICALLY WRONG (the AIsEval benchmark's "compiled 2/16 vs eager
+            // 4/16"; CompiledInferenceParityTests Defect 1 was one such CNN plan).
+            // A plan that compiles "successfully" but computes the wrong answer would
+            // be SILENTLY wrong if we replayed it blind. So compiled-by-default needs
+            // a verify-then-trust gate (run eager once, compare, adopt compiled only
+            // on parity; else stay eager for that model/shape) — tracked as #1622 L3b.
+            // NOTE for the L3b implementer: the gate canNOT just live here — almost
+            // every concrete model (all but ClipNeuralNetwork) OVERRIDES Predict and
+            // never calls this base method, so a base-only gate would cover ~1 model.
+            // L3b needs either a sealed Predict + virtual PredictCore refactor (single
+            // funnel for the gate) or per-model wiring of a shared verify helper.
+            // Until that lands, eager is the safe default; callers can opt into
+            // compiled replay explicitly via CompileForward + PredictCompiled.
+            //
+            // #1622 L3b: for foundation-scale models in inference,
+            // _autoCompiledInferenceEnabled routes through PredictAccelerated — the
+            // verify-then-trust gate the note above asks for. It runs eager once per
+            // shape to validate the compiled plan (adopting it only on numerical
+            // parity, else staying eager for that shape), and adds a collision-safe
+            // value-hash memo. Output is numerically identical to PredictEager for
+            // every input, so it is safe as the base-Predict default for the models
+            // that route here; small models / training stay eager.
+            // PredictAccelerated is itself gated (it falls straight through to PredictEager unless the
+            // acceleration is engaged), so calling it unconditionally here costs nothing when off.
+            var output = PredictAccelerated(promoted);
 
             // If we promoted the input by prepending a unit batch dim,
             // squeeze the same dim back off the output so callers
@@ -3944,6 +3960,143 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // #1622 L3 — auto-enabled, correctness-gated compiled inference + value memo.
+    // The verify-then-trust gate + collision-safe value memo live in the reusable
+    // VerifiedInferenceGate<T> component (shared with NoisePredictorBase so the
+    // diffusion family gets the same behavior); this class just composes one and
+    // feeds it the eager + compiled forwards.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private readonly VerifiedInferenceGate<T> _inferenceGate = new();
+
+    /// <summary>
+    /// True when this model is foundation-scale and in inference mode, so
+    /// <see cref="Predict"/> routes through the verify-then-trust compiled path +
+    /// value memo instead of plain eager. Latched in <see cref="Predict"/> /
+    /// <see cref="SetTrainingMode"/> off <see cref="WeightStreamingAutoDetected"/>;
+    /// cleared when training is (re)enabled. Small models and training stay eager.
+    /// </summary>
+    private volatile bool _inferenceAccelerationOptIn;
+
+    /// <summary>
+    /// Process-wide opt-out for the auto compiled-inference path. Set
+    /// <c>AIDOTNET_DISABLE_AUTO_COMPILE=1</c> to force every model onto the plain
+    /// eager path (debugging a suspected compiled-plan defect, or pinning bit-exact
+    /// eager numerics). Read once.
+    /// </summary>
+    private static readonly bool s_autoCompileDisabled =
+        string.Equals(Environment.GetEnvironmentVariable("AIDOTNET_DISABLE_AUTO_COMPILE"), "1", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Whether the verify-then-trust compiled-inference path is currently engaged for this model:
+    /// either the caller explicitly opted in (<see cref="EnableInferenceAcceleration"/>) — which works
+    /// for a model of ANY size — or the model is foundation-scale (over the weight-streaming threshold)
+    /// in inference mode, where it auto-engages with zero config. Never during the global opt-out.
+    /// </summary>
+    private bool InferenceAccelerationEngaged =>
+        !s_autoCompileDisabled
+        && (_inferenceAccelerationOptIn || (_streamingEngagedByAutoDetect && !IsTrainingMode));
+
+    /// <summary>Whether the compiled-inference path is currently engaged for this model. Diagnostic/test hook.</summary>
+    internal bool AutoCompiledInferenceEngaged => InferenceAccelerationEngaged;
+
+    /// <summary>
+    /// Opts this model into the #1622 verify-then-trust compiled-inference path regardless of size, the
+    /// industry-standard explicit "compile this model" gesture (cf. <c>torch.compile</c>). Foundation-
+    /// scale models auto-engage without this; small/medium models that are served repeatedly (the case
+    /// where the one-time per-shape verification amortizes) call this once to opt in. Output stays
+    /// numerically identical to eager. No effect under the <c>AIDOTNET_DISABLE_AUTO_COMPILE</c> opt-out.
+    /// </summary>
+    /// <param name="enabled">True to enable (default); false to opt back out.</param>
+    public void EnableInferenceAcceleration(bool enabled = true)
+    {
+        _inferenceAccelerationOptIn = enabled;
+        if (!enabled) _inferenceGate.Clear();
+    }
+
+    /// <summary>Count of value-memo hits (identical-input short-circuits) on the accelerated path. Diagnostic/test hook.</summary>
+    internal long AcceleratedMemoHits => _inferenceGate.MemoHits;
+
+    /// <summary>Count of verify-then-trust verifications performed (one per new shape+version). Diagnostic/test hook.</summary>
+    internal long AcceleratedVerifyCount => _inferenceGate.VerifyCount;
+
+    /// <summary>
+    /// Forces the verify-then-trust compiled inference path on/off for this model. Test hook —
+    /// equivalent to <see cref="EnableInferenceAcceleration"/>.
+    /// </summary>
+    internal void ForceAutoCompiledInferenceForTesting(bool enabled) => _inferenceAccelerationOptIn = enabled;
+
+    /// <summary>
+    /// Returns the current verify-then-trust verdict for an input shape at the live structure
+    /// version: 0 = unknown/not-yet-verified, 1 = trusted (compiled replayed), 2 = rejected (eager).
+    /// Test/diagnostic hook.
+    /// </summary>
+    internal int CompiledVerdictForTesting(int[] shape) => _inferenceGate.VerdictFor(shape, _layerStructureVersion);
+
+    /// <summary>
+    /// Verify-then-trust compiled inference for foundation-scale models, with a
+    /// collision-safe value-hash memo. Returns output numerically identical to
+    /// <see cref="PredictEager"/> for every input: compiled is adopted per shape
+    /// only after it matches eager, and the memo only returns a cached output for a
+    /// confirmed-identical input. Invoked by <see cref="Predict"/> when
+    /// <see cref="_autoCompiledInferenceEnabled"/> is set.
+    /// </summary>
+    /// <param name="input">The (already batch-normalized) inference input.</param>
+    protected internal Tensor<T> PredictAccelerated(Tensor<T> input)
+        => Accelerate(input, () => PredictEager(input));
+
+    /// <summary>
+    /// Opt a model's forward into the #1622 verify-then-trust compiled-inference acceleration with a
+    /// single wrap. The canonical use is the LAST line of a <see cref="Predict"/> override:
+    /// <code>
+    /// public override Tensor&lt;T&gt; Predict(Tensor&lt;T&gt; input)
+    /// {
+    ///     // ... model-specific setup (eval flip, reshape, etc.) ...
+    ///     return Accelerate(input, () =&gt; RunMyForward(input));
+    /// }
+    /// </code>
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When the foundation-scale auto-compiled path is NOT engaged (small models, training), this just
+    /// invokes <paramref name="eagerForward"/> — zero behavior change and zero overhead, so it is safe
+    /// to wrap EVERY model's forward unconditionally. When engaged, it routes through the shared
+    /// <see cref="VerifiedInferenceGate{T}"/>: the SAME <paramref name="eagerForward"/> lambda is both
+    /// the verify reference AND what the compile host traces, so the gate verifies the model's REAL
+    /// forward (whatever custom logic it contains) and adopts the compiled plan only on numerical
+    /// parity — otherwise it stays eager for that shape. Output is numerically identical to
+    /// <paramref name="eagerForward"/> for every input.
+    /// </para>
+    /// <para>
+    /// Models with a genuinely non-traceable forward (multi-step loops, control flow the GraphMode
+    /// tracer can't capture) are handled transparently: the compile attempt fails, the gate records the
+    /// shape as eager-only, and every call runs <paramref name="eagerForward"/> — so wrapping them is
+    /// harmless, never wrong.
+    /// </para>
+    /// </remarks>
+    /// <param name="input">The input tensor whose shape keys the compile cache.</param>
+    /// <param name="eagerForward">The model's eager forward (verify reference + trace source + fallback).</param>
+    protected Tensor<T> Accelerate(Tensor<T> input, Func<Tensor<T>> eagerForward)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (eagerForward is null) throw new ArgumentNullException(nameof(eagerForward));
+
+        // Not engaged (small model with no opt-in, or training) → behave exactly like the plain eager
+        // forward: no gate, no trace, no overhead, so wrapping any model is always safe. Engagement is
+        // computed each call (explicit opt-in for any size, or foundation-scale auto in eval).
+        if (!InferenceAccelerationEngaged)
+            return eagerForward();
+
+        return _inferenceGate.Run(
+            input,
+            _layerStructureVersion,
+            eager: eagerForward,
+            compiled: () => _compileHost.Predict(input, _layerStructureVersion, eagerForward),
+            onDecision: (enabled, reason) => AiDotNet.Helpers.InferenceDiagnostics.RecordDecision(
+                area: "NeuralNetworkBase", feature: "AutoCompiledInference", enabled: enabled, reason: reason));
+    }
+
     /// <summary>
     /// Releases every compiled inference plan this network holds, returning their
     /// pre-allocated intermediate buffers to the GC. The next compiled call (or
@@ -4001,6 +4154,47 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     protected virtual void OnReleaseCompiledPlans()
     {
+    }
+
+    /// <summary>
+    /// Inference forward pass that threads a per-call <see cref="AiDotNet.Inference.InferenceForwardContext"/>
+    /// to context-aware layers (paged/cached attention), enabling concurrent multi-sequence decode
+    /// over a shared KV cache (#99). Non-context-aware layers run their normal forward.
+    /// </summary>
+    /// <remarks>
+    /// Concurrency contract (mirrors <see cref="Predict"/>): this does NOT toggle training mode, so
+    /// callers driving concurrent sequences on one instance must call <c>SetTrainingMode(false)</c>
+    /// once (and warm up lazy caches with one forward) before fanning out. KV routing is isolated by
+    /// <see cref="AiDotNet.Inference.InferenceForwardContext.SequenceId"/>; the remaining per-forward
+    /// scratch fields (<c>_lastInput</c>/<c>_lastOutput</c>) are written but only read by Backward,
+    /// which inference never calls, so concurrent forwards produce correct independent outputs.
+    /// </remarks>
+    internal Tensor<T> PredictWithContext(Tensor<T> input, AiDotNet.Inference.InferenceForwardContext context)
+    {
+        if (context is null) throw new ArgumentNullException(nameof(context));
+
+        using var _ = new NoGradScope<T>();
+
+        var promoted = NormalizeInputBatchDim(input);
+        var current = promoted;
+        foreach (var layer in Layers)
+        {
+            current = layer is AiDotNet.Inference.IContextAwareInferenceLayer<T> contextAware
+                ? contextAware.ForwardWithContext(current, context)
+                : layer.Forward(current);
+        }
+
+        // Squeeze the unit batch dim back off if we promoted (mirrors Predict).
+        bool wasPromoted = !ReferenceEquals(promoted, input);
+        if (wasPromoted && current.Rank > 1 && current.Shape[0] == 1)
+        {
+            int[] squeezed = new int[current.Rank - 1];
+            for (int i = 0; i < squeezed.Length; i++)
+                squeezed[i] = current.Shape[i + 1];
+            current = current.Reshape(squeezed);
+        }
+
+        return current;
     }
 
     /// <summary>
@@ -4438,7 +4632,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // _layerShapesResolved / _streamingAutoDetectFinalized) so the
         // hot path is one branch + early-return after the first call.
         ResolveLazyLayerShapes();
-        TryAutoEnableWeightStreaming();
+        // Pass the INCOMING mode explicitly: this runs before IsTrainingMode is updated below,
+        // so relying on the field would finalize the streaming store dtype from the prior mode.
+        TryAutoEnableWeightStreaming(isTrainingOverride: isTraining);
 
         // Tell the weight-streaming pool which execution mode we're in so its
         // StreamingStoreDtype.Auto policy is safe: store paged-out weights as bf16
@@ -4448,6 +4644,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // to bf16 and small optimizer updates aren't lost. No-op unless streaming is
         // engaged and the dtype is Auto.
         SetStreamingExecutionTrainingIfSupported(isTraining);
+
+        if (isTraining)
+        {
+            // Entering training invalidates the inference-acceleration state: weights will change, so
+            // the verify-then-trust verdicts and the value memo (keyed to the current weights) are
+            // stale. Clear the gate; a later inference forward re-verifies from scratch. Engagement
+            // itself is computed (InferenceAccelerationEngaged excludes training), so nothing to unset.
+            _inferenceGate.Clear();
+        }
 
         if (SupportsTraining)
         {
@@ -4863,6 +5068,34 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Quant-resident inference store selection (Tier 1 / AiDotNet#1622). Picks the streaming-store
+    /// precision for a foundation-scale model in INFERENCE so its weight set stays RESIDENT — no
+    /// per-forward paging I/O, which is the dominant cost of the multi-forward Predict the
+    /// ModelFamily tests run — at the best accuracy that fits <paramref name="residentBudgetBytes"/>:
+    /// <list type="bullet">
+    /// <item>bf16 (2 B/param) when it fits — least lossy, and the current Auto-inference behaviour,
+    /// so models that already fit bf16-resident are unchanged.</item>
+    /// <item>int8-resident (1 B/param, 4x vs fp32, fed by the no-upcast int8 GEMM) when bf16 will
+    /// not fit but int8 will — this is the lever that keeps the mid-size OOM models resident.</item>
+    /// <item>int4-resident (0.5 B/param, 8x) slots in here once the Tensors package exposes
+    /// <c>StreamingStoreDtype.Int4</c>; until then the &gt;int8 case falls through.</item>
+    /// <item>If even the tightest available precision will not fit, return bf16 and let the pool
+    /// page to stay under budget (the existing streaming fallback).</item>
+    /// </list>
+    /// Inference-only: training keeps the Auto policy so fp/bf16 masters are preserved.
+    /// </summary>
+    internal static StreamingStoreDtype ResolveInferenceStoreDtype(long paramCount, long residentBudgetBytes)
+    {
+        if (paramCount <= 0 || residentBudgetBytes <= 0) return StreamingStoreDtype.Auto;
+        long bf16Bytes = paramCount * 2L;
+        if (bf16Bytes <= residentBudgetBytes) return StreamingStoreDtype.Bf16; // bf16-resident
+        if (paramCount <= residentBudgetBytes) return StreamingStoreDtype.Int8; // int8-resident (1 B/param)
+        // int4-resident (paramCount/2 bytes) is the next rung — enabled once the int4-capable
+        // Tensors release is consumed; until then, fall back to bf16 + paging.
+        return StreamingStoreDtype.Bf16;
+    }
+
+    /// <summary>
     /// True once auto-detect has FINALIZED on this instance. Distinct from
     /// "attempted once" because lazy models legitimately need a second
     /// look after the first forward materializes their placeholder weights
@@ -5059,7 +5292,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// regression tests can assert on the auto-detect branch firing.
     /// </para>
     /// </remarks>
-    internal void TryAutoEnableWeightStreaming()
+    /// <param name="isTrainingOverride">
+    /// The execution mode the caller is about to enter, when it is known to differ from the
+    /// current <see cref="IsTrainingMode"/> field. <see cref="SetTrainingMode"/> calls this
+    /// BEFORE it updates the field, so it must pass the incoming mode here — otherwise the
+    /// permanent inference-vs-training store-dtype decision below is made from the stale prior
+    /// mode (e.g. finalizing an inference dtype while transitioning INTO training, which would
+    /// silently truncate the master weights and lose the Auto training-safety policy).
+    /// When null, the current <see cref="IsTrainingMode"/> is used (correct for every call site
+    /// that runs after the field already reflects the intended mode).
+    /// </param>
+    internal void TryAutoEnableWeightStreaming(bool? isTrainingOverride = null)
     {
         if (_streamingAutoDetectFinalized) return;
         if (_weightLifetimeConfigured)
@@ -5199,6 +5442,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             if (conservative < options.StreamingPoolMaxResidentBytes)
                 options.StreamingPoolMaxResidentBytes = conservative;
         }
+        // Quant-resident inference (Tier 1, #1622): for a foundation-scale model in inference, keep
+        // the weights resident at the loosest precision that fits the (now-capped) budget so
+        // multi-forward Predict pays no per-forward paging I/O. Use the entry point's intended mode,
+        // not the (possibly stale) field — see the isTrainingOverride remarks. Training keeps the
+        // Auto policy (fp/bf16 masters), so it leaves StreamingStoreDtype at its default.
+        bool isTrainingForThisAttempt = isTrainingOverride ?? IsTrainingMode;
+        if (!isTrainingForThisAttempt)
+            // Use effectiveCount, not paramCount: a lazy foundation model can cross the threshold
+            // via SafeEstimateStructuralParameterCount() while ParameterCount is still 0 pre-first-
+            // forward. Passing paramCount=0 would make ResolveInferenceStoreDtype fall back to Auto,
+            // so the int8-resident tier would never engage before the first forward.
+            options.StreamingStoreDtype = ResolveInferenceStoreDtype(effectiveCount, options.StreamingPoolMaxResidentBytes);
+        // L3b (#1622): a foundation-scale model auto-enables the verify-then-trust
+        // compiled forward path (PredictAccelerated) too, composing the compiled plan
+        // with the quant-resident streamed weights configured just above (L1 + L3
+        // unified). The enable itself is latched in Predict (guaranteed inference mode
+        // there, so it is correct regardless of whether this finalize ran from a
+        // training- or inference-mode call) keyed on _streamingEngagedByAutoDetect.
         ConfigureWeightLifetime(options);
         // Declare the default (inference) execution mode so the zero-copy mmap
         // fast path is eligible immediately — a freshly-built model is in

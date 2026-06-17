@@ -38,5 +38,17 @@ public class LLaVA15Options : InstructionTunedVLMOptions
         SystemPrompt = other.SystemPrompt;
     }
 
-    public LLaVA15Options() { InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection; VisionDim = 1024; DecoderDim = 4096; ProjectionDim = 4096; NumVisionLayers = 24; NumDecoderLayers = 32; NumHeads = 32; ImageSize = 336; LanguageModelName = "Vicuna"; MaxVisualTokens = 576; }
+    public LLaVA15Options()
+    {
+        InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;
+        VisionDim = 1024;
+        DecoderDim = 4096;
+        ProjectionDim = 4096;
+        NumVisionLayers = 24;
+        NumDecoderLayers = 32;
+        NumHeads = 32;
+        ImageSize = 336;
+        LanguageModelName = "Vicuna";
+        MaxVisualTokens = 576;
+    }
 }

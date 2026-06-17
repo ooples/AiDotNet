@@ -120,7 +120,13 @@ public class RWKV4LanguageModel<T> : NeuralNetworkBase<T>
         RWKV4Options? options = null)
         : base(
             architecture,
-            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.TextGeneration))
+            // RWKV's LM head emits RAW LOGITS (DenseLayer with no activation), so the loss must be
+            // cross-entropy-with-logits (fused log-softmax + NLL, == PyTorch nn.CrossEntropyLoss /
+            // RWKV-LM's F.cross_entropy). The TextGeneration DEFAULT is CategoricalCrossEntropy, which
+            // expects softmax PROBABILITIES and computes log(predicted) — feeding it un-normalized
+            // logits drives training in a degenerate direction and the loss diverges (the cause of the
+            // RWKV4 Training_ShouldReduceLoss / MoreData reds). #1622 follow-on.
+            lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new RWKV4Options();
         Options = _options;
@@ -169,13 +175,16 @@ public class RWKV4LanguageModel<T> : NeuralNetworkBase<T>
     {
         SetTrainingMode(false);
 
-        var output = input;
-        for (int i = 0; i < Layers.Count; i++)
+        return Accelerate(input, () =>
         {
-            output = Layers[i].Forward(output);
-        }
+            var output = input;
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                output = Layers[i].Forward(output);
+            }
 
-        return output;
+            return output;
+        });
     }
 
     /// <inheritdoc />

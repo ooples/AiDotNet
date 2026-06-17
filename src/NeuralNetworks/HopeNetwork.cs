@@ -506,7 +506,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
                 layer.SetTrainingMode(false);
             }
 
-            return Forward(input);
+            return Accelerate(input, () => Forward(input));
         }
         finally
         {

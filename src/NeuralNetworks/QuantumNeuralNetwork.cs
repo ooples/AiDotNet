@@ -253,19 +253,22 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
             throw new ArgumentException($"Input has {inputElements} elements but expected {expectedElements} elements.");
         }
 
-        // Simulate quantum state preparation
-        var quantumState = PrepareQuantumState(workingInput);
-
-        // Apply quantum layers
-        foreach (var layer in Layers)
+        return Accelerate(input, () =>
         {
-            var realInput = ExtractRealPart(quantumState);
-            var realOutput = layer.Forward(realInput);
-            quantumState = ConvertToComplexTensor(realOutput);
-        }
+            // Simulate quantum state preparation
+            var quantumState = PrepareQuantumState(workingInput);
 
-        // Measure the quantum state to get classical output
-        return MeasureQuantumState(quantumState);
+            // Apply quantum layers
+            foreach (var layer in Layers)
+            {
+                var realInput = ExtractRealPart(quantumState);
+                var realOutput = layer.Forward(realInput);
+                quantumState = ConvertToComplexTensor(realOutput);
+            }
+
+            // Measure the quantum state to get classical output
+            return MeasureQuantumState(quantumState);
+        });
     }
 
     /// <summary>

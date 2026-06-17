@@ -23,6 +23,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 /// at paper scale are model-side performance bugs to be fixed in the
 /// model code, not papered over here.
 /// </remarks>
+[Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4): serialized so its forward gets the whole machine
 public class TransfusionTests : VisionLanguageTestBase<float>
 {
     // Paper-faithful image size — matches TransfusionOptions's default

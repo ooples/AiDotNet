@@ -1335,8 +1335,11 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        var audioFeatures = EncodeAudio(input);
-        return Tensor<T>.FromVector(audioFeatures);
+        return Accelerate(input, () =>
+        {
+            var audioFeatures = EncodeAudio(input);
+            return Tensor<T>.FromVector(audioFeatures);
+        });
     }
 
     /// <inheritdoc/>

@@ -21,6 +21,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 /// streaming (NeuralNetworkBase.TryAutoEnableWeightStreaming) engages on
 /// the layer-by-layer parameter budget, matching production deployment.
 /// </summary>
+[Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4): serialized so its forward gets the whole machine
 public class GrokVisionTests : NeuralNetworkModelTestBase<float>
 {
     // [batch=1, num_tokens=4, vision_dim=1024]. vision_dim must equal

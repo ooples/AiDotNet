@@ -61,14 +61,27 @@ public sealed class RT2ActionTokenizer<T>
         int numBins = 256,
         int vocabSize = 32000,
         double[]? minRange = null,
-        double[]? maxRange = null)
+        double[]? maxRange = null
+    )
     {
         if (actionDim <= 0)
-            throw new ArgumentOutOfRangeException(nameof(actionDim), actionDim, "actionDim must be positive.");
+            throw new ArgumentOutOfRangeException(
+                nameof(actionDim),
+                actionDim,
+                "actionDim must be positive."
+            );
         if (numBins <= 1)
-            throw new ArgumentOutOfRangeException(nameof(numBins), numBins, "numBins must be greater than 1.");
+            throw new ArgumentOutOfRangeException(
+                nameof(numBins),
+                numBins,
+                "numBins must be greater than 1."
+            );
         if (vocabSize <= numBins)
-            throw new ArgumentOutOfRangeException(nameof(vocabSize), vocabSize, $"vocabSize ({vocabSize}) must exceed numBins ({numBins}) so action bins can be assigned to the least-used vocabulary tokens.");
+            throw new ArgumentOutOfRangeException(
+                nameof(vocabSize),
+                vocabSize,
+                $"vocabSize ({vocabSize}) must exceed numBins ({numBins}) so action bins can be assigned to the least-used vocabulary tokens."
+            );
 
         ActionDim = actionDim;
         NumBins = numBins;
@@ -80,7 +93,9 @@ public sealed class RT2ActionTokenizer<T>
         for (int d = 0; d < actionDim; d++)
         {
             if (!(_maxRange[d] > _minRange[d]))
-                throw new ArgumentException($"maxRange[{d}] ({_maxRange[d]}) must be strictly greater than minRange[{d}] ({_minRange[d]}).");
+                throw new ArgumentException(
+                    $"maxRange[{d}] ({_maxRange[d]}) must be strictly greater than minRange[{d}] ({_minRange[d]})."
+                );
         }
 
         _numOps = MathHelper.GetNumericOperations<T>();
@@ -93,14 +108,18 @@ public sealed class RT2ActionTokenizer<T>
     /// <returns>Array of <see cref="ActionDim"/> token IDs, each in <c>[TokenIdOffset, TokenIdEndExclusive)</c>.</returns>
     public int[] EncodeAction(Tensor<T> continuousAction)
     {
-        if (continuousAction is null) throw new ArgumentNullException(nameof(continuousAction));
+        if (continuousAction is null)
+            throw new ArgumentNullException(nameof(continuousAction));
         // Exact-length check: silently truncating extra dimensions
         // makes a misaligned caller (wrong ActionDim, accidentally
         // flattened multi-step tensor, etc.) look like a valid
         // single-step encode and hides the shape bug. ActionDim is
         // the documented contract; reject anything else.
         if (continuousAction.Length != ActionDim)
-            throw new ArgumentException($"continuousAction has length {continuousAction.Length} but tokenizer expects exactly {ActionDim}.", nameof(continuousAction));
+            throw new ArgumentException(
+                $"continuousAction has length {continuousAction.Length} but tokenizer expects exactly {ActionDim}.",
+                nameof(continuousAction)
+            );
 
         var tokens = new int[ActionDim];
         for (int d = 0; d < ActionDim; d++)
@@ -116,9 +135,13 @@ public sealed class RT2ActionTokenizer<T>
     /// </summary>
     public int[] EncodeAction(Vector<T> continuousAction)
     {
-        if (continuousAction is null) throw new ArgumentNullException(nameof(continuousAction));
+        if (continuousAction is null)
+            throw new ArgumentNullException(nameof(continuousAction));
         if (continuousAction.Length != ActionDim)
-            throw new ArgumentException($"continuousAction has length {continuousAction.Length} but tokenizer expects exactly {ActionDim}.", nameof(continuousAction));
+            throw new ArgumentException(
+                $"continuousAction has length {continuousAction.Length} but tokenizer expects exactly {ActionDim}.",
+                nameof(continuousAction)
+            );
 
         var tokens = new int[ActionDim];
         for (int d = 0; d < ActionDim; d++)
@@ -135,11 +158,20 @@ public sealed class RT2ActionTokenizer<T>
     /// </summary>
     public int[] EncodeHorizon(Tensor<T> horizonAction, int horizon)
     {
-        if (horizonAction is null) throw new ArgumentNullException(nameof(horizonAction));
-        if (horizon <= 0) throw new ArgumentOutOfRangeException(nameof(horizon), horizon, "horizon must be positive.");
+        if (horizonAction is null)
+            throw new ArgumentNullException(nameof(horizonAction));
+        if (horizon <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(horizon),
+                horizon,
+                "horizon must be positive."
+            );
         int expected = horizon * ActionDim;
         if (horizonAction.Length != expected)
-            throw new ArgumentException($"horizonAction has length {horizonAction.Length} but tokenizer expects exactly {expected} (horizon {horizon} × ActionDim {ActionDim}).", nameof(horizonAction));
+            throw new ArgumentException(
+                $"horizonAction has length {horizonAction.Length} but tokenizer expects exactly {expected} (horizon {horizon} × ActionDim {ActionDim}).",
+                nameof(horizonAction)
+            );
 
         var tokens = new int[expected];
         for (int t = 0; t < horizon; t++)
@@ -159,9 +191,13 @@ public sealed class RT2ActionTokenizer<T>
     /// </summary>
     public Tensor<T> DecodeAction(int[] tokenIds)
     {
-        if (tokenIds is null) throw new ArgumentNullException(nameof(tokenIds));
+        if (tokenIds is null)
+            throw new ArgumentNullException(nameof(tokenIds));
         if (tokenIds.Length != ActionDim)
-            throw new ArgumentException($"tokenIds has length {tokenIds.Length} but tokenizer expects exactly {ActionDim}.", nameof(tokenIds));
+            throw new ArgumentException(
+                $"tokenIds has length {tokenIds.Length} but tokenizer expects exactly {ActionDim}.",
+                nameof(tokenIds)
+            );
 
         var action = new Tensor<T>([ActionDim]);
         for (int d = 0; d < ActionDim; d++)
@@ -177,11 +213,20 @@ public sealed class RT2ActionTokenizer<T>
     /// </summary>
     public Tensor<T> DecodeHorizon(int[] tokenIds, int horizon)
     {
-        if (tokenIds is null) throw new ArgumentNullException(nameof(tokenIds));
-        if (horizon <= 0) throw new ArgumentOutOfRangeException(nameof(horizon), horizon, "horizon must be positive.");
+        if (tokenIds is null)
+            throw new ArgumentNullException(nameof(tokenIds));
+        if (horizon <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(horizon),
+                horizon,
+                "horizon must be positive."
+            );
         int expected = horizon * ActionDim;
         if (tokenIds.Length != expected)
-            throw new ArgumentException($"tokenIds has length {tokenIds.Length} but tokenizer expects exactly {expected} (horizon {horizon} × ActionDim {ActionDim}).", nameof(tokenIds));
+            throw new ArgumentException(
+                $"tokenIds has length {tokenIds.Length} but tokenizer expects exactly {expected} (horizon {horizon} × ActionDim {ActionDim}).",
+                nameof(tokenIds)
+            );
 
         var action = new Tensor<T>([horizon, ActionDim]);
         for (int t = 0; t < horizon; t++)
@@ -196,7 +241,8 @@ public sealed class RT2ActionTokenizer<T>
     }
 
     /// <summary>Returns true when the supplied token ID falls in this tokenizer's action-bin range.</summary>
-    public bool IsActionToken(int tokenId) => tokenId >= TokenIdOffset && tokenId < TokenIdEndExclusive;
+    public bool IsActionToken(int tokenId) =>
+        tokenId >= TokenIdOffset && tokenId < TokenIdEndExclusive;
 
     /// <summary>
     /// Given a position in the emitted action-token stream, returns which continuous action dimension it controls.
@@ -213,7 +259,8 @@ public sealed class RT2ActionTokenizer<T>
     /// <param name="logits">Length-<c>VocabSize</c> logit vector for one decode position.</param>
     public int GreedyActionToken(Tensor<T> logits)
     {
-        if (logits is null) throw new ArgumentNullException(nameof(logits));
+        if (logits is null)
+            throw new ArgumentNullException(nameof(logits));
         // Exact-length match against VocabSize: previously the check
         // was "logits.Length >= TokenIdEndExclusive", which silently
         // accepted a flattened multi-position decoder output
@@ -224,15 +271,22 @@ public sealed class RT2ActionTokenizer<T>
         // callers stuck on flatten-vs-position errors get a clear
         // diagnostic.
         if (logits.Length != VocabSize)
-            throw new ArgumentException($"logits length ({logits.Length}) must equal VocabSize ({VocabSize}) for a single decode position. " +
-                "If you're passing the flattened decoder output for multiple positions, slice it to the last-position logits first.", nameof(logits));
+            throw new ArgumentException(
+                $"logits length ({logits.Length}) must equal VocabSize ({VocabSize}) for a single decode position. "
+                    + "If you're passing the flattened decoder output for multiple positions, slice it to the last-position logits first.",
+                nameof(logits)
+            );
 
         int bestToken = TokenIdOffset;
         double bestLogit = _numOps.ToDouble(logits[TokenIdOffset]);
         for (int t = TokenIdOffset + 1; t < TokenIdEndExclusive; t++)
         {
             double v = _numOps.ToDouble(logits[t]);
-            if (v > bestLogit) { bestLogit = v; bestToken = t; }
+            if (v > bestLogit)
+            {
+                bestLogit = v;
+                bestToken = t;
+            }
         }
         return bestToken;
     }
@@ -244,8 +298,10 @@ public sealed class RT2ActionTokenizer<T>
         double clamped = Math.Max(lo, Math.Min(hi, value));
         double normalised = (clamped - lo) / (hi - lo);
         int bin = (int)Math.Floor(normalised * NumBins);
-        if (bin >= NumBins) bin = NumBins - 1;
-        if (bin < 0) bin = 0;
+        if (bin >= NumBins)
+            bin = NumBins - 1;
+        if (bin < 0)
+            bin = 0;
         return bin;
     }
 
@@ -266,22 +322,32 @@ public sealed class RT2ActionTokenizer<T>
         return lo + centre * (hi - lo);
     }
 
-    private static double[] NormaliseRange(double[]? input, int actionDim, double defaultValue, string paramName)
+    private static double[] NormaliseRange(
+        double[]? input,
+        int actionDim,
+        double defaultValue,
+        string paramName
+    )
     {
         if (input is null)
         {
             var arr = new double[actionDim];
-            for (int i = 0; i < actionDim; i++) arr[i] = defaultValue;
+            for (int i = 0; i < actionDim; i++)
+                arr[i] = defaultValue;
             return arr;
         }
         if (input.Length == 1)
         {
             var arr = new double[actionDim];
-            for (int i = 0; i < actionDim; i++) arr[i] = input[0];
+            for (int i = 0; i < actionDim; i++)
+                arr[i] = input[0];
             return arr;
         }
         if (input.Length != actionDim)
-            throw new ArgumentException($"{paramName} length ({input.Length}) must equal actionDim ({actionDim}) or be 1 to broadcast.", paramName);
+            throw new ArgumentException(
+                $"{paramName} length ({input.Length}) must equal actionDim ({actionDim}) or be 1 to broadcast.",
+                paramName
+            );
         return (double[])input.Clone();
     }
 }

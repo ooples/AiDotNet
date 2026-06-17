@@ -191,7 +191,7 @@ public class HyperbolicNeuralNetwork<T> : NeuralNetworkBase<T>
         TensorValidator.ValidateShape(input, Architecture.GetInputShape(),
             nameof(HyperbolicNeuralNetwork<T>), "prediction");
 
-        var predictions = Forward(input);
+        var predictions = Accelerate(input, () => Forward(input));
 
         IsTrainingMode = previousTrainingMode;
 

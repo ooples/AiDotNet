@@ -11,9 +11,14 @@ public class ContinuousBatcherConfig
     public BatchSchedulerConfig SchedulerConfig { get; set; } = new();
 
     /// <summary>
+    /// Default end-of-sequence token ID when none is configured.
+    /// </summary>
+    public const int DefaultEosTokenId = 2;
+
+    /// <summary>
     /// End-of-sequence token ID.
     /// </summary>
-    public int EosTokenId { get; set; } = 2;
+    public int EosTokenId { get; set; } = DefaultEosTokenId;
 
     /// <summary>
     /// Milliseconds to sleep when idle.
@@ -62,6 +67,18 @@ public class ContinuousBatcherConfig
     /// Some speculative methods may implicitly enable this internally.
     /// </remarks>
     public bool UseTreeSpeculation { get; set; } = false;
+
+    /// <summary>
+    /// Branching factor for tree speculation (continuations explored per step). When 0, the
+    /// batcher derives it from <see cref="SpeculativeMethod"/> (Medusa = 4, otherwise 2).
+    /// </summary>
+    public int TreeBranchFactor { get; set; } = 0;
+
+    /// <summary>
+    /// Maximum depth of the speculation tree. When 0, the batcher derives it from
+    /// <see cref="SpeculationDepth"/>.
+    /// </summary>
+    public int MaxTreeDepth { get; set; } = 0;
 
     /// <summary>
     /// Creates config for a specific model.
