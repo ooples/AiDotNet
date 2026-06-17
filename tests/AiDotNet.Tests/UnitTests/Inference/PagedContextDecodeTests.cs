@@ -66,6 +66,36 @@ public class PagedContextDecodeTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task IncrementalContextDecode_MatchesFullSequenceForward()
+    {
+        await Task.Yield();
+        var layer = BuildLayer(out var cache);
+        var data = RandomSequence(20260616);
+
+        long seqFull = 9001;
+        Assert.True(cache.AllocateSequence(seqFull, 0));
+        var outFull = layer.ForwardWithContext(
+            new Tensor<float>(data, new[] { 1, SeqLen, EmbDim }), new InferenceForwardContext(seqFull, 0));
+
+        long seqIncr = 9002;
+        Assert.True(cache.AllocateSequence(seqIncr, 0));
+        var outIncr = new float[SeqLen * EmbDim];
+        for (int t = 0; t < SeqLen; t++)
+        {
+            var tok = new float[EmbDim];
+            Array.Copy(data, t * EmbDim, tok, 0, EmbDim);
+            var step = layer.ForwardWithContext(
+                new Tensor<float>(tok, new[] { 1, 1, EmbDim }), new InferenceForwardContext(seqIncr, t));
+            var s = step.AsSpan();
+            for (int e = 0; e < EmbDim; e++) outIncr[t * EmbDim + e] = s[e];
+        }
+
+        double relErr = RelErr(outIncr, outFull.AsSpan());
+        Assert.True(relErr < 1e-4,
+            $"per-sequence incremental ctx decode diverges from the full forward (relErr={relErr:E3}).");
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task InterleavedSequences_DoNotCorruptEachOther()
     {
         await Task.Yield();
