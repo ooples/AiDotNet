@@ -129,6 +129,80 @@ public class IncrementalGenerationEndToEndTests
         Assert.Equal(refB, outB);
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task PrefixSharing_ReusesRegisteredPrefix()
+    {
+        await Task.Yield();
+        var (service, wrapper) = BuildService();
+
+        // First request registers its prompt [1,2,3,4] as a reusable prefix.
+        _ = service.Generate("lm", NumericType.Float, Req(new[] { 1, 2, 3, 4 }));
+
+        // A later prompt that extends it forks the cached prefix (copy-on-write): 4 tokens already
+        // cached, only [5,6] need forwarding.
+        using var session = wrapper.BeginGeneration(new[] { 1, 2, 3, 4, 5, 6 });
+        Assert.Equal(4, session.CachedPromptTokens);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task PrefixSharing_IsTransparent_SameResultAsNoSharing()
+    {
+        await Task.Yield();
+        var extended = new[] { 1, 2, 3, 4, 5, 6 };
+
+        // Use ONE wrapper/model so the comparison isolates prefix sharing (not weight differences
+        // between two separately-built model instances).
+        var (service, wrapper) = BuildService();
+
+        // Register prefix [1,2,3,4], then decode `extended` two ways on the SAME model:
+        //  - forked: BeginGeneration(extended) reuses the cached [1,2,3,4] prefix (CachedPromptTokens=4)
+        //  - fresh:  BeginGeneration() with no prefix
+        _ = service.Generate("lm", NumericType.Float, Req(new[] { 1, 2, 3, 4 }));
+
+        var forked = GreedyDecode(wrapper.BeginGeneration(extended), extended, 5);
+        var fresh = GreedyDecode(wrapper.BeginGeneration(), extended, 5);
+
+        Assert.True(forked.Length > 0);
+        Assert.Equal(fresh, forked); // prefix sharing must not change the output
+    }
+
+    /// <summary>Drives a session: prefill the remaining prompt then greedily decode maxNew tokens.</summary>
+    private static int[] GreedyDecode(IGenerationSession<float> session, int[] prompt, int maxNew)
+    {
+        using (session)
+        {
+            int start = session.CachedPromptTokens;
+            var logits = session.Forward(TokenTensor(prompt[start]));
+            for (int i = start + 1; i < prompt.Length; i++)
+            {
+                logits = session.Forward(TokenTensor(prompt[i]));
+            }
+
+            var gen = new List<int>(maxNew);
+            for (int s = 0; s < maxNew; s++)
+            {
+                int next = ArgMax(logits);
+                gen.Add(next);
+                logits = session.Forward(TokenTensor(next));
+            }
+            return gen.ToArray();
+        }
+    }
+
+    private static Tensor<float> TokenTensor(int tokenId)
+        => new(new[] { (float)tokenId }, new[] { 1, 1 });
+
+    private static int ArgMax(Tensor<float> logits)
+    {
+        var s = logits.AsSpan();
+        int best = 0;
+        for (int i = 1; i < s.Length; i++)
+        {
+            if (s[i] > s[best]) best = i;
+        }
+        return best;
+    }
+
     private sealed class OneModelRepo : IModelRepository
     {
         private readonly string _name;

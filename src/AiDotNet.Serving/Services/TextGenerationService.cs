@@ -193,19 +193,24 @@ public sealed class TextGenerationService : ITextGenerationService
         int eosTokenId = request.EosTokenId ?? ContinuousBatcherConfig.DefaultEosTokenId;
         var generated = new List<int>(request.MaxNewTokens);
 
-        using var session = model.BeginGeneration();
+        // Prefix sharing (RadixAttention): the session may start with a registered prompt prefix
+        // already in its KV cache (forked copy-on-write); we then forward only the remaining suffix.
+        using var session = model.BeginGeneration(request.InputTokens);
+        int prefillStart = session.CachedPromptTokens; // 0..InputTokens.Length-1 (strict prefix)
 
-        // Prefill: feed the prompt one token at a time so the KV cache accumulates the context.
-        // (Per-token prefill is universally compatible — it works for fixed single-token-step
-        // models as well as multi-token ones — at the cost of not batching the prefill, which a
-        // later optimization can add for models that accept a multi-token forward.)
-        // Exceptions propagate to the caller's fallback (full-context decode); cancellation returns
-        // a cancelled response directly (no fallback).
-        var logits = session.Forward(TokensToTensor<T>(new[] { request.InputTokens[0] }));
-        for (int i = 1; i < request.InputTokens.Length; i++)
+        // Prefill the (remaining) prompt one token at a time so the KV cache accumulates the context.
+        // (Per-token prefill is universally compatible — it works for fixed single-token-step models
+        // as well as multi-token ones. There is always >= 1 suffix token because the shared prefix is
+        // strict.) Exceptions propagate to the caller's fallback (full-context decode); cancellation
+        // returns a cancelled response directly (no fallback).
+        var logits = session.Forward(TokensToTensor<T>(new[] { request.InputTokens[prefillStart] }));
+        for (int i = prefillStart + 1; i < request.InputTokens.Length; i++)
         {
             logits = session.Forward(TokensToTensor<T>(new[] { request.InputTokens[i] }));
         }
+
+        // Register this prompt as a reusable prefix so later requests that extend it can fork its KV.
+        session.RegisterPromptPrefix(request.InputTokens);
 
         for (int step = 0; step < request.MaxNewTokens; step++)
         {
