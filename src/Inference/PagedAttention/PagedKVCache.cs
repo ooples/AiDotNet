@@ -374,6 +374,40 @@ internal class PagedKVCache<T> : IDisposable
     }
 
     /// <summary>
+    /// Rolls a sequence's logical length back to <paramref name="newLength"/>, discarding the KV at
+    /// positions <c>newLength .. CurrentLength-1</c>. Used by speculative decoding to drop the KV of
+    /// rejected draft tokens so the corrected token can be (re)written at <paramref name="newLength"/>.
+    /// </summary>
+    /// <remarks>
+    /// Only the logical length is lowered; the already-allocated blocks are retained (the sequence will
+    /// regrow into them and <see cref="WriteKey"/>/<see cref="WriteValue"/> overwrite the stale slots,
+    /// while the paged attention kernel only attends over <see cref="GetSequenceLength"/> positions, so
+    /// the discarded slots are never read). This keeps rollback O(1) with no block churn for the small
+    /// speculation windows typical of decoding.
+    /// </remarks>
+    /// <param name="sequenceId">The sequence to truncate.</param>
+    /// <param name="newLength">The new logical length (0 ≤ newLength ≤ current length).</param>
+    /// <returns>True if the sequence exists and was truncated; false if it is unknown.</returns>
+    public bool TruncateSequence(long sequenceId, int newLength)
+    {
+        if (newLength < 0)
+            throw new ArgumentOutOfRangeException(nameof(newLength), "New length must be non-negative.");
+
+        lock (_lock)
+        {
+            if (!_sequenceMetadata.TryGetValue(sequenceId, out var metadata))
+                return false;
+
+            if (newLength > metadata.CurrentLength)
+                throw new ArgumentOutOfRangeException(nameof(newLength),
+                    $"Cannot truncate sequence {sequenceId} to {newLength}; current length is {metadata.CurrentLength}. Truncation only shrinks.");
+
+            metadata.CurrentLength = newLength;
+            return true;
+        }
+    }
+
+    /// <summary>
     /// Gets the current length of a sequence.
     /// </summary>
     public int GetSequenceLength(long sequenceId)

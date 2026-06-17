@@ -226,40 +226,198 @@ public sealed class TextGenerationService : ITextGenerationService
         // Register this prompt as a reusable prefix so later requests that extend it can fork its KV.
         session.RegisterPromptPrefix(request.InputTokens);
 
-        for (int step = 0; step < request.MaxNewTokens; step++)
+        // Running token stream (prompt + generated) — used both for the response and as the corpus for
+        // prompt-lookup speculative drafting.
+        var allTokens = new List<int>(request.InputTokens.Length + request.MaxNewTokens);
+        allTokens.AddRange(request.InputTokens);
+
+        // Speculative decoding composes with the paged KV cache only when the model produces per-position
+        // logits (a multi-token verify forward is the whole point) — the same capability batched prefill
+        // requires. We use draft-model-free PROMPT-LOOKUP speculation (n-gram match against the running
+        // stream): no second model, exact-greedy output, and a real speed-up on repetitive text.
+        double acceptanceRate = 0.0;
+        bool speculative = request.NumDraftTokens > 0 && model.SupportsBatchedPrefill;
+        if (speculative)
         {
-            if (cancellationToken.IsCancellationRequested)
+            acceptanceRate = SpeculativeDecodeLoop(
+                session, logits, request, eosTokenId, generated, allTokens, cancellationToken,
+                out bool cancelled);
+            if (cancelled)
             {
-                return new SpeculativeDecodingResponse
-                {
-                    Error = "Text generation was cancelled.",
-                    RequestId = request.RequestId
-                };
+                return new SpeculativeDecodingResponse { Error = "Text generation was cancelled.", RequestId = request.RequestId };
             }
-
-            int next = ArgMaxLastPosition(logits);
-            if (next == eosTokenId)
-            {
-                break;
-            }
-
-            generated.Add(next);
-
-            // Decode: forward only the new token; the KV cache supplies the prior context.
-            logits = session.Forward(TokensToTensor<T>(new[] { next }));
         }
+        else
+        {
+            for (int step = 0; step < request.MaxNewTokens; step++)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return new SpeculativeDecodingResponse { Error = "Text generation was cancelled.", RequestId = request.RequestId };
+                }
 
-        var allTokens = new List<int>(request.InputTokens);
-        allTokens.AddRange(generated);
+                int next = ArgMaxLastPosition(logits);
+                if (next == eosTokenId)
+                {
+                    break;
+                }
+
+                generated.Add(next);
+                allTokens.Add(next);
+
+                // Decode: forward only the new token; the KV cache supplies the prior context.
+                logits = session.Forward(TokensToTensor<T>(new[] { next }));
+            }
+        }
 
         return new SpeculativeDecodingResponse
         {
             AllTokens = allTokens.ToArray(),
             GeneratedTokens = generated.ToArray(),
             NumGenerated = generated.Count,
-            AcceptanceRate = 0.0, // speculative decoding composes with incremental in a later stage
+            AcceptanceRate = acceptanceRate,
             RequestId = request.RequestId
         };
+    }
+
+    /// <summary>
+    /// Exact-greedy speculative decode over the per-sequence paged cache, using prompt-lookup (n-gram)
+    /// drafting. Each round: draft up to <c>NumDraftTokens</c> tokens, verify them in ONE multi-token
+    /// forward (per-position logits), accept the greedy-matching prefix, and on rejection roll the KV
+    /// cache back so the corrected token overwrites the rejected drafts. The emitted tokens are
+    /// byte-for-byte identical to plain greedy decode; speculation only changes how many forwards it takes.
+    /// </summary>
+    /// <returns>The fraction of drafted tokens that were accepted (0 when nothing was ever drafted).</returns>
+    private static double SpeculativeDecodeLoop<T>(
+        IGenerationSession<T> session,
+        Tensor<T> prefillLogits,
+        SpeculativeDecodingRequest request,
+        int eosTokenId,
+        List<int> generated,
+        List<int> allTokens,
+        CancellationToken cancellationToken,
+        out bool cancelled)
+    {
+        cancelled = false;
+        int maxNew = request.MaxNewTokens;
+        int k = Math.Max(1, request.NumDraftTokens);
+        var nextLogits = prefillLogits; // predicts the next position to emit
+        long drafted = 0, accepted = 0;
+
+        while (generated.Count < maxNew)
+        {
+            if (cancellationToken.IsCancellationRequested) { cancelled = true; return Ratio(accepted, drafted); }
+
+            int greedy = ArgMaxLastPosition(nextLogits);
+            var draft = PromptLookupDraft(allTokens, k);
+
+            if (draft.Count == 0)
+            {
+                // No n-gram match this round: take a single ordinary greedy step.
+                if (greedy == eosTokenId) break;
+                generated.Add(greedy); allTokens.Add(greedy);
+                if (generated.Count >= maxNew) break;
+                nextLogits = session.Forward(TokensToTensor<T>(new[] { greedy }));
+                continue;
+            }
+
+            // Verify the K draft tokens in ONE forward. They occupy positions pos..pos+K-1; row j of the
+            // returned logits predicts position pos+j+1 given the prefix + draft[0..j].
+            int posBefore = session.Position;
+            var verifyLogits = session.Forward(TokensToTensor<T>(draft));
+            drafted += draft.Count;
+
+            // Accept the longest greedy-matching prefix: expected_0 = greedy(prefill);
+            // expected_{j+1} = argmax(verify row j).
+            int expected = greedy;
+            int nAccept = 0;
+            for (int j = 0; j < draft.Count; j++)
+            {
+                if (draft[j] != expected) break;
+                nAccept++;
+                expected = ArgMaxAtPosition(verifyLogits, j);
+            }
+            accepted += nAccept;
+
+            // Emit accepted drafts (their KV at pos..pos+nAccept-1 is correct — real tokens as context).
+            bool stop = false;
+            for (int j = 0; j < nAccept; j++)
+            {
+                if (draft[j] == eosTokenId) { stop = true; break; }
+                generated.Add(draft[j]); allTokens.Add(draft[j]);
+                if (generated.Count >= maxNew) { stop = true; break; }
+            }
+            if (stop) break;
+
+            // Drop the rejected drafts' KV (positions pos+nAccept..), then emit + commit the correction
+            // (target's own greedy at the divergence, or the bonus token after a full accept).
+            session.Truncate(posBefore + nAccept);
+            if (expected == eosTokenId) break;
+            generated.Add(expected); allTokens.Add(expected);
+            if (generated.Count >= maxNew) break;
+            nextLogits = session.Forward(TokensToTensor<T>(new[] { expected }));
+        }
+
+        return Ratio(accepted, drafted);
+
+        static double Ratio(long a, long d) => d > 0 ? (double)a / d : 0.0;
+    }
+
+    /// <summary>
+    /// Prompt-lookup draft: find the most recent earlier occurrence of the last <c>ngram</c> tokens in
+    /// the running stream and propose the up-to-<paramref name="k"/> tokens that followed it. Returns an
+    /// empty list when no match exists (the caller then takes a plain greedy step). No draft model needed.
+    /// </summary>
+    private static List<int> PromptLookupDraft(IReadOnlyList<int> tokens, int k, int ngram = 2)
+    {
+        int n = tokens.Count;
+        var draft = new List<int>(k);
+        if (n < ngram + 1)
+        {
+            return draft;
+        }
+
+        // Scan backwards for the most recent earlier match of the trailing ngram.
+        for (int start = n - ngram - 1; start >= 0; start--)
+        {
+            bool match = true;
+            for (int g = 0; g < ngram; g++)
+            {
+                if (tokens[start + g] != tokens[n - ngram + g]) { match = false; break; }
+            }
+            if (!match) continue;
+
+            int src = start + ngram;
+            for (int i = 0; i < k && src + i < n; i++)
+            {
+                draft.Add(tokens[src + i]);
+            }
+            return draft;
+        }
+        return draft;
+    }
+
+    /// <summary>Argmax over vocab at output position <paramref name="posIndex"/> of a per-position logits
+    /// tensor (<c>[1, positions, vocab]</c> or <c>[positions, vocab]</c>).</summary>
+    private static int ArgMaxAtPosition<T>(Tensor<T> logits, int posIndex)
+    {
+        var numOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        int rank = logits.Shape.Length;
+        int vocab = logits.Shape[rank - 1];
+        int baseOffset = posIndex * vocab;
+
+        var flat = logits.AsSpan();
+        int best = 0;
+        T bestVal = flat[baseOffset];
+        for (int v = 1; v < vocab; v++)
+        {
+            if (numOps.GreaterThan(flat[baseOffset + v], bestVal))
+            {
+                bestVal = flat[baseOffset + v];
+                best = v;
+            }
+        }
+        return best;
     }
 
     /// <summary>Builds a <c>[1, n]</c> token-id tensor from token IDs.</summary>

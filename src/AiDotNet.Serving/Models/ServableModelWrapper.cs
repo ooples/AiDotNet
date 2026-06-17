@@ -848,6 +848,28 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
 
         public int CachedPromptTokens { get; }
 
+        public int Position => _position;
+
+        public void Truncate(int newPosition)
+        {
+            if (_disposed)
+            {
+                throw new ObjectDisposedException(nameof(GenerationSession));
+            }
+            if (newPosition < 0 || newPosition > _position)
+            {
+                throw new ArgumentOutOfRangeException(nameof(newPosition),
+                    $"Truncate position {newPosition} must be in [0, {_position}].");
+            }
+            // Roll back the shared cache's logical length for THIS sequence under the forward lock, so a
+            // concurrent session's forward can't observe a half-rewound length for the same model.
+            lock (_owner._forwardLock)
+            {
+                _cache.TruncateSequence(_sequenceId, newPosition);
+            }
+            _position = newPosition;
+        }
+
         public Tensor<T> Forward(Tensor<T> newTokenIds)
         {
             Guard.NotNull(newTokenIds);

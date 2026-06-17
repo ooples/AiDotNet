@@ -227,6 +227,45 @@ public class IncrementalGenerationEndToEndTests
         Assert.Equal(first, fourth);
     }
 
+    private static (TextGenerationService Service, ServableModelWrapper<float> Wrapper) BuildPerPositionService()
+    {
+        var model = BuildPerPositionLm();
+        var wrapper = new ServableModelWrapper<float>("lm", model, inputShape: new[] { 1 }, generationForward: model.Predict);
+        var repo = new OneModelRepo("lm", wrapper);
+        return (new TextGenerationService(repo, NullLogger<TextGenerationService>.Instance), wrapper);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SpeculativeDecode_MatchesGreedy_AndAcceptsDrafts()
+    {
+        await Task.Yield();
+        // Prompt-lookup speculative decode (NumDraftTokens>0) over the paged cache must produce tokens
+        // byte-for-byte identical to plain greedy decode (NumDraftTokens=0): speculation is exact for
+        // greedy, it only changes how many forwards it takes. Rejected drafts roll the KV back via
+        // IGenerationSession.Truncate; accepted drafts keep their (correct) KV.
+        var (service, _) = BuildPerPositionService();
+        var prompt = new[] { 1, 2, 3 };
+
+        SpeculativeDecodingRequest Make(int draftTokens) => new()
+        {
+            InputTokens = prompt,
+            MaxNewTokens = 12,
+            EosTokenId = 999, // out of range -> run to the limit
+            NumDraftTokens = draftTokens
+        };
+
+        var greedy = service.Generate("lm", NumericType.Float, Make(0));
+        var spec = service.Generate("lm", NumericType.Float, Make(4));
+
+        Assert.Null(greedy.Error);
+        Assert.Null(spec.Error);
+        Assert.Equal(greedy.GeneratedTokens, spec.GeneratedTokens);
+        Assert.Equal(12, spec.NumGenerated);
+        // An untrained LM's greedy output is repetitive, so prompt-lookup finds matches and accepts.
+        Assert.True(spec.AcceptanceRate > 0.0,
+            $"prompt-lookup speculation should accept some drafts (acceptance={spec.AcceptanceRate}).");
+    }
+
     [Fact(Timeout = 120000)]
     public async Task BatchedPrefill_IsTransparent_SameResultAsPerToken()
     {
