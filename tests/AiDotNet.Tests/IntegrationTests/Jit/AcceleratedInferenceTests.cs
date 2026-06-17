@@ -197,6 +197,44 @@ public class AcceleratedInferenceTests : IDisposable
             $"verify-then-trust must cache its verdict (≤2 verifies for 4 distinct inputs), got {net.AcceleratedVerifyCount}");
     }
 
+    /// <summary>A model that OVERRIDES Predict and opts into acceleration via the one-line Accelerate helper.</summary>
+    private sealed class HelperWrappedNet : FeedForwardNeuralNetwork<float>
+    {
+        public HelperWrappedNet(NeuralNetworkArchitecture<float> arch) : base(arch) { }
+        public override Tensor<float> Predict(Tensor<float> input)
+            => Accelerate(input, () => { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; });
+    }
+
+    [Fact]
+    public void AccelerateHelper_OnOverridingModel_MatchesEager()
+    {
+        // The Accelerate helper is how the ~126 Predict-overriding models opt in with one line. Prove it
+        // accelerates an overriding model's custom forward and stays eager-identical.
+        var arch = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputSize: InputDim, outputSize: OutputDim,
+            layers: new List<ILayer<float>>
+            {
+                new DenseLayer<float>(32, (IActivationFunction<float>)new ReLUActivation<float>()),
+                new DenseLayer<float>(OutputDim, activationFunction: (IActivationFunction<float>?)null),
+            });
+        var net = new HelperWrappedNet(arch);
+        net.SetTrainingMode(false);
+        var p = net.GetParameters();
+        var det = new float[p.Length];
+        var rng = new Random(7);
+        for (int i = 0; i < det.Length; i++) det[i] = (float)(rng.NextDouble() - 0.5) * 0.3f;
+        net.UpdateParameters(new Vector<float>(det));
+
+        var input = MakeInput(88);
+        var eager = Eager(net, input);             // accel not engaged (no force) → pure eager via the helper
+
+        net.ForceAutoCompiledInferenceForTesting(true);
+        var accel = net.Predict(input);            // overriding Predict → Accelerate → verify-then-trust gate
+        AssertParity(eager, accel, "overriding model via Accelerate helper");
+        Assert.True(net.AcceleratedVerifyCount >= 1, "the helper should have driven the verify gate");
+    }
+
     [Fact]
     public void Training_DisablesAcceleration_AndClearsVerdicts()
     {
