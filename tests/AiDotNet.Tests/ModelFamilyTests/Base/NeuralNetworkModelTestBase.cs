@@ -1071,6 +1071,21 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// </summary>
     protected virtual double TrainingErrorMultiplier => 3.0;
 
+    /// <summary>
+    /// True when <see cref="TrainingError_ShouldNotExceedTestError"/> is a
+    /// load-bearing invariant for this model. Override to false for models whose
+    /// <c>Train()</c> is NOT supervised gradient-descent fitting of a fixed
+    /// (input, target) pair — e.g. HTM, whose Hebbian spatial-pooler / temporal-
+    /// memory learning plus homeostatic boosting continuously re-codes the
+    /// input's sparse representation (Cui, Ahmad &amp; Hawkins 2017), so the model
+    /// cannot — and by design does not — fit a fixed training target tighter than
+    /// an arbitrary test target. This is the same paper-faithful rationale the HTM
+    /// test applies to Training_ShouldReduceLoss / MoreData / ScaledInput. Narrow
+    /// opt-out (mirrors NEAT's <c>OptimizerStepParamL2InvariantApplicable</c>) so
+    /// gradient-trained models keep asserting this invariant. Default true.
+    /// </summary>
+    protected virtual bool TrainingErrorInvariantApplicable => true;
+
     [Fact(Timeout = 120000)]
     public async Task TrainingError_ShouldNotExceedTestError()
     {
@@ -1079,6 +1094,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
         if (TrainingInvariantsNotApplicable(network)) return;
+        if (!TrainingErrorInvariantApplicable) return;
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 
