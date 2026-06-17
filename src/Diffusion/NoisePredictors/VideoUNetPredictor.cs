@@ -299,7 +299,18 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             activation: new IdentityActivation<T>());
 
         // Time embedding MLP — lazy so constructor-time memory stays flat.
-        _timeEmbedMlp1 = LazyDense(_timeEmbeddingDim / 4, _timeEmbeddingDim, new SiLUActivation<T>());
+        // The first projection MUST take the full sinusoidal embedding width that
+        // NoisePredictorBase.GetTimestepEmbedding actually emits — [1, TimeEmbeddingDim]
+        // — not TimeEmbeddingDim/4. The earlier /4 input made the layer's CONSTRUCTION
+        // shape ([TimeEmbeddingDim/4]) disagree with its real forward input
+        // ([TimeEmbeddingDim]); the lazy DenseLayer then silently re-resolved to the
+        // larger forward shape, so a freshly-constructed clone (which has no forward to
+        // re-resolve it) kept the stale narrow shape and SetParameters threw a length
+        // mismatch on Clone. Per Ho et al. 2022 §3 / Dhariwal & Nichol 2021 the time
+        // embedding is a 2-layer MLP (Linear → SiLU → Linear) over the sinusoidal
+        // features; here the sinusoidal width already equals TimeEmbeddingDim
+        // (= 4·baseChannels), so both projections are [TimeEmbeddingDim → TimeEmbeddingDim].
+        _timeEmbedMlp1 = LazyDense(_timeEmbeddingDim, _timeEmbeddingDim, new SiLUActivation<T>());
         _timeEmbedMlp2 = LazyDense(_timeEmbeddingDim, _timeEmbeddingDim, new SiLUActivation<T>());
 
         // Image conditioning projection (for image-to-video)
@@ -1259,6 +1270,48 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         return (int)Math.Min(count, int.MaxValue);
     }
 
+    /// <summary>
+    /// Enumerates every layer in the EXACT order used by <see cref="GetParameters"/> /
+    /// <see cref="SetParameters"/> (input conv, time-embed MLPs, image-cond projection,
+    /// then each encoder/middle/decoder block's components, then the output conv). Used
+    /// by <see cref="Clone"/> for a paired per-layer weight copy that needs no shape-
+    /// resolution forward. Null slots (attention disabled at a level, or a pure
+    /// Downsample/Upsample block) are yielded as null so source and clone enumerations
+    /// stay index-aligned by construction.
+    /// </summary>
+    private IEnumerable<ILayer<T>?> EnumerateLayersInParameterOrder()
+    {
+        yield return _inputConv;
+        yield return _timeEmbedMlp1;
+        yield return _timeEmbedMlp2;
+        yield return _imageCondProjection;
+
+        foreach (var block in _encoderBlocks)
+            foreach (var layer in BlockLayersInParameterOrder(block))
+                yield return layer;
+        foreach (var block in _middleBlocks)
+            foreach (var layer in BlockLayersInParameterOrder(block))
+                yield return layer;
+        foreach (var block in _decoderBlocks)
+            foreach (var layer in BlockLayersInParameterOrder(block))
+                yield return layer;
+
+        yield return _outputConv;
+    }
+
+    // Must match AddBlockParameters / SetBlockParameters component order exactly.
+    private static IEnumerable<ILayer<T>?> BlockLayersInParameterOrder(VideoBlock block)
+    {
+        yield return block.SpatialResBlock;
+        yield return block.TimeCondProjection;
+        yield return block.TemporalResBlock;
+        yield return block.SpatialAttention;
+        yield return block.TemporalAttention;
+        yield return block.CrossAttention;
+        yield return block.Downsample;
+        yield return block.Upsample;
+    }
+
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
@@ -1387,20 +1440,41 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             _clipTokenLength,
             LossFunction);
 
-        // Eager-init BOTH source and clone before snapshotting/setting
-        // parameters. The time-embedding MLPs, temporal/cross attention, and
-        // image-condition projection are all lazy (LazyDense/LazyMHA/
-        // LazyConv2D) and report ParameterCount=0 until their first forward.
-        //   * The clone needs resolution BEFORE SetParameters(), otherwise
-        //     every lazy slice is sized to 0 and the copied weights are
-        //     dropped, leaving the clone with fresh random weights.
-        //   * The source ALSO needs resolution BEFORE GetParameters(),
-        //     otherwise the snapshot under-counts the lazy layers and the
-        //     clone re-resolves (with a different seed) on its first Predict,
-        //     diverging from the original. Mirrors UNetNoisePredictor.Clone.
+        // Resolve the SOURCE's lazy layers so each source layer reports its real
+        // parameter shape below. The source's resolving forward packs its OWN
+        // (correct) weights, so the source stays self-consistent.
         TriggerLazyShapeResolution();
-        clone.TriggerLazyShapeResolution();
-        clone.SetParameters(GetParameters());
+
+        // Paired per-layer copy. Crucially we do NOT run a resolving forward on the
+        // CLONE. Every layer's SetParameters self-resolves its shape without a forward:
+        // ConvolutionalLayer / DeconvolutionalLayer infer inputDepth from the incoming
+        // parameter-vector length, MultiHeadAttentionLayer allocates from its
+        // construction-known embedding dim, and DenseLayer is already shape-resolved at
+        // construction (LazyDense calls ResolveShapesOnly) — now that the time-embed MLP
+        // input width matches the real sinusoidal embedding, every construction shape
+        // equals the forward shape, so no layer silently re-resolves.
+        //
+        // A resolving forward on the clone would lazily initialise the clone's weights
+        // to fresh random values and build the fused-CPU weight pack from THOSE; the
+        // subsequent in-place SetParameters cannot invalidate that CPU pack
+        // (Engine.InvalidatePersistentTensor is a no-op without a GPU), so the clone's
+        // forward would read a stale pack built from random weights and diverge from the
+        // source by a small per-element amount (the Clone_ShouldProduceIdenticalOutput
+        // failure). Copying layer-by-layer from the already-resolved source skips the
+        // random-init/pack step entirely, so the clone's first real forward packs from
+        // the correct copied weights.
+        using (var srcEnum = EnumerateLayersInParameterOrder().GetEnumerator())
+        using (var cloneEnum = clone.EnumerateLayersInParameterOrder().GetEnumerator())
+        {
+            while (srcEnum.MoveNext() && cloneEnum.MoveNext())
+            {
+                var srcLayer = srcEnum.Current;
+                var cloneLayer = cloneEnum.Current;
+                if (srcLayer is null || cloneLayer is null)
+                    continue;
+                cloneLayer.SetParameters(srcLayer.GetParameters());
+            }
+        }
         return clone;
     }
 
