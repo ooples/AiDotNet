@@ -406,7 +406,10 @@ public class DeepFloydIFModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-                                return new DeepFloydIFModel<T>(
+        return new DeepFloydIFModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
             stageIUnet: (UNetNoisePredictor<T>)_stageIUnet.Clone(),
             stageIIUnet: (UNetNoisePredictor<T>)_stageIIUnet.Clone(),
             vae: (StandardVAE<T>)_vae.Clone(),

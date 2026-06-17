@@ -221,7 +221,13 @@ public class IPAdapterFaceIDModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-                        return new IPAdapterFaceIDModel<T>(unet: (UNetNoisePredictor<T>)_unet.Clone(), vae: (StandardVAE<T>)_vae.Clone(), conditioner: _conditioner);
+        return new IPAdapterFaceIDModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            unet: (UNetNoisePredictor<T>)_unet.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner);
     }
 
     #endregion

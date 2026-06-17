@@ -175,6 +175,8 @@ public class EMMDiTPredictor<T> : NoisePredictorBase<T>
                 $"EMMDiTPredictor requires spatial dims divisible by patchSize ({patchSize}); got {height}×{width}.",
                 nameof(noisySample));
 
+        using var streaming = BeginWeightStreamingForward();
+
         int patchDim = _inputChannels * patchSize * patchSize;
         int hPatches = height / patchSize;
         int wPatches = width / patchSize;
@@ -239,7 +241,7 @@ public class EMMDiTPredictor<T> : NoisePredictorBase<T>
 
         if (wasUnbatched)
             output = output.Reshape(new[] { channels, height, width });
-        return output;
+        return streaming.Complete(output);
     }
 
     /// <inheritdoc />
