@@ -59,6 +59,8 @@ public class EMMDiTPredictor<T> : NoisePredictorBase<T>
 
     private readonly int _inputChannels;
     private readonly int _contextDim;
+    private readonly int _hiddenSize;
+    private readonly int _numLayers;
 
     private DenseLayer<T> _patchEmbed;
     private DenseLayer<T>[] _blocks;
@@ -69,9 +71,9 @@ public class EMMDiTPredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override int OutputChannels => _inputChannels;
     /// <inheritdoc />
-    public override int BaseChannels => EMMDIT_HIDDEN_SIZE;
+    public override int BaseChannels => _hiddenSize;
     /// <inheritdoc />
-    public override int TimeEmbeddingDim => EMMDIT_HIDDEN_SIZE;
+    public override int TimeEmbeddingDim => _hiddenSize;
     /// <inheritdoc />
     public override bool SupportsCFG => true;
     /// <inheritdoc />
@@ -86,15 +88,21 @@ public class EMMDiTPredictor<T> : NoisePredictorBase<T>
     /// </summary>
     /// <param name="inputChannels">Input latent channels. Default: 4.</param>
     /// <param name="contextDim">Text conditioning dimension. Default: 768.</param>
+    /// <param name="hiddenSize">Transformer hidden size. Default: E-MMDiT paper width.</param>
+    /// <param name="numLayers">Number of transformer blocks. Default: E-MMDiT paper depth.</param>
     /// <param name="seed">Optional random seed.</param>
     public EMMDiTPredictor(
         int inputChannels = 4,
         int contextDim = 768,
+        int hiddenSize = EMMDIT_HIDDEN_SIZE,
+        int numLayers = EMMDIT_NUM_LAYERS,
         int? seed = null)
         : base(seed: seed)
     {
         _inputChannels = inputChannels;
         _contextDim = contextDim;
+        _hiddenSize = hiddenSize;
+        _numLayers = numLayers;
 
         InitializeLayers(seed);
         ParameterCount = CalculateParameterCount();
@@ -106,13 +114,13 @@ public class EMMDiTPredictor<T> : NoisePredictorBase<T>
         int patchDim = _inputChannels * 4;
         // LazyDense: weight tensors stay unallocated until first Forward() — avoids
         // eagerly materializing ~GB of weights at construction time.
-        _patchEmbed = LazyDense(patchDim, EMMDIT_HIDDEN_SIZE, new GELUActivation<T>());
+        _patchEmbed = LazyDense(patchDim, _hiddenSize, new GELUActivation<T>());
 
-        _blocks = new DenseLayer<T>[EMMDIT_NUM_LAYERS];
-        for (int i = 0; i < EMMDIT_NUM_LAYERS; i++)
-            _blocks[i] = LazyDense(EMMDIT_HIDDEN_SIZE, EMMDIT_HIDDEN_SIZE, new GELUActivation<T>());
+        _blocks = new DenseLayer<T>[_numLayers];
+        for (int i = 0; i < _numLayers; i++)
+            _blocks[i] = LazyDense(_hiddenSize, _hiddenSize, new GELUActivation<T>());
 
-        _finalLayer = LazyDense(EMMDIT_HIDDEN_SIZE, patchDim);
+        _finalLayer = LazyDense(_hiddenSize, patchDim);
     }
 
     private int CalculateParameterCount()
@@ -269,7 +277,11 @@ public class EMMDiTPredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override INoisePredictor<T> Clone()
     {
-        var clone = new EMMDiTPredictor<T>(_inputChannels, _contextDim);
+        var clone = new EMMDiTPredictor<T>(
+            inputChannels: _inputChannels,
+            contextDim: _contextDim,
+            hiddenSize: _hiddenSize,
+            numLayers: _numLayers);
         clone.SetParameters(GetParameters());
         return clone;
     }

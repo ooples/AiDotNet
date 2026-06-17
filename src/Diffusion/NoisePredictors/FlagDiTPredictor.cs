@@ -133,10 +133,97 @@ public class FlagDiTPredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
+        var input4d = noisySample;
+        bool wasUnbatched = false;
+        if (input4d.Rank == 3)
+        {
+            wasUnbatched = true;
+            input4d = input4d.Reshape(new[] { 1, input4d.Shape[0], input4d.Shape[1], input4d.Shape[2] });
+        }
+        if (input4d.Rank != 4)
+            throw new ArgumentException(
+                $"FlagDiTPredictor expects rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {input4d.Rank}.",
+                nameof(noisySample));
+
+        const int patchSize = 2;
+        int batch = input4d.Shape[0];
+        int channels = input4d.Shape[1];
+        int height = input4d.Shape[2];
+        int width = input4d.Shape[3];
+
+        if (channels != _inputChannels)
+            throw new ArgumentException(
+                $"FlagDiTPredictor configured for {_inputChannels} channels; got {channels}.",
+                nameof(noisySample));
+        if (height % patchSize != 0 || width % patchSize != 0)
+            throw new ArgumentException(
+                $"FlagDiTPredictor requires spatial dims divisible by patchSize ({patchSize}); got {height}x{width}.",
+                nameof(noisySample));
+
         using var streaming = BeginWeightStreamingForward();
-        var x = _patchEmbed.Forward(noisySample);
+
+        int patchDim = _inputChannels * patchSize * patchSize;
+        int hPatches = height / patchSize;
+        int wPatches = width / patchSize;
+        int numTokens = hPatches * wPatches;
+
+        var tokens = new Tensor<T>(new[] { batch, numTokens, patchDim });
+        for (int b = 0; b < batch; b++)
+        {
+            for (int hp = 0; hp < hPatches; hp++)
+            {
+                for (int wp = 0; wp < wPatches; wp++)
+                {
+                    int tokenIdx = hp * wPatches + wp;
+                    int featIdx = 0;
+                    for (int c = 0; c < channels; c++)
+                    {
+                        for (int p1 = 0; p1 < patchSize; p1++)
+                        {
+                            for (int p2 = 0; p2 < patchSize; p2++)
+                            {
+                                int hSrc = hp * patchSize + p1;
+                                int wSrc = wp * patchSize + p2;
+                                tokens[b, tokenIdx, featIdx++] = input4d[b, c, hSrc, wSrc];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        var x = _patchEmbed.Forward(tokens);
         foreach (var block in _blocks) x = block.Forward(x);
-        return streaming.Complete(_finalLayer.Forward(x));
+        var projected = _finalLayer.Forward(x);
+
+        var output = new Tensor<T>(new[] { batch, channels, height, width });
+        for (int b = 0; b < batch; b++)
+        {
+            for (int hp = 0; hp < hPatches; hp++)
+            {
+                for (int wp = 0; wp < wPatches; wp++)
+                {
+                    int tokenIdx = hp * wPatches + wp;
+                    int featIdx = 0;
+                    for (int c = 0; c < channels; c++)
+                    {
+                        for (int p1 = 0; p1 < patchSize; p1++)
+                        {
+                            for (int p2 = 0; p2 < patchSize; p2++)
+                            {
+                                int hDst = hp * patchSize + p1;
+                                int wDst = wp * patchSize + p2;
+                                output[b, c, hDst, wDst] = projected[b, tokenIdx, featIdx++];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (wasUnbatched)
+            output = output.Reshape(new[] { channels, height, width });
+        return streaming.Complete(output);
     }
 
     /// <inheritdoc />

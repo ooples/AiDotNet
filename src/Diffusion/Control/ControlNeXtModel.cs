@@ -81,6 +81,7 @@ public class ControlNeXtModel<T> : LatentDiffusionModelBase<T>
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? baseUNet = null,
         StandardVAE<T>? vae = null,
+        ControlNetEncoder<T>? controlEncoder = null,
         IConditioningModule<T>? conditioner = null,
         ControlType controlType = ControlType.Canny,
         int? seed = null)
@@ -94,11 +95,15 @@ public class ControlNeXtModel<T> : LatentDiffusionModelBase<T>
     {
         _controlType = controlType;
         _conditioner = conditioner;
-        InitializeLayers(baseUNet, vae, seed);
+        InitializeLayers(baseUNet, vae, controlEncoder, seed);
     }
 
     [MemberNotNull(nameof(_baseUNet), nameof(_vae), nameof(_controlEncoder))]
-    private void InitializeLayers(UNetNoisePredictor<T>? baseUNet, StandardVAE<T>? vae, int? seed)
+    private void InitializeLayers(
+        UNetNoisePredictor<T>? baseUNet,
+        StandardVAE<T>? vae,
+        ControlNetEncoder<T>? controlEncoder,
+        int? seed)
     {
         _baseUNet = baseUNet ?? new UNetNoisePredictor<T>(
             architecture: Architecture, inputChannels: LATENT_CHANNELS, outputChannels: LATENT_CHANNELS,
@@ -108,7 +113,7 @@ public class ControlNeXtModel<T> : LatentDiffusionModelBase<T>
             inputChannels: 3, latentChannels: LATENT_CHANNELS, baseChannels: 128,
             channelMultipliers: new[] { 1, 2, 4, 4 }, numResBlocksPerLevel: 2, seed: seed);
         // ControlNeXt uses cross-normalization, simulated here with a smaller encoder
-        _controlEncoder = new ControlNetEncoder<T>(
+        _controlEncoder = controlEncoder ?? new ControlNetEncoder<T>(
             inputChannels: 3, baseChannels: 256, channelMultipliers: new[] { 1, 2, 4 }, seed: seed);
     }
 
@@ -135,9 +140,15 @@ public class ControlNeXtModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new ControlNeXtModel<T>(controlType: _controlType, conditioner: _conditioner, seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
-        return clone;
+        return new ControlNeXtModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            baseUNet: (UNetNoisePredictor<T>)_baseUNet.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            controlEncoder: _controlEncoder.Clone(),
+            controlType: _controlType,
+            conditioner: _conditioner);
     }
 
     /// <inheritdoc />

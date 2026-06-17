@@ -208,6 +208,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
     /// <param name="scheduler">Optional custom scheduler.</param>
     /// <param name="baseUNet">Optional base U-Net noise predictor.</param>
     /// <param name="vae">Optional custom VAE.</param>
+    /// <param name="controlNetEncoder">Optional custom control encoder.</param>
     /// <param name="conditioner">Optional conditioning module for text encoding.</param>
     /// <param name="controlType">The type of control signal.</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
@@ -217,6 +218,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? baseUNet = null,
         StandardVAE<T>? vae = null,
+        ControlNetEncoder<T>? controlNetEncoder = null,
         IConditioningModule<T>? conditioner = null,
         ControlType controlType = ControlType.Canny,
         int? seed = null)
@@ -235,7 +237,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
         _conditioner = conditioner;
         _controlChannels = GetControlChannels(controlType);
 
-        InitializeLayers(baseUNet, vae, seed);
+        InitializeLayers(baseUNet, vae, controlNetEncoder, seed);
     }
 
     #endregion
@@ -246,7 +248,11 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
     /// Initializes the U-Net, VAE, and ControlNet encoder layers.
     /// </summary>
     [MemberNotNull(nameof(_baseUNet), nameof(_vae), nameof(_controlNetEncoder), nameof(_encoderCache))]
-    private void InitializeLayers(UNetNoisePredictor<T>? baseUNet, StandardVAE<T>? vae, int? seed)
+    private void InitializeLayers(
+        UNetNoisePredictor<T>? baseUNet,
+        StandardVAE<T>? vae,
+        ControlNetEncoder<T>? controlNetEncoder,
+        int? seed)
     {
         _baseUNet = baseUNet ?? new UNetNoisePredictor<T>(
             architecture: Architecture,
@@ -267,7 +273,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
             numResBlocksPerLevel: 2,
             seed: seed);
 
-        _controlNetEncoder = new ControlNetEncoder<T>(
+        _controlNetEncoder = controlNetEncoder ?? new ControlNetEncoder<T>(
             inputChannels: _controlChannels,
             baseChannels: 320,
             channelMultipliers: new[] { 1, 2, 4, 4 },
@@ -686,19 +692,25 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
+        var clonedEncoders = _encoderCache.ToDictionary(
+            kvp => kvp.Key,
+            kvp => kvp.Value.Clone());
+
         var clone = new ControlNetModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            baseUNet: (UNetNoisePredictor<T>)_baseUNet.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            controlNetEncoder: clonedEncoders[_controlType],
             controlType: _controlType,
-            conditioner: _conditioner,
-            seed: RandomGenerator.Next());
+            conditioner: _conditioner);
 
         // Create matching encoder cache in clone before setting parameters
         foreach (var controlType in _encoderCache.Keys.Where(ct => ct != _controlType))
         {
-            // GetOrCreateEncoder adds to the cache
-            clone.GetOrCreateEncoder(controlType);
+            clone._encoderCache[controlType] = clonedEncoders[controlType];
         }
-
-        clone.SetParameters(GetParameters());
         clone.ConditioningStrength = _conditioningStrength;
 
         return clone;
@@ -966,5 +978,19 @@ public class ControlNetEncoder<T>
             zc.SetParameters(new Vector<T>(p));
             offset += count;
         }
+    }
+
+    /// <summary>
+    /// Creates a deep copy with the same encoder shape and parameter values.
+    /// </summary>
+    public ControlNetEncoder<T> Clone()
+    {
+        var clone = new ControlNetEncoder<T>(
+            _inputChannels,
+            _baseChannels,
+            (int[])_channelMultipliers.Clone(),
+            _imageSize);
+        clone.SetParameters(GetParameters());
+        return clone;
     }
 }

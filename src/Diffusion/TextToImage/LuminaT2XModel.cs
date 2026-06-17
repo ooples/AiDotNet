@@ -145,7 +145,12 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
     [MemberNotNull(nameof(_predictor), nameof(_vae))]
     private void InitializeLayers(FlagDiTPredictor<T>? predictor, StandardVAE<T>? vae, int? seed)
     {
-        _predictor = predictor ?? new FlagDiTPredictor<T>(seed: seed);
+        _predictor = predictor ?? new FlagDiTPredictor<T>(
+            inputChannels: T2X_LATENT_CHANNELS,
+            hiddenSize: T2X_HIDDEN_SIZE,
+            numLayers: T2X_NUM_LAYERS,
+            contextDim: T2X_CONTEXT_DIM,
+            seed: seed);
         _vae = vae ?? new StandardVAE<T>(
             inputChannels: 3, latentChannels: T2X_LATENT_CHANNELS, baseChannels: 128,
             channelMultipliers: [1, 2, 4, 4], numResBlocksPerLevel: 2, seed: seed);
@@ -218,7 +223,11 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var cp = new FlagDiTPredictor<T>();
+        var cp = new FlagDiTPredictor<T>(
+            inputChannels: T2X_LATENT_CHANNELS,
+            hiddenSize: T2X_HIDDEN_SIZE,
+            numLayers: T2X_NUM_LAYERS,
+            contextDim: T2X_CONTEXT_DIM);
         cp.SetParameters(_predictor.GetParameters());
         var cv = new StandardVAE<T>(inputChannels: 3, latentChannels: T2X_LATENT_CHANNELS,
             baseChannels: 128, channelMultipliers: [1, 2, 4, 4], numResBlocksPerLevel: 2);

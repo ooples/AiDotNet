@@ -90,19 +90,25 @@ public class MMDiTXNoisePredictor<T> : NoisePredictorBase<T>
     /// <param name="patchSize">Patch size. Default: 2.</param>
     /// <param name="contextDim">Context dimension from text encoder. Default: 4096.</param>
     /// <param name="seed">Optional random seed.</param>
+    /// <param name="hiddenSize">Optional hidden size override. Defaults to the variant's production width.</param>
+    /// <param name="numJointLayers">Optional joint-layer count override. Defaults to the variant's production depth.</param>
+    /// <param name="numHeads">Optional attention-head count override. Defaults to the variant's production head count.</param>
     public MMDiTXNoisePredictor(
         MMDiTXVariant variant = MMDiTXVariant.Medium,
         int inputChannels = 16,
         int patchSize = 2,
         int contextDim = 4096,
-        int? seed = null)
+        int? seed = null,
+        int? hiddenSize = null,
+        int? numJointLayers = null,
+        int? numHeads = null)
         : base(seed: seed)
     {
         _variant = variant;
         _inputChannels = inputChannels;
-        _hiddenSize = GetHiddenSize(variant);
-        _numJointLayers = GetNumLayers(variant);
-        _numHeads = GetNumHeads(variant);
+        _hiddenSize = hiddenSize ?? GetHiddenSize(variant);
+        _numJointLayers = numJointLayers ?? GetNumLayers(variant);
+        _numHeads = numHeads ?? GetNumHeads(variant);
         _patchSize = patchSize;
         _contextDim = contextDim;
 
@@ -311,7 +317,14 @@ public class MMDiTXNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override INoisePredictor<T> Clone()
     {
-        var clone = new MMDiTXNoisePredictor<T>(_variant, _inputChannels, _patchSize, _contextDim);
+        var clone = new MMDiTXNoisePredictor<T>(
+            variant: _variant,
+            inputChannels: _inputChannels,
+            patchSize: _patchSize,
+            contextDim: _contextDim,
+            hiddenSize: _hiddenSize,
+            numJointLayers: _numJointLayers,
+            numHeads: _numHeads);
         clone.SetParameters(GetParameters());
         return clone;
     }

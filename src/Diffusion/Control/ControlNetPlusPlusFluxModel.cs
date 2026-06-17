@@ -82,6 +82,7 @@ public class ControlNetPlusPlusFluxModel<T> : LatentDiffusionModelBase<T>
         INoiseScheduler<T>? scheduler = null,
         FluxDoubleStreamPredictor<T>? predictor = null,
         StandardVAE<T>? vae = null,
+        ControlNetEncoder<T>? controlEncoder = null,
         IConditioningModule<T>? conditioner = null,
         ControlType controlType = ControlType.Canny,
         double rewardWeight = 0.5,
@@ -97,18 +98,22 @@ public class ControlNetPlusPlusFluxModel<T> : LatentDiffusionModelBase<T>
         _controlType = controlType;
         _conditioner = conditioner;
         _rewardWeight = rewardWeight;
-        InitializeLayers(predictor, vae, seed);
+        InitializeLayers(predictor, vae, controlEncoder, seed);
         SetGuidanceScale(DEFAULT_GUIDANCE);
     }
 
     [MemberNotNull(nameof(_predictor), nameof(_vae), nameof(_controlEncoder))]
-    private void InitializeLayers(FluxDoubleStreamPredictor<T>? predictor, StandardVAE<T>? vae, int? seed)
+    private void InitializeLayers(
+        FluxDoubleStreamPredictor<T>? predictor,
+        StandardVAE<T>? vae,
+        ControlNetEncoder<T>? controlEncoder,
+        int? seed)
     {
         _predictor = predictor ?? new FluxDoubleStreamPredictor<T>(seed: seed);
         _vae = vae ?? new StandardVAE<T>(
             inputChannels: 3, latentChannels: FLUX_LATENT_CHANNELS, baseChannels: 128,
             channelMultipliers: new[] { 1, 2, 4, 4 }, numResBlocksPerLevel: 2, seed: seed);
-        _controlEncoder = new ControlNetEncoder<T>(
+        _controlEncoder = controlEncoder ?? new ControlNetEncoder<T>(
             inputChannels: 3, baseChannels: 320, channelMultipliers: new[] { 1, 2, 4, 4 }, seed: seed);
     }
 
@@ -135,10 +140,16 @@ public class ControlNetPlusPlusFluxModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new ControlNetPlusPlusFluxModel<T>(
-            controlType: _controlType, conditioner: _conditioner, rewardWeight: _rewardWeight, seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
-        return clone;
+        return new ControlNetPlusPlusFluxModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            predictor: (FluxDoubleStreamPredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            controlEncoder: _controlEncoder.Clone(),
+            controlType: _controlType,
+            conditioner: _conditioner,
+            rewardWeight: _rewardWeight);
     }
 
     /// <inheritdoc />

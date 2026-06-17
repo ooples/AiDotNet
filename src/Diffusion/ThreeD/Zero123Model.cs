@@ -179,6 +179,8 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? unet = null,
         StandardVAE<T>? vae = null,
+        ImageEncoder<T>? imageEncoder = null,
+        CameraPoseEncoder<T>? poseEncoder = null,
         int imageSize = DEFAULT_IMAGE_SIZE,
         int? seed = null)
         : base(
@@ -192,7 +194,7 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
             scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
             architecture)
     {
-        InitializeLayers(unet, vae, seed);
+        InitializeLayers(unet, vae, imageEncoder, poseEncoder, seed);
     }
 
     #endregion
@@ -206,6 +208,8 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
     private void InitializeLayers(
         UNetNoisePredictor<T>? unet,
         StandardVAE<T>? vae,
+        ImageEncoder<T>? imageEncoder,
+        CameraPoseEncoder<T>? poseEncoder,
         int? seed)
     {
         // U-Net with doubled input channels for concatenated input latent
@@ -230,7 +234,7 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
             seed: seed);
 
         // CLIP image encoder for conditioning
-        _imageEncoder = new ImageEncoder<T>(
+        _imageEncoder = imageEncoder ?? new ImageEncoder<T>(
             imageSize: 224,
             patchSize: 16,
             embedDim: 768,
@@ -239,7 +243,7 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
             seed: seed);
 
         // Camera pose encoder for viewpoint control
-        _poseEncoder = new CameraPoseEncoder<T>(
+        _poseEncoder = poseEncoder ?? new CameraPoseEncoder<T>(
             embedDim: 768,
             seed: seed);
     }

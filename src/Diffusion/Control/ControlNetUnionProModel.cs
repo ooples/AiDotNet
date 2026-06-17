@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Collections.Generic;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
@@ -98,6 +99,7 @@ public class ControlNetUnionProModel<T> : LatentDiffusionModelBase<T>
         StandardVAE<T>? vae = null,
         IConditioningModule<T>? conditioner = null,
         ControlType[]? supportedTypes = null,
+        IReadOnlyDictionary<ControlType, ControlNetEncoder<T>>? controlEncoders = null,
         int? seed = null)
         : base(
             options ?? new DiffusionModelOptions<T>
@@ -117,11 +119,15 @@ public class ControlNetUnionProModel<T> : LatentDiffusionModelBase<T>
             ControlType.Normal, ControlType.Segmentation, ControlType.LineArt,
             ControlType.SoftEdge, ControlType.Scribble, ControlType.Tile
         };
-        InitializeLayers(baseUNet, vae, seed);
+        InitializeLayers(baseUNet, vae, controlEncoders, seed);
     }
 
     [MemberNotNull(nameof(_baseUNet), nameof(_vae), nameof(_encoderCache))]
-    private void InitializeLayers(UNetNoisePredictor<T>? baseUNet, StandardVAE<T>? vae, int? seed)
+    private void InitializeLayers(
+        UNetNoisePredictor<T>? baseUNet,
+        StandardVAE<T>? vae,
+        IReadOnlyDictionary<ControlType, ControlNetEncoder<T>>? controlEncoders,
+        int? seed)
     {
         _baseUNet = baseUNet ?? new UNetNoisePredictor<T>(
             architecture: Architecture,
@@ -145,11 +151,13 @@ public class ControlNetUnionProModel<T> : LatentDiffusionModelBase<T>
         _encoderCache = new Dictionary<ControlType, ControlNetEncoder<T>>();
         foreach (var ct in _supportedTypes)
         {
-            _encoderCache[ct] = new ControlNetEncoder<T>(
-                inputChannels: 3,
-                baseChannels: 320,
-                channelMultipliers: new[] { 1, 2, 4, 4 },
-                seed: seed);
+            _encoderCache[ct] = controlEncoders is not null && controlEncoders.TryGetValue(ct, out var encoder)
+                ? encoder
+                : new ControlNetEncoder<T>(
+                    inputChannels: 3,
+                    baseChannels: 320,
+                    channelMultipliers: new[] { 1, 2, 4, 4 },
+                    seed: seed);
         }
     }
 
@@ -193,12 +201,17 @@ public class ControlNetUnionProModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new ControlNetUnionProModel<T>(
+        return new ControlNetUnionProModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            baseUNet: (UNetNoisePredictor<T>)_baseUNet.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
             supportedTypes: _supportedTypes,
-            seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
-        return clone;
+            controlEncoders: _encoderCache.ToDictionary(
+                kvp => kvp.Key,
+                kvp => kvp.Value.Clone()));
     }
 
     /// <inheritdoc />

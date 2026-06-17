@@ -80,6 +80,7 @@ public class ControlNetInpaintingModel<T> : LatentDiffusionModelBase<T>
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? baseUNet = null,
         StandardVAE<T>? vae = null,
+        ControlNetEncoder<T>? controlEncoder = null,
         IConditioningModule<T>? conditioner = null,
         ControlType controlType = ControlType.Canny,
         int? seed = null)
@@ -93,11 +94,15 @@ public class ControlNetInpaintingModel<T> : LatentDiffusionModelBase<T>
     {
         _controlType = controlType;
         _conditioner = conditioner;
-        InitializeLayers(baseUNet, vae, seed);
+        InitializeLayers(baseUNet, vae, controlEncoder, seed);
     }
 
     [MemberNotNull(nameof(_baseUNet), nameof(_vae), nameof(_controlEncoder))]
-    private void InitializeLayers(UNetNoisePredictor<T>? baseUNet, StandardVAE<T>? vae, int? seed)
+    private void InitializeLayers(
+        UNetNoisePredictor<T>? baseUNet,
+        StandardVAE<T>? vae,
+        ControlNetEncoder<T>? controlEncoder,
+        int? seed)
     {
         _baseUNet = baseUNet ?? new UNetNoisePredictor<T>(
             architecture: Architecture, inputChannels: LATENT_CHANNELS + INPAINT_EXTRA_CHANNELS,
@@ -106,7 +111,7 @@ public class ControlNetInpaintingModel<T> : LatentDiffusionModelBase<T>
         _vae = vae ?? new StandardVAE<T>(
             inputChannels: 3, latentChannels: LATENT_CHANNELS, baseChannels: 128,
             channelMultipliers: new[] { 1, 2, 4, 4 }, numResBlocksPerLevel: 2, seed: seed);
-        _controlEncoder = new ControlNetEncoder<T>(
+        _controlEncoder = controlEncoder ?? new ControlNetEncoder<T>(
             inputChannels: 3, baseChannels: 320, channelMultipliers: new[] { 1, 2, 4, 4 }, seed: seed);
     }
 
@@ -156,9 +161,15 @@ public class ControlNetInpaintingModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new ControlNetInpaintingModel<T>(controlType: _controlType, conditioner: _conditioner, seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
-        return clone;
+        return new ControlNetInpaintingModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            baseUNet: (UNetNoisePredictor<T>)_baseUNet.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            controlEncoder: _controlEncoder.Clone(),
+            conditioner: _conditioner,
+            controlType: _controlType);
     }
 
     /// <inheritdoc />

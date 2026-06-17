@@ -91,18 +91,24 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
     /// <param name="inputChannels">Latent channels. Default: 16.</param>
     /// <param name="contextDim">Context dimension. Default: 4096.</param>
     /// <param name="seed">Optional random seed.</param>
+    /// <param name="hiddenSize">Transformer hidden width. Defaults to the FLUX paper width.</param>
+    /// <param name="numJointLayers">Number of double-stream blocks. Defaults to the FLUX paper depth.</param>
+    /// <param name="numSingleLayers">Number of single-stream blocks. Defaults to the FLUX paper depth.</param>
     public FluxDoubleStreamPredictor(
         FluxPredictorVariant variant = FluxPredictorVariant.Dev,
         int inputChannels = 16,
         int contextDim = 4096,
-        int? seed = null)
+        int? seed = null,
+        int? hiddenSize = null,
+        int? numJointLayers = null,
+        int? numSingleLayers = null)
         : base(seed: seed)
     {
         _variant = variant;
         _inputChannels = inputChannels;
-        _hiddenSize = 3072;
-        _numJointLayers = 19;
-        _numSingleLayers = 38;
+        _hiddenSize = hiddenSize ?? 3072;
+        _numJointLayers = numJointLayers ?? 19;
+        _numSingleLayers = numSingleLayers ?? 38;
         _contextDim = contextDim;
 
         InitializeLayers(seed);
@@ -341,7 +347,13 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override INoisePredictor<T> Clone()
     {
-        var clone = new FluxDoubleStreamPredictor<T>(_variant, _inputChannels, _contextDim);
+        var clone = new FluxDoubleStreamPredictor<T>(
+            _variant,
+            _inputChannels,
+            _contextDim,
+            hiddenSize: _hiddenSize,
+            numJointLayers: _numJointLayers,
+            numSingleLayers: _numSingleLayers);
         clone.SetParameters(GetParameters());
         return clone;
     }

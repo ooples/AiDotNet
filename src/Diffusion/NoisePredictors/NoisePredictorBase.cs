@@ -143,7 +143,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
                             $"on {t.Name} due to reflection read failure: {ex.GetType().Name}: {ex.Message}");
                         continue;
                     }
-                    if (value is null || !visited.Add(value)) continue;
+                    if (value is null || IsNumericContainer(value.GetType()) || !visited.Add(value)) continue;
 
                     if (value is ILayer<T> layer)
                     {
@@ -162,7 +162,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
                         // disposed correctly.
                         foreach (System.Collections.DictionaryEntry entry in dictionary)
                         {
-                            if (entry.Value is null || !visited.Add(entry.Value)) continue;
+                            if (entry.Value is null || IsNumericContainer(entry.Value.GetType()) || !visited.Add(entry.Value)) continue;
                             if (entry.Value is ILayer<T> nestedLayer)
                             {
                                 yield return nestedLayer;
@@ -178,7 +178,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
                     {
                         foreach (var item in enumerable)
                         {
-                            if (item is null || !visited.Add(item)) continue;
+                            if (item is null || IsNumericContainer(item.GetType()) || !visited.Add(item)) continue;
                             if (item is ILayer<T> nestedLayer)
                             {
                                 yield return nestedLayer;
@@ -216,9 +216,17 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         if (ns.StartsWith("System", StringComparison.Ordinal)) return false;
         // Avoid recursing into low-level numeric containers — their fields are arrays
         // of T, not layers, and walking them adds noise for no benefit.
-        if (ns.StartsWith("AiDotNet.Tensors", StringComparison.Ordinal)) return false;
-        if (type.Name == "Vector`1" || type.Name == "Matrix`1" || type.Name == "Tensor`1") return false;
+        if (IsNumericContainer(type)) return false;
         return true;
+    }
+
+    private static bool IsNumericContainer(Type type)
+    {
+        var ns = type.Namespace ?? string.Empty;
+        return ns.StartsWith("AiDotNet.Tensors", StringComparison.Ordinal) ||
+            type.Name == "Vector`1" ||
+            type.Name == "Matrix`1" ||
+            type.Name == "Tensor`1";
     }
 
     /// <summary>
@@ -364,9 +372,8 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
 
     #region Transparent Weight Streaming (Tensors #602 / issue #430)
 
-    // 0 = not engaged, 1 = engaged. Int (not bool) so the engage transition can be claimed
-    // atomically via Interlocked.CompareExchange — concurrent callers on the same instance
-    // then can't both reconfigure the process-global WeightRegistry.
+    // 0 = not engaged, 1 = engaged. Int (not bool) so Volatile reads/writes
+    // give concurrent forwards a fully published engagement state.
     private int _streamingEngaged;
 
     // 0 = no successful weight registration yet, 1 = resolved lazy weights have
@@ -398,21 +405,18 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// Engages transparent weight streaming for this predictor when it is large
     /// enough to pressure host RAM. Idempotent — runs at most once per instance.
     /// <para>
-    /// When engaged it configures the process-wide <see cref="WeightRegistry"/> for
-    /// transparent auto-eviction and flags every owned layer to allocate its lazy
-    /// weights through the disk-backed streaming pool. Combined with
-    /// <see cref="RegisterResolvedStreamingWeights"/> (called after the first
-    /// forward resolves weights), the multi-step denoising loop then keeps only a
-    /// bounded resident set: each weight auto-rehydrates on access and the
-    /// symmetric owner-drop evicts cold ones.
+    /// Called after a successful forward resolves lazy weights. Configuring the
+    /// process-wide <see cref="WeightRegistry"/> before a predictor's first UNet
+    /// forward can disturb lazy convolution allocation because predictors do not
+    /// have NeuralNetworkBase's per-layer materialization wrapper. Post-forward
+    /// engagement registers real tensors while preserving first-use lazy init.
     /// </para>
     /// <para>
     /// <b>Safety guard.</b> The registry is process-global and
     /// <see cref="WeightRegistry.Configure"/> throws on a pool that already has
-    /// live handles. So this only engages when the registry is empty — if another
-    /// model currently owns a streaming session, this predictor runs resident
-    /// rather than clobbering it. The common single-model inference path sees an
-    /// empty registry.
+    /// live handles or in-flight reservations. A fresh pool is configured only
+    /// when the registry is idle; otherwise this predictor joins an existing
+    /// transparent streaming pool rather than clobbering it.
     /// </para>
     /// </summary>
     protected void MaybeEngageWeightStreaming()
@@ -422,27 +426,44 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         long threshold = StreamingThresholdOverride ?? DefaultStreamingThresholdParams;
         if (ParameterCount <= threshold) return;
 
-        // Don't reconfigure (or clobber) a registry another model is using.
-        if (WeightRegistry.GetStreamingReport().RegisteredEntryCount > 0) return;
-
-        // Atomically claim engagement: if a concurrent call on this same instance already
-        // won the race, that thread owns the WeightRegistry.Configure below and this one
-        // returns (runs resident) rather than reconfiguring the process-global registry.
-        if (System.Threading.Interlocked.CompareExchange(ref _streamingEngaged, 1, 0) != 0) return;
-
-        WeightRegistry.Configure(new GpuOffloadOptions
+        lock (NoisePredictorWeightStreamingGate.Sync)
         {
-            StreamingPoolMaxResidentBytes = StreamingResidentCapOverride ?? ComputeResidentCapBytes(),
-            TransparentAutoEviction = true,
-        });
+            if (System.Threading.Volatile.Read(ref _streamingEngaged) != 0) return;
 
-        // ReflectInstanceLayers (not EnumerateLayers) so the engagement works for
-        // ANY predictor without requiring an EnumerateLayers override — it walks
-        // owned layer fields recursively, including those inside the DiT block list.
-        foreach (var layer in ReflectInstanceLayers(this))
-        {
-            if (layer is LayerBase<T> lb) lb.UseStreamingAllocator = true;
+            var report = WeightRegistry.GetStreamingReport();
+            var canUseTransparentStreaming = report.RegisteredEntryCount > 0
+                ? WeightRegistry.CurrentOptions.TransparentAutoEviction
+                : TryConfigureWeightStreamingPool();
+
+            if (!canUseTransparentStreaming) return;
+
+            System.Threading.Volatile.Write(ref _streamingEngaged, 1);
         }
+    }
+
+    private bool TryConfigureWeightStreamingPool()
+    {
+        try
+        {
+            WeightRegistry.Configure(new GpuOffloadOptions
+            {
+                StreamingPoolMaxResidentBytes = StreamingResidentCapOverride ?? ComputeResidentCapBytes(),
+                TransparentAutoEviction = true,
+            });
+            return true;
+        }
+        catch (InvalidOperationException ex) when (IsBusyWeightRegistryConfigureFailure(ex))
+        {
+            return WeightRegistry.CurrentOptions.TransparentAutoEviction;
+        }
+    }
+
+    private static bool IsBusyWeightRegistryConfigureFailure(InvalidOperationException ex)
+    {
+        const string prefix = "WeightRegistry.Configure: existing streaming pool has ";
+        return ex.Message.StartsWith(prefix, StringComparison.Ordinal) &&
+            (ex.Message.Contains("registered entries", StringComparison.Ordinal) ||
+             ex.Message.Contains("outstanding reservations", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -452,7 +473,6 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// </summary>
     protected WeightStreamingForwardScope BeginWeightStreamingForward()
     {
-        MaybeEngageWeightStreaming();
         return new WeightStreamingForwardScope(this);
     }
 
@@ -530,6 +550,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
 
         public Tensor<T> Complete(Tensor<T> result)
         {
+            _owner.MaybeEngageWeightStreaming();
             _owner.RegisterResolvedStreamingWeights();
             _completed = true;
             return result;
@@ -1304,4 +1325,9 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     }
 
     #endregion
+}
+
+internal static class NoisePredictorWeightStreamingGate
+{
+    internal static readonly object Sync = new();
 }

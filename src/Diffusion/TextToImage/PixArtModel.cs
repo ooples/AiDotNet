@@ -252,8 +252,11 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
         PixArtVariant modelSize = DefaultVariant,
         IConditioningModule<T>? conditioner = null,
         INoiseScheduler<T>? scheduler = null,
+        DiffusionModelOptions<T>? options = null,
+        DiTNoisePredictor<T>? dit = null,
+        StandardVAE<T>? vae = null,
         int? seed = null)
-        : base(CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler(seed), architecture)
+        : base(options ?? CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler(seed), architecture)
     {
         _modelSize = modelSize;
         _conditioner = conditioner;
@@ -266,7 +269,7 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
         _defaultResolution = resolution;
 
         // Initialize mutable neural network layers
-        InitializeLayers(seed);
+        InitializeLayers(dit, vae, seed);
     }
 
     #endregion
@@ -278,10 +281,10 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     [MemberNotNull(nameof(_dit), nameof(_vae))]
-    private void InitializeLayers(int? seed)
+    private void InitializeLayers(DiTNoisePredictor<T>? dit, StandardVAE<T>? vae, int? seed)
     {
         // Create VAE
-        _vae = new StandardVAE<T>(
+        _vae = vae ?? new StandardVAE<T>(
             inputChannels: 3,
             latentChannels: PIXART_LATENT_CHANNELS,
             baseChannels: 128,
@@ -290,7 +293,7 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
             seed: seed);
 
         // Create DiT noise predictor with PixArt-specific configuration
-        _dit = CreateDiTPredictor(seed);
+        _dit = dit ?? CreateDiTPredictor(seed);
     }
 
     #endregion
@@ -609,8 +612,10 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
             conditioner: _conditioner,
             seed: RandomGenerator.Next());
 
-        // Copy parameters
-        clone.SetParameters(GetParameters());
+        // Copy-on-write: share this model's weight tensors with the clone instead of deep-copying all
+        // parameters (PixArt-α is ~600M params / ~2.4 GB). The clone gets identical weights at O(1);
+        // either model copies its own set lazily on the first weight write (training).
+        clone.ShareWeightsFrom(this);
 
         return clone;
     }

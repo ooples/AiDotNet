@@ -468,7 +468,7 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         // Project conditioning text to hidden dim
         var textTokens = conditioning != null
             ? _contextProj.Forward(conditioning)
-            : TensorAllocator.Rent<T>(new[] { batch, 0, _hiddenSize });
+            : TensorAllocator.Rent<T>(new[] { batch, 1, _hiddenSize });
 
         // Process through joint (double-stream) blocks
         foreach (var block in _jointBlocks)
