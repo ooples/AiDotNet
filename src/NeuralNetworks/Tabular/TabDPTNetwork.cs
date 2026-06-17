@@ -145,13 +145,16 @@ public class TabDPTNetwork<T> : NeuralNetworkBase<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        Tensor<T> currentOutput = input;
-        foreach (var layer in Layers)
+        return Accelerate(input, () =>
         {
-            currentOutput = layer.Forward(currentOutput);
-        }
+            Tensor<T> currentOutput = input;
+            foreach (var layer in Layers)
+            {
+                currentOutput = layer.Forward(currentOutput);
+            }
 
-        return currentOutput;
+            return currentOutput;
+        });
     }
 
     /// <inheritdoc/>
