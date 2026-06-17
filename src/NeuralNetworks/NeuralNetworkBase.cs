@@ -5876,6 +5876,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> resolvedOptimizer,
         bool useStreamingDefaults)
     {
+        // #1624: scope THIS step's transient allocations (forward activations,
+        // backward grad buffers) to a per-step arena, exactly as the eager
+        // TrainWithTape path does. Without this, when a caller wraps the whole
+        // training loop in one outer arena (and never Reset()s it between steps —
+        // e.g. the model-family memorization test), every step's tensors pile into
+        // that outer arena's ring (its cursor only advances), so _ringBackingArrays
+        // grows by one step's working set EACH step and OOMs after a handful of
+        // steps (the real #1624 leak: ~11.45 GB rooted Single[] across ~8 steps).
+        // A nested per-step arena disposes at method exit, returning its buffers to
+        // the cross-arena persistent pool (zero-GC reuse preserved) and bounding the
+        // resident set to a SINGLE step's working set.
+        using var arena = TensorArena.Create();
+
         var loss = LossFunction as LossFunctions.LossFunctionBase<T>
             ?? throw new InvalidOperationException(
                 "LossFunction must derive from LossFunctionBase<T> for tape-based training.");
