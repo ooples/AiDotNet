@@ -3093,6 +3093,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // first PredictEager call. Idempotent once finalized.
         TryAutoEnableWeightStreaming();
 
+        // L3b (#1622): latch the auto compiled-inference path for foundation-scale
+        // models. We are guaranteed to be in inference mode here (the flip above ran),
+        // so keying on _streamingEngagedByAutoDetect (set iff the model is over the
+        // foundation-scale threshold and the user didn't opt out of auto-streaming) is
+        // correct regardless of whether the streaming auto-detect first finalized from a
+        // training- or inference-mode call. Idempotent. Cleared again on SetTrainingMode(true).
+        if (_streamingEngagedByAutoDetect && !s_autoCompileDisabled)
+            _autoCompiledInferenceEnabled = true;
+
         try
         {
             // Universal batch-dim auto-promotion (mirrors the Train path).
@@ -3133,7 +3142,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // funnel for the gate) or per-model wiring of a shared verify helper.
             // Until that lands, eager is the safe default; callers can opt into
             // compiled replay explicitly via CompileForward + PredictCompiled.
-            var output = PredictEager(promoted);
+            //
+            // #1622 L3b: for foundation-scale models in inference,
+            // _autoCompiledInferenceEnabled routes through PredictAccelerated — the
+            // verify-then-trust gate the note above asks for. It runs eager once per
+            // shape to validate the compiled plan (adopting it only on numerical
+            // parity, else staying eager for that shape), and adds a collision-safe
+            // value-hash memo. Output is numerically identical to PredictEager for
+            // every input, so it is safe as the base-Predict default for the models
+            // that route here; small models / training stay eager.
+            var output = _autoCompiledInferenceEnabled
+                ? PredictAccelerated(promoted)
+                : PredictEager(promoted);
 
             // If we promoted the input by prepending a unit batch dim,
             // squeeze the same dim back off the output so callers
@@ -3949,6 +3969,78 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // #1622 L3 — auto-enabled, correctness-gated compiled inference + value memo.
+    // The verify-then-trust gate + collision-safe value memo live in the reusable
+    // VerifiedInferenceGate<T> component (shared with NoisePredictorBase so the
+    // diffusion family gets the same behavior); this class just composes one and
+    // feeds it the eager + compiled forwards.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private readonly VerifiedInferenceGate<T> _inferenceGate = new();
+
+    /// <summary>
+    /// True when this model is foundation-scale and in inference mode, so
+    /// <see cref="Predict"/> routes through the verify-then-trust compiled path +
+    /// value memo instead of plain eager. Latched in <see cref="Predict"/> /
+    /// <see cref="SetTrainingMode"/> off <see cref="WeightStreamingAutoDetected"/>;
+    /// cleared when training is (re)enabled. Small models and training stay eager.
+    /// </summary>
+    private volatile bool _autoCompiledInferenceEnabled;
+
+    /// <summary>
+    /// Process-wide opt-out for the auto compiled-inference path. Set
+    /// <c>AIDOTNET_DISABLE_AUTO_COMPILE=1</c> to force every model onto the plain
+    /// eager path (debugging a suspected compiled-plan defect, or pinning bit-exact
+    /// eager numerics). Read once.
+    /// </summary>
+    private static readonly bool s_autoCompileDisabled =
+        string.Equals(Environment.GetEnvironmentVariable("AIDOTNET_DISABLE_AUTO_COMPILE"), "1", StringComparison.Ordinal);
+
+    /// <summary>Whether the auto compiled-inference path is currently engaged for this model. Diagnostic/test hook.</summary>
+    internal bool AutoCompiledInferenceEngaged => _autoCompiledInferenceEnabled;
+
+    /// <summary>Count of value-memo hits (identical-input short-circuits) on the accelerated path. Diagnostic/test hook.</summary>
+    internal long AcceleratedMemoHits => _inferenceGate.MemoHits;
+
+    /// <summary>Count of verify-then-trust verifications performed (one per new shape+version). Diagnostic/test hook.</summary>
+    internal long AcceleratedVerifyCount => _inferenceGate.VerifyCount;
+
+    /// <summary>
+    /// Forces the verify-then-trust compiled inference path on/off for this model, bypassing the
+    /// foundation-scale auto-detect gate. Test hook only — production enablement flows through
+    /// <see cref="TryAutoEnableWeightStreaming"/> + <see cref="Predict"/>.
+    /// </summary>
+    internal void ForceAutoCompiledInferenceForTesting(bool enabled) => _autoCompiledInferenceEnabled = enabled;
+
+    /// <summary>
+    /// Returns the current verify-then-trust verdict for an input shape at the live structure
+    /// version: 0 = unknown/not-yet-verified, 1 = trusted (compiled replayed), 2 = rejected (eager).
+    /// Test/diagnostic hook.
+    /// </summary>
+    internal int CompiledVerdictForTesting(int[] shape) => _inferenceGate.VerdictFor(shape, _layerStructureVersion);
+
+    /// <summary>
+    /// Verify-then-trust compiled inference for foundation-scale models, with a
+    /// collision-safe value-hash memo. Returns output numerically identical to
+    /// <see cref="PredictEager"/> for every input: compiled is adopted per shape
+    /// only after it matches eager, and the memo only returns a cached output for a
+    /// confirmed-identical input. Invoked by <see cref="Predict"/> (and reusable by
+    /// subclasses that override Predict) when <see cref="_autoCompiledInferenceEnabled"/> is set.
+    /// </summary>
+    /// <param name="input">The (already batch-normalized) inference input.</param>
+    protected internal Tensor<T> PredictAccelerated(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        return _inferenceGate.Run(
+            input,
+            _layerStructureVersion,
+            eager: () => PredictEager(input),
+            compiled: () => PredictCompiled(input),
+            onDecision: (enabled, reason) => AiDotNet.Helpers.InferenceDiagnostics.RecordDecision(
+                area: "NeuralNetworkBase", feature: "AutoCompiledInference", enabled: enabled, reason: reason));
+    }
+
     /// <summary>
     /// Releases every compiled inference plan this network holds, returning their
     /// pre-allocated intermediate buffers to the GC. The next compiled call (or
@@ -4496,6 +4588,25 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // to bf16 and small optimizer updates aren't lost. No-op unless streaming is
         // engaged and the dtype is Auto.
         SetStreamingExecutionTrainingIfSupported(isTraining);
+
+        if (isTraining)
+        {
+            // Entering training invalidates the inference acceleration state: weights
+            // will change, so the verify-then-trust verdicts and the value memo (keyed
+            // to the current weights) are stale. Turn the auto-compiled path off and
+            // clear the gate; a later return to inference re-verifies from scratch.
+            _autoCompiledInferenceEnabled = false;
+            _inferenceGate.Clear();
+        }
+        else if (_streamingEngagedByAutoDetect && !s_autoCompileDisabled)
+        {
+            // L3b (#1622): switching a foundation-scale model into inference latches the
+            // auto-compiled eligibility. SetTrainingMode is the universal funnel every
+            // Predict override calls, so this marks eligibility even for models that
+            // override Predict (the base-Predict routing only reaches non-overriding
+            // models; overriding families opt their forward into PredictAccelerated).
+            _autoCompiledInferenceEnabled = true;
+        }
 
         if (SupportsTraining)
         {
@@ -5293,6 +5404,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         bool isTrainingForThisAttempt = isTrainingOverride ?? IsTrainingMode;
         if (!isTrainingForThisAttempt)
             options.StreamingStoreDtype = ResolveInferenceStoreDtype(paramCount, options.StreamingPoolMaxResidentBytes);
+        // L3b (#1622): a foundation-scale model auto-enables the verify-then-trust
+        // compiled forward path (PredictAccelerated) too, composing the compiled plan
+        // with the quant-resident streamed weights configured just above (L1 + L3
+        // unified). The enable itself is latched in Predict (guaranteed inference mode
+        // there, so it is correct regardless of whether this finalize ran from a
+        // training- or inference-mode call) keyed on _streamingEngagedByAutoDetect.
         ConfigureWeightLifetime(options);
         // Declare the default (inference) execution mode so the zero-copy mmap
         // fast path is eligible immediately — a freshly-built model is in
