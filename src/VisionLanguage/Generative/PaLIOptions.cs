@@ -33,5 +33,14 @@ public class PaLIOptions : GenerativeVLMOptions
         WeightDecay = other.WeightDecay;
     }
 
-    public PaLIOptions() { ArchitectureType = GenerativeArchitectureType.EncoderDecoder; VisionDim = 1408; DecoderDim = 1024; NumVisionLayers = 48; NumDecoderLayers = 24; NumHeads = 16; ImageSize = 224; }
+    public PaLIOptions()
+    {
+        ArchitectureType = GenerativeArchitectureType.EncoderDecoder;
+        VisionDim = 1408;
+        DecoderDim = 1024;
+        NumVisionLayers = 48;
+        NumDecoderLayers = 24;
+        NumHeads = 16;
+        ImageSize = 224;
+    }
 }

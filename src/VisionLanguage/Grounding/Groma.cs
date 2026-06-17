@@ -53,19 +53,80 @@ namespace AiDotNet.VisionLanguage.Grounding;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Groma: Localized Visual Tokenization for Grounding Multimodal Large Language Models", "https://arxiv.org/abs/2404.13013", Year = 2024, Authors = "Ma et al.")]
+[ResearchPaper(
+    "Groma: Localized Visual Tokenization for Grounding Multimodal Large Language Models",
+    "https://arxiv.org/abs/2404.13013",
+    Year = 2024,
+    Authors = "Ma et al."
+)]
 public class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
-    private readonly GromaOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly GromaOptions _options;
+
+    public override ModelOptions GetOptions() => _options;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer; private bool _useNativeMode; private bool _disposed;
+    private readonly ITokenizer? _tokenizer;
+    private bool _useNativeMode;
+    private bool _disposed;
     private int _encoderLayerEnd;
 
-    public Groma(NeuralNetworkArchitecture<T> architecture, string modelPath, GromaOptions? options = null) : base(architecture) { _options = options ?? new GromaOptions(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
-    public Groma(NeuralNetworkArchitecture<T> architecture, GromaOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new GromaOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
+    public Groma(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        GromaOptions? options = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new GromaOptions();
+        _useNativeMode = false;
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
 
-    public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxDetections => _options.MaxDetections;
-    public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
+    public Groma(
+        NeuralNetworkArchitecture<T> architecture,
+        GromaOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new GromaOptions();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    public int EmbeddingDimension => _options.DecoderDim;
+    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageChannels => 3;
+    public int MaxDetections => _options.MaxDetections;
+
+    public Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(p));
+        var c = p;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            c = Layers[i].Forward(c);
+        return L2Normalize(c);
+    }
+
     /// <summary>
     /// Grounds text using Groma's localized visual tokenization approach.
     /// Per the paper (Ma et al., ByteDance 2024), Groma grounds multimodal LLMs
@@ -100,7 +161,8 @@ public class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
         // Step 2: Region proposal network with learned region queries
         int numRegionQueries = 64;
         int gridSize = (int)Math.Sqrt(visDim);
-        if (gridSize < 4) gridSize = 4;
+        if (gridSize < 4)
+            gridSize = 4;
 
         // Each region query attends to the visual features to propose a region
         var regionProposals = new double[numRegionQueries][];
@@ -111,7 +173,10 @@ public class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
             regionProposals[q] = new double[4]; // cx, cy, w, h
 
             // Query-specific attention over visual features to determine region
-            double attnCx = 0, attnCy = 0, attnW = 0, attnH = 0;
+            double attnCx = 0,
+                attnCy = 0,
+                attnW = 0,
+                attnH = 0;
             double attnSum = 0;
 
             int stride = Math.Max(1, visDim / numRegionQueries);
@@ -141,7 +206,8 @@ public class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
             }
 
             // Predict width/height from feature variance
-            double varX = 0, varY = 0;
+            double varX = 0,
+                varY = 0;
             for (int d = qStart; d < qEnd; d++)
             {
                 double val = NumOps.ToDouble(visualFeatures[d]);
@@ -151,7 +217,11 @@ public class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
                 varX += weight * (spatialX - attnCx) * (spatialX - attnCx);
                 varY += weight * (spatialY - attnCy) * (spatialY - attnCy);
             }
-            if (attnSum > 1e-8) { varX /= attnSum; varY /= attnSum; }
+            if (attnSum > 1e-8)
+            {
+                varX /= attnSum;
+                varY /= attnSum;
+            }
             attnW = Math.Max(0.05, Math.Sqrt(varX) * 4);
             attnH = Math.Max(0.05, Math.Sqrt(varY) * 4);
 
@@ -215,68 +285,180 @@ public class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 
         // Step 4: NMS
         var kept = new bool[validCount];
-        for (int i = 0; i < validCount; i++) kept[i] = true;
+        for (int i = 0; i < validCount; i++)
+            kept[i] = true;
         for (int i = 0; i < validCount; i++)
         {
-            if (!kept[i]) continue;
+            if (!kept[i])
+                continue;
             for (int j = i + 1; j < validCount; j++)
             {
-                if (!kept[j]) continue;
+                if (!kept[j])
+                    continue;
                 double iou = ComputeIoU(
-                    rawDetections[i, 0], rawDetections[i, 1], rawDetections[i, 2], rawDetections[i, 3],
-                    rawDetections[j, 0], rawDetections[j, 1], rawDetections[j, 2], rawDetections[j, 3]);
-                if (iou > nmsThreshold) kept[j] = false;
+                    rawDetections[i, 0],
+                    rawDetections[i, 1],
+                    rawDetections[i, 2],
+                    rawDetections[i, 3],
+                    rawDetections[j, 0],
+                    rawDetections[j, 1],
+                    rawDetections[j, 2],
+                    rawDetections[j, 3]
+                );
+                if (iou > nmsThreshold)
+                    kept[j] = false;
             }
         }
 
         int finalCount = 0;
-        for (int i = 0; i < validCount; i++) if (kept[i]) finalCount++;
-        if (finalCount == 0) return new Tensor<T>([fieldsPerDet]);
+        for (int i = 0; i < validCount; i++)
+            if (kept[i])
+                finalCount++;
+        if (finalCount == 0)
+            return new Tensor<T>([fieldsPerDet]);
 
         var result = new Tensor<T>([finalCount * fieldsPerDet]);
         int idx = 0;
         for (int i = 0; i < validCount; i++)
         {
-            if (!kept[i]) continue;
+            if (!kept[i])
+                continue;
             for (int f = 0; f < fieldsPerDet; f++)
                 result[idx * fieldsPerDet + f] = NumOps.FromDouble(rawDetections[i, f]);
             idx++;
         }
         return result;
     }
+
     public Tensor<T> DetectObjects(Tensor<T> image, IReadOnlyList<string> categories)
     {
         ThrowIfDisposed();
         string combined = string.Join(". ", categories) + ".";
         return GroundText(image, combined);
     }
-    private static double ComputeIoU(double x1a, double y1a, double x2a, double y2a,
-                                      double x1b, double y1b, double x2b, double y2b)
+
+    private static double ComputeIoU(
+        double x1a,
+        double y1a,
+        double x2a,
+        double y2a,
+        double x1b,
+        double y1b,
+        double x2b,
+        double y2b
+    )
     {
-        double ix1 = Math.Max(x1a, x1b), iy1 = Math.Max(y1a, y1b);
-        double ix2 = Math.Min(x2a, x2b), iy2 = Math.Min(y2a, y2b);
-        double iw = Math.Max(0, ix2 - ix1), ih = Math.Max(0, iy2 - iy1);
+        double ix1 = Math.Max(x1a, x1b),
+            iy1 = Math.Max(y1a, y1b);
+        double ix2 = Math.Min(x2a, x2b),
+            iy2 = Math.Min(y2a, y2b);
+        double iw = Math.Max(0, ix2 - ix1),
+            ih = Math.Max(0, iy2 - iy1);
         double inter = iw * ih;
         double areaA = (x2a - x1a) * (y2a - y1a);
         double areaB = (x2b - x1b) * (y2b - y1b);
         double union = areaA + areaB - inter;
         return union > 1e-8 ? inter / union : 0;
     }
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; } else { Layers.AddRange(LayerHelper<T>.CreateDefaultLLaVAMLPProjectorLayers(_options.VisionDim, _options.VisionDim * 4, _options.DecoderDim, _options.NumVisionLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate)); ComputeEncoderDecoderBoundary(); } }
-    private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 3; }
-    private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode)
+            return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            _encoderLayerEnd = Layers.Count / 2;
+        }
+        else
+        {
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultLLaVAMLPProjectorLayers(
+                    _options.VisionDim,
+                    _options.VisionDim * 4,
+                    _options.DecoderDim,
+                    _options.NumVisionLayers,
+                    _options.NumDecoderLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate
+                )
+            );
+            ComputeEncoderDecoderBoundary();
+        }
+    }
+
+    private void ComputeEncoderDecoderBoundary()
+    {
+        int lpb = _options.DropoutRate > 0 ? 6 : 5;
+        _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 3;
+    }
+
+    private Tensor<T> TokenizeText(string text)
+    {
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
+        var encoding = _tokenizer.Encode(text);
+        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
+        var tokens = new Tensor<T>([seqLen]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        return tokens;
+    }
+
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
+        var c = input;
+        foreach (var l in Layers)
+            c = l.Forward(c);
+        return c;
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        TrainWithTape(input, expected);
+        SetTrainingMode(false);
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Groma-Native" : "Groma-ONNX", Description = "Groma: localized visual tokenization for grounded understanding.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "Groma-Native" : "Groma-ONNX",
+            Description = "Groma: localized visual tokenization for grounded understanding.",
+            FeatureCount = _options.DecoderDim,
+            Complexity = _options.NumVisionLayers + _options.NumDecoderLayers,
+        };
         m.AdditionalInfo["Architecture"] = "Groma";
         m.AdditionalInfo["LocalizedTokenization"] = _options.EnableLocalizedTokenization.ToString();
         return m;
     }
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) {
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
         writer.Write(_useNativeMode);
         writer.Write(_options.ModelPath ?? string.Empty);
         writer.Write(_options.ImageSize);
@@ -288,10 +470,13 @@ public class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
         writer.Write(_options.MaxDetections);
         writer.Write(_options.EnableLocalizedTokenization);
     }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) {
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
         _useNativeMode = reader.ReadBoolean();
         string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionDim = reader.ReadInt32();
         _options.DecoderDim = reader.ReadInt32();
@@ -300,9 +485,28 @@ public class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
         _options.NumHeads = reader.ReadInt32();
         _options.MaxDetections = reader.ReadInt32();
         _options.EnableLocalizedTokenization = reader.ReadBoolean();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new Groma<T>(Architecture, mp, _options); return new Groma<T>(Architecture, _options); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(Groma<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new Groma<T>(Architecture, mp, _options);
+        return new Groma<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(Groma<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
 }

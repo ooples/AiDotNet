@@ -41,11 +41,25 @@ public class QwenVLOptions : InstructionTunedVLMOptions
         NumResamplerHeads = other.NumResamplerHeads;
     }
 
-    public QwenVLOptions() { InstructionArchitectureType = InstructionTunedArchitectureType.CrossAttentionResampler; VisionDim = 1024; DecoderDim = 4096; NumVisionLayers = 48; NumDecoderLayers = 32; NumHeads = 16; ImageSize = 448; LanguageModelName = "Qwen"; MaxVisualTokens = 256; }
+    public QwenVLOptions()
+    {
+        InstructionArchitectureType = InstructionTunedArchitectureType.CrossAttentionResampler;
+        VisionDim = 1024;
+        DecoderDim = 4096;
+        NumVisionLayers = 48;
+        NumDecoderLayers = 32;
+        NumHeads = 16;
+        ImageSize = 448;
+        LanguageModelName = "Qwen";
+        MaxVisualTokens = 256;
+    }
+
     /// <summary>Gets or sets the resampler dimension.</summary>
     public int ResamplerDim { get; set; } = 1024;
+
     /// <summary>Gets or sets the number of resampler layers.</summary>
     public int NumResamplerLayers { get; set; } = 6;
+
     /// <summary>Gets or sets the number of resampler heads.</summary>
     public int NumResamplerHeads { get; set; } = 16;
 }

@@ -57,10 +57,16 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("An Inverse Scaling Law for CLIP Training", "https://arxiv.org/abs/2305.07017", Year = 2023, Authors = "Li et al.")]
+[ResearchPaper(
+    "An Inverse Scaling Law for CLIP Training",
+    "https://arxiv.org/abs/2305.07017",
+    Year = 2023,
+    Authors = "Li et al."
+)]
 public class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly CLIPAOptions _options;
+
     public override ModelOptions GetOptions() => _options;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -71,7 +77,9 @@ public class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
     public CLIPA(
         NeuralNetworkArchitecture<T> architecture,
         string imageEncoderModelPath,
-        CLIPAOptions? options = null) : base(architecture)
+        CLIPAOptions? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new CLIPAOptions();
         SyncImageSizeWithArchitecture();
@@ -80,9 +88,15 @@ public class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.VisionEmbeddingDim;
         if (string.IsNullOrWhiteSpace(imageEncoderModelPath))
-            throw new ArgumentException("Image encoder model path cannot be null or empty.", nameof(imageEncoderModelPath));
+            throw new ArgumentException(
+                "Image encoder model path cannot be null or empty.",
+                nameof(imageEncoderModelPath)
+            );
         if (!File.Exists(imageEncoderModelPath))
-            throw new FileNotFoundException($"ONNX model not found: {imageEncoderModelPath}", imageEncoderModelPath);
+            throw new FileNotFoundException(
+                $"ONNX model not found: {imageEncoderModelPath}",
+                imageEncoderModelPath
+            );
         _options.ImageEncoderModelPath = imageEncoderModelPath;
         OnnxImageEncoder = new OnnxModel<T>(imageEncoderModelPath, _options.OnnxOptions);
         if (_options.TextEncoderModelPath is { } tp && !string.IsNullOrEmpty(tp))
@@ -98,7 +112,9 @@ public class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
     public CLIPA(
         NeuralNetworkArchitecture<T> architecture,
         CLIPAOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new CLIPAOptions();
         SyncImageSizeWithArchitecture();
@@ -122,7 +138,8 @@ public class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
     {
         int h = Architecture.InputHeight;
         int w = Architecture.InputWidth;
-        if (h > 0 && w > 0 && h == w) _options.ImageSize = h;
+        if (h > 0 && w > 0 && h == w)
+            _options.ImageSize = h;
     }
 
     public int EmbeddingDimension => _options.VisionEmbeddingDim;
@@ -137,9 +154,11 @@ public class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxImageEncoder is not null) return L2Normalize(OnnxImageEncoder.Run(p));
+        if (IsOnnxMode && OnnxImageEncoder is not null)
+            return L2Normalize(OnnxImageEncoder.Run(p));
         var current = p;
-        foreach (var layer in Layers) current = layer.Forward(current);
+        foreach (var layer in Layers)
+            current = layer.Forward(current);
         return L2Normalize(current);
     }
 
@@ -147,16 +166,19 @@ public class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
     {
         ThrowIfDisposed();
         var t = TokenizeText(text);
-        if (IsOnnxMode && OnnxTextEncoder is not null) return L2Normalize(OnnxTextEncoder.Run(t));
+        if (IsOnnxMode && OnnxTextEncoder is not null)
+            return L2Normalize(OnnxTextEncoder.Run(t));
         var current = t;
-        foreach (var layer in TextEncoderLayers) current = layer.Forward(current);
+        foreach (var layer in TextEncoderLayers)
+            current = layer.Forward(current);
         return L2Normalize(current);
     }
 
     public Tensor<T>[] EncodeTexts(string[] texts)
     {
         var e = new Tensor<T>[texts.Length];
-        for (int i = 0; i < texts.Length; i++) e[i] = EncodeText(texts[i]);
+        for (int i = 0; i < texts.Length; i++)
+            e[i] = EncodeText(texts[i]);
         return e;
     }
 
@@ -173,13 +195,15 @@ public class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
             logits[i] = NumOps.FromDouble(NumOps.ToDouble(CosineSimilarity(ie, te[i])) / temp);
         var probs = Softmax(logits);
         var r = new Dictionary<string, T>();
-        for (int i = 0; i < labels.Length; i++) r[labels[i]] = probs[i];
+        for (int i = 0; i < labels.Length; i++)
+            r[labels[i]] = probs[i];
         return r;
     }
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
@@ -188,10 +212,13 @@ public class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
 
         // ViT patch embedding + dual-stream split (vision in Layers, text in TextEncoderLayers).
         int patchSize = Math.Max(1, _options.ImageSize / 16);
-        Layers.Add(new PatchEmbeddingLayer<T>(
-            patchSize: patchSize,
-            embeddingDim: _options.VisionEmbeddingDim,
-            expectedInputChannels: 3));
+        Layers.Add(
+            new PatchEmbeddingLayer<T>(
+                patchSize: patchSize,
+                embeddingDim: _options.VisionEmbeddingDim,
+                expectedInputChannels: 3
+            )
+        );
 
         int blockSize = _options.DropoutRate > 0 ? 6 : 5;
         int visionLayerCount = 2 + _options.NumVisionLayers * blockSize;
@@ -204,23 +231,28 @@ public class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
                 numTextLayers: _options.NumTextLayers,
                 numVisionHeads: _options.NumVisionHeads,
                 numTextHeads: _options.NumTextHeads,
-                dropoutRate: _options.DropoutRate),
-            visionLayerCount);
+                dropoutRate: _options.DropoutRate
+            ),
+            visionLayerCount
+        );
     }
 
     public override Tensor<T> Predict(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxImageEncoder is not null) return OnnxImageEncoder.Run(input);
+        if (IsOnnxMode && OnnxImageEncoder is not null)
+            return OnnxImageEncoder.Run(input);
         SetTrainingMode(false);
         var current = PreprocessImage(input);
-        foreach (var layer in Layers) current = layer.Forward(current);
+        foreach (var layer in Layers)
+            current = layer.Forward(current);
         return current;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
         try
         {
@@ -234,7 +266,8 @@ public class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
 
     public override void UpdateParameters(Vector<T> parameters)
     {
-        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
         int idx = 0;
         foreach (var l in Layers)
         {
@@ -257,8 +290,8 @@ public class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
     }
 
     /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-        => EnumerateTextEncoderTrainableLayers();
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
+        EnumerateTextEncoderTrainableLayers();
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
@@ -272,11 +305,12 @@ public class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
             Name = _useNativeMode ? "CLIPA-Native" : "CLIPA-ONNX",
             Description = "CLIPA: An Inverse Scaling Law for CLIP Training (Li et al., 2023)",
             FeatureCount = _options.ProjectionDim,
-            Complexity = _options.NumVisionLayers + _options.NumTextLayers
+            Complexity = _options.NumVisionLayers + _options.NumTextLayers,
         };
         m.AdditionalInfo["Architecture"] = "CLIPA";
         m.AdditionalInfo["InitialImageSize"] = _options.InitialImageSize.ToString();
-        m.AdditionalInfo["ReducedResolutionFraction"] = _options.ReducedResolutionFraction.ToString();
+        m.AdditionalInfo["ReducedResolutionFraction"] =
+            _options.ReducedResolutionFraction.ToString();
         return m;
     }
 
@@ -296,9 +330,11 @@ public class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
     {
         _useNativeMode = reader.ReadBoolean();
         string ip = reader.ReadString();
-        if (!string.IsNullOrEmpty(ip)) _options.ImageEncoderModelPath = ip;
+        if (!string.IsNullOrEmpty(ip))
+            _options.ImageEncoderModelPath = ip;
         string tp = reader.ReadString();
-        if (!string.IsNullOrEmpty(tp)) _options.TextEncoderModelPath = tp;
+        if (!string.IsNullOrEmpty(tp))
+            _options.TextEncoderModelPath = tp;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionEmbeddingDim = reader.ReadInt32();
         _options.TextEmbeddingDim = reader.ReadInt32();
@@ -312,29 +348,37 @@ public class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        if (!_useNativeMode && _options.ImageEncoderModelPath is { } mp && !string.IsNullOrEmpty(mp))
+        if (
+            !_useNativeMode
+            && _options.ImageEncoderModelPath is { } mp
+            && !string.IsNullOrEmpty(mp)
+        )
             return new CLIPA<T>(Architecture, mp, _options);
         return new CLIPA<T>(Architecture, _options);
     }
 
     private Tensor<T> TokenizeText(string text)
     {
-        if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized.");
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
         var enc = _tokenizer.Encode(text);
         int sl = Math.Min(enc.TokenIds.Count, _options.MaxSequenceLength);
         var tk = new Tensor<T>([sl]);
-        for (int i = 0; i < sl; i++) tk[i] = NumOps.FromDouble(enc.TokenIds[i]);
+        for (int i = 0; i < sl; i++)
+            tk[i] = NumOps.FromDouble(enc.TokenIds[i]);
         return tk;
     }
 
     private void ThrowIfDisposed()
     {
-        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(CLIPA<T>));
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(CLIPA<T>));
     }
 
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         if (disposing)
         {

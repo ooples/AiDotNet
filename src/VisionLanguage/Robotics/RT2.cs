@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -10,7 +11,6 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
-using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.Robotics;
 
@@ -71,13 +71,19 @@ namespace AiDotNet.VisionLanguage.Robotics;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("RT-2: Vision-Language-Action Models Transfer Web Knowledge to Robotic Control", "https://arxiv.org/abs/2307.15818", Year = 2023, Authors = "Brohan et al.")]
+[ResearchPaper(
+    "RT-2: Vision-Language-Action Models Transfer Web Knowledge to Robotic Control",
+    "https://arxiv.org/abs/2307.15818",
+    Year = 2023,
+    Authors = "Brohan et al."
+)]
 public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly RT2Options _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer _tokenizer;
     private readonly RT2ActionTokenizer<T> _actionTokenizer;
+
     // Learned token embedding table — replaces the previous deterministic
     // sinusoidal placeholder in EmbedInstructionTokens /
     // AppendActionTokenEmbedding. Per Brohan et al. 2023 §3.1 RT-2's
@@ -96,15 +102,22 @@ public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 
     public override ModelOptions GetOptions() => _options;
 
-    public RT2(NeuralNetworkArchitecture<T> architecture, string modelPath, RT2Options? options = null) : base(architecture)
+    public RT2(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        RT2Options? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new RT2Options();
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
-        if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
-        if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options.ModelPath = modelPath;
         OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
@@ -113,7 +126,12 @@ public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         InitializeLayers();
     }
 
-    public RT2(NeuralNetworkArchitecture<T> architecture, RT2Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    public RT2(
+        NeuralNetworkArchitecture<T> architecture,
+        RT2Options? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new RT2Options();
         _useNativeMode = true;
@@ -148,9 +166,11 @@ public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     {
         ThrowIfDisposed();
         var preprocessed = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(preprocessed));
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(preprocessed));
         var hidden = preprocessed;
-        for (int i = 0; i < _encoderLayerEnd; i++) hidden = Layers[i].Forward(hidden);
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            hidden = Layers[i].Forward(hidden);
         return L2Normalize(hidden);
     }
 
@@ -178,10 +198,11 @@ public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
             if (!string.IsNullOrWhiteSpace(prompt))
             {
                 throw new NotSupportedException(
-                    "Prompted generation is not implemented for ONNX mode. " +
-                    "Use the native (non-ONNX) constructor for RT-2 if you need " +
-                    "language-conditioned action prediction, or call this method " +
-                    "without a prompt to run vision-only ONNX inference.");
+                    "Prompted generation is not implemented for ONNX mode. "
+                        + "Use the native (non-ONNX) constructor for RT-2 if you need "
+                        + "language-conditioned action prediction, or call this method "
+                        + "without a prompt to run vision-only ONNX inference."
+                );
             }
             return OnnxModel.Run(preprocessed);
         }
@@ -190,7 +211,9 @@ public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         for (int i = 0; i < _encoderLayerEnd; i++)
             encoderHidden = Layers[i].Forward(encoderHidden);
 
-        var fused = prompt is null ? encoderHidden : FuseVisualAndTextEmbeddings(encoderHidden, TokenizeText(prompt));
+        var fused = prompt is null
+            ? encoderHidden
+            : FuseVisualAndTextEmbeddings(encoderHidden, TokenizeText(prompt));
 
         var output = fused;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
@@ -220,9 +243,10 @@ public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         if (IsOnnxMode)
         {
             throw new NotSupportedException(
-                "PredictAction is not implemented for ONNX mode — the loaded " +
-                "ONNX graph is vision-only. Use the native (non-ONNX) " +
-                "constructor to enable action prediction.");
+                "PredictAction is not implemented for ONNX mode — the loaded "
+                    + "ONNX graph is vision-only. Use the native (non-ONNX) "
+                    + "constructor to enable action prediction."
+            );
         }
         int actionDim = _options.ActionDimension;
         int horizon = Math.Max(1, _options.PredictionHorizon);
@@ -255,13 +279,15 @@ public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
             decoderState = AppendActionTokenEmbedding(decoderState, nextToken);
         }
 
-        if (horizon == 1) return _actionTokenizer.DecodeAction(generatedTokens);
+        if (horizon == 1)
+            return _actionTokenizer.DecodeAction(generatedTokens);
         return _actionTokenizer.DecodeHorizon(generatedTokens, horizon);
     }
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             // Custom architectures need an EXPLICIT encoder/decoder
@@ -277,25 +303,29 @@ public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
             // RT2Options exposes an explicit EncoderLayerCount /
             // DecoderLayerCount pair for custom architectures.
             throw new NotSupportedException(
-                "Custom RT2 architectures (Architecture.Layers populated) " +
-                "must declare an explicit encoder/decoder boundary. The " +
-                "previous 'half-and-half' split was a heuristic that " +
-                "silently misrouted layers when vision/decoder counts " +
-                "weren't equal. Either use the default-topology " +
-                "constructor (Architecture.Layers null), or extend " +
-                "RT2Options with an EncoderLayerCount property and pin " +
-                "_encoderLayerEnd to that value here.");
+                "Custom RT2 architectures (Architecture.Layers populated) "
+                    + "must declare an explicit encoder/decoder boundary. The "
+                    + "previous 'half-and-half' split was a heuristic that "
+                    + "silently misrouted layers when vision/decoder counts "
+                    + "weren't equal. Either use the default-topology "
+                    + "constructor (Architecture.Layers null), or extend "
+                    + "RT2Options with an EncoderLayerCount property and pin "
+                    + "_encoderLayerEnd to that value here."
+            );
         }
 
-        Layers.AddRange(LayerHelper<T>.CreateDefaultRoboticsActionLayers(
-            visionDim: _options.VisionDim,
-            decoderDim: _options.DecoderDim,
-            actionDim: _actionTokenizer.NumBins,
-            numVisionLayers: _options.NumVisionLayers,
-            numDecoderLayers: _options.NumDecoderLayers,
-            numActionLayers: 2,
-            numHeads: _options.NumHeads,
-            dropoutRate: _options.DropoutRate));
+        Layers.AddRange(
+            LayerHelper<T>.CreateDefaultRoboticsActionLayers(
+                visionDim: _options.VisionDim,
+                decoderDim: _options.DecoderDim,
+                actionDim: _actionTokenizer.NumBins,
+                numVisionLayers: _options.NumVisionLayers,
+                numDecoderLayers: _options.NumDecoderLayers,
+                numActionLayers: 2,
+                numHeads: _options.NumHeads,
+                dropoutRate: _options.DropoutRate
+            )
+        );
 
         // Vocabulary-projection head (paper §3.1): RT-2 emits ordinary text tokens (for the
         // VQA co-fine-tuning batches) and action-bin tokens (for the robot-trajectory batches)
@@ -319,11 +349,13 @@ public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 
     private Tensor<T> TokenizeText(string text)
     {
-        if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized.");
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
         var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
         return tokens;
     }
 
@@ -333,9 +365,13 @@ public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     /// Text-token embedding goes through the learned <see cref="_tokenEmbedding"/> table so
     /// it shares the same representation the LM head is trained against.
     /// </summary>
-    private Tensor<T> FuseVisualAndTextEmbeddings(Tensor<T> visualFeatures, Tensor<T> instructionTokens)
+    private Tensor<T> FuseVisualAndTextEmbeddings(
+        Tensor<T> visualFeatures,
+        Tensor<T> instructionTokens
+    )
     {
-        if (instructionTokens.Length == 0) return visualFeatures;
+        if (instructionTokens.Length == 0)
+            return visualFeatures;
         var textEmbed = EmbedTokenIds(instructionTokens);
         return visualFeatures.ConcatenateTensors(textEmbed);
     }
@@ -376,21 +412,25 @@ public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         return new RT2ActionTokenizer<T>(
             actionDim: options.ActionDimension,
             numBins: 256,
-            vocabSize: options.VocabSize);
+            vocabSize: options.VocabSize
+        );
     }
 
     public override Tensor<T> Predict(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
         var hidden = input;
-        foreach (var layer in Layers) hidden = layer.Forward(hidden);
+        foreach (var layer in Layers)
+            hidden = layer.Forward(hidden);
         return hidden;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
         try
         {
@@ -409,7 +449,8 @@ public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 
     public override void UpdateParameters(Vector<T> parameters)
     {
-        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
         int idx = 0;
         foreach (var layer in Layers)
         {
@@ -419,7 +460,9 @@ public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         }
     }
 
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
     public override ModelMetadata<T> GetModelMetadata()
@@ -427,7 +470,8 @@ public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         var meta = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "RT-2-Native" : "RT-2-ONNX",
-            Description = "RT-2: vision-language-action model that transfers web knowledge to robotic control (Brohan et al., 2023, arXiv:2307.15818).",
+            Description =
+                "RT-2: vision-language-action model that transfers web knowledge to robotic control (Brohan et al., 2023, arXiv:2307.15818).",
             FeatureCount = _options.DecoderDim,
             Complexity = _options.NumVisionLayers + _options.NumDecoderLayers,
         };
@@ -436,7 +480,8 @@ public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         meta.AdditionalInfo["ActionBins"] = _actionTokenizer.NumBins.ToString();
         meta.AdditionalInfo["ActionDimension"] = _options.ActionDimension.ToString();
         meta.AdditionalInfo["VocabularySize"] = _options.VocabSize.ToString();
-        meta.AdditionalInfo["ActionTokenWindow"] = $"[{_actionTokenizer.TokenIdOffset}, {_actionTokenizer.TokenIdEndExclusive})";
+        meta.AdditionalInfo["ActionTokenWindow"] =
+            $"[{_actionTokenizer.TokenIdOffset}, {_actionTokenizer.TokenIdEndExclusive})";
         return meta;
     }
 
@@ -459,7 +504,8 @@ public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     {
         _useNativeMode = reader.ReadBoolean();
         string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionDim = reader.ReadInt32();
         _options.DecoderDim = reader.ReadInt32();
@@ -482,12 +528,14 @@ public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 
     private void ThrowIfDisposed()
     {
-        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(RT2<T>));
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(RT2<T>));
     }
 
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         base.Dispose(disposing);
     }

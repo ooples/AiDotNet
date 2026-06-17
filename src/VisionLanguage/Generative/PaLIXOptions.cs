@@ -33,5 +33,14 @@ public class PaLIXOptions : GenerativeVLMOptions
         WeightDecay = other.WeightDecay;
     }
 
-    public PaLIXOptions() { ArchitectureType = GenerativeArchitectureType.EncoderDecoder; VisionDim = 4096; DecoderDim = 4096; NumVisionLayers = 48; NumDecoderLayers = 32; NumHeads = 32; ImageSize = 224; }
+    public PaLIXOptions()
+    {
+        ArchitectureType = GenerativeArchitectureType.EncoderDecoder;
+        VisionDim = 4096;
+        DecoderDim = 4096;
+        NumVisionLayers = 48;
+        NumDecoderLayers = 32;
+        NumHeads = 32;
+        ImageSize = 224;
+    }
 }

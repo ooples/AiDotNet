@@ -45,10 +45,16 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Combined Scaling for Zero-shot Transfer Learning", "https://arxiv.org/abs/2111.10050", Year = 2022, Authors = "Pham et al.")]
+[ResearchPaper(
+    "Combined Scaling for Zero-shot Transfer Learning",
+    "https://arxiv.org/abs/2111.10050",
+    Year = 2022,
+    Authors = "Pham et al."
+)]
 public class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly BASICOptions _options;
+
     public override ModelOptions GetOptions() => _options;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -56,7 +62,11 @@ public class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
     private bool _useNativeMode;
     private bool _disposed;
 
-    public BASIC(NeuralNetworkArchitecture<T> architecture, string imageEncoderModelPath, BASICOptions? options = null)
+    public BASIC(
+        NeuralNetworkArchitecture<T> architecture,
+        string imageEncoderModelPath,
+        BASICOptions? options = null
+    )
         : base(architecture)
     {
         _options = options ?? new BASICOptions();
@@ -67,9 +77,15 @@ public class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         base.EmbeddingDim = _options.VisionEmbeddingDim;
 
         if (string.IsNullOrWhiteSpace(imageEncoderModelPath))
-            throw new ArgumentException("Image encoder model path cannot be null or empty.", nameof(imageEncoderModelPath));
+            throw new ArgumentException(
+                "Image encoder model path cannot be null or empty.",
+                nameof(imageEncoderModelPath)
+            );
         if (!File.Exists(imageEncoderModelPath))
-            throw new FileNotFoundException($"ONNX model not found: {imageEncoderModelPath}", imageEncoderModelPath);
+            throw new FileNotFoundException(
+                $"ONNX model not found: {imageEncoderModelPath}",
+                imageEncoderModelPath
+            );
 
         _options.ImageEncoderModelPath = imageEncoderModelPath;
         OnnxImageEncoder = new OnnxModel<T>(imageEncoderModelPath, _options.OnnxOptions);
@@ -85,8 +101,11 @@ public class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         InitializeLayers();
     }
 
-    public BASIC(NeuralNetworkArchitecture<T> architecture, BASICOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    public BASIC(
+        NeuralNetworkArchitecture<T> architecture,
+        BASICOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
         : base(architecture)
     {
         _options = options ?? new BASICOptions();
@@ -104,7 +123,8 @@ public class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
     {
         int h = Architecture.InputHeight;
         int w = Architecture.InputWidth;
-        if (h > 0 && w > 0 && h == w) _options.ImageSize = h;
+        if (h > 0 && w > 0 && h == w)
+            _options.ImageSize = h;
     }
 
     public int EmbeddingDimension => _options.VisionEmbeddingDim;
@@ -122,7 +142,8 @@ public class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         if (IsOnnxMode && OnnxImageEncoder is not null)
             return L2Normalize(OnnxImageEncoder.Run(preprocessed));
         var c = preprocessed;
-        foreach (var l in Layers) c = l.Forward(c);
+        foreach (var l in Layers)
+            c = l.Forward(c);
         return L2Normalize(c);
     }
 
@@ -133,7 +154,8 @@ public class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         if (IsOnnxMode && OnnxTextEncoder is not null)
             return L2Normalize(OnnxTextEncoder.Run(tokenized));
         var c = tokenized;
-        foreach (var l in TextEncoderLayers) c = l.Forward(c);
+        foreach (var l in TextEncoderLayers)
+            c = l.Forward(c);
         return L2Normalize(c);
     }
 
@@ -155,7 +177,9 @@ public class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         var logits = new Tensor<T>([labels.Length]);
         double temp = _options.Temperature;
         for (int i = 0; i < labels.Length; i++)
-            logits[i] = NumOps.FromDouble(NumOps.ToDouble(CosineSimilarity(imageEmb, textEmbs[i])) / temp);
+            logits[i] = NumOps.FromDouble(
+                NumOps.ToDouble(CosineSimilarity(imageEmb, textEmbs[i])) / temp
+            );
         var probs = Softmax(logits);
         var result = new Dictionary<string, T>();
         for (int i = 0; i < labels.Length; i++)
@@ -165,7 +189,8 @@ public class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture is DualStreamArchitecture<T> dual)
         {
             Layers.AddRange(dual.VisionLayers);
@@ -192,8 +217,10 @@ public class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
                 numTextLayers: _options.NumTextLayers,
                 numVisionHeads: _options.NumVisionHeads,
                 numTextHeads: _options.NumTextHeads,
-                dropoutRate: _options.DropoutRate),
-            visionLayerCount);
+                dropoutRate: _options.DropoutRate
+            ),
+            visionLayerCount
+        );
     }
 
     public override Tensor<T> Predict(Tensor<T> input)
@@ -204,23 +231,33 @@ public class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         // ONNX fast path would diverge silently from native (different
         // mean / std offsets reach the model), which is hard to debug.
         var current = PreprocessImage(input);
-        if (IsOnnxMode && OnnxImageEncoder is not null) return OnnxImageEncoder.Run(current);
+        if (IsOnnxMode && OnnxImageEncoder is not null)
+            return OnnxImageEncoder.Run(current);
         SetTrainingMode(false);
-        foreach (var layer in Layers) current = layer.Forward(current);
+        foreach (var layer in Layers)
+            current = layer.Forward(current);
         return current;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        try { TrainWithTape(PreprocessImage(input), expected, _optimizer); }
-        finally { SetTrainingMode(false); }
+        try
+        {
+            TrainWithTape(PreprocessImage(input), expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
     {
-        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
         int idx = 0;
         foreach (var layer in Layers)
         {
@@ -244,8 +281,8 @@ public class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
     }
 
     /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-        => EnumerateTextEncoderTrainableLayers();
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
+        EnumerateTextEncoderTrainableLayers();
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
@@ -257,9 +294,10 @@ public class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         var meta = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "BASIC-Native" : "BASIC-ONNX",
-            Description = "BASIC: Combined Scaling for Zero-shot Transfer Learning (Pham et al., 2022)",
+            Description =
+                "BASIC: Combined Scaling for Zero-shot Transfer Learning (Pham et al., 2022)",
             FeatureCount = _options.ProjectionDim,
-            Complexity = _options.NumVisionLayers + _options.NumTextLayers
+            Complexity = _options.NumVisionLayers + _options.NumTextLayers,
         };
         meta.AdditionalInfo["Architecture"] = "BASIC";
         meta.AdditionalInfo["VisionEncoder"] = "CoAtNet";
@@ -283,9 +321,11 @@ public class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
     {
         _useNativeMode = reader.ReadBoolean();
         string imgPath = reader.ReadString();
-        if (!string.IsNullOrEmpty(imgPath)) _options.ImageEncoderModelPath = imgPath;
+        if (!string.IsNullOrEmpty(imgPath))
+            _options.ImageEncoderModelPath = imgPath;
         string txtPath = reader.ReadString();
-        if (!string.IsNullOrEmpty(txtPath)) _options.TextEncoderModelPath = txtPath;
+        if (!string.IsNullOrEmpty(txtPath))
+            _options.TextEncoderModelPath = txtPath;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionEmbeddingDim = reader.ReadInt32();
         _options.TextEmbeddingDim = reader.ReadInt32();
@@ -299,31 +339,43 @@ public class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        if (!_useNativeMode && _options.ImageEncoderModelPath is { } mp && !string.IsNullOrEmpty(mp))
+        if (
+            !_useNativeMode
+            && _options.ImageEncoderModelPath is { } mp
+            && !string.IsNullOrEmpty(mp)
+        )
             return new BASIC<T>(Architecture, mp, _options);
         return new BASIC<T>(Architecture, _options);
     }
 
     private Tensor<T> TokenizeText(string text)
     {
-        if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized.");
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
         var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
         return tokens;
     }
 
     private void ThrowIfDisposed()
     {
-        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(BASIC<T>));
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(BASIC<T>));
     }
 
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
-        if (disposing) { OnnxImageEncoder?.Dispose(); OnnxTextEncoder?.Dispose(); }
+        if (disposing)
+        {
+            OnnxImageEncoder?.Dispose();
+            OnnxTextEncoder?.Dispose();
+        }
         base.Dispose(disposing);
     }
 }

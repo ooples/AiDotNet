@@ -49,10 +49,16 @@ namespace AiDotNet.VisionLanguage.Generative;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("What matters when building vision-language models?", "https://arxiv.org/abs/2405.02246", Year = 2024, Authors = "Laurencon et al.")]
+[ResearchPaper(
+    "What matters when building vision-language models?",
+    "https://arxiv.org/abs/2405.02246",
+    Year = 2024,
+    Authors = "Laurencon et al."
+)]
 public class IDEFICS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly IDEFICS2Options _options;
+
     public override ModelOptions GetOptions() => _options;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -63,7 +69,12 @@ public class IDEFICS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguage
     private readonly List<ILayer<T>> _perceiverLayers = new List<ILayer<T>>();
     private readonly List<ILayer<T>> _decoderLayers = new List<ILayer<T>>();
 
-    public IDEFICS2(NeuralNetworkArchitecture<T> architecture, string modelPath, IDEFICS2Options? options = null) : base(architecture)
+    public IDEFICS2(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        IDEFICS2Options? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new IDEFICS2Options();
         SyncImageSizeWithArchitecture();
@@ -81,7 +92,12 @@ public class IDEFICS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguage
         InitializeLayers();
     }
 
-    public IDEFICS2(NeuralNetworkArchitecture<T> architecture, IDEFICS2Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    public IDEFICS2(
+        NeuralNetworkArchitecture<T> architecture,
+        IDEFICS2Options? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new IDEFICS2Options();
         SyncImageSizeWithArchitecture();
@@ -98,7 +114,8 @@ public class IDEFICS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguage
     {
         int h = Architecture.InputHeight;
         int w = Architecture.InputWidth;
-        if (h > 0 && w > 0 && h == w) _options.ImageSize = h;
+        if (h > 0 && w > 0 && h == w)
+            _options.ImageSize = h;
     }
 
     public int EmbeddingDimension => _options.DecoderDim;
@@ -111,9 +128,11 @@ public class IDEFICS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguage
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p));
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(p));
         var c = p;
-        foreach (var l in Layers) c = l.Forward(c);
+        foreach (var l in Layers)
+            c = l.Forward(c);
         return L2Normalize(c);
     }
 
@@ -129,29 +148,36 @@ public class IDEFICS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguage
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(p);
 
         var visionOut = p;
-        foreach (var l in Layers) visionOut = l.Forward(visionOut);
+        foreach (var l in Layers)
+            visionOut = l.Forward(visionOut);
 
         var perceiverOut = visionOut;
-        foreach (var l in _perceiverLayers) perceiverOut = l.Forward(perceiverOut);
+        foreach (var l in _perceiverLayers)
+            perceiverOut = l.Forward(perceiverOut);
 
         Tensor<T>? promptTokens = null;
-        if (prompt is not null) promptTokens = TokenizeText(prompt);
+        if (prompt is not null)
+            promptTokens = TokenizeText(prompt);
 
         var decoderInput = perceiverOut;
-        if (promptTokens is not null) decoderInput = perceiverOut.ConcatenateTensors(promptTokens);
+        if (promptTokens is not null)
+            decoderInput = perceiverOut.ConcatenateTensors(promptTokens);
 
         var output = decoderInput;
-        foreach (var l in _decoderLayers) output = l.Forward(output);
+        foreach (var l in _decoderLayers)
+            output = l.Forward(output);
 
         return output;
     }
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture is TripleStreamArchitecture<T> triple)
         {
             Layers.AddRange(triple.VisionLayers);
@@ -169,17 +195,27 @@ public class IDEFICS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguage
         int perceiverLayerEnd = visionLayerEnd + pProj + _options.NumPerceiverLayers * pBlockSize;
 
         var allLayers = LayerHelper<T>.CreateDefaultPerceiverResamplerLayers(
-            _options.VisionDim, _options.PerceiverDim, _options.DecoderDim,
-            _options.NumVisionLayers, _options.NumPerceiverLayers, _options.NumDecoderLayers,
-            _options.NumLatents, _options.NumHeads, _options.NumPerceiverHeads,
-            _options.DropoutRate);
+            _options.VisionDim,
+            _options.PerceiverDim,
+            _options.DecoderDim,
+            _options.NumVisionLayers,
+            _options.NumPerceiverLayers,
+            _options.NumDecoderLayers,
+            _options.NumLatents,
+            _options.NumHeads,
+            _options.NumPerceiverHeads,
+            _options.DropoutRate
+        );
 
         int idx = 0;
         foreach (var layer in allLayers)
         {
-            if (idx < visionLayerEnd) Layers.Add(layer);
-            else if (idx < perceiverLayerEnd) _perceiverLayers.Add(layer);
-            else _decoderLayers.Add(layer);
+            if (idx < visionLayerEnd)
+                Layers.Add(layer);
+            else if (idx < perceiverLayerEnd)
+                _perceiverLayers.Add(layer);
+            else
+                _decoderLayers.Add(layer);
             idx++;
         }
 
@@ -189,37 +225,54 @@ public class IDEFICS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguage
 
     private Tensor<T> TokenizeText(string text)
     {
-        if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized.");
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
         var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
         return tokens;
     }
 
     public override Tensor<T> Predict(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
         SetTrainingMode(false);
         var c = PreprocessImage(input);
-        foreach (var l in Layers) c = l.Forward(c);
+        foreach (var l in Layers)
+            c = l.Forward(c);
         return c;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        try { TrainWithTape(PreprocessImage(input), expected, _optimizer); }
-        finally { SetTrainingMode(false); }
+        try
+        {
+            TrainWithTape(PreprocessImage(input), expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
     {
-        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
         int idx = 0;
-        foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
         // Sync the auxiliary streams (Q-Former / perceiver / decoder /
         // regression head, depending on model) — see OpenFlamingo.UpdateParameters
         // for full rationale (dual-stream split, GetExtraTrainableLayers
@@ -228,7 +281,8 @@ public class IDEFICS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguage
         // and the model state silently de-syncs across streams).
         foreach (var l in EnumerateAuxiliaryStreamTrainableLayers())
         {
-            if (l is null) continue;
+            if (l is null)
+                continue;
             int c = (int)l.ParameterCount;
             l.UpdateParameters(parameters.Slice(idx, c));
             idx += c;
@@ -236,8 +290,8 @@ public class IDEFICS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguage
     }
 
     /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-        => EnumerateAuxiliaryStreamTrainableLayers();
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
+        EnumerateAuxiliaryStreamTrainableLayers();
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
@@ -249,9 +303,11 @@ public class IDEFICS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguage
         var m = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "IDEFICS2-Native" : "IDEFICS2-ONNX",
-            Description = "IDEFICS2: What matters when building vision-language models? (Laurencon et al., 2024)",
+            Description =
+                "IDEFICS2: What matters when building vision-language models? (Laurencon et al., 2024)",
             FeatureCount = _options.DecoderDim,
-            Complexity = _options.NumVisionLayers + _options.NumPerceiverLayers + _options.NumDecoderLayers
+            Complexity =
+                _options.NumVisionLayers + _options.NumPerceiverLayers + _options.NumDecoderLayers,
         };
         m.AdditionalInfo["Architecture"] = "IDEFICS2";
         m.AdditionalInfo["GenerativeType"] = _options.ArchitectureType.ToString();
@@ -276,7 +332,8 @@ public class IDEFICS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguage
     {
         _useNativeMode = reader.ReadBoolean();
         string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionDim = reader.ReadInt32();
         _options.PerceiverDim = reader.ReadInt32();
@@ -298,14 +355,19 @@ public class IDEFICS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguage
 
     private void ThrowIfDisposed()
     {
-        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(IDEFICS2<T>));
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(IDEFICS2<T>));
     }
 
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
-        if (disposing) { OnnxModel?.Dispose(); }
+        if (disposing)
+        {
+            OnnxModel?.Dispose();
+        }
         base.Dispose(disposing);
     }
 }

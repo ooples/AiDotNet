@@ -38,5 +38,17 @@ public class Phi3VisionOptions : InstructionTunedVLMOptions
         SystemPrompt = other.SystemPrompt;
     }
 
-    public Phi3VisionOptions() { InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection; VisionDim = 1024; DecoderDim = 3072; ProjectionDim = 3072; NumVisionLayers = 24; NumDecoderLayers = 32; NumHeads = 32; ImageSize = 336; LanguageModelName = "Phi-3"; MaxVisualTokens = 576; }
+    public Phi3VisionOptions()
+    {
+        InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;
+        VisionDim = 1024;
+        DecoderDim = 3072;
+        ProjectionDim = 3072;
+        NumVisionLayers = 24;
+        NumDecoderLayers = 32;
+        NumHeads = 32;
+        ImageSize = 336;
+        LanguageModelName = "Phi-3";
+        MaxVisualTokens = 576;
+    }
 }

@@ -51,7 +51,8 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets whether this model is running in ONNX inference mode.
     /// </summary>
-    public bool IsOnnxMode => OnnxImageEncoder is not null || OnnxTextEncoder is not null || OnnxModel is not null;
+    public bool IsOnnxMode =>
+        OnnxImageEncoder is not null || OnnxTextEncoder is not null || OnnxModel is not null;
 
     /// <summary>
     /// Gets or sets the ONNX image encoder model (for dual-encoder architectures).
@@ -77,10 +78,9 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>
     protected VisionLanguageModelBase(
         NeuralNetworkArchitecture<T> architecture,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), maxGradNorm)
-    {
-    }
+        double maxGradNorm = 1.0
+    )
+        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), maxGradNorm) { }
 
     /// <summary>
     /// Gets whether this network supports training.
@@ -157,7 +157,8 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>
         for (int i = 0; i < logits.Length; i++)
         {
             double v = NumOps.ToDouble(logits[i]);
-            if (v > maxVal) maxVal = v;
+            if (v > maxVal)
+                maxVal = v;
         }
 
         var result = new Tensor<T>(logits._shape);
@@ -193,7 +194,8 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>
         }
 
         norm = Math.Sqrt(norm);
-        if (norm < 1e-8) return embedding;
+        if (norm < 1e-8)
+            return embedding;
 
         var result = new Tensor<T>(embedding._shape);
         for (int i = 0; i < embedding.Length; i++)
@@ -208,15 +210,27 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>
     private protected static void ValidateVisualPatchOptions(int imageSize, int maxVisualTokens)
     {
         if (imageSize <= 0)
-            throw new ArgumentOutOfRangeException(nameof(imageSize), imageSize, "ImageSize must be greater than 0.");
+            throw new ArgumentOutOfRangeException(
+                nameof(imageSize),
+                imageSize,
+                "ImageSize must be greater than 0."
+            );
         if (maxVisualTokens <= 0)
-            throw new ArgumentOutOfRangeException(nameof(maxVisualTokens), maxVisualTokens, "MaxVisualTokens must be greater than 0.");
+            throw new ArgumentOutOfRangeException(
+                nameof(maxVisualTokens),
+                maxVisualTokens,
+                "MaxVisualTokens must be greater than 0."
+            );
     }
 
     /// <summary>
     /// Computes a patch size from an image size and target visual-token budget.
     /// </summary>
-    private protected static int ComputeVisualPatchSize(int imageSize, int maxVisualTokens, bool roundUp = false)
+    private protected static int ComputeVisualPatchSize(
+        int imageSize,
+        int maxVisualTokens,
+        bool roundUp = false
+    )
     {
         ValidateVisualPatchOptions(imageSize, maxVisualTokens);
         double targetTokensPerSide = Math.Sqrt(maxVisualTokens);
@@ -227,12 +241,14 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Returns the layer count contributed by a standard transformer block.
     /// </summary>
-    private protected static int TransformerBlockLayerCount(double dropoutRate) => dropoutRate > 0 ? 6 : 5;
+    private protected static int TransformerBlockLayerCount(double dropoutRate) =>
+        dropoutRate > 0 ? 6 : 5;
 
     /// <summary>
     /// Returns the layer count contributed by a cross-attention resampler block.
     /// </summary>
-    private protected static int ResamplerBlockLayerCount(double dropoutRate) => dropoutRate > 0 ? 8 : 7;
+    private protected static int ResamplerBlockLayerCount(double dropoutRate) =>
+        dropoutRate > 0 ? 8 : 7;
 
     /// <summary>
     /// Computes an encoder/decoder split boundary from repeated block counts.
@@ -243,20 +259,28 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>
         int visionBlockLayerCount,
         int auxiliaryBlockCount = 0,
         int auxiliaryBlockLayerCount = 0,
-        int trailingLayerCount = 0)
+        int trailingLayerCount = 0
+    )
     {
-        if (leadingLayerCount < 0) throw new ArgumentOutOfRangeException(nameof(leadingLayerCount));
-        if (visionLayerCount < 0) throw new ArgumentOutOfRangeException(nameof(visionLayerCount));
-        if (visionBlockLayerCount < 0) throw new ArgumentOutOfRangeException(nameof(visionBlockLayerCount));
-        if (auxiliaryBlockCount < 0) throw new ArgumentOutOfRangeException(nameof(auxiliaryBlockCount));
-        if (auxiliaryBlockLayerCount < 0) throw new ArgumentOutOfRangeException(nameof(auxiliaryBlockLayerCount));
-        if (trailingLayerCount < 0) throw new ArgumentOutOfRangeException(nameof(trailingLayerCount));
+        if (leadingLayerCount < 0)
+            throw new ArgumentOutOfRangeException(nameof(leadingLayerCount));
+        if (visionLayerCount < 0)
+            throw new ArgumentOutOfRangeException(nameof(visionLayerCount));
+        if (visionBlockLayerCount < 0)
+            throw new ArgumentOutOfRangeException(nameof(visionBlockLayerCount));
+        if (auxiliaryBlockCount < 0)
+            throw new ArgumentOutOfRangeException(nameof(auxiliaryBlockCount));
+        if (auxiliaryBlockLayerCount < 0)
+            throw new ArgumentOutOfRangeException(nameof(auxiliaryBlockLayerCount));
+        if (trailingLayerCount < 0)
+            throw new ArgumentOutOfRangeException(nameof(trailingLayerCount));
 
         return checked(
-            leadingLayerCount +
-            visionLayerCount * visionBlockLayerCount +
-            auxiliaryBlockCount * auxiliaryBlockLayerCount +
-            trailingLayerCount);
+            leadingLayerCount
+            + visionLayerCount * visionBlockLayerCount
+            + auxiliaryBlockCount * auxiliaryBlockLayerCount
+            + trailingLayerCount
+        );
     }
 
     /// <summary>
@@ -265,7 +289,9 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>
     private protected void ValidateEncoderDecoderBoundary(int encoderLayerEnd)
     {
         if (encoderLayerEnd <= 0 || encoderLayerEnd > Layers.Count)
-            throw new InvalidOperationException($"Invalid encoder boundary {encoderLayerEnd} for {Layers.Count} layers.");
+            throw new InvalidOperationException(
+                $"Invalid encoder boundary {encoderLayerEnd} for {Layers.Count} layers."
+            );
     }
 
     /// <summary>
@@ -309,9 +335,13 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>
     /// the projection head).</param>
     protected void SplitDualStreamLayers(IEnumerable<ILayer<T>> allLayers, int visionLayerCount)
     {
-        if (allLayers is null) throw new System.ArgumentNullException(nameof(allLayers));
+        if (allLayers is null)
+            throw new System.ArgumentNullException(nameof(allLayers));
         if (visionLayerCount < 0)
-            throw new System.ArgumentOutOfRangeException(nameof(visionLayerCount), "visionLayerCount must be ≥ 0.");
+            throw new System.ArgumentOutOfRangeException(
+                nameof(visionLayerCount),
+                "visionLayerCount must be ≥ 0."
+            );
 
         // Materialize once so we can validate before mutating Layers /
         // TextEncoderLayers. An oversized visionLayerCount that the
@@ -325,15 +355,18 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>
         if (visionLayerCount > layerList.Count)
             throw new System.ArgumentOutOfRangeException(
                 nameof(visionLayerCount),
-                $"visionLayerCount ({visionLayerCount}) exceeds the supplied layer sequence " +
-                $"({layerList.Count}). The supplied factory's layer count and the dual-stream " +
-                "split point have drifted apart — check the OpenCLIP-style block-size / layer-count " +
-                "math against the architecture's NumVisionLayers / DropoutRate.");
+                $"visionLayerCount ({visionLayerCount}) exceeds the supplied layer sequence "
+                    + $"({layerList.Count}). The supplied factory's layer count and the dual-stream "
+                    + "split point have drifted apart — check the OpenCLIP-style block-size / layer-count "
+                    + "math against the architecture's NumVisionLayers / DropoutRate."
+            );
 
         for (int idx = 0; idx < layerList.Count; idx++)
         {
-            if (idx < visionLayerCount) Layers.Add(layerList[idx]);
-            else TextEncoderLayers.Add(layerList[idx]);
+            if (idx < visionLayerCount)
+                Layers.Add(layerList[idx]);
+            else
+                TextEncoderLayers.Add(layerList[idx]);
         }
     }
 
@@ -344,7 +377,8 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>
     protected IEnumerable<LayerBase<T>?> EnumerateTextEncoderTrainableLayers()
     {
         foreach (var layer in TextEncoderLayers)
-            if (layer is LayerBase<T> lb) yield return lb;
+            if (layer is LayerBase<T> lb)
+                yield return lb;
     }
 
     // --- Auxiliary-stream support (BLIP-2 / Q-Former / fusion VL models) ---
@@ -375,7 +409,8 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>
     /// visible.</param>
     protected void RegisterAuxiliaryEncoderStream(List<ILayer<T>> stream)
     {
-        if (stream is null) throw new System.ArgumentNullException(nameof(stream));
+        if (stream is null)
+            throw new System.ArgumentNullException(nameof(stream));
         _auxiliaryEncoderStreams.Add(stream);
     }
 
@@ -388,8 +423,9 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>
     protected IEnumerable<LayerBase<T>?> EnumerateAuxiliaryStreamTrainableLayers()
     {
         foreach (var stream in _auxiliaryEncoderStreams)
-            foreach (var layer in stream)
-                if (layer is LayerBase<T> lb) yield return lb;
+        foreach (var layer in stream)
+            if (layer is LayerBase<T> lb)
+                yield return lb;
     }
 
     /// <summary>
@@ -401,8 +437,10 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>
     /// </summary>
     protected IEnumerable<LayerBase<T>?> EnumerateAllAuxiliaryTrainableLayers()
     {
-        foreach (var l in EnumerateTextEncoderTrainableLayers()) yield return l;
-        foreach (var l in EnumerateAuxiliaryStreamTrainableLayers()) yield return l;
+        foreach (var l in EnumerateTextEncoderTrainableLayers())
+            yield return l;
+        foreach (var l in EnumerateAuxiliaryStreamTrainableLayers())
+            yield return l;
     }
 
     /// <summary>
