@@ -88,8 +88,9 @@ public class PagedQuantizedDecodeTests
         var qFull = Full(q, cacheQ, 1, data);
         var qIncr = Incremental(q, cacheQ, 2, data);
 
-        // All outputs finite.
-        foreach (var v in qIncr) Assert.True(float.IsFinite(v));
+        // All outputs finite. (Use !IsNaN && !IsInfinity instead of float.IsFinite — the latter
+        // is net5+ only and this test project also targets net471.)
+        foreach (var v in qIncr) Assert.True(!float.IsNaN(v) && !float.IsInfinity(v));
 
         // Core: quantized incremental decode == quantized full forward (per-sequence paged decode
         // stays correct under int8 weight-only quantization).
