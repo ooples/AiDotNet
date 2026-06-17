@@ -158,6 +158,9 @@ public class StyleAlignedModel<T> : LatentDiffusionModelBase<T>
         // default-scale model and SetParameters(GetParameters()), which mismatches an injected non-default
         // variant and re-randomizes the clone's unmaterialized lazy weights.
         return new StyleAlignedModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
             baseUNet: (UNetNoisePredictor<T>)_baseUNet.Clone(),
             vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,

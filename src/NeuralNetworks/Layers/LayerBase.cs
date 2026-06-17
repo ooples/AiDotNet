@@ -638,8 +638,51 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         if (!IsShapeResolved)
         {
             OnFirstForward(input);
+            RegisterStreamingWeightsWithPool();
         }
         EnsureInitialized();
+    }
+
+    /// <summary>
+    /// Registers this layer's just-materialized streaming weight tensors with
+    /// the process-wide <see cref="WeightRegistry"/> so they become evictable
+    /// LRU entries the moment they exist — not in a batched post-forward sweep.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Lazy layers in a foundation-scale model allocate their weights through
+    /// <see cref="AllocateLazyWeight"/> → <c>WeightRegistry.AllocateStreaming</c>
+    /// during the FIRST forward. That call only <em>reserves</em> pool budget; it
+    /// does not register the tensor, so the weight is resident-on-heap but absent
+    /// from the pool's eviction LRU. Without this hook, every layer's weight
+    /// accumulates on the GC heap as the forward walks the stack — the pool has
+    /// nothing registered to evict — and a multi-GB model OOMs mid-forward on a
+    /// memory-bounded runner even though weight streaming is "enabled". The
+    /// previous registration path only ran AFTER the full forward (and is bypassed
+    /// entirely by models with a custom <c>Predict</c>), i.e. far too late.
+    /// </para>
+    /// <para>
+    /// Registering here adds the freshly-initialized weight to the LRU and drops
+    /// its resident copy to the backing store; this layer's own immediately-
+    /// following matmul transparently rehydrates it, and the next layer's
+    /// allocation evicts it again once the resident budget is crossed — keeping
+    /// the resident set bounded across the whole forward. No-op unless streaming
+    /// was enabled for this layer (<see cref="UseStreamingAllocator"/>);
+    /// idempotent via the already-registered handle gate.
+    /// </para>
+    /// </remarks>
+    private void RegisterStreamingWeightsWithPool()
+    {
+        if (!UseStreamingAllocator) return;
+        foreach (var tensor in GetTrainableParameters())
+        {
+            if (tensor is null || tensor.Length == 0) continue;
+            // Only streaming-allocated tensors carry Lifetime.Streaming; skip
+            // anything already registered (handle assigned) to stay idempotent.
+            if (tensor.Lifetime != WeightLifetime.Streaming) continue;
+            if (tensor.StreamingPoolHandle >= 0) continue;
+            WeightRegistry.RegisterWeight(tensor);
+        }
     }
 
     // ── Shape-inference mode (single source of truth for lazy shape resolution) ─────

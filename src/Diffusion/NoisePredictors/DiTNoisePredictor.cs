@@ -487,33 +487,23 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
         EnsureLayersInitialized();
-        // Engage transparent weight streaming for foundation-scale predictors
-        // BEFORE the forward resolves lazy weights, so they allocate through the
-        // disk-backed pool. No-op below threshold or when the registry is busy.
-        MaybeEngageWeightStreaming();
+        using var streaming = BeginWeightStreamingForward();
         _lastInput = noisySample;
 
         // Get timestep embedding
         var timeEmbed = GetTimestepEmbedding(timestep);
         timeEmbed = ProjectTimeEmbedding(timeEmbed);
 
-        var result = Forward(noisySample, timeEmbed, conditioning);
-        // Drop the now-resolved weights to the pool; from the next forward on the
-        // denoising loop runs against a bounded resident set (auto-rehydrate +
-        // owner-drop). No-op unless streaming engaged above.
-        RegisterResolvedStreamingWeights();
-        return result;
+        return streaming.Complete(Forward(noisySample, timeEmbed, conditioning));
     }
 
     /// <inheritdoc />
     public override Tensor<T> PredictNoiseWithEmbedding(Tensor<T> noisySample, Tensor<T> timeEmbedding, Tensor<T>? conditioning = null)
     {
         EnsureLayersInitialized();
-        MaybeEngageWeightStreaming();
+        using var streaming = BeginWeightStreamingForward();
         _lastInput = noisySample;
-        var result = Forward(noisySample, timeEmbedding, conditioning);
-        RegisterResolvedStreamingWeights();
-        return result;
+        return streaming.Complete(Forward(noisySample, timeEmbedding, conditioning));
     }
 
     /// <summary>

@@ -313,10 +313,17 @@ public class RecraftV3Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-                        return new RecraftV3Model<T>(
+        var clone = new RecraftV3Model<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
             predictor: (MMDiTXNoisePredictor<T>)_predictor.Clone(),
             vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner);
+        // The constructor resets guidance to the Recraft default; carry over the
+        // current (possibly caller-tuned) guidance scale so the clone matches.
+        clone.SetGuidanceScale(GuidanceScale);
+        return clone;
     }
 
     #endregion

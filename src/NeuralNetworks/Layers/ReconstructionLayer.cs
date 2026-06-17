@@ -286,9 +286,65 @@ public class ReconstructionLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        var x = _fc1.Forward(input);
+        var x = _fc1.Forward(FlattenToFeatureMatrix(input));
         x = _fc2.Forward(x);
         return _fc3.Forward(x);
+    }
+
+    /// <summary>
+    /// Normalises any incoming tensor to <c>[batch, featureWidth]</c> so the
+    /// first <see cref="FullyConnectedLayer{T}"/> always resolves to the same
+    /// input width regardless of how the upstream layer shaped its output.
+    /// </summary>
+    /// <remarks>
+    /// The reconstruction decoder consumes the flattened capsule vector
+    /// (e.g. <c>numClasses × outputCapsuleDimension</c>). Depending on the
+    /// call site that vector arrives in inconsistent ranks: pre-flattened as
+    /// <c>[batch, features]</c> (the masked reconstruction-loss path),
+    /// capsule-shaped as <c>[batch, numClasses, capsuleDim]</c>, or with a
+    /// collapsed leading dimension as <c>[numClasses, capsuleDim]</c> /
+    /// <c>[features]</c> (the straight forward chain out of
+    /// <c>DigitCapsuleLayer</c>, which returns 1-D for a single sample).
+    /// Routed straight into a lazily-resolved FCL, the capsule-shaped forms
+    /// bound the FCL's input width to the trailing capsule dimension while
+    /// the pre-flattened form bound it to the full feature width, so the
+    /// paths disagreed and the matmul threw a dimension-mismatch.
+    /// <para>
+    /// The layer's declared per-sample feature width is fixed at construction
+    /// (<see cref="LayerBase{T}.InputShape"/><c>[0]</c>), so we reshape every
+    /// input to <c>[length / featureWidth, featureWidth]</c>. This recovers
+    /// the true batch count for any incoming rank and makes the FCL resolve
+    /// to the same width on every path. <see cref="Engine"/>.Reshape keeps the
+    /// operation on the autodiff tape so gradients flow back through training.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> FlattenToFeatureMatrix(Tensor<T> input)
+    {
+        int featureWidth = InputShape[0];
+        if (featureWidth <= 0)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(ReconstructionLayer<T>)} has an invalid declared feature width " +
+                $"({nameof(InputShape)}[0] = {featureWidth}); it must be positive.");
+        }
+        if (input.Length % featureWidth != 0)
+        {
+            // Fail fast rather than silently passing an unnormalizable input
+            // through — letting the FCL resolve against an unintended width just
+            // pushes a confusing dimension-mismatch to a later layer.
+            throw new ArgumentException(
+                $"Input length {input.Length} is not divisible by the reconstruction " +
+                $"feature width {featureWidth}; cannot normalize to [batch, {featureWidth}].",
+                nameof(input));
+        }
+
+        int batch = input.Length / featureWidth;
+        if (input.Rank == 2 && input.Shape[0] == batch && input.Shape[1] == featureWidth)
+        {
+            return input;
+        }
+
+        return Engine.Reshape(input, [batch, featureWidth]);
     }
 
     /// <summary>
@@ -327,7 +383,9 @@ public class ReconstructionLayer<T> : LayerBase<T>
         // weights against the actual resolved input dim. Output of one
         // sub-layer feeds the next, so each gets the right input shape
         // without us hardcoding _hidden1Dim/_hidden2Dim assumptions.
-        var x = _fc1.Forward(input);
+        // Flatten first so the resolved input width matches the live Forward
+        // path (which may receive a capsule-shaped tensor of differing rank).
+        var x = _fc1.Forward(FlattenToFeatureMatrix(input));
         x = _fc2.Forward(x);
         _ = _fc3.Forward(x);
     }
@@ -343,7 +401,7 @@ public class ReconstructionLayer<T> : LayerBase<T>
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
 
         // Chain through the three fully connected layers
-        var x = _fc1.ForwardGpu(inputs[0]);
+        var x = _fc1.ForwardGpu(FlattenToFeatureMatrix(inputs[0]));
         var x2 = _fc2.ForwardGpu(x);
         x.Dispose(); // Dispose intermediate tensor
 

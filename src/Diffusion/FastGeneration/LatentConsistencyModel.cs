@@ -377,7 +377,10 @@ public class LatentConsistencyModel<T> : LatentDiffusionModelBase<T>
             _ => LCM_CROSS_ATTENTION_DIM
         };
 
-                        return new LatentConsistencyModel<T>(
+        return new LatentConsistencyModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
             unet: (UNetNoisePredictor<T>)_unet.Clone(),
             vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
