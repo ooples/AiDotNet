@@ -1085,8 +1085,11 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
             return gpuResult;
 
         SetTrainingMode(false);
-        var features = ExtractPerceiverFeatures(input);
-        return features;
+        return Accelerate(input, () =>
+        {
+            var features = ExtractPerceiverFeatures(input);
+            return features;
+        });
     }
 
     /// <inheritdoc/>

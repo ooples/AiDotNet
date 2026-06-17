@@ -1185,8 +1185,11 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
             return gpuResult;
 
         SetTrainingMode(false);
-        var features = ExtractVisualFeatures(input);
-        return ProjectToLanguageSpace(features);
+        return Accelerate(input, () =>
+        {
+            var features = ExtractVisualFeatures(input);
+            return ProjectToLanguageSpace(features);
+        });
     }
 
     /// <inheritdoc/>

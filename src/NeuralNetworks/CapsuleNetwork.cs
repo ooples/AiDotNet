@@ -258,13 +258,16 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        Tensor<T> current = input;
-        foreach (var layer in Layers)
+        return Accelerate(input, () =>
         {
-            current = layer.Forward(current);
-        }
+            Tensor<T> current = input;
+            foreach (var layer in Layers)
+            {
+                current = layer.Forward(current);
+            }
 
-        return current;
+            return current;
+        });
     }
 
     /// <summary>

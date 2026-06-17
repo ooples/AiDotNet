@@ -1528,9 +1528,12 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        // Default prediction returns image embedding
-        var embedding = GetImageEmbedding(input);
-        return Tensor<T>.FromVector(embedding);
+        return Accelerate(input, () =>
+        {
+            // Default prediction returns image embedding
+            var embedding = GetImageEmbedding(input);
+            return Tensor<T>.FromVector(embedding);
+        });
     }
 
     /// <inheritdoc/>

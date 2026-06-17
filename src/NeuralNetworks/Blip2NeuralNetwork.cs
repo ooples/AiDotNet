@@ -1878,9 +1878,12 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        // For BLIP-2, prediction depends on the task
-        // Default: return Q-Former features
-        return ExtractQFormerFeatures(input);
+        return Accelerate(input, () =>
+        {
+            // For BLIP-2, prediction depends on the task
+            // Default: return Q-Former features
+            return ExtractQFormerFeatures(input);
+        });
     }
 
     /// <summary>
