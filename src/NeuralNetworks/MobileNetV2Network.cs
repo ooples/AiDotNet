@@ -352,7 +352,8 @@ public class MobileNetV2Network<T> : NeuralNetworkBase<T>
     {
         SetAllLayersEvalMode();
         using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        return Forward(input);
+        // #1622 verify-then-trust compiled gate; no-op unless acceleration is engaged.
+        return Accelerate(input, () => Forward(input));
     }
 
     /// <inheritdoc />
