@@ -567,7 +567,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
             conditioner: _conditioner,
             seed: RandomGenerator.Next());
 
-        clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         clone.ImagePromptWeight = _imagePromptWeight;
 
         return clone;

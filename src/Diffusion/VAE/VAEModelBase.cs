@@ -308,6 +308,17 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     /// <inheritdoc />
     public abstract void SetParameters(Vector<T> parameters);
 
+    /// <summary>
+    /// COW clone lever (#1624): shares each trainable weight tensor's STORAGE with <paramref name="source"/>
+    /// via the global <see cref="AiDotNet.Helpers.CopyOnWriteCloneHelper"/> (O(1)-until-write), instead of
+    /// the flat <c>GetParameters()</c> → <c>SetParameters()</c> round-trip that materializes the entire VAE
+    /// a second time — the source of large-VAE <c>Clone()</c> OOMs. Returns <c>false</c> (leaving this VAE
+    /// untouched) if the trainable-layer structure doesn't line up 1:1, so the caller falls back to the
+    /// eager flat copy.
+    /// </summary>
+    protected bool TryShareParametersFrom(VAEModelBase<T> source)
+        => AiDotNet.Helpers.CopyOnWriteCloneHelper.TryShareTrainableParameters<T>(source, this);
+
     /// <inheritdoc />
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
     {

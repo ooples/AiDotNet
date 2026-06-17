@@ -546,7 +546,7 @@ public class AutoencoderKL<T> : VAEModelBase<T>
             inputSpatialSize: 512,
             LossFunction);
 
-        clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         return clone;
     }
 

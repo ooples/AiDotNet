@@ -159,7 +159,7 @@ public class AsymmDiTPredictor<T> : NoisePredictorBase<T>
     public override INoisePredictor<T> Clone()
     {
         var clone = new AsymmDiTPredictor<T>(_inputChannels, _hiddenSize, _numLayers, _numHeads, _contextDim);
-        clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         return clone;
     }
 

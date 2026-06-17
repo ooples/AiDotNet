@@ -137,7 +137,7 @@ public class SD3FlashModel<T> : LatentDiffusionModelBase<T>
     public override IDiffusionModel<T> Clone()
     {
         var clone = new SD3FlashModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         return clone;
     }
 

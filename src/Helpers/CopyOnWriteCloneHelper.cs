@@ -34,12 +34,26 @@ public static class CopyOnWriteCloneHelper
     public static bool TryShareTrainableParameters<T>(
         IFullModel<T, Tensor<T>, Tensor<T>>? source,
         IFullModel<T, Tensor<T>, Tensor<T>>? dest)
+        => TryShareGraph<T>(source, dest);
+
+    /// <summary>
+    /// Object-graph overload for parameterized models that are NOT <see cref="IFullModel{T,TInput,TOutput}"/>
+    /// but are still reflection-walkable weight graphs — e.g. diffusion <c>NoisePredictorBase</c> and
+    /// <c>VAEModelBase</c>, the heavy models whose <c>Clone()</c> also OOMs on the flat copy. Identical
+    /// semantics to the <see cref="IFullModel{T,TInput,TOutput}"/> overload (1:1 structure verified up
+    /// front; returns <c>false</c> and leaves <paramref name="dest"/> untouched on any mismatch so the
+    /// caller can fall back to the eager flat copy).
+    /// </summary>
+    public static bool TryShareTrainableParameters<T>(object? source, object? dest)
+        => TryShareGraph<T>(source, dest);
+
+    private static bool TryShareGraph<T>(object? source, object? dest)
     {
         if (source is null || dest is null || ReferenceEquals(source, dest)) return false;
         if (source.GetType() != dest.GetType()) return false;
 
-        var srcLayers = CollectTrainableLayers<T>(source);
-        var dstLayers = CollectTrainableLayers<T>(dest);
+        var srcLayers = CollectTrainableLayersFromGraph<T>(source);
+        var dstLayers = CollectTrainableLayersFromGraph<T>(dest);
         if (srcLayers.Count == 0 || srcLayers.Count != dstLayers.Count) return false;
 
         // Verify the full structure matches BEFORE mutating anything, so we never leave a half-shared clone.
@@ -68,10 +82,13 @@ public static class CopyOnWriteCloneHelper
     /// result pairs 1:1 between a model and its fresh clone.
     /// </summary>
     public static List<ITrainableLayer<T>> CollectTrainableLayers<T>(IFullModel<T, Tensor<T>, Tensor<T>> root)
+        => CollectTrainableLayersFromGraph<T>(root);
+
+    private static List<ITrainableLayer<T>> CollectTrainableLayersFromGraph<T>(object root)
     {
         var layers = new List<ITrainableLayer<T>>();
         // CollectInto walks arbitrary instance fields, so it is necessarily typed `object?` internally;
-        // the public entry point is constrained to a model so callers can't pass an unrelated graph.
+        // the public entry points constrain the root to a model so callers can't pass an unrelated graph.
         CollectInto(root, layers, new HashSet<object>(TensorReferenceComparer<object>.Instance));
         return layers;
     }

@@ -297,7 +297,7 @@ public class CogVideoModel<T> : VideoDiffusionModelBase<T>
             defaultNumFrames: DefaultNumFrames,
             defaultFPS: DefaultFPS);
         if (!AiDotNet.Helpers.CopyOnWriteCloneHelper.TryShareTrainableParameters<T>(this, clone))
-            clone.SetParameters(GetParameters());
+            if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         return clone;
     }
 

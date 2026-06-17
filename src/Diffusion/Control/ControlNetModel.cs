@@ -698,7 +698,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
             clone.GetOrCreateEncoder(controlType);
         }
 
-        clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         clone.ConditioningStrength = _conditioningStrength;
 
         return clone;

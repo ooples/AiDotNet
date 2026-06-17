@@ -219,7 +219,7 @@ public class SiTPredictor<T> : NoisePredictorBase<T>
     {
         var clone = new SiTPredictor<T>(_inputChannels, _hiddenSize, _numLayers, _numHeads, _seed);
         if (_initialized)
-            clone.SetParameters(GetParameters());
+            if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         return clone;
     }
 

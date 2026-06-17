@@ -1400,7 +1400,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         //     diverging from the original. Mirrors UNetNoisePredictor.Clone.
         TriggerLazyShapeResolution();
         clone.TriggerLazyShapeResolution();
-        clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         return clone;
     }
 

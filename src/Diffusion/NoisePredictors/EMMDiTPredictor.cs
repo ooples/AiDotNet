@@ -268,7 +268,7 @@ public class EMMDiTPredictor<T> : NoisePredictorBase<T>
     public override INoisePredictor<T> Clone()
     {
         var clone = new EMMDiTPredictor<T>(_inputChannels, _contextDim);
-        clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         return clone;
     }
 

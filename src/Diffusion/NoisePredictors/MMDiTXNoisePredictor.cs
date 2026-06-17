@@ -331,7 +331,7 @@ public class MMDiTXNoisePredictor<T> : NoisePredictorBase<T>
             var probe = new Tensor<T>(new[] { 1, _inputChannels, probeSpatial, probeSpatial });
             clone.PredictNoise(probe, timestep: 0, conditioning: null);
         }
-        clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         return clone;
     }
 

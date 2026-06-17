@@ -586,7 +586,7 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
             numHeads: _numHeads,
             patchSize: _patchSize,
             contextDim: _contextDim);
-        clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         return clone;
     }
 

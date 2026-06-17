@@ -109,7 +109,7 @@ public class SpotDiffusionModel<T> : LatentDiffusionModelBase<T>
     public override IDiffusionModel<T> Clone()
     {
         var clone = new SpotDiffusionModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         return clone;
     }
 

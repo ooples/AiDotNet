@@ -340,7 +340,7 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
     public override INoisePredictor<T> Clone()
     {
         var clone = new FluxDoubleStreamPredictor<T>(_variant, _inputChannels, _contextDim);
-        clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         return clone;
     }
 
