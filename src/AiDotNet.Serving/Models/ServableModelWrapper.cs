@@ -260,7 +260,8 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         int[] inputShape,
         bool enableBatching = true,
         bool enableSpeculativeDecoding = false,
-        Func<Tensor<T>, Tensor<T>>? generationForward = null)
+        Func<Tensor<T>, Tensor<T>>? generationForward = null,
+        bool quantizeIncrementalWeights = false)
     {
         Guard.NotNullOrWhiteSpace(modelName);
         Guard.NotNull(model);
@@ -339,7 +340,7 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         {
             try
             {
-                var built = BuildIncrementalModel(neural);
+                var built = BuildIncrementalModel(neural, quantizeIncrementalWeights);
                 _incrementalModel = built.Model;
                 _incrementalCache = built.Cache;
             }
@@ -361,7 +362,7 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     /// (null, null) when the model has no optimizable attention (incremental unsupported).
     /// </summary>
     private static (AiDotNet.NeuralNetworks.NeuralNetworkBase<T>? Model, AiDotNet.Inference.PagedAttention.PagedKVCache<T>? Cache)
-        BuildIncrementalModel(AiDotNet.NeuralNetworks.NeuralNetworkBase<T> source)
+        BuildIncrementalModel(AiDotNet.NeuralNetworks.NeuralNetworkBase<T> source, bool quantizeWeights)
     {
         var config = new AiDotNet.Configuration.InferenceOptimizationConfig
         {
@@ -370,7 +371,11 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
             EnableFlashAttention = false,
             EnableLayerFusion = false,
             AttentionMasking = AiDotNet.Configuration.AttentionMaskingMode.Causal,
-            InferenceQuantization = AiDotNet.Configuration.InferenceQuantizationMode.None
+            // int8 weight-only quantization shrinks resident weights so more sequences fit; the paged
+            // decode stays correct under it (proven by PagedQuantizedDecodeTests).
+            InferenceQuantization = quantizeWeights
+                ? AiDotNet.Configuration.InferenceQuantizationMode.WeightOnlyInt8
+                : AiDotNet.Configuration.InferenceQuantizationMode.None
         };
 
         var optimizer = new AiDotNet.Inference.InferenceOptimizer<T>(config);

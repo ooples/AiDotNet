@@ -53,11 +53,12 @@ public class IncrementalGenerationEndToEndTests
         return model;
     }
 
-    private static (TextGenerationService Service, ServableModelWrapper<float> Wrapper) BuildService()
+    private static (TextGenerationService Service, ServableModelWrapper<float> Wrapper) BuildService(bool quantize = false)
     {
         var model = BuildLm();
         var wrapper = new ServableModelWrapper<float>(
-            "lm", model, inputShape: new[] { 1 }, generationForward: model.Predict);
+            "lm", model, inputShape: new[] { 1 }, generationForward: model.Predict,
+            quantizeIncrementalWeights: quantize);
         var repo = new OneModelRepo("lm", wrapper);
         return (new TextGenerationService(repo, NullLogger<TextGenerationService>.Instance), wrapper);
     }
@@ -86,6 +87,22 @@ public class IncrementalGenerationEndToEndTests
         Assert.Equal(resp.NumGenerated, resp.GeneratedTokens.Length);
         Assert.All(resp.GeneratedTokens, t => Assert.InRange(t, 0, Vocab - 1));
         Assert.Equal(new[] { 1, 2, 3 }, resp.AllTokens[..3]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task QuantizedIncrementalServing_BuildsAndGenerates()
+    {
+        await Task.Yield();
+        var (service, wrapper) = BuildService(quantize: true);
+
+        Assert.True(wrapper.SupportsIncrementalGeneration,
+            "wrapper should build a quantized KV-cached incremental path");
+
+        var resp = service.Generate("lm", NumericType.Float, Req(new[] { 1, 2, 3 }));
+
+        Assert.Null(resp.Error);
+        Assert.Equal(5, resp.NumGenerated);
+        Assert.All(resp.GeneratedTokens, t => Assert.InRange(t, 0, Vocab - 1));
     }
 
     [Fact(Timeout = 120000)]
