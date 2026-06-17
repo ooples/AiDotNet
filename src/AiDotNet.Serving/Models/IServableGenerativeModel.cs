@@ -53,6 +53,15 @@ internal interface IServableGenerativeModel<T>
     /// </summary>
     /// <returns>A disposable session; dispose it to free the KV-cache sequence.</returns>
     IGenerationSession<T> BeginGeneration();
+
+    /// <summary>
+    /// Begins a generation session for a specific prompt, reusing cached KV for the longest
+    /// registered prompt prefix (RadixAttention-style sharing via copy-on-write fork). The returned
+    /// session's <see cref="IGenerationSession{T}.CachedPromptTokens"/> reports how many leading
+    /// prompt tokens are already in the KV cache, so the caller forwards only the remaining suffix.
+    /// </summary>
+    /// <param name="promptTokens">The full prompt token IDs.</param>
+    IGenerationSession<T> BeginGeneration(System.Collections.Generic.IReadOnlyList<int> promptTokens);
 }
 
 /// <summary>
@@ -70,4 +79,18 @@ public interface IGenerationSession<T> : IDisposable
     /// <param name="newTokenIds">New token IDs shaped <c>[1, newLength]</c>.</param>
     /// <returns>Logits for the new tokens (<c>[1, newLength, vocab]</c> or a last-position form).</returns>
     Tensor<T> Forward(Tensor<T> newTokenIds);
+
+    /// <summary>
+    /// Number of leading prompt tokens already present in this session's KV cache from a prefix-share
+    /// fork (0 for a fresh session). The caller forwards only <c>prompt[CachedPromptTokens..]</c>.
+    /// </summary>
+    int CachedPromptTokens { get; }
+
+    /// <summary>
+    /// Registers this session's current KV state (which must hold exactly the prefilled prompt) as a
+    /// reusable prefix base, so later requests whose prompt extends this one can fork from it. Call
+    /// once, immediately after prefill and before decoding. No-op when prefix sharing is unavailable.
+    /// </summary>
+    /// <param name="promptTokens">The prompt token IDs just prefilled into this session.</param>
+    void RegisterPromptPrefix(System.Collections.Generic.IReadOnlyList<int> promptTokens);
 }

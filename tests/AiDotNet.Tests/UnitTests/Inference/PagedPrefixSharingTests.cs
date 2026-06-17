@@ -56,6 +56,62 @@ public class PagedPrefixSharingTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task ForkAfterSourceMutation_PreservesPrefixKv()
+    {
+        await Task.Yield();
+        // blockSize 16 so prefix(4) AND suffix share block 0 — exercises COW on the shared block,
+        // which the block-granular test below does not (its suffix lands in a new block).
+        const int E = EmbDim, H = Heads, HD = E / H;
+        var layer = new PagedCachedMultiHeadAttention<float>(8, E, H, useCausalMask: true)
+        { InferenceMode = true, LayerIndex = 0 };
+        var rng = new Random(20260616);
+        var pv = new float[layer.GetParameters().Length];
+        for (int i = 0; i < pv.Length; i++) pv[i] = (float)(rng.NextDouble() - 0.5) * 0.2f;
+        layer.SetParameters(new Vector<float>(pv));
+        var cache = PagedKVCache<float>.FromMemorySize(64L * 1024 * 1024, 1, H, HD, blockSize: 16);
+        layer.Kernel = new PagedAttentionKernel<float>(cache, new PagedAttentionConfig
+        { NumHeads = H, HeadDimension = HD, BlockSize = 16, MaxBatchSize = 8 });
+
+        var data = new float[6 * E];
+        var rd = new Random(55);
+        for (int i = 0; i < data.Length; i++) data[i] = (float)(rd.NextDouble() - 0.5);
+
+        float[] StepOn(long seq, int t)
+        {
+            var tok = new float[E];
+            Array.Copy(data, t * E, tok, 0, E);
+            return layer.ForwardWithContext(new Tensor<float>(tok, new[] { 1, 1, E }), new InferenceForwardContext(seq, t)).AsSpan().ToArray();
+        }
+
+        // Reference: fresh sequence, full 6 tokens.
+        Assert.True(cache.AllocateSequence(1, 0));
+        float[] refOut5 = new float[E];
+        for (int t = 0; t < 6; t++) { var o = StepOn(1, t); if (t == 5) refOut5 = o; }
+
+        // Source: prefill 4 tokens, fork to base, then MUTATE source (write 2 more into shared block 0).
+        Assert.True(cache.AllocateSequence(10, 0));
+        for (int t = 0; t < 4; t++) StepOn(10, t);
+        Assert.True(cache.ForkSequence(10, 11)); // base = prefix snapshot
+        for (int t = 4; t < 6; t++) StepOn(10, t); // source decode -> COW must protect base
+        cache.FreeSequence(10);
+
+        // Fork base and continue with the real suffix; position 5 must match the fresh reference.
+        Assert.True(cache.ForkSequence(11, 12));
+        float[] forkOut5 = new float[E];
+        for (int t = 4; t < 6; t++) forkOut5 = StepOn(12, t);
+
+        Assert.True(RelErrV(forkOut5, refOut5) < 1e-4,
+            "fork-after-source-mutation: COW failed to preserve the prefix KV (output diverges from fresh).");
+    }
+
+    private static double RelErrV(ReadOnlySpan<float> a, ReadOnlySpan<float> b)
+    {
+        double num = 0, den = 1e-12;
+        for (int i = 0; i < a.Length; i++) { double d = a[i] - b[i]; num += d * d; den += (double)b[i] * b[i]; }
+        return Math.Sqrt(num / den);
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task ForkedPrefix_ReusesBlocks_AndMatchesFreshSequence()
     {
         await Task.Yield();

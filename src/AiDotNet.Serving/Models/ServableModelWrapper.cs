@@ -28,6 +28,15 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     private readonly AiDotNet.Inference.PagedAttention.PagedKVCache<T>? _incrementalCache;
     private long _nextSequenceId;
 
+    // RadixAttention-style prefix sharing (#99 Stage 2 integration): maps a prompt-prefix key to a
+    // base KV-cache sequence whose cache holds exactly that prefix. New requests fork from the
+    // longest registered strict-prefix (copy-on-write), reusing the prefix's KV. LRU-capped; evicted
+    // bases are freed (existing forks keep shared blocks alive via block ref-counting).
+    private const int PrefixRegistryCapacity = 64;
+    private readonly object _prefixLock = new();
+    private readonly System.Collections.Generic.Dictionary<string, long> _prefixRegistry = new();
+    private readonly System.Collections.Generic.LinkedList<string> _prefixLru = new();
+
     private readonly string _modelName;
     private readonly int _inputDimension;
     private readonly int _outputDimension;
@@ -583,7 +592,106 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         }
 
         long sequenceId = AllocateSessionSequence(_incrementalCache);
-        return new GenerationSession(_incrementalModel, _incrementalCache, sequenceId);
+        return new GenerationSession(this, _incrementalModel, _incrementalCache, sequenceId, cachedPromptTokens: 0);
+    }
+
+    /// <inheritdoc/>
+    public IGenerationSession<T> BeginGeneration(System.Collections.Generic.IReadOnlyList<int> promptTokens)
+    {
+        Guard.NotNull(promptTokens);
+        if (_incrementalModel is null || _incrementalCache is null)
+        {
+            throw new NotSupportedException(
+                $"Model '{_modelName}' does not support incremental generation.");
+        }
+
+        long sequenceId = AllocateSessionSequence(_incrementalCache);
+        int cachedPromptTokens = 0;
+
+        // Reuse the longest registered prompt prefix that is a STRICT prefix of this prompt (so at
+        // least the last token is still forwarded, producing the first next-token logits). Fork it
+        // copy-on-write so the shared prefix KV is reused and only the suffix allocates new blocks.
+        lock (_prefixLock)
+        {
+            for (int len = promptTokens.Count - 1; len >= 1; len--)
+            {
+                string key = PrefixKey(promptTokens, len);
+                if (_prefixRegistry.TryGetValue(key, out long baseSeqId) &&
+                    _incrementalCache.ForkSequence(baseSeqId, sequenceId))
+                {
+                    cachedPromptTokens = len;
+                    TouchPrefix(key);
+                    break;
+                }
+            }
+        }
+
+        return new GenerationSession(this, _incrementalModel, _incrementalCache, sequenceId, cachedPromptTokens);
+    }
+
+    /// <summary>
+    /// Registers a base sequence (forked from <paramref name="sourceSequenceId"/>, which must hold
+    /// exactly the prompt's KV) under the full prompt key, so later prompts that extend it can fork.
+    /// </summary>
+    private void RegisterPrefix(System.Collections.Generic.IReadOnlyList<int> promptTokens, long sourceSequenceId)
+    {
+        if (_incrementalCache is null || promptTokens.Count == 0)
+        {
+            return;
+        }
+
+        string key = PrefixKey(promptTokens, promptTokens.Count);
+        lock (_prefixLock)
+        {
+            if (_prefixRegistry.ContainsKey(key))
+            {
+                TouchPrefix(key);
+                return;
+            }
+
+            long baseSeqId = System.Threading.Interlocked.Increment(ref _nextSequenceId);
+            if (!_incrementalCache.ForkSequence(sourceSequenceId, baseSeqId))
+            {
+                return; // best-effort: skip registration if the fork fails
+            }
+
+            _prefixRegistry[key] = baseSeqId;
+            _prefixLru.AddLast(key);
+            EvictPrefixesIfNeeded();
+        }
+    }
+
+    // Caller must hold _prefixLock.
+    private void TouchPrefix(string key)
+    {
+        _prefixLru.Remove(key);
+        _prefixLru.AddLast(key);
+    }
+
+    // Caller must hold _prefixLock.
+    private void EvictPrefixesIfNeeded()
+    {
+        while (_prefixRegistry.Count > PrefixRegistryCapacity && _prefixLru.First is not null)
+        {
+            string oldest = _prefixLru.First.Value;
+            _prefixLru.RemoveFirst();
+            if (_prefixRegistry.TryGetValue(oldest, out long evictedBase))
+            {
+                _prefixRegistry.Remove(oldest);
+                _incrementalCache?.FreeSequence(evictedBase);
+            }
+        }
+    }
+
+    private static string PrefixKey(System.Collections.Generic.IReadOnlyList<int> tokens, int length)
+    {
+        var sb = new System.Text.StringBuilder(length * 4);
+        for (int i = 0; i < length; i++)
+        {
+            sb.Append(tokens[i]);
+            sb.Append(',');
+        }
+        return sb.ToString();
     }
 
     private long AllocateSessionSequence(AiDotNet.Inference.PagedAttention.PagedKVCache<T> cache)
@@ -607,6 +715,7 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     /// </summary>
     private sealed class GenerationSession : IGenerationSession<T>
     {
+        private readonly ServableModelWrapper<T> _owner;
         private readonly AiDotNet.NeuralNetworks.NeuralNetworkBase<T> _model;
         private readonly AiDotNet.Inference.PagedAttention.PagedKVCache<T> _cache;
         private readonly long _sequenceId;
@@ -614,14 +723,22 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         private bool _disposed;
 
         public GenerationSession(
+            ServableModelWrapper<T> owner,
             AiDotNet.NeuralNetworks.NeuralNetworkBase<T> model,
             AiDotNet.Inference.PagedAttention.PagedKVCache<T> cache,
-            long sequenceId)
+            long sequenceId,
+            int cachedPromptTokens)
         {
+            _owner = owner;
             _model = model;
             _cache = cache;
             _sequenceId = sequenceId;
+            // A forked session starts decoding after the shared prefix already in its KV cache.
+            _position = cachedPromptTokens;
+            CachedPromptTokens = cachedPromptTokens;
         }
+
+        public int CachedPromptTokens { get; }
 
         public Tensor<T> Forward(Tensor<T> newTokenIds)
         {
@@ -636,6 +753,20 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
             var logits = _model.PredictWithContext(newTokenIds, context);
             _position += newLength;
             return logits;
+        }
+
+        public void RegisterPromptPrefix(System.Collections.Generic.IReadOnlyList<int> promptTokens)
+        {
+            if (_disposed)
+            {
+                throw new ObjectDisposedException(nameof(GenerationSession));
+            }
+
+            // Only meaningful right after prefill, when this session's KV holds exactly the prompt.
+            if (_position == promptTokens.Count)
+            {
+                _owner.RegisterPrefix(promptTokens, _sequenceId);
+            }
         }
 
         public void Dispose()
