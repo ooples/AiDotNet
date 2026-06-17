@@ -17,6 +17,16 @@ using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers;
 
+/// <summary>
+/// Serializes the cache-skip parity tests. They toggle the (AsyncLocal-backed)
+/// <c>LayerBase&lt;T&gt;.KeepActivationCacheUnderTape</c> escape hatch; running them
+/// in one non-parallel collection removes any chance of cross-test interference
+/// even on runtimes where the AsyncLocal flow boundary is coarse.
+/// </summary>
+[CollectionDefinition("LayerCacheSkipTests", DisableParallelization = true)]
+public class LayerCacheSkipTestsCollection { }
+
+[Collection("LayerCacheSkipTests")]
 public class FeedForwardLayerCacheSkipParityTests
 {
     private static Tensor<float> Rand(int[] shape, int seed)

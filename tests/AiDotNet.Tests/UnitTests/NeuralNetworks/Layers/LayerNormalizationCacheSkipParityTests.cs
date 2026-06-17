@@ -15,6 +15,7 @@ using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers;
 
+[Collection("LayerCacheSkipTests")]
 public class LayerNormalizationCacheSkipParityTests
 {
     private static Tensor<float> Rand(int[] shape, int seed)

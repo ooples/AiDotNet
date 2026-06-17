@@ -896,9 +896,21 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// <see cref="GradientTape{T}"/> the tape captures each op's own state, so the
     /// manual caches are write-only dead weight that pins a SECOND reference to
     /// every activation — the deep-model activation set behind the #1624 training-
-    /// scale OOM. Shared across all layer types.
+    /// scale OOM. Shared across all layer types, but backed by an
+    /// <see cref="System.Threading.AsyncLocal{T}"/> so the value is flow-local:
+    /// flipping it on one async flow (a test, or a single train/inference path)
+    /// never races with same-typed layers running on other threads/flows. A
+    /// plain static would let one parallel path flip cache behavior process-wide
+    /// for every <see cref="LayerBase{T}"/>.
     /// </summary>
-    internal static bool KeepActivationCacheUnderTape { get; set; }
+    private static readonly System.Threading.AsyncLocal<bool> _keepActivationCacheUnderTape = new();
+
+    /// <summary>#1624 escape hatch / test hook — see <see cref="ShouldCacheActivationsForManualBackward"/>.</summary>
+    internal static bool KeepActivationCacheUnderTape
+    {
+        get => _keepActivationCacheUnderTape.Value;
+        set => _keepActivationCacheUnderTape.Value = value;
+    }
 
     /// <summary>
     /// True when the layer should populate its manual-backward activation caches:

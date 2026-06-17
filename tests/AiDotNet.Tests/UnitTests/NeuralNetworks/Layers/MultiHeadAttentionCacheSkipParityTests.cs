@@ -16,6 +16,7 @@ using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers;
 
+[Collection("LayerCacheSkipTests")]
 public class MultiHeadAttentionCacheSkipParityTests
 {
     private static Tensor<float> Rand(int[] shape, int seed)
@@ -62,6 +63,11 @@ public class MultiHeadAttentionCacheSkipParityTests
 
         Assert.Equal(keep.Length, skip.Length);
         Assert.Contains(keep, g => g != 0f);
+        // precision: 4 (vs 5 in the FeedForward/LayerNorm parity tests) is deliberate:
+        // MHA accumulates more floating-point error along the longer op chain (Q/K/V
+        // projections → scaled-dot-product attention → context → output projection),
+        // so the keep-vs-skip gradients agree to ~1e-4 rather than ~1e-5. Both are far
+        // tighter than any real divergence the cache-skip could introduce.
         for (int i = 0; i < keep.Length; i++)
             Assert.Equal(keep[i], skip[i], 4);
     }
