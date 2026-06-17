@@ -20,6 +20,14 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     // the wrapper is constructed from a tensor-to-tensor model (e.g. a transformer language
     // model); null for vector/matrix prediction models, which cannot generate text.
     private readonly Func<Tensor<T>, Tensor<T>>? _tensorForward;
+
+    // Incremental KV-cached generation (#99): an InferenceOptimizer-optimized clone (paged cached
+    // attention) + its shared PagedKVCache. Built only for a generative NeuralNetworkBase model
+    // with optimizable attention; null => incremental unsupported (callers use stateless Forward).
+    private readonly AiDotNet.NeuralNetworks.NeuralNetworkBase<T>? _incrementalModel;
+    private readonly AiDotNet.Inference.PagedAttention.PagedKVCache<T>? _incrementalCache;
+    private long _nextSequenceId;
+
     private readonly string _modelName;
     private readonly int _inputDimension;
     private readonly int _outputDimension;
@@ -323,6 +331,74 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         };
 
         _predictBatchFunc = null; // Falls back to row-by-row single predictions
+
+        // Build the incremental (KV-cached) generation path when this is an opt-in generative model
+        // (generationForward supplied) backed by an optimizable NeuralNetworkBase. Best-effort: any
+        // failure leaves incremental disabled and callers fall back to stateless Forward decoding.
+        if (generationForward is not null && model is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> neural)
+        {
+            try
+            {
+                var built = BuildIncrementalModel(neural);
+                _incrementalModel = built.Model;
+                _incrementalCache = built.Cache;
+            }
+            catch (Exception ex)
+            {
+                AiDotNet.Helpers.InferenceDiagnostics.RecordException(
+                    area: "Serving.ServableModelWrapper",
+                    feature: "IncrementalGeneration",
+                    ex: ex,
+                    reason: "Failed to build incremental KV-cached model; falling back to stateless decode.");
+                _incrementalModel = null;
+                _incrementalCache = null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Optimizes a generative model to a paged-KV inference form for incremental decode. Returns
+    /// (null, null) when the model has no optimizable attention (incremental unsupported).
+    /// </summary>
+    private static (AiDotNet.NeuralNetworks.NeuralNetworkBase<T>? Model, AiDotNet.Inference.PagedAttention.PagedKVCache<T>? Cache)
+        BuildIncrementalModel(AiDotNet.NeuralNetworks.NeuralNetworkBase<T> source)
+    {
+        var config = new AiDotNet.Configuration.InferenceOptimizationConfig
+        {
+            EnableKVCache = true,
+            EnablePagedKVCache = true,
+            EnableFlashAttention = false,
+            EnableLayerFusion = false,
+            AttentionMasking = AiDotNet.Configuration.AttentionMaskingMode.Causal,
+            InferenceQuantization = AiDotNet.Configuration.InferenceQuantizationMode.None
+        };
+
+        var optimizer = new AiDotNet.Inference.InferenceOptimizer<T>(config);
+        var (optimized, applied) = optimizer.OptimizeForInference(source, cloneModel: true);
+        var cache = optimizer.PagedKVCache;
+        if (!applied || cache is null)
+        {
+            return (null, null);
+        }
+
+        // Eval mode + warm up lazy caches (kernel weight cache, etc.) single-threaded before
+        // concurrent sessions touch the shared model — keeps the per-call forward race-free.
+        optimized.SetTrainingMode(false);
+        long warmupId = long.MaxValue;
+        if (cache.AllocateSequence(warmupId, 0))
+        {
+            try
+            {
+                var probe = new Tensor<T>(new[] { 1, 1 });
+                optimized.PredictWithContext(probe, new AiDotNet.Inference.InferenceForwardContext(warmupId, 0));
+            }
+            finally
+            {
+                cache.FreeSequence(warmupId);
+            }
+        }
+
+        return (optimized, cache);
     }
 
     /// <summary>
@@ -487,6 +563,86 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         }
 
         return _tensorForward(inputTokenIds);
+    }
+
+    /// <inheritdoc/>
+    public bool SupportsIncrementalGeneration => _incrementalModel is not null && _incrementalCache is not null;
+
+    /// <inheritdoc/>
+    public IGenerationSession<T> BeginGeneration()
+    {
+        if (_incrementalModel is null || _incrementalCache is null)
+        {
+            throw new NotSupportedException(
+                $"Model '{_modelName}' does not support incremental generation.");
+        }
+
+        long sequenceId = AllocateSessionSequence(_incrementalCache);
+        return new GenerationSession(_incrementalModel, _incrementalCache, sequenceId);
+    }
+
+    private long AllocateSessionSequence(AiDotNet.Inference.PagedAttention.PagedKVCache<T> cache)
+    {
+        for (int attempt = 0; attempt < 4096; attempt++)
+        {
+            long id = System.Threading.Interlocked.Increment(ref _nextSequenceId);
+            if (cache.AllocateSequence(id, 0))
+            {
+                return id;
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"Unable to allocate a KV-cache sequence for model '{_modelName}' (cache exhausted).");
+    }
+
+    /// <summary>
+    /// Per-request KV-cached generation session over the shared optimized model + paged cache,
+    /// isolated by its own sequence id.
+    /// </summary>
+    private sealed class GenerationSession : IGenerationSession<T>
+    {
+        private readonly AiDotNet.NeuralNetworks.NeuralNetworkBase<T> _model;
+        private readonly AiDotNet.Inference.PagedAttention.PagedKVCache<T> _cache;
+        private readonly long _sequenceId;
+        private int _position;
+        private bool _disposed;
+
+        public GenerationSession(
+            AiDotNet.NeuralNetworks.NeuralNetworkBase<T> model,
+            AiDotNet.Inference.PagedAttention.PagedKVCache<T> cache,
+            long sequenceId)
+        {
+            _model = model;
+            _cache = cache;
+            _sequenceId = sequenceId;
+        }
+
+        public Tensor<T> Forward(Tensor<T> newTokenIds)
+        {
+            Guard.NotNull(newTokenIds);
+            if (_disposed)
+            {
+                throw new ObjectDisposedException(nameof(GenerationSession));
+            }
+
+            int newLength = newTokenIds.Shape[newTokenIds.Shape.Length - 1];
+            var context = new AiDotNet.Inference.InferenceForwardContext(_sequenceId, _position);
+            var logits = _model.PredictWithContext(newTokenIds, context);
+            _position += newLength;
+            return logits;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            _cache.FreeSequence(_sequenceId);
+        }
     }
 
     /// <inheritdoc/>

@@ -1,6 +1,7 @@
 using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.ContinuousBatching;
 using AiDotNet.Serving.Models;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 using Microsoft.Extensions.Logging;
 
@@ -80,6 +81,25 @@ public sealed class TextGenerationService : ITextGenerationService
             };
         }
 
+        // Preferred path: KV-cached incremental decode over a per-request session (each request gets
+        // its own paged-cache sequence id, so concurrent requests to the same model are isolated and
+        // each decode step only pays for the new token instead of recomputing the full context).
+        // On any failure, fall through to the proven full-context path below so a model whose
+        // incremental path misbehaves still serves correct (if slower) results.
+        if (generativeModel.SupportsIncrementalGeneration)
+        {
+            try
+            {
+                return GenerateIncremental(modelName, generativeModel, request, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Incremental generation failed for model '{ModelName}'; falling back to full-context decode.",
+                    modelName);
+            }
+        }
+
         var config = new ContinuousBatcherConfig
         {
             // Drive the engine synchronously via Step() for this single REST request.
@@ -157,5 +177,106 @@ public sealed class TextGenerationService : ITextGenerationService
             AcceptanceRate = batcher.SpeculationAcceptanceRate ?? 0.0,
             RequestId = request.RequestId
         };
+    }
+
+    /// <summary>
+    /// KV-cached incremental decode: prefill the prompt, then decode one token at a time over the
+    /// session's paged KV cache (each step forwards only the new token). The session owns a distinct
+    /// cache sequence id, so concurrent requests to the same model are isolated.
+    /// </summary>
+    private SpeculativeDecodingResponse GenerateIncremental<T>(
+        string modelName,
+        IServableGenerativeModel<T> model,
+        SpeculativeDecodingRequest request,
+        CancellationToken cancellationToken)
+    {
+        int eosTokenId = request.EosTokenId ?? ContinuousBatcherConfig.DefaultEosTokenId;
+        var generated = new List<int>(request.MaxNewTokens);
+
+        using var session = model.BeginGeneration();
+
+        // Prefill: forward the whole prompt, producing the first next-token logits.
+        // Exceptions propagate to the caller's fallback (full-context decode); cancellation returns
+        // a cancelled response directly (no fallback).
+        var logits = session.Forward(TokensToTensor<T>(request.InputTokens));
+
+        for (int step = 0; step < request.MaxNewTokens; step++)
+        {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return new SpeculativeDecodingResponse
+                {
+                    Error = "Text generation was cancelled.",
+                    RequestId = request.RequestId
+                };
+            }
+
+            int next = ArgMaxLastPosition(logits);
+            if (next == eosTokenId)
+            {
+                break;
+            }
+
+            generated.Add(next);
+
+            // Decode: forward only the new token; the KV cache supplies the prior context.
+            logits = session.Forward(TokensToTensor<T>(new[] { next }));
+        }
+
+        var allTokens = new List<int>(request.InputTokens);
+        allTokens.AddRange(generated);
+
+        return new SpeculativeDecodingResponse
+        {
+            AllTokens = allTokens.ToArray(),
+            GeneratedTokens = generated.ToArray(),
+            NumGenerated = generated.Count,
+            AcceptanceRate = 0.0, // speculative decoding composes with incremental in a later stage
+            RequestId = request.RequestId
+        };
+    }
+
+    /// <summary>Builds a <c>[1, n]</c> token-id tensor from token IDs.</summary>
+    private static Tensor<T> TokensToTensor<T>(IReadOnlyList<int> tokens)
+    {
+        var numOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        var tensor = new Tensor<T>(new[] { 1, tokens.Count });
+        for (int i = 0; i < tokens.Count; i++)
+        {
+            tensor[0, i] = numOps.FromDouble(tokens[i]);
+        }
+        return tensor;
+    }
+
+    /// <summary>
+    /// Returns the argmax token id of the last position of a logits tensor, handling
+    /// <c>[1, seq, vocab]</c>, <c>[seq, vocab]</c>, <c>[1, vocab]</c>, and <c>[vocab]</c> shapes.
+    /// </summary>
+    private static int ArgMaxLastPosition<T>(Tensor<T> logits)
+    {
+        var numOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        int rank = logits.Shape.Length;
+        int vocab = logits.Shape[rank - 1];
+
+        // Flat offset of the last position's vocab row.
+        int positions = 1;
+        for (int d = 0; d < rank - 1; d++)
+        {
+            positions *= logits.Shape[d];
+        }
+        int baseOffset = (positions - 1) * vocab;
+
+        var flat = logits.AsSpan();
+        int best = 0;
+        T bestVal = flat[baseOffset];
+        for (int v = 1; v < vocab; v++)
+        {
+            if (numOps.GreaterThan(flat[baseOffset + v], bestVal))
+            {
+                bestVal = flat[baseOffset + v];
+                best = v;
+            }
+        }
+        return best;
     }
 }

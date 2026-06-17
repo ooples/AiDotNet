@@ -368,7 +368,10 @@ public class InferenceController : ControllerBase
             // Run real autoregressive generation through the continuous-batching engine
             // (with speculative decoding). This works for any tensor-based (token-to-logits)
             // model, such as a transformer language model.
-            var response = _textGenerationService.Generate(modelName, modelInfo.NumericType, request, HttpContext.RequestAborted);
+            // HttpContext can be null outside a request pipeline (e.g. unit tests); fall back to a
+            // non-cancelling token rather than NRE-ing into the 500 handler.
+            var requestAborted = HttpContext?.RequestAborted ?? System.Threading.CancellationToken.None;
+            var response = _textGenerationService.Generate(modelName, modelInfo.NumericType, request, requestAborted);
 
             sw.Stop();
             response.ProcessingTimeMs = sw.ElapsedMilliseconds;

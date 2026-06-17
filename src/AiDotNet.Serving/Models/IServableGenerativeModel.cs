@@ -38,4 +38,36 @@ internal interface IServableGenerativeModel<T>
     /// Logits shaped <c>[1, sequenceLength, vocabularySize]</c> or <c>[1, vocabularySize]</c>.
     /// </returns>
     Tensor<T> Forward(Tensor<T> inputTokenIds);
+
+    /// <summary>
+    /// Gets whether this model supports KV-cached incremental generation via per-request sessions
+    /// (<see cref="BeginGeneration"/>). When false, callers fall back to stateless full-context
+    /// <see cref="Forward"/> decoding.
+    /// </summary>
+    bool SupportsIncrementalGeneration { get; }
+
+    /// <summary>
+    /// Begins a new generation session backed by its own KV-cache sequence, isolated from other
+    /// concurrent sessions sharing the same model. Only valid when
+    /// <see cref="SupportsIncrementalGeneration"/> is true.
+    /// </summary>
+    /// <returns>A disposable session; dispose it to free the KV-cache sequence.</returns>
+    IGenerationSession<T> BeginGeneration();
+}
+
+/// <summary>
+/// A per-request KV-cached generation session over a shared model + paged KV cache. Each session
+/// owns a distinct cache sequence id, so concurrent sessions decode independently. Forwarding only
+/// the new tokens advances the session's position and KV cache (true incremental decode).
+/// </summary>
+/// <typeparam name="T">The numeric type used by the model.</typeparam>
+public interface IGenerationSession<T> : IDisposable
+{
+    /// <summary>
+    /// Runs an incremental forward over only the new tokens (the prompt on the first call, then one
+    /// token per decode step), appending to this session's KV cache.
+    /// </summary>
+    /// <param name="newTokenIds">New token IDs shaped <c>[1, newLength]</c>.</param>
+    /// <returns>Logits for the new tokens (<c>[1, newLength, vocab]</c> or a last-position form).</returns>
+    Tensor<T> Forward(Tensor<T> newTokenIds);
 }
