@@ -2408,12 +2408,14 @@ public static class DeserializationHelper
                 // The preferred metadata key is present, so an empty/non-string value is a
                 // HARD error: the legacy Dense fallback is only valid for older saves that
                 // never wrote InnerLayerTypeName at all. Silently rebuilding a named inner
-                // layer as Dense would deserialize the wrong architecture.
-                innerTypeName = innerTypeObj as string;
-                if (string.IsNullOrWhiteSpace(innerTypeName))
+                // layer as Dense would deserialize the wrong architecture. The pattern match
+                // narrows innerTypeName to non-null on net471 too (string.IsNullOrWhiteSpace
+                // there lacks the [NotNullWhen] annotation the compiler would otherwise use).
+                if (innerTypeObj is not string innerTypeStr || string.IsNullOrWhiteSpace(innerTypeStr))
                     throw new InvalidOperationException(
                         "ResidualLayer metadata contains InnerLayerTypeName but it is empty or not a string; " +
                         "refusing to silently rebuild it as a Dense layer.");
+                innerTypeName = innerTypeStr;
 
                 int[]? innerIn = TryGetIntArray(additionalParams, "InnerLayerInputShape");
                 int[]? innerOut = TryGetIntArray(additionalParams, "InnerLayerOutputShape");
