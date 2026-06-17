@@ -1233,9 +1233,14 @@ public partial class LSTMLayer<T> : LayerBase<T>
 
         for (int t = 0; t < timeSteps; t++)
         {
-            // Slice along the time dimension (dim 1), keeping batch dimension
-            // For input [batchSize, timeSteps, inputSize], this returns [batchSize, inputSize]
-            var xt = input3D.GetSliceAlongDimension(t, 1);
+            // Slice along the time dimension (dim 1), keeping batch dimension.
+            // For input [batchSize, timeSteps, inputSize], this returns [batchSize, inputSize].
+            // Use the tape-tracked Engine.TensorSliceAxis (NOT the raw Tensor.GetSliceAlongDimension):
+            // the raw slice is not an autodiff node, so gradient never flowed from xt back into
+            // input3D — severing every trainable layer UPSTREAM of the LSTM (embeddings, char
+            // encoder, stacked lower BiLSTMs). Routing the per-timestep slice through the tape lets
+            // the LSTM propagate gradient to its input, so upstream layers train end-to-end.
+            var xt = Engine.TensorSliceAxis(input3D, axis: 1, index: t);
 
             // Forget Gate - using TensorBroadcastAdd for bias (supports [batch, hidden] + [hidden] broadcasting)
             var f = Engine.TensorMatMul(xt, WfiT);

@@ -202,56 +202,29 @@ public class WordCharBiLSTMCRF<T> : SequenceLabelingNERBase<T>
                 scalarActivation: identity));
     }
 
-    #region Text convenience API
+    #region Input encoding (preprocessing — facade input prep, not a parallel train/predict path)
 
     /// <summary>
     /// Encodes a tokenized sentence into the packed-index input tensor this model consumes.
     /// </summary>
+    /// <remarks>
+    /// This is input <b>preprocessing</b>, not an alternate run path: it only builds the
+    /// <see cref="Tensor{T}"/> you feed to the facade. Train through
+    /// <c>AiModelBuilder.ConfigureModel(model).BuildAsync(...)</c> and run inference through
+    /// <c>AiModelResult.Predict(...)</c> (or <see cref="PredictLabels"/>) on the encoded tensor,
+    /// then map indices to names with <see cref="SequenceLabelingNERBase{T}.DecodeLabels"/> — exactly
+    /// like every other NER model, which consume caller-prepared tensors.
+    /// </remarks>
     /// <param name="tokens">The sentence tokens.</param>
     /// <returns>A <c>[sequenceLength, 1 + maxWordLength]</c> index tensor.</returns>
     public Tensor<T> EncodeSentence(string[] tokens)
     {
+        if (tokens is null) throw new ArgumentNullException(nameof(tokens));
         double[] packed = _encoder.EncodePacked(tokens, _options.MaxSequenceLength);
         var data = new T[packed.Length];
         for (int i = 0; i < packed.Length; i++) data[i] = NumOps.FromDouble(packed[i]);
         return new Tensor<T>(new Vector<T>(data),
             [_options.MaxSequenceLength, 1 + _encoder.MaxWordLength]);
-    }
-
-    /// <summary>
-    /// Trains on a single labeled sentence (one gradient step over the CRF negative log-likelihood).
-    /// </summary>
-    /// <param name="tokens">The sentence tokens.</param>
-    /// <param name="labelIndices">Per-token gold label indices (into <see cref="SequenceLabelingNERBase{T}.LabelNames"/>).</param>
-    /// <returns>The scalar training loss for this step.</returns>
-    public double TrainOnSentence(string[] tokens, int[] labelIndices)
-    {
-        if (tokens is null) throw new ArgumentNullException(nameof(tokens));
-        if (labelIndices is null) throw new ArgumentNullException(nameof(labelIndices));
-
-        var x = EncodeSentence(tokens);
-        var yData = new T[labelIndices.Length];
-        for (int i = 0; i < labelIndices.Length; i++) yData[i] = NumOps.FromDouble(labelIndices[i]);
-        var y = new Tensor<T>(new Vector<T>(yData), [labelIndices.Length]);
-        return RunCrfAwareTrainStep(x, y, _options.UseCRF, _optimizer);
-    }
-
-    /// <summary>
-    /// Predicts BIO label names for a tokenized sentence.
-    /// </summary>
-    /// <param name="tokens">The sentence tokens.</param>
-    /// <returns>One label name per input token.</returns>
-    public string[] PredictSentence(string[] tokens)
-    {
-        if (tokens is null) throw new ArgumentNullException(nameof(tokens));
-        var x = EncodeSentence(tokens);
-        var labelIndices = PredictLabels(x);
-        var decoded = DecodeLabels(labelIndices);
-        int count = Math.Min(tokens.Length, decoded.Length);
-        var result = new string[tokens.Length];
-        for (int i = 0; i < tokens.Length; i++)
-            result[i] = i < count ? decoded[i] : "O";
-        return result;
     }
 
     /// <summary>
@@ -278,7 +251,9 @@ public class WordCharBiLSTMCRF<T> : SequenceLabelingNERBase<T>
         foreach (var line in File.ReadLines(gloveFilePath))
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
-            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            // char[] overload (not the char one) — string.Split(char, StringSplitOptions) does not
+            // exist on net471, which this project also targets.
+            var parts = line.Split([' '], StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length != dim + 1) continue;
 
             string word = parts[0].ToLowerInvariant();
