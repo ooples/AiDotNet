@@ -26,6 +26,7 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     // with optimizable attention; null => incremental unsupported (callers use stateless Forward).
     private readonly AiDotNet.NeuralNetworks.NeuralNetworkBase<T>? _incrementalModel;
     private readonly AiDotNet.Inference.PagedAttention.PagedKVCache<T>? _incrementalCache;
+    private readonly bool _supportsBatchedPrefill;
     private long _nextSequenceId;
 
     // RadixAttention-style prefix sharing (#99 Stage 2 integration): maps a prompt-prefix key to a
@@ -352,6 +353,10 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
                 var built = BuildIncrementalModel(neural, quantizeIncrementalWeights);
                 _incrementalModel = built.Model;
                 _incrementalCache = built.Cache;
+                if (_incrementalModel is not null && _incrementalCache is not null)
+                {
+                    _supportsBatchedPrefill = ProbeBatchedPrefill(_incrementalModel, _incrementalCache);
+                }
             }
             catch (Exception ex)
             {
@@ -413,6 +418,42 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         }
 
         return (optimized, cache);
+    }
+
+    /// <summary>
+    /// Probes whether the optimized model accepts a multi-token forward (per-position logits), so the
+    /// prompt can be prefilled in one pass. An exception means the model is single-token-step only.
+    /// </summary>
+    private static bool ProbeBatchedPrefill(
+        AiDotNet.NeuralNetworks.NeuralNetworkBase<T> model,
+        AiDotNet.Inference.PagedAttention.PagedKVCache<T> cache)
+    {
+        const long probeSequenceId = long.MaxValue - 1;
+        if (!cache.AllocateSequence(probeSequenceId, 0))
+        {
+            return false;
+        }
+
+        try
+        {
+            var probe = new Tensor<T>(new[] { 1, 2 }); // two tokens in one forward
+            model.PredictWithContext(probe, new AiDotNet.Inference.InferenceForwardContext(probeSequenceId, 0));
+            return true;
+        }
+        catch (Exception ex)
+        {
+            // Expected for fixed single-token-step models; record as a capability decision, not an error.
+            AiDotNet.Helpers.InferenceDiagnostics.RecordDecision(
+                area: "Serving.ServableModelWrapper",
+                feature: "BatchedPrefill",
+                enabled: false,
+                reason: ex.GetType().Name);
+            return false;
+        }
+        finally
+        {
+            cache.FreeSequence(probeSequenceId);
+        }
     }
 
     /// <summary>
@@ -581,6 +622,9 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
 
     /// <inheritdoc/>
     public bool SupportsIncrementalGeneration => _incrementalModel is not null && _incrementalCache is not null;
+
+    /// <inheritdoc/>
+    public bool SupportsBatchedPrefill => _supportsBatchedPrefill;
 
     /// <inheritdoc/>
     public IGenerationSession<T> BeginGeneration()

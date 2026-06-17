@@ -198,15 +198,29 @@ public sealed class TextGenerationService : ITextGenerationService
         using var session = model.BeginGeneration(request.InputTokens);
         int prefillStart = session.CachedPromptTokens; // 0..InputTokens.Length-1 (strict prefix)
 
-        // Prefill the (remaining) prompt one token at a time so the KV cache accumulates the context.
-        // (Per-token prefill is universally compatible — it works for fixed single-token-step models
-        // as well as multi-token ones. There is always >= 1 suffix token because the shared prefix is
-        // strict.) Exceptions propagate to the caller's fallback (full-context decode); cancellation
-        // returns a cancelled response directly (no fallback).
-        var logits = session.Forward(TokensToTensor<T>(new[] { request.InputTokens[prefillStart] }));
-        for (int i = prefillStart + 1; i < request.InputTokens.Length; i++)
+        // Prefill the (remaining) prompt. When the model accepts a multi-token forward, do it in a
+        // SINGLE batched pass (per-position logits, take the last); otherwise one token at a time
+        // (universally compatible with fixed single-token-step models). There is always >= 1 suffix
+        // token because any shared prefix is strict. Exceptions propagate to the caller's fallback
+        // (full-context decode); cancellation returns a cancelled response directly.
+        int suffixLength = request.InputTokens.Length - prefillStart;
+        Tensor<T> logits;
+        if (model.SupportsBatchedPrefill && suffixLength > 1)
         {
-            logits = session.Forward(TokensToTensor<T>(new[] { request.InputTokens[i] }));
+            var suffix = new int[suffixLength];
+            for (int i = 0; i < suffixLength; i++)
+            {
+                suffix[i] = request.InputTokens[prefillStart + i];
+            }
+            logits = session.Forward(TokensToTensor<T>(suffix));
+        }
+        else
+        {
+            logits = session.Forward(TokensToTensor<T>(new[] { request.InputTokens[prefillStart] }));
+            for (int i = prefillStart + 1; i < request.InputTokens.Length; i++)
+            {
+                logits = session.Forward(TokensToTensor<T>(new[] { request.InputTokens[i] }));
+            }
         }
 
         // Register this prompt as a reusable prefix so later requests that extend it can fork its KV.

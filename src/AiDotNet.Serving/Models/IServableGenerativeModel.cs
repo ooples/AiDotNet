@@ -62,6 +62,13 @@ internal interface IServableGenerativeModel<T>
     /// </summary>
     /// <param name="promptTokens">The full prompt token IDs.</param>
     IGenerationSession<T> BeginGeneration(System.Collections.Generic.IReadOnlyList<int> promptTokens);
+
+    /// <summary>
+    /// Whether the model accepts a multi-token forward (<c>[1, n]</c>) so the prompt can be prefilled
+    /// in a single pass (per-position logits) rather than one token at a time. Determined by a probe;
+    /// false for fixed single-token-step models.
+    /// </summary>
+    bool SupportsBatchedPrefill { get; }
 }
 
 /// <summary>
