@@ -4009,6 +4009,47 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Inference forward pass that threads a per-call <see cref="AiDotNet.Inference.InferenceForwardContext"/>
+    /// to context-aware layers (paged/cached attention), enabling concurrent multi-sequence decode
+    /// over a shared KV cache (#99). Non-context-aware layers run their normal forward.
+    /// </summary>
+    /// <remarks>
+    /// Concurrency contract (mirrors <see cref="Predict"/>): this does NOT toggle training mode, so
+    /// callers driving concurrent sequences on one instance must call <c>SetTrainingMode(false)</c>
+    /// once (and warm up lazy caches with one forward) before fanning out. KV routing is isolated by
+    /// <see cref="AiDotNet.Inference.InferenceForwardContext.SequenceId"/>; the remaining per-forward
+    /// scratch fields (<c>_lastInput</c>/<c>_lastOutput</c>) are written but only read by Backward,
+    /// which inference never calls, so concurrent forwards produce correct independent outputs.
+    /// </remarks>
+    internal Tensor<T> PredictWithContext(Tensor<T> input, AiDotNet.Inference.InferenceForwardContext context)
+    {
+        if (context is null) throw new ArgumentNullException(nameof(context));
+
+        using var _ = new NoGradScope<T>();
+
+        var promoted = NormalizeInputBatchDim(input);
+        var current = promoted;
+        foreach (var layer in Layers)
+        {
+            current = layer is AiDotNet.Inference.IContextAwareInferenceLayer<T> contextAware
+                ? contextAware.ForwardWithContext(current, context)
+                : layer.Forward(current);
+        }
+
+        // Squeeze the unit batch dim back off if we promoted (mirrors Predict).
+        bool wasPromoted = !ReferenceEquals(promoted, input);
+        if (wasPromoted && current.Rank > 1 && current.Shape[0] == 1)
+        {
+            int[] squeezed = new int[current.Rank - 1];
+            for (int i = 0; i < squeezed.Length; i++)
+                squeezed[i] = current.Shape[i + 1];
+            current = current.Reshape(squeezed);
+        }
+
+        return current;
+    }
+
+    /// <summary>
     /// Eager forward pass through all layers. Used as fallback when compilation fails.
     /// </summary>
     protected virtual Tensor<T> PredictEager(Tensor<T> input)
