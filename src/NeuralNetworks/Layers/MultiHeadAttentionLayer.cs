@@ -1220,6 +1220,26 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             context_4D = flashOutput;
             attentionWeights4D = flashWeights ?? new Tensor<T>(new[] { batchSize, _headCount, seqLengthQ, seqLengthKV });
         }
+        else if (!IsTrainingMode)
+        {
+            // Inference fast path (#1622 / #1630 fused attention): FlashAttention's online
+            // softmax computes softmax(QKᵀ/scale)·V WITHOUT ever materializing the
+            // [B, H, seq, seq] score tensor that Engine.ScaledDotProductAttention returns —
+            // that O(seq²) tensor is the attention memory behind foundation-model forward OOM
+            // (large-sequence diffusion cross-attention / VLM decoders). Same math as the SDPA
+            // call it replaces (no causal mask here — matches the mask:null below); the score
+            // weights are only needed by the backward/aux-loss paths, which don't run in
+            // inference, so we discard them. FlashAttention needs contiguous inputs; the
+            // permuted Q/K/V views are O(B·H·seq·dH) to copy — far smaller than the scores.
+            var qContig = queries.Contiguous();
+            var kContig = keys.Contiguous();
+            var vContig = values.Contiguous();
+            var flashConfig = FlashAttentionConfig.Default;
+            flashConfig.ReturnAttentionWeights = false; // no O(seq²) materialization
+            var (flashOutput, _) = FlashAttention<T>.Forward(qContig, kContig, vContig, flashConfig);
+            context_4D = flashOutput;
+            attentionWeights4D = Tensor<T>.Empty();
+        }
         else
         {
             context_4D = Engine.ScaledDotProductAttention(

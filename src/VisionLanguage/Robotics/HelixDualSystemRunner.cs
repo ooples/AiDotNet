@@ -49,9 +49,15 @@ public sealed class HelixDualSystemRunner<T>
     public HelixDualSystemRunner(
         Func<Tensor<T>, string, Tensor<T>> system2Forward,
         Func<Tensor<T>, Tensor<T>, Tensor<T>> system1Forward,
-        int system2TicksValid = 22)
+        int system2TicksValid = 22
+    )
     {
-        if (system2TicksValid <= 0) throw new ArgumentOutOfRangeException(nameof(system2TicksValid), system2TicksValid, "system2TicksValid must be positive.");
+        if (system2TicksValid <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(system2TicksValid),
+                system2TicksValid,
+                "system2TicksValid must be positive."
+            );
 
         _system2Forward = system2Forward ?? throw new ArgumentNullException(nameof(system2Forward));
         _system1Forward = system1Forward ?? throw new ArgumentNullException(nameof(system1Forward));
@@ -66,8 +72,10 @@ public sealed class HelixDualSystemRunner<T>
     /// </summary>
     public Tensor<T> Step(Tensor<T> observation, string instruction)
     {
-        if (observation is null) throw new ArgumentNullException(nameof(observation));
-        if (instruction is null) throw new ArgumentNullException(nameof(instruction));
+        if (observation is null)
+            throw new ArgumentNullException(nameof(observation));
+        if (instruction is null)
+            throw new ArgumentNullException(nameof(instruction));
 
         if (_cachedLatent is null || _cachedLatent.IsStaleAt(_currentTick))
         {
@@ -86,7 +94,12 @@ public sealed class HelixDualSystemRunner<T>
     /// </summary>
     public Tensor<T>[] Rollout(Tensor<T> observation, string instruction, int numSteps)
     {
-        if (numSteps <= 0) throw new ArgumentOutOfRangeException(nameof(numSteps), numSteps, "numSteps must be positive.");
+        if (numSteps <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(numSteps),
+                numSteps,
+                "numSteps must be positive."
+            );
         var rollout = new Tensor<T>[numSteps];
         for (int i = 0; i < numSteps; i++)
             rollout[i] = Step(observation, instruction);

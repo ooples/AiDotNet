@@ -58,15 +58,29 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("SmolVLM: Redefining Small and Efficient Multimodal Models", "https://huggingface.co/blog/smolvlm", Year = 2025, Authors = "HuggingFace")]
+[ResearchPaper(
+    "SmolVLM: Redefining Small and Efficient Multimodal Models",
+    "https://huggingface.co/blog/smolvlm",
+    Year = 2025,
+    Authors = "HuggingFace"
+)]
 public class SmolVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
-    private readonly SmolVLMOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly SmolVLMOptions _options;
+
+    public override ModelOptions GetOptions() => _options;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer; private bool _useNativeMode; private bool _disposed;
+    private readonly ITokenizer? _tokenizer;
+    private bool _useNativeMode;
+    private bool _disposed;
     private int _encoderLayerEnd;
 
-    public SmolVLM(NeuralNetworkArchitecture<T> architecture, string modelPath, SmolVLMOptions? options = null)
+    public SmolVLM(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        SmolVLMOptions? options = null
+    )
         : base(architecture)
     {
         _options = options ?? new SmolVLMOptions();
@@ -84,21 +98,55 @@ public class SmolVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
-    public SmolVLM(NeuralNetworkArchitecture<T> architecture, SmolVLMOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) {
+
+    public SmolVLM(
+        NeuralNetworkArchitecture<T> architecture,
+        SmolVLMOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
+    {
         _options = options ?? new SmolVLMOptions();
         _options.ValidateVisualSizing();
         _useNativeMode = true;
         // Paper-faithful LR: Marafioti et al. 2024 ("SmolVLM") uses LR=5e-5
         // for compact-VLM fine-tuning. Framework AdamW default (LR=1e-3)
         // diverges on this BERT-class VLM stack.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 5e-5 });
-        base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim;
+        _optimizer =
+            optimizer
+            ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = 5e-5,
+                }
+            );
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
 
-    public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim; public string LanguageModelName => _options.LanguageModelName;
-    public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
+    public int EmbeddingDimension => _options.DecoderDim;
+    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageChannels => 3;
+    public int MaxGenerationLength => _options.MaxGenerationLength;
+    public int DecoderEmbeddingDim => _options.DecoderDim;
+    public string LanguageModelName => _options.LanguageModelName;
+
+    public Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(p));
+        var c = p;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            c = Layers[i].Forward(c);
+        return L2Normalize(c);
+    }
+
     /// <summary>
     /// Generates text using SmolVLM's Idefics3 pixel-shuffle compression architecture.
     /// SmolVLM (HuggingFace, 2024) uses Idefics3 architecture with:
@@ -113,7 +161,8 @@ public class SmolVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(p);
 
         // Step 1: SigLIP vision encoder
         var visualFeatures = p;
@@ -138,13 +187,30 @@ public class SmolVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 
         return output;
     }
-    public Tensor<T> Chat(Tensor<T> image, IEnumerable<(string Role, string Content)> conversationHistory, string userMessage) { ThrowIfDisposed(); var sb = new System.Text.StringBuilder(); sb.Append(_options.SystemPrompt); foreach (var (role, content) in conversationHistory) sb.Append($"\n{role}: {content}"); sb.Append($"\nUser: {userMessage}\nAssistant:"); return GenerateFromImage(image, sb.ToString()); }
+
+    public Tensor<T> Chat(
+        Tensor<T> image,
+        IEnumerable<(string Role, string Content)> conversationHistory,
+        string userMessage
+    )
+    {
+        ThrowIfDisposed();
+        var sb = new System.Text.StringBuilder();
+        sb.Append(_options.SystemPrompt);
+        foreach (var (role, content) in conversationHistory)
+            sb.Append($"\n{role}: {content}");
+        sb.Append($"\nUser: {userMessage}\nAssistant:");
+        return GenerateFromImage(image, sb.ToString());
+    }
+
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
-            Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2;
+            Layers.AddRange(Architecture.Layers);
+            _encoderLayerEnd = Layers.Count / 2;
         }
         else
         {
@@ -152,11 +218,23 @@ public class SmolVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
             // projector path — custom Architecture.Layers stacks don't consume
             // the patch options, so don't reject them on those values.
             ValidatePatchOptions();
-            Layers.AddRange(LayerHelper<T>.CreateDefaultPixelShuffleProjectorLayers(_options.VisionDim, _options.VisionDim * 2, _options.DecoderDim, _options.NumVisionLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, patchSize: ComputePatchSize()));
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultPixelShuffleProjectorLayers(
+                    _options.VisionDim,
+                    _options.VisionDim * 2,
+                    _options.DecoderDim,
+                    _options.NumVisionLayers,
+                    _options.NumDecoderLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate,
+                    patchSize: ComputePatchSize()
+                )
+            );
             ComputeEncoderDecoderBoundary();
         }
         ValidateEncoderDecoderBoundary();
     }
+
     // SmolVLM (Marafioti et al. 2024) ViT patch size = imageSize / sqrt(maxVisualTokens). For the 2.2B variant: 384 / 16 = 24.
     private int ComputePatchSize()
     {
@@ -164,29 +242,112 @@ public class SmolVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         double targetTokensPerSide = Math.Sqrt(_options.MaxVisualTokens);
         return Math.Max(1, (int)Math.Ceiling(_options.ImageSize / targetTokensPerSide));
     }
-    private void ValidatePatchOptions() { if (_options.ImageSize <= 0) throw new ArgumentOutOfRangeException(nameof(_options.ImageSize), _options.ImageSize, "ImageSize must be greater than 0."); if (_options.MaxVisualTokens <= 0) throw new ArgumentOutOfRangeException(nameof(_options.MaxVisualTokens), _options.MaxVisualTokens, "MaxVisualTokens must be greater than 0."); }
-    // +2 leading layers from the helper: PatchEmbedding + LayerNorm. Previously +1 (LayerNorm only).
-    private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb + 5; }
-    private void ValidateEncoderDecoderBoundary() { if (_encoderLayerEnd <= 0 || _encoderLayerEnd > Layers.Count) throw new InvalidOperationException($"Invalid encoder boundary {_encoderLayerEnd} for {Layers.Count} layers."); }
-    private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try { TrainWithTape(input, expected, _optimizer); } finally { SetTrainingMode(false); }
+
+    private void ValidatePatchOptions()
+    {
+        if (_options.ImageSize <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(_options.ImageSize),
+                _options.ImageSize,
+                "ImageSize must be greater than 0."
+            );
+        if (_options.MaxVisualTokens <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(_options.MaxVisualTokens),
+                _options.MaxVisualTokens,
+                "MaxVisualTokens must be greater than 0."
+            );
     }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
+    // +2 leading layers from the helper: PatchEmbedding + LayerNorm. Previously +1 (LayerNorm only).
+    private void ComputeEncoderDecoderBoundary()
+    {
+        int lpb = _options.DropoutRate > 0 ? 6 : 5;
+        _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb + 5;
+    }
+
+    private void ValidateEncoderDecoderBoundary()
+    {
+        if (_encoderLayerEnd <= 0 || _encoderLayerEnd > Layers.Count)
+            throw new InvalidOperationException(
+                $"Invalid encoder boundary {_encoderLayerEnd} for {Layers.Count} layers."
+            );
+    }
+
+    private Tensor<T> TokenizeText(string text)
+    {
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
+        var encoding = _tokenizer.Encode(text);
+        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
+        var tokens = new Tensor<T>([seqLen]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        return tokens;
+    }
+
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
+        var c = input;
+        foreach (var l in Layers)
+            c = l.Forward(c);
+        return c;
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "SmolVLM-Native" : "SmolVLM-ONNX", Description = "SmolVLM: compact and efficient VLM designed for edge deployment.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "SmolVLM-Native" : "SmolVLM-ONNX",
+            Description = "SmolVLM: compact and efficient VLM designed for edge deployment.",
+            FeatureCount = _options.DecoderDim,
+            Complexity = _options.NumVisionLayers + _options.NumDecoderLayers,
+        };
         m.AdditionalInfo["Architecture"] = "SmolVLM";
         m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString();
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         m.AdditionalInfo["ModelVariant"] = _options.ModelVariant;
         return m;
     }
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) {
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
         writer.Write(_useNativeMode);
         writer.Write(_options.ModelPath ?? string.Empty);
         writer.Write(_options.ImageSize);
@@ -198,10 +359,13 @@ public class SmolVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         writer.Write(_options.NumHeads);
         writer.Write(_options.ModelVariant ?? string.Empty);
     }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) {
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
         _useNativeMode = reader.ReadBoolean();
         string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionDim = reader.ReadInt32();
         _options.DecoderDim = reader.ReadInt32();
@@ -210,9 +374,28 @@ public class SmolVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         _options.NumDecoderLayers = reader.ReadInt32();
         _options.NumHeads = reader.ReadInt32();
         _options.ModelVariant = reader.ReadString();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new SmolVLM<T>(Architecture, mp, _options); return new SmolVLM<T>(Architecture, _options); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(SmolVLM<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new SmolVLM<T>(Architecture, mp, _options);
+        return new SmolVLM<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(SmolVLM<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
 }

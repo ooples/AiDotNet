@@ -51,10 +51,16 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("EVA-CLIP: Improved Training Techniques for CLIP at Scale", "https://arxiv.org/abs/2303.15389", Year = 2023, Authors = "Sun et al.")]
+[ResearchPaper(
+    "EVA-CLIP: Improved Training Techniques for CLIP at Scale",
+    "https://arxiv.org/abs/2303.15389",
+    Year = 2023,
+    Authors = "Sun et al."
+)]
 public class EVACLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly EVACLIPOptions _options;
+
     public override ModelOptions GetOptions() => _options;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -62,7 +68,11 @@ public class EVACLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
     private bool _useNativeMode;
     private bool _disposed;
 
-    public EVACLIP(NeuralNetworkArchitecture<T> architecture, string imageEncoderModelPath, EVACLIPOptions? options = null)
+    public EVACLIP(
+        NeuralNetworkArchitecture<T> architecture,
+        string imageEncoderModelPath,
+        EVACLIPOptions? options = null
+    )
         : base(architecture)
     {
         _options = options ?? new EVACLIPOptions();
@@ -72,9 +82,15 @@ public class EVACLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.VisionEmbeddingDim;
         if (string.IsNullOrWhiteSpace(imageEncoderModelPath))
-            throw new ArgumentException("Image encoder model path cannot be null or empty.", nameof(imageEncoderModelPath));
+            throw new ArgumentException(
+                "Image encoder model path cannot be null or empty.",
+                nameof(imageEncoderModelPath)
+            );
         if (!File.Exists(imageEncoderModelPath))
-            throw new FileNotFoundException($"ONNX model not found: {imageEncoderModelPath}", imageEncoderModelPath);
+            throw new FileNotFoundException(
+                $"ONNX model not found: {imageEncoderModelPath}",
+                imageEncoderModelPath
+            );
         _options.ImageEncoderModelPath = imageEncoderModelPath;
         OnnxImageEncoder = new OnnxModel<T>(imageEncoderModelPath, _options.OnnxOptions);
         if (_options.TextEncoderModelPath is { } tp && !string.IsNullOrEmpty(tp))
@@ -87,7 +103,11 @@ public class EVACLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
         InitializeLayers();
     }
 
-    public EVACLIP(NeuralNetworkArchitecture<T> architecture, EVACLIPOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    public EVACLIP(
+        NeuralNetworkArchitecture<T> architecture,
+        EVACLIPOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
         : base(architecture)
     {
         _options = options ?? new EVACLIPOptions();
@@ -105,7 +125,8 @@ public class EVACLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
     {
         int h = Architecture.InputHeight;
         int w = Architecture.InputWidth;
-        if (h > 0 && w > 0 && h == w) _options.ImageSize = h;
+        if (h > 0 && w > 0 && h == w)
+            _options.ImageSize = h;
     }
 
     public int EmbeddingDimension => _options.VisionEmbeddingDim;
@@ -120,9 +141,11 @@ public class EVACLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxImageEncoder is not null) return L2Normalize(OnnxImageEncoder.Run(p));
+        if (IsOnnxMode && OnnxImageEncoder is not null)
+            return L2Normalize(OnnxImageEncoder.Run(p));
         var c = p;
-        foreach (var l in Layers) c = l.Forward(c);
+        foreach (var l in Layers)
+            c = l.Forward(c);
         return L2Normalize(c);
     }
 
@@ -139,19 +162,22 @@ public class EVACLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
             // call site rather than as silently corrupt similarity scores.
             if (OnnxTextEncoder is null)
                 throw new InvalidOperationException(
-                    "EVACLIP.EncodeText requires a configured text encoder in ONNX mode. " +
-                    "Provide an ONNX text-encoder model path or use the native (non-ONNX) constructor.");
+                    "EVACLIP.EncodeText requires a configured text encoder in ONNX mode. "
+                        + "Provide an ONNX text-encoder model path or use the native (non-ONNX) constructor."
+                );
             return L2Normalize(OnnxTextEncoder.Run(t));
         }
         var c = t;
-        foreach (var l in TextEncoderLayers) c = l.Forward(c);
+        foreach (var l in TextEncoderLayers)
+            c = l.Forward(c);
         return L2Normalize(c);
     }
 
     public Tensor<T>[] EncodeTexts(string[] texts)
     {
         var e = new Tensor<T>[texts.Length];
-        for (int i = 0; i < texts.Length; i++) e[i] = EncodeText(texts[i]);
+        for (int i = 0; i < texts.Length; i++)
+            e[i] = EncodeText(texts[i]);
         return e;
     }
 
@@ -168,13 +194,15 @@ public class EVACLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
             logits[i] = NumOps.FromDouble(NumOps.ToDouble(CosineSimilarity(ie, te[i])) / temp);
         var probs = Softmax(logits);
         var r = new Dictionary<string, T>();
-        for (int i = 0; i < labels.Length; i++) r[labels[i]] = probs[i];
+        for (int i = 0; i < labels.Length; i++)
+            r[labels[i]] = probs[i];
         return r;
     }
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture is DualStreamArchitecture<T> dual)
         {
             Layers.AddRange(dual.VisionLayers);
@@ -183,16 +211,29 @@ public class EVACLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
         }
 
         int patchSize = Math.Max(1, _options.ImageSize / 16);
-        Layers.Add(new PatchEmbeddingLayer<T>(patchSize, _options.VisionEmbeddingDim, expectedInputChannels: 3));
+        Layers.Add(
+            new PatchEmbeddingLayer<T>(
+                patchSize,
+                _options.VisionEmbeddingDim,
+                expectedInputChannels: 3
+            )
+        );
 
         int blockSize = _options.DropoutRate > 0 ? 6 : 5;
         int visionLayerCount = 2 + _options.NumVisionLayers * blockSize;
         SplitDualStreamLayers(
             LayerHelper<T>.CreateDefaultOpenCLIPLayers(
-                _options.VisionEmbeddingDim, _options.TextEmbeddingDim, _options.ProjectionDim,
-                _options.NumVisionLayers, _options.NumTextLayers,
-                _options.NumVisionHeads, _options.NumTextHeads, _options.DropoutRate),
-            visionLayerCount);
+                _options.VisionEmbeddingDim,
+                _options.TextEmbeddingDim,
+                _options.ProjectionDim,
+                _options.NumVisionLayers,
+                _options.NumTextLayers,
+                _options.NumVisionHeads,
+                _options.NumTextHeads,
+                _options.DropoutRate
+            ),
+            visionLayerCount
+        );
     }
 
     public override Tensor<T> Predict(Tensor<T> input)
@@ -200,36 +241,56 @@ public class EVACLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
         ThrowIfDisposed();
         // Both paths must see the same preprocessed input.
         var c = PreprocessImage(input);
-        if (IsOnnxMode && OnnxImageEncoder is not null) return OnnxImageEncoder.Run(c);
+        if (IsOnnxMode && OnnxImageEncoder is not null)
+            return OnnxImageEncoder.Run(c);
         SetTrainingMode(false);
-        foreach (var l in Layers) c = l.Forward(c);
+        foreach (var l in Layers)
+            c = l.Forward(c);
         return c;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        try { TrainWithTape(PreprocessImage(input), expected, _optimizer); }
-        finally { SetTrainingMode(false); }
+        try
+        {
+            TrainWithTape(PreprocessImage(input), expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
     {
-        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
         int idx = 0;
-        foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
         // Sync the text-encoder stream too — see CLIPA.UpdateParameters
         // for full rationale (dual-stream split, GetExtraTrainableLayers
         // widens ParameterCount to include TextEncoderLayers, so a
         // flat-vector writeback that only walks Layers leaves the text
         // encoder on stale weights and the streams de-sync).
-        foreach (var l in TextEncoderLayers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+        foreach (var l in TextEncoderLayers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
     }
 
     /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-        => EnumerateTextEncoderTrainableLayers();
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
+        EnumerateTextEncoderTrainableLayers();
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
@@ -241,9 +302,10 @@ public class EVACLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
         var m = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "EVA-CLIP-Native" : "EVA-CLIP-ONNX",
-            Description = "EVA-CLIP: Improved Training Techniques for CLIP at Scale (Sun et al., 2023)",
+            Description =
+                "EVA-CLIP: Improved Training Techniques for CLIP at Scale (Sun et al., 2023)",
             FeatureCount = _options.ProjectionDim,
-            Complexity = _options.NumVisionLayers + _options.NumTextLayers
+            Complexity = _options.NumVisionLayers + _options.NumTextLayers,
         };
         m.AdditionalInfo["Architecture"] = "EVA-CLIP";
         m.AdditionalInfo["UseEVA02"] = _options.UseEVA02.ToString();
@@ -271,9 +333,11 @@ public class EVACLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
     {
         _useNativeMode = reader.ReadBoolean();
         string ip = reader.ReadString();
-        if (!string.IsNullOrEmpty(ip)) _options.ImageEncoderModelPath = ip;
+        if (!string.IsNullOrEmpty(ip))
+            _options.ImageEncoderModelPath = ip;
         string tp = reader.ReadString();
-        if (!string.IsNullOrEmpty(tp)) _options.TextEncoderModelPath = tp;
+        if (!string.IsNullOrEmpty(tp))
+            _options.TextEncoderModelPath = tp;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionEmbeddingDim = reader.ReadInt32();
         _options.TextEmbeddingDim = reader.ReadInt32();
@@ -290,31 +354,43 @@ public class EVACLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        if (!_useNativeMode && _options.ImageEncoderModelPath is { } mp && !string.IsNullOrEmpty(mp))
+        if (
+            !_useNativeMode
+            && _options.ImageEncoderModelPath is { } mp
+            && !string.IsNullOrEmpty(mp)
+        )
             return new EVACLIP<T>(Architecture, mp, _options);
         return new EVACLIP<T>(Architecture, _options);
     }
 
     private Tensor<T> TokenizeText(string text)
     {
-        if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized.");
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
         var enc = _tokenizer.Encode(text);
         int sl = Math.Min(enc.TokenIds.Count, _options.MaxSequenceLength);
         var tk = new Tensor<T>([sl]);
-        for (int i = 0; i < sl; i++) tk[i] = NumOps.FromDouble(enc.TokenIds[i]);
+        for (int i = 0; i < sl; i++)
+            tk[i] = NumOps.FromDouble(enc.TokenIds[i]);
         return tk;
     }
 
     private void ThrowIfDisposed()
     {
-        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(EVACLIP<T>));
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(EVACLIP<T>));
     }
 
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
-        if (disposing) { OnnxImageEncoder?.Dispose(); OnnxTextEncoder?.Dispose(); }
+        if (disposing)
+        {
+            OnnxImageEncoder?.Dispose();
+            OnnxTextEncoder?.Dispose();
+        }
         base.Dispose(disposing);
     }
 }

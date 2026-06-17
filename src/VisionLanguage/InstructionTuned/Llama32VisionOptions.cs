@@ -38,5 +38,17 @@ public class Llama32VisionOptions : InstructionTunedVLMOptions
         SystemPrompt = other.SystemPrompt;
     }
 
-    public Llama32VisionOptions() { InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection; VisionDim = 1024; DecoderDim = 4096; ProjectionDim = 4096; NumVisionLayers = 24; NumDecoderLayers = 32; NumHeads = 32; ImageSize = 336; LanguageModelName = "LLaMA-3.2"; MaxVisualTokens = 576; }
+    public Llama32VisionOptions()
+    {
+        InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;
+        VisionDim = 1024;
+        DecoderDim = 4096;
+        ProjectionDim = 4096;
+        NumVisionLayers = 24;
+        NumDecoderLayers = 32;
+        NumHeads = 32;
+        ImageSize = 336;
+        LanguageModelName = "LLaMA-3.2";
+        MaxVisualTokens = 576;
+    }
 }

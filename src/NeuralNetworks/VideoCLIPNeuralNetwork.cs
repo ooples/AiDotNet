@@ -1458,14 +1458,17 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
 
         SetTrainingMode(false);
 
-        var frames = ParseInputToFrames(input);
-        var embedding = GetVideoEmbedding(frames);
-        var result = Tensor<T>.CreateDefault([1, embedding.Length], NumOps.Zero);
-        for (int i = 0; i < embedding.Length; i++)
+        return Accelerate(input, () =>
         {
-            result[0, i] = embedding[i];
-        }
-        return result;
+            var frames = ParseInputToFrames(input);
+            var embedding = GetVideoEmbedding(frames);
+            var result = Tensor<T>.CreateDefault([1, embedding.Length], NumOps.Zero);
+            for (int i = 0; i < embedding.Length; i++)
+            {
+                result[0, i] = embedding[i];
+            }
+            return result;
+        });
     }
 
     /// <summary>

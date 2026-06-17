@@ -1,16 +1,16 @@
 using AiDotNet.Attributes;
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
-using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.Robotics;
 
@@ -55,12 +55,22 @@ namespace AiDotNet.VisionLanguage.Robotics;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("PaLM-E: An Embodied Multimodal Language Model", "https://arxiv.org/abs/2303.03378", Year = 2023, Authors = "Driess et al.")]
+[ResearchPaper(
+    "PaLM-E: An Embodied Multimodal Language Model",
+    "https://arxiv.org/abs/2303.03378",
+    Year = 2023,
+    Authors = "Driess et al."
+)]
 public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
-    private readonly PaLMEOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly PaLMEOptions _options;
+
+    public override ModelOptions GetOptions() => _options;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer; private bool _useNativeMode; private bool _disposed;
+    private readonly ITokenizer? _tokenizer;
+    private bool _useNativeMode;
+    private bool _disposed;
     private int _encoderLayerEnd;
 
     // Patch-embedding Conv2D — projects raw image pixels [B, 3, H, W] into a
@@ -74,8 +84,34 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     private ConvolutionalLayer<T>? _patchEmbed;
     private int PatchSize => Math.Max(1, _options.ImageSize / 16);
 
-    public PaLME(NeuralNetworkArchitecture<T> architecture, string modelPath, PaLMEOptions? options = null) : base(architecture) { _options = options ?? new PaLMEOptions(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
-    public PaLME(NeuralNetworkArchitecture<T> architecture, PaLMEOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    public PaLME(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        PaLMEOptions? options = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new PaLMEOptions();
+        _useNativeMode = false;
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    public PaLME(
+        NeuralNetworkArchitecture<T> architecture,
+        PaLMEOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new PaLMEOptions();
         _useNativeMode = true;
@@ -98,8 +134,26 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         }
     }
 
-    public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim; public string LanguageModelName => _options.LanguageModelName; public int ActionDimension => _options.ActionDimension;
-    public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
+    public int EmbeddingDimension => _options.DecoderDim;
+    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageChannels => 3;
+    public int MaxGenerationLength => _options.MaxGenerationLength;
+    public int DecoderEmbeddingDim => _options.DecoderDim;
+    public string LanguageModelName => _options.LanguageModelName;
+    public int ActionDimension => _options.ActionDimension;
+
+    public Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(p));
+        var c = p;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            c = Layers[i].Forward(c);
+        return L2Normalize(c);
+    }
+
     /// <summary>
     /// Generates from image using PaLM-E's embodied multimodal approach.
     /// Visual tokens from ViT are injected into the LLM sequence interleaved with text tokens
@@ -109,42 +163,35 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(p);
 
         int dim = _options.DecoderDim;
         var encoderOut = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             encoderOut = Layers[i].Forward(encoderOut);
 
-
         // Fuse visual features with prompt tokens via ConcatenateTensors
 
         Tensor<T> fusedInput;
 
         if (prompt is not null)
-
         {
-
             var promptTokens = TokenizeText(prompt);
 
             fusedInput = encoderOut.ConcatenateTensors(promptTokens);
-
         }
-
         else
-
         {
-
             fusedInput = encoderOut;
-
         }
-
 
         var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
         return output;
     }
+
     /// <summary>
     /// Predicts action using PaLM-E's embodied multimodal approach. Per the paper
     /// (Google 2023), visual tokens from ViT are injected directly into the LLM
@@ -236,9 +283,11 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 
         return actions;
     }
+
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
@@ -251,25 +300,52 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         // OutputDimension_ShouldMatchExpectedShape and Training_ShouldReduceLoss
         // because the model emitted 256-dim outputs while tests expected the
         // architecture's configured size.
-        int actionTokenDim = Architecture.OutputSize > 0
-            ? Architecture.OutputSize
-            : Math.Max(1, _options.ActionDimension);
+        int actionTokenDim =
+            Architecture.OutputSize > 0
+                ? Architecture.OutputSize
+                : Math.Max(1, _options.ActionDimension);
         // Token sequence is reduced to a single per-sequence vector by the
         // final pooling — append a GlobalAveragePoolingLayer + reshape so the
         // model returns [B, actionTokenDim] instead of [B, S, actionTokenDim].
         // Tests expect a flat output matching the architecture OutputSize.
-        Layers.AddRange(LayerHelper<T>.CreateDefaultRoboticsActionLayers(
-            _options.VisionDim, _options.DecoderDim, actionTokenDim,
-            _options.NumVisionLayers, _options.NumDecoderLayers, 2,
-            _options.NumHeads, _options.DropoutRate));
+        Layers.AddRange(
+            LayerHelper<T>.CreateDefaultRoboticsActionLayers(
+                _options.VisionDim,
+                _options.DecoderDim,
+                actionTokenDim,
+                _options.NumVisionLayers,
+                _options.NumDecoderLayers,
+                2,
+                _options.NumHeads,
+                _options.DropoutRate
+            )
+        );
         ComputeEncoderDecoderBoundary();
     }
-    private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 2; }
-    private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
+
+    private void ComputeEncoderDecoderBoundary()
+    {
+        int lpb = _options.DropoutRate > 0 ? 6 : 5;
+        _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 2;
+    }
+
+    private Tensor<T> TokenizeText(string text)
+    {
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
+        var encoding = _tokenizer.Encode(text);
+        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
+        var tokens = new Tensor<T>([seqLen]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        return tokens;
+    }
+
     public override Tensor<T> Predict(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
 
         // Disable training-mode behavior (Dropout active, BatchNorm batch stats)
         // for the forward pass. Training-mode state is process-wide on the
@@ -283,7 +359,8 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         // via patch embedding when the input is rank-3 [C, H, W] or rank-4
         // [B, C, H, W]. Already-tokenized inputs are passed straight through.
         var c = TokenizeImageInput(input);
-        foreach (var l in Layers) c = l.Forward(c);
+        foreach (var l in Layers)
+            c = l.Forward(c);
         // Reduce [B, S, E] → [B, E] by mean-pooling over the sequence axis,
         // then squeeze the batch dim back off when the input was unbatched.
         // PaLM-E §3 (Driess et al. 2023) uses the action-head pooled token;
@@ -294,7 +371,8 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 
     private Tensor<T> PoolSequence(Tensor<T> bse, bool wasBatched)
     {
-        if (bse.Rank != 3) return bse;
+        if (bse.Rank != 3)
+            return bse;
         int b = bse.Shape[0];
         int s = bse.Shape[1];
         int e = bse.Shape[2];
@@ -322,9 +400,11 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         }
         return pooled;
     }
+
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
         try
         {
@@ -354,7 +434,12 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     {
         bool wasNull = _patchEmbed is null;
         var result = PatchEmbedHelper.TokenizeImageNCHWToBSC(
-            input, _options.VisionDim, _options.ImageSize, ref _patchEmbed, Engine);
+            input,
+            _options.VisionDim,
+            _options.ImageSize,
+            ref _patchEmbed,
+            Engine
+        );
         // If the helper just lazy-created _patchEmbed (the field went from
         // null → non-null in this call), register its trainable tensors with
         // the weight registry. Without this, ConfigureWeightLifetime ran
@@ -387,10 +472,13 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     /// </summary>
     private void EnsurePatchEmbedForParameterVector(int paramVectorLength)
     {
-        if (_patchEmbed is not null) return;
+        if (_patchEmbed is not null)
+            return;
         long layerSum = 0L;
-        for (int i = 0; i < Layers.Count; i++) layerSum += Layers[i].ParameterCount;
-        if (paramVectorLength <= layerSum) return;
+        for (int i = 0; i < Layers.Count; i++)
+            layerSum += Layers[i].ParameterCount;
+        if (paramVectorLength <= layerSum)
+            return;
 
         var probe = new Tensor<T>(new[] { 1, 3, _options.ImageSize, _options.ImageSize });
         TokenizeImageInput(probe);
@@ -427,9 +515,11 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
             for (int i = 0; i < Layers.Count; i++)
             {
                 total += Layers[i].ParameterCount;
-                if (total >= int.MaxValue) return int.MaxValue;
+                if (total >= int.MaxValue)
+                    return int.MaxValue;
             }
-            if (_patchEmbed is not null) total += (int)_patchEmbed.ParameterCount;
+            if (_patchEmbed is not null)
+                total += (int)_patchEmbed.ParameterCount;
             return total >= int.MaxValue ? int.MaxValue : (int)total;
         }
     }
@@ -448,25 +538,31 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         // Compute the exact sum in long arithmetic so we surface the limit
         // before trying to allocate a Vector<T> that would overflow.
         long total = 0L;
-        for (int i = 0; i < Layers.Count; i++) total += Layers[i].ParameterCount;
-        if (_patchEmbed is not null) total += (int)_patchEmbed.ParameterCount;
+        for (int i = 0; i < Layers.Count; i++)
+            total += Layers[i].ParameterCount;
+        if (_patchEmbed is not null)
+            total += (int)_patchEmbed.ParameterCount;
         if (total > int.MaxValue)
         {
             throw new InvalidOperationException(
-                $"PaLME parameter count ({total:N0}) exceeds int32 capacity " +
-                $"({int.MaxValue:N0}); the flat Vector<T> API cannot represent " +
-                "this many parameters in a single buffer. Use per-layer access " +
-                "via Layers[i].GetParameters() for full-config training, or " +
-                "construct a smaller PaLMEOptions for tests that need flat " +
-                "parameter materialization.");
+                $"PaLME parameter count ({total:N0}) exceeds int32 capacity "
+                    + $"({int.MaxValue:N0}); the flat Vector<T> API cannot represent "
+                    + "this many parameters in a single buffer. Use per-layer access "
+                    + "via Layers[i].GetParameters() for full-config training, or "
+                    + "construct a smaller PaLMEOptions for tests that need flat "
+                    + "parameter materialization."
+            );
         }
 
         var basePar = base.GetParameters();
-        if (_patchEmbed is null || _patchEmbed.ParameterCount == 0) return basePar;
+        if (_patchEmbed is null || _patchEmbed.ParameterCount == 0)
+            return basePar;
         var patchPar = _patchEmbed.GetParameters();
         var combined = new Vector<T>(basePar.Length + patchPar.Length);
-        for (int i = 0; i < basePar.Length; i++) combined[i] = basePar[i];
-        for (int i = 0; i < patchPar.Length; i++) combined[basePar.Length + i] = patchPar[i];
+        for (int i = 0; i < basePar.Length; i++)
+            combined[i] = basePar[i];
+        for (int i = 0; i < patchPar.Length; i++)
+            combined[basePar.Length + i] = patchPar[i];
         return combined;
     }
 
@@ -482,23 +578,27 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         // Layout matches GetParameters: [base layer params ...] [patch-embed params].
         int patchCount = (int)(_patchEmbed?.ParameterCount ?? 0);
         int baseCount = parameters.Length - patchCount;
-        if (baseCount < 0) baseCount = parameters.Length;
+        if (baseCount < 0)
+            baseCount = parameters.Length;
 
         var baseSlice = new Vector<T>(baseCount);
-        for (int i = 0; i < baseCount; i++) baseSlice[i] = parameters[i];
+        for (int i = 0; i < baseCount; i++)
+            baseSlice[i] = parameters[i];
         base.SetParameters(baseSlice);
 
         if (_patchEmbed is not null && patchCount > 0)
         {
             var patchSlice = new Vector<T>(patchCount);
-            for (int i = 0; i < patchCount; i++) patchSlice[i] = parameters[baseCount + i];
+            for (int i = 0; i < patchCount; i++)
+                patchSlice[i] = parameters[baseCount + i];
             _patchEmbed.SetParameters(patchSlice);
         }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
     {
-        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
         EnsurePatchEmbedForParameterVector(parameters.Length);
         int idx = 0;
         foreach (var l in Layers)
@@ -517,15 +617,28 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
             }
         }
     }
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "PaLM-E-Native" : "PaLM-E-ONNX", Description = "PaLM-E: 562B embodied multimodal language model for robotic planning.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "PaLM-E-Native" : "PaLM-E-ONNX",
+            Description = "PaLM-E: 562B embodied multimodal language model for robotic planning.",
+            FeatureCount = _options.DecoderDim,
+            Complexity = _options.NumVisionLayers + _options.NumDecoderLayers,
+        };
         m.AdditionalInfo["Architecture"] = "PaLM-E";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;
     }
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) {
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
         writer.Write(_useNativeMode);
         writer.Write(_options.ModelPath ?? string.Empty);
         writer.Write(_options.ImageSize);
@@ -536,10 +649,13 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         writer.Write(_options.NumHeads);
         writer.Write(_options.ActionDimension);
     }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) {
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
         _useNativeMode = reader.ReadBoolean();
         string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionDim = reader.ReadInt32();
         _options.DecoderDim = reader.ReadInt32();
@@ -547,20 +663,35 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         _options.NumDecoderLayers = reader.ReadInt32();
         _options.NumHeads = reader.ReadInt32();
         _options.ActionDimension = reader.ReadInt32();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new PaLME<T>(Architecture, mp, _options); return new PaLME<T>(Architecture, _options); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(PaLME<T>)); }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new PaLME<T>(Architecture, mp, _options);
+        return new PaLME<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(PaLME<T>));
+    }
+
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         if (disposing)
         {
             // _patchEmbed lives outside Layers; dispose it explicitly so the
             // conv's weights/buffers get released alongside the rest of the
             // model rather than leaking until GC.
-            if (_patchEmbed is IDisposable pe) pe.Dispose();
+            if (_patchEmbed is IDisposable pe)
+                pe.Dispose();
         }
         base.Dispose(disposing);
     }

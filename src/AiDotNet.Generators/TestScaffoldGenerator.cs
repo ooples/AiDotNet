@@ -2879,6 +2879,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
             }
 
+            // Raw-logit-head CE LMs (RWKV4/Eagle/Finch): pin a deterministic per-layer init seed around
+            // construction so the training-trajectory invariants (Training_ShouldReduceLoss / MoreData)
+            // are order-INDEPENDENT — without it, weight init falls back to the process-shared
+            // ThreadSafeRandom whose state depends on how many sibling tests ran first on this xUnit
+            // worker (the pass-isolated / fail-in-class signature). MeasureLoss already evaluates the
+            // model's own objective for these (CrossEntropyWithLogitsLoss); the pin removes the residual
+            // init-order nondeterminism.
+            if (IsLogitsCrossEntropyLanguageModel(model.ClassName))
+            {
+                pinInitSeed = true;
+            }
+
             // Language models start with EmbeddingLayer which truncates its
             // float-valued input to int for the token lookup. Base-class
             // CreateConstantTensor(0.1) and CreateConstantTensor(0.9) both
@@ -5075,6 +5087,31 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "HawkLanguageModel" => true,
             "GriffinLanguageModel" => true,
             "RecurrentGemmaLanguageModel" => true,
+            // RWKV-4 / Eagle (v5) / Finch (v6): paper vocab 50277/65536 → a large LM head whose
+            // 50/200-iteration MoreData backward set is slow and (with order-dependent init) flaky.
+            // 1/2 iters keeps the paper dims while making the invariant fast + stable (paired with the
+            // pinned init seed below).
+            "RWKV4LanguageModel" => true,
+            "EagleLanguageModel" => true,
+            "FinchLanguageModel" => true,
+            _ => false,
+        };
+    }
+
+    /// <summary>
+    /// Raw-logit-head language models trained with cross-entropy-with-logits (RWKV4 / Eagle / Finch).
+    /// Their generated tests pin a deterministic per-layer init seed so the training-trajectory
+    /// invariants are order-independent across xUnit workers, and measure the model's own objective.
+    /// </summary>
+    private static bool IsLogitsCrossEntropyLanguageModel(string className)
+    {
+        int tickIdx = className.IndexOf('`');
+        if (tickIdx > 0) className = className.Substring(0, tickIdx);
+        return className switch
+        {
+            "RWKV4LanguageModel" => true,
+            "EagleLanguageModel" => true,
+            "FinchLanguageModel" => true,
             _ => false,
         };
     }

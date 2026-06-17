@@ -52,19 +52,80 @@ namespace AiDotNet.VisionLanguage.Grounding;
 [ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Simple Open-Vocabulary Object Detection with Vision Transformers", "https://arxiv.org/abs/2205.06230", Year = 2022, Authors = "Minderer et al.")]
+[ResearchPaper(
+    "Simple Open-Vocabulary Object Detection with Vision Transformers",
+    "https://arxiv.org/abs/2205.06230",
+    Year = 2022,
+    Authors = "Minderer et al."
+)]
 public class OWLViT<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
-    private readonly OWLViTOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly OWLViTOptions _options;
+
+    public override ModelOptions GetOptions() => _options;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer; private bool _useNativeMode; private bool _disposed;
+    private readonly ITokenizer? _tokenizer;
+    private bool _useNativeMode;
+    private bool _disposed;
     private int _encoderLayerEnd;
 
-    public OWLViT(NeuralNetworkArchitecture<T> architecture, string modelPath, OWLViTOptions? options = null) : base(architecture) { _options = options ?? new OWLViTOptions(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
-    public OWLViT(NeuralNetworkArchitecture<T> architecture, OWLViTOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new OWLViTOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
+    public OWLViT(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        OWLViTOptions? options = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new OWLViTOptions();
+        _useNativeMode = false;
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
 
-    public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxDetections => _options.MaxDetections;
-    public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
+    public OWLViT(
+        NeuralNetworkArchitecture<T> architecture,
+        OWLViTOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new OWLViTOptions();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    public int EmbeddingDimension => _options.DecoderDim;
+    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageChannels => 3;
+    public int MaxDetections => _options.MaxDetections;
+
+    public Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(p));
+        var c = p;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            c = Layers[i].Forward(c);
+        return L2Normalize(c);
+    }
+
     /// <summary>
     /// Grounds text using OWL-ViT's CLIP-aligned patch-level detection approach.
     /// Per the paper (Minderer et al., Google 2022), OWL-ViT repurposes a
@@ -111,7 +172,8 @@ public class OWLViT<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
         int gridSize = _options.ImageSize / patchSize;
         int numPatches = gridSize * gridSize;
         int actualPatches = Math.Min(numPatches, outDim / Math.Max(1, dim));
-        if (actualPatches < 1) actualPatches = Math.Min(numPatches, outDim);
+        if (actualPatches < 1)
+            actualPatches = Math.Min(numPatches, outDim);
 
         int fieldsPerDet = 5;
         int maxDet = Math.Min(actualPatches, _options.MaxDetections);
@@ -134,9 +196,11 @@ public class OWLViT<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 
             // L2 normalize patch features
             double patchNorm = 0;
-            for (int d = 0; d < dim; d++) patchNorm += patchFeat[d] * patchFeat[d];
+            for (int d = 0; d < dim; d++)
+                patchNorm += patchFeat[d] * patchFeat[d];
             patchNorm = Math.Sqrt(patchNorm) + 1e-8;
-            for (int d = 0; d < dim; d++) patchFeat[d] /= patchNorm;
+            for (int d = 0; d < dim; d++)
+                patchFeat[d] /= patchNorm;
 
             // Objectness score from text-conditioned patch features
             double objectness = 0;
@@ -145,12 +209,19 @@ public class OWLViT<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
             double conf = 1.0 / (1.0 + Math.Exp(-objectness / Math.Max(1, dim)));
 
             // Box prediction MLP: predict offsets from patch center
-            double boxDx = 0, boxDy = 0, boxW = 0, boxH = 0;
+            double boxDx = 0,
+                boxDy = 0,
+                boxW = 0,
+                boxH = 0;
             int quarter = Math.Max(1, dim / 4);
-            for (int d = 0; d < quarter && d < dim; d++) boxDx += patchFeat[d];
-            for (int d = quarter; d < 2 * quarter && d < dim; d++) boxDy += patchFeat[d];
-            for (int d = 2 * quarter; d < 3 * quarter && d < dim; d++) boxW += patchFeat[d];
-            for (int d = 3 * quarter; d < dim; d++) boxH += patchFeat[d];
+            for (int d = 0; d < quarter && d < dim; d++)
+                boxDx += patchFeat[d];
+            for (int d = quarter; d < 2 * quarter && d < dim; d++)
+                boxDy += patchFeat[d];
+            for (int d = 2 * quarter; d < 3 * quarter && d < dim; d++)
+                boxW += patchFeat[d];
+            for (int d = 3 * quarter; d < dim; d++)
+                boxH += patchFeat[d];
 
             boxDx = Math.Tanh(boxDx / quarter) * 0.5 / gridSize;
             boxDy = Math.Tanh(boxDy / quarter) * 0.5 / gridSize;
@@ -177,35 +248,51 @@ public class OWLViT<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 
         // Step 4: NMS
         var kept = new bool[validCount];
-        for (int i = 0; i < validCount; i++) kept[i] = true;
+        for (int i = 0; i < validCount; i++)
+            kept[i] = true;
         for (int i = 0; i < validCount; i++)
         {
-            if (!kept[i]) continue;
+            if (!kept[i])
+                continue;
             for (int j = i + 1; j < validCount; j++)
             {
-                if (!kept[j]) continue;
+                if (!kept[j])
+                    continue;
                 double iou = ComputeIoU(
-                    rawDetections[i, 0], rawDetections[i, 1], rawDetections[i, 2], rawDetections[i, 3],
-                    rawDetections[j, 0], rawDetections[j, 1], rawDetections[j, 2], rawDetections[j, 3]);
-                if (iou > nmsThreshold) kept[j] = false;
+                    rawDetections[i, 0],
+                    rawDetections[i, 1],
+                    rawDetections[i, 2],
+                    rawDetections[i, 3],
+                    rawDetections[j, 0],
+                    rawDetections[j, 1],
+                    rawDetections[j, 2],
+                    rawDetections[j, 3]
+                );
+                if (iou > nmsThreshold)
+                    kept[j] = false;
             }
         }
 
         int finalCount = 0;
-        for (int i = 0; i < validCount; i++) if (kept[i]) finalCount++;
-        if (finalCount == 0) return new Tensor<T>([fieldsPerDet]);
+        for (int i = 0; i < validCount; i++)
+            if (kept[i])
+                finalCount++;
+        if (finalCount == 0)
+            return new Tensor<T>([fieldsPerDet]);
 
         var result = new Tensor<T>([finalCount * fieldsPerDet]);
         int idx = 0;
         for (int i = 0; i < validCount; i++)
         {
-            if (!kept[i]) continue;
+            if (!kept[i])
+                continue;
             for (int f = 0; f < fieldsPerDet; f++)
                 result[idx * fieldsPerDet + f] = NumOps.FromDouble(rawDetections[i, f]);
             idx++;
         }
         return result;
     }
+
     public Tensor<T> DetectObjects(Tensor<T> image, IReadOnlyList<string> categories)
     {
         ThrowIfDisposed();
@@ -213,33 +300,131 @@ public class OWLViT<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
         string combined = string.Join(". ", categories) + ".";
         return GroundText(image, combined);
     }
-    private static double ComputeIoU(double x1a, double y1a, double x2a, double y2a,
-                                      double x1b, double y1b, double x2b, double y2b)
+
+    private static double ComputeIoU(
+        double x1a,
+        double y1a,
+        double x2a,
+        double y2a,
+        double x1b,
+        double y1b,
+        double x2b,
+        double y2b
+    )
     {
-        double ix1 = Math.Max(x1a, x1b), iy1 = Math.Max(y1a, y1b);
-        double ix2 = Math.Min(x2a, x2b), iy2 = Math.Min(y2a, y2b);
-        double iw = Math.Max(0, ix2 - ix1), ih = Math.Max(0, iy2 - iy1);
+        double ix1 = Math.Max(x1a, x1b),
+            iy1 = Math.Max(y1a, y1b);
+        double ix2 = Math.Min(x2a, x2b),
+            iy2 = Math.Min(y2a, y2b);
+        double iw = Math.Max(0, ix2 - ix1),
+            ih = Math.Max(0, iy2 - iy1);
         double inter = iw * ih;
         double areaA = (x2a - x1a) * (y2a - y1a);
         double areaB = (x2b - x1b) * (y2b - y1b);
         double union = areaA + areaB - inter;
         return union > 1e-8 ? inter / union : 0;
     }
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; } else { Layers.AddRange(LayerHelper<T>.CreateDefaultGroundingDetectionLayers(_options.VisionDim, 768, _options.VisionDim, 256, _options.NumVisionLayers, 6, 6, _options.NumHeads, _options.DropoutRate)); ComputeEncoderDecoderBoundary(); } }
-    private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb; }
-    private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode)
+            return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            _encoderLayerEnd = Layers.Count / 2;
+        }
+        else
+        {
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultGroundingDetectionLayers(
+                    _options.VisionDim,
+                    768,
+                    _options.VisionDim,
+                    256,
+                    _options.NumVisionLayers,
+                    6,
+                    6,
+                    _options.NumHeads,
+                    _options.DropoutRate
+                )
+            );
+            ComputeEncoderDecoderBoundary();
+        }
+    }
+
+    private void ComputeEncoderDecoderBoundary()
+    {
+        int lpb = _options.DropoutRate > 0 ? 6 : 5;
+        _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb;
+    }
+
+    private Tensor<T> TokenizeText(string text)
+    {
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
+        var encoding = _tokenizer.Encode(text);
+        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
+        var tokens = new Tensor<T>([seqLen]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        return tokens;
+    }
+
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
+        var c = input;
+        foreach (var l in Layers)
+            c = l.Forward(c);
+        return c;
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        TrainWithTape(input, expected);
+        SetTrainingMode(false);
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "OWL-ViT-Native" : "OWL-ViT-ONNX", Description = "OWL-ViT: open-vocabulary object detection via ViT + CLIP alignment.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "OWL-ViT-Native" : "OWL-ViT-ONNX",
+            Description = "OWL-ViT: open-vocabulary object detection via ViT + CLIP alignment.",
+            FeatureCount = _options.DecoderDim,
+            Complexity = _options.NumVisionLayers + _options.NumDecoderLayers,
+        };
         m.AdditionalInfo["Architecture"] = "OWL-ViT";
         m.AdditionalInfo["NumClassEmbeddings"] = _options.NumClassEmbeddings.ToString();
         return m;
     }
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) {
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
         writer.Write(_useNativeMode);
         writer.Write(_options.ModelPath ?? string.Empty);
         writer.Write(_options.ImageSize);
@@ -251,10 +436,13 @@ public class OWLViT<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
         writer.Write(_options.MaxDetections);
         writer.Write(_options.NumClassEmbeddings);
     }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) {
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
         _useNativeMode = reader.ReadBoolean();
         string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionDim = reader.ReadInt32();
         _options.DecoderDim = reader.ReadInt32();
@@ -263,9 +451,28 @@ public class OWLViT<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
         _options.NumHeads = reader.ReadInt32();
         _options.MaxDetections = reader.ReadInt32();
         _options.NumClassEmbeddings = reader.ReadInt32();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new OWLViT<T>(Architecture, mp, _options); return new OWLViT<T>(Architecture, _options); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(OWLViT<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new OWLViT<T>(Architecture, mp, _options);
+        return new OWLViT<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(OWLViT<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
 }

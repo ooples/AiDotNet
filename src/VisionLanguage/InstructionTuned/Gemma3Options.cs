@@ -39,7 +39,20 @@ public class Gemma3Options : InstructionTunedVLMOptions
         EnableNativeDynamicResolution = other.EnableNativeDynamicResolution;
     }
 
-    public Gemma3Options() { InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection; VisionDim = 1152; DecoderDim = 3584; ProjectionDim = 3584; NumVisionLayers = 27; NumDecoderLayers = 36; NumHeads = 16; ImageSize = 896; LanguageModelName = "Gemma-3"; MaxVisualTokens = 4096; }
+    public Gemma3Options()
+    {
+        InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;
+        VisionDim = 1152;
+        DecoderDim = 3584;
+        ProjectionDim = 3584;
+        NumVisionLayers = 27;
+        NumDecoderLayers = 36;
+        NumHeads = 16;
+        ImageSize = 896;
+        LanguageModelName = "Gemma-3";
+        MaxVisualTokens = 4096;
+    }
+
     /// <summary>Gets or sets whether native dynamic resolution is enabled.</summary>
     public bool EnableNativeDynamicResolution { get; set; } = true;
 }

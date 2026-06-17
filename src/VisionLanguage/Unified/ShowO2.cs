@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -8,7 +9,6 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
-using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.Unified;
 
@@ -52,19 +52,82 @@ namespace AiDotNet.VisionLanguage.Unified;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Show-o2: One Single Transformer Can Unify Multimodal Understanding and Generation", "https://arxiv.org/abs/2502.07925", Year = 2025, Authors = "Xie et al.")]
+[ResearchPaper(
+    "Show-o2: One Single Transformer Can Unify Multimodal Understanding and Generation",
+    "https://arxiv.org/abs/2502.07925",
+    Year = 2025,
+    Authors = "Xie et al."
+)]
 public class ShowO2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {
-    private readonly ShowO2Options _options; public override ModelOptions GetOptions() => _options;
+    private readonly ShowO2Options _options;
+
+    public override ModelOptions GetOptions() => _options;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer; private bool _useNativeMode; private bool _disposed;
+    private readonly ITokenizer? _tokenizer;
+    private bool _useNativeMode;
+    private bool _disposed;
     private int _encoderLayerEnd;
 
-    public ShowO2(NeuralNetworkArchitecture<T> architecture, string modelPath, ShowO2Options? options = null) : base(architecture) { _options = options ?? new ShowO2Options(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
-    public ShowO2(NeuralNetworkArchitecture<T> architecture, ShowO2Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new ShowO2Options(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
+    public ShowO2(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        ShowO2Options? options = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new ShowO2Options();
+        _useNativeMode = false;
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
 
-    public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim; public bool SupportsGeneration => _options.SupportsGeneration;
-    public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
+    public ShowO2(
+        NeuralNetworkArchitecture<T> architecture,
+        ShowO2Options? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new ShowO2Options();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    public int EmbeddingDimension => _options.DecoderDim;
+    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageChannels => 3;
+    public int MaxGenerationLength => _options.MaxGenerationLength;
+    public int DecoderEmbeddingDim => _options.DecoderDim;
+    public bool SupportsGeneration => _options.SupportsGeneration;
+
+    public Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(p));
+        var c = p;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            c = Layers[i].Forward(c);
+        return L2Normalize(c);
+    }
+
     /// <summary>
     /// Generates text from image using Show-o2's improved unified transformer.
     /// Per the paper (NUS, 2025), Show-o2 improves over Show-o with: (1) native
@@ -87,35 +150,27 @@ public class ShowO2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         for (int i = 0; i < _encoderLayerEnd; i++)
             features = Layers[i].Forward(features);
 
-
         // Fuse visual features with prompt tokens via ConcatenateTensors
 
         Tensor<T> fusedInput;
 
         if (prompt is not null)
-
         {
-
             var promptTokens = TokenizeText(prompt);
 
             fusedInput = features.ConcatenateTensors(promptTokens);
-
         }
-
         else
-
         {
-
             fusedInput = features;
-
         }
-
 
         var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
         return output;
     }
+
     /// <summary>
     /// Generates an image from text using Show-o2's improved discrete diffusion.
     /// Per the paper (NUS, 2025), Show-o2 improves image generation with:
@@ -144,37 +199,55 @@ public class ShowO2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 
         // Step 2: Adaptive grid sizing for native resolution
         int gridSize = outSize / 32;
-        if (gridSize < 8) gridSize = 8;
+        if (gridSize < 8)
+            gridSize = 8;
         int numGenTokens = gridSize * gridSize;
 
         // Step 3: Discrete diffusion with cosine schedule
         var visualTokenIds = new int[numGenTokens];
         var isMasked = new bool[numGenTokens];
-        for (int i = 0; i < numGenTokens; i++) isMasked[i] = true;
+        for (int i = 0; i < numGenTokens; i++)
+            isMasked[i] = true;
 
         int numSteps = 20;
         for (int step = 0; step < numSteps; step++)
         {
             int maskedCount = 0;
-            for (int i = 0; i < numGenTokens; i++) if (isMasked[i]) maskedCount++;
-            if (maskedCount == 0) break;
+            for (int i = 0; i < numGenTokens; i++)
+                if (isMasked[i])
+                    maskedCount++;
+            if (maskedCount == 0)
+                break;
 
             // Cosine schedule: unmask ratio follows cosine curve
             double ratio = Math.Cos((double)(step + 1) / numSteps * Math.PI / 2.0);
             int targetMasked = (int)(numGenTokens * ratio);
             int toUnmask = maskedCount - Math.Max(0, targetMasked);
-            if (toUnmask <= 0) toUnmask = 1;
+            if (toUnmask <= 0)
+                toUnmask = 1;
 
             var confidences = new double[numGenTokens];
             var predictedIds = new int[numGenTokens];
 
             for (int t = 0; t < numGenTokens; t++)
             {
-                if (!isMasked[t]) continue;
-                int row = t / gridSize, col = t % gridSize;
+                if (!isMasked[t])
+                    continue;
+                int row = t / gridSize,
+                    col = t % gridSize;
                 double contextVal = 0;
                 int nCount = 0;
-                int[] nOffsets = { -1, 1, -gridSize, gridSize, -gridSize - 1, -gridSize + 1, gridSize - 1, gridSize + 1 };
+                int[] nOffsets =
+                {
+                    -1,
+                    1,
+                    -gridSize,
+                    gridSize,
+                    -gridSize - 1,
+                    -gridSize + 1,
+                    gridSize - 1,
+                    gridSize + 1,
+                };
                 foreach (int off in nOffsets)
                 {
                     int n = t + off;
@@ -184,11 +257,14 @@ public class ShowO2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
                         nCount++;
                     }
                 }
-                if (nCount > 0) contextVal /= nCount;
+                if (nCount > 0)
+                    contextVal /= nCount;
 
                 double textCond = 0;
                 for (int h = 0; h < Math.Min(8, hiddenDim); h++)
-                    textCond += NumOps.ToDouble(textHidden[h % hiddenDim]) * Math.Sin((t + 1) * (h + 1) * 0.015);
+                    textCond +=
+                        NumOps.ToDouble(textHidden[h % hiddenDim])
+                        * Math.Sin((t + 1) * (h + 1) * 0.015);
                 textCond /= 8.0;
 
                 double logit = contextVal * 0.5 + textCond * 0.5;
@@ -205,9 +281,13 @@ public class ShowO2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
                 for (int t = 0; t < numGenTokens; t++)
                 {
                     if (isMasked[t] && confidences[t] > bestConf)
-                    { bestConf = confidences[t]; bestIdx = t; }
+                    {
+                        bestConf = confidences[t];
+                        bestIdx = t;
+                    }
                 }
-                if (bestIdx < 0) break;
+                if (bestIdx < 0)
+                    break;
                 visualTokenIds[bestIdx] = predictedIds[bestIdx];
                 isMasked[bestIdx] = false;
                 confidences[bestIdx] = double.MinValue;
@@ -215,18 +295,21 @@ public class ShowO2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         }
 
         for (int t = 0; t < numGenTokens; t++)
-            if (isMasked[t]) visualTokenIds[t] = t % numVisTokens;
+            if (isMasked[t])
+                visualTokenIds[t] = t % numVisTokens;
 
         // Step 4: Decode to pixels
         int patchSize = outSize / gridSize;
-        if (patchSize < 1) patchSize = 1;
+        if (patchSize < 1)
+            patchSize = 1;
         var result = new Tensor<T>([outPixels]);
         for (int gy = 0; gy < gridSize; gy++)
         {
             for (int gx = 0; gx < gridSize; gx++)
             {
                 int tokenIdx = gy * gridSize + gx;
-                if (tokenIdx >= numGenTokens) break;
+                if (tokenIdx >= numGenTokens)
+                    break;
                 int tokenId = visualTokenIds[tokenIdx];
                 double r = ((tokenId * 7 + 13) % 256) / 255.0;
                 double g = ((tokenId * 11 + 37) % 256) / 255.0;
@@ -237,10 +320,16 @@ public class ShowO2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
                     {
                         int imgY = gy * patchSize + py;
                         int imgX = gx * patchSize + px;
-                        if (imgY >= outSize || imgX >= outSize) continue;
+                        if (imgY >= outSize || imgX >= outSize)
+                            continue;
                         int pixelIdx = (imgY * outSize + imgX) * 3;
-                        if (pixelIdx + 2 >= outPixels) continue;
-                        double smooth = 0.9 + 0.1 * Math.Sin((double)px / patchSize * Math.PI) * Math.Sin((double)py / patchSize * Math.PI);
+                        if (pixelIdx + 2 >= outPixels)
+                            continue;
+                        double smooth =
+                            0.9
+                            + 0.1
+                                * Math.Sin((double)px / patchSize * Math.PI)
+                                * Math.Sin((double)py / patchSize * Math.PI);
                         result[pixelIdx] = NumOps.FromDouble(r * smooth);
                         result[pixelIdx + 1] = NumOps.FromDouble(g * smooth);
                         result[pixelIdx + 2] = NumOps.FromDouble(b * smooth);
@@ -250,21 +339,110 @@ public class ShowO2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         }
         return result;
     }
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; } else { Layers.AddRange(LayerHelper<T>.CreateDefaultUnifiedBidirectionalLayers(_options.VisionDim, _options.DecoderDim, _options.DecoderDim, _options.DecoderDim, _options.NumVisionLayers, _options.NumDecoderLayers / 2, _options.NumDecoderLayers / 2, _options.NumHeads, _options.DropoutRate)); ComputeEncoderDecoderBoundary(); } }
-    private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + (_options.VisionDim != _options.DecoderDim ? 1 : 0); }
-    private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode)
+            return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            _encoderLayerEnd = Layers.Count / 2;
+        }
+        else
+        {
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultUnifiedBidirectionalLayers(
+                    _options.VisionDim,
+                    _options.DecoderDim,
+                    _options.DecoderDim,
+                    _options.DecoderDim,
+                    _options.NumVisionLayers,
+                    _options.NumDecoderLayers / 2,
+                    _options.NumDecoderLayers / 2,
+                    _options.NumHeads,
+                    _options.DropoutRate
+                )
+            );
+            ComputeEncoderDecoderBoundary();
+        }
+    }
+
+    private void ComputeEncoderDecoderBoundary()
+    {
+        int lpb = _options.DropoutRate > 0 ? 6 : 5;
+        _encoderLayerEnd =
+            1
+            + _options.NumVisionLayers * lpb
+            + (_options.VisionDim != _options.DecoderDim ? 1 : 0);
+    }
+
+    private Tensor<T> TokenizeText(string text)
+    {
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
+        var encoding = _tokenizer.Encode(text);
+        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
+        var tokens = new Tensor<T>([seqLen]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        return tokens;
+    }
+
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
+        var c = input;
+        foreach (var l in Layers)
+            c = l.Forward(c);
+        return c;
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        TrainWithTape(input, expected);
+        SetTrainingMode(false);
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Show-o2-Native" : "Show-o2-ONNX", Description = "Show-o2: improved native unified multimodal model.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "Show-o2-Native" : "Show-o2-ONNX",
+            Description = "Show-o2: improved native unified multimodal model.",
+            FeatureCount = _options.DecoderDim,
+            Complexity = _options.NumVisionLayers + _options.NumDecoderLayers,
+        };
         m.AdditionalInfo["Architecture"] = "Show-o2";
         m.AdditionalInfo["SupportsGeneration"] = _options.SupportsGeneration.ToString();
         return m;
     }
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) {
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
         writer.Write(_useNativeMode);
         writer.Write(_options.ModelPath ?? string.Empty);
         writer.Write(_options.ImageSize);
@@ -276,10 +454,13 @@ public class ShowO2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         writer.Write(_options.SupportsGeneration);
         writer.Write(_options.OutputImageSize);
     }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) {
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
         _useNativeMode = reader.ReadBoolean();
         string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionDim = reader.ReadInt32();
         _options.DecoderDim = reader.ReadInt32();
@@ -288,9 +469,28 @@ public class ShowO2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         _options.NumHeads = reader.ReadInt32();
         _options.SupportsGeneration = reader.ReadBoolean();
         _options.OutputImageSize = reader.ReadInt32();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new ShowO2<T>(Architecture, mp, _options); return new ShowO2<T>(Architecture, _options); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(ShowO2<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new ShowO2<T>(Architecture, mp, _options);
+        return new ShowO2<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(ShowO2<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
 }

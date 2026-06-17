@@ -38,5 +38,17 @@ public class PixtralLargeOptions : InstructionTunedVLMOptions
         SystemPrompt = other.SystemPrompt;
     }
 
-    public PixtralLargeOptions() { InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection; VisionDim = 1280; DecoderDim = 8192; ProjectionDim = 8192; NumVisionLayers = 32; NumDecoderLayers = 80; NumHeads = 64; ImageSize = 1024; LanguageModelName = "Mistral-Large"; MaxVisualTokens = 1024; }
+    public PixtralLargeOptions()
+    {
+        InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;
+        VisionDim = 1280;
+        DecoderDim = 8192;
+        ProjectionDim = 8192;
+        NumVisionLayers = 32;
+        NumDecoderLayers = 80;
+        NumHeads = 64;
+        ImageSize = 1024;
+        LanguageModelName = "Mistral-Large";
+        MaxVisualTokens = 1024;
+    }
 }

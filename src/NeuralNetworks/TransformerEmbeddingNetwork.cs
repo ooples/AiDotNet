@@ -401,12 +401,15 @@ namespace AiDotNet.NeuralNetworks
             if (TryForwardGpuOptimized(input, out var gpuResult))
                 return gpuResult;
 
-            Tensor<T> current = input;
-            foreach (var layer in Layers)
+            return Accelerate(input, () =>
             {
-                current = layer.Forward(current);
-            }
-            return current;
+                Tensor<T> current = input;
+                foreach (var layer in Layers)
+                {
+                    current = layer.Forward(current);
+                }
+                return current;
+            });
         }
 
         /// <summary>

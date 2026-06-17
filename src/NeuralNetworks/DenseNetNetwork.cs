@@ -345,7 +345,8 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
     public override Tensor<T> Predict(Tensor<T> input)
     {
         SetTrainingMode(false);
-        return Forward(input);
+        // #1622 verify-then-trust compiled gate; no-op unless acceleration is engaged.
+        return Accelerate(input, () => Forward(input));
     }
 
     /// <inheritdoc />

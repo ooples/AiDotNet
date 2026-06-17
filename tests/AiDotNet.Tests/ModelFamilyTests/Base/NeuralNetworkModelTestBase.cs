@@ -348,9 +348,10 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 
-        // Measure initial loss (MSE)
+        // Measure initial loss (model's objective — MSE for most families, the model's own loss for
+        // raw-logit cross-entropy LMs where MSE is meaningless; see MeasureLoss).
         var initialOutput = network.Predict(input);
-        double initialLoss = ComputeMSE(initialOutput, target);
+        double initialLoss = MeasureLoss(network, initialOutput, target);
 
         // Train
         for (int i = 0; i < TrainingIterations * 3; i++)
@@ -358,7 +359,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         // Measure final loss
         var finalOutput = network.Predict(input);
-        double finalLoss = ComputeMSE(finalOutput, target);
+        double finalLoss = MeasureLoss(network, finalOutput, target);
 
         if (!double.IsNaN(initialLoss) && !double.IsNaN(finalLoss))
         {
@@ -1031,12 +1032,12 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         for (int i = 0; i < shortIters; i++)
             network1.Train(input, target);
-        double lossShort = ComputeMSE(network1.Predict(input), target);
+        double lossShort = MeasureLoss(network1, network1.Predict(input), target);
 
         // Train network2 for the "long" iteration count (default 200)
         for (int i = 0; i < longIters; i++)
             network2.Train(input2, target2);
-        double lossLong = ComputeMSE(network2.Predict(input2), target2);
+        double lossLong = MeasureLoss(network2, network2.Predict(input2), target2);
 
         // Training divergence → NaN loss is the exact failure mode this invariant
         // should catch. Fail fast instead of skipping the assertion.
@@ -1101,13 +1102,13 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         for (int i = 0; i < TrainingIterations * 3; i++)
             network.Train(input, target);
 
-        double trainMSE = ComputeMSE(network.Predict(input), target);
+        double trainMSE = MeasureLoss(network, network.Predict(input), target);
         var testInput = CreateRandomTensor(InputShape, ModelTestHelpers.CreateSeededRandom(99));
         // CreateRandomTargetTensor for the same reason the trainTarget
         // a few lines above uses it — type-constrained families (NER /
         // CRF) need legal label values.
         var testTarget = CreateRandomTargetTensor(EffectiveOutputShape, ModelTestHelpers.CreateSeededRandom(99));
-        double testMSE = ComputeMSE(network.Predict(testInput), testTarget);
+        double testMSE = MeasureLoss(network, network.Predict(testInput), testTarget);
 
         if (!double.IsNaN(trainMSE) && !double.IsNaN(testMSE))
         {
@@ -1535,6 +1536,32 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             mse += diff * diff;
         }
         return mse / len;
+    }
+
+    /// <summary>
+    /// Trajectory-loss metric for the training-invariant tests. For models whose head emits RAW LOGITS
+    /// trained with cross-entropy-with-logits (RWKV4 / Eagle / Finch and any other model that wires
+    /// <see cref="CrossEntropyWithLogitsLoss{T}"/>), MSE against the (random) target is a meaningless
+    /// signal: it GROWS as the correct-class logits grow during HEALTHY training, so legitimately
+    /// successful training reads as "loss increased / degraded". For those models we measure the
+    /// model's OWN training objective — which decreases as the model is optimized, the correct
+    /// semantics for "training reduces loss" and "more data should not degrade". Every other family
+    /// keeps <see cref="ComputeMSE"/> byte-identical, since this branch only triggers when the model's
+    /// loss function is cross-entropy-with-logits.
+    /// </summary>
+    protected double MeasureLoss(INeuralNetworkModel<T> network, Tensor<T> output, Tensor<T> target)
+    {
+        if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn
+            && nn.DefaultLossFunction is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T> ce)
+        {
+            int len = Math.Min(output.Length, target.Length);
+            if (len == 0) return double.NaN;
+            var predicted = new Vector<T>(len);
+            var actual = new Vector<T>(len);
+            for (int i = 0; i < len; i++) { predicted[i] = output[i]; actual[i] = target[i]; }
+            return ConvertToDouble(ce.CalculateLoss(predicted, actual));
+        }
+        return ComputeMSE(output, target);
     }
 
     /// <summary>

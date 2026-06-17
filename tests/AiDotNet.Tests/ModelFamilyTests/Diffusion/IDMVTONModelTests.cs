@@ -10,6 +10,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 /// paper defaults allocates ≈12.3 GB at FP64 standalone, OOMs in the shared
 /// diffusion-test process.
 /// </summary>
+[Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4)
 public class IDMVTONModelTests : DiffusionModelTestBase<float>
 {
     // SD-based latent diffusion: 4 channels, 64x64 latent (512x512 images / 8x VAE)

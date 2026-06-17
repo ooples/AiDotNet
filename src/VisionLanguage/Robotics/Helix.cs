@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -10,7 +11,6 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
-using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.Robotics;
 
@@ -77,12 +77,18 @@ namespace AiDotNet.VisionLanguage.Robotics;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Helix: A Vision-Language-Action Model for Generalist Humanoid Control", "https://arxiv.org/abs/2502.07092", Year = 2025, Authors = "Figure AI")]
+[ResearchPaper(
+    "Helix: A Vision-Language-Action Model for Generalist Humanoid Control",
+    "https://arxiv.org/abs/2502.07092",
+    Year = 2025,
+    Authors = "Figure AI"
+)]
 public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly HelixOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer _tokenizer;
+
     // Learned instruction-token embedding table — replaces the previous
     // deterministic sinusoidal fabrication in EmbedInstructionTokens. Helix's
     // System-2 VLM consumes ordinary learned text embeddings (Figure AI 2025,
@@ -99,15 +105,22 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 
     public override ModelOptions GetOptions() => _options;
 
-    public Helix(NeuralNetworkArchitecture<T> architecture, string modelPath, HelixOptions? options = null) : base(architecture)
+    public Helix(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        HelixOptions? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new HelixOptions();
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
-        if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
-        if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options.ModelPath = modelPath;
         OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
@@ -115,7 +128,12 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         InitializeLayers();
     }
 
-    public Helix(NeuralNetworkArchitecture<T> architecture, HelixOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    public Helix(
+        NeuralNetworkArchitecture<T> architecture,
+        HelixOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new HelixOptions();
         _useNativeMode = true;
@@ -153,9 +171,11 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     {
         ThrowIfDisposed();
         var preprocessed = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(preprocessed));
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(preprocessed));
         var hidden = preprocessed;
-        for (int i = 0; i < _encoderLayerEnd; i++) hidden = Layers[i].Forward(hidden);
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            hidden = Layers[i].Forward(hidden);
         return L2Normalize(hidden);
     }
 
@@ -163,7 +183,8 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     {
         ThrowIfDisposed();
         var preprocessed = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(preprocessed);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(preprocessed);
         return System2Forward(preprocessed, prompt ?? string.Empty);
     }
 
@@ -199,7 +220,8 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     public Tensor<T> System1Forward(Tensor<T> preprocessedObservation, Tensor<T> system2Latent)
     {
         ThrowIfDisposed();
-        if (system2Latent is null) throw new ArgumentNullException(nameof(system2Latent));
+        if (system2Latent is null)
+            throw new ArgumentNullException(nameof(system2Latent));
 
         var visual = preprocessedObservation;
         for (int i = 0; i < _encoderLayerEnd; i++)
@@ -224,7 +246,8 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         return new HelixDualSystemRunner<T>(
             system2Forward: (obs, instr) => System2Forward(PreprocessImage(obs), instr),
             system1Forward: (obs, latent) => System1Forward(PreprocessImage(obs), latent),
-            system2TicksValid: System1ToSystem2Ratio);
+            system2TicksValid: System1ToSystem2Ratio
+        );
     }
 
     /// <summary>
@@ -274,7 +297,8 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
@@ -286,15 +310,18 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         }
 
         // Vision encoder + S2 LLM decoder via the standard robotics factory.
-        Layers.AddRange(LayerHelper<T>.CreateDefaultRoboticsActionLayers(
-            visionDim: _options.VisionDim,
-            decoderDim: _options.DecoderDim,
-            actionDim: _options.DecoderDim,
-            numVisionLayers: _options.NumVisionLayers,
-            numDecoderLayers: _options.NumDecoderLayers,
-            numActionLayers: 2,
-            numHeads: _options.NumHeads,
-            dropoutRate: _options.DropoutRate));
+        Layers.AddRange(
+            LayerHelper<T>.CreateDefaultRoboticsActionLayers(
+                visionDim: _options.VisionDim,
+                decoderDim: _options.DecoderDim,
+                actionDim: _options.DecoderDim,
+                numVisionLayers: _options.NumVisionLayers,
+                numDecoderLayers: _options.NumDecoderLayers,
+                numActionLayers: 2,
+                numHeads: _options.NumHeads,
+                dropoutRate: _options.DropoutRate
+            )
+        );
 
         // S2 latent emission head (LayerNorm + projection to S2_LatentDim).
         IActivationFunction<T> identity = new IdentityActivation<T>();
@@ -319,12 +346,18 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         Layers.Add(new DenseLayer<T>(s1Dim, identity));
         for (int i = 0; i < _options.System1NumLayers; i++)
         {
-            Layers.Add(new MultiHeadAttentionLayer<T>(_options.System1NumHeads, s1Dim / Math.Max(1, _options.System1NumHeads)));
+            Layers.Add(
+                new MultiHeadAttentionLayer<T>(
+                    _options.System1NumHeads,
+                    s1Dim / Math.Max(1, _options.System1NumHeads)
+                )
+            );
             Layers.Add(new LayerNormalizationLayer<T>());
             Layers.Add(new DenseLayer<T>(s1FfnDim, gelu));
             Layers.Add(new DenseLayer<T>(s1Dim, identity));
             Layers.Add(new LayerNormalizationLayer<T>());
-            if (_options.DropoutRate > 0) Layers.Add(new DropoutLayer<T>(_options.DropoutRate));
+            if (_options.DropoutRate > 0)
+                Layers.Add(new DropoutLayer<T>(_options.DropoutRate));
         }
         Layers.Add(new DenseLayer<T>(_options.ActionDimension, identity));
     }
@@ -346,32 +379,38 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     /// </summary>
     private Tensor<T> EmbedInstructionTokens(Tensor<T> instructionTokens)
     {
-        if (instructionTokens.Length == 0) return new Tensor<T>([_options.DecoderDim]);
+        if (instructionTokens.Length == 0)
+            return new Tensor<T>([_options.DecoderDim]);
         return _tokenEmbedding.Forward(instructionTokens);
     }
 
     private Tensor<T> TokenizeText(string text)
     {
-        if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized.");
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
         var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
         return tokens;
     }
 
     public override Tensor<T> Predict(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
         var hidden = input;
-        foreach (var layer in Layers) hidden = layer.Forward(hidden);
+        foreach (var layer in Layers)
+            hidden = layer.Forward(hidden);
         return hidden;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
         TrainWithTape(input, expected);
         SetTrainingMode(false);
@@ -379,7 +418,8 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 
     public override void UpdateParameters(Vector<T> parameters)
     {
-        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
         int idx = 0;
         foreach (var layer in Layers)
         {
@@ -409,7 +449,8 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         get
         {
             long total = 0;
-            foreach (var layer in Layers) total += layer.ParameterCount;
+            foreach (var layer in Layers)
+                total += layer.ParameterCount;
             return total + _tokenEmbedding.ParameterCount;
         }
     }
@@ -420,10 +461,13 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     {
         var baseParams = base.GetParameters();
         var embedParams = _tokenEmbedding.GetParameters();
-        if (embedParams.Length == 0) return baseParams;
+        if (embedParams.Length == 0)
+            return baseParams;
         var combined = new Vector<T>(baseParams.Length + embedParams.Length);
-        for (int i = 0; i < baseParams.Length; i++) combined[i] = baseParams[i];
-        for (int i = 0; i < embedParams.Length; i++) combined[baseParams.Length + i] = embedParams[i];
+        for (int i = 0; i < baseParams.Length; i++)
+            combined[i] = baseParams[i];
+        for (int i = 0; i < embedParams.Length; i++)
+            combined[baseParams.Length + i] = embedParams[i];
         return combined;
     }
 
@@ -444,26 +488,32 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         // base.SetParameters ran. Compute the true layer total once and pick
         // the matching layout explicitly.
         int layerCount = 0;
-        foreach (var layer in Layers) layerCount += (int)layer.ParameterCount;
+        foreach (var layer in Layers)
+            layerCount += (int)layer.ParameterCount;
 
         if (parameters.Length != layerCount && parameters.Length != layerCount + embedCount)
             throw new ArgumentException(
                 $"Expected {layerCount} (layers-only) or {layerCount + embedCount} (layers + embedding) parameters, got {parameters.Length}.",
-                nameof(parameters));
+                nameof(parameters)
+            );
 
         var baseSlice = new Vector<T>(layerCount);
-        for (int i = 0; i < layerCount; i++) baseSlice[i] = parameters[i];
+        for (int i = 0; i < layerCount; i++)
+            baseSlice[i] = parameters[i];
         base.SetParameters(baseSlice);
 
         if (embedCount > 0 && parameters.Length == layerCount + embedCount)
         {
             var embedSlice = new Vector<T>(embedCount);
-            for (int i = 0; i < embedCount; i++) embedSlice[i] = parameters[layerCount + i];
+            for (int i = 0; i < embedCount; i++)
+                embedSlice[i] = parameters[layerCount + i];
             _tokenEmbedding.SetParameters(embedSlice);
         }
     }
 
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
     public override ModelMetadata<T> GetModelMetadata()
@@ -471,9 +521,11 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         var meta = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "Helix-Native" : "Helix-ONNX",
-            Description = "Helix: dual-system VLA for full-body humanoid control (Figure AI 2025, arXiv:2502.07092).",
+            Description =
+                "Helix: dual-system VLA for full-body humanoid control (Figure AI 2025, arXiv:2502.07092).",
             FeatureCount = _options.DecoderDim,
-            Complexity = _options.NumVisionLayers + _options.NumDecoderLayers + _options.System1NumLayers,
+            Complexity =
+                _options.NumVisionLayers + _options.NumDecoderLayers + _options.System1NumLayers,
         };
         meta.AdditionalInfo["Architecture"] = "Helix";
         meta.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
@@ -517,7 +569,8 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     {
         _useNativeMode = reader.ReadBoolean();
         string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionDim = reader.ReadInt32();
         _options.DecoderDim = reader.ReadInt32();
@@ -540,9 +593,10 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         {
             if (embedCount != (int)_tokenEmbedding.ParameterCount)
                 throw new InvalidOperationException(
-                    $"Serialized Helix token-embedding parameter count ({embedCount:N0}) does not match " +
-                    $"this instance's embedding ({_tokenEmbedding.ParameterCount:N0}). The model was saved with " +
-                    "a different VocabSize/DecoderDim configuration.");
+                    $"Serialized Helix token-embedding parameter count ({embedCount:N0}) does not match "
+                        + $"this instance's embedding ({_tokenEmbedding.ParameterCount:N0}). The model was saved with "
+                        + "a different VocabSize/DecoderDim configuration."
+                );
             var embedParams = new Vector<T>(embedCount);
             for (int i = 0; i < embedCount; i++)
                 embedParams[i] = NumOps.FromDouble(reader.ReadDouble());
@@ -562,12 +616,14 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 
     private void ThrowIfDisposed()
     {
-        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(Helix<T>));
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(Helix<T>));
     }
 
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         base.Dispose(disposing);
     }

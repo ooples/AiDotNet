@@ -50,10 +50,16 @@ namespace AiDotNet.VisionLanguage.Generative;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Generative Pretraining in Multimodality", "https://arxiv.org/abs/2307.05222", Year = 2023, Authors = "Sun et al.")]
+[ResearchPaper(
+    "Generative Pretraining in Multimodality",
+    "https://arxiv.org/abs/2307.05222",
+    Year = 2023,
+    Authors = "Sun et al."
+)]
 public class Emu<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly EmuOptions _options;
+
     public override ModelOptions GetOptions() => _options;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -64,7 +70,12 @@ public class Emu<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel
     private readonly List<ILayer<T>> _decoderLayers = new List<ILayer<T>>();
     private readonly List<ILayer<T>> _regressionLayers = new List<ILayer<T>>();
 
-    public Emu(NeuralNetworkArchitecture<T> architecture, string modelPath, EmuOptions? options = null) : base(architecture)
+    public Emu(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        EmuOptions? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new EmuOptions();
         SyncImageSizeWithArchitecture();
@@ -82,7 +93,12 @@ public class Emu<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel
         InitializeLayers();
     }
 
-    public Emu(NeuralNetworkArchitecture<T> architecture, EmuOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    public Emu(
+        NeuralNetworkArchitecture<T> architecture,
+        EmuOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new EmuOptions();
         SyncImageSizeWithArchitecture();
@@ -99,7 +115,8 @@ public class Emu<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel
     {
         int h = Architecture.InputHeight;
         int w = Architecture.InputWidth;
-        if (h > 0 && w > 0 && h == w) _options.ImageSize = h;
+        if (h > 0 && w > 0 && h == w)
+            _options.ImageSize = h;
     }
 
     public int EmbeddingDimension => _options.DecoderDim;
@@ -112,9 +129,11 @@ public class Emu<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p));
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(p));
         var c = p;
-        foreach (var l in Layers) c = l.Forward(c);
+        foreach (var l in Layers)
+            c = l.Forward(c);
         return L2Normalize(c);
     }
 
@@ -132,34 +151,41 @@ public class Emu<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(p);
 
         // Step 1: EVA-CLIP vision encoder + projection
         var visionOut = p;
-        foreach (var l in Layers) visionOut = l.Forward(visionOut);
+        foreach (var l in Layers)
+            visionOut = l.Forward(visionOut);
 
         // Step 2: Tokenize prompt for interleaved multimodal sequence
         Tensor<T>? promptTokens = null;
-        if (prompt is not null) promptTokens = TokenizeText(prompt);
+        if (prompt is not null)
+            promptTokens = TokenizeText(prompt);
 
         // Step 3: Concatenate visual features with prompt tokens for multimodal sequence
         var decoderInput = visionOut;
-        if (promptTokens is not null) decoderInput = visionOut.ConcatenateTensors(promptTokens);
+        if (promptTokens is not null)
+            decoderInput = visionOut.ConcatenateTensors(promptTokens);
 
         // Step 4: Causal Transformer decoder
         var decoderOut = decoderInput;
-        foreach (var l in _decoderLayers) decoderOut = l.Forward(decoderOut);
+        foreach (var l in _decoderLayers)
+            decoderOut = l.Forward(decoderOut);
 
         // Step 5: Visual regression head (maps to visual embedding space)
         var output = decoderOut;
-        foreach (var l in _regressionLayers) output = l.Forward(output);
+        foreach (var l in _regressionLayers)
+            output = l.Forward(output);
 
         return output;
     }
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
@@ -168,21 +194,32 @@ public class Emu<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel
 
         int blockSize = _options.DropoutRate > 0 ? 6 : 5;
         int decoderBlockSize = _options.DropoutRate > 0 ? 6 : 5;
-        int visionLayerEnd = 1 + _options.NumVisionLayers * blockSize
+        int visionLayerEnd =
+            1
+            + _options.NumVisionLayers * blockSize
             + (_options.VisionDim != _options.DecoderDim ? 1 : 0);
         int decoderLayerEnd = visionLayerEnd + _options.NumDecoderLayers * decoderBlockSize;
 
         var allLayers = LayerHelper<T>.CreateDefaultUnifiedGenerationLayers(
-            _options.VisionDim, _options.DecoderDim, _options.RegressionDim,
-            _options.NumVisionLayers, _options.NumDecoderLayers, _options.NumRegressionLayers,
-            _options.NumHeads, _options.DropoutRate);
+            _options.VisionDim,
+            _options.DecoderDim,
+            _options.RegressionDim,
+            _options.NumVisionLayers,
+            _options.NumDecoderLayers,
+            _options.NumRegressionLayers,
+            _options.NumHeads,
+            _options.DropoutRate
+        );
 
         int idx = 0;
         foreach (var layer in allLayers)
         {
-            if (idx < visionLayerEnd) Layers.Add(layer);
-            else if (idx < decoderLayerEnd) _decoderLayers.Add(layer);
-            else _regressionLayers.Add(layer);
+            if (idx < visionLayerEnd)
+                Layers.Add(layer);
+            else if (idx < decoderLayerEnd)
+                _decoderLayers.Add(layer);
+            else
+                _regressionLayers.Add(layer);
             idx++;
         }
 
@@ -192,37 +229,54 @@ public class Emu<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel
 
     private Tensor<T> TokenizeText(string text)
     {
-        if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized.");
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
         var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
         return tokens;
     }
 
     public override Tensor<T> Predict(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
         SetTrainingMode(false);
         var c = PreprocessImage(input);
-        foreach (var l in Layers) c = l.Forward(c);
+        foreach (var l in Layers)
+            c = l.Forward(c);
         return c;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        try { TrainWithTape(PreprocessImage(input), expected); }
-        finally { SetTrainingMode(false); }
+        try
+        {
+            TrainWithTape(PreprocessImage(input), expected);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
     {
-        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
         int idx = 0;
-        foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
         // Sync the auxiliary streams (Q-Former / perceiver / decoder /
         // regression head, depending on model) — see OpenFlamingo.UpdateParameters
         // for full rationale (dual-stream split, GetExtraTrainableLayers
@@ -231,7 +285,8 @@ public class Emu<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel
         // and the model state silently de-syncs across streams).
         foreach (var l in EnumerateAuxiliaryStreamTrainableLayers())
         {
-            if (l is null) continue;
+            if (l is null)
+                continue;
             int c = (int)l.ParameterCount;
             l.UpdateParameters(parameters.Slice(idx, c));
             idx += c;
@@ -239,8 +294,8 @@ public class Emu<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel
     }
 
     /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-        => EnumerateAuxiliaryStreamTrainableLayers();
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
+        EnumerateAuxiliaryStreamTrainableLayers();
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
@@ -254,7 +309,8 @@ public class Emu<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel
             Name = _useNativeMode ? "Emu-Native" : "Emu-ONNX",
             Description = "Emu: Generative Pretraining in Multimodality (Sun et al., 2023)",
             FeatureCount = _options.DecoderDim,
-            Complexity = _options.NumVisionLayers + _options.NumDecoderLayers + _options.NumRegressionLayers
+            Complexity =
+                _options.NumVisionLayers + _options.NumDecoderLayers + _options.NumRegressionLayers,
         };
         m.AdditionalInfo["Architecture"] = "Emu";
         m.AdditionalInfo["GenerativeType"] = _options.ArchitectureType.ToString();
@@ -279,7 +335,8 @@ public class Emu<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel
     {
         _useNativeMode = reader.ReadBoolean();
         string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionDim = reader.ReadInt32();
         _options.DecoderDim = reader.ReadInt32();
@@ -301,14 +358,19 @@ public class Emu<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel
 
     private void ThrowIfDisposed()
     {
-        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(Emu<T>));
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(Emu<T>));
     }
 
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
-        if (disposing) { OnnxModel?.Dispose(); }
+        if (disposing)
+        {
+            OnnxModel?.Dispose();
+        }
         base.Dispose(disposing);
     }
 }

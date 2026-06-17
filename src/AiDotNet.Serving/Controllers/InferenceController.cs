@@ -23,6 +23,7 @@ public class InferenceController : ControllerBase
 
     private readonly IModelRepository _modelRepository;
     private readonly IRequestBatcher _requestBatcher;
+    private readonly ITextGenerationService _textGenerationService;
     private readonly ILogger<InferenceController> _logger;
 
     /// <summary>
@@ -30,16 +31,20 @@ public class InferenceController : ControllerBase
     /// </summary>
     /// <param name="modelRepository">The model repository service</param>
     /// <param name="requestBatcher">The request batcher service</param>
+    /// <param name="textGenerationService">The text generation service (continuous-batching engine)</param>
     /// <param name="logger">Logger for diagnostics</param>
     public InferenceController(
         IModelRepository modelRepository,
         IRequestBatcher requestBatcher,
+        ITextGenerationService textGenerationService,
         ILogger<InferenceController> logger)
     {
         Guard.NotNull(modelRepository);
         _modelRepository = modelRepository;
         Guard.NotNull(requestBatcher);
         _requestBatcher = requestBatcher;
+        Guard.NotNull(textGenerationService);
+        _textGenerationService = textGenerationService;
         Guard.NotNull(logger);
         _logger = logger;
     }
@@ -323,21 +328,19 @@ public class InferenceController : ControllerBase
     /// <param name="request">The speculative decoding request</param>
     /// <returns>Generated tokens and statistics</returns>
     /// <response code="200">Generation completed successfully</response>
-    /// <response code="400">Invalid request format</response>
+    /// <response code="400">Invalid request, or the model does not support text generation</response>
     /// <response code="404">Model not found</response>
-    /// <response code="501">Speculative decoding not supported for this model</response>
     [HttpPost("generate/{modelName}")]
     [ProducesResponseType(typeof(SpeculativeDecodingResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status501NotImplemented)]
     public IActionResult GenerateWithSpeculativeDecoding(string modelName, [FromBody] SpeculativeDecodingRequest request)
     {
         var sw = Stopwatch.StartNew();
 
         try
         {
-            _logger.LogDebug("Received speculative decoding request for model '{ModelName}'", modelName);
+            _logger.LogDebug("Received text generation request for model '{ModelName}'", modelName);
 
             // Validate request
             var validationError = request.Validate();
@@ -362,34 +365,39 @@ public class InferenceController : ControllerBase
                 });
             }
 
-            // Speculative decoding requires text generation capability which
-            // depends on the model architecture. Currently, IServableModel only
-            // supports vector-to-vector predictions. This endpoint documents
-            // the API contract for when text generation models are supported.
-            //
-            // For full speculative decoding support, models need to implement:
-            // - Token-level forward pass (logits for each position)
-            // - Vocabulary mapping (token IDs to embeddings)
-            // - Draft model integration
-            //
-            // This is planned for a future release with transformer model support.
+            // Run real autoregressive generation through the continuous-batching engine
+            // (with speculative decoding). This works for any tensor-based (token-to-logits)
+            // model, such as a transformer language model.
+            // HttpContext can be null outside a request pipeline (e.g. unit tests); fall back to a
+            // non-cancelling token rather than NRE-ing into the 500 handler.
+            var requestAborted = HttpContext?.RequestAborted ?? System.Threading.CancellationToken.None;
+            var response = _textGenerationService.Generate(modelName, modelInfo.NumericType, request, requestAborted);
 
             sw.Stop();
+            response.ProcessingTimeMs = sw.ElapsedMilliseconds;
 
-            return StatusCode(501, new SpeculativeDecodingResponse
+            if (response.Error != null)
             {
-                Error = "Speculative decoding is not available via the REST API in the current version.",
-                RequestId = request.RequestId,
-                ProcessingTimeMs = sw.ElapsedMilliseconds
-            });
+                // The model loaded successfully but cannot generate text (e.g. it is a
+                // regression/classification model, not a token-to-logits language model).
+                _logger.LogWarning(
+                    "Text generation unavailable for model '{ModelName}': {Error}", modelName, response.Error);
+                return BadRequest(response);
+            }
+
+            _logger.LogInformation(
+                "Text generation completed for model '{ModelName}' in {ElapsedMs}ms ({NumGenerated} tokens generated)",
+                modelName, sw.ElapsedMilliseconds, response.NumGenerated);
+
+            return Ok(response);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error during speculative decoding for model '{ModelName}'", modelName);
+            _logger.LogError(ex, "Unexpected error during text generation for model '{ModelName}'", modelName);
             sw.Stop();
             return StatusCode(500, new SpeculativeDecodingResponse
             {
-                Error = "An unexpected error occurred during speculative decoding.",
+                Error = "An unexpected error occurred during text generation.",
                 RequestId = request.RequestId,
                 ProcessingTimeMs = sw.ElapsedMilliseconds
             });

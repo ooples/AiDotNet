@@ -886,14 +886,18 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        // Process input as a tensor through the network
-        var current = input;
-        for (int i = 0; i < Layers.Count; i++)
+        // Process input as a tensor through the network (wrapped in the #1622 verify-then-trust
+        // compiled gate; no-op unless acceleration is engaged).
+        return Accelerate(input, () =>
         {
-            current = Layers[i].Forward(current);
-        }
+            var current = input;
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                current = Layers[i].Forward(current);
+            }
 
-        return current;
+            return current;
+        });
     }
 
     /// <summary>

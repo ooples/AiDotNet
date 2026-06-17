@@ -14,6 +14,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 /// <see cref="AiDotNet.AiModelBuilder{T, TInput, TOutput}.ConfigureMixedPrecision"/>
 /// accepts.
 /// </summary>
+[Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4)
 public class StableDiffusion15ModelTests : DiffusionModelTestBase<float>
 {
     // Per Rombach et al. 2022: SD 1.5 operates on 64×64 latent space

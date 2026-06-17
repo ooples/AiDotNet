@@ -64,11 +64,18 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Scaling Up Visual and Vision-Language Representation Learning With Noisy Text Supervision", "https://arxiv.org/abs/2102.05918", Year = 2021, Authors = "Jia et al.")]
+[ResearchPaper(
+    "Scaling Up Visual and Vision-Language Representation Learning With Noisy Text Supervision",
+    "https://arxiv.org/abs/2102.05918",
+    Year = 2021,
+    Authors = "Jia et al."
+)]
 public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly ALIGNOptions _options;
+
     public override ModelOptions GetOptions() => _options;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -77,7 +84,11 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
     /// <summary>
     /// Creates an ALIGN model in ONNX inference mode.
     /// </summary>
-    public ALIGN(NeuralNetworkArchitecture<T> architecture, string imageEncoderModelPath, ALIGNOptions? options = null)
+    public ALIGN(
+        NeuralNetworkArchitecture<T> architecture,
+        string imageEncoderModelPath,
+        ALIGNOptions? options = null
+    )
         : base(architecture)
     {
         _options = options ?? new ALIGNOptions();
@@ -88,9 +99,15 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         base.EmbeddingDim = _options.VisionEmbeddingDim;
 
         if (string.IsNullOrWhiteSpace(imageEncoderModelPath))
-            throw new ArgumentException("Image encoder model path cannot be null or empty.", nameof(imageEncoderModelPath));
+            throw new ArgumentException(
+                "Image encoder model path cannot be null or empty.",
+                nameof(imageEncoderModelPath)
+            );
         if (!File.Exists(imageEncoderModelPath))
-            throw new FileNotFoundException($"ONNX model not found: {imageEncoderModelPath}", imageEncoderModelPath);
+            throw new FileNotFoundException(
+                $"ONNX model not found: {imageEncoderModelPath}",
+                imageEncoderModelPath
+            );
 
         _options.ImageEncoderModelPath = imageEncoderModelPath;
         OnnxImageEncoder = new OnnxModel<T>(imageEncoderModelPath, _options.OnnxOptions);
@@ -109,8 +126,11 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
     /// <summary>
     /// Creates an ALIGN model in native training mode.
     /// </summary>
-    public ALIGN(NeuralNetworkArchitecture<T> architecture, ALIGNOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    public ALIGN(
+        NeuralNetworkArchitecture<T> architecture,
+        ALIGNOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
         : base(architecture)
     {
         _options = options ?? new ALIGNOptions();
@@ -185,7 +205,8 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             // Caller-supplied layer graph: keep historic single-list behaviour.
@@ -207,8 +228,10 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
                 numVisionLayers: _options.NumVisionLayers,
                 numTextLayers: _options.NumTextLayers,
                 numTextHeads: _options.NumTextHeads,
-                dropoutRate: _options.DropoutRate),
-            visionLayerCount);
+                dropoutRate: _options.DropoutRate
+            ),
+            visionLayerCount
+        );
     }
 
     public override Tensor<T> Predict(Tensor<T> input)
@@ -225,7 +248,8 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
         try
         {
@@ -238,12 +262,13 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
     }
 
     /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-        => EnumerateTextEncoderTrainableLayers();
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
+        EnumerateTextEncoderTrainableLayers();
 
     public override void UpdateParameters(Vector<T> parameters)
     {
-        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
         int idx = 0;
         foreach (var layer in Layers)
         {
@@ -253,8 +278,8 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         }
     }
 
-    protected override Tensor<T> PreprocessImage(Tensor<T> image)
-        => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
@@ -263,9 +288,10 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         var meta = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "ALIGN-Native" : "ALIGN-ONNX",
-            Description = "ALIGN: A Large-scale ImaGe and Noisy-text embedding (Jia et al., ICML 2021)",
+            Description =
+                "ALIGN: A Large-scale ImaGe and Noisy-text embedding (Jia et al., ICML 2021)",
             FeatureCount = _options.ProjectionDim,
-            Complexity = _options.NumVisionLayers + _options.NumTextLayers
+            Complexity = _options.NumVisionLayers + _options.NumTextLayers,
         };
         meta.AdditionalInfo["Architecture"] = "ALIGN";
         meta.AdditionalInfo["VisionEncoder"] = "EfficientNet-B7";
@@ -289,9 +315,11 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
     {
         _useNativeMode = reader.ReadBoolean();
         string imgPath = reader.ReadString();
-        if (!string.IsNullOrEmpty(imgPath)) _options.ImageEncoderModelPath = imgPath;
+        if (!string.IsNullOrEmpty(imgPath))
+            _options.ImageEncoderModelPath = imgPath;
         string txtPath = reader.ReadString();
-        if (!string.IsNullOrEmpty(txtPath)) _options.TextEncoderModelPath = txtPath;
+        if (!string.IsNullOrEmpty(txtPath))
+            _options.TextEncoderModelPath = txtPath;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionEmbeddingDim = reader.ReadInt32();
         _options.TextEmbeddingDim = reader.ReadInt32();
@@ -306,7 +334,11 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        if (!_useNativeMode && _options.ImageEncoderModelPath is { } mp && !string.IsNullOrEmpty(mp))
+        if (
+            !_useNativeMode
+            && _options.ImageEncoderModelPath is { } mp
+            && !string.IsNullOrEmpty(mp)
+        )
             return new ALIGN<T>(Architecture, mp, _options);
         return new ALIGN<T>(Architecture, _options);
     }
@@ -331,7 +363,8 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
     {
         int h = Architecture.InputHeight;
         int w = Architecture.InputWidth;
-        if (h > 0 && w > 0 && h == w) _options.ImageSize = h;
+        if (h > 0 && w > 0 && h == w)
+            _options.ImageSize = h;
     }
 
     private Tensor<T> ForwardVisionEncoder(Tensor<T> input)
@@ -352,14 +385,20 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
 
     private void ThrowIfDisposed()
     {
-        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(ALIGN<T>));
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(ALIGN<T>));
     }
 
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
-        if (disposing) { OnnxImageEncoder?.Dispose(); OnnxTextEncoder?.Dispose(); }
+        if (disposing)
+        {
+            OnnxImageEncoder?.Dispose();
+            OnnxTextEncoder?.Dispose();
+        }
         base.Dispose(disposing);
     }
 }
