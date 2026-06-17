@@ -504,28 +504,31 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
                     $"Input tensor must have shape [batchSize, 2, ...dimensions] for Siamese comparison. Got shape: {string.Join(",", input._shape)}");
             }
 
-            int batchSize = input.Shape[0];
-            var output = TensorAllocator.Rent<T>(new[] { batchSize, 1 });
-
-            // Process each pair in the batch
-            for (int b = 0; b < batchSize; b++)
+            return Accelerate(input, () =>
             {
-                // Extract the pair of inputs - GetSlice returns a tensor
-                var input1 = input.GetSlice(b).GetSlice(0);
-                var input2 = input.GetSlice(b).GetSlice(1);
+                int batchSize = input.Shape[0];
+                var output = TensorAllocator.Rent<T>(new[] { batchSize, 1 });
 
-                // Process each input through the shared subnetwork
-                var embedding1 = _subnetwork.Predict(input1).ToVector();
-                var embedding2 = _subnetwork.Predict(input2).ToVector();
+                // Process each pair in the batch
+                for (int b = 0; b < batchSize; b++)
+                {
+                    // Extract the pair of inputs - GetSlice returns a tensor
+                    var input1 = input.GetSlice(b).GetSlice(0);
+                    var input2 = input.GetSlice(b).GetSlice(1);
 
-                // Combine embeddings and compute similarity
-                var combinedEmbedding = CombineEmbeddings(embedding1, embedding2);
-                var similarityScore = _outputLayer.Forward(Tensor<T>.FromVector(combinedEmbedding)).ToVector();
+                    // Process each input through the shared subnetwork
+                    var embedding1 = _subnetwork.Predict(input1).ToVector();
+                    var embedding2 = _subnetwork.Predict(input2).ToVector();
 
-                output[b, 0] = similarityScore[0];
-            }
+                    // Combine embeddings and compute similarity
+                    var combinedEmbedding = CombineEmbeddings(embedding1, embedding2);
+                    var similarityScore = _outputLayer.Forward(Tensor<T>.FromVector(combinedEmbedding)).ToVector();
 
-            return output;
+                    output[b, 0] = similarityScore[0];
+                }
+
+                return output;
+            });
         }
         finally
         {

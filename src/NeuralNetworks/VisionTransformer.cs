@@ -353,6 +353,8 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
         // Use input4D for the forward pass
         input = input4D;
 
+        return Accelerate(input, () =>
+        {
         var patchEmbeddings = Layers[0].Forward(input);
 
         var sequenceWithCls = new Tensor<T>([batchSize, _numPatches + 1, _hiddenDim]);
@@ -427,6 +429,7 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
         }
 
         return finalOutput;
+        });
     }
 
     /// <summary>
