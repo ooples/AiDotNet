@@ -49,6 +49,10 @@ public class NLinearOptions<T> : TimeSeriesRegressionOptions<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> how big a step the model takes when updating its weights. Smaller is
     /// slower but more stable; larger trains faster but can overshoot.</para>
+    /// <para><b>Default source:</b> general-purpose baseline for this library's supervised forecasting
+    /// harness. The LTSF-Linear reference implementation (Zeng et al., AAAI 2023) tunes the learning rate
+    /// per dataset (commonly 1e-3 to 5e-2) rather than fixing a single value, so 0.01 is a safe default,
+    /// not a paper-specified constant.</para>
     /// </remarks>
     public double LearningRate { get; set; } = 0.01;
 
@@ -57,6 +61,8 @@ public class NLinearOptions<T> : TimeSeriesRegressionOptions<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> how many times the model sees the whole training set. Too many can
     /// lead to overfitting.</para>
+    /// <para><b>Default source:</b> library baseline. The reference implementation uses early stopping
+    /// rather than a fixed epoch budget; 50 is a reasonable cap for this library's supervised harness.</para>
     /// </remarks>
     public int Epochs { get; set; } = 50;
 
@@ -65,6 +71,8 @@ public class NLinearOptions<T> : TimeSeriesRegressionOptions<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> how many examples are averaged before each weight update. Larger
     /// batches are steadier; smaller batches update more often.</para>
+    /// <para><b>Default source:</b> a common minibatch size and this library's baseline; the LTSF-Linear
+    /// reference implementation uses dataset-dependent batch sizes rather than a single fixed value.</para>
     /// </remarks>
     public int BatchSize { get; set; } = 32;
 
