@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Inherits all NN invariant tests and adds audio-specific invariants:
 /// finite spectral energy, silence handling, variable input lengths, and output validity.
 /// </summary>
-public abstract class AudioNNModelTestBase : NeuralNetworkModelTestBase
+public abstract class AudioNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
 {
     // =====================================================
     // AUDIO INVARIANT: Finite Spectral Energy
@@ -31,7 +31,10 @@ public abstract class AudioNNModelTestBase : NeuralNetworkModelTestBase
         var output = network.Predict(input);
         double energy = 0;
         for (int i = 0; i < output.Length; i++)
-            energy += output[i] * output[i];
+        {
+            double o = ConvertToDouble(output[i]);
+            energy += o * o;
+        }
 
         Assert.True(!double.IsNaN(energy) && !double.IsInfinity(energy),
             "Audio output has infinite energy — values are exploding.");
@@ -58,7 +61,10 @@ public abstract class AudioNNModelTestBase : NeuralNetworkModelTestBase
         // Compute RMS of output
         double sumSq = 0;
         for (int i = 0; i < output.Length; i++)
-            sumSq += output[i] * output[i];
+        {
+            double o = ConvertToDouble(output[i]);
+            sumSq += o * o;
+        }
         double rms = Math.Sqrt(sumSq / Math.Max(1, output.Length));
 
         Assert.True(rms < 1.0,
@@ -88,7 +94,7 @@ public abstract class AudioNNModelTestBase : NeuralNetworkModelTestBase
         Assert.True(output.Length > 0, "Output should not be empty for smaller input.");
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.False(double.IsNaN(output[i]),
+            Assert.False(double.IsNaN(ConvertToDouble(output[i])),
                 $"Output[{i}] is NaN for smaller input — model can't handle variable lengths.");
         }
     }
@@ -111,3 +117,6 @@ public abstract class AudioNNModelTestBase : NeuralNetworkModelTestBase
         Assert.True(output.Length > 0, "Audio model produced empty output.");
     }
 }
+
+/// <summary>Double-precision default for <see cref="AudioNNModelTestBase{T}"/>.</summary>
+public abstract class AudioNNModelTestBase : AudioNNModelTestBase<double> { }

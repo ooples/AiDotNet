@@ -6,7 +6,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-public class HunyuanDiTModelTests : DiffusionModelTestBase
+public class HunyuanDiTModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 4, 32, 32];
     protected override int[] OutputShape => [1, 4, 32, 32];
@@ -17,12 +17,12 @@ public class HunyuanDiTModelTests : DiffusionModelTestBase
     // instance of the same architecture at a runnable scale — latentChannels (4) and contextDim
     // (2048) stay paper-correct; only the hidden width / depth / VAE base channels are shrunk,
     // keeping the model well below the streaming threshold.
-    protected override IDiffusionModel<double> CreateModel()
-        => new HunyuanDiTModel<double>(
-            dit: new DiTNoisePredictor<double>(
+    protected override IDiffusionModel<float> CreateModel()
+        => new HunyuanDiTModel<float>(
+            dit: new DiTNoisePredictor<float>(
                 inputChannels: 4, hiddenSize: 64, numLayers: 2, numHeads: 2,
                 patchSize: 2, contextDim: 2048, seed: 42),
-            vae: new StandardVAE<double>(
+            vae: new StandardVAE<float>(
                 inputChannels: 3, latentChannels: 4, baseChannels: 16,
                 channelMultipliers: new[] { 1, 2 }, numResBlocksPerLevel: 1,
                 latentScaleFactor: 0.13025, seed: 42),

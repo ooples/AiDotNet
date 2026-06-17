@@ -387,17 +387,8 @@ public class LTXVideoModel<T> : VideoDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedDit = new DiTNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS,
-            hiddenSize: HIDDEN_DIM,
-            numLayers: NUM_LAYERS,
-            numHeads: NUM_HEADS,
-            patchSize: PATCH_SIZE,
-            contextDim: CONTEXT_DIM);
-        clonedDit.SetParameters(_dit.GetParameters());
-
-        return new LTXVideoModel<T>(
-            dit: clonedDit,
+                return new LTXVideoModel<T>(
+            dit: (DiTNoisePredictor<T>)_dit.Clone(),
             temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
             conditioner: _conditioner,
             defaultNumFrames: DefaultNumFrames,

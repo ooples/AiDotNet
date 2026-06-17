@@ -24,20 +24,20 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 /// tests at paper scale are model-side performance bugs to fix in
 /// the model code, not papered over here.
 /// </remarks>
-public class SmolVLMTests : VisionLanguageTestBase
+public class SmolVLMTests : VisionLanguageTestBase<float>
 {
     // Paper-faithful image size (384×384 RGB per SmolVLM cards and
     // SmolVLMOptions.ImageSize). VisionLanguageModelBase's contract
     // is [batch, channels=3, height, width].
     protected override int[] InputShape => [1, 3, 384, 384];
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
+    protected override INeuralNetworkModel<float> CreateNetwork()
     {
         // Architecture's image dims must match SmolVLMOptions.ImageSize
         // (384) so the vision encoder's patch embedder sees the
         // expected spatial extent. OutputSize is the next-token
         // classification head's vocabulary slice.
-        var architecture = new NeuralNetworkArchitecture<double>(
+        var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
             taskType: NeuralNetworkTaskType.ImageClassification,
             inputHeight: 384,
@@ -46,6 +46,6 @@ public class SmolVLMTests : VisionLanguageTestBase
             outputSize: 512);
 
         // Defaults intentional — see <remarks> above.
-        return new SmolVLM<double>(architecture, new SmolVLMOptions());
+        return new SmolVLM<float>(architecture, new SmolVLMOptions());
     }
 }

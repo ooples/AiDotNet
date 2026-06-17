@@ -6,7 +6,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class Word2VecTests : NeuralNetworkModelTestBase
+public class Word2VecTests : NeuralNetworkModelTestBase<float>
 {
     // Word2Vec's default ctor uses vocabSize=10000 — the last layer emits
     // a 10000-dim softmax over the vocabulary, so predicted output length
@@ -27,9 +27,9 @@ public class Word2VecTests : NeuralNetworkModelTestBase
     // drop over 100 steps (vs the 1% threshold). The base-class
     // CreateRandomTensor's XML doc explicitly calls out this exact
     // override pattern; we just hadn't applied it.
-    protected override Tensor<double> CreateRandomTensor(int[] shape, System.Random rng)
+    protected override Tensor<float> CreateRandomTensor(int[] shape, System.Random rng)
     {
-        var tensor = new Tensor<double>(shape);
+        var tensor = new Tensor<float>(shape);
         // Word2Vec default vocabSize = 10000. Emit token indices in the
         // [0, 1000) sub-range so the test base's ScaledInput_ShouldChangeOutput
         // invariant (which multiplies the input by 10) still stays inside
@@ -56,14 +56,14 @@ public class Word2VecTests : NeuralNetworkModelTestBase
     /// targets keep BCE well-defined and let the invariant assertions
     /// measure real training signal rather than numeric blow-up.
     /// </summary>
-    protected override Tensor<double> CreateRandomTargetTensor(int[] shape, System.Random rng)
+    protected override Tensor<float> CreateRandomTargetTensor(int[] shape, System.Random rng)
     {
-        var tensor = new Tensor<double>(shape);
+        var tensor = new Tensor<float>(shape);
         for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = rng.NextDouble();
+            tensor[i] = (float)rng.NextDouble();
         return tensor;
     }
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new Word2Vec<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new Word2Vec<float>();
 }

@@ -4,7 +4,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-public class DiffWaveModelTests : DiffusionModelTestBase
+public class DiffWaveModelTests : DiffusionModelTestBase<float>
 {
     // DiffWave operates on raw 1D audio waveforms — Kong et al. 2020 §3 /
     // Figure 1 — NOT on image-like 4D latents. The previous [1, 4, 64, 64]
@@ -16,6 +16,6 @@ public class DiffWaveModelTests : DiffusionModelTestBase
     protected override int[] InputShape => [1, 1, 256];
     protected override int[] OutputShape => [1, 1, 256];
 
-    protected override IDiffusionModel<double> CreateModel()
-        => new DiffWaveModel<double>(seed: 42);
+    protected override IDiffusionModel<float> CreateModel()
+        => new DiffWaveModel<float>(seed: 42);
 }

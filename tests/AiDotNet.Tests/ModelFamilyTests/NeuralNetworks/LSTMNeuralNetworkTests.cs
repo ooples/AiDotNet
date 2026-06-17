@@ -4,7 +4,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class LSTMNeuralNetworkTests : NeuralNetworkModelTestBase
+public class LSTMNeuralNetworkTests : NeuralNetworkModelTestBase<float>
 {
     protected override int[] InputShape => [128];
     protected override int[] OutputShape => [1];
@@ -17,6 +17,6 @@ public class LSTMNeuralNetworkTests : NeuralNetworkModelTestBase
     // (which scales as 1e+N, not 1e-3).
     protected override double MoreDataTolerance => 1e-3;
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new LSTMNeuralNetwork<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new LSTMNeuralNetwork<float>();
 }

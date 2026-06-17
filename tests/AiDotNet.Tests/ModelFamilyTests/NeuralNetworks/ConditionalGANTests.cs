@@ -8,7 +8,7 @@ using Xunit;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class ConditionalGANTests : GANModelTestBase
+public class ConditionalGANTests : GANModelTestBase<float>
 {
     // Default ConditionalGAN: generator inputSize=110 (latentDim=100 + numClasses=10), outputSize=784
     // The public API accepts noise-only input (100), conditions are added internally by Predict/Train
@@ -37,29 +37,29 @@ public class ConditionalGANTests : GANModelTestBase
     protected override int MemorizationTaskIterations => 4;
     protected override double MemorizationTaskLossThreshold => 0.99999;
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new ConditionalGAN<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new ConditionalGAN<float>();
 
     [Fact(Timeout = 120000)]
     public async Task CustomFullWidthGeneratorArchitecture_AcceptsNoiseOnlyPredictInput()
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
-        var generatorArchitecture = new NeuralNetworkArchitecture<double>(
+        var generatorArchitecture = new NeuralNetworkArchitecture<float>(
             InputType.OneDimensional,
             NeuralNetworkTaskType.Generative,
             NetworkComplexity.Simple,
             inputSize: 32,
             outputSize: 64);
 
-        var discriminatorArchitecture = new NeuralNetworkArchitecture<double>(
+        var discriminatorArchitecture = new NeuralNetworkArchitecture<float>(
             InputType.OneDimensional,
             NeuralNetworkTaskType.BinaryClassification,
             NetworkComplexity.Simple,
             inputSize: 64,
             outputSize: 1);
 
-        using var cgan = new ConditionalGAN<double>(
+        using var cgan = new ConditionalGAN<float>(
             generatorArchitecture,
             discriminatorArchitecture,
             numConditionClasses: 10,

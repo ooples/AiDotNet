@@ -4,11 +4,11 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-public class MidJourneyV7ModelTests : DiffusionModelTestBase
+public class MidJourneyV7ModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 16, 32, 32];
     protected override int[] OutputShape => [1, 16, 32, 32];
 
-    protected override IDiffusionModel<double> CreateModel()
-        => new MidJourneyV7Model<double>(seed: 42);
+    protected override IDiffusionModel<float> CreateModel()
+        => new MidJourneyV7Model<float>(seed: 42);
 }

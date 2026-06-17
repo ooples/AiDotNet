@@ -4,11 +4,11 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-public class OasisModelTests : DiffusionModelTestBase
+public class OasisModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 16, 32, 32];
     protected override int[] OutputShape => [1, 16, 32, 32];
 
-    protected override IDiffusionModel<double> CreateModel()
-        => new OasisModel<double>(seed: 42);
+    protected override IDiffusionModel<float> CreateModel()
+        => new OasisModel<float>(seed: 42);
 }

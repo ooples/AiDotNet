@@ -319,63 +319,71 @@ public class SAGAN<T> : NeuralNetworkBase<T>
     {
         Generator.SetTrainingMode(false);
 
-        // Reshape latent codes to 3D/4D format for CNN generator
+        // Reshape latent codes into the generator's DECLARED input volume.
+        // The generator is a CNN built for a specific input shape
+        // (Generator.Architecture's input grid); the latent vector is the spatial
+        // seed and must be projected into exactly that volume — zero-padding when
+        // the latent has fewer elements than the grid, truncating when it has
+        // more. The previous ceil(sqrt(latentSize)) heuristic produced a grid
+        // (e.g. 4x4 for latent 16) that did NOT match the generator's actual
+        // input grid (e.g. 8x8), so the conv stack fed the wrong flattened
+        // feature count into the first dense layer and threw a weight-shape
+        // mismatch. Targeting the generator's own input shape keeps the data
+        // flow consistent by construction for any latent / generator pairing.
+        int[] genInputShape = Generator.Architecture.GetInputShape();
+        int genInputSize = 1;
+        foreach (int d in genInputShape) genInputSize *= d;
+
+        // Bulk span copies (vectorized memcpy) — never per-element indexer loops.
+        // The flat tensor is zero-initialized, so any tail beyond the latent
+        // length is the zero padding for free.
         Tensor<T> reshapedLatent;
         if (latentCodes.Shape.Length == 1)
         {
-            // 1D [latent_size] -> 3D [1, height, width] where height*width >= latent_size
             int latentLen = latentCodes.Shape[0];
-            int h = (int)Math.Ceiling(Math.Sqrt(latentLen));
-            int w = h;
-            int padSize = h * w - latentLen;
-            if (padSize > 0)
-            {
-                // Pad latent code to fit h*w
-                var padded = new Tensor<T>([h * w]);
-                for (int i = 0; i < latentLen; i++)
-                    padded.Data.Span[i] = latentCodes.Data.Span[i];
-                for (int i = latentLen; i < h * w; i++)
-                    padded.Data.Span[i] = NumOps.Zero;
-                reshapedLatent = padded.Reshape(1, h, w);
-            }
-            else
-            {
-                reshapedLatent = latentCodes.Reshape(1, h, w);
-            }
+            int copy = Math.Min(latentLen, genInputSize);
+            var flat = new Tensor<T>([genInputSize]);
+            latentCodes.Data.Span.Slice(0, copy).CopyTo(flat.Data.Span);
+            // Promote to a leading batch axis of 1: conditional generation concatenates
+            // BATCHED class embeddings on axis 0, so a rank-0-batch latent would hit a
+            // rank mismatch in ConcatenateTensors. A [1, ...genInputShape] latent is also
+            // what the generator's batched Predict expects.
+            var batchShape = new int[genInputShape.Length + 1];
+            batchShape[0] = 1;
+            for (int i = 0; i < genInputShape.Length; i++)
+                batchShape[i + 1] = genInputShape[i];
+            reshapedLatent = flat.Reshape(batchShape);
         }
         else if (latentCodes.Shape.Length == 2)
         {
-            // 2D [batch, latent_size] -> 4D [batch, 1, height, width]
             int batchSize = latentCodes.Shape[0];
             int latentLen = latentCodes.Shape[1];
-            int h = (int)Math.Ceiling(Math.Sqrt(latentLen));
-            int w = h;
-            int padSize = h * w - latentLen;
-            if (padSize > 0)
-            {
-                var padded = new Tensor<T>([batchSize, h * w]);
-                for (int b = 0; b < batchSize; b++)
-                {
-                    for (int i = 0; i < latentLen; i++)
-                        padded[b, i] = latentCodes[b, i];
-                    for (int i = latentLen; i < h * w; i++)
-                        padded[b, i] = NumOps.Zero;
-                }
-                reshapedLatent = padded.Reshape(batchSize, 1, h, w);
-            }
-            else
-            {
-                reshapedLatent = latentCodes.Reshape(batchSize, 1, h, w);
-            }
+            int copy = Math.Min(latentLen, genInputSize);
+            var batchShape = new int[genInputShape.Length + 1];
+            batchShape[0] = batchSize;
+            for (int i = 0; i < genInputShape.Length; i++)
+                batchShape[i + 1] = genInputShape[i];
+            var flat = new Tensor<T>([batchSize, genInputSize]);
+            var src = latentCodes.Data.Span;
+            var dst = flat.Data.Span;
+            // One vectorized row-copy per batch element (not per-element).
+            for (int b = 0; b < batchSize; b++)
+                src.Slice(b * latentLen, copy).CopyTo(dst.Slice(b * genInputSize, copy));
+            reshapedLatent = flat.Reshape(batchShape);
         }
         else
         {
-            // Already 3D or 4D, use as-is
+            // Already in the generator's expected rank — use as-is.
             reshapedLatent = latentCodes;
         }
 
         if (_isConditional && classIndices != null)
         {
+            if (classIndices.Length != reshapedLatent.Shape[0])
+                throw new ArgumentException(
+                    $"Conditional generation requires one class index per batch element: got " +
+                    $"{classIndices.Length} class indices for batch size {reshapedLatent.Shape[0]}.",
+                    nameof(classIndices));
             var classEmbeddings = CreateClassEmbeddings(classIndices);
             var input = ConcatenateTensors(reshapedLatent, classEmbeddings);
             return Generator.Predict(input);

@@ -165,17 +165,8 @@ public class CogVideoX15Model<T> : VideoDiffusionModelBase<T>
 
     public override IDiffusionModel<T> Clone()
     {
-        var clonedPredictor = new DiTNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS,
-            hiddenSize: 2560,
-            numLayers: 36,
-            numHeads: 20,
-            patchSize: 2,
-            contextDim: CONTEXT_DIM);
-        clonedPredictor.SetParameters(_predictor.GetParameters());
-
-        return new CogVideoX15Model<T>(
-            predictor: clonedPredictor,
+                return new CogVideoX15Model<T>(
+            predictor: (DiTNoisePredictor<T>)_predictor.Clone(),
             temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
             conditioner: _conditioner,
             defaultNumFrames: DefaultNumFrames,

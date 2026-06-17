@@ -431,15 +431,17 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
+        using var streaming = BeginWeightStreamingForward();
         var timeEmbed = GetTimestepEmbedding(timestep);
         timeEmbed = ProjectTimeEmbedding(timeEmbed);
-        return Forward(noisySample, timeEmbed, conditioning);
+        return streaming.Complete(Forward(noisySample, timeEmbed, conditioning));
     }
 
     /// <inheritdoc />
     public override Tensor<T> PredictNoiseWithEmbedding(Tensor<T> noisySample, Tensor<T> timeEmbedding, Tensor<T>? conditioning = null)
     {
-        return Forward(noisySample, timeEmbedding, conditioning);
+        using var streaming = BeginWeightStreamingForward();
+        return streaming.Complete(Forward(noisySample, timeEmbedding, conditioning));
     }
 
     private Tensor<T> ProjectTimeEmbedding(Tensor<T> timeEmbed)
@@ -463,10 +465,13 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         // Add position embeddings to image tokens
         imageTokens = AddPositionEmbedding(imageTokens, numImageTokens);
 
-        // Project conditioning text to hidden dim
-        var textTokens = conditioning != null
-            ? _contextProj.Forward(conditioning)
-            : TensorAllocator.Rent<T>(new[] { batch, 0, _hiddenSize });
+        // Project conditioning text to hidden dim. For an unconditional forward (no conditioning),
+        // use a single zero "null" text token — the classifier-free-guidance null embedding — rather
+        // than an empty (0-token) text stream. A 0-token stream feeds 0-row GEMMs into the joint
+        // attention/MLP blocks, which divide by zero in the packed SGEMM; a single null token keeps
+        // every GEMM well-formed and matches how MMDiT/SD3 represent the unconditional branch.
+        var textConditioning = conditioning ?? new Tensor<T>(new[] { batch, 1, _contextDim });
+        var textTokens = _contextProj.Forward(textConditioning);
 
         // Process through joint (double-stream) blocks
         foreach (var block in _jointBlocks)

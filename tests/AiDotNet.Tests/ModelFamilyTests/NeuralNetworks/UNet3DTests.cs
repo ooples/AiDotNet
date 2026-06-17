@@ -4,7 +4,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class UNet3DTests : NeuralNetworkModelTestBase
+public class UNet3DTests : NeuralNetworkModelTestBase<float>
 {
     // UNet3D is a per-voxel segmentation network: it emits one class
     // prediction per input voxel, so the output carries the same spatial
@@ -18,6 +18,6 @@ public class UNet3DTests : NeuralNetworkModelTestBase
     protected override int[] InputShape => [1, 32, 32, 32];
     protected override int[] OutputShape => [1, 32, 32, 32];
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new UNet3D<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new UNet3D<float>();
 }

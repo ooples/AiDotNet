@@ -3,9 +3,60 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System.Threading.Tasks;
+using System.Runtime;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
+
+/// <summary>
+/// Process-wide lock guarding the teardown LOH-compaction critical section, which mutates the
+/// PROCESS-GLOBAL <see cref="System.Runtime.GCSettings.LargeObjectHeapCompactionMode"/>. It is a
+/// NON-generic holder on purpose: a static field inside a generic base (e.g.
+/// <c>NeuralNetworkModelTestBase&lt;T&gt;</c>) gets a SEPARATE instance per closed type
+/// (<c>&lt;float&gt;</c> vs <c>&lt;double&gt;</c>), which would let parallel teardowns across type
+/// boundaries enter the "lock" concurrently and race on the global GC flag. Every model-family test
+/// base (NeuralNetworks + Diffusion) serializes on this single object.
+/// </summary>
+internal static class ModelFamilyTestGcGate
+{
+    internal static readonly object LohCompaction = new();
+
+    /// <summary>
+    /// Between-test memory reclaim shared by EVERY model-family test base (NeuralNetworks, Diffusion,
+    /// Classification, Regression, TimeSeries, Clustering). Two retention sources let committed memory
+    /// accumulate across a shard's model classes until a heavy shard OOM-kills the 16 GB CI runner even
+    /// though each model is disposed:
+    /// <list type="number">
+    /// <item><b>InferenceWeightCache</b> — fused-MlpForward / SgemmWithCachedB / Conv2D-kernel packs key
+    /// derived weight forms by the weight ARRAY's object identity, pinning disposed models' tensors.</item>
+    /// <item><b>LOH not compacted</b> — plain GC.Collect() sweeps but does not compact the LOH; under
+    /// DOTNET_GCHeapHardLimit (the CI cap) committed-but-free LOH counts against the limit.</item>
+    /// </list>
+    /// This clears the cache and runs a compacting Gen-2 collect, serialized on
+    /// <see cref="LohCompaction"/> because <c>GCSettings.LargeObjectHeapCompactionMode</c> is
+    /// process-global. Pure hygiene — changes no assertion, scale, iteration count, or timeout. On the
+    /// light classical-ML bases the heap is small, so the compacting collect is cheap.
+    /// </summary>
+    internal static void ReclaimBetweenTests()
+    {
+        // Drop process-wide weight-derived caches that pin the disposed model's tensors.
+        AiDotNet.Tensors.Engines.InferenceWeightCache.InvalidateAll();
+
+        lock (LohCompaction)
+        {
+            // First pass: compacting Gen-2 + LOH reclaims everything unreachable, including the
+            // just-disposed model's weight tensors.
+            System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
+            GC.WaitForPendingFinalizers();
+
+            // Second pass: reclaim finalizer-released memory (pool return paths) + any LOH allocations
+            // made by finalizers.
+            System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
+        }
+    }
+}
 
 /// <summary>
 /// Base test class for neural network models implementing INeuralNetworkModel&lt;double&gt;.
@@ -184,11 +235,28 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// tensor allocations that, without GC pressure between xunit test methods,
     /// stack up in the shared-process runner and OOM before the job ever finishes.
     /// </summary>
+    /// <remarks>
+    /// Two retention sources made the heavy NeuralNetworks shards (O-R, etc.)
+    /// accumulate committed memory across model classes until the 16 GB CI runner
+    /// died mid-shard ("runner has received a shutdown signal"), even though each
+    /// model is <c>using</c>-disposed:
+    /// <list type="number">
+    /// <item><b>InferenceWeightCache</b> \u2014 the fused-MlpForward / SgemmWithCachedB /
+    /// Conv2D-kernel cache keys derived weight forms by the weight ARRAY's object
+    /// identity, so it pins the just-disposed model's weight tensors and they can't
+    /// be collected. Cleared here.</item>
+    /// <item><b>LOH not compacted</b> \u2014 model weight/activation arrays are far above
+    /// the 85 KB LOH threshold; plain <see cref="GC.Collect()"/> sweeps the LOH but
+    /// leaves it fragmented/committed. Under <c>DOTNET_GCHeapHardLimit</c> (the CI
+    /// 16 GB cap) committed-but-free LOH counts against the limit, so the runner OOMs
+    /// even though the live set is small. A compacting Gen-2 collect returns it.</item>
+    /// </list>
+    /// This is pure between-test memory hygiene \u2014 it changes no assertion, scale,
+    /// iteration count, or timeout. Mirrors the proven DiffusionModelTestBase teardown.
+    /// </remarks>
     public virtual Task DisposeAsync()
     {
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
+        ModelFamilyTestGcGate.ReclaimBetweenTests();
         return Task.CompletedTask;
     }
 
@@ -722,9 +790,22 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var clonedOutput = cloned.Predict(input);
 
         Assert.Equal(original.Length, clonedOutput.Length);
+        // Clone preserves weights exactly, but the two Predict calls don't take a bit-identical compute
+        // path: the original's forward populates cached/compiled plans (e.g. SIMD pre-packed weights),
+        // while the clone runs them fresh, so float32 results differ at the ~1e-7 (float-epsilon) level.
+        // A re-randomized / weight-dropping clone differs by O(1), not O(1e-7), so a dtype-appropriate
+        // relative+absolute tolerance (torch.allclose-style) still catches real Clone bugs while not
+        // demanding sub-float-epsilon equality. double stays strict (its path diff is ~1e-13).
+        bool isFloat = typeof(T) == typeof(float);
+        double atol = isFloat ? 1e-4 : 1e-10;
+        double rtol = isFloat ? 1e-3 : 0.0;
         for (int i = 0; i < original.Length; i++)
-            Assert.True(Math.Abs(ConvertToDouble(original[i]) - ConvertToDouble(clonedOutput[i])) < 1e-10,
-                $"Clone output[{i}] differs: original={original[i]}, cloned={clonedOutput[i]}");
+        {
+            double a = ConvertToDouble(original[i]);
+            double b = ConvertToDouble(clonedOutput[i]);
+            Assert.True(Math.Abs(a - b) <= atol + rtol * Math.Abs(a),
+                $"Clone output[{i}] differs beyond {(isFloat ? "float" : "double")} tolerance: original={original[i]}, cloned={clonedOutput[i]}");
+        }
     }
 
     // =====================================================

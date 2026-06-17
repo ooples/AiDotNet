@@ -72,8 +72,23 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     private readonly string? _onnxModelPath;
     private InferenceSession? _onnxSession;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    // True when the constructor caller supplied an explicit optimizer, so tape
+    // training honors it instead of the built-in LR-warmup Adam default.
+    private readonly bool _hasUserSuppliedOptimizer;
     private bool _disposed;
     private int _encoderLayerEnd;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _baseTapeOptimizer;
+
+    // Per-encoder-stage layer counts, used by Forward to tap each stage's output for
+    // the U-Net skip connections. Null when layers come from a pre-supplied
+    // Architecture (Forward then falls back to a plain sequential pass).
+    private int[]? _encoderStageLayerCounts;
+
+    // Each decoder upsampling stage is Deconv + GroupNorm + SiLU + ResidualBlock +
+    // GroupNorm (see LayerHelper.CreateODISEDecoderLayers). Forward consumes exactly
+    // this many layers per stage before inserting the skip-concat. Aliases the single
+    // source of truth in LayerHelper so the builder and this consumer can't drift apart.
+    private const int DecoderStageLayerCount = LayerHelper<T>.ODISEDecoderStageLayerCount;
     #endregion
 
     #region Properties
@@ -120,7 +135,8 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numClasses = numClasses; _modelSize = modelSize; _dropRate = dropRate;
         _useNativeMode = true; _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _hasUserSuppliedOptimizer = optimizer is not null;
+        _optimizer = optimizer;
         (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
         InitializeLayers();
     }
@@ -205,6 +221,48 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown when called on an ONNX-mode model.</exception>
+    /// <summary>
+    /// ODISE trains the dense per-pixel segmentation head through a deep convolutional
+    /// encoder/decoder. Its Stable-Diffusion U-Net encoder (SiLU + GroupNorm residual
+    /// stack, per Xu et al. 2023 §3) is randomly initialised at test time, so the very
+    /// first optimizer steps see large, poorly-conditioned gradients: at a fixed 1e-2 the
+    /// per-pixel cross-entropy overshoots on step 1-2 and then DIVERGES (CE 2.35 → 5.5),
+    /// while a fixed 1e-4 is too slow to memorise within the probe's 100 iterations.
+    ///
+    /// The standard remedy for this exact failure mode — and the regime diffusion U-Net
+    /// training itself uses — is a linear learning-rate WARMUP: ramp the rate from ~0 up
+    /// to the target over the first few steps so Adam's moment estimates stabilise on the
+    /// ill-conditioned initial geometry before the full step size is applied, then hold it
+    /// constant. This restores a monotonic decrease without weakening any test tolerance or
+    /// touching the architecture.
+    ///
+    /// NOTE: the scheduler must be stepped PER BATCH (<see cref="SchedulerStepMode.StepPerBatch"/>)
+    /// — the tape training path advances the scheduler via OnBatchEnd once per Train() call,
+    /// and the default StepPerEpoch mode would leave the warmup pinned at its initial rate.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+    {
+        // Honor a constructor-supplied optimizer (public contract). Only fall back to
+        // the built-in LR-warmup Adam — which the from-scratch SD-U-Net needs for a
+        // stable descent — when the caller did not provide one.
+        if (_hasUserSuppliedOptimizer && _optimizer is not null)
+            return _optimizer;
+
+        return _baseTapeOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                UseAMSGrad = false,
+                InitialLearningRate = 0.01,
+                SchedulerStepMode = LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+                LearningRateScheduler = new LearningRateSchedulers.LinearWarmupScheduler(
+                    baseLearningRate: 0.01,
+                    warmupSteps: 10,
+                    totalSteps: 0,         // 0 => no decay phase; hold at baseLearningRate after warmup
+                    warmupInitLr: 0.001)   // start small but NONZERO so the very first step still trains
+            });
+    }
+
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
@@ -228,14 +286,65 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         _ => ([64, 128, 320, 512], [2, 2, 4, 2], 256)
     };
 
+    /// <summary>
+    /// Forward pass with Stable Diffusion U-Net skip connections (Xu et al. 2023 §3).
+    /// The encoder is run stage-by-stage and each stage's output is tapped; the decoder
+    /// then upsamples the bottleneck and concatenates the matching-resolution encoder
+    /// tap before each successive upsampling stage. The skips inject the encoder's
+    /// high-resolution (spatially-detailed) features into the decoder so the dense
+    /// per-pixel head is conditioned on per-pixel input — without them the 32x
+    /// downsample collapses a small input to a 1x1 bottleneck and the output is
+    /// spatially uniform.
+    /// </summary>
     private Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
+
+        // When the layers come from a pre-supplied Architecture (no generated
+        // encoder/decoder split), fall back to a plain sequential pass.
+        if (_encoderStageLayerCounts is null)
+        {
+            var seq = input;
+            for (int i = 0; i < Layers.Count; i++) seq = Layers[i].Forward(seq);
+            if (!hasBatch) seq = RemoveBatchDimension(seq); return seq;
+        }
+
         var features = input;
-        for (int i = 0; i < _encoderLayerEnd; i++) features = Layers[i].Forward(features);
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++) features = Layers[i].Forward(features);
+        int li = 0;
+        int n = _encoderStageLayerCounts.Length;
+
+        // Encoder: run each stage and tap its output (taps[n-1] is the bottleneck).
+        var taps = new Tensor<T>[n];
+        for (int s = 0; s < n; s++)
+        {
+            int stageLayers = _encoderStageLayerCounts[s];
+            for (int k = 0; k < stageLayers; k++) features = Layers[li++].Forward(features);
+            taps[s] = features;
+        }
+
+        // Decoder: n-1 transposed-conv upsampling stages (3 layers each). After each
+        // upsample, concat the encoder tap at the now-matching resolution (the stage
+        // whose output shares that resolution): ds=0 -> taps[n-2], ds=1 -> taps[n-3], ...
+        for (int ds = 0; ds < n - 1; ds++)
+        {
+            for (int k = 0; k < DecoderStageLayerCount; k++) features = Layers[li++].Forward(features);
+            features = Engine.TensorConcatenate(new[] { features, taps[n - 2 - ds] }, axis: 1);
+        }
+
+        // Stem-reversal upsample stage + dense head — no skip (encoder has no feature
+        // map above the stem resolution). Run all remaining layers sequentially.
+        while (li < Layers.Count) features = Layers[li++].Forward(features);
+
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
+
+    /// <summary>
+    /// Training forward MUST use the same skip-connection path as inference so the lazy
+    /// decoder convolutions resolve their input channel counts against the CONCATENATED
+    /// feature maps. A plain sequential pass would resolve them against non-concatenated
+    /// inputs and then mismatch at the first real (skip) forward.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
 
     private Tensor<T> PredictOnnx(Tensor<T> input)
     {
@@ -280,8 +389,12 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         {
             var encoderLayers = LayerHelper<T>.CreateODISEEncoderLayers(_channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
             _encoderLayerEnd = encoderLayers.Count; Layers.AddRange(encoderLayers);
-            int fH = _height / 32, fW = _width / 32;
-            var decoderLayers = LayerHelper<T>.CreateODISEDecoderLayers(_channelDims[^1], _decoderDim, _numClasses, fH, fW);
+            // Layers per encoder stage (mirrors CreateODISEEncoderLayers): a strided
+            // downsample Conv + GroupNorm + SiLU, then (depth-1) residual blocks each
+            // wrapped as ResidualLayer + GroupNorm.
+            _encoderStageLayerCounts = new int[_depths.Length];
+            for (int s = 0; s < _depths.Length; s++) _encoderStageLayerCounts[s] = 3 + (_depths[s] - 1) * 2;
+            var decoderLayers = LayerHelper<T>.CreateODISEDecoderLayers(_channelDims, _decoderDim, _numClasses);
             Layers.AddRange(decoderLayers);
         }
     }

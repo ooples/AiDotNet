@@ -4,7 +4,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class NEATTests : NeuralNetworkModelTestBase
+public class NEATTests : NeuralNetworkModelTestBase<float>
 {
     // Default NEAT: inputSize=10, outputSize=1
     // Must use 2D shapes [batch, features] because NEAT.Train and ExtractTrainingData
@@ -39,6 +39,6 @@ public class NEATTests : NeuralNetworkModelTestBase
     // those produce loss far above 1e-4.
     protected override double MemorizationTaskAbsoluteLossFloor => 1e-4;
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new NEAT<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new NEAT<float>();
 }

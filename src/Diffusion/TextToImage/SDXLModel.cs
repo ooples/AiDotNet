@@ -1143,30 +1143,12 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
     public override IDiffusionModel<T> Clone()
     {
         // Clone U-Net with trained weights
-        var clonedUnet = new UNetNoisePredictor<T>(
-            inputChannels: SDXL_LATENT_CHANNELS,
-            outputChannels: SDXL_LATENT_CHANNELS,
-            baseChannels: 320,
-            channelMultipliers: new[] { 1, 2, 4, 4 },
-            numResBlocks: 2,
-            attentionResolutions: new[] { 4, 2, 1 },
-            contextDim: _crossAttentionDim);
-        clonedUnet.SetParameters(_unet.GetParameters());
-
-        // Clone VAE with trained weights
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: SDXL_LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: new[] { 1, 2, 4, 4 },
-            numResBlocksPerLevel: 2);
-        clonedVae.SetParameters(_vae.GetParameters());
-
-        return new SDXLModel<T>(
+                // Clone VAE with trained weights
+                return new SDXLModel<T>(
             options: null,
             scheduler: null,
-            unet: clonedUnet,
-            vae: clonedVae,
+            unet: (UNetNoisePredictor<T>)_unet.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner1: _conditioner1,
             conditioner2: _conditioner2,
             refiner: _refiner,

@@ -8,13 +8,13 @@ using Xunit;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class DeepBeliefNetworkTests : NeuralNetworkModelTestBase
+public class DeepBeliefNetworkTests : NeuralNetworkModelTestBase<float>
 {
     protected override int[] InputShape => [128];
     protected override int[] OutputShape => [1];
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new DeepBeliefNetwork<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new DeepBeliefNetwork<float>();
 
     // Per Hinton 2006 ("A fast learning algorithm for deep belief nets") and
     // Hinton & Salakhutdinov 2006 ("Reducing the Dimensionality of Data with
@@ -55,7 +55,7 @@ public class DeepBeliefNetworkTests : NeuralNetworkModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        using var network = (DeepBeliefNetwork<double>)CreateNetwork();
+        using var network = (DeepBeliefNetwork<float>)CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 
@@ -94,7 +94,7 @@ public class DeepBeliefNetworkTests : NeuralNetworkModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        using var network = (DeepBeliefNetwork<double>)CreateNetwork();
+        using var network = (DeepBeliefNetwork<float>)CreateNetwork();
 
         var trainInput = CreateRandomTensor(InputShape, rng);
         var trainTarget = CreateRandomTensor(EffectiveOutputShape, rng);
@@ -132,7 +132,7 @@ public class DeepBeliefNetworkTests : NeuralNetworkModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        using var network = (DeepBeliefNetwork<double>)CreateNetwork();
+        using var network = (DeepBeliefNetwork<float>)CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 
@@ -178,7 +178,7 @@ public class DeepBeliefNetworkTests : NeuralNetworkModelTestBase
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
 
-        var network1 = (DeepBeliefNetwork<double>)CreateNetwork();
+        var network1 = (DeepBeliefNetwork<float>)CreateNetwork();
 
         var input = CreateRandomTensor(InputShape, rng1);
         var target = CreateRandomTargetTensor(EffectiveOutputShape, rng1);
@@ -191,7 +191,7 @@ public class DeepBeliefNetworkTests : NeuralNetworkModelTestBase
         // the base MoreData_ShouldNotDegrade enforces.
         network1.PreTrain(input);
 
-        var network2 = (DeepBeliefNetwork<double>)network1.Clone();
+        var network2 = (DeepBeliefNetwork<float>)network1.Clone();
 
         int shortIters = MoreDataShortIterations;
         int longIters = MoreDataLongIterations;

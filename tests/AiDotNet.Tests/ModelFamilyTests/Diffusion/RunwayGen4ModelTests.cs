@@ -4,11 +4,11 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-public class RunwayGen4ModelTests : DiffusionModelTestBase
+public class RunwayGen4ModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 16, 32, 32];
     protected override int[] OutputShape => [1, 16, 32, 32];
 
-    protected override IDiffusionModel<double> CreateModel()
-        => new RunwayGen4Model<double>();
+    protected override IDiffusionModel<float> CreateModel()
+        => new RunwayGen4Model<float>();
 }
