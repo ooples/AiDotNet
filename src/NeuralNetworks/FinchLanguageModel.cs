@@ -78,7 +78,10 @@ public class FinchLanguageModel<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         FinchOptions? options = null)
         : base(architecture,
-            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.TextGeneration))
+            // Raw-logit LM head → cross-entropy-with-logits (fused log-softmax + NLL), not the
+            // TextGeneration default CategoricalCrossEntropy (which log()s un-normalized logits and
+            // diverges). Mirrors the RWKV4 fix; same root cause. #1622 follow-on.
+            lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new FinchOptions();
         Options = _options;
