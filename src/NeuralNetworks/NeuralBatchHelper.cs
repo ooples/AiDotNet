@@ -531,6 +531,18 @@ internal static class NeuralBatchHelper
         int probeSmall = System.Math.Min(8, axis0);
         int probeLarge = System.Math.Min(16, axis0);
 
+        // Pool-aware floor: the tensor allocator pools its buffers, so
+        // GC.GetAllocatedBytesForCurrentThread (used by the allocated-bytes probe
+        // below) counts NEW allocations only — once the pool is primed at a batch
+        // size, a same-size forward reuses buffers and allocates ~0, collapsing the
+        // per-sample slope toward zero and letting the chunk grow unbounded (the
+        // pool then balloons to GBs on the oversized chunk). Measure the RETAINED
+        // managed-heap growth of a forward at probeLarge FIRST — before the
+        // allocated probes prime the pool — so the delta reflects the pooled
+        // footprint the budget must actually bound.
+        long retainedLarge = MeasureForwardRetainedBytes(nn, sampleInput, probeLarge);
+        long perSampleRetained = retainedLarge / System.Math.Max(1, probeLarge);
+
         long bytesSmall = MeasureForwardAllocatedBytes(nn, sampleInput, probeSmall);
         long beta;       // per-sample slope (bytes per additional sample)
         long alpha;      // per-call fixed cost (intercept)
@@ -550,6 +562,12 @@ internal static class NeuralBatchHelper
             alpha = 0L;
         }
 
+        // The per-sample cost is the larger of the transient allocated slope and
+        // the pooled retained footprint per sample — whichever actually grows with
+        // the chunk. Without the retained floor, a pooling allocator drives beta to
+        // ~0 and the chunk becomes unbounded.
+        beta = System.Math.Max(beta, perSampleRetained);
+
         long budgetWithMargin = (long)(memoryBudgetBytes * MemoryBudgetSafetyFactor);
         // Solve alpha + beta * chunk <= budget for chunk.
         long chunk = (budgetWithMargin - alpha) / beta;
@@ -565,6 +583,37 @@ internal static class NeuralBatchHelper
     /// captures every allocation regardless of GC timing — strictly
     /// better than the heap-delta read used previously.
     /// </summary>
+    /// <summary>
+    /// Probes the RETAINED managed-heap growth of a single Predict at
+    /// <paramref name="batchSize"/> samples — the pooled-buffer footprint that
+    /// the memory budget must bound. Warms up at B=1 only (JIT + lazy-init
+    /// weights) so the probe-size forward genuinely grows the tensor pool;
+    /// warming up at the probe size would prime the pool and make the retained
+    /// delta read ~0. Must be called BEFORE any same-or-larger-size probe primes
+    /// the pool, otherwise the growth has already happened.
+    /// </summary>
+    private static long MeasureForwardRetainedBytes<T>(
+        NeuralNetworkBase<T> nn, Tensor<T> sampleInput, int batchSize)
+    {
+        var probeInput = sampleInput.Shape[0] >= batchSize
+            ? sampleInput.Slice(axis: 0, start: 0, end: batchSize).Contiguous()
+            : sampleInput;
+
+        // Warm up at B=1 so JIT/lazy-init weight allocation is excluded WITHOUT
+        // pre-growing the pool to the probe batch size.
+        if (sampleInput.Shape[0] >= 1)
+        {
+            var warm = sampleInput.Slice(axis: 0, start: 0, end: 1).Contiguous();
+            _ = nn.Predict(warm);
+        }
+
+        long before = System.GC.GetTotalMemory(forceFullCollection: true);
+        var probeOutput = nn.Predict(probeInput);
+        long after = System.GC.GetTotalMemory(forceFullCollection: true);
+        if (probeOutput is System.IDisposable disposable) disposable.Dispose();
+        return System.Math.Max(0L, after - before);
+    }
+
     private static long MeasureForwardAllocatedBytes<T>(
         NeuralNetworkBase<T> nn, Tensor<T> sampleInput, int batchSize)
     {

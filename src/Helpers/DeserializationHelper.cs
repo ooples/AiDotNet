@@ -834,18 +834,35 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(GraphConvolutionalLayer<>))
         {
-            // GraphConvolutionalLayer(int inputFeatures, int outputFeatures, IActivationFunction<T>? activationFunction = null)
+            // GraphConvolutionalLayer(int inputFeatures, int outputFeatures, IActivationFunction<T>? activationFunction, bool implicitIdentityWhenUnset)
             int inputFeatures = inputShape[0];
             int outputFeatures = outputShape[0];
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), activationFuncType });
-            if (ctor is null)
-            {
-                throw new MissingLayerCtorException("Cannot find GraphConvolutionalLayer constructor with expected signature.");
-            }
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-            instance = ctor.Invoke(new object?[] { inputFeatures, outputFeatures, activation });
+
+            // Reconstruct with implicitIdentityWhenUnset: true so a deserialized /
+            // cloned graph layer tolerates a missing adjacency (falls back to a
+            // self-loop identity) instead of throwing — the serialization path
+            // does not carry the runtime-set adjacency, and a model that supplies a
+            // real graph at runtime (e.g. GraphNeuralNetwork.SetAdjacencyMatrix)
+            // simply overwrites the fallback. Direct construction via the 3-arg
+            // ctor keeps the strict "a GCN requires a graph" contract (Kipf &
+            // Welling 2017) that the layer's unit tests assert.
+            var ctor4 = type.GetConstructor(new Type[] { typeof(int), typeof(int), activationFuncType, typeof(bool) });
+            if (ctor4 is not null)
+            {
+                instance = ctor4.Invoke(new object?[] { inputFeatures, outputFeatures, activation, true });
+            }
+            else
+            {
+                var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), activationFuncType });
+                if (ctor is null)
+                {
+                    throw new MissingLayerCtorException("Cannot find GraphConvolutionalLayer constructor with expected signature.");
+                }
+                instance = ctor.Invoke(new object?[] { inputFeatures, outputFeatures, activation });
+            }
         }
         else if (genericDef == typeof(GraphSAGELayer<>))
         {
@@ -1830,6 +1847,8 @@ public static class DeserializationHelper
                     $"{genericDef.Name} divisibility violation: hiddenSize ({hsTeb}) must be a " +
                     $"multiple of numHeads ({nhTeb}). Serialized metadata is corrupt.");
             }
+            var activationFuncTypeTeb = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            object? ffnActivationTeb = TryCreateActivationInstance(additionalParams, "FfnActivationType", activationFuncTypeTeb);
             var ctorTeb = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).FirstOrDefault()
                 ?? throw new MissingLayerCtorException($"Cannot find any public constructor for {layerType} during deserialization.");
             var psTeb = ctorTeb.GetParameters();
@@ -1844,6 +1863,10 @@ public static class DeserializationHelper
                     (Type t, _) when t == typeof(int) && n == "numheads" => nhTeb,
                     (Type t, _) when t == typeof(int) && n == "ffndim" => ffTeb,
                     (Type t, _) when t == typeof(double) && n == "dropoutrate" => drTeb,
+                    // Restore the FFN inner activation (GELU for BERT-class encoders);
+                    // null falls back to the ctor default (ReLU) for blocks that did
+                    // not persist one.
+                    (_, "ffnactivation") => ffnActivationTeb,
                     _ => p.HasDefaultValue ? p.DefaultValue : null,
                 };
             }

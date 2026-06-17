@@ -334,11 +334,12 @@ public class CCDM<T> : TimeSeriesFoundationModelBase<T>
         bool addedBatchDim = false;
         if (conditioned.Rank == 1) { conditioned = conditioned.Reshape(new[] { 1, conditioned.Length }); addedBatchDim = true; }
 
-        Tensor<T> condHidden;
-        if (_inputProjection is not null)
-            condHidden = _inputProjection.Forward(conditioned);
-        else
-            condHidden = conditioned;
+        // Raw conditioning: _inputProjection projects the WHOLE packed per-step
+        // score-network input to hidden width (see CSDI for rationale), so the
+        // conditioning is packed RAW rather than pre-projected.
+        var condHidden = conditioned.Rank == 2
+            ? conditioned
+            : Engine.Reshape(conditioned, new[] { 1, conditioned.Length });
 
         int outputLen = _forecastHorizon;
         var rand = RandomHelper.CreateSecureRandom();
@@ -382,8 +383,16 @@ public class CCDM<T> : TimeSeriesFoundationModelBase<T>
             var summed = Engine.TensorAdd(xtPadded, condPadded);
             var scoreInput = Engine.TensorAddScalar(summed, logSigma);
 
+<<<<<<< HEAD
             // Predict score: s_theta(x_t, sigma_t).
+||||||| 0d65f659c
+            // Predict score: s_theta(x_t, sigma_t)
+=======
+            // Predict score: s_theta(x_t, sigma_t). Project the packed input to
+            // hidden width before the denoising stack.
+>>>>>>> origin/master
             var score = scoreInput;
+            if (_inputProjection is not null) score = _inputProjection.Forward(score);
             foreach (var layer in _denoisingLayers) score = layer.Forward(score);
             if (_outputProjection is not null) score = _outputProjection.Forward(score);
 

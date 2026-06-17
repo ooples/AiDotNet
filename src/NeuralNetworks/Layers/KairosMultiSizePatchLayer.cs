@@ -129,6 +129,7 @@ public class KairosMultiSizePatchLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+<<<<<<< HEAD
         // Support [B, contextLength], [contextLength], or rank-3
         // [B, contextLength, features]. The univariate time-series fixtures
         // hand a rank-3 [B, T, 1] tensor — without the trailing-1 squeeze,
@@ -136,12 +137,19 @@ public class KairosMultiSizePatchLayer<T> : LayerBase<T>
         // dim from `input.Shape[^1] = 1` instead of contextLength, so a
         // serialize/deserialize round-trip mismatches against
         // SetParameters' explicit `ResolveFromShape([contextLength])`.
+||||||| 0d65f659c
+        // Support both [B, contextLength] and [contextLength] inputs.
+=======
+        // Support [contextLength], [B, contextLength], and [B, lookback, channels]
+        // inputs.
+>>>>>>> origin/master
         bool addedBatch = false;
         if (input.Rank == 1)
         {
             input = Engine.Reshape(input, new[] { 1, input.Shape[0] });
             addedBatch = true;
         }
+<<<<<<< HEAD
         else if (input.Rank == 3 && input.Shape[2] == 1)
         {
             // Squeeze the trailing-1 feature dim so the router and patch
@@ -158,6 +166,23 @@ public class KairosMultiSizePatchLayer<T> : LayerBase<T>
             // mismatch error fires downstream.
             input = Engine.Reshape(input, new[] { input.Shape[0], input.Shape[1] * input.Shape[2] });
         }
+||||||| 0d65f659c
+=======
+        else if (input.Rank > 2)
+        {
+            // Foundation-forecaster pipelines (Kairos.ForwardNative) hand this
+            // layer a rank-3 [B, lookback, channels] tensor. Per Kairos
+            // (Mixture-of-Size Encoder) the size-router weights the patch scales
+            // from the FULL flattened look-back window, so collapse the trailing
+            // axes into the contextLength axis -> [B, contextLength]. Without
+            // this the DenseLayer router binds to the trailing (channel) axis on
+            // the first forward, while SetParameters re-resolves it from
+            // contextLength on deserialize, so the two disagree and the
+            // serialization round-trip throws a parameter-count mismatch.
+            int b = input.Shape[0];
+            input = Engine.Reshape(input, new[] { b, input.Length / b });
+        }
+>>>>>>> origin/master
         int batchSize = input.Shape[0];
 
         // Router over flat input.

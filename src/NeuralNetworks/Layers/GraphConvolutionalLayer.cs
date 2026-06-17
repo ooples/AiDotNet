@@ -196,6 +196,15 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </summary>
     private bool _useSparseAggregation = false;
 
+    // When true, a Forward with no adjacency set falls back to a self-loop
+    // identity adjacency instead of throwing. Off by default (a graph conv is
+    // undefined without a graph, Kipf & Welling 2017); models that legitimately
+    // run on plain sequences without an explicit graph (e.g. GraphCodeBERT on a
+    // token stream with no data-flow edges) opt in. DeserializationHelper
+    // reconstructs cloned/round-tripped graph layers with this enabled so a
+    // model whose adjacency is only set at runtime survives serialization.
+    private readonly bool _implicitIdentityWhenUnset;
+
     /// <summary>
     /// Stores the gradients for the weights calculated during the backward pass.
     /// </summary>
@@ -341,7 +350,8 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// to transform this into 16 features per atom, you would use inputFeatures=8 and outputFeatures=16.
     /// </para>
     /// </remarks>
-    public GraphConvolutionalLayer(int inputFeatures, int outputFeatures, IActivationFunction<T>? activationFunction = null)
+    public GraphConvolutionalLayer(int inputFeatures, int outputFeatures, IActivationFunction<T>? activationFunction = null,
+        bool implicitIdentityWhenUnset = false)
         : base([inputFeatures], [outputFeatures], activationFunction ?? new IdentityActivation<T>())
     {
         if (inputFeatures <= 0)
@@ -354,6 +364,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             throw new ArgumentOutOfRangeException(nameof(outputFeatures), "Output features must be positive.");
         }
 
+        _implicitIdentityWhenUnset = implicitIdentityWhenUnset;
         InputFeatures = inputFeatures;
         OutputFeatures = outputFeatures;
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
@@ -668,13 +679,35 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             ? input.Shape[input.Shape.Length - 2]
             : 1;
 
-        bool missing = _adjacencyMatrix == null;
-        bool mismatched2D = _adjacencyMatrix is not null
-            && _adjacencyMatrix.Shape.Length == 2
+        // A graph convolution is undefined without a graph: per Kipf & Welling
+        // (2017) the propagation rule H' = Â·H·W is built on the adjacency Â, so an
+        // unset adjacency is a usage error — throw rather than silently degrade to
+        // a per-node MLP. Models that legitimately run on plain sequences with no
+        // explicit graph opt into a self-loop identity fallback via the
+        // constructor flag (which survives Clone, so the cloned layer behaves the
+        // same as the original).
+        if (_adjacencyMatrix is null)
+        {
+            if (!_implicitIdentityWhenUnset)
+                throw new InvalidOperationException(
+                    "GraphConvolutionalLayer requires an adjacency matrix. Call " +
+                    "SetAdjacencyMatrix(...) with the graph structure before Forward.");
+
+            var identity = new Tensor<T>(new[] { inferredNumNodes, inferredNumNodes });
+            for (int i = 0; i < inferredNumNodes; i++)
+                identity[i, i] = NumOps.One;
+            SetAdjacencyMatrix(identity);
+            return;
+        }
+
+        // A previously-set dense adjacency can go shape-stale if the node count
+        // changes between calls; rebuild an identity of the right size so the
+        // matmul stays well-formed (the adjacency was supplied, just outdated).
+        bool mismatched2D = _adjacencyMatrix.Shape.Length == 2
             && (_adjacencyMatrix.Shape[0] != inferredNumNodes
                 || _adjacencyMatrix.Shape[1] != inferredNumNodes);
 
-        if (missing || mismatched2D)
+        if (mismatched2D)
         {
             var identity = new Tensor<T>(new[] { inferredNumNodes, inferredNumNodes });
             for (int i = 0; i < inferredNumNodes; i++)

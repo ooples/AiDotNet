@@ -40,10 +40,44 @@ public abstract class CausalDiscoveryTestBase
     /// X0 → X1 (coeff 0.8), X1 → X2 (coeff 0.6), X0 → X3 (coeff -0.7).
     /// True adjacency: nonzero at [0,1], [1,2], [0,3]. All others zero.
     /// </summary>
+    /// <remarks>
+    /// For algorithms with <see cref="ICausalDiscoveryAlgorithm{T}.SupportsTimeSeries"/>
+    /// the SAME structural equations are generated with a one-step LAG
+    /// (X1[t] = 0.8·X0[t−1] + noise, …) instead of instantaneously. Time-series
+    /// estimators (Transfer Entropy — Schreiber 2000; oCSE — Sun et al. 2015;
+    /// Granger) measure LAGGED information transfer: on i.i.d. rows, sample t is
+    /// statistically independent of sample t−1, so their true score is exactly
+    /// zero for every pair and a paper-faithful implementation correctly finds
+    /// no edges. The lagged variant preserves the true edge set, coefficients,
+    /// and the X1⊥X3|X0 conditional-independence used by the invariants.
+    /// </remarks>
     protected virtual Matrix<double> CreateKnownStructureData()
     {
         var rng = new Random(42);
         var data = new Matrix<double>(NumSamples, NumVariables);
+
+        if (CreateAlgorithm().SupportsTimeSeries)
+        {
+            // Lagged version of the same SEM: each effect responds to its
+            // cause's PREVIOUS value, with a mild AR(1) self-term so every
+            // series has its own dynamics for the estimators to condition on.
+            double x0 = 0.0, x1 = 0.0, x2 = 0.0, x3 = 0.0;
+            for (int i = 0; i < NumSamples; i++)
+            {
+                double x0New = 0.5 * x0 + (rng.NextDouble() * 2.0 - 1.0);
+                double x1New = 0.3 * x1 + 0.8 * x0 + (rng.NextDouble() * 0.2 - 0.1);
+                double x2New = 0.3 * x2 + 0.6 * x1 + (rng.NextDouble() * 0.2 - 0.1);
+                double x3New = 0.3 * x3 - 0.7 * x0 + (rng.NextDouble() * 0.2 - 0.1);
+
+                x0 = x0New; x1 = x1New; x2 = x2New; x3 = x3New;
+                data[i, 0] = x0;
+                data[i, 1] = x1;
+                data[i, 2] = x2;
+                if (NumVariables > 3) data[i, 3] = x3;
+            }
+
+            return data;
+        }
 
         for (int i = 0; i < NumSamples; i++)
         {

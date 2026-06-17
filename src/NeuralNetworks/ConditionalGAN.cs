@@ -98,6 +98,7 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         NeuralNetworkArchitecture<T> generatorArchitecture,
         int numConditionClasses)
     {
+<<<<<<< HEAD
         // The runtime Predict / TrainStep code concatenates a one-hot
         // condition vector of length numConditionClasses onto the noise BEFORE
         // feeding the generator. The flat-feature (OneDimensional / regression)
@@ -124,6 +125,56 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
                 inputFrames: generatorArchitecture.InputFrames);
         }
         return generatorArchitecture;
+||||||| 0d65f659c
+        // Return the generator architecture unchanged. The condition concatenation
+        // is handled at runtime in GenerateConditional() and TrainStep(), not by
+        // modifying the architecture dimensions. This avoids conflicts between
+        // inputSize and dimension parameters for ThreeDimensional input types.
+        // numConditionClasses is part of the factory contract but only used at runtime
+        // in GenerateConditional()/TrainStep() for condition concatenation, not here.
+        return generatorArchitecture;
+=======
+        // The conditional generator's input is [noise | condition], so its first
+        // layer must be sized for the CONCATENATED width — GenerateConditional()
+        // and TrainStep() append the condition at runtime. Returning the
+        // architecture unchanged left the generator's first layer at the
+        // noise-only width, so Predict threw a shape mismatch (e.g. expected
+        // [32], got [42] for noise=32 + 10 condition classes). Mirror the
+        // discriminator's input expansion: grow the flat input width by
+        // numConditionClasses, or add numConditionClasses channels for spatial
+        // generators.
+        bool isSpatialInput = generatorArchitecture.InputHeight > 0
+            && generatorArchitecture.InputWidth > 0
+            && generatorArchitecture.InputDepth > 0;
+
+        int inputSize;
+        int inputDepth;
+        if (isSpatialInput)
+        {
+            inputDepth = generatorArchitecture.InputDepth + numConditionClasses;
+            inputSize = generatorArchitecture.InputSize > 0
+                ? generatorArchitecture.InputSize + (numConditionClasses * generatorArchitecture.InputHeight * generatorArchitecture.InputWidth)
+                : 0;
+        }
+        else
+        {
+            inputSize = generatorArchitecture.InputSize > 0
+                ? generatorArchitecture.InputSize + numConditionClasses
+                : 0;
+            inputDepth = generatorArchitecture.InputDepth;
+        }
+
+        return new NeuralNetworkArchitecture<T>(
+            inputType: generatorArchitecture.InputType,
+            taskType: generatorArchitecture.TaskType,
+            complexity: generatorArchitecture.Complexity,
+            inputSize: inputSize,
+            inputHeight: generatorArchitecture.InputHeight,
+            inputWidth: generatorArchitecture.InputWidth,
+            inputDepth: inputDepth,
+            outputSize: generatorArchitecture.OutputSize,
+            layers: generatorArchitecture.Layers);
+>>>>>>> origin/master
     }
 
     /// <summary>

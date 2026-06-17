@@ -290,12 +290,15 @@ public class TSDiff<T> : TimeSeriesFoundationModelBase<T>
         bool addedBatchDim = false;
         if (conditioned.Rank == 1) { conditioned = conditioned.Reshape(new[] { 1, conditioned.Length }); addedBatchDim = true; }
 
-        // Encode conditioning context through input projection
-        Tensor<T> condHidden;
-        if (_inputProjection is not null)
-            condHidden = _inputProjection.Forward(conditioned);
-        else
-            condHidden = conditioned;
+        // Raw conditioning context. As in CSDI (Tashiro 2021) / the layer-helper
+        // layout, _inputProjection projects the WHOLE packed per-step denoiser
+        // input to hidden width — so the conditioning is packed RAW here, not
+        // pre-projected (pre-projecting consumed _inputProjection on the
+        // conditioning shape and let the raw packed input fall through to the
+        // residual stack whose BatchNorm channels are hiddenDimension).
+        var condHidden = conditioned.Rank == 2
+            ? conditioned
+            : Engine.Reshape(conditioned, new[] { 1, conditioned.Length });
 
         int outputLen = _forecastHorizon;
         var rand = RandomHelper.CreateSecureRandom();
@@ -327,8 +330,10 @@ public class TSDiff<T> : TimeSeriesFoundationModelBase<T>
             var summed = Engine.TensorAdd(xtPadded, condPadded);
             var denoisingInput = Engine.TensorAddScalar(summed, timeEmbed);
 
-            // Predict conditioned noise estimate eps_cond
+            // Predict conditioned noise estimate eps_cond. Project the packed
+            // input to hidden width before the residual stack.
             var epsCond = denoisingInput;
+            if (_inputProjection is not null) epsCond = _inputProjection.Forward(epsCond);
             foreach (var layer in _residualLayers) epsCond = layer.Forward(epsCond);
             if (_outputProjection is not null) epsCond = _outputProjection.Forward(epsCond);
 
@@ -345,6 +350,7 @@ public class TSDiff<T> : TimeSeriesFoundationModelBase<T>
                     PadOrTruncateRank2(xt, _hiddenDimension), timeEmbed);
 
                 var epsUncond = uncondInput;
+                if (_inputProjection is not null) epsUncond = _inputProjection.Forward(epsUncond);
                 foreach (var layer in _residualLayers) epsUncond = layer.Forward(epsUncond);
                 if (_outputProjection is not null) epsUncond = _outputProjection.Forward(epsUncond);
 

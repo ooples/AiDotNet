@@ -103,7 +103,14 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         : this(new NeuralNetworkArchitecture<T>(
             inputType: Enums.InputType.OneDimensional,
             taskType: Enums.NeuralNetworkTaskType.Regression,
-            inputSize: DefaultStateDim * 2,
+            // The network input IS the full phase-space state vector (q, p), so
+            // its size must equal stateDim — the ctor enforces
+            // CalculatedInputSize == stateDim. The previous `DefaultStateDim * 2`
+            // made the input 4 while stateDim stayed 2, so the parameterless ctor
+            // always threw "input size (4) must match state dimension (2)".
+            // DefaultStateDim = 2 is the canonical 1-DOF Hamiltonian phase space
+            // (one position q + one momentum p).
+            inputSize: DefaultStateDim,
             outputSize: 1),
             stateDim: DefaultStateDim)
     {

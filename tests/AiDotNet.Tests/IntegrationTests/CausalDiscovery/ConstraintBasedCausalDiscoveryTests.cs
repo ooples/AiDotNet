@@ -176,11 +176,44 @@ public class ConstraintBasedCausalDiscoveryTests
         AssertGraphAPIConsistency(graph);
     }
 
+    /// <summary>
+    /// Noisy i.i.d. structural equation model with the same causal chain
+    /// (X0 → X1, X0/X1 → X2) but stochastic noise on every variable.
+    /// Constraint-based discovery runs Fisher-z conditional-independence
+    /// tests, which are DEGENERATE on the noiseless collinear ramp: every
+    /// pairwise correlation is exactly ±1 (z = atanh(1) = ∞) and every
+    /// partial correlation is an indeterminate 0/0, so test decisions are
+    /// numerical accidents rather than statistics. Fast-IAMB's speculative
+    /// multi-variable admission (Yaramakala &amp; Margaritis 2005) and
+    /// CD-NOD's time-index conditioning (Huang et al. 2020 — a deterministic
+    /// ramp is PURE nonstationarity, fully explained by the index, so an
+    /// empty X-X graph is the paper-correct answer there) both need
+    /// well-posed CI statistics to find structure.
+    /// </summary>
+    private static Matrix<double> CreateNoisySEMData()
+    {
+        int n = 200;
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
+        var data = new double[n, 3];
+        for (int i = 0; i < n; i++)
+        {
+            double x0 = rng.NextDouble() * 2.0 - 1.0;
+            double x1 = 2.0 * x0 + 0.5 + (rng.NextDouble() * 0.4 - 0.2);
+            double x2 = x0 + 0.3 * x1 + (rng.NextDouble() * 0.4 - 0.2);
+
+            data[i, 0] = x0;
+            data[i, 1] = x1;
+            data[i, 2] = x2;
+        }
+
+        return new Matrix<double>(data);
+    }
+
     [Fact(Timeout = 120000)]
     public async Task FastIAMB_Discover_FindsCausalStructure()
     {
         var algo = new FastIAMBAlgorithm<double>();
-        var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
+        var graph = algo.DiscoverStructure(CreateNoisySEMData(), FeatureNames);
         AssertMeaningfulGraph(graph);
         AssertGraphAPIConsistency(graph);
     }
@@ -197,8 +230,11 @@ public class ConstraintBasedCausalDiscoveryTests
     [Fact(Timeout = 120000)]
     public async Task CDNOD_Discover_FindsCausalStructure()
     {
+        // Noisy SEM fixture — see CreateNoisySEMData: on the deterministic ramp
+        // CD-NOD's time-index surrogate explains ALL dependence, so the
+        // paper-correct output there is an empty X-X graph.
         var algo = new CDNODAlgorithm<double>();
-        var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
+        var graph = algo.DiscoverStructure(CreateNoisySEMData(), FeatureNames);
         AssertMeaningfulGraph(graph);
         AssertGraphAPIConsistency(graph);
     }

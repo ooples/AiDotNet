@@ -247,14 +247,30 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         for (int stage = _channelDims.Length - 2; stage >= 0; stage--)
         {
             d = _decUps[convIdx].Forward(d);
+<<<<<<< HEAD
             d = MatchSpatialShapeToSkip(d, skips[stage]);
+||||||| 0d65f659c
+=======
+            // Align the upsampled tensor to the skip's spatial dims before the
+            // channel concat. Each encoder downsample computes ceil(n/2), so a
+            // x2 upsample yields 2*ceil(n/2) >= n — one voxel larger on odd
+            // sizes (e.g. D: 3 -> 2 -> 1, then 1 -> 2 vs skip 1). The official
+            // SegMamba (Xing et al. 2024) trains on 2^depth-divisible crops
+            // where the sizes match exactly; for general inputs we follow the
+            // U-Net convention (Ronneberger et al. 2015) of cropping the larger
+            // tensor to the skip so the concat is well-formed.
+            d = CropToSpatial(d, skips[stage]);
+>>>>>>> origin/master
             d = Engine.TensorConcatenate([d, skips[stage]], axis: 1);
             d = ApplyConvBlock(_decConvs[convIdx], _decNorms[convIdx], d);
             convIdx++;
         }
 
-        // Final upsample back to full input resolution + conv block.
+        // Final upsample back to full input resolution + conv block. Crop to the
+        // exact input spatial dims so the logits match the input volume on odd
+        // sizes (the x2 upsample of ceil(n/2) overshoots by one voxel).
         d = _decUps[convIdx].Forward(d);
+        d = CropToSpatial(d, input);
         d = ApplyConvBlock(_decConvs[convIdx], _decNorms[convIdx], d);
 
         // 1x1x1 projection to class logits.
@@ -266,6 +282,34 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
             logits = Engine.Reshape(logits, [s[1], s[2], s[3], s[4]]);
         }
         return logits;
+    }
+
+    /// <summary>
+    /// Center-crops the spatial dims (D, H, W = axes 2..4) of <paramref name="t"/>
+    /// down to the reference tensor's spatial dims when larger. Cropping (rather
+    /// than padding) is sufficient because every encoder downsample produces
+    /// ceil(n/2), so a x2 upsample is always >= the matching skip / input size.
+    /// Uses Engine.TensorNarrow, which stays on the autodiff tape.
+    /// </summary>
+    private Tensor<T> CropToSpatial(Tensor<T> t, Tensor<T> reference)
+    {
+        bool cropped = false;
+        for (int axis = 2; axis <= 4; axis++)
+        {
+            int cur = t.Shape[axis];
+            int target = reference.Shape[axis];
+            if (cur > target)
+            {
+                int start = (cur - target) / 2;
+                t = Engine.TensorNarrow(t, dim: axis, start: start, length: target);
+                cropped = true;
+            }
+        }
+
+        // TensorNarrow returns a strided VIEW; the downstream concat/conv reads
+        // raw Data and requires contiguous storage. Materialize once after all
+        // axis crops (same pattern as VideoUNetPredictor's Permute().Contiguous()).
+        return cropped ? t.Contiguous() : t;
     }
 
     /// <inheritdoc/>

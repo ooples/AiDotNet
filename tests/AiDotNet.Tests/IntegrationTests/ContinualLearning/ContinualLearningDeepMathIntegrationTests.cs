@@ -859,9 +859,23 @@ public class ContinualLearningDeepMathIntegrationTests
     /// at runtime via InterfaceGuard, which throws for models that only
     /// declare IFullModel.
     /// </summary>
+<<<<<<< HEAD
     private class CLMockModel : IFullModel<double, Tensor<double>, Tensor<double>>,
         IParameterizable<double, Tensor<double>, Tensor<double>>,
         IGradientComputable<double, Tensor<double>, Tensor<double>>
+||||||| 0d65f659c
+    private class CLMockModel : IFullModel<double, Tensor<double>, Tensor<double>>
+=======
+    // Implements IParameterizable explicitly: the interface-segregation refactor
+    // moved GetParameters/SetParameters/ParameterCount/WithParameters off IFullModel
+    // and onto IParameterizable, and EWC/SI guard-require it via
+    // InterfaceGuard.Parameterizable (EWC's Fisher matrix and SI's importance are
+    // computed OVER the model's parameters). The mock already implements every
+    // IParameterizable member below; it just needs to declare the interface so the
+    // runtime `model is IParameterizable<...>` check succeeds.
+    private class CLMockModel : IFullModel<double, Tensor<double>, Tensor<double>>,
+        IParameterizable<double, Tensor<double>, Tensor<double>>
+>>>>>>> origin/master
     {
         private Vector<double> _parameters;
         private List<int> _activeFeatures;

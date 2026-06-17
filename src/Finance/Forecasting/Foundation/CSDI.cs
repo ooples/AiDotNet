@@ -375,19 +375,25 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
         var scaledNoise = Engine.TensorMultiplyScalar(epsilonTrue, sqrtOneMinus);
         var xt = Engine.TensorAdd(scaledTarget, scaledNoise);
 
-        // 4. Condition on the observed input via _inputProjection.
-        // Normalization and rank-fix mirror the inference path.
+        // 4. Condition on the raw instance-normalized observed input. As in the
+        // inference path, the conditioning is NOT pre-projected: it is packed raw
+        // into the per-step denoiser input, and _inputProjection projects the
+        // WHOLE packed vector to hidden width (its intended role). This keeps the
+        // training and inference denoiser graphs identical so the residual stack
+        // (BatchNorm channels = hiddenDimension) always receives a hidden-width
+        // input on both paths.
         var conditioned = ApplyInstanceNormalization(input);
         if (conditioned.Rank == 1)
             conditioned = Engine.Reshape(conditioned, new[] { 1, conditioned.Length });
-        var condHidden = _inputProjection is not null
-            ? _inputProjection.Forward(conditioned)
-            : conditioned;
+        var condFlat = conditioned.Rank == 2
+            ? conditioned
+            : Engine.Reshape(conditioned, new[] { 1, conditioned.Length });
 
-        // Flatten xt to rank-2 [1, targetLen] for concatenation.
+        // Flatten xt to rank-2 [1, targetLen] for packing.
         var xt2d = xt.Rank == 1 ? Engine.Reshape(xt, new[] { 1, targetLen }) : xt;
-        int condLen = Math.Min(condHidden.Length, _hiddenDimension);
+        int condLen = Math.Min(condFlat.Length, _hiddenDimension);
 
+<<<<<<< HEAD
         // Build the [xt | condHidden[0:condLen] | sin(t)] denoiser
         // input. The only trainable piece is the condHidden slice —
         // TensorSliceAxis + TensorConcatenate keep the tape intact.
@@ -411,15 +417,56 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
         var condPaddedTrain = PadOrTruncateRank2(condHidden, _hiddenDimension);
         var summedTrain = Engine.TensorAdd(xt2dPadded, condPaddedTrain);
         var denoisingInput = Engine.TensorAddScalar(summedTrain, timeEmbedTrain);
+||||||| 0d65f659c
+        // Build the [xt | condHidden[0:condLen] | sin(t)] denoiser
+        // input. The only trainable piece is the condHidden slice —
+        // TensorSliceAxis + TensorConcatenate keep the tape intact.
+        // xt and the sin(t) scalar are treated as constants.
+        var condFlat = condHidden.Rank == 1
+            ? condHidden
+            : Engine.Reshape(condHidden, new[] { condHidden.Length });
+        var condSlice = Engine.TensorSliceAxis(
+            condFlat.Rank == 1 ? Engine.Reshape(condFlat, new[] { 1, condFlat.Length }) : condFlat,
+            axis: 1, index: 0);
+        // Simpler path: build a [1, xtLen + condLen + 1]-shaped input by
+        // copying into a fresh tensor. The denoiser will run its
+        // tape-tracked Forward passes on this — that's what needs
+        // gradients, not the concat layout itself.
+        var denoisingInput = new Tensor<T>(new[] { 1, targetLen + condLen + 1 });
+        for (int i = 0; i < targetLen; i++) denoisingInput.Data.Span[i] = xt2d[0, i];
+        for (int i = 0; i < condLen; i++) denoisingInput.Data.Span[targetLen + i] = condHidden[i];
+        denoisingInput.Data.Span[targetLen + condLen] = NumOps.FromDouble(
+            Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));
+=======
+        // Build the [xt | conditioning[0:condLen] | sin(t)] packed denoiser
+        // input. xt, the conditioning slice, and the sin(t) scalar are all
+        // constants here; gradients flow through the denoiser (_inputProjection
+        // + residual stack + _outputProjection), whose tape-aware Forward passes
+        // run on this packed tensor.
+        var denoisingInput = new Tensor<T>(new[] { 1, targetLen + condLen + 1 });
+        for (int i = 0; i < targetLen; i++) denoisingInput.Data.Span[i] = xt2d[0, i];
+        for (int i = 0; i < condLen; i++) denoisingInput.Data.Span[targetLen + i] = condFlat[i];
+        denoisingInput.Data.Span[targetLen + condLen] = NumOps.FromDouble(
+            Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));
+>>>>>>> origin/master
 
-        // 5. Predict noise via residual stack. _residualLayers[i]
-        // .Forward is tape-aware, so gradients flow back through the
-        // whole stack to each layer's parameters.
+        // 5. Predict noise: project packed input to hidden width, run the
+        // residual stack, then the output projection. All Forward passes are
+        // tape-aware so gradients flow back to every denoiser parameter.
         var eps = (Tensor<T>)denoisingInput;
+        if (_inputProjection is not null)
+            eps = _inputProjection.Forward(eps);
         foreach (var layer in _residualLayers)
             eps = layer.Forward(eps);
         if (_outputProjection is not null)
             eps = _outputProjection.Forward(eps);
+
+        // The output projection emits the flat score vector
+        // (sequenceLength × numFeatures); the denoised target here is the
+        // univariate series of length targetLen, so take the leading targetLen
+        // scores (tape-safe) to align with the true-noise tensor.
+        if (eps.Rank == 2 && eps.Shape[1] > epsilonTrue.Length)
+            eps = Engine.TensorNarrow(eps, dim: 1, start: 0, length: epsilonTrue.Length);
 
         // Align predicted-noise shape with true-noise shape so the loss
         // operates element-wise. CSDI's denoiser head is sized to
@@ -573,12 +620,19 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
         bool addedBatchDim = false;
         if (conditioned.Rank == 1) { conditioned = conditioned.Reshape(new[] { 1, conditioned.Length }); addedBatchDim = true; }
 
-        // Encode conditioning (observed values) through input projection
-        Tensor<T> condHidden;
-        if (_inputProjection is not null)
-            condHidden = _inputProjection.Forward(conditioned);
-        else
-            condHidden = conditioned;
+        // Conditioning = raw instance-normalized observed values, flattened to
+        // [1, N]. The packed per-step denoiser input (noisy sample + conditioning
+        // + diffusion-time embedding) is what gets projected to hidden width by
+        // _inputProjection — its intended role per Tashiro et al. 2021 "CSDI" and
+        // the layer-helper layout (input projection -> residual blocks ->
+        // output projection). The conditioning is therefore NOT pre-projected
+        // here: pre-projecting it consumed _inputProjection's resolved input
+        // width on the conditioning shape, so the raw packed input fell straight
+        // through to the residual stack whose BatchNorm channels are sized to
+        // hiddenDimension — the [1, 33] vs [1, 24] broadcast crash.
+        var condFlat = conditioned.Rank == 2
+            ? conditioned
+            : Engine.Reshape(conditioned, new[] { 1, conditioned.Length });
 
         int outputLen = _sequenceLength;
         var rand = RandomHelper.CreateSecureRandom();
@@ -592,6 +646,7 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
         T eps10 = NumOps.FromDouble(1e-10);
         for (int t = _numDiffusionSteps - 1; t >= 0; t--)
         {
+<<<<<<< HEAD
             // Denoising input — hiddenDim-additive composition (same fix
             // as CCDM / TSDiff / TimeDiff). The raw [x_t | condHidden |
             // t_embed] concatenation would shape-mismatch the first
@@ -602,9 +657,29 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
             var condPadded = PadOrTruncateRank2(condHidden, _hiddenDimension);
             var summed = Engine.TensorAdd(xtPadded, condPadded);
             var denoisingInput = Engine.TensorAddScalar(summed, timeEmbed);
+||||||| 0d65f659c
+            // Concatenate noisy sample with conditioning hidden state
+            int xtLen = Math.Min(xt.Length, outputLen);
+            int condLen = Math.Min(condHidden.Length, _hiddenDimension);
+            var denoisingInput = new Tensor<T>(new[] { 1, xtLen + condLen + 1 });
+            for (int i = 0; i < xtLen; i++) denoisingInput.Data.Span[i] = xt[i];
+            for (int i = 0; i < condLen; i++) denoisingInput.Data.Span[xtLen + i] = condHidden[i];
+            denoisingInput.Data.Span[xtLen + condLen] = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));
+=======
+            // Pack the per-step denoiser input: [noisy sample | conditioning | sin(t)].
+            int xtLen = Math.Min(xt.Length, outputLen);
+            int condLen = Math.Min(condFlat.Length, _hiddenDimension);
+            var denoisingInput = new Tensor<T>(new[] { 1, xtLen + condLen + 1 });
+            for (int i = 0; i < xtLen; i++) denoisingInput.Data.Span[i] = xt[i];
+            for (int i = 0; i < condLen; i++) denoisingInput.Data.Span[xtLen + i] = condFlat[i];
+            denoisingInput.Data.Span[xtLen + condLen] = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));
+>>>>>>> origin/master
 
-            // Predict noise through residual layers
+            // Project the packed input to hidden width, then run the residual
+            // stack (whose BatchNorm channels are hiddenDimension), then the
+            // output projection back to the flat score vector.
             var eps = denoisingInput;
+            if (_inputProjection is not null) eps = _inputProjection.Forward(eps);
             foreach (var layer in _residualLayers) eps = layer.Forward(eps);
             if (_outputProjection is not null) eps = _outputProjection.Forward(eps);
 
