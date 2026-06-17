@@ -46,6 +46,19 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     private readonly AiDotNet.NeuralNetworks.CompiledModelHost<T> _compileHost;
 
     /// <summary>
+    /// Verify-then-trust gate (#1622 L3b) shared with <c>NeuralNetworkBase</c>: the per-step
+    /// <see cref="PredictCompiled"/> call a diffusion denoising loop makes runs eager once per shape to
+    /// confirm the compiled plan matches, then replays the trusted plan for the remaining 50+ steps —
+    /// the dominant inference cost of a foundation-scale diffusion model. Output stays numerically
+    /// identical to eager (rejected/unverified shapes fall back to eager). Process-wide opt-out via
+    /// <c>AIDOTNET_DISABLE_AUTO_COMPILE=1</c>.
+    /// </summary>
+    private readonly AiDotNet.NeuralNetworks.VerifiedInferenceGate<T> _inferenceGate = new();
+
+    private static readonly bool s_autoCompileDisabled =
+        string.Equals(System.Environment.GetEnvironmentVariable("AIDOTNET_DISABLE_AUTO_COMPILE"), "1", System.StringComparison.Ordinal);
+
+    /// <summary>
     /// Monotonic layer-graph version. Concrete predictors bump this via
     /// <see cref="InvalidateCompiledPlans"/> after lazy-init expands tensor shapes
     /// or after <see cref="SetParameters"/> swaps weights. The host drops stale
@@ -230,8 +243,23 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// </summary>
     /// <param name="input">Shape key for the compile cache.</param>
     /// <param name="eagerFallback">The eager forward pass (traced, replayed, or fallback).</param>
-    protected Tensor<T> PredictCompiled(Tensor<T> input, Func<Tensor<T>> eagerFallback) =>
-        _compileHost.Predict(input, _layerStructureVersion, eagerFallback);
+    protected Tensor<T> PredictCompiled(Tensor<T> input, Func<Tensor<T>> eagerFallback)
+    {
+        // Direct compile host when the verify gate is opted out.
+        if (s_autoCompileDisabled)
+            return _compileHost.Predict(input, _layerStructureVersion, eagerFallback);
+
+        // #1622 L3b: front the compile host with the verify-then-trust gate so a compiled plan is
+        // adopted for a shape only after it matches the eager forward — then replayed for the rest of
+        // the denoising loop. Output stays numerically identical to eager (rejected shapes stay eager).
+        return _inferenceGate.Run(
+            input,
+            _layerStructureVersion,
+            eager: eagerFallback,
+            compiled: () => _compileHost.Predict(input, _layerStructureVersion, eagerFallback),
+            onDecision: (enabled, reason) => AiDotNet.Helpers.InferenceDiagnostics.RecordDecision(
+                area: "NoisePredictorBase", feature: "AutoCompiledInference", enabled: enabled, reason: reason));
+    }
 
     /// <summary>
     /// Async overload of <see cref="PredictCompiled"/> — routes through
@@ -265,6 +293,9 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         // immediately — important when the caller is invalidating because the
         // old graph holds memory we want to reclaim now.
         _compileHost.Invalidate();
+        // The gate's verdicts/memo are version-scoped (stale entries are ignored after the bump), but
+        // clear eagerly so the memo's retained input/output clones are released now too.
+        _inferenceGate.Clear();
     }
 
     /// <summary>
