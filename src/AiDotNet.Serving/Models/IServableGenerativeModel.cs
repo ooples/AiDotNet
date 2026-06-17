@@ -94,6 +94,20 @@ public interface IGenerationSession<T> : IDisposable
     int CachedPromptTokens { get; }
 
     /// <summary>
+    /// The current decode position (number of tokens whose KV is committed in this session's cache).
+    /// Advances by the new-token count on each <see cref="Forward"/>; rewound by <see cref="Truncate"/>.
+    /// </summary>
+    int Position { get; }
+
+    /// <summary>
+    /// Rolls this session's KV cache and position back to <paramref name="newPosition"/>, discarding the
+    /// KV for positions at or beyond it. Used by speculative decoding to drop rejected draft tokens so
+    /// the corrected token is (re)written at <paramref name="newPosition"/>.
+    /// </summary>
+    /// <param name="newPosition">The position to roll back to (0 ≤ newPosition ≤ current position).</param>
+    void Truncate(int newPosition);
+
+    /// <summary>
     /// Registers this session's current KV state (which must hold exactly the prefilled prompt) as a
     /// reusable prefix base, so later requests whose prompt extends this one can fork from it. Call
     /// once, immediately after prefill and before decoding. No-op when prefix sharing is unavailable.

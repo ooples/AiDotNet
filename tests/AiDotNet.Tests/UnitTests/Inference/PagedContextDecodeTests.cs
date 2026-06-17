@@ -126,6 +126,47 @@ public class PagedContextDecodeTests
         Assert.True(RelErr(refA, refB) > 1e-2, "sequences A and B should produce different outputs");
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task TruncateSequence_RollsBackKv_ReDecodeMatches()
+    {
+        await Task.Yield();
+        // Speculative decoding rolls the KV back when draft tokens are rejected. Prove that decoding to
+        // length L, truncating to M, and re-decoding positions M..L-1 reproduces the original outputs
+        // bit-for-bit — i.e. truncation leaves the cache in a state indistinguishable from never having
+        // written the discarded positions.
+        var layer = BuildLayer(out var cache);
+        var data = RandomSequence(20260617);
+
+        // Reference: clean straight-through decode of all SeqLen positions.
+        var reference = DecodeIncremental(layer, cache, 7001, data);
+
+        // Decode all positions on a fresh sequence, then truncate back to M and re-decode the tail.
+        const int M = 2;
+        long seqId = 7002;
+        Assert.True(cache.AllocateSequence(seqId, 0));
+        for (int t = 0; t < SeqLen; t++)
+        {
+            var scratch = new float[SeqLen * EmbDim];
+            CopyStep(layer, seqId, data, t, scratch);
+        }
+        Assert.Equal(SeqLen, cache.GetSequenceLength(seqId));
+
+        Assert.True(cache.TruncateSequence(seqId, M));
+        Assert.Equal(M, cache.GetSequenceLength(seqId));
+
+        // Re-decode positions M..SeqLen-1; these overwrite the rolled-back slots.
+        var rolled = new float[SeqLen * EmbDim];
+        for (int t = M; t < SeqLen; t++) CopyStep(layer, seqId, data, t, rolled);
+
+        for (int t = M; t < SeqLen; t++)
+        {
+            var a = new ReadOnlySpan<float>(rolled, t * EmbDim, EmbDim);
+            var b = new ReadOnlySpan<float>(reference, t * EmbDim, EmbDim);
+            Assert.True(RelErr(a, b) < 1e-4,
+                $"re-decode after truncate diverged at position {t} (relErr={RelErr(a, b):E3}).");
+        }
+    }
+
     private static float[] DecodeIncremental(PagedCachedMultiHeadAttention<float> layer, PagedKVCache<float> cache, long seqId, float[] data)
     {
         Assert.True(cache.AllocateSequence(seqId, 0));
