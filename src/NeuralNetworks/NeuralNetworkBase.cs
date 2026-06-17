@@ -4025,18 +4025,68 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// collision-safe value-hash memo. Returns output numerically identical to
     /// <see cref="PredictEager"/> for every input: compiled is adopted per shape
     /// only after it matches eager, and the memo only returns a cached output for a
-    /// confirmed-identical input. Invoked by <see cref="Predict"/> (and reusable by
-    /// subclasses that override Predict) when <see cref="_autoCompiledInferenceEnabled"/> is set.
+    /// confirmed-identical input. Invoked by <see cref="Predict"/> when
+    /// <see cref="_autoCompiledInferenceEnabled"/> is set.
     /// </summary>
     /// <param name="input">The (already batch-normalized) inference input.</param>
     protected internal Tensor<T> PredictAccelerated(Tensor<T> input)
+        => Accelerate(input, () => PredictEager(input));
+
+    /// <summary>
+    /// Opt a model's forward into the #1622 verify-then-trust compiled-inference acceleration with a
+    /// single wrap. The canonical use is the LAST line of a <see cref="Predict"/> override:
+    /// <code>
+    /// public override Tensor&lt;T&gt; Predict(Tensor&lt;T&gt; input)
+    /// {
+    ///     // ... model-specific setup (eval flip, reshape, etc.) ...
+    ///     return Accelerate(input, () =&gt; RunMyForward(input));
+    /// }
+    /// </code>
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When the foundation-scale auto-compiled path is NOT engaged (small models, training), this just
+    /// invokes <paramref name="eagerForward"/> — zero behavior change and zero overhead, so it is safe
+    /// to wrap EVERY model's forward unconditionally. When engaged, it routes through the shared
+    /// <see cref="VerifiedInferenceGate{T}"/>: the SAME <paramref name="eagerForward"/> lambda is both
+    /// the verify reference AND what the compile host traces, so the gate verifies the model's REAL
+    /// forward (whatever custom logic it contains) and adopts the compiled plan only on numerical
+    /// parity — otherwise it stays eager for that shape. Output is numerically identical to
+    /// <paramref name="eagerForward"/> for every input.
+    /// </para>
+    /// <para>
+    /// Models with a genuinely non-traceable forward (multi-step loops, control flow the GraphMode
+    /// tracer can't capture) are handled transparently: the compile attempt fails, the gate records the
+    /// shape as eager-only, and every call runs <paramref name="eagerForward"/> — so wrapping them is
+    /// harmless, never wrong.
+    /// </para>
+    /// </remarks>
+    /// <param name="input">The input tensor whose shape keys the compile cache.</param>
+    /// <param name="eagerForward">The model's eager forward (verify reference + trace source + fallback).</param>
+    protected Tensor<T> Accelerate(Tensor<T> input, Func<Tensor<T>> eagerForward)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
+        if (eagerForward is null) throw new ArgumentNullException(nameof(eagerForward));
+
+        // Self-latch for foundation-scale eval so a wrapped model engages without depending on the
+        // base Predict / SetTrainingMode latch (overriding models may manage mode themselves). Only in
+        // inference mode (training mutates weights → plans/memo would be stale) and only when weight-
+        // streaming auto-detect already flagged this model as foundation-scale.
+        if (!_autoCompiledInferenceEnabled
+            && _streamingEngagedByAutoDetect && !s_autoCompileDisabled && !IsTrainingMode)
+            _autoCompiledInferenceEnabled = true;
+
+        // Not engaged → behave exactly like the plain eager forward (no gate, no trace, no overhead).
+        // (Training safety is already enforced upstream: the self-latch above only engages in eval, and
+        // SetTrainingMode(true) clears the flag + the gate — so the flag is never set during training.)
+        if (!_autoCompiledInferenceEnabled)
+            return eagerForward();
+
         return _inferenceGate.Run(
             input,
             _layerStructureVersion,
-            eager: () => PredictEager(input),
-            compiled: () => PredictCompiled(input),
+            eager: eagerForward,
+            compiled: () => _compileHost.Predict(input, _layerStructureVersion, eagerForward),
             onDecision: (enabled, reason) => AiDotNet.Helpers.InferenceDiagnostics.RecordDecision(
                 area: "NeuralNetworkBase", feature: "AutoCompiledInference", enabled: enabled, reason: reason));
     }
