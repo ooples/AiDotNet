@@ -83,7 +83,8 @@ public class FateZeroModel<T> : VideoDiffusionModelBase<T>
         TemporalVAE<T>? temporalVAE = null,
         IConditioningModule<T>? conditioner = null,
         int defaultNumFrames = DEFAULT_NUM_FRAMES,
-        int defaultFPS = DEFAULT_FPS)
+        int defaultFPS = DEFAULT_FPS,
+        int? seed = null)
         : base(
             options ?? new DiffusionModelOptions<T>
             {
@@ -98,13 +99,14 @@ public class FateZeroModel<T> : VideoDiffusionModelBase<T>
             architecture)
     {
         _conditioner = conditioner;
-        InitializeLayers(predictor, temporalVAE);
+        InitializeLayers(predictor, temporalVAE, seed);
     }
 
     [MemberNotNull(nameof(_predictor), nameof(_temporalVAE))]
     private void InitializeLayers(
         VideoUNetPredictor<T>? predictor,
-        TemporalVAE<T>? temporalVAE)
+        TemporalVAE<T>? temporalVAE,
+        int? seed = null)
     {
         _predictor = predictor ?? new VideoUNetPredictor<T>(
             inputChannels: LATENT_CHANNELS,
@@ -112,7 +114,8 @@ public class FateZeroModel<T> : VideoDiffusionModelBase<T>
             channelMultipliers: new[] { 1, 2, 4, 4 },
             numResBlocks: 2,
             numHeads: 8,
-            contextDim: CONTEXT_DIM);
+            contextDim: CONTEXT_DIM,
+            seed: seed);
 
         _temporalVAE = temporalVAE ?? new TemporalVAE<T>(
             inputChannels: 3,

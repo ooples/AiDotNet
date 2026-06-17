@@ -277,6 +277,17 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         _middleBlocks = new List<VideoBlock>();
         _decoderBlocks = new List<VideoBlock>();
 
+        // Establish a deterministic per-layer init-seed sequence for the layers built
+        // below. NoisePredictorBase (unlike NeuralNetworkBase) does not call this, so
+        // without it every layer's lazy weight init falls back to the process-shared,
+        // order-dependent RandomHelper.ThreadSafeRandom — making the predictor's
+        // initial weights depend on how much unrelated work ran first. That is the
+        // root of the suite-position-dependent training-invariant flakiness (a model
+        // whose Training_ShouldReducePredictionError passes in isolation fails once
+        // sibling tests have advanced the shared RNG). With a seed the init becomes
+        // reproducible; with seed == null the scope is inert and the existing
+        // non-reproducible production default is preserved.
+        LayerInitializationSeedScope.ResetForModelConstruction(seed);
         InitializeLayers();
     }
 

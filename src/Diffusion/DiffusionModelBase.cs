@@ -620,12 +620,38 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         // Backward pass via graph-based autodiff.
         var grads = tape.ComputeGradients(loss, paramTensors);
 
-        // Per-tensor SGD: param -= lr * grad, applied in place so registered
+        // Global gradient-norm clipping (canonical diffusion training: HuggingFace
+        // diffusers and the SVD / Video-Diffusion reference recipes call
+        // torch.nn.utils.clip_grad_norm_(params, max_norm=1.0) after every backward).
+        // Plain SGD without it can overshoot on a freshly random-initialised model —
+        // a single step can move the noise-prediction error the WRONG way before the
+        // weights settle, which is exactly what Training_ShouldReducePredictionError
+        // caught for FateZero (error rose 0.399 -> 0.456 over 10 steps on an unlucky
+        // init, while the seeded sibling models happened to start in a stable basin).
+        // Clipping rescales the WHOLE gradient by max_norm/‖g‖ when ‖g‖ exceeds the
+        // threshold, so it bounds the step magnitude while preserving its direction —
+        // it can only stabilise training, never reverse a descent direction. The norm
+        // is computed with Engine reductions (no per-element scalar loop).
+        const double MaxGradNorm = 1.0;
+        T sumSq = NumOps.Zero;
+        foreach (var param in paramTensors)
+        {
+            if (!grads.TryGetValue(param, out var g) || g is null) continue;
+            var gsq = Engine.ReduceSum(Engine.TensorMultiply(g, g), null);
+            sumSq = NumOps.Add(sumSq, gsq[0]);
+        }
+        double gradNorm = Math.Sqrt(Convert.ToDouble(sumSq));
+        T clipScale = gradNorm > MaxGradNorm
+            ? NumOps.FromDouble(MaxGradNorm / gradNorm)
+            : NumOps.One;
+        T effectiveLr = NumOps.Multiply(LearningRate, clipScale);
+
+        // Per-tensor SGD: param -= effectiveLr * grad, applied in place so registered
         // tensor references stay stable across training steps.
         foreach (var param in paramTensors)
         {
             if (!grads.TryGetValue(param, out var grad) || grad is null) continue;
-            var update = Engine.TensorMultiplyScalar(grad, LearningRate);
+            var update = Engine.TensorMultiplyScalar(grad, effectiveLr);
             var paramSpan = param.Data.Span;
             var updateSpan = update.AsSpan();
             int n = Math.Min(paramSpan.Length, updateSpan.Length);
