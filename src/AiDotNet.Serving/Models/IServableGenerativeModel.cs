@@ -41,7 +41,7 @@ internal interface IServableGenerativeModel<T>
 
     /// <summary>
     /// Gets whether this model supports KV-cached incremental generation via per-request sessions
-    /// (<see cref="BeginGeneration"/>). When false, callers fall back to stateless full-context
+    /// (<see cref="BeginGeneration()"/>). When false, callers fall back to stateless full-context
     /// <see cref="Forward"/> decoding.
     /// </summary>
     bool SupportsIncrementalGeneration { get; }

@@ -193,6 +193,41 @@ public class IncrementalGenerationEndToEndTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task SequenceCollapsingLm_DoesNotAdvertiseBatchedPrefill()
+    {
+        await Task.Yield();
+        // BuildLm is Embedding -> MHA -> Flatten -> Dense: the Flatten collapses the sequence into one
+        // fixed-width row, so a multi-token forward does NOT produce per-position logits (and would make
+        // a shape-dependent Dense re-fit its weights to the wider flattened input). The batched-prefill
+        // probe must reject it (require the position dimension to be preserved) so it uses per-token
+        // prefill. A false positive here fed [1,n] then [1,1] forwards of differing flattened widths and
+        // caused nondeterministic decode (the Dense layer re-initialized on each width change).
+        var model = BuildLm();
+        var wrapper = new ServableModelWrapper<float>("lm", model, inputShape: new[] { 1 }, generationForward: model.Predict);
+        Assert.False(wrapper.SupportsBatchedPrefill,
+            "a Flatten+Dense (sequence-collapsing) LM must not advertise batched prefill");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task RepeatedRequests_SamePrompt_AreDeterministic()
+    {
+        await Task.Yield();
+        // Generations of the same prompt over the SAME served model (shared paged cache + prefix
+        // registry) must be byte-for-byte identical across repeated requests — no state leaks between
+        // requests. This is the sequential analogue of ConcurrentRequests_SameModel_AreIsolated and
+        // directly guards the per-token vs batched-prefill width-mismatch regression.
+        var (service, _) = BuildService();
+
+        var first = service.Generate("lm", NumericType.Float, Req(new[] { 1, 2, 3 })).GeneratedTokens;
+        _ = service.Generate("lm", NumericType.Float, Req(new[] { 7, 8 })).GeneratedTokens;
+        var third = service.Generate("lm", NumericType.Float, Req(new[] { 1, 2, 3 })).GeneratedTokens;
+        var fourth = service.Generate("lm", NumericType.Float, Req(new[] { 1, 2, 3 })).GeneratedTokens;
+
+        Assert.Equal(first, third);
+        Assert.Equal(first, fourth);
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task BatchedPrefill_IsTransparent_SameResultAsPerToken()
     {
         await Task.Yield();
@@ -209,6 +244,53 @@ public class IncrementalGenerationEndToEndTests
 
         Assert.True(batched.Length > 0);
         Assert.Equal(perToken, batched);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FromModel_WithGenerationEnabled_YieldsGenerativeWrapper()
+    {
+        await Task.Yield();
+        var model = BuildPerPositionLm();
+
+        // Auto-detect path (the production loader path: ModelLoader.Load -> FromModel). Opting in to
+        // text generation must wire the token-to-logits forward + the KV-cached incremental path.
+        var generative = ServableModelWrapper<float>.FromModel(
+            "lm", model, enableBatching: true, enableSpeculativeDecoding: false,
+            enableTextGeneration: true);
+
+        Assert.True(generative.SupportsGeneration,
+            "enableTextGeneration:true should advertise token-level generation");
+        Assert.True(generative.SupportsIncrementalGeneration,
+            "enableTextGeneration:true should build the KV-cached incremental path");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FromModel_GenerationDisabledByDefault()
+    {
+        await Task.Yield();
+        var model = BuildPerPositionLm();
+
+        // Default: a tensor model is NOT assumed generative (e.g. diffusion models have no
+        // next-token-logits semantics), so generation stays off unless explicitly enabled.
+        var nonGenerative = ServableModelWrapper<float>.FromModel("lm", model);
+
+        Assert.False(nonGenerative.SupportsGeneration,
+            "tensor models must not advertise generation unless enableTextGeneration is set");
+        Assert.False(nonGenerative.SupportsIncrementalGeneration);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FromModel_QuantizedGeneration_BuildsIncrementalPath()
+    {
+        await Task.Yield();
+        var model = BuildPerPositionLm();
+
+        var generative = ServableModelWrapper<float>.FromModel(
+            "lm", model, enableBatching: true, enableSpeculativeDecoding: false,
+            enableTextGeneration: true, quantizeKvCacheWeights: true);
+
+        Assert.True(generative.SupportsIncrementalGeneration,
+            "quantized generation config should still build the incremental path");
     }
 
     private static int[] GreedyDecodeBatchedPrefill(IGenerationSession<float> session, int[] prompt, int maxNew)
