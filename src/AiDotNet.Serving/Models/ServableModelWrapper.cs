@@ -29,6 +29,15 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     private readonly bool _supportsBatchedPrefill;
     private long _nextSequenceId;
 
+    // Concurrent generation sessions share ONE optimized model instance. Its KV state is isolated
+    // per sequence id (paged cache), but the layers carry per-forward scratch (e.g. _lastInput), so
+    // two threads cannot run the forward simultaneously without corrupting each other. Inference on a
+    // single in-memory model is inherently one-forward-at-a-time (as on a single device); we serialize
+    // each forward STEP here, not the whole request — sessions still interleave at step granularity,
+    // and the memory win of a shared per-sequence paged cache is preserved. Cross-request parallelism
+    // is the batching engine's job (one thread, one batched forward), not parallel forwards.
+    private readonly object _forwardLock = new();
+
     // RadixAttention-style prefix sharing (#99 Stage 2 integration): maps a prompt-prefix key to a
     // base KV-cache sequence whose cache holds exactly that prefix. New requests fork from the
     // longest registered strict-prefix (copy-on-write), reusing the prefix's KV. LRU-capped; evicted
@@ -264,6 +273,8 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     /// token-to-logits semantics (e.g. a transformer LM). When null (default), the model does not
     /// advertise generation support — not every Tensor-to-Tensor model (e.g. a diffusion model) has
     /// valid next-token-logits semantics, so generation must be opt-in rather than assumed.</param>
+    /// <param name="quantizeIncrementalWeights">When generation is enabled, whether the incremental
+    /// KV-cached model uses int8 weight-only quantization so more sequences stay KV-resident.</param>
     public ServableModelWrapper(
         string modelName,
         IFullModel<T, Tensor<T>, Tensor<T>> model,
@@ -421,13 +432,25 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     }
 
     /// <summary>
-    /// Probes whether the optimized model accepts a multi-token forward (per-position logits), so the
-    /// prompt can be prefilled in one pass. An exception means the model is single-token-step only.
+    /// Probes whether the optimized model accepts a multi-token forward as genuine PER-POSITION logits,
+    /// so the prompt can be prefilled in one pass. Two conditions must hold: (1) the forward does not
+    /// throw, and (2) the output preserves the sequence dimension — i.e. an <c>n</c>-token input yields
+    /// <c>n</c> output positions (<c>[1, n, vocab]</c>), not a single collapsed row (<c>[1, vocab]</c>).
     /// </summary>
+    /// <remarks>
+    /// The second condition is essential: a <c>Flatten → Dense</c> language model collapses the
+    /// sequence into one fixed-width row, so a multi-token forward does NOT throw — it silently
+    /// produces a single position (and a shape-dependent dense layer would even re-fit its weights to
+    /// the wider flattened input). Treating that as "batched prefill supported" would feed the model a
+    /// multi-token sequence whose Dense input width differs from the single-token decode width, which
+    /// is incorrect. Requiring the position dimension to be preserved rejects such models, so they fall
+    /// back to the correct per-token prefill path.
+    /// </remarks>
     private static bool ProbeBatchedPrefill(
         AiDotNet.NeuralNetworks.NeuralNetworkBase<T> model,
         AiDotNet.Inference.PagedAttention.PagedKVCache<T> cache)
     {
+        const int probeTokens = 2;
         const long probeSequenceId = long.MaxValue - 1;
         if (!cache.AllocateSequence(probeSequenceId, 0))
         {
@@ -436,24 +459,49 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
 
         try
         {
-            var probe = new Tensor<T>(new[] { 1, 2 }); // two tokens in one forward
-            model.PredictWithContext(probe, new AiDotNet.Inference.InferenceForwardContext(probeSequenceId, 0));
+            var probe = new Tensor<T>(new[] { 1, probeTokens }); // two tokens in one forward
+            var output = model.PredictWithContext(probe, new AiDotNet.Inference.InferenceForwardContext(probeSequenceId, 0));
+
+            // Require the output to keep one logits row PER input token. positions = (total / vocab):
+            // [1, 2, vocab] -> 2 (per-position, supported); [1, vocab] -> 1 (collapsed, NOT supported).
+            int rank = output.Shape.Length;
+            if (rank < 2)
+            {
+                return RejectBatchedPrefill("OutputRankTooLow");
+            }
+            int vocab = output.Shape[rank - 1];
+            if (vocab <= 0)
+            {
+                return RejectBatchedPrefill("OutputVocabNonPositive");
+            }
+            long total = 1;
+            for (int d = 0; d < rank; d++) total *= output.Shape[d];
+            long positions = total / vocab;
+            if (positions != probeTokens)
+            {
+                return RejectBatchedPrefill($"CollapsedSequence(positions={positions})");
+            }
             return true;
         }
         catch (Exception ex)
         {
             // Expected for fixed single-token-step models; record as a capability decision, not an error.
-            AiDotNet.Helpers.InferenceDiagnostics.RecordDecision(
-                area: "Serving.ServableModelWrapper",
-                feature: "BatchedPrefill",
-                enabled: false,
-                reason: ex.GetType().Name);
-            return false;
+            return RejectBatchedPrefill(ex.GetType().Name);
         }
         finally
         {
             cache.FreeSequence(probeSequenceId);
         }
+    }
+
+    private static bool RejectBatchedPrefill(string reason)
+    {
+        AiDotNet.Helpers.InferenceDiagnostics.RecordDecision(
+            area: "Serving.ServableModelWrapper",
+            feature: "BatchedPrefill",
+            enabled: false,
+            reason: reason);
+        return false;
     }
 
     /// <summary>
@@ -509,13 +557,17 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     /// <param name="model">The model instance (must implement IModelSerializer and one of the IFullModel variants).</param>
     /// <param name="enableBatching">Whether serving-side batching is enabled.</param>
     /// <param name="enableSpeculativeDecoding">Whether speculative decoding is enabled.</param>
+    /// <param name="enableTextGeneration">Whether to build the KV-cached incremental generation path (tensor LMs only).</param>
+    /// <param name="quantizeKvCacheWeights">Whether the incremental generation model uses int8 weight-only quantization.</param>
     /// <returns>A ServableModelWrapper configured for the detected model type.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the model does not implement a supported IFullModel variant.</exception>
     internal static ServableModelWrapper<T> FromModel(
         string modelName,
         IModelSerializer model,
         bool enableBatching = true,
-        bool enableSpeculativeDecoding = false)
+        bool enableSpeculativeDecoding = false,
+        bool enableTextGeneration = false,
+        bool quantizeKvCacheWeights = false)
     {
         Guard.NotNullOrWhiteSpace(modelName);
         Guard.NotNull(model);
@@ -548,7 +600,15 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
                     "Tensor models must implement IModelShape to provide the input shape for serving.");
             }
 
-            return new ServableModelWrapper<T>(modelName, tensorModel, inputShape, enableBatching, enableSpeculativeDecoding);
+            // Token-generation models (declared via config) get the KV-cached incremental path; other
+            // tensor models (e.g. diffusion) do not advertise generation. model.Predict is the
+            // token-to-logits forward only when the operator marks the model generative.
+            Func<Tensor<T>, Tensor<T>>? generationForward = enableTextGeneration ? tensorModel.Predict : null;
+
+            return new ServableModelWrapper<T>(
+                modelName, tensorModel, inputShape, enableBatching, enableSpeculativeDecoding,
+                generationForward: generationForward,
+                quantizeIncrementalWeights: enableTextGeneration && quantizeKvCacheWeights);
         }
 
         throw new InvalidOperationException(
@@ -567,6 +627,8 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     /// <param name="enableSpeculativeDecoding">Whether speculative decoding is enabled.</param>
     /// <param name="licenseKey">Optional license key for encrypted AIMF models.</param>
     /// <param name="decryptionToken">Optional server-side decryption token.</param>
+    /// <param name="enableTextGeneration">Whether to build the KV-cached incremental generation path (tensor LMs only).</param>
+    /// <param name="quantizeKvCacheWeights">Whether the incremental generation model uses int8 weight-only quantization.</param>
     /// <returns>A ServableModelWrapper ready for serving.</returns>
     internal static ServableModelWrapper<T> LoadServable(
         string filePath,
@@ -574,10 +636,12 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         bool enableBatching = true,
         bool enableSpeculativeDecoding = false,
         string? licenseKey = null,
-        byte[]? decryptionToken = null)
+        byte[]? decryptionToken = null,
+        bool enableTextGeneration = false,
+        bool quantizeKvCacheWeights = false)
     {
         var model = ModelLoader.Load<T>(filePath, licenseKey, decryptionToken);
-        return FromModel(modelName, model, enableBatching, enableSpeculativeDecoding);
+        return FromModel(modelName, model, enableBatching, enableSpeculativeDecoding, enableTextGeneration, quantizeKvCacheWeights);
     }
 
     /// <inheritdoc/>
@@ -794,7 +858,13 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
 
             int newLength = newTokenIds.Shape[newTokenIds.Shape.Length - 1];
             var context = new AiDotNet.Inference.InferenceForwardContext(_sequenceId, _position);
-            var logits = _model.PredictWithContext(newTokenIds, context);
+            // Serialize the forward step across concurrent sessions on the shared model instance
+            // (per-forward layer scratch is not reentrant); KV isolation is by sequence id, not by lock.
+            Tensor<T> logits;
+            lock (_owner._forwardLock)
+            {
+                logits = _model.PredictWithContext(newTokenIds, context);
+            }
             _position += newLength;
             return logits;
         }
