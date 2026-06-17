@@ -2578,6 +2578,31 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// influenced by the previous one.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Invalidates the cached CPU pre-packed stacked weights on any training-mode
+    /// TRANSITION. The fused inference fast path (<see cref="TryFusedLstmForward"/>) packs
+    /// the eight per-gate weight tensors into <c>_cpuStackedWeightsIh/Hh/BiasIh</c> ONCE and
+    /// reuses them while <c>_cpuStackedWeightsValid</c> stays set. Tape-based training
+    /// updates the per-gate weights IN PLACE (the optimizer writes the tensors' backing
+    /// buffers directly; it never routes through SetParameters / UpdateParameters, the only
+    /// sites that call <see cref="InvalidateCpuStackedWeights"/>), so a stacked pack built
+    /// before/during training survives into the post-training inference and feeds STALE
+    /// input weights + biases to the fused primitive — a trained model then predicts
+    /// differently from a fresh deserialize of itself with bit-identical weights
+    /// (Clone_AfterTraining_ShouldPreserveLearnedWeights, #1623; verified: at the
+    /// LstmSequenceForward call site the orig's stacked Wih/Bih differed from the clone's
+    /// while the gate weights themselves were identical). A training↔eval transition is the
+    /// authoritative "weights may have changed" signal the layer CAN observe, so we drop the
+    /// pack here; the next inference rebuilds it from the current (final) weights. Only
+    /// transitions invalidate, so repeated same-mode inference still reuses the pack.
+    /// </summary>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        if (isTraining != IsTrainingMode)
+            InvalidateCpuStackedWeights();
+        base.SetTrainingMode(isTraining);
+    }
+
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes

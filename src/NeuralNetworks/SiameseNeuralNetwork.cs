@@ -17,14 +17,24 @@ using AiDotNet.Tokenization.Interfaces;
 namespace AiDotNet.NeuralNetworks
 {
     /// <summary>
-    /// Siamese Neural Network implementation for dual-encoder comparison and similarity learning.
+    /// Sentence-BERT (SBERT) style shared sentence-encoder tower: a transformer encoder
+    /// that maps a tokenized input to a fixed-size embedding (default 768-d, BERT vocab
+    /// 30522, max length 512) for semantic similarity and retrieval.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations (typically float or double).</typeparam>
     /// <remarks>
     /// <para>
-    /// A Siamese Neural Network consists of two identical subnetworks (sharing the same parameters) 
-    /// that process two different inputs. The outputs are typically compared using a distance metric 
-    /// and optimized via contrastive or triplet loss.
+    /// This implements the SHARED ENCODER of a Siamese/dual-encoder setup (Reimers &amp; Gurevych
+    /// 2019, "Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks"): the same encoder
+    /// is applied independently to each sentence, and the resulting embeddings are compared by a
+    /// distance/cosine metric. <see cref="Predict"/> returns the encoder embedding for one input;
+    /// pair training (contrastive/triplet) compares two such embeddings.
+    /// </para>
+    /// <para>
+    /// NOTE: this is distinct from <see cref="SiameseNetwork{T}"/>, which is the
+    /// pair-in / similarity-score-out VERIFICATION network of Koch et al. 2015 (twin subnetwork +
+    /// L1-distance sigmoid head). This class is the sentence-embedding ENCODER tower; that class
+    /// is the end-to-end pair verifier.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> A Siamese Network is like having two identical twins who think exactly 
@@ -49,7 +59,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelTask(ModelTask.Classification)]
     [ModelComplexity(ModelComplexity.Medium)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ResearchPaper("Siamese Neural Networks for One-shot Image Recognition", "https://www.cs.cmu.edu/~rsalakh/oneshot/papers/Siamese%20Neural%20Networks%20for%20One-Shot%20Image%20Recognition.pdf")]
+    [ResearchPaper("Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks", "https://arxiv.org/abs/1908.10084", Year = 2019, Authors = "Nils Reimers, Iryna Gurevych")]
     public class SiameseNeuralNetwork<T> : NeuralNetworkBase<T>, IEmbeddingModel<T>
     {
         private readonly SiameseNeuralNetworkOptions _options;
@@ -124,8 +134,21 @@ namespace AiDotNet.NeuralNetworks
         /// <param name="vocabSize">The size of the shared vocabulary (default: 30522).</param>
         /// <param name="embeddingDimension">The dimension of the shared embeddings (default: 768).</param>
         /// <param name="maxSequenceLength">The maximum allowed input length (default: 512).</param>
-        /// <param name="lossFunction">Optional loss function. Defaults to Contrastive Loss.</param>
+        /// <param name="lossFunction">Optional loss function. Defaults to Mean Squared Error — see
+        /// remarks on why contrastive loss is NOT the default for the single-tower training path.</param>
         /// <param name="maxGradNorm">Maximum gradient norm for stability (default: 1.0).</param>
+        /// <remarks>
+        /// The shared-tower <see cref="Predict"/> emits an EMBEDDING, and the standard
+        /// <c>Train(input, expectedOutput)</c> path optimises that embedding toward a target embedding
+        /// — a representation-regression objective whose correct loss is mean squared error.
+        /// ContrastiveLoss is a PAIR loss: it consumes <c>(distance, similarity-label)</c>, so its
+        /// scalar <see cref="ILossFunction{T}"/> interface throws and its tape form
+        /// (<c>ComputeTapeLoss</c>) reinterprets <c>predicted</c> as a distance and <c>target</c> as a
+        /// 0/1 label. Feeding it an embedding + a target embedding produced a wrong-direction gradient
+        /// that INCREASED the embedding error during training (Training_ShouldReduceLoss: 1.31 → 1.43).
+        /// Contrastive/triplet pair training (Bromley 1993 / Koch 2015) is exposed through the
+        /// dedicated pair API; the generic single-input Train path uses MSE.
+        /// </remarks>
         public SiameseNeuralNetwork(
             NeuralNetworkArchitecture<T> architecture,
             ITokenizer? tokenizer = null,
@@ -136,7 +159,7 @@ namespace AiDotNet.NeuralNetworks
             ILossFunction<T>? lossFunction = null,
             double maxGradNorm = 1.0,
             SiameseNeuralNetworkOptions? options = null)
-            : base(architecture, lossFunction ?? new ContrastiveLoss<T>(), maxGradNorm)
+            : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), maxGradNorm)
         {
             _options = options ?? new SiameseNeuralNetworkOptions();
             Options = _options;
@@ -144,7 +167,7 @@ namespace AiDotNet.NeuralNetworks
             _vocabSize = vocabSize;
             _embeddingDimension = embeddingDimension;
             _maxSequenceLength = maxSequenceLength;
-            _lossFunction = lossFunction ?? new ContrastiveLoss<T>();
+            _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
             InitializeLayersCore(false);

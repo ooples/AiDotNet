@@ -1071,6 +1071,21 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// </summary>
     protected virtual double TrainingErrorMultiplier => 3.0;
 
+    /// <summary>
+    /// True when <see cref="TrainingError_ShouldNotExceedTestError"/> is a
+    /// load-bearing invariant for this model. Override to false for models whose
+    /// <c>Train()</c> is NOT supervised gradient-descent fitting of a fixed
+    /// (input, target) pair — e.g. HTM, whose Hebbian spatial-pooler / temporal-
+    /// memory learning plus homeostatic boosting continuously re-codes the
+    /// input's sparse representation (Cui, Ahmad &amp; Hawkins 2017), so the model
+    /// cannot — and by design does not — fit a fixed training target tighter than
+    /// an arbitrary test target. This is the same paper-faithful rationale the HTM
+    /// test applies to Training_ShouldReduceLoss / MoreData / ScaledInput. Narrow
+    /// opt-out (mirrors NEAT's <c>OptimizerStepParamL2InvariantApplicable</c>) so
+    /// gradient-trained models keep asserting this invariant. Default true.
+    /// </summary>
+    protected virtual bool TrainingErrorInvariantApplicable => true;
+
     [Fact(Timeout = 120000)]
     public async Task TrainingError_ShouldNotExceedTestError()
     {
@@ -1079,6 +1094,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
         if (TrainingInvariantsNotApplicable(network)) return;
+        if (!TrainingErrorInvariantApplicable) return;
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 
@@ -1226,6 +1242,21 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// </summary>
     protected virtual double OptimizerStepL2UpperBound => 2.0;
 
+    /// <summary>
+    /// True when the single-step parameter-L2 bound applies. The invariant assumes a
+    /// GRADIENT-OPTIMIZER step on a FIXED-topology network, where one update should not
+    /// move the weight-vector norm more than ~2×. It does NOT apply to topology-AUGMENTING
+    /// evolutionary models (NEAT, Stanley &amp; Miikkulainen 2002): there is no "optimizer
+    /// step" — one Train call evolves a population for many generations and ADDS
+    /// connections/nodes by design, so <c>GetParameters()</c> grows in LENGTH and the L2
+    /// norm necessarily increases with the complexifying genome. Bounding it to 2× would
+    /// contradict the paper's core "Augmenting Topologies" mechanism. Override to
+    /// <c>false</c> for such models (their weight-magnitude stability is still exercised by
+    /// the bounded per-connection weight clamp in the model itself, and convergence by
+    /// <see cref="Training_ShouldReduceLoss"/> / <c>LossStrictlyDecreasesOnMemorizationTask</c>).
+    /// </summary>
+    protected virtual bool OptimizerStepParamL2InvariantApplicable => true;
+
     [Fact(Timeout = 120000)]
     public async Task OptimizerStep_ParamL2_DoesNotExplode()
     {
@@ -1234,6 +1265,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
         if (TrainingInvariantsNotApplicable(network)) return;
+        if (!OptimizerStepParamL2InvariantApplicable) return;
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 

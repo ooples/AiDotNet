@@ -62,7 +62,11 @@ public class StitchDiffusionModel<T> : LatentDiffusionModelBase<T>
         NeuralNetworkArchitecture<T>? architecture = null, DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null, UNetNoisePredictor<T>? predictor = null,
         StandardVAE<T>? vae = null, IConditioningModule<T>? conditioner = null, int? seed = null)
-        : base(options ?? new DiffusionModelOptions<T> { TrainTimesteps = 1000, BetaStart = 0.00085, BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear },
+        // Propagate `seed` into the options so the base RandomGenerator (and thus the
+        // training-timestep sampling in DiffusionModelBase.Train) is deterministic;
+        // otherwise it falls back to a non-deterministic secure RNG and the training
+        // invariants become flaky (see SpotDiffusionModel for the detailed rationale).
+        : base(options ?? new DiffusionModelOptions<T> { TrainTimesteps = 1000, BetaStart = 0.00085, BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear, Seed = seed },
             scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()), architecture)
     {
         _conditioner = conditioner;
@@ -108,7 +112,17 @@ public class StitchDiffusionModel<T> : LatentDiffusionModelBase<T>
 
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new StitchDiffusionModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
+        // Clone the ACTUAL predictor/VAE: passing neither rebuilt the default foundation-scale UNet
+        // (~643 M params) while the source may hold a small/custom predictor (~10 M), so
+        // SetParameters threw "Expected 643774499 parameters, got 10342915". See MultiDiffusionModel.
+        var clone = new StitchDiffusionModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner,
+            seed: RandomGenerator.Next());
         clone.SetParameters(GetParameters());
         return clone;
     }
