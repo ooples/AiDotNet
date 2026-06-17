@@ -195,10 +195,17 @@ public sealed class TextGenerationService : ITextGenerationService
 
         using var session = model.BeginGeneration();
 
-        // Prefill: forward the whole prompt, producing the first next-token logits.
+        // Prefill: feed the prompt one token at a time so the KV cache accumulates the context.
+        // (Per-token prefill is universally compatible — it works for fixed single-token-step
+        // models as well as multi-token ones — at the cost of not batching the prefill, which a
+        // later optimization can add for models that accept a multi-token forward.)
         // Exceptions propagate to the caller's fallback (full-context decode); cancellation returns
         // a cancelled response directly (no fallback).
-        var logits = session.Forward(TokensToTensor<T>(request.InputTokens));
+        var logits = session.Forward(TokensToTensor<T>(new[] { request.InputTokens[0] }));
+        for (int i = 1; i < request.InputTokens.Length; i++)
+        {
+            logits = session.Forward(TokensToTensor<T>(new[] { request.InputTokens[i] }));
+        }
 
         for (int step = 0; step < request.MaxNewTokens; step++)
         {
