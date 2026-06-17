@@ -890,6 +890,28 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     public bool UseAutodiff { get; set; } = false;
 
     /// <summary>
+    /// #1624 escape hatch / test hook. When true, layers populate their manual-
+    /// backward activation caches (cached Input/Output/pre-activation/statistics)
+    /// EVEN under tape autodiff. Default false: under a recording
+    /// <see cref="GradientTape{T}"/> the tape captures each op's own state, so the
+    /// manual caches are write-only dead weight that pins a SECOND reference to
+    /// every activation — the deep-model activation set behind the #1624 training-
+    /// scale OOM. Shared across all layer types.
+    /// </summary>
+    internal static bool KeepActivationCacheUnderTape { get; set; }
+
+    /// <summary>
+    /// True when the layer should populate its manual-backward activation caches:
+    /// only when NO <see cref="GradientTape{T}"/> is recording (the tape-less
+    /// manual-autodiff path may read them) or when <see cref="KeepActivationCacheUnderTape"/>
+    /// forces it. Under a recording tape the caches are never read — the tape
+    /// backward walks the tape, not the layers — so skipping them frees the
+    /// redundant activation reference.
+    /// </summary>
+    protected static bool ShouldCacheActivationsForManualBackward
+        => GradientTape<T>.Current is null || KeepActivationCacheUnderTape;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="LayerBase{T}"/> class with the specified input and output shapes.
     /// </summary>
     /// <param name="inputShape">The shape of the input tensor.</param>

@@ -173,17 +173,6 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     private Tensor<T>? PreActivationOutput { get; set; }
 
     /// <summary>
-    /// #1624 escape hatch / test hook. When true, the Input/PreActivationOutput/
-    /// Output manual-backward caches are populated EVEN under tape autodiff. These
-    /// fields are write-only here (no Backward reads them; the tape captures each
-    /// op's own state), so the default skip-under-tape frees a redundant reference
-    /// to every activation — the deep-model activation set that drives the #1624
-    /// training-scale OOM. Set true only to A/B the behaviour (parity test) or as
-    /// a safety hatch if some out-of-tree consumer reads the caches.
-    /// </summary>
-    internal static bool KeepActivationCacheUnderTape { get; set; }
-
-    /// <summary>
     /// The gradients for the weights, computed during backpropagation.
     /// </summary>
     /// <remarks>
@@ -557,9 +546,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
         // activation and block release of the deep model's activation set. Caching
         // still happens when no tape is active (a manual-backward consumer may read
         // it) or when the safety hatch forces it.
-        bool cacheForManualBackward =
-            AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
-            || KeepActivationCacheUnderTape;
+        bool cacheForManualBackward = ShouldCacheActivationsForManualBackward;
         if (cacheForManualBackward)
             Input = input;
 
