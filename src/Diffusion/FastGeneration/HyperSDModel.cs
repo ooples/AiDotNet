@@ -156,7 +156,7 @@ public class HyperSDModel<T> : LatentDiffusionModelBase<T>
     {
         var clone = new HyperSDModel<T>(
             conditioner: _conditioner, isXLVariant: _isXLVariant, seed: RandomGenerator.Next());
-        clone.ShareWeightsFrom(this);
+        clone.SetParameters(GetParameters());
         return clone;
     }
 

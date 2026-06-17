@@ -149,7 +149,7 @@ public class Flux2SchnellModel<T> : LatentDiffusionModelBase<T>
     public override IDiffusionModel<T> Clone()
     {
         var clone = new Flux2SchnellModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
-        clone.ShareWeightsFrom(this);
+        clone.SetParameters(GetParameters());
         return clone;
     }
 

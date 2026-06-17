@@ -146,127 +146,6 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// </summary>
     private Tensor<T>[]? _cachedTrainableParameters;
 
-    // ── Copy-on-write weight sharing (cheap Clone of large models) ───────────────────────────────
-    //
-    // Clone() shares the parent's weight TENSORS by reference instead of deep-copying every
-    // parameter (a 600M-param model would otherwise copy ~2.4 GB on every clone). The clone gets its
-    // OWN layer objects — and therefore its own forward activation caches — but each layer's weight
-    // tensors point at the parent's, so Predict on either model reads identical weights at O(1) clone
-    // cost. The first time EITHER model WRITES a weight (training), it transparently copies its own
-    // weights first (copy-on-write) so neither can corrupt the other. A shared set is reference-
-    // counted: when a member detaches, the remaining members keep sharing, and once only one member
-    // is left it owns the tensors outright and never needs to copy.
-
-    /// <summary>Reference-counted membership token for a set of models sharing weight tensors.</summary>
-    private sealed class WeightShareGroup
-    {
-        private int _count;
-        public WeightShareGroup(int initialCount) => _count = initialCount;
-        /// <summary>A new model joins the shared set.</summary>
-        public void Join() { lock (this) _count++; }
-        /// <summary>Decrements the sharer count; returns true if a copy is required (others remain).</summary>
-        public bool LeaveAndNeedsCopy()
-        {
-            lock (this)
-            {
-                bool othersRemain = _count > 1;
-                if (_count > 0) _count--;
-                return othersRemain;
-            }
-        }
-    }
-
-    private WeightShareGroup? _shareGroup;
-
-    /// <summary>
-    /// Reflection-walks the model graph (same traversal as <see cref="CollectTrainableParameters"/>)
-    /// and returns every <see cref="Interfaces.ITrainableLayer{T}"/> in a stable order, so a clone's
-    /// layers can be paired positionally with its parent's.
-    /// </summary>
-    private List<Interfaces.ITrainableLayer<T>> CollectTrainableLayers()
-    {
-        var layers = new List<Interfaces.ITrainableLayer<T>>();
-        CollectLayersInto(this, layers, new HashSet<object>(AiDotNet.Helpers.TensorReferenceComparer<object>.Instance));
-        return layers;
-    }
-
-    private void CollectLayersInto(object? obj, List<Interfaces.ITrainableLayer<T>> layers, HashSet<object> visited)
-    {
-        if (obj is null || !visited.Add(obj)) return;
-        if (obj is Interfaces.ITrainableLayer<T> trainable) layers.Add(trainable);
-        foreach (var field in obj.GetType().GetFields(
-                     System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic))
-        {
-            Type ft = field.FieldType;
-            if (ft.IsValueType || ft == typeof(string)) continue;
-            object? value;
-            try { value = field.GetValue(obj); } catch { continue; }
-            if (value is null) continue;
-            if (value is System.Collections.IEnumerable en && value is not Interfaces.ITrainableLayer<T>)
-                foreach (var item in en) CollectLayersInto(item, layers, visited);
-            else
-                CollectLayersInto(value, layers, visited);
-        }
-    }
-
-    /// <summary>
-    /// Makes this (freshly-constructed) model SHARE <paramref name="parent"/>'s weight tensors by
-    /// reference — the copy-on-write fast path for <see cref="Clone"/>. Both models join a shared
-    /// reference-counted set; the first weight write on either triggers a private copy. The two layer
-    /// lists must have identical structure (same model class + config), which Clone guarantees.
-    /// </summary>
-    protected void ShareWeightsFrom(DiffusionModelBase<T> parent)
-    {
-        var parentLayers = parent.CollectTrainableLayers();
-        var myLayers = CollectTrainableLayers();
-        if (parentLayers.Count != myLayers.Count)
-            throw new InvalidOperationException(
-                $"ShareWeightsFrom: layer count mismatch (parent {parentLayers.Count} vs clone {myLayers.Count}). " +
-                "Copy-on-write clone requires identical structure.");
-
-        for (int i = 0; i < myLayers.Count; i++)
-            myLayers[i].SetTrainableParameters(parentLayers[i].GetTrainableParameters());
-
-        if (parent._shareGroup is null)
-        {
-            // Parent was a sole owner; it and this clone now form a shared set of two. The parent must
-            // also copy-on-write before its next weight write, so it joins the group too.
-            parent._shareGroup = new WeightShareGroup(2);
-        }
-        else
-        {
-            // Parent already shares with one or more clones; this one joins the existing set.
-            parent._shareGroup.Join();
-        }
-        _shareGroup = parent._shareGroup;
-        InvalidateTrainableParametersCache();
-    }
-
-    /// <summary>
-    /// Copy-on-write guard: if this model is sharing its weight tensors with another model, give it a
-    /// private deep copy of every weight tensor BEFORE the caller mutates any of them. Called at the
-    /// top of every weight-mutating entry point (<see cref="Train"/>, <see cref="SetParameters"/>).
-    /// No-op once the model owns its weights outright.
-    /// </summary>
-    protected void EnsureOwnWeights()
-    {
-        var group = _shareGroup;
-        if (group is null) return;
-        _shareGroup = null;
-        if (group.LeaveAndNeedsCopy())
-        {
-            foreach (var layer in CollectTrainableLayers())
-            {
-                var shared = layer.GetTrainableParameters();
-                if (shared is null) continue;
-                var owned = new Tensor<T>[shared.Count];
-                for (int i = 0; i < shared.Count; i++) owned[i] = shared[i].Clone();
-                layer.SetTrainableParameters(owned);
-            }
-        }
-        InvalidateTrainableParametersCache();
-    }
-
     /// <inheritdoc />
     public INoiseScheduler<T> Scheduler => _scheduler;
 
@@ -689,10 +568,6 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// </remarks>
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Copy-on-write: if this model shares weight tensors with a clone/parent, give it a private
-        // copy before we mutate weights in place below, so the other model isn't corrupted.
-        EnsureOwnWeights();
-
         // Tape-based direct per-tensor SGD step. The forward pass records Engine
         // ops onto the thread-local gradient tape, backward returns per-tensor
         // gradients, and we apply them in place via param -= lr * grad. This

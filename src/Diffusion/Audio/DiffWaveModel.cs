@@ -398,7 +398,7 @@ public class DiffWaveModel<T> : DiffusionModelBase<T>
             clone._network.ResolveLayerShapesFor(_lastInputShape);
             clone._lastInputShape = (int[])_lastInputShape.Clone();
         }
-        clone.ShareWeightsFrom(this);
+        clone.SetParameters(GetParameters());
         return clone;
     }
 

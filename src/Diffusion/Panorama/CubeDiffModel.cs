@@ -110,7 +110,7 @@ public class CubeDiffModel<T> : LatentDiffusionModelBase<T>
     public override IDiffusionModel<T> Clone()
     {
         var clone = new CubeDiffModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
-        clone.ShareWeightsFrom(this);
+        clone.SetParameters(GetParameters());
         return clone;
     }
 

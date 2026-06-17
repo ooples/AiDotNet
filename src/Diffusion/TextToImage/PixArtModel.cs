@@ -609,10 +609,8 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
             conditioner: _conditioner,
             seed: RandomGenerator.Next());
 
-        // Copy-on-write: share this model's weight tensors with the clone instead of deep-copying all
-        // parameters (PixArt-α is ~600M params / ~2.4 GB). The clone gets identical weights at O(1);
-        // either model copies its own set lazily on the first weight write (training).
-        clone.ShareWeightsFrom(this);
+        // Copy parameters
+        clone.SetParameters(GetParameters());
 
         return clone;
     }

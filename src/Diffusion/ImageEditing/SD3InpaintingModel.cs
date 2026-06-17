@@ -135,7 +135,7 @@ public class SD3InpaintingModel<T> : LatentDiffusionModelBase<T>
     public override IDiffusionModel<T> Clone()
     {
         var clone = new SD3InpaintingModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
-        clone.ShareWeightsFrom(this);
+        clone.SetParameters(GetParameters());
         return clone;
     }
 
