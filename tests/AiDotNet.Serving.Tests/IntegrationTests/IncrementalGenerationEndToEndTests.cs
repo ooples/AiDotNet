@@ -166,6 +166,87 @@ public class IncrementalGenerationEndToEndTests
         Assert.Equal(fresh, forked); // prefix sharing must not change the output
     }
 
+    // Per-position LM (no Flatten): Embedding -> MHA -> Dense(vocab) maps [1,S] -> [1,S,vocab], so it
+    // accepts a multi-token forward (batched prefill / speculative verification).
+    private static NeuralNetwork<float> BuildPerPositionLm()
+    {
+        var layers = new List<AiDotNet.Interfaces.ILayer<float>>
+        {
+            new EmbeddingLayer<float>(Vocab, EmbDim),
+            new MultiHeadAttentionLayer<float>(Heads, EmbDim / Heads,
+                activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>()),
+            new DenseLayer<float>(Vocab, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
+        };
+        var architecture = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.TextGeneration,
+            complexity: NetworkComplexity.Simple,
+            inputSize: 1,
+            outputSize: Vocab,
+            layers: layers);
+        var model = new NeuralNetwork<float>(architecture);
+        var p = model.GetParameters();
+        var det = new float[p.Length];
+        for (int i = 0; i < det.Length; i++) det[i] = ((i % 17) - 8) / 16.0f;
+        model.UpdateParameters(new Vector<float>(det));
+        return model;
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task BatchedPrefill_IsTransparent_SameResultAsPerToken()
+    {
+        await Task.Yield();
+        var model = BuildPerPositionLm();
+        var wrapper = new ServableModelWrapper<float>("lm", model, inputShape: new[] { 1 }, generationForward: model.Predict);
+        Assert.True(wrapper.SupportsBatchedPrefill, "per-position LM should accept a multi-token forward");
+
+        var prompt = new[] { 1, 2, 3, 4 };
+
+        // Batched prefill: one multi-token forward over the whole prompt.
+        var batched = GreedyDecodeBatchedPrefill(wrapper.BeginGeneration(), prompt, 5);
+        // Per-token prefill: forward each prompt token.
+        var perToken = GreedyDecode(wrapper.BeginGeneration(), prompt, 5);
+
+        Assert.True(batched.Length > 0);
+        Assert.Equal(perToken, batched);
+    }
+
+    private static int[] GreedyDecodeBatchedPrefill(IGenerationSession<float> session, int[] prompt, int maxNew)
+    {
+        using (session)
+        {
+            // Single multi-token prefill forward over the whole prompt (per-position logits; last one).
+            var promptTensor = new Tensor<float>(System.Array.ConvertAll(prompt, t => (float)t), new[] { 1, prompt.Length });
+            var logits = session.Forward(promptTensor);
+
+            var gen = new List<int>(maxNew);
+            for (int s = 0; s < maxNew; s++)
+            {
+                int next = ArgMaxLast(logits);
+                gen.Add(next);
+                logits = session.Forward(TokenTensor(next));
+            }
+            return gen.ToArray();
+        }
+    }
+
+    // ArgMax over the LAST position of a [1, S, vocab] (or [1, vocab]) logits tensor.
+    private static int ArgMaxLast(Tensor<float> logits)
+    {
+        int rank = logits.Shape.Length;
+        int vocab = logits.Shape[rank - 1];
+        int positions = 1;
+        for (int d = 0; d < rank - 1; d++) positions *= logits.Shape[d];
+        int baseOffset = (positions - 1) * vocab;
+        var s = logits.AsSpan();
+        int best = 0;
+        for (int v = 1; v < vocab; v++)
+        {
+            if (s[baseOffset + v] > s[baseOffset + best]) best = v;
+        }
+        return best;
+    }
+
     /// <summary>Drives a session: prefill the remaining prompt then greedily decode maxNew tokens.</summary>
     private static int[] GreedyDecode(IGenerationSession<float> session, int[] prompt, int maxNew)
     {
