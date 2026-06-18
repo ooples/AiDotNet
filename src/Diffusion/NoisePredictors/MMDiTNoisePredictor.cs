@@ -1113,6 +1113,88 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         SetLayerParams(_outputProj, parameters, offset);
     }
 
+    /// <summary>
+    /// The full layer list in the EXACT order GetParameters/SetParameters serialize it. Streaming and the
+    /// flat path share this sequence so the chunk concatenation stays index-identical to GetParameters.
+    /// </summary>
+    private IEnumerable<ILayer<T>> MMDiTLayerSequence()
+    {
+        yield return _patchEmbed;
+        yield return _timeEmbed1;
+        yield return _timeEmbed2;
+        yield return _contextProj;
+
+        foreach (var block in _jointBlocks)
+        {
+            yield return block.ImageNorm1;
+            yield return block.ImageQProj;
+            yield return block.ImageKProj;
+            yield return block.ImageVProj;
+            yield return block.ImageOutProj;
+            yield return block.ImageNorm2;
+            yield return block.ImageMLP1;
+            yield return block.ImageMLP2;
+            yield return block.ImageAdaLN;
+            yield return block.TextNorm1;
+            yield return block.TextQProj;
+            yield return block.TextKProj;
+            yield return block.TextVProj;
+            yield return block.TextOutProj;
+            yield return block.TextNorm2;
+            yield return block.TextMLP1;
+            yield return block.TextMLP2;
+            yield return block.TextAdaLN;
+        }
+
+        foreach (var block in _singleBlocks)
+        {
+            yield return block.Norm;
+            yield return block.QProj;
+            yield return block.KProj;
+            yield return block.VProj;
+            yield return block.OutProj;
+            yield return block.MLP1;
+            yield return block.MLP2;
+            yield return block.AdaLN;
+        }
+
+        yield return _finalNorm;
+        yield return _adalnModulation;
+        yield return _outputProj;
+    }
+
+    /// <inheritdoc />
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        // #1624: one chunk per layer in the canonical MMDiTLayerSequence order, so the flat
+        // concatenation is index-identical to GetParameters without materializing the full
+        // multi-billion-parameter aggregate that overflows/OOMs at default size.
+        foreach (var layer in MMDiTLayerSequence())
+        {
+            var p = layer.GetParameters();
+            if (p.Length > 0) yield return new Tensor<T>(new[] { p.Length }, p);
+        }
+    }
+
+    /// <inheritdoc />
+    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        using var e = chunks.GetEnumerator();
+        foreach (var layer in MMDiTLayerSequence())
+        {
+            if (layer.ParameterCount == 0) continue;
+            if (!e.MoveNext())
+                throw new System.ArgumentException(
+                    "SetParameterChunks received fewer chunks than MMDiT has parameterized layers.",
+                    nameof(chunks));
+            layer.SetParameters(e.Current.ToVector());
+        }
+        if (e.MoveNext())
+            throw new System.ArgumentException(
+                "SetParameterChunks received more chunks than MMDiT has parameterized layers.",
+                nameof(chunks));
+    }
+
     private void AddLayerParams(List<T> allParams, ILayer<T> layer)
     {
         var p = layer.GetParameters();

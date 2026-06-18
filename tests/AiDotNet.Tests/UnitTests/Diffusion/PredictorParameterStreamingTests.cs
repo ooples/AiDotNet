@@ -40,6 +40,13 @@ public class PredictorParameterStreamingTests
             MMDiTXVariant.Medium, inputChannels: 4, patchSize: 2, contextDim: 32, seed: seed,
             hiddenSizeOverride: 32, numLayersOverride: 2, numHeadsOverride: 4);
 
+    // MMDiT has the deepest per-block sub-layer fan-out (18 layers / joint block, 8 / single block);
+    // include one of each so the chunk sequence covers both block kinds and the head/tail layers.
+    private static MMDiTNoisePredictor<double> MMDiT(int seed) =>
+        new MMDiTNoisePredictor<double>(
+            inputChannels: 4, hiddenSize: 32, numJointLayers: 1, numSingleLayers: 1,
+            numHeads: 4, patchSize: 2, contextDim: 32, seed: seed);
+
     [Fact] public void FlagDiT_Chunks_IndexIdentical() => AssertIndexIdentical(FlagDiT(7));
     [Fact] public void FlagDiT_SetChunks_RoundTrips() => AssertRoundTrips(FlagDiT(1), FlagDiT(2));
 
@@ -54,6 +61,9 @@ public class PredictorParameterStreamingTests
 
     [Fact] public void MMDiTX_Chunks_IndexIdentical() => AssertIndexIdentical(MMDiTX(7));
     [Fact] public void MMDiTX_SetChunks_RoundTrips() => AssertRoundTrips(MMDiTX(1), MMDiTX(2));
+
+    [Fact] public void MMDiT_Chunks_IndexIdentical() => AssertIndexIdentical(MMDiT(7));
+    [Fact] public void MMDiT_SetChunks_RoundTrips() => AssertRoundTrips(MMDiT(1), MMDiT(2));
 
     private static void AssertIndexIdentical(NoisePredictorBase<double> predictor)
     {
