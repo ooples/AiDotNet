@@ -157,6 +157,15 @@
     <!-- 0.101.2: latest published; supersedes 0.98.0. Pulls in the #1624-class OOM/perf work
          (COW clone, byte-budgeted arena, fused-path per-step arena, streaming clean/dirty eviction,
          activation-aware autotuner) that this PR's training-scale fixes build on.
+
+         Measured 0.98.0 -> 0.101.2 on the canonical #1624 leak shape (SimCSE<float> dim=384,
+         10 layers, fused-optimizer path under one never-Reset() outer TensorArena, CPU, 31 steps),
+         same local src, version the only variable:
+           * Peak RSS      1404 MiB -> 949 MiB   (-32%, the number that OOMs the 16 GiB runner)
+           * Total alloc   2422 MiB -> 1173 MiB  (-52%; alloc/step 78 -> 38 MiB)
+           * Per-step heap growth flat in BOTH (-0.001 MiB/step: the per-step leak fix is consumer
+             src, constant across the runs), and loss converges identically (1.27 -> 0.26) — the
+             reduction is not from silently breaking training.
          Native packages coreleased in lockstep at 0.101.2. -->
     <PackageVersion Include="AiDotNet.Tensors" Version="0.101.2" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.101.2" />
