@@ -473,10 +473,28 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         var textConditioning = conditioning ?? new Tensor<T>(new[] { batch, 1, _contextDim });
         var textTokens = _contextProj.Forward(textConditioning);
 
-        // Process through joint (double-stream) blocks
+        // Process through joint (double-stream) blocks.
+        // G4 (#1624): each joint block is dual-stream ((image, text) out), which the single-input
+        // checkpoint primitive can't take directly. Pack the two streams into one tensor with the
+        // tape-tracked TensorConcatenate, checkpoint a function that splits them back out with
+        // tape-tracked TensorNarrow, runs the block, and re-packs — then unpack. Concat/Narrow are
+        // lossless, so the forward result is identical (verified) and the checkpoint primitive owns the
+        // backward recompute. timeEmbed is captured as a constant.
         foreach (var block in _jointBlocks)
         {
-            (imageTokens, textTokens) = ForwardJointBlock(imageTokens, textTokens, timeEmbed, block);
+            var blk = block;
+            int txtLen = textTokens.Shape[1];
+            int imgLen = imageTokens.Shape[1];
+            var packed = Engine.TensorConcatenate<T>(new[] { textTokens, imageTokens }, axis: 1);
+            packed = CheckpointBlock(p =>
+            {
+                var t = Engine.TensorNarrow(p, dim: 1, start: 0, length: txtLen);
+                var img = Engine.TensorNarrow(p, dim: 1, start: txtLen, length: imgLen);
+                var (img2, t2) = ForwardJointBlock(img, t, timeEmbed, blk);
+                return Engine.TensorConcatenate<T>(new[] { t2, img2 }, axis: 1);
+            }, packed);
+            textTokens = Engine.TensorNarrow(packed, dim: 1, start: 0, length: txtLen);
+            imageTokens = Engine.TensorNarrow(packed, dim: 1, start: txtLen, length: imgLen);
         }
 
         // Process through single-stream blocks (FLUX-style)
@@ -484,9 +502,11 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         {
             // Concatenate text and image tokens for single-stream processing
             var combined = ConcatenateSequences(textTokens, imageTokens);
+            // G4 (#1624): single-stream blocks ARE single-input over `combined` — checkpoint directly.
             foreach (var block in _singleBlocks)
             {
-                combined = ForwardSingleBlock(combined, timeEmbed, block);
+                var blk = block;
+                combined = CheckpointBlock(c => ForwardSingleBlock(c, timeEmbed, blk), combined);
             }
             // Extract image tokens from the combined sequence
             imageTokens = ExtractImageTokens(combined, textTokens.Shape[1], numImageTokens);

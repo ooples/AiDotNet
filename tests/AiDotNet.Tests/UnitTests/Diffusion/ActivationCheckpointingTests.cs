@@ -25,12 +25,8 @@ public class ActivationCheckpointingTests
         return t;
     }
 
-    [Fact]
-    public void FlagDiT_Checkpointing_IsForwardTransparent()
+    private static void AssertForwardTransparent(NoisePredictorBase<double> predictor, Tensor<double> input)
     {
-        var predictor = TinyFlagDiT(seed: 7);
-        var input = Input();
-
         predictor.ActivationCheckpointingEnabled = false;
         var eager = predictor.PredictNoise(input, timestep: 0);
 
@@ -41,6 +37,26 @@ public class ActivationCheckpointingTests
         for (int i = 0; i < eager.Length; i++)
             Assert.Equal(eager[i], checkpointed[i], 10);
     }
+
+    [Fact]
+    public void FlagDiT_Checkpointing_IsForwardTransparent()
+        => AssertForwardTransparent(TinyFlagDiT(seed: 7), Input());
+
+    [Fact]
+    public void MMDiT_Checkpointing_IsForwardTransparent()
+        => AssertForwardTransparent(
+            new MMDiTNoisePredictor<double>(
+                inputChannels: 4, hiddenSize: 32, numJointLayers: 2, numSingleLayers: 1,
+                numHeads: 4, patchSize: 2, contextDim: 32, seed: 7),
+            Input());
+
+    [Fact]
+    public void UViT_Checkpointing_IsForwardTransparent()
+        => AssertForwardTransparent(
+            new UViTNoisePredictor<double>(
+                inputChannels: 4, hiddenSize: 32, numLayers: 2, numHeads: 4,
+                patchSize: 2, contextDim: 0, latentSpatialSize: 8, seed: 7),
+            Input());
 
     [Fact]
     public void ActivationCheckpointing_AutoEngages_AboveThreshold()

@@ -303,25 +303,30 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
 
         int halfLayers = _numLayers / 2;
 
-        // Encoder: store activations for skip connections
+        // Encoder: store activations for skip connections.
+        // G4 (#1624): checkpoint each block (ApplyBlock is single-input over the residual stream; the
+        // skip concat/projection below stay OUTSIDE the checkpoint). The loop index is copied to a local
+        // because the checkpoint defers the block recomputation to the backward pass.
         var skipActivations = new Tensor<T>[halfLayers];
         for (int i = 0; i < halfLayers; i++)
         {
+            int enc = i;
             skipActivations[i] = CloneTensor(patches);
-            patches = ApplyBlock(_encoderBlocks[i], patches);
+            patches = CheckpointBlock(p => ApplyBlock(_encoderBlocks[enc], p), patches);
         }
 
         // Middle block
-        patches = ApplyBlock(_middleBlock, patches);
+        patches = CheckpointBlock(p => ApplyBlock(_middleBlock, p), patches);
 
         // Decoder with skip connections
         for (int i = 0; i < halfLayers; i++)
         {
+            int dec = i;
             int skipIdx = halfLayers - 1 - i;
-            // Concatenate along feature dimension and project
+            // Concatenate along feature dimension and project (kept outside the checkpoint).
             patches = ConcatenateTensors(patches, skipActivations[skipIdx]);
             patches = _skipProjections[i].Forward(patches);
-            patches = ApplyBlock(_decoderBlocks[i], patches);
+            patches = CheckpointBlock(p => ApplyBlock(_decoderBlocks[dec], p), patches);
         }
 
         // Final norm and unpatchify
