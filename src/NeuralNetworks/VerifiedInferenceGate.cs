@@ -127,6 +127,83 @@ internal sealed class VerifiedInferenceGate<T>
         return output;
     }
 
+    /// <summary>
+    /// Multi-input variant: verify-then-trust keyed on the COMBINED shape of all
+    /// <paramref name="inputs"/>. Used by diffusion noise predictors whose per-step forward reads
+    /// several per-call-varying leaves (noisy sample + timestep embedding + optional conditioning).
+    /// The first call at a new (combined-shape, version) runs BOTH eager and compiled and adopts
+    /// the compiled plan only if it matches eager numerically; later calls at the same shape replay
+    /// the trusted compiled plan. Unlike the single-input overload there is no identical-input value
+    /// memo — a denoising loop changes its inputs every step, so the memo would never hit; the
+    /// per-shape verdict is the whole benefit (verify once, replay the rest of the loop).
+    /// </summary>
+    /// <param name="inputs">The per-call mutable input leaves, in a stable order.</param>
+    /// <param name="structureVersion">Caller's monotonic layer-graph version.</param>
+    /// <param name="eager">The eager forward (source of truth).</param>
+    /// <param name="compiled">The compiled multi-input forward (candidate).</param>
+    /// <param name="onDecision">Optional callback invoked when a shape's verdict is first decided.</param>
+    public Tensor<T> Run(
+        Tensor<T>[] inputs,
+        int structureVersion,
+        System.Func<Tensor<T>> eager,
+        System.Func<Tensor<T>> compiled,
+        System.Action<bool, string>? onDecision = null)
+    {
+        if (inputs is null || inputs.Length == 0) return eager();
+
+        long shapeKey = ComputeMultiShapeKey(inputs);
+
+        _verdicts.TryGetValue(shapeKey, out var v);
+        bool decided = v.Version == structureVersion && (v.Verdict == VerdictTrusted || v.Verdict == VerdictRejected);
+
+        if (decided && v.Verdict == VerdictTrusted)
+            return compiled();
+        if (decided && v.Verdict == VerdictRejected)
+            return eager();
+
+        System.Threading.Interlocked.Increment(ref _verifyCount);
+        var reference = eager();
+        Tensor<T> candidate;
+        try
+        {
+            candidate = compiled();
+        }
+        catch (System.Exception ex) when (
+            ex is not System.OutOfMemoryException &&
+            ex is not System.StackOverflowException &&
+            ex is not System.AccessViolationException)
+        {
+            _verdicts[shapeKey] = (VerdictRejected, structureVersion);
+            onDecision?.Invoke(false, $"verify-throw:{ex.GetType().Name}");
+            return reference;
+        }
+
+        bool parity = OutputsClose(reference, candidate);
+        _verdicts[shapeKey] = (parity ? VerdictTrusted : VerdictRejected, structureVersion);
+        onDecision?.Invoke(parity, parity ? "compiled-matches-eager" : "compiled-diverged-stay-eager");
+        // The eager reference is the source of truth on the verify call, so a divergent compiled
+        // plan never leaks a wrong value to the caller.
+        return reference;
+    }
+
+    /// <summary>FNV-1a fold of every input's shape (rank-tagged) so distinct secondary shapes don't collide.</summary>
+    private static long ComputeMultiShapeKey(Tensor<T>[] inputs)
+    {
+        long hash = unchecked((long)0xcbf29ce484222325L);
+        for (int t = 0; t < inputs.Length; t++)
+        {
+            var shape = inputs[t]._shape;
+            hash ^= shape.Length;           // rank-tag so [1,4,1] never collides with [1,4]
+            hash *= unchecked((long)0x100000001b3L);
+            for (int i = 0; i < shape.Length; i++)
+            {
+                hash ^= shape[i];
+                hash *= unchecked((long)0x100000001b3L);
+            }
+        }
+        return hash;
+    }
+
     /// <summary>Drops all verdicts and memo entries (e.g. on entering training, where weights change).</summary>
     public void Clear()
     {
