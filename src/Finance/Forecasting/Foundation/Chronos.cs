@@ -70,7 +70,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// </para>
 /// <para>
 /// <b>Thread Safety:</b> This class is NOT thread-safe. Concurrent calls to
-/// <see cref="Forecast(Tensor{T}, double[]?)"/> or <see cref="Train(Tensor{T}, Tensor{T})"/>
+/// <see cref="Forecast(Tensor{T}, double[])"/> or <see cref="Train(Tensor{T}, Tensor{T})"/>
 /// will result in undefined behavior due to shared tokenization state.
 /// Create separate instances for concurrent usage scenarios.
 /// </para>
