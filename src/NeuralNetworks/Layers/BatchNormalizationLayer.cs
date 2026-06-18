@@ -682,6 +682,61 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
 
             return output;
         }
+        else if (IsTrainingMode)
+        {
+            // #639: batch=1 TRAINING fallback. Batch variance is undefined for a single
+            // sample, so we normalize with the running statistics (same VALUE as inference)
+            // — but route it through the single differentiable BatchNormAffine engine op
+            // instead of the manual sqrt/divide/subtract/broadcast decomposition. Two wins:
+            //   1. Op-count: the compiled-plan replay records ONE op per BN layer instead of
+            //      the ~4-op cached-scale broadcast chain (the batch=1 op explosion in #639).
+            //   2. Correctness: BatchNormAffine carries an exact backward to x, gamma AND beta
+            //      every step. The cached-scale path below can DETACH the gamma/beta gradient
+            //      whenever _cachedInferenceScale/_cachedInferenceShift are reused from a prior
+            //      step (they were built off-tape), silently zeroing the affine-parameter grads.
+            // mean/variance are constant running stats here (batch=1 never updates them), so the
+            // captured references stay valid across compiled-plan replays.
+            _lastMean = _runningMean;
+            _lastVariance = _runningVariance;
+
+            double epsD = NumOps.ToDouble(_epsilon);
+            Tensor<T> output;
+            if (input.Rank == 4)
+            {
+                // Conv feature maps [B, C, H, W] — the MobileNetV3 case — go straight in.
+                output = Engine.BatchNormAffine(input, _gamma, _beta, _runningMean, _runningVariance, epsD);
+            }
+            else
+            {
+                // Map any rank to NCHW via tape-tracked reshape, mirroring the channel-axis
+                // rule in ApplyInferenceAnyRank (rank 3 [C,H,W] → channels axis 0; else axis 1).
+                int rank = input.Rank;
+                int channelAxis = rank == 3 ? 0 : 1;
+                int n = 1;
+                for (int i = 0; i < channelAxis; i++) n *= input.Shape[i];
+                int c = input.Shape[channelAxis];
+                int spatial = 1;
+                for (int i = channelAxis + 1; i < rank; i++) spatial *= input.Shape[i];
+
+                var x4 = Engine.Reshape(input, [n, c, spatial, 1]);
+                var y4 = Engine.BatchNormAffine(x4, _gamma, _beta, _runningMean, _runningVariance, epsD);
+                output = Engine.Reshape(y4, input._shape);
+            }
+
+            // Restore pre-flatten rank for the features-last path.
+            if (flattenedFeaturesLast && preFlattenShape is not null)
+            {
+                output = Engine.Reshape(output, preFlattenShape);
+            }
+
+            // Preserve original rank.
+            if (_inputWas1D)
+            {
+                output = Engine.Reshape(output, [output.Length]);
+            }
+
+            return output;
+        }
         else
         {
             // Inference: Use running statistics
