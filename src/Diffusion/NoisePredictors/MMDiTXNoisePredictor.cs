@@ -209,10 +209,9 @@ public class MMDiTXNoisePredictor<T> : NoisePredictorBase<T>
         var tokens = Patchify(input4d, batch, channels, height, width, hPatches, wPatches, patchDim);
 
         // Embed and propagate
-        // G4 (#1624): checkpoint each block so foundation-scale stacks recompute activations in backward.
         var x = _patchEmbed.Forward(tokens);
         foreach (var block in _jointBlocks)
-            x = CheckpointBlock(block.Forward, x);
+            x = block.Forward(x);
         var projected = _finalLayer.Forward(x);  // [B, numTokens, patchDim]
 
         // Unpatchify back to [B, C, H, W]

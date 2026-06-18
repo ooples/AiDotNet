@@ -488,67 +488,14 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// </summary>
     internal static long? StreamingThresholdOverride { get; set; }
 
-    // G4 (#1624): activation/gradient checkpointing. null = auto (engage by parameter-count threshold),
-    // true/false = explicit override (e.g. AiModelBuilder's UseGradientCheckpointing).
-    private bool? _activationCheckpointing;
+    // G4 (#1624) activation checkpointing was removed: the AiDotNet.Tensors GradientCheckpointing
+    // primitive does NOT produce gradient-equivalent results through GradientTape.ComputeGradients —
+    // a one-step train with checkpointing on vs off diverged on every predictor (incl. a capture-free
+    // block), so it silently corrupted training rather than just trading compute for memory. It must be
+    // fixed + covered by a gradient-equivalence test at the Tensors-package level before being re-wired.
 
     /// <summary>
-    /// Parameter-count threshold above which activation checkpointing engages by default. Activation
-    /// memory (not weights) is the training-time peak for deep transformers, so this is well below the
-    /// weight-streaming threshold — a 100 M-param DiT already stores enough per-block activations to
-    /// pressure the 16 GB runner during backward.
-    /// </summary>
-    private const long DefaultCheckpointingThresholdParams = 100_000_000L;
-
-    /// <summary>Test/diagnostic override for <see cref="DefaultCheckpointingThresholdParams"/>. Process-global.</summary>
-    internal static long? CheckpointingThresholdOverride { get; set; }
-
-    /// <summary>
-    /// Whether this predictor recomputes block activations during backward instead of storing them
-    /// (activation checkpointing — the standard transformer memory/compute trade, ~33% extra compute for
-    /// ~sqrt(N) activation memory). Defaults to ON for foundation-scale predictors
-    /// (<see cref="ParameterCount"/> &gt; the threshold); set explicitly to force on/off (e.g. from the
-    /// builder's memory config). Checkpointing is mathematically transparent — it changes only memory,
-    /// not the forward result or gradients (modulo stochastic layers, which the DiT blocks don't use).
-    /// </summary>
-    public bool ActivationCheckpointingEnabled
-    {
-        get => _activationCheckpointing
-            ?? (ParameterCount > (CheckpointingThresholdOverride ?? DefaultCheckpointingThresholdParams));
-        // Internal: checkpointing is a memory/compute trade configured through the builder's memory
-        // config, not a user-facing model capability — keep it off the public facade surface.
-        internal set => _activationCheckpointing = value;
-    }
-
-    /// <summary>
-    /// Copies the explicit activation-checkpointing override (auto vs. forced on/off) from
-    /// <paramref name="source"/> so a clone preserves the exact runtime memory setting rather than
-    /// reverting to the auto/threshold default. The backing field is private + nullable and the
-    /// public getter collapses "auto" to a computed bool, so a clone cannot reconstruct the override
-    /// from the getter alone — concrete <c>Clone()</c> overrides call this on the fresh clone.
-    /// </summary>
-    protected void CopyCheckpointingConfigFrom(NoisePredictorBase<T> source)
-    {
-        if (source is null) throw new ArgumentNullException(nameof(source));
-        _activationCheckpointing = source._activationCheckpointing;
-    }
-
-    /// <summary>
-    /// Runs one block's forward under activation checkpointing when
-    /// <see cref="ActivationCheckpointingEnabled"/> is set, otherwise eagerly. The block is expressed as
-    /// a single-input/single-output function over the residual stream; any conditioning (time/text
-    /// embeddings) is captured as a constant and recomputed alongside the block in backward. Concrete
-    /// predictors wrap each transformer/U-Net block call in this so foundation-scale stacks don't store
-    /// every block's intermediate activations through to the backward pass.
-    /// </summary>
-    protected Tensor<T> CheckpointBlock(System.Func<Tensor<T>, Tensor<T>> blockForward, Tensor<T> input)
-    {
-        if (!ActivationCheckpointingEnabled) return blockForward(input);
-        return AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing<T>.Checkpoint(
-            new[] { blockForward }, input, segmentSize: 1);
-    }
-
-    /// <summary>
+    /// Test/diagnostic override for the streaming pool's resident-byte cap so a
     /// Test/diagnostic override for the streaming pool's resident-byte cap so a
     /// small model can be forced to page (the auto-cap is sized for foundation
     /// models). <c>null</c> ⇒ use <see cref="ComputeResidentCapBytes"/>.

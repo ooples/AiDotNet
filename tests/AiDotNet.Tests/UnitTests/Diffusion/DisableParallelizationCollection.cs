@@ -4,7 +4,7 @@ namespace AiDotNet.Tests.UnitTests.Diffusion;
 
 /// <summary>
 /// Marker collection for diffusion tests that mutate PROCESS-GLOBAL static state (for example
-/// <see cref="AiDotNet.Diffusion.NoisePredictors.NoisePredictorBase{T}.CheckpointingThresholdOverride"/>).
+/// <see cref="AiDotNet.Diffusion.DiffusionModelBase{T}.QatThresholdOverride"/>).
 /// </summary>
 /// <remarks>
 /// <c>DisableParallelization = true</c> stops member classes from running concurrently with any other

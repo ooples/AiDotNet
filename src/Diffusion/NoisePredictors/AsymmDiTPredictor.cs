@@ -130,8 +130,7 @@ public class AsymmDiTPredictor<T> : NoisePredictorBase<T>
     {
         using var streaming = BeginWeightStreamingForward();
         var x = _patchEmbed.Forward(noisySample);
-        // G4 (#1624): checkpoint each block so foundation-scale stacks recompute activations in backward.
-        foreach (var block in _blocks) x = CheckpointBlock(block.Forward, x);
+        foreach (var block in _blocks) x = block.Forward(x);
         return streaming.Complete(_finalLayer.Forward(x));
     }
 

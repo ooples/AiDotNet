@@ -192,12 +192,11 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
         var tokens = Patchify(input4d, PatchSize);
 
         // Embed + propagate through joint (double) + single block stack.
-        // G4 (#1624): checkpoint each block so foundation-scale stacks recompute activations in backward.
         var x = _patchEmbed.Forward(tokens);
         foreach (var block in _doubleBlocks)
-            x = CheckpointBlock(block.Forward, x);
+            x = block.Forward(x);
         foreach (var block in _singleBlocks)
-            x = CheckpointBlock(block.Forward, x);
+            x = block.Forward(x);
         var projected = _finalLayer.Forward(x);  // [B, numTokens, patchDim]
 
         // Unpatchify back to [B, C, H, W].
