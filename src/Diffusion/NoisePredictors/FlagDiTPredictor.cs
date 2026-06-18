@@ -214,7 +214,13 @@ public class FlagDiTPredictor<T> : NoisePredictorBase<T>
 
         var hidden = _patchEmbed.Forward(Patchify(x));   // [B, seq, hidden]
         for (int i = 0; i < _numLayers; i++)
-            hidden = ForwardBlock(hidden, cond, i);
+        {
+            // G4 (#1624): checkpoint each block over the residual stream `h`, capturing `cond`/`i` as
+            // constants, so foundation-scale stacks recompute block activations in backward instead of
+            // storing all _numLayers of them. No-op (eager) below the checkpointing threshold.
+            int blockIndex = i;
+            hidden = CheckpointBlock(h => ForwardBlock(h, cond, blockIndex), hidden);
+        }
         hidden = FinalLayer(hidden, cond);                // [B, seq, hidden] -> norm/adaLN
         var patches = _outputProj.Forward(hidden);        // [B, seq, patchDim]
         var output = Unpatchify(patches, height, width);  // [B, C, H, W]
