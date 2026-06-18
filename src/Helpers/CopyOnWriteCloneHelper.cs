@@ -21,7 +21,7 @@ namespace AiDotNet.Helpers;
 /// identical to the flat-copy clone. Fidelity is equivalent to the flat copy because both transfer
 /// exactly the model's trainable tensors.</para>
 /// </remarks>
-public static class CopyOnWriteCloneHelper
+internal static class CopyOnWriteCloneHelper
 {
     /// <summary>
     /// Re-binds every trainable parameter of <paramref name="dest"/> to a copy-on-write share of the
@@ -31,7 +31,7 @@ public static class CopyOnWriteCloneHelper
     /// not line up 1:1 (e.g. a freshly-constructed clone whose lazy layers aren't resolved yet), so the
     /// caller can fall back to the eager flat copy.
     /// </summary>
-    public static bool TryShareTrainableParameters<T>(
+    internal static bool TryShareTrainableParameters<T>(
         IFullModel<T, Tensor<T>, Tensor<T>>? source,
         IFullModel<T, Tensor<T>, Tensor<T>>? dest)
     {
@@ -42,10 +42,21 @@ public static class CopyOnWriteCloneHelper
         var dstLayers = CollectTrainableLayers<T>(dest);
         if (srcLayers.Count == 0 || srcLayers.Count != dstLayers.Count) return false;
 
-        // Verify the full structure matches BEFORE mutating anything, so we never leave a half-shared clone.
+        // Verify the full structure — per-layer parameter COUNT and per-tensor SHAPE — matches BEFORE
+        // mutating anything, so we never leave a half-shared clone and never rebind a shape-incompatible
+        // tensor. A count-only check would let a same-count but differently-shaped graph (e.g. a custom
+        // source whose predictor/VAE was built with different channel widths than the clone's defaults)
+        // pass, share, and silently corrupt the clone; a shape mismatch must instead fall back to the
+        // eager copy. A freshly-constructed clone whose lazy layers aren't resolved yet shows up here as
+        // a zero-/mismatched-shape tensor and also falls back.
         for (int i = 0; i < srcLayers.Count; i++)
-            if (srcLayers[i].GetTrainableParameters().Count != dstLayers[i].GetTrainableParameters().Count)
-                return false;
+        {
+            var sps = srcLayers[i].GetTrainableParameters();
+            var dps = dstLayers[i].GetTrainableParameters();
+            if (sps.Count != dps.Count) return false;
+            for (int p = 0; p < sps.Count; p++)
+                if (!ShapesEqual(sps[p], dps[p])) return false;
+        }
 
         for (int i = 0; i < srcLayers.Count; i++)
         {
@@ -60,6 +71,16 @@ public static class CopyOnWriteCloneHelper
         return true;
     }
 
+    private static bool ShapesEqual<T>(Tensor<T> a, Tensor<T> b)
+    {
+        var sa = a.Shape;
+        var sb = b.Shape;
+        if (sa.Length != sb.Length) return false;
+        for (int i = 0; i < sa.Length; i++)
+            if (sa[i] != sb[i]) return false;
+        return true;
+    }
+
     /// <summary>
     /// Collects every <see cref="ITrainableLayer{T}"/> reachable from <paramref name="root"/> by reflection,
     /// in a deterministic order. Captures layers held both in a base <c>_layers</c> list AND in dedicated
@@ -67,7 +88,7 @@ public static class CopyOnWriteCloneHelper
     /// <c>_layers</c>-only walk misses. Two instances of the same runtime type yield matching order, so the
     /// result pairs 1:1 between a model and its fresh clone.
     /// </summary>
-    public static List<ITrainableLayer<T>> CollectTrainableLayers<T>(IFullModel<T, Tensor<T>, Tensor<T>> root)
+    internal static List<ITrainableLayer<T>> CollectTrainableLayers<T>(IFullModel<T, Tensor<T>, Tensor<T>> root)
     {
         var layers = new List<ITrainableLayer<T>>();
         // CollectInto walks arbitrary instance fields, so it is necessarily typed `object?` internally;

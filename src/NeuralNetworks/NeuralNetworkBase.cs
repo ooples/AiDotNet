@@ -9223,7 +9223,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     // PASS at O(1)-until-write; FT/Tab/DenseNet/Autoencoder/CNN share verified-correct; VAE/Siamese/LSTM
     // fall back (LSTM's failure is a pre-existing eager #1221 lazy-deserialize bug, not COW). Set
     // AIDOTNET_COW_DEEPCOPY=0 (or false/off) to force the eager full-copy path everywhere.
-    public static bool UseCopyOnWriteDeepCopy { get; set; } =
+    internal static bool UseCopyOnWriteDeepCopy { get; set; } =
         Environment.GetEnvironmentVariable("AIDOTNET_COW_DEEPCOPY") is not { } e ||
         !(e == "0" || string.Equals(e, "false", StringComparison.OrdinalIgnoreCase) ||
           string.Equals(e, "off", StringComparison.OrdinalIgnoreCase));

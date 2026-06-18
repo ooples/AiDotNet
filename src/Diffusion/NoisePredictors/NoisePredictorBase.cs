@@ -368,10 +368,18 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// </summary>
     public virtual void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
     {
+        // Public weight-mutating entry point: validate external input deterministically (null
+        // sequence / null element would otherwise surface as a NullReferenceException), and refuse
+        // to touch a disposed predictor's layer graph.
+        ThrowIfDisposed();
+        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
+
         var buffered = new List<Tensor<T>>();
         long total = 0;
         foreach (var chunk in chunks)
         {
+            if (chunk is null)
+                throw new ArgumentException("Chunk sequence contains a null tensor.", nameof(chunks));
             buffered.Add(chunk);
             total += chunk.Length;
         }
@@ -385,6 +393,9 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         }
 
         SetParameters(flat);
+        // Weights changed — drop any plan captured against the old graph so the next compiled
+        // forward re-traces (mirrors every other in-place weight-update path).
+        InvalidateCompiledPlans();
     }
 
     /// <inheritdoc/>
@@ -473,7 +484,22 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     {
         get => _activationCheckpointing
             ?? (ParameterCount > (CheckpointingThresholdOverride ?? DefaultCheckpointingThresholdParams));
-        set => _activationCheckpointing = value;
+        // Internal: checkpointing is a memory/compute trade configured through the builder's memory
+        // config, not a user-facing model capability — keep it off the public facade surface.
+        internal set => _activationCheckpointing = value;
+    }
+
+    /// <summary>
+    /// Copies the explicit activation-checkpointing override (auto vs. forced on/off) from
+    /// <paramref name="source"/> so a clone preserves the exact runtime memory setting rather than
+    /// reverting to the auto/threshold default. The backing field is private + nullable and the
+    /// public getter collapses "auto" to a computed bool, so a clone cannot reconstruct the override
+    /// from the getter alone — concrete <c>Clone()</c> overrides call this on the fresh clone.
+    /// </summary>
+    protected void CopyCheckpointingConfigFrom(NoisePredictorBase<T> source)
+    {
+        if (source is null) throw new ArgumentNullException(nameof(source));
+        _activationCheckpointing = source._activationCheckpointing;
     }
 
     /// <summary>

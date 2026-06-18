@@ -1227,9 +1227,15 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             tapeStateCount++;
             tapeParameterLength += tapeState.Length;
             if (tapeState.MQuantized != null) quantizedStateMemory += tapeState.MQuantized.Length;
-            quantizedStateMemory += tapeState.VQuantized.Length;
+            // VQuantized/VScales are null after a BF16 run (UseBFloat16MomentStorage) — the V moment
+            // lives in VBf16 instead — so guard the deref to avoid a NullReferenceException, and
+            // attribute the BF16 buffers (2 bytes/element, no per-block scales) so the savings math
+            // stays correct regardless of which storage mode the run used.
+            if (tapeState.VQuantized != null) quantizedStateMemory += tapeState.VQuantized.Length;
             if (tapeState.MScales != null) scalesMemory += tapeState.MScales.Length * 8;
-            scalesMemory += tapeState.VScales.Length * 8;
+            if (tapeState.VScales != null) scalesMemory += tapeState.VScales.Length * 8;
+            if (tapeState.MBf16 != null) quantizedStateMemory += tapeState.MBf16.Length * 2;
+            if (tapeState.VBf16 != null) quantizedStateMemory += tapeState.VBf16.Length * 2;
             if (tapeState.MFullPrecision != null)
             {
                 fullPrecisionMemory += tapeState.MFullPrecision.Length * bytesPerElement;
@@ -1308,8 +1314,10 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 MScalesLength = s.MScales?.Length ?? 0,
                 HasMFullPrecision = s.MFullPrecision is not null,
                 MFullPrecisionLength = s.MFullPrecision?.Length ?? 0,
-                VQuantizedLength = s.VQuantized.Length,
-                VScalesLength = s.VScales.Length,
+                // Null after a BF16 run (the V moment is in VBf16) — guard so the test snapshot
+                // doesn't throw a NullReferenceException.
+                VQuantizedLength = s.VQuantized?.Length ?? 0,
+                VScalesLength = s.VScales?.Length ?? 0,
             };
         }
         return snapshot;
