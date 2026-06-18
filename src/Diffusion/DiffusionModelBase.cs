@@ -284,6 +284,34 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// </summary>
     public virtual IEnumerable<Tensor<T>> GetParameterChunks() => System.Linq.Enumerable.Empty<Tensor<T>>();
 
+    /// <summary>
+    /// Streaming counterpart to <see cref="SetParameters"/>: assigns weights from per-tensor
+    /// chunks in <see cref="GetParameterChunks"/> order without materializing a flat aggregate.
+    /// Default buffers the chunks into one flat <see cref="Vector{T}"/> and delegates to
+    /// <see cref="SetParameters"/> (back-compatible for tractable stacks); foundation-scale
+    /// subclasses override to consume one chunk at a time and stay flat-free.
+    /// </summary>
+    public virtual void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        var buffered = new List<Tensor<T>>();
+        long total = 0;
+        foreach (var chunk in chunks)
+        {
+            buffered.Add(chunk);
+            total += chunk.Length;
+        }
+
+        var flat = new Vector<T>(checked((int)total));
+        int offset = 0;
+        foreach (var chunk in buffered)
+        {
+            var v = chunk.ToVector();
+            for (int i = 0; i < v.Length; i++) flat[offset++] = v[i];
+        }
+
+        SetParameters(flat);
+    }
+
     /// <inheritdoc/>
     public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
 

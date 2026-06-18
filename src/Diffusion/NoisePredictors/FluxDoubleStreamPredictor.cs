@@ -291,15 +291,65 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        // Pre-size the array (1 patch embed + N double + N single + 1 final) so we skip
-        // the List growth/copy + ToArray allocation on every optimizer step.
-        var vectors = new Vector<T>[2 + _doubleBlocks.Length + _singleBlocks.Length];
-        int i = 0;
-        vectors[i++] = _patchEmbed.GetParameters();
-        foreach (var b in _doubleBlocks) vectors[i++] = b.GetParameters();
-        foreach (var b in _singleBlocks) vectors[i++] = b.GetParameters();
-        vectors[i] = _finalLayer.GetParameters();
-        return Vector<T>.Concatenate(vectors);
+        // #1624: copy each sub-block into ONE pre-sized result buffer, fetching one block's
+        // vector at a time. The previous approach held every block's vector live in an array
+        // AND allocated a full-size Vector<T>.Concatenate result on top — a ~2x peak that OOMs
+        // the runner on FLUX-scale weights. Streaming one block at a time keeps peak at
+        // result + the single largest block. Order mirrors SetParameters exactly
+        // (patch embed -> double blocks -> single blocks -> final layer).
+        var combined = new Vector<T>(checked((int)ParameterCount));
+        int offset = 0;
+        offset = CopyParams(_patchEmbed.GetParameters(), combined, offset);
+        foreach (var b in _doubleBlocks) offset = CopyParams(b.GetParameters(), combined, offset);
+        foreach (var b in _singleBlocks) offset = CopyParams(b.GetParameters(), combined, offset);
+        offset = CopyParams(_finalLayer.GetParameters(), combined, offset);
+        return combined;
+    }
+
+    private static int CopyParams(Vector<T> src, Vector<T> dst, int offset)
+    {
+        for (int i = 0; i < src.Length; i++) dst[offset + i] = src[i];
+        return offset + src.Length;
+    }
+
+    /// <inheritdoc />
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        // #1624: yield one chunk per sub-block (each DenseLayer fits in int) instead of
+        // falling back to the base default that materializes the full flat GetParameters()
+        // vector — which overflows/ OOMs at FLUX scale. Order mirrors SetParameters /
+        // SetParameterChunks exactly (patch embed -> double blocks -> single blocks -> final).
+        yield return Wrap(_patchEmbed.GetParameters());
+        foreach (var b in _doubleBlocks) yield return Wrap(b.GetParameters());
+        foreach (var b in _singleBlocks) yield return Wrap(b.GetParameters());
+        yield return Wrap(_finalLayer.GetParameters());
+    }
+
+    /// <inheritdoc />
+    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        // Consume one chunk per sub-block in the same order GetParameterChunks yields them,
+        // never materializing a flat aggregate.
+        using var e = chunks.GetEnumerator();
+        SetNext(e, _patchEmbed);
+        foreach (var b in _doubleBlocks) SetNext(e, b);
+        foreach (var b in _singleBlocks) SetNext(e, b);
+        SetNext(e, _finalLayer);
+        if (e.MoveNext())
+            throw new ArgumentException(
+                "SetParameterChunks received more chunks than the predictor has sub-blocks.",
+                nameof(chunks));
+    }
+
+    private static Tensor<T> Wrap(Vector<T> v) => new Tensor<T>(new[] { v.Length }, v);
+
+    private static void SetNext(IEnumerator<Tensor<T>> chunks, DenseLayer<T> layer)
+    {
+        if (!chunks.MoveNext())
+            throw new ArgumentException(
+                "SetParameterChunks received fewer chunks than the predictor has sub-blocks.",
+                nameof(chunks));
+        layer.SetParameters(chunks.Current.ToVector());
     }
 
     /// <inheritdoc />

@@ -2,6 +2,7 @@ using AiDotNet.Diffusion.FastGeneration;
 using AiDotNet.Diffusion.TextToImage;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.Diffusion.VAE;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 using System.Threading.Tasks;
 
@@ -609,14 +610,38 @@ public class FastGenContractTests : DiffusionUnitTestBase
     [Fact(Timeout = 120000)]
     public async Task Flux2Model_GetSetParameters_RoundTrips()
     {
+        await Task.Yield();
         var model = new Flux2Model<double>();
 
-        var parameters = model.GetParameters();
-        Assert.True(parameters.Length > 0);
+        // Flux 2 is foundation-scale (>2.1B params): a flat GetParameters()/SetParameters() round-trip
+        // overflows Vector<T>.Length's int contract and OOMs the host. Round-trip through the streaming
+        // chunk API (#1624) instead, which never materializes a flat aggregate. This asserts the same
+        // contract — parameters survive a get -> set -> get — one chunk in flight at a time.
+        long total = 0;
+        Vector<double>? firstBefore = null;
+        foreach (var chunk in model.GetParameterChunks())
+        {
+            firstBefore ??= chunk.ToVector().Clone();
+            total += chunk.Length;
+        }
+        Assert.True(total > 0);
+        Assert.NotNull(firstBefore);
 
-        model.SetParameters(parameters);
-        var retrieved = model.GetParameters();
-        Assert.Equal(parameters.Length, retrieved.Length);
+        // Assign the model's parameters back from its own streamed chunks.
+        model.SetParameterChunks(model.GetParameterChunks());
+
+        long retrieved = 0;
+        Vector<double>? firstAfter = null;
+        foreach (var chunk in model.GetParameterChunks())
+        {
+            firstAfter ??= chunk.ToVector();
+            retrieved += chunk.Length;
+        }
+        Assert.Equal(total, retrieved);
+        Assert.NotNull(firstAfter);
+        Assert.Equal(firstBefore!.Length, firstAfter!.Length);
+        for (int i = 0; i < firstBefore.Length; i++)
+            Assert.Equal(firstBefore[i], firstAfter[i], 10);
     }
 
     #endregion
