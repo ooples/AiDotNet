@@ -288,17 +288,20 @@ public class CogVideoModel<T> : VideoDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        // #1624: build with fresh (cheap) sub-models and share weight-tensor STORAGE copy-on-write
-        // (O(1)-until-write), instead of cloning each sub-model's full weight set. Falls back to the flat
-        // copy if the structure doesn't match 1:1 (e.g. a sub-model whose lazy layers aren't resolved).
-        var clone = new CogVideoModel<T>(
+        // #1624: compose the clone from each sub-model's own Clone(). The model cannot share weights at
+        // its own level: a fresh CogVideoModel's VideoUNetPredictor has UNRESOLVED lazy layers, so a
+        // model-level parameter transfer (COW share or flat SetParameters) cannot reshape the clone to the
+        // source's resolved 573M-parameter structure and silently produces a wrong-sized network. Each
+        // sub-model's Clone() resolves its own lazy shapes first and applies the memory-efficient transfer
+        // internally (VideoUNetPredictor: paired per-layer copy that avoids the fused-CPU stale-pack
+        // divergence; TemporalVAE: copy-on-write), so the composed clone is both correct and OOM-safe.
+        return new CogVideoModel<T>(
+            videoUnet: (VideoUNetPredictor<T>)_videoUnet.Clone(),
+            temporalVae: (TemporalVAE<T>)_temporalVae.Clone(),
             conditioner: _conditioner,
             variant: _variant,
             defaultNumFrames: DefaultNumFrames,
             defaultFPS: DefaultFPS);
-        if (!AiDotNet.Helpers.CopyOnWriteCloneHelper.TryShareTrainableParameters<T>(this, clone))
-            if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
-        return clone;
     }
 
     #endregion
