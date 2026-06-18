@@ -1963,6 +1963,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         _skipParameterBufferVersion = -1;
         Training.TapeTrainingStep<T>.InvalidateCache();
         InvalidateLayerInfoCache();
+        // Layer structure changed — re-test for a cross-batch BatchNorm layer next ShouldMicroBatch
+        // call. Without this, a model that cached "no BatchNorm" before a BatchNorm layer was added
+        // would still micro-batch (G8) and silently compute per-chunk BN statistics.
+        _hasCrossBatchNormCached = null;
         // Layer structure changed — drop stale compiled inference plans.
         _compileHost.Invalidate();
         // Also drop compiled fused training plans and reset sticky-disable
@@ -5719,7 +5723,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // fp32 full-batch training (no convergence change); only a model that would otherwise crash pays
             // the levers' cost. If the retry still OOMs, the exception propagates (the levers weren't enough).
             _memoryLeversForced = true;
-            _baseTrainOptimizer = null;
+            // Rebuild the optimizer as 8-bit ONLY when it was lazily defaulted. A caller's
+            // explicitly-configured optimizer (AdamW / attached LR scheduler / AMSGrad via the builder)
+            // must be preserved — silently swapping it for the default 8-bit Adam would change the
+            // training trajectory. The micro-batch lever (G8) still caps the activation peak either way.
+            if (!_baseTrainOptimizerExplicitlyConfigured)
+                _baseTrainOptimizer = null;
             GC.Collect();
             GC.WaitForPendingFinalizers();
             GC.Collect();
@@ -8131,8 +8140,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (LossFunction is not LossFunctions.LossFunctionBase<T>) return false;
         if (HasCrossBatchNormalization()) return false;
 
-        // Must have tape-trainable parameters (the accumulation path forwards/backwards through the tape).
-        if (Training.TapeTrainingStep<T>.CollectParameters(Layers).Count == 0)
+        // Must have something tape-trainable to accumulate over. Check trainable LAYERS (which exist even
+        // before the first forward resolves lazy weights) rather than CollectParameters — that returns 0
+        // for a lazy model pre-forward, which would make the very first (still-lazy) step skip G8 and
+        // re-enter the full-batch path that just OOM'd. TrainWithGradientAccumulation re-collects
+        // parameters after each chunk forward, so lazy layers are handled correctly downstream.
+        if (AiDotNet.Helpers.CopyOnWriteCloneHelper.CollectTrainableLayers<T>(this).Count == 0)
         {
             using var e = GetExtraTrainableTensors().GetEnumerator();
             if (!e.MoveNext()) return false;
@@ -8251,6 +8264,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     internal virtual void SetBaseTrainOptimizer(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
     {
         _baseTrainOptimizer = optimizer;
+        _baseTrainOptimizerExplicitlyConfigured = optimizer is not null;
     }
 
     /// <summary>
@@ -8258,6 +8272,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Lazily initialized on first use (Adam with default settings).
     /// </summary>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _baseTrainOptimizer;
+
+    /// <summary>
+    /// True when the base-train optimizer was supplied explicitly via
+    /// <see cref="SetBaseTrainOptimizer"/> (e.g. <c>AiModelBuilder.ConfigureOptimizer</c>) rather than
+    /// lazily defaulted. The reactive OOM memory-lever recovery must NOT silently replace a caller's
+    /// optimizer (AdamW / attached LR scheduler / AMSGrad) with the default 8-bit Adam.
+    /// </summary>
+    private bool _baseTrainOptimizerExplicitlyConfigured;
 
     /// <summary>
     /// Contiguous parameter buffer for zero-copy flat parameter access.
@@ -9403,6 +9425,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             (copy as IDisposable)?.Dispose();
             return false;
+        }
+
+        // GetExtraTrainableTensors() are raw trainable tensors the model owns OUTSIDE any layer (e.g.
+        // ViT's cls_token / positional embeddings), which training DOES update. The reflection walk
+        // above shares only LAYER tensors, and ParameterCount excludes the extras — so the coverage
+        // guard below (walked layer tensors vs ParameterCount) can't detect them, and a COW share would
+        // leave the clone's extras fresh-random and diverging after training. Fall back to the eager
+        // full-fidelity copy whenever the model carries any extra trainable tensor.
+        using (var extras = GetExtraTrainableTensors().GetEnumerator())
+        {
+            if (extras.MoveNext())
+            {
+                (copy as IDisposable)?.Dispose();
+                return false;
+            }
         }
 
         // Coverage guard: the share only transfers the tensors GetTrainableParameters exposes. If the
