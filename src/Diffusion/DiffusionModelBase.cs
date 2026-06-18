@@ -1,5 +1,7 @@
 ﻿using System.Linq;
 using AiDotNet.Autodiff;
+using AiDotNet.Deployment.Optimization.Quantization;
+using AiDotNet.Deployment.Optimization.Quantization.Training;
 using AiDotNet.Engines;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
@@ -131,6 +133,15 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// Active feature indices used by the model.
     /// </summary>
     private HashSet<int> _activeFeatureIndices = new HashSet<int>();
+
+    /// <summary>
+    /// G5 (#1624) quantization-aware-training hook. <c>null</c> = OFF (the default). When set,
+    /// <see cref="Train"/> fake-quantizes the weights used in the forward pass (keeping full-precision
+    /// shadows) so the model learns quantization-robust weights. Opt-in only — QAT is <b>lossy</b> (it
+    /// changes the training numerics), so it is never auto-engaged; callers turn it on explicitly via
+    /// <see cref="EnableQuantizationAwareTraining"/>.
+    /// </summary>
+    private QATTrainingHook<T>? _qatHook;
 
     /// <summary>
     /// The learning rate converted to type T for training computations.
@@ -715,11 +726,58 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// </list>
     /// You can control the step size by setting the LearningRate in the options.</para>
     /// </remarks>
+    /// <summary>
+    /// Enables quantization-aware training (G5, #1624): from the next <see cref="Train"/> step the
+    /// forward pass uses fake-quantized weights (quantize→dequantize, simulating the int8 inference
+    /// precision) while keeping full-precision shadow weights that the optimizer updates — a
+    /// straight-through estimator, so the model learns weights that survive post-training int8
+    /// quantization. <b>Opt-in and lossy</b> (it changes the training trajectory); it is never engaged
+    /// automatically. Pass a <see cref="QuantizationConfiguration"/> to tune bit width / symmetry;
+    /// the default is symmetric int8 with no warmup.
+    /// </summary>
+    public void EnableQuantizationAwareTraining(QuantizationConfiguration? config = null)
+    {
+        // QATWarmupEpochs = 0 ⇒ the hook quantizes immediately (we drive it per step, not per epoch).
+        _qatHook = new QATTrainingHook<T>(config ?? new QuantizationConfiguration { QATWarmupEpochs = 0 });
+    }
+
+    /// <summary>Disables quantization-aware training, reverting <see cref="Train"/> to full-precision.</summary>
+    public void DisableQuantizationAwareTraining() => _qatHook = null;
+
+    /// <summary>Whether quantization-aware training is currently engaged (G5, #1624). Default <c>false</c>.</summary>
+    public bool IsQuantizationAwareTrainingEnabled => _qatHook is not null;
+
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // Copy-on-write: if this model shares weight tensors with a clone/parent, give it a private
         // copy before we mutate weights in place below, so the other model isn't corrupted.
         EnsureOwnWeights();
+
+        // G5 (#1624) quantization-aware training (opt-in, default OFF). Fake-quantize the weights the
+        // forward will use, keeping full-precision shadows to restore before the optimizer update — the
+        // straight-through estimator: gradients computed against the quantized values update the
+        // full-precision weights. Quantization happens OUTSIDE the gradient tape, so the STE is implicit
+        // (the tape treats the quantized values as the leaf weights). On the very first step the lazy
+        // layers aren't resolved yet (empty/zero-length collection) so this is a natural no-op warmup.
+        Tensor<T>[]? qatParams = null;
+        Vector<T>[]? qatShadows = null;
+        if (_qatHook is not null)
+        {
+            qatParams = CollectTrainableParameters();
+            if (qatParams.Length > 0)
+            {
+                _qatHook.Reset(); // fresh per-tensor scales each step, tracking the current weight range
+                qatShadows = new Vector<T>[qatParams.Length];
+                for (int i = 0; i < qatParams.Length; i++)
+                {
+                    qatShadows[i] = qatParams[i].ToVector();
+                    if (qatShadows[i].Length == 0) continue;
+                    var quantized = _qatHook.ApplyFakeQuantization(qatShadows[i], "qat_param_" + i);
+                    var span = qatParams[i].Data.Span;
+                    for (int k = 0; k < span.Length && k < quantized.Length; k++) span[k] = quantized[k];
+                }
+            }
+        }
 
         // Tape-based direct per-tensor SGD step. The forward pass records Engine
         // ops onto the thread-local gradient tape, backward returns per-tensor
@@ -798,6 +856,19 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             ? NumOps.FromDouble(MaxGradNorm / gradNorm)
             : NumOps.One;
         T effectiveLr = NumOps.Multiply(LearningRate, clipScale);
+
+        // G5 (#1624): restore the full-precision shadow weights before the optimizer step, so the
+        // update lands on full precision (straight-through estimator). The forward used the quantized
+        // values; the gradients are computed against them but applied to the full-precision weights.
+        if (qatParams is not null && qatShadows is not null)
+        {
+            for (int i = 0; i < qatParams.Length; i++)
+            {
+                var span = qatParams[i].Data.Span;
+                var shadow = qatShadows[i];
+                for (int k = 0; k < span.Length && k < shadow.Length; k++) span[k] = shadow[k];
+            }
+        }
 
         // Per-tensor SGD: param -= effectiveLr * grad, applied in place so registered
         // tensor references stay stable across training steps.
