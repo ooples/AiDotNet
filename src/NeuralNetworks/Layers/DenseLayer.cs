@@ -454,13 +454,19 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // Streaming-aware allocation: when the parent network has
             // engaged streaming, route through WeightRegistry.AllocateStreaming
             // so the pool can pre-evict competing weights to disk before
-            // this allocation hits the GC heap. Otherwise preserve the
-            // existing arena-allocator fast path so non-streaming models
-            // don't pay the pool-lookup overhead.
+            // this allocation hits the GC heap. Otherwise allocate from the
+            // arena's PINNED tier (#1643): these weights are long-lived, but
+            // lazy materialization can run inside a training step's active
+            // TensorArena (the first forward). The old TensorAllocator.Rent
+            // path handed out RECYCLABLE scratch that Reset() reissues as
+            // transient activations on the next step — silently corrupting the
+            // weights (eval Predict became non-deterministic, weights drifted).
+            // RentPinned lands in the pinned tier that survives Reset, and
+            // degrades to a plain heap Tensor<T> when no arena is active.
             int[] wShape = [inputSize, outputSize];
             int[] bShape = [outputSize];
-            _weights = AllocateLazyWeight(wShape, () => TensorAllocator.Rent<T>(wShape));
-            _biases = AllocateLazyWeight(bShape, () => TensorAllocator.Rent<T>(bShape));
+            _weights = AllocateLazyWeight(wShape, () => TensorAllocator.RentPinned<T>(wShape));
+            _biases = AllocateLazyWeight(bShape, () => TensorAllocator.RentPinned<T>(bShape));
 
             // Initialize using strategy or default. Skip strategies that only
             // advertise the LAZY deferral contract (IsLazy): their InitializeWeights

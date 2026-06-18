@@ -705,8 +705,12 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         Stride = reader.ReadInt32();
         Padding = reader.ReadInt32();
 
-        // Deserialize _kernels — flat span iteration replaces 4-nested indexing loops
-        _kernels = TensorAllocator.RentUninitialized<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+        // Deserialize _kernels — flat span iteration replaces 4-nested indexing loops.
+        // #1643: kernels are long-lived trainable weights; pin them so a Deserialize that
+        // happens to run inside an active TensorArena can't have them recycled by Reset()
+        // (RentPinned degrades to a heap Tensor<T> when no arena is active; the loop below
+        // overwrites every element, so the one-time zero-fill is free).
+        _kernels = TensorAllocator.RentPinned<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
         var kernelSpan = _kernels.Data.Span;
         for (int i = 0; i < kernelSpan.Length; i++)
             kernelSpan[i] = NumOps.FromDouble(reader.ReadDouble());
@@ -880,12 +884,17 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             // largely conv kernels). When the parent network has engaged
             // streaming, route through AllocateLazyWeight so the pool
             // pre-evicts before the new GC byte[] lands. The non-streaming
-            // fallback preserves the existing arena fast-path
-            // (TensorAllocator.RentUninitialized) for kernels and the
-            // plain Tensor ctor for the small biases tensor.
+            // path allocates kernels from the arena's PINNED tier (#1643):
+            // lazy materialization can run inside a training step's active
+            // TensorArena (first forward), and the old RentUninitialized
+            // scratch path was reissued as transient activations by the next
+            // Reset() — corrupting the kernels (eval Predict non-deterministic,
+            // weights drifted). RentPinned survives Reset and degrades to a
+            // plain heap Tensor<T> with no active arena; the one-time zero-fill
+            // is overwritten by InitializeWeights() below.
             int[] kShape = [OutputDepth, InputDepth, KernelSize, KernelSize];
             int[] bShape = [OutputDepth];
-            _kernels = AllocateLazyWeight(kShape, () => TensorAllocator.RentUninitialized<T>(kShape));
+            _kernels = AllocateLazyWeight(kShape, () => TensorAllocator.RentPinned<T>(kShape));
             _biases = AllocateLazyWeight(bShape);
 
             // Initialize weights (fills _kernels and _biases with He-uniform values)
