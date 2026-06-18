@@ -210,7 +210,8 @@ public class EMMDiTPredictor<T> : NoisePredictorBase<T>
 
         // Embed and propagate
         var x = _patchEmbed.Forward(tokens);
-        foreach (var block in _blocks) x = block.Forward(x);
+        // G4 (#1624): checkpoint each block so foundation-scale stacks recompute activations in backward.
+        foreach (var block in _blocks) x = CheckpointBlock(block.Forward, x);
         var projected = _finalLayer.Forward(x);  // [B, numTokens, patchDim]
 
         // Unpatchify: [B, numTokens, patchDim] → [B, C, H, W]

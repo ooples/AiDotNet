@@ -182,7 +182,8 @@ public class SiTPredictor<T> : NoisePredictorBase<T>
         var tokens = Engine.Reshape(patchOrdered, new[] { b, hp * wp, c * patchSize * patchSize });
 
         var x = embed.Forward(tokens);
-        foreach (var block in blocks) x = block.Forward(x);
+        // G4 (#1624): checkpoint each block so foundation-scale stacks recompute activations in backward.
+        foreach (var block in blocks) x = CheckpointBlock(block.Forward, x);
         var outTokens = final_.Forward(x); // [B, hp*wp, C*patchSize*patchSize]
 
         // Unpatchify: reverse of the above.
