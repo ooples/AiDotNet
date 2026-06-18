@@ -538,7 +538,17 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
         // the redundant second EnsureInitialized was a no-op but
         // misleading.
         EnsureInitializedFromInput(input);
-        Input = input;
+
+        // #1624: skip the manual-backward activation caches under tape autodiff.
+        // Input/PreActivationOutput/Output are never read here (no Backward method
+        // reads them) — under a recording GradientTape the tape already holds each
+        // op's state, so these fields only pin a second reference to every
+        // activation and block release of the deep model's activation set. Caching
+        // still happens when no tape is active (a manual-backward consumer may read
+        // it) or when the safety hatch forces it.
+        bool cacheForManualBackward = ShouldCacheActivationsForManualBackward;
+        if (cacheForManualBackward)
+            Input = input;
 
         // Mirror DenseLayer: dynamically resize the weight matrix when the caller's
         // input last-dim doesn't match the baked-in inputSize. Several Finance
@@ -561,8 +571,10 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
         if (fusedActivation != FusedActivationType.None && !IsTrainingMode)
         {
             // Pure-inference fast path — no activation-gradient cache needed.
-            Output = Engine.FusedLinear(input, _weights, _biases, fusedActivation);
-            return Output;
+            var fusedOut = Engine.FusedLinear(input, _weights, _biases, fusedActivation);
+            if (cacheForManualBackward)
+                Output = fusedOut;
+            return fusedOut;
         }
 
         // Training or non-fusable activation: emit the linear pre-activation in one
@@ -570,10 +582,14 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
         // FusedLinear entry (calling FusedLinear twice per forward corrupts tape
         // accounting via RemoveLastNTapeEntries).
         var linearOutput = Engine.FusedLinear(input, _weights, _biases, FusedActivationType.None);
-        PreActivationOutput = linearOutput;
-        Output = ApplyActivation(linearOutput);
+        var activated = ApplyActivation(linearOutput);
+        if (cacheForManualBackward)
+        {
+            PreActivationOutput = linearOutput;
+            Output = activated;
+        }
 
-        return Output;
+        return activated;
     }
 
     /// <summary>
