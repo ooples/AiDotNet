@@ -312,6 +312,53 @@ public class MMDiTXNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     /// <inheritdoc />
+    public override System.Collections.Generic.IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        // #1624: one chunk per layer (then the raw positional-embedding table) in the SAME order as
+        // GetParameters/SetParameters, so the flat concatenation is index-identical to GetParameters
+        // without materializing the full aggregate that OOMs at default size.
+        yield return ChunkOf(_patchEmbed);
+        foreach (var block in _jointBlocks) yield return ChunkOf(block);
+        yield return ChunkOf(_finalLayer);
+        if (_posEmbed.Length > 0) yield return new Tensor<T>(new[] { _posEmbed.Length }, new Vector<T>(_posEmbed));
+    }
+
+    /// <inheritdoc />
+    public override void SetParameterChunks(System.Collections.Generic.IEnumerable<Tensor<T>> chunks)
+    {
+        using var e = chunks.GetEnumerator();
+        SetChunk(e, _patchEmbed);
+        foreach (var block in _jointBlocks) SetChunk(e, block);
+        SetChunk(e, _finalLayer);
+        if (_posEmbed.Length > 0)
+        {
+            if (!e.MoveNext())
+                throw new System.ArgumentException(
+                    "SetParameterChunks received fewer chunks than MMDiT-X has parameter groups (missing posEmbed).",
+                    nameof(chunks));
+            var pos = e.Current.ToVector();
+            for (int i = 0; i < _posEmbed.Length; i++) _posEmbed[i] = pos[i];
+        }
+        if (e.MoveNext())
+            throw new System.ArgumentException(
+                "SetParameterChunks received more chunks than MMDiT-X has parameter groups.", nameof(chunks));
+    }
+
+    private static Tensor<T> ChunkOf(DenseLayer<T> layer)
+    {
+        var p = layer.GetParameters();
+        return new Tensor<T>(new[] { p.Length }, p);
+    }
+
+    private static void SetChunk(System.Collections.Generic.IEnumerator<Tensor<T>> e, DenseLayer<T> layer)
+    {
+        if (!e.MoveNext())
+            throw new System.ArgumentException(
+                "SetParameterChunks received fewer chunks than MMDiT-X has parameter groups.", nameof(e));
+        layer.SetParameters(e.Current.ToVector());
+    }
+
+    /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
     /// <inheritdoc />

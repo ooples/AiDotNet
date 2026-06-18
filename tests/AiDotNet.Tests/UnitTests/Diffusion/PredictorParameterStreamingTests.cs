@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -31,6 +32,14 @@ public class PredictorParameterStreamingTests
     private static EMMDiTPredictor<double> EMMDiT(int seed) =>
         new EMMDiTPredictor<double>(inputChannels: 4, contextDim: 64, seed: seed);
 
+    // MMDiT-X exposes size overrides for a reduced-scale same-architecture fixture; it also has a raw
+    // positional-embedding table appended after the layers, so this exercises the mixed layer + raw-array
+    // chunk path.
+    private static MMDiTXNoisePredictor<double> MMDiTX(int seed) =>
+        new MMDiTXNoisePredictor<double>(
+            MMDiTXVariant.Medium, inputChannels: 4, patchSize: 2, contextDim: 32, seed: seed,
+            hiddenSizeOverride: 32, numLayersOverride: 2, numHeadsOverride: 4);
+
     [Fact] public void FlagDiT_Chunks_IndexIdentical() => AssertIndexIdentical(FlagDiT(7));
     [Fact] public void FlagDiT_SetChunks_RoundTrips() => AssertRoundTrips(FlagDiT(1), FlagDiT(2));
 
@@ -42,6 +51,9 @@ public class PredictorParameterStreamingTests
 
     [Fact] public void EMMDiT_Chunks_IndexIdentical() => AssertIndexIdentical(EMMDiT(7));
     [Fact] public void EMMDiT_SetChunks_RoundTrips() => AssertRoundTrips(EMMDiT(1), EMMDiT(2));
+
+    [Fact] public void MMDiTX_Chunks_IndexIdentical() => AssertIndexIdentical(MMDiTX(7));
+    [Fact] public void MMDiTX_SetChunks_RoundTrips() => AssertRoundTrips(MMDiTX(1), MMDiTX(2));
 
     private static void AssertIndexIdentical(NoisePredictorBase<double> predictor)
     {
