@@ -347,6 +347,42 @@ public class FlagDiTPredictor<T> : NoisePredictorBase<T>
         foreach (var layer in FlagDiTLayerSequence()) offset = Load(layer, parameters, offset);
     }
 
+    /// <inheritdoc />
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        // #1624: one chunk per layer in the SAME canonical order as GetParameters/SetParameters, so
+        // the flat concatenation of chunks is index-identical to GetParameters() (the per-index
+        // correspondence contract) WITHOUT ever materializing the full multi-billion-parameter
+        // aggregate that overflows/OOMs at Flag-DiT / Lumina scale.
+        foreach (var layer in FlagDiTLayerSequence())
+        {
+            var p = layer.GetParameters();
+            if (p.Length > 0) yield return new Tensor<T>(new[] { p.Length }, p);
+        }
+    }
+
+    /// <inheritdoc />
+    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        // Consume one chunk per parameterized layer in the same canonical order — one chunk in flight
+        // at a time, never a flat aggregate. Skips zero-parameter layers symmetrically with
+        // GetParameterChunks above.
+        using var e = chunks.GetEnumerator();
+        foreach (var layer in FlagDiTLayerSequence())
+        {
+            if (layer.ParameterCount == 0) continue;
+            if (!e.MoveNext())
+                throw new ArgumentException(
+                    "SetParameterChunks received fewer chunks than Flag-DiT has parameterized layers.",
+                    nameof(chunks));
+            layer.SetParameters(e.Current.ToVector());
+        }
+        if (e.MoveNext())
+            throw new ArgumentException(
+                "SetParameterChunks received more chunks than Flag-DiT has parameterized layers.",
+                nameof(chunks));
+    }
+
     protected override Vector<T> GetParameterGradients()
     {
         var all = new List<T>();
