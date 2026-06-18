@@ -674,6 +674,22 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     }
 
     /// <summary>
+    /// Creates a lazily-allocated <see cref="DenseLayer{T}"/> whose weights and biases zero-fill on
+    /// first resolve (the <see cref="InitializationStrategies{T}.Zero"/> strategy is non-lazy, so the
+    /// deferred <c>EnsureInitialized</c> applies it). This is the memory-safe form of adaLN-zero
+    /// (Peebles &amp; Xie 2022): it keeps the layer deferred — no weight tensor is allocated at
+    /// construction — instead of eagerly resolving a foundation-scale layer just to write zeros into
+    /// it (which OOMs the host on Flag-DiT / Lumina-scale stacks). The first forward zero-fills exactly
+    /// as eager zero-init would, so the block still begins as the identity.
+    /// </summary>
+    protected static DenseLayer<T> LazyDenseZero(int inputSize, int outputSize)
+    {
+        var layer = new DenseLayer<T>(outputSize, (IActivationFunction<T>?)null, InitializationStrategies<T>.Zero);
+        layer.ResolveShapesOnly(new[] { inputSize });
+        return layer;
+    }
+
+    /// <summary>
     /// Creates a <see cref="LayerNormalizationLayer{T}"/> pre-resolved against
     /// <paramref name="featureSize"/> so its gamma/beta tensors are fully allocated
     /// at construction time. Use when callers iterate <c>ParameterCount</c>,
