@@ -65,6 +65,55 @@ public class PredictorParameterStreamingTests
     [Fact] public void MMDiT_Chunks_IndexIdentical() => AssertIndexIdentical(MMDiT(7));
     [Fact] public void MMDiT_SetChunks_RoundTrips() => AssertRoundTrips(MMDiT(1), MMDiT(2));
 
+    // U-ViT: encoder/middle/decoder blocks with optional-null sub-layers + interleaved skip projections.
+    // Its block attention layers only allocate weights on Forward, so (like MMDiTX) the real round-trip
+    // path is Clone (which probe-forwards first). We resolve via a probe forward before the chunk set,
+    // mirroring that contract. This also regression-covers the previously-truncated SetParameters and the
+    // Clone that didn't materialize the clone before copying.
+    private static UViTNoisePredictor<double> UViT(int seed) =>
+        new UViTNoisePredictor<double>(
+            inputChannels: 4, hiddenSize: 32, numLayers: 2, numHeads: 4,
+            patchSize: 2, contextDim: 0, latentSpatialSize: 8, seed: seed);
+
+    private static Tensor<double> UViTInput()
+    {
+        var t = new Tensor<double>(new[] { 1, 4, 8, 8 });
+        for (int i = 0; i < t.Length; i++) t[i] = (i % 7) * 0.01 - 0.03;
+        return t;
+    }
+
+    [Fact]
+    public void UViT_Chunks_IndexIdentical()
+    {
+        var p = UViT(7);
+        p.PredictNoise(UViTInput(), 0); // resolve lazy attention weights
+        AssertIndexIdentical(p);
+    }
+
+    [Fact]
+    public void UViT_SetChunks_RoundTrips()
+    {
+        var src = UViT(1); var dst = UViT(2);
+        src.PredictNoise(UViTInput(), 0);
+        dst.PredictNoise(UViTInput(), 0);
+        AssertRoundTrips(src, dst);
+    }
+
+    [Fact]
+    public void UViT_Clone_RoundTripsEveryLayer()
+    {
+        var src = UViT(1);
+        src.PredictNoise(UViTInput(), 0);
+        var sf = src.GetParameters();
+
+        var clone = (UViTNoisePredictor<double>)src.Clone();
+        var cf = clone.GetParameters();
+
+        Assert.Equal(sf.Length, cf.Length);
+        for (int i = 0; i < sf.Length; i++)
+            Assert.Equal(sf[i], cf[i], 12);
+    }
+
     private static void AssertIndexIdentical(NoisePredictorBase<double> predictor)
     {
         var flat = predictor.GetParameters();
