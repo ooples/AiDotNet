@@ -3480,6 +3480,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 (inp, tgt) => ForwardForTraining(inp),
                 (pred, tgt) => loss.ComputeTapeLoss(pred, tgt),
                 parameterBuffer: null);
+            // Past the point of no return: weights are about to be written in place (#1624 OOM-retry gate).
+            MarkTrainMutationStarted();
             optimizer.Step(context);
             // GPU weight-cache coherence after the grad-accum aggregated step.
             // See InvalidateWeightCachesAfterSuccessfulWeightUpdate.
@@ -5705,16 +5707,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Fresh step: no parameter has been mutated yet, so an OOM during the forward/backward
+        // (allocation) phase is safe to retry. MarkTrainMutationStarted() flips this true the moment
+        // any in-place weight/moment write begins, after which the OOM-retry below stands down.
+        _trainMutationStarted = false;
         try
         {
             TrainCore(input, expectedOutput);
         }
-        catch (Exception ex) when (IsGpuTransientFailure(ex))
+        catch (Exception ex) when (IsGpuTransientFailure(ex) && !_trainMutationStarted)
         {
-            // A sticky GPU fault tripped the circuit breaker (engine is now CPU); retry on CPU.
+            // A sticky GPU fault tripped the circuit breaker (engine is now CPU); retry on CPU — but only
+            // if no weight has been written yet, otherwise replaying the step would double-apply the update.
             TrainCore(input, expectedOutput);
         }
-        catch (OutOfMemoryException) when (!_memoryLeversForced)
+        catch (OutOfMemoryException) when (!_memoryLeversForced && !_trainMutationStarted)
         {
             // Reactive memory levers (#1624). The full-precision, full-batch step exhausted RAM. Latch the
             // 8-bit optimizer (G2 — ~1.5x model size less moment state) and micro-batch accumulation (G8 —
@@ -5792,6 +5799,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // helper so all training entry points keep the same
                 // OnBatchEnd contract. Closes #1270.yYuK.
                 var opt = GetOrCreateBaseOptimizer();
+                // Legacy per-layer update writes weights in place (#1624 OOM-retry gate).
+                MarkTrainMutationStarted();
                 opt.UpdateParameters(Layers);
                 StepSchedulerIfSupported(opt);
             }
@@ -6347,6 +6356,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 (source, grad) =>
                 {
                     if (grad is null || grad.Length == 0) return;
+                    // Streaming optimizer writes this source's weights in place (#1624 OOM-retry gate).
+                    MarkTrainMutationStarted();
                     streamingOptimizer.Apply(source, grad);
                 });
         }
@@ -6397,6 +6408,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                         for (int i = 0; i < len; i++)
                             span[i] = NumOps.Multiply(span[i], scale);
                     }
+                    // Streaming optimizer writes this source's weights in place (#1624 OOM-retry gate).
+                    MarkTrainMutationStarted();
                     streamingOptimizer.Apply(source, grad);
                 });
         }
@@ -7060,6 +7073,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
             if (!mpSkipOptimizerStep)
             {
+                // Tape optimizer step writes weights in place (#1624 OOM-retry gate).
+                MarkTrainMutationStarted();
                 opt.Step(context);
             }
 
@@ -7896,6 +7911,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 trainableParams, grads, lossValue,
                 input, input, ComputeForward, RecomputeLoss);
 
+            // Tape optimizer step writes weights in place (#1624 OOM-retry gate).
+            MarkTrainMutationStarted();
             opt.Step(context);
             // GPU weight-cache coherence after the custom-loss step.
             // See InvalidateWeightCachesAfterSuccessfulWeightUpdate.
@@ -7988,6 +8005,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(
             trainableParams, grads, lossValue);
 
+        // Tape optimizer step writes weights in place (#1624 OOM-retry gate).
+        MarkTrainMutationStarted();
         opt.Step(context);
         // GPU weight-cache coherence after the precomputed-loss step.
         // See InvalidateWeightCachesAfterSuccessfulWeightUpdate.
@@ -8158,6 +8177,23 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// optimizer) and G8 (micro-batch accumulation) memory levers ON for all subsequent steps of this model.
     /// </summary>
     private bool _memoryLeversForced;
+
+    /// <summary>
+    /// True once the current <see cref="Train(Tensor{T}, Tensor{T})"/> step has begun an in-place parameter
+    /// or moment-buffer mutation (optimizer step / streaming apply / legacy update). The reactive OOM-retry
+    /// in <see cref="Train(Tensor{T}, Tensor{T})"/> only retries when this is <c>false</c>: once any weight
+    /// has been partially written, retrying the same logical step from that corrupted intermediate state is
+    /// unsafe, so the OOM is rethrown instead. Set via <see cref="MarkTrainMutationStarted"/> at each
+    /// non-transactional write boundary; reset at the start/end of each <c>Train</c> call.
+    /// </summary>
+    private bool _trainMutationStarted;
+
+    /// <summary>
+    /// Marks that an in-place training write (optimizer.Step / streaming Apply / legacy UpdateParameters) is
+    /// about to begin, so a subsequent OOM is rethrown rather than retried from partially-mutated state.
+    /// See <see cref="_trainMutationStarted"/>.
+    /// </summary>
+    protected void MarkTrainMutationStarted() => _trainMutationStarted = true;
 
     /// <summary>
     /// Whether any layer reachable from this model performs cross-batch normalization (a BatchNorm layer),

@@ -299,6 +299,37 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     }
 
     /// <summary>
+    /// Wraps a layer's flat parameter vector in a 1-D <see cref="Tensor{T}"/> chunk for the streaming
+    /// <c>GetParameterChunks</c> contract (#1624). The chunk's flat order matches <c>GetParameters</c>.
+    /// </summary>
+    /// <param name="layer">The layer whose parameters become one chunk.</param>
+    /// <returns>A 1-D tensor holding the layer's parameters.</returns>
+    protected static Tensor<T> ChunkOf(DenseLayer<T> layer)
+    {
+        var p = layer.GetParameters();
+        return new Tensor<T>(new[] { p.Length }, p);
+    }
+
+    /// <summary>
+    /// Pulls the next chunk from <paramref name="e"/> and assigns it to <paramref name="layer"/>, used by
+    /// streaming <c>SetParameterChunks</c> (#1624). Throws if the sequence is exhausted early so a short
+    /// chunk stream fails loudly instead of leaving later layers silently un-set.
+    /// </summary>
+    /// <param name="e">Enumerator positioned before the chunk for <paramref name="layer"/>.</param>
+    /// <param name="layer">The layer to assign the next chunk to.</param>
+    protected static void SetChunk(IEnumerator<Tensor<T>> e, DenseLayer<T> layer)
+    {
+        if (e is null) throw new System.ArgumentNullException(nameof(e));
+        if (layer is null) throw new System.ArgumentNullException(nameof(layer));
+        if (!e.MoveNext())
+            throw new System.ArgumentException(
+                "SetParameterChunks received fewer chunks than the predictor has parameter groups.", nameof(e));
+        if (e.Current is null)
+            throw new System.ArgumentException("SetParameterChunks received a null chunk.", nameof(e));
+        layer.SetParameters(e.Current.ToVector());
+    }
+
+    /// <summary>
     /// Provides numeric operations for the specific type T.
     /// </summary>
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
