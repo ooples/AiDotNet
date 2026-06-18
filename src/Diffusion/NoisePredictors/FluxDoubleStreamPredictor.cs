@@ -329,6 +329,8 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
     {
+        ThrowIfDisposed();
+        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
         // Consume one chunk per sub-block in the same order GetParameterChunks yields them,
         // never materializing a flat aggregate.
         using var e = chunks.GetEnumerator();
@@ -340,6 +342,9 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
             throw new ArgumentException(
                 "SetParameterChunks received more chunks than the predictor has sub-blocks.",
                 nameof(chunks));
+        // Weights changed in place — drop any plan captured against the old graph so the next
+        // compiled forward re-traces instead of replaying stale weights.
+        InvalidateCompiledPlans();
     }
 
     private static Tensor<T> Wrap(Vector<T> v) => new Tensor<T>(new[] { v.Length }, v);

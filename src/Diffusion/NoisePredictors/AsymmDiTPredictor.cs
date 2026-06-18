@@ -167,6 +167,8 @@ public class AsymmDiTPredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override void SetParameterChunks(System.Collections.Generic.IEnumerable<Tensor<T>> chunks)
     {
+        ThrowIfDisposed();
+        if (chunks is null) throw new System.ArgumentNullException(nameof(chunks));
         using var e = chunks.GetEnumerator();
         SetChunk(e, _patchEmbed);
         foreach (var b in _blocks) SetChunk(e, b);
@@ -174,6 +176,8 @@ public class AsymmDiTPredictor<T> : NoisePredictorBase<T>
         if (e.MoveNext())
             throw new System.ArgumentException(
                 "SetParameterChunks received more chunks than the predictor has layers.", nameof(chunks));
+        // Weights changed in place — invalidate stale compiled plans (same as the base contract).
+        InvalidateCompiledPlans();
     }
 
     private static Tensor<T> ChunkOf(DenseLayer<T> layer)

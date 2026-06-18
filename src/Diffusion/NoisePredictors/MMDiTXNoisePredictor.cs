@@ -381,7 +381,17 @@ public class MMDiTXNoisePredictor<T> : NoisePredictorBase<T>
             var probe = new Tensor<T>(new[] { 1, _inputChannels, probeSpatial, probeSpatial });
             clone.PredictNoise(probe, timestep: 0, conditioning: null);
         }
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
+        if (clone.TryShareParametersFrom(this))
+        {
+            // COW shares trainable LAYER tensors only; _posEmbed is a learned Vector<T> field
+            // (random-init, part of Get/SetParameters), so copy it explicitly here or the clone keeps
+            // its own RNG-init positional embedding and diverges from the source on the share path.
+            var pos = new Vector<T>(_posEmbed.Length);
+            for (int i = 0; i < _posEmbed.Length; i++) pos[i] = _posEmbed[i];
+            clone._posEmbed = pos;
+            return clone;
+        }
+        clone.SetParameters(GetParameters());
         return clone;
     }
 
