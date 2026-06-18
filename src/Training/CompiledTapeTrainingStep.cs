@@ -732,16 +732,29 @@ public static class CompiledTapeTrainingStep<T>
                 return true;
             }
 
-            var plan = cache.GetOrCompileTraining(
-                compositeKey,
-                () =>
-                {
-                    // Trace through the persistent tensors so plan.Step()
-                    // reads from the same refs we update each call.
-                    var predicted = forward(_persistentInput!);
-                    return computeLoss(predicted, _persistentTarget!);
-                },
-                parameters);
+            // FP16-IN-CAPTURE (Tensors task #30): when opted in (AIDOTNET_FP16_CAPTURE=1, float), trace the
+            // forward under an FP16-storage autocast so the compiled CompiledTrainingPlan captures the Half
+            // activation nodes (consumed by its heterogeneous forward/backward — device-resident FP16
+            // activation storage, ~half the activation VRAM). Distinct from AIDOTNET_FP16_ACTIVATIONS, which
+            // routes to the separate, capture-incompatible MixedPrecisionCompiledPlan handled above. The scope
+            // is active only during the (once-per-shape) trace+compile; Step() replays without it.
+            ICompiledTrainingPlan<T> plan;
+            {
+                using var _fp16Capture =
+                    (typeof(T) == typeof(float) && Environment.GetEnvironmentVariable("AIDOTNET_FP16_CAPTURE") == "1")
+                        ? new AiDotNet.Tensors.Engines.Gpu.AutocastScope(AiDotNet.Tensors.Engines.Gpu.PrecisionMode.Float16)
+                        : null;
+                plan = cache.GetOrCompileTraining(
+                    compositeKey,
+                    () =>
+                    {
+                        // Trace through the persistent tensors so plan.Step()
+                        // reads from the same refs we update each call.
+                        var predicted = forward(_persistentInput!);
+                        return computeLoss(predicted, _persistentTarget!);
+                    },
+                    parameters);
+            }
 
             // STRICT SINGLE-PLAN POLICY: optimizer state lives inside the
             // compiled plan (ConfigureOptimizer attaches m/v buffers directly

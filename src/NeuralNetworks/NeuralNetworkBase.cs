@@ -7623,39 +7623,78 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // target's shape) makes the loss compute in a different space and
         // produces different gradients. Apply the same direction-aware fix
         // inside computeLoss where both tensors are in scope.
-        var ran = Training.CompiledTapeTrainingStep<T>.TryStepWithFusedOptimizer(
-            trainableLayers,
-            input,
-            expected,
-            forward: inp =>
-            {
-                var fwd = ForwardForTraining(inp);
-                // Branch (a): fwd has extra leading batch dim.
-                if (fwd.Rank > expected.Rank && fwd.Shape[0] == 1 && fwd.Length == expected.Length)
-                    return Engine.Reshape(fwd, expected._shape);
-                return fwd;
-            },
-            computeLoss: (pred, tgt) =>
-            {
-                // Branch (b): target has extra leading batch dim → reshape TARGET
-                // (matches the eager path's direction at TrainWithTape:2509-2512).
-                if (tgt.Rank > pred.Rank && tgt.Shape[0] == 1 && tgt.Length == pred.Length)
-                    tgt = Engine.Reshape(tgt, pred._shape);
-                return loss.ComputeTapeLoss(pred, tgt);
-            },
-            optimizerType: fusedType,
-            learningRate: lr,
-            beta1: b1,
-            beta2: b2,
-            epsilon: eps,
-            weightDecay: wd,
-            out T lossValue,
-            maxGradNorm: MaxGradNormValue,
-            lrSchedule: lrSched,
-            // Lets the compiled FP16-activation path (AIDOTNET_FP16_ACTIVATIONS=1) cover
-            // fused optimizers beyond the inline Adam/SGD fast paths by applying this
-            // optimizer's own master update to the FP16-computed FP32 gradients.
-            eagerOptimizer: resolvedOptimizer);
+        // #1624 / #1640: reclaim this training step's transient activations instead of
+        // letting them accumulate across steps. This is how PyTorch bounds training
+        // memory: its caching allocator returns each iteration's freed blocks to a reuse
+        // pool, so the process reaches a steady state and never grows with the step
+        // count, while the optimizer's state (Adam m/v) lives in optimizer.state, outside
+        // the per-iteration churn. The per-step TensorArena here is that per-iteration
+        // scope — on Dispose it returns this step's buffers to the cross-arena persistent
+        // pool for the next step to reuse (the arena's _persistent pool IS that block
+        // cache). Without it, the fused-optimizer path — unlike the eager tape and
+        // streaming paths, which already scope per step — ran every step under whatever
+        // arena the caller had open; when a caller wraps the whole loop in ONE un-Reset
+        // outer arena (the shared ModelFamilyTests base, or any cross-step buffer
+        // pooling), each step's working set piled into that outer ring → linear growth →
+        // OOM (#1640's 100 GB was this exact accumulation on ViT-Base, ~+403 MB/step).
+        //
+        // Unconditional and safe on every step (including the first/configuring one): the
+        // compiled plan's persistent state — Adam m/v moments + the persistent
+        // input/target — is held by the plan's own managed references on the GC heap, NOT
+        // arena-ring allocated, so this scope never recycles it. It persists across steps
+        // exactly like PyTorch's optimizer.state. (Verified: fused Adam step-for-step
+        // parity holds with this scope active.)
+        var stepArena = TensorArena.Create();
+
+        // Dispose the per-step transient arena the instant the fused step returns —
+        // BEFORE the result handling and especially before the OOM → streaming fallback
+        // in the `else if` below. That fallback degrades to the memory-bounded streaming
+        // path precisely because the fused plan ran out of memory; holding this step's
+        // transient ring alive across the switch would waste memory under pressure and
+        // nest the streaming path inside a transient scope. try/finally also releases the
+        // arena if the fused call throws.
+        bool ran;
+        T lossValue;
+        try
+        {
+            ran = Training.CompiledTapeTrainingStep<T>.TryStepWithFusedOptimizer(
+                trainableLayers,
+                input,
+                expected,
+                forward: inp =>
+                {
+                    var fwd = ForwardForTraining(inp);
+                    // Branch (a): fwd has extra leading batch dim.
+                    if (fwd.Rank > expected.Rank && fwd.Shape[0] == 1 && fwd.Length == expected.Length)
+                        return Engine.Reshape(fwd, expected._shape);
+                    return fwd;
+                },
+                computeLoss: (pred, tgt) =>
+                {
+                    // Branch (b): target has extra leading batch dim → reshape TARGET
+                    // (matches the eager path's direction at TrainWithTape:2509-2512).
+                    if (tgt.Rank > pred.Rank && tgt.Shape[0] == 1 && tgt.Length == pred.Length)
+                        tgt = Engine.Reshape(tgt, pred._shape);
+                    return loss.ComputeTapeLoss(pred, tgt);
+                },
+                optimizerType: fusedType,
+                learningRate: lr,
+                beta1: b1,
+                beta2: b2,
+                epsilon: eps,
+                weightDecay: wd,
+                out lossValue,
+                maxGradNorm: MaxGradNormValue,
+                lrSchedule: lrSched,
+                // Lets the compiled FP16-activation path (AIDOTNET_FP16_ACTIVATIONS=1) cover
+                // fused optimizers beyond the inline Adam/SGD fast paths by applying this
+                // optimizer's own master update to the FP16-computed FP32 gradients.
+                eagerOptimizer: resolvedOptimizer);
+        }
+        finally
+        {
+            stepArena.Dispose();
+        }
 
         if (ran)
         {

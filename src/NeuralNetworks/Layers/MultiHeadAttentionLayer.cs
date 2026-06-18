@@ -1132,10 +1132,21 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         key = Engine.Reshape(key, [batchK, seqLenK, dimK]);
         value = Engine.Reshape(value, [batchV, seqLenV, dimV]);
 
-        _lastInput = query;
-        _lastQueryInput = query;
-        _lastKeyInput = key;
-        _lastValueInput = value;
+        // #1624: these _last* fields are manual-backward caches that are write-only
+        // under tape autodiff (the engine ops record their own backward state, and
+        // the gradient flows through the tape, not the layer's caches). Skip them
+        // when a GradientTape is recording so they don't pin a redundant reference
+        // to every attention activation. _lastAttentionScores / _lastHeadOutputs are
+        // the exception — they ARE read by ComputeAuxiliaryLoss — so those are kept
+        // whenever UseAuxiliaryLoss is on. See LayerBase.ShouldCacheActivationsForManualBackward.
+        bool cacheForManualBackward = ShouldCacheActivationsForManualBackward;
+        if (cacheForManualBackward)
+        {
+            _lastInput = query;
+            _lastQueryInput = query;
+            _lastKeyInput = key;
+            _lastValueInput = value;
+        }
 
         int batchSize = query.Shape[0];
         int seqLengthQ = query.Shape[1];
@@ -1189,9 +1200,12 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         }
 
         // Cache projected Q, K, V for backward pass (4D: [batch, heads, seq, head_dim])
-        _lastProjectedQueries = queries;
-        _lastProjectedKeys = keys;
-        _lastProjectedValues = values;
+        if (cacheForManualBackward)
+        {
+            _lastProjectedQueries = queries;
+            _lastProjectedKeys = keys;
+            _lastProjectedValues = values;
+        }
 
         // 2. Compute Scaled Dot-Product Attention
         // ScaledDotProductAttention computes: softmax(Q @ K^T / scale) @ V
@@ -1249,8 +1263,11 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
                 out attentionWeights4D);
         }
 
-        // Cache attention weights for backward pass
-        _lastAttentionScores = attentionWeights4D;
+        // Cache attention weights — read by the manual backward (no tape) AND by
+        // ComputeAuxiliaryLoss (entropy/diversity) when UseAuxiliaryLoss is on, so
+        // keep them whenever either consumer needs them.
+        if (cacheForManualBackward || UseAuxiliaryLoss)
+            _lastAttentionScores = attentionWeights4D;
 
         // 3. Cache Head Outputs — only when the auxiliary loss path will
         // read them. ComputeAuxiliaryLoss is the sole consumer of
@@ -1276,8 +1293,9 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         var context_transposed = Engine.TensorPermute(context_4D, new[] { 0, 2, 1, 3 });
         var context_flat = Engine.Reshape(context_transposed, [batchSize * seqLengthQ, embeddingDimension]);
 
-        // Cache pre-projection context for weight gradient computation in backward pass
-        _lastAttentionContext = Engine.Reshape(context_transposed, [batchSize, seqLengthQ, embeddingDimension]);
+        // Cache pre-projection context for the manual weight-gradient backward.
+        if (cacheForManualBackward)
+            _lastAttentionContext = Engine.Reshape(context_transposed, [batchSize, seqLengthQ, embeddingDimension]);
 
         // Fused matmul+bias: collapses MatMul + Reshape + Reshape + BroadcastAdd
         // (4 engine dispatches) into FusedLinear + Reshape (2 dispatches). Same fused
@@ -1289,7 +1307,7 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         var result = ApplyActivation(outputWithBias);
 
         // Only store for backward pass during training - skip during inference
-        if (IsTrainingMode)
+        if (IsTrainingMode && cacheForManualBackward)
         {
             _lastOutput = result;
             _lastPreActivationOutput = outputWithBias;

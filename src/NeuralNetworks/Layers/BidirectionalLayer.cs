@@ -161,6 +161,16 @@ public class BidirectionalLayer<T> : LayerBase<T>
         {
             _backwardLayer.SetParameters(_backwardLayer.GetParameters().Clone());
         }
+
+        // Register the forward/backward inner layers as children so the gradient-tape parameter
+        // collector (TapeTrainingStep.CollectParameters, which walks GetSubLayers) discovers and
+        // trains their weights. Without this the wrapped recurrent layers were invisible to the
+        // tape — the BiLSTM stayed frozen at its random initialization and only the layers AFTER
+        // it (e.g. the Dense projection + CRF) learned, which is the real reason BiLSTM-CRF models
+        // failed to converge. GetParameters/SetParameters/ParameterCount are independently overridden
+        // to delegate to the same two layers, so this only affects tape discovery, not serialization.
+        RegisterSubLayer(_forwardLayer);
+        RegisterSubLayer(_backwardLayer);
     }
 
     /// <summary>
@@ -204,6 +214,16 @@ public class BidirectionalLayer<T> : LayerBase<T>
         {
             _backwardLayer.SetParameters(_backwardLayer.GetParameters().Clone());
         }
+
+        // Register the forward/backward inner layers as children so the gradient-tape parameter
+        // collector (TapeTrainingStep.CollectParameters, which walks GetSubLayers) discovers and
+        // trains their weights. Without this the wrapped recurrent layers were invisible to the
+        // tape — the BiLSTM stayed frozen at its random initialization and only the layers AFTER
+        // it (e.g. the Dense projection + CRF) learned, which is the real reason BiLSTM-CRF models
+        // failed to converge. GetParameters/SetParameters/ParameterCount are independently overridden
+        // to delegate to the same two layers, so this only affects tape discovery, not serialization.
+        RegisterSubLayer(_forwardLayer);
+        RegisterSubLayer(_backwardLayer);
     }
 
     /// <summary>
@@ -569,11 +589,15 @@ public class BidirectionalLayer<T> : LayerBase<T>
     {
         if (_mergeMode)
         {
-            return forward.Add(backward);
+            // Use the tape-tracked engine add (not Tensor.Add) so the gradient flows from the
+            // merged output back into BOTH direction outputs and on to this layer's input. The
+            // raw Tensor.Add is not an autodiff node, so it severed the chain — freezing every
+            // layer upstream of the BiLSTM (embeddings, char encoder, stacked lower BiLSTMs).
+            return Engine.TensorAdd(forward, backward);
         }
         else
         {
-            return Tensor<T>.Stack([forward, backward], 0);
+            return Engine.TensorStack([forward, backward], 0);
         }
     }
 
