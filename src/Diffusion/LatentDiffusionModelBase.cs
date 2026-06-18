@@ -92,6 +92,11 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
     /// </summary>
     public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
     {
+        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
+        // Detach copy-on-write-shared weights before streaming chunks straight into the sub-models'
+        // layers (this override bypasses the base flat SetParameters path), so a sibling clone isn't
+        // corrupted. Per-element null tensors are rejected by each sub-model's own SetParameterChunks.
+        EnsureOwnWeights();
 #if NETFRAMEWORK
         // Chunked API is unavailable through the interface on net471 (see GetParameterChunks above);
         // fall back to the base flat buffer-and-SetParameters path.

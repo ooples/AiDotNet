@@ -304,10 +304,18 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// </summary>
     public virtual void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
     {
+        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
+        // Detach any copy-on-write-shared weights before mutating in place — SetParameters writes
+        // through raw spans that bypass the COW write barrier, so without this a chunk assignment
+        // could corrupt a sibling clone. Same guard Train() applies.
+        EnsureOwnWeights();
+
         var buffered = new List<Tensor<T>>();
         long total = 0;
         foreach (var chunk in chunks)
         {
+            if (chunk is null)
+                throw new ArgumentException("Chunk sequence contains a null tensor.", nameof(chunks));
             buffered.Add(chunk);
             total += chunk.Length;
         }

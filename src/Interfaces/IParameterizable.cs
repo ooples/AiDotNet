@@ -93,10 +93,13 @@ public interface IParameterizable<T, TInput, TOutput>
     /// </remarks>
     void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
     {
+        if (chunks is null) throw new System.ArgumentNullException(nameof(chunks));
         var buffered = new List<Tensor<T>>();
         long total = 0;
         foreach (var chunk in chunks)
         {
+            if (chunk is null)
+                throw new System.ArgumentException("Chunk sequence contains a null tensor.", nameof(chunks));
             buffered.Add(chunk);
             total += chunk.Length;
         }
