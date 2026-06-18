@@ -11,6 +11,15 @@ namespace AiDotNet.Tests.UnitTests.Diffusion;
 /// reduction itself only manifests at foundation scale during training and is verified in CI; here we
 /// pin the correctness contract on a tiny variant.)
 /// </summary>
+/// <remarks>
+/// <see cref="NoisePredictorBase{T}.CheckpointingThresholdOverride"/> is a PROCESS-GLOBAL static that
+/// drives auto-engagement for every predictor constructed anywhere. The threshold test below temporarily
+/// lowers it, so this class is pinned to a <see cref="DisableParallelizationCollection"/> whose
+/// <c>DisableParallelization = true</c> stops it from running concurrently with any other test collection —
+/// otherwise a predictor constructed on a parallel thread could observe the lowered threshold and silently
+/// flip into checkpointing mid-test. The mutation itself is still scoped with try/finally restore.
+/// </remarks>
+[Collection(DisableParallelizationCollection.Name)]
 public class ActivationCheckpointingTests
 {
     private static FlagDiTPredictor<double> TinyFlagDiT(int seed) =>
