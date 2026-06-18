@@ -23,14 +23,37 @@ public class QuantizationAwareTrainingTests
     }
 
     [Fact]
-    public void QAT_IsOffByDefault_And_Toggles()
+    public void QAT_SmallModelOffByDefault_And_Toggles()
     {
+        // The tiny DDPM is far below the foundation-scale default threshold, so QAT is off by default.
         var model = new DDPMModel<double>(channels: 3, imageSize: 8, seed: 42);
         Assert.False(model.IsQuantizationAwareTrainingEnabled);
         model.EnableQuantizationAwareTraining();
         Assert.True(model.IsQuantizationAwareTrainingEnabled);
         model.DisableQuantizationAwareTraining();
         Assert.False(model.IsQuantizationAwareTrainingEnabled);
+    }
+
+    [Fact]
+    public void QAT_AutoEngages_ForFoundationScale_AndExplicitOverridesWin()
+    {
+        var prev = DiffusionModelBase<double>.QatThresholdOverride;
+        try
+        {
+            // Drop the threshold below the tiny model's size → QAT auto-engages by default (G5 default-ON
+            // for foundation-scale models, which a real 500M+ DiT exceeds).
+            DiffusionModelBase<double>.QatThresholdOverride = 0;
+            var auto = new DDPMModel<double>(channels: 3, imageSize: 8, seed: 1);
+            Assert.True(auto.IsQuantizationAwareTrainingEnabled);
+
+            // An explicit disable beats the threshold default.
+            auto.DisableQuantizationAwareTraining();
+            Assert.False(auto.IsQuantizationAwareTrainingEnabled);
+        }
+        finally
+        {
+            DiffusionModelBase<double>.QatThresholdOverride = prev;
+        }
     }
 
     [Fact]

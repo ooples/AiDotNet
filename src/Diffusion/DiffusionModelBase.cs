@@ -135,13 +135,29 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     private HashSet<int> _activeFeatureIndices = new HashSet<int>();
 
     /// <summary>
-    /// G5 (#1624) quantization-aware-training hook. <c>null</c> = OFF (the default). When set,
-    /// <see cref="Train"/> fake-quantizes the weights used in the forward pass (keeping full-precision
-    /// shadows) so the model learns quantization-robust weights. Opt-in only — QAT is <b>lossy</b> (it
-    /// changes the training numerics), so it is never auto-engaged; callers turn it on explicitly via
-    /// <see cref="EnableQuantizationAwareTraining"/>.
+    /// G5 (#1624) quantization-aware-training hook, created lazily on the first <see cref="Train"/> step
+    /// once <see cref="IsQuantizationAwareTrainingEnabled"/> is true.
     /// </summary>
     private QATTrainingHook<T>? _qatHook;
+
+    /// <summary>QAT config (explicit or default). Captured by <see cref="EnableQuantizationAwareTraining"/>.</summary>
+    private QuantizationConfiguration? _qatConfig;
+
+    /// <summary>
+    /// Explicit QAT override: <c>null</c> = auto (engage by the parameter-count threshold),
+    /// <c>true</c>/<c>false</c> = forced on/off.
+    /// </summary>
+    private bool? _qatExplicit;
+
+    /// <summary>
+    /// Parameter-count threshold at/above which QAT engages by DEFAULT (G5, #1624). Foundation-scale
+    /// diffusion models are the int8-deployment targets, so they train quantization-aware by default;
+    /// smaller models stay full-precision unless QAT is requested explicitly.
+    /// </summary>
+    private const long DefaultQatThresholdParams = 500_000_000L;
+
+    /// <summary>Test/diagnostic override for <see cref="DefaultQatThresholdParams"/>. Process-global.</summary>
+    internal static long? QatThresholdOverride { get; set; }
 
     /// <summary>
     /// The learning rate converted to type T for training computations.
@@ -735,25 +751,37 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// You can control the step size by setting the LearningRate in the options.</para>
     /// </remarks>
     /// <summary>
-    /// Enables quantization-aware training (G5, #1624): from the next <see cref="Train"/> step the
-    /// forward pass uses fake-quantized weights (quantize→dequantize, simulating the int8 inference
-    /// precision) while keeping full-precision shadow weights that the optimizer updates — a
-    /// straight-through estimator, so the model learns weights that survive post-training int8
-    /// quantization. <b>Opt-in and lossy</b> (it changes the training trajectory); it is never engaged
-    /// automatically. Pass a <see cref="QuantizationConfiguration"/> to tune bit width / symmetry;
-    /// the default is symmetric int8 with no warmup.
+    /// Forces quantization-aware training ON (G5, #1624): from the next <see cref="Train"/> step the
+    /// forward pass uses fake-quantized weights (quantize→dequantize, simulating int8 inference
+    /// precision) while keeping full-precision shadow weights that the optimizer updates (a
+    /// straight-through estimator), so the model learns weights that survive post-training int8
+    /// quantization. Foundation-scale models already engage this <b>by default</b> (above
+    /// <see cref="DefaultQatThresholdParams"/>); call this to force it on a smaller model or to override
+    /// the config. QAT is lossy — it changes the training trajectory. Pass a
+    /// <see cref="QuantizationConfiguration"/> to tune bit width / symmetry; default is symmetric int8.
     /// </summary>
     public void EnableQuantizationAwareTraining(QuantizationConfiguration? config = null)
     {
-        // QATWarmupEpochs = 0 ⇒ the hook quantizes immediately (we drive it per step, not per epoch).
-        _qatHook = new QATTrainingHook<T>(config ?? new QuantizationConfiguration { QATWarmupEpochs = 0 });
+        _qatExplicit = true;
+        _qatConfig = config;
+        _qatHook = null; // rebuilt lazily in Train with the new config
     }
 
-    /// <summary>Disables quantization-aware training, reverting <see cref="Train"/> to full-precision.</summary>
-    public void DisableQuantizationAwareTraining() => _qatHook = null;
+    /// <summary>Forces quantization-aware training OFF, overriding the parameter-count default.</summary>
+    public void DisableQuantizationAwareTraining()
+    {
+        _qatExplicit = false;
+        _qatHook = null;
+    }
 
-    /// <summary>Whether quantization-aware training is currently engaged (G5, #1624). Default <c>false</c>.</summary>
-    public bool IsQuantizationAwareTrainingEnabled => _qatHook is not null;
+    /// <summary>
+    /// Whether quantization-aware training is engaged for <see cref="Train"/> (G5, #1624). Defaults to ON
+    /// for foundation-scale models (<see cref="ParameterCount"/> ≥ <see cref="DefaultQatThresholdParams"/>)
+    /// and OFF for smaller ones, unless overridden via <see cref="EnableQuantizationAwareTraining"/> /
+    /// <see cref="DisableQuantizationAwareTraining"/>.
+    /// </summary>
+    public bool IsQuantizationAwareTrainingEnabled =>
+        _qatExplicit ?? (ParameterCount >= (QatThresholdOverride ?? DefaultQatThresholdParams));
 
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
@@ -769,8 +797,9 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         // layers aren't resolved yet (empty/zero-length collection) so this is a natural no-op warmup.
         Tensor<T>[]? qatParams = null;
         Vector<T>[]? qatShadows = null;
-        if (_qatHook is not null)
+        if (IsQuantizationAwareTrainingEnabled)
         {
+            _qatHook ??= new QATTrainingHook<T>(_qatConfig ?? new QuantizationConfiguration { QATWarmupEpochs = 0 });
             qatParams = CollectTrainableParameters();
             if (qatParams.Length > 0)
             {
