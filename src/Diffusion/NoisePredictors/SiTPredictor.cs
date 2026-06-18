@@ -214,6 +214,44 @@ public class SiTPredictor<T> : NoisePredictorBase<T>
     }
 
     /// <inheritdoc />
+    public override System.Collections.Generic.IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        // #1624: one chunk per layer in the SAME order as GetParameters/SetParameters, so the flat
+        // concatenation is index-identical to GetParameters without materializing the full aggregate.
+        var (_, embed, blocks, final_) = EnsureInitialized();
+        yield return ChunkOf(embed);
+        foreach (var b in blocks) yield return ChunkOf(b);
+        yield return ChunkOf(final_);
+    }
+
+    /// <inheritdoc />
+    public override void SetParameterChunks(System.Collections.Generic.IEnumerable<Tensor<T>> chunks)
+    {
+        var (_, embed, blocks, final_) = EnsureInitialized();
+        using var e = chunks.GetEnumerator();
+        SetChunk(e, embed);
+        foreach (var b in blocks) SetChunk(e, b);
+        SetChunk(e, final_);
+        if (e.MoveNext())
+            throw new System.ArgumentException(
+                "SetParameterChunks received more chunks than the predictor has layers.", nameof(chunks));
+    }
+
+    private static Tensor<T> ChunkOf(DenseLayer<T> layer)
+    {
+        var p = layer.GetParameters();
+        return new Tensor<T>(new[] { p.Length }, p);
+    }
+
+    private static void SetChunk(System.Collections.Generic.IEnumerator<Tensor<T>> e, DenseLayer<T> layer)
+    {
+        if (!e.MoveNext())
+            throw new System.ArgumentException(
+                "SetParameterChunks received fewer chunks than the predictor has layers.", nameof(e));
+        layer.SetParameters(e.Current.ToVector());
+    }
+
+    /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
     /// <inheritdoc />

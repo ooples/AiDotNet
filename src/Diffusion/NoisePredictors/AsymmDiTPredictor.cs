@@ -154,6 +154,42 @@ public class AsymmDiTPredictor<T> : NoisePredictorBase<T>
     }
 
     /// <inheritdoc />
+    public override System.Collections.Generic.IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        // #1624: one chunk per layer in the SAME order as GetParameters/SetParameters, so the flat
+        // concatenation is index-identical to GetParameters without materializing the full aggregate.
+        yield return ChunkOf(_patchEmbed);
+        foreach (var b in _blocks) yield return ChunkOf(b);
+        yield return ChunkOf(_finalLayer);
+    }
+
+    /// <inheritdoc />
+    public override void SetParameterChunks(System.Collections.Generic.IEnumerable<Tensor<T>> chunks)
+    {
+        using var e = chunks.GetEnumerator();
+        SetChunk(e, _patchEmbed);
+        foreach (var b in _blocks) SetChunk(e, b);
+        SetChunk(e, _finalLayer);
+        if (e.MoveNext())
+            throw new System.ArgumentException(
+                "SetParameterChunks received more chunks than the predictor has layers.", nameof(chunks));
+    }
+
+    private static Tensor<T> ChunkOf(DenseLayer<T> layer)
+    {
+        var p = layer.GetParameters();
+        return new Tensor<T>(new[] { p.Length }, p);
+    }
+
+    private static void SetChunk(System.Collections.Generic.IEnumerator<Tensor<T>> e, DenseLayer<T> layer)
+    {
+        if (!e.MoveNext())
+            throw new System.ArgumentException(
+                "SetParameterChunks received fewer chunks than the predictor has layers.", nameof(e));
+        layer.SetParameters(e.Current.ToVector());
+    }
+
+    /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
     /// <inheritdoc />
