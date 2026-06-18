@@ -96,6 +96,21 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         new(HeavyConcurrencyCap, HeavyConcurrencyCap);
 
     /// <summary>
+    /// BLAS-thread cap (issue #1305). xUnit runs diffusion test classes in parallel; uncapped, every
+    /// concurrent foundation-scale forward grabs ALL cores via the managed BLAS, so N tests fight for
+    /// the same cores and per-step latency multiplies 4-8× — blowing the 120s timeout even though each
+    /// test fits in isolation. Cap the managed-BLAS parallelism per test so the at-most
+    /// <see cref="HeavyConcurrencyCap"/> concurrent heavy forwards share the machine
+    /// (cap × HeavyConcurrencyCap ≈ core count) instead of each demanding the whole machine. Set once,
+    /// process-wide, in the static initializer so parallel test classes don't race the global knob.
+    /// </summary>
+    static DiffusionModelTestBase()
+    {
+        AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism =
+            System.Math.Max(1, System.Environment.ProcessorCount / HeavyConcurrencyCap);
+    }
+
+    /// <summary>
     /// Per-test-instance flag tracking whether this instance acquired
     /// <see cref="_heavyTestGate"/>. Only released in <see cref="DisposeAsync"/>
     /// if acquired here, so a failure during InitializeAsync (gate not yet

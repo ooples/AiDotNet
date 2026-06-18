@@ -262,6 +262,42 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     }
 
     /// <summary>
+    /// Multi-input compiled replay for a forward that reads SEVERAL per-call-varying leaves —
+    /// the diffusion per-step <see cref="Forward"/> reads the noisy sample, the per-step timestep
+    /// embedding, and optional conditioning. The single-input <see cref="PredictCompiled"/> bakes
+    /// every leaf but the first as a constant, so it would replay step 0's timestep embedding for
+    /// the whole denoising loop (silent corruption); this overload marks EVERY tensor in
+    /// <paramref name="inputs"/> as a mutable slot the compiled plan re-binds each step
+    /// (AiDotNet.Tensors#616), compiling the expensive forward once while keeping the per-step
+    /// inputs live. The verify-then-trust gate still adopts the compiled plan for a shape only
+    /// after it matches eager, so output stays numerically identical to eager.
+    /// </summary>
+    /// <param name="inputs">The per-step mutable input leaves, in a stable order. Each must be a
+    /// tensor the forward reads directly; otherwise compile fails closed and this falls back to eager.</param>
+    /// <param name="eagerFallback">The eager forward pass (traced, replayed, verified, or fallback).</param>
+    protected Tensor<T> PredictCompiledMulti(Tensor<T>[] inputs, Func<Tensor<T>> eagerFallback)
+    {
+        // Direct compile host when the verify gate is opted out.
+        if (s_autoCompileDisabled)
+            return _compileHost.Predict(inputs, _layerStructureVersion, eagerFallback);
+
+        return _inferenceGate.Run(
+            inputs,
+            _layerStructureVersion,
+            eager: eagerFallback,
+            compiled: () => _compileHost.Predict(inputs, _layerStructureVersion, eagerFallback),
+            onDecision: (enabled, reason) => AiDotNet.Helpers.InferenceDiagnostics.RecordDecision(
+                area: "NoisePredictorBase", feature: "AutoCompiledMultiInputInference", enabled: enabled, reason: reason));
+    }
+
+    /// <summary>
+    /// Count of successful multi-input compiled-plan executions on this predictor's compile
+    /// host (the per-step denoising path). Test/diagnostic hook: a test can assert this grew
+    /// to confirm the compiled plan actually ran rather than silently falling back to eager.
+    /// </summary>
+    internal long CompiledMultiInputReplays => _compileHost.MultiInputReplays;
+
+    /// <summary>
     /// Async overload of <see cref="PredictCompiled"/> — routes through
     /// <see cref="CompiledModelHost{T}.PredictAsync"/> so the compiled plan's
     /// <c>ExecuteAsync</c> path is taken. CPU engines complete synchronously
