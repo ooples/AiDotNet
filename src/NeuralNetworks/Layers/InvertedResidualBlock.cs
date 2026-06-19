@@ -245,12 +245,18 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
         }
 
         int dwInputChannels = _hasExpansion ? hiddenDim : inChannels;
+        // #639: this is the DEPTHWISE stage of the inverted residual — it must convolve
+        // each channel independently (groups == channels), not run a dense [C,C,3,3]
+        // conv. The old code omitted groups, so it did C× more FLOPs than MobileNet's
+        // design (the dominant cost on the heavy-channel blocks). groups=dwInputChannels
+        // routes ConvolutionalLayer to Engine.DepthwiseConv2D with a [C,1,3,3] kernel.
         _dwConv = new ConvolutionalLayer<T>(
             outputDepth: dwInputChannels,
             kernelSize: 3,
             stride: Stride,
             padding: 1,
-            activationFunction: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>(),
+            groups: dwInputChannels);
         _dwBn = new BatchNormalizationLayer<T>();
 
         if (_useSE)
