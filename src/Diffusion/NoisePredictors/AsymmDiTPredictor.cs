@@ -130,7 +130,10 @@ public class AsymmDiTPredictor<T> : NoisePredictorBase<T>
     {
         using var streaming = BeginWeightStreamingForward();
         var x = _patchEmbed.Forward(noisySample);
-        foreach (var block in _blocks) x = block.Forward(x);
+        // G4 (#1624): checkpoint the block stack (recompute activations in backward) — gradient-equivalent.
+        var blockForwards = new System.Func<Tensor<T>, Tensor<T>>[_blocks.Length];
+        for (int i = 0; i < _blocks.Length; i++) blockForwards[i] = _blocks[i].Forward;
+        x = CheckpointBlocks(blockForwards, x);
         return streaming.Complete(_finalLayer.Forward(x));
     }
 

@@ -213,8 +213,12 @@ public class FlagDiTPredictor<T> : NoisePredictorBase<T>
         }
 
         var hidden = _patchEmbed.Forward(Patchify(x));   // [B, seq, hidden]
-        for (int i = 0; i < _numLayers; i++)
-            hidden = ForwardBlock(hidden, cond, i);
+        // G4 (#1624): checkpoint each block (recompute activations in backward) — gradient-equivalent.
+        // Each closure is a pure function of the residual stream; `cond` is captured as a constant and
+        // its gradient is propagated correctly by the package checkpoint's recompute.
+        var blockForwards = new System.Func<Tensor<T>, Tensor<T>>[_numLayers];
+        for (int i = 0; i < _numLayers; i++) { int idx = i; blockForwards[i] = h => ForwardBlock(h, cond, idx); }
+        hidden = CheckpointBlocks(blockForwards, hidden);
         hidden = FinalLayer(hidden, cond);                // [B, seq, hidden] -> norm/adaLN
         var patches = _outputProj.Forward(hidden);        // [B, seq, patchDim]
         var output = Unpatchify(patches, height, width);  // [B, C, H, W]

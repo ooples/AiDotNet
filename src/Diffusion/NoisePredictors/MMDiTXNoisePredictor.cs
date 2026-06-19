@@ -210,8 +210,10 @@ public class MMDiTXNoisePredictor<T> : NoisePredictorBase<T>
 
         // Embed and propagate
         var x = _patchEmbed.Forward(tokens);
-        foreach (var block in _jointBlocks)
-            x = block.Forward(x);
+        // G4 (#1624): checkpoint the joint-block stack (recompute activations in backward) — gradient-equivalent.
+        var blockForwards = new System.Func<Tensor<T>, Tensor<T>>[_jointBlocks.Length];
+        for (int i = 0; i < _jointBlocks.Length; i++) blockForwards[i] = _jointBlocks[i].Forward;
+        x = CheckpointBlocks(blockForwards, x);
         var projected = _finalLayer.Forward(x);  // [B, numTokens, patchDim]
 
         // Unpatchify back to [B, C, H, W]

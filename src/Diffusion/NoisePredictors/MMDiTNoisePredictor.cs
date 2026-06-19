@@ -473,7 +473,12 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         var textConditioning = conditioning ?? new Tensor<T>(new[] { batch, 1, _contextDim });
         var textTokens = _contextProj.Forward(textConditioning);
 
-        // Process through joint (double-stream) blocks
+        // Process through joint (double-stream) blocks.
+        // G4 (#1624): the joint blocks are DUAL-stream — each threads an (image, text) token PAIR —
+        // so they don't fit the single-residual-stream CheckpointBlocks primitive without a packed
+        // concat/split wrapper. They are intentionally left un-checkpointed; the single-stream stack
+        // below (the FLUX-style tail) IS checkpointed, and the other DiT-family predictors checkpoint
+        // their full block stacks. A packed dual-stream checkpoint is a possible follow-up.
         foreach (var block in _jointBlocks)
         {
             (imageTokens, textTokens) = ForwardJointBlock(imageTokens, textTokens, timeEmbed, block);
@@ -484,10 +489,15 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         {
             // Concatenate text and image tokens for single-stream processing
             var combined = ConcatenateSequences(textTokens, imageTokens);
-            foreach (var block in _singleBlocks)
+            // G4 (#1624): checkpoint the single-stream block stack (recompute activations in backward)
+            // — gradient-equivalent. timeEmbed is captured as a constant in each closure.
+            var blockForwards = new System.Func<Tensor<T>, Tensor<T>>[_singleBlocks.Count];
+            for (int i = 0; i < _singleBlocks.Count; i++)
             {
-                combined = ForwardSingleBlock(combined, timeEmbed, block);
+                var block = _singleBlocks[i];
+                blockForwards[i] = h => ForwardSingleBlock(h, timeEmbed, block);
             }
+            combined = CheckpointBlocks(blockForwards, combined);
             // Extract image tokens from the combined sequence
             imageTokens = ExtractImageTokens(combined, textTokens.Shape[1], numImageTokens);
         }

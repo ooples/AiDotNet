@@ -166,8 +166,17 @@
            * Per-step heap growth flat in BOTH (-0.001 MiB/step: the per-step leak fix is consumer
              src, constant across the runs), and loss converges identically (1.27 -> 0.26) — the
              reduction is not from silently breaking training.
-         Native packages coreleased in lockstep at 0.101.2. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.101.2" />
+         Native packages coreleased in lockstep at 0.101.2.
+
+         0.101.2 -> 0.101.4: activation-checkpointing weight-gradient fix
+         (ooples/AiDotNet.Tensors#643). GradientCheckpointing.Checkpoint's recompute backward
+         differentiated only w.r.t. the segment input, silently dropping the weight gradients of
+         every checkpointed layer — so G4 (#1624) checkpointed layers did not learn. 0.101.4
+         backprops the recomputed segment through its parameters too (matches torch.utils.checkpoint).
+         Required by the G4 wiring in the diffusion NoisePredictors + NeuralNetworkBase. Only the core
+         AiDotNet.Tensors package carries the fix; the native packages (no checkpoint code) stay at
+         0.101.2. NOTE: publish AiDotNet.Tensors 0.101.4 from PR #643 before this PR's CI can restore. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.101.4" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.101.2" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.101.2" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.101.2" />

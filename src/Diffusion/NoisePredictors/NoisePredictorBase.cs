@@ -488,11 +488,63 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// </summary>
     internal static long? StreamingThresholdOverride { get; set; }
 
-    // G4 (#1624) activation checkpointing was removed: the AiDotNet.Tensors GradientCheckpointing
-    // primitive does NOT produce gradient-equivalent results through GradientTape.ComputeGradients —
-    // a one-step train with checkpointing on vs off diverged on every predictor (incl. a capture-free
-    // block), so it silently corrupted training rather than just trading compute for memory. It must be
-    // fixed + covered by a gradient-equivalence test at the Tensors-package level before being re-wired.
+    // G4 (#1624) activation checkpointing. null = auto (engage by parameter-count threshold),
+    // true/false = explicit override.
+    private bool? _activationCheckpointing;
+
+    /// <summary>
+    /// Parameter-count threshold above which activation checkpointing engages by default. Activation
+    /// memory (not weights) is the training-time peak for deep transformers, so this is well below the
+    /// weight-streaming threshold.
+    /// </summary>
+    private const long DefaultCheckpointingThresholdParams = 100_000_000L;
+
+    /// <summary>Test/diagnostic override for <see cref="DefaultCheckpointingThresholdParams"/>. Process-global.</summary>
+    internal static long? CheckpointingThresholdOverride { get; set; }
+
+    /// <summary>
+    /// Whether this predictor recomputes block activations during backward instead of storing them
+    /// (activation checkpointing — the standard transformer memory/compute trade). Defaults to ON for
+    /// foundation-scale predictors (<see cref="ParameterCount"/> &gt; the threshold); set explicitly to
+    /// force on/off. Implemented via the package's tape-integrated
+    /// <see cref="AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing{T}"/> primitive, which
+    /// recomputes each segment in backward with a correct VJP seed (AiDotNet.Tensors#361), so it is
+    /// mathematically gradient-equivalent to the non-checkpointed forward — verified for both the input
+    /// and the weight gradients by <c>PackageCheckpoint_GradientsMatchEager_ForInputAndParameters</c>
+    /// and end-to-end by <c>Transformer_with_checkpointing_actually_learns_loss_decreases</c>.
+    /// </summary>
+    public bool ActivationCheckpointingEnabled
+    {
+        get => _activationCheckpointing
+            ?? (ParameterCount > (CheckpointingThresholdOverride ?? DefaultCheckpointingThresholdParams));
+        internal set => _activationCheckpointing = value;
+    }
+
+    /// <summary>
+    /// Runs a sequence of residual-stream blocks under activation checkpointing when
+    /// <see cref="ActivationCheckpointingEnabled"/> is set, otherwise eagerly. Each entry of
+    /// <paramref name="blocks"/> is a block's forward as a pure function of the residual-stream tensor
+    /// (conditioning captured by the closure); the blocks read their LIVE trainable weights, so the
+    /// package primitive's recompute backward attributes gradients to those weights via the active tape.
+    /// Mathematically identical to running the blocks sequentially — it only changes when each segment's
+    /// activations are materialized (recomputed in backward instead of retained), which is the memory win.
+    /// </summary>
+    /// <param name="blocks">Per-block forward functions, applied in order.</param>
+    /// <param name="input">The residual-stream tensor entering the first block.</param>
+    protected Tensor<T> CheckpointBlocks(System.Func<Tensor<T>, Tensor<T>>[] blocks, Tensor<T> input)
+    {
+        if (!ActivationCheckpointingEnabled || blocks.Length == 0)
+        {
+            var x = input;
+            foreach (var b in blocks) x = b(x);
+            return x;
+        }
+
+        // sqrt(N) segment size is the classic memory/compute optimum: ~sqrt(N) retained checkpoints with
+        // ~one extra forward of recompute (Chen et al. 2016, "Training Deep Nets with Sublinear Memory").
+        int segmentSize = System.Math.Max(1, (int)System.Math.Sqrt(blocks.Length));
+        return AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing<T>.Checkpoint(blocks, input, segmentSize);
+    }
 
     /// <summary>
     /// Test/diagnostic override for the streaming pool's resident-byte cap so a

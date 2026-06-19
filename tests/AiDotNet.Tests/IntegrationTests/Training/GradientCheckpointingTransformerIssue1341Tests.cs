@@ -50,7 +50,7 @@ public class GradientCheckpointingTransformerIssue1341Tests
     /// <c>Directory.Packages.props</c>'s AiDotNet.Tensors version and remove
     /// the Skip attribute once the upstream fix is consumable.
     /// </remarks>
-    [Fact(Skip = "Blocked on ooples/AiDotNet.Tensors#361 — GradientCheckpointing vjp seeding fix. Un-skip after the Tensors NuGet that includes the fix is referenced in Directory.Packages.props.")]
+    [Fact]
     public void Transformer_Train_with_ForTransformers_checkpointing_does_not_throw_on_shape_mismatch()
     {
         const int vocabSize = 256;
@@ -123,7 +123,7 @@ public class GradientCheckpointingTransformerIssue1341Tests
     /// <c>Directory.Packages.props</c>'s AiDotNet.Tensors version and remove
     /// the Skip attribute once the upstream fix is consumable.
     /// </remarks>
-    [Fact(Skip = "Blocked on ooples/AiDotNet.Tensors#361 — GradientCheckpointing vjp seeding fix. Un-skip after the Tensors NuGet that includes the fix is referenced in Directory.Packages.props.")]
+    [Fact]
     public void Transformer_Train_with_checkpointing_succeeds_for_repeated_calls()
     {
         const int vocabSize = 32;
@@ -172,5 +172,70 @@ public class GradientCheckpointingTransformerIssue1341Tests
         }
 
         _output.WriteLine("Three consecutive checkpointed Train calls succeeded.");
+    }
+
+    // Note: a "loss decreases under checkpointing" test was intentionally NOT kept — it is
+    // confounded. A Transformer's non-checkpointed parameters (token/position embeddings, output
+    // projection) drive the loss down on a memorize-one-sample task even when the checkpointed
+    // attention/FFN weights receive zero gradient, so such a test passes on BOTH the broken and the
+    // fixed package and proves nothing about checkpointed-weight correctness. The unconfounded
+    // parameter-update equivalence test below is the real correctness guard.
+
+    /// <summary>
+    /// UNCONFOUNDED gradient-equivalence on the real library path: two Transformers from an IDENTICAL
+    /// initial parameter vector (same fresh optimizer state) take ONE training step on the SAME sample —
+    /// one with checkpointing, one without. If the package checkpoint is gradient-correct for the
+    /// checkpointed layers' WEIGHTS (not just the segment input), every parameter update must match. If
+    /// the checkpoint drops weight gradients, the checkpointed entries stay put in the on-run and the
+    /// two parameter vectors diverge by far more than fp noise. Uses dropout=0 so the only difference
+    /// between the two runs is the checkpointing mechanism itself.
+    /// </summary>
+    [Fact]
+    public void Transformer_checkpointing_parameter_updates_match_eager_one_step()
+    {
+        const int vocabSize = 32, dModel = 16, dFf = 32, ctxLen = 8, heads = 2, layers = 2;
+
+        Transformer<float> Build()
+        {
+            var arch = new TransformerArchitecture<float>(
+                inputType: InputType.TwoDimensional,
+                taskType: NeuralNetworkTaskType.SequenceClassification,
+                numEncoderLayers: layers, numDecoderLayers: 0, numHeads: heads,
+                modelDimension: dModel, feedForwardDimension: dFf, inputSize: ctxLen,
+                outputSize: vocabSize, maxSequenceLength: ctxLen, vocabularySize: vocabSize,
+                dropoutRate: 0.0);
+            return new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
+        }
+
+        var rng = RandomHelper.CreateSeededRandom(11);
+        var input = new Tensor<float>(new[] { 1, ctxLen });
+        for (int t = 0; t < ctxLen; t++) input[0, t] = rng.Next(vocabSize);
+        var target = new Tensor<float>(new[] { 1, vocabSize });
+        target[0, rng.Next(vocabSize)] = 1.0f;
+
+        var tOff = Build();
+        var tOn = Build();
+        tOn.SetParameters(tOff.GetParameters()); // identical init; both have fresh (zero) optimizer state
+        tOn.EnableMemoryManagement(TrainingMemoryConfig.ForTransformers());
+
+        tOff.Train(input, target);
+        tOn.Train(input, target);
+
+        var pOff = tOff.GetParameters();
+        var pOn = tOn.GetParameters();
+        Assert.Equal(pOff.Length, pOn.Length);
+
+        int diffCount = 0; double maxDiff = 0;
+        for (int i = 0; i < pOff.Length; i++)
+        {
+            double d = System.Math.Abs((double)pOff[i] - (double)pOn[i]);
+            if (d > 1e-5) diffCount++;
+            if (d > maxDiff) maxDiff = d;
+        }
+        _output.WriteLine($"param updates: total={pOff.Length}, diffCount={diffCount}, maxDiff={maxDiff}");
+        Assert.True(diffCount == 0,
+            $"Checkpointed vs eager parameter updates diverge: {diffCount}/{pOff.Length} params differ " +
+            $"(maxDiff={maxDiff}). A correct checkpoint is gradient-equivalent — divergence means the " +
+            $"package checkpoint is not propagating weight gradients for checkpointed segments.");
     }
 }

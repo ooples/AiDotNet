@@ -193,10 +193,13 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
 
         // Embed + propagate through joint (double) + single block stack.
         var x = _patchEmbed.Forward(tokens);
-        foreach (var block in _doubleBlocks)
-            x = block.Forward(x);
-        foreach (var block in _singleBlocks)
-            x = block.Forward(x);
+        // G4 (#1624): checkpoint the full double+single block stack (recompute activations in backward)
+        // — gradient-equivalent. Both stacks run sequentially on the same residual stream.
+        var blockForwards = new System.Func<Tensor<T>, Tensor<T>>[_doubleBlocks.Length + _singleBlocks.Length];
+        int bi = 0;
+        for (int i = 0; i < _doubleBlocks.Length; i++) blockForwards[bi++] = _doubleBlocks[i].Forward;
+        for (int i = 0; i < _singleBlocks.Length; i++) blockForwards[bi++] = _singleBlocks[i].Forward;
+        x = CheckpointBlocks(blockForwards, x);
         var projected = _finalLayer.Forward(x);  // [B, numTokens, patchDim]
 
         // Unpatchify back to [B, C, H, W].
