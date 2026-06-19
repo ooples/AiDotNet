@@ -565,19 +565,18 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
             return x;
         }
 
-        // Single segment (segmentSize == block count): the whole stack is recomputed in backward, so
-        // NO intermediate block activations are retained — the MAXIMUM activation-memory saving, which
-        // is what the memory-bound foundation-scale training in #1624 needs (memory, not recompute, is
-        // the binding constraint on the 16 GiB runner).
-        //
-        // Single-segment also avoids a multi-segment defect in the package primitive: when
-        // GradientCheckpointing.Checkpoint splits a FusedLinear-bearing block stack into MORE THAN ONE
-        // segment, the gradient handed from a later segment to an earlier segment's input is double-
-        // counted, so every earlier-segment parameter gradient comes out 2x (verified: 2-segment
-        // FusedLinear diverges 2x while 1-segment and 2-segment plain-matmul are exact). A single
-        // segment has no inter-segment hand-off, so it is exactly gradient-equivalent to the eager
-        // forward (verified by the diffusion + Tensors gradient-equivalence tests).
-        return AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing<T>.Checkpoint(blocks, input, blocks.Length);
+        // sqrt(N) segment size — the classic memory/compute optimum (Chen et al. 2016, "Training Deep
+        // Nets with Sublinear Memory Cost"): the backward recomputes ONE segment at a time, so the peak
+        // activation memory is O(sqrt(N)) (sqrt(N) retained segment boundaries + one segment's worth of
+        // recomputed activations), for ~one extra forward of compute. This bounds the PEAK — the binding
+        // constraint that OOMs the 16 GiB runner in #1624. (A single segment would recompute the whole
+        // stack into one tape, spiking peak back to a full forward, so it is NOT the right trade here.)
+        // Multi-segment correctness requires AiDotNet.Tensors >= 0.101.5 (the per-segment input is
+        // detached in the recompute so a later segment can't re-enter and double-count an earlier one —
+        // ooples/AiDotNet.Tensors#645). Verified gradient-equivalent (input + weights) by the diffusion
+        // and Tensors multi-segment checkpoint tests.
+        int segmentSize = System.Math.Max(1, (int)System.Math.Sqrt(blocks.Length));
+        return AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing<T>.Checkpoint(blocks, input, segmentSize);
     }
 
     /// <summary>

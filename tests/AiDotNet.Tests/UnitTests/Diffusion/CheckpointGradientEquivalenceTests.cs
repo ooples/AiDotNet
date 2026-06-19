@@ -64,8 +64,10 @@ public class CheckpointGradientEquivalenceTests : System.IDisposable
         using var tape = new GradientTape<double>();
         var blockFns = new System.Func<Tensor<double>, Tensor<double>>[] { l0.Forward, l1.Forward };
         Tensor<double> output = checkpoint
-            // Single segment (segmentSize == block count) — matches NoisePredictorBase.CheckpointBlocks.
-            ? GradientCheckpointing<double>.Checkpoint(blockFns, input, blockFns.Length)
+            // segmentSize 1 → MULTIPLE segments (one per block), the cross-segment recompute path
+            // NoisePredictorBase.CheckpointBlocks uses via sqrt(N). Requires the multi-segment
+            // double-count fix (AiDotNet.Tensors >= 0.101.5 / #645).
+            ? GradientCheckpointing<double>.Checkpoint(blockFns, input, 1)
             : l1.Forward(l0.Forward(input));
         var loss = Engine.ReduceSum(Engine.TensorMultiply(output, outWeight), null);
 

@@ -168,15 +168,18 @@
              reduction is not from silently breaking training.
          Native packages coreleased in lockstep at 0.101.2.
 
-         0.101.2 -> 0.101.4: activation-checkpointing weight-gradient fix
-         (ooples/AiDotNet.Tensors#643). GradientCheckpointing.Checkpoint's recompute backward
-         differentiated only w.r.t. the segment input, silently dropping the weight gradients of
-         every checkpointed layer — so G4 (#1624) checkpointed layers did not learn. 0.101.4
-         backprops the recomputed segment through its parameters too (matches torch.utils.checkpoint).
-         Required by the G4 wiring in the diffusion NoisePredictors + NeuralNetworkBase. Only the core
-         AiDotNet.Tensors package carries the fix; the native packages (no checkpoint code) stay at
-         0.101.2. NOTE: publish AiDotNet.Tensors 0.101.4 from PR #643 before this PR's CI can restore. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.101.4" />
+         0.101.2 -> 0.101.5: activation-checkpointing correctness, two fixes.
+         (1) #643 (0.101.4): GradientCheckpointing.Checkpoint's recompute differentiated only w.r.t.
+             the segment input, silently dropping every checkpointed layer's WEIGHT gradients.
+         (2) #645 (0.101.5): multi-segment recompute double-counted earlier segments — a later
+             segment's recompute followed its (non-detached) input back into the earlier segment's
+             checkpoint node, so earlier-segment gradients came out 2x. 0.101.5 detaches each
+             segment's input (matches torch.utils.checkpoint), making sqrt(N) multi-segment exact.
+         Both are required for G4 (#1624) in the diffusion NoisePredictors (sqrt(N) checkpointing) and
+         for NeuralNetworkBase checkpointing. Only the core AiDotNet.Tensors package carries the fixes;
+         the native packages (no checkpoint code) stay at 0.101.2. NOTE: publish AiDotNet.Tensors
+         0.101.5 from PR #645 before this PR's CI can restore. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.101.5" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.101.2" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.101.2" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.101.2" />
