@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
@@ -129,5 +130,45 @@ public class CheckpointGradientEquivalenceTests : System.IDisposable
         Assert.Equal(eager.Length, ckpt.Length);
         for (int i = 0; i < eager.Length; i++)
             Assert.Equal(eager[i], ckpt[i], 10);
+    }
+
+    // MMDiT's joint blocks are DUAL-stream (image, text). G4 checkpoints them by packing the two
+    // streams into one tensor along the token axis and splitting per block with the differentiable
+    // TensorNarrow, then re-concatenating. This verifies — on ONE instance, same input — that enabling
+    // checkpointing does not change the forward output (forward-transparency), which confirms the
+    // pack/split wrapper is correct and the checkpoint is a pure memory/compute trade. The wrapper is a
+    // differentiable function of the packed stream, so gradient-equivalence then follows from the
+    // package primitive's proven exactness for arbitrary differentiable (incl. residual/attention-
+    // shape) segments — see GradientCorrectnessTests.Checkpoint_* in AiDotNet.Tensors.
+    [Fact]
+    public void MMDiT_DualStreamJointBlockCheckpoint_IsForwardTransparent()
+    {
+        var p = new MMDiTNoisePredictor<double>(
+            inputChannels: 4, hiddenSize: 32, numJointLayers: 3, numSingleLayers: 0,
+            numHeads: 2, patchSize: 2, contextDim: 8, seed: 1234);
+        var x = Filled(new[] { 1, 4, 8, 8 }, start: -0.2, step: 0.01);
+
+        double[] Forward(bool checkpoint)
+        {
+            p.ActivationCheckpointingEnabled = checkpoint;
+            using var tape = new GradientTape<double>(); // tape active so the checkpoint path engages
+            var outp = p.PredictNoise(x, timestep: 5);
+            var arr = new double[outp.Length];
+            for (int i = 0; i < outp.Length; i++) arr[i] = outp[i];
+            return arr;
+        }
+
+        var off = Forward(checkpoint: false);
+        var on = Forward(checkpoint: true);
+
+        Assert.Equal(off.Length, on.Length);
+        double maxAbs = 0, maxDiff = 0;
+        for (int i = 0; i < off.Length; i++)
+        {
+            maxAbs = System.Math.Max(maxAbs, System.Math.Abs(off[i]));
+            maxDiff = System.Math.Max(maxDiff, System.Math.Abs(off[i] - on[i]));
+        }
+        Assert.True(maxAbs > 0, "forward produced all-zero output");
+        Assert.True(maxDiff < 1e-9, $"dual-stream checkpoint changed the forward: maxDiff={maxDiff:E3} (maxAbs={maxAbs:E3})");
     }
 }

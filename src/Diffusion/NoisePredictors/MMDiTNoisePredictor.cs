@@ -474,15 +474,31 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         var textTokens = _contextProj.Forward(textConditioning);
 
         // Process through joint (double-stream) blocks.
-        // G4 (#1624): the joint blocks are DUAL-stream — each threads an (image, text) token PAIR —
-        // so they don't fit the single-residual-stream CheckpointBlocks primitive without a packed
-        // concat/split wrapper. They are intentionally left un-checkpointed; the single-stream stack
-        // below (the FLUX-style tail) IS checkpointed, and the other DiT-family predictors checkpoint
-        // their full block stacks. A packed dual-stream checkpoint is a possible follow-up.
-        foreach (var block in _jointBlocks)
+        // G4 (#1624): the joint blocks are DUAL-stream — each threads an (image, text) token PAIR — so
+        // they don't fit the single-residual-stream CheckpointBlocks primitive directly. Pack the two
+        // streams into one tensor along the token axis [B, Ni+Nt, D], checkpoint the packed stack, then
+        // unpack. The per-block wrapper splits the packed tensor back into image/text with the
+        // differentiable TensorNarrow (records NarrowBackward) and re-concatenates with the
+        // differentiable TensorConcatenate, so the wrapper is a pure differentiable function of the
+        // packed residual stream — exactly what the (multi-segment-correct, 0.101.5) primitive needs.
+        // Token counts are invariant across joint blocks, so the split sizes are constant.
+        int numTextTokens = textTokens.Shape[1];
+        var packed = ConcatenateSequences(imageTokens, textTokens); // [B, Ni+Nt, D]
+        var jointForwards = new System.Func<Tensor<T>, Tensor<T>>[_jointBlocks.Count];
+        for (int i = 0; i < _jointBlocks.Count; i++)
         {
-            (imageTokens, textTokens) = ForwardJointBlock(imageTokens, textTokens, timeEmbed, block);
+            var block = _jointBlocks[i];
+            jointForwards[i] = p =>
+            {
+                var img = Engine.TensorNarrow(p, 1, 0, numImageTokens);
+                var txt = Engine.TensorNarrow(p, 1, numImageTokens, numTextTokens);
+                var (imgOut, txtOut) = ForwardJointBlock(img, txt, timeEmbed, block);
+                return Engine.TensorConcatenate<T>(new[] { imgOut, txtOut }, axis: 1);
+            };
         }
+        packed = CheckpointBlocks(jointForwards, packed);
+        imageTokens = Engine.TensorNarrow(packed, 1, 0, numImageTokens);
+        textTokens = Engine.TensorNarrow(packed, 1, numImageTokens, numTextTokens);
 
         // Process through single-stream blocks (FLUX-style)
         if (_singleBlocks.Count > 0)
