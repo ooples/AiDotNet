@@ -132,12 +132,20 @@ internal sealed class CompiledModelHost<T> : IDisposable
     /// </summary>
     private long _hotPathHits;
     private long _slowPathCalls;
+    private long _multiInputReplays;
 
     /// <summary>Hot-path replay count since this host was created. Diagnostic-only.</summary>
     public long HotPathHits => System.Threading.Interlocked.Read(ref _hotPathHits);
 
     /// <summary>Slow-path call count since this host was created. Diagnostic-only.</summary>
     public long SlowPathCalls => System.Threading.Interlocked.Read(ref _slowPathCalls);
+
+    /// <summary>
+    /// Count of successful multi-input compiled-plan executions (the diffusion per-step
+    /// denoising path) since this host was created. Diagnostic/test-only — lets a test
+    /// confirm the compiled plan actually ran rather than silently falling back to eager.
+    /// </summary>
+    public long MultiInputReplays => System.Threading.Interlocked.Read(ref _multiInputReplays);
 
     public CompiledModelHost(
         SymbolicShapeMode shapeMode = SymbolicShapeMode.BatchDynamic,
@@ -493,6 +501,157 @@ internal sealed class CompiledModelHost<T> : IDisposable
             // "last-out" check is atomic with the dispose action.
             DrainPendingDisposals();
         }
+    }
+
+    /// <summary>
+    /// Multi-input variant of <see cref="Predict(Tensor{T}, int, Func{Tensor{T}})"/>: every
+    /// tensor in <paramref name="inputs"/> is marked as a mutable input slot the compiled
+    /// plan re-binds on each replay (AiDotNet.Tensors#616). The canonical use is a diffusion
+    /// denoiser whose per-step forward reads BOTH the noisy sample AND a per-step timestep
+    /// embedding (plus optional conditioning): the single-input path bakes step 0's embedding
+    /// as a constant and replays it for every step, so those predictors route through this
+    /// overload to keep the per-step inputs live while still compiling the (expensive) forward
+    /// exactly once.
+    /// </summary>
+    /// <param name="inputs">
+    /// The mutable input leaves, in a stable order. Each must be a tensor the forward reads
+    /// directly; multi-input compile fails closed (throws) if a declared input is not a traced
+    /// leaf, and this method then falls back to eager — so a caller can never silently get a
+    /// baked input.
+    /// </param>
+    /// <param name="structureVersion">Layer-structure version; a change swaps in a fresh cache.</param>
+    /// <param name="eagerForward">The eager forward to trace once, and to fall back to.</param>
+    public Tensor<T> Predict(
+        Tensor<T>[] inputs,
+        int structureVersion,
+        Func<Tensor<T>> eagerForward)
+    {
+        if (eagerForward is null)
+            throw new ArgumentNullException(nameof(eagerForward));
+        if (inputs is null || inputs.Length == 0)
+            throw new ArgumentException("At least one input is required.", nameof(inputs));
+
+        // EAGER-ONLY ratchet: a (combined-shape, version) that previously failed to compile
+        // goes straight to eager, skipping the ~14 ms trace+throw retry. Keyed on the combined
+        // key over ALL inputs so a different secondary-input shape re-attempts compilation.
+        bool keyOk = TryComputeMultiShapeKey(inputs, out long shapeKey);
+        var eagerSnap = System.Threading.Volatile.Read(ref _eagerOnlyShapeKeys);
+        if (keyOk && eagerSnap is not null && eagerSnap.Contains((shapeKey, structureVersion)))
+            return eagerForward();
+
+        // Acquire the cache under the lock with the SAME version-swap + active-call accounting
+        // as the single-input path, then compile/replay OUTSIDE the lock. Unlike the single-
+        // input path there is no separate host-level hot-plan short-circuit: a foundation-scale
+        // denoiser's per-step forward dominates the cache dictionary lookup, and the cache's own
+        // lock-free hit path (GetOrCompileInference re-binds every input via SetInputs on a hit)
+        // already provides steady-state replay.
+        CompiledModelCache<T>? cache;
+        bool fallToEager;
+        lock (_sync)
+        {
+            fallToEager = _disposed || _disposeRequested
+                || !TensorCodecOptions.Current.EnableCompilation;
+
+            if (!fallToEager)
+            {
+                if (_cache is not null && structureVersion != _lastCompiledVersion)
+                {
+                    (_pendingDisposeCaches ??= new List<CompiledModelCache<T>>()).Add(_cache);
+                    _cache = new CompiledModelCache<T>();
+                    _lastCompiledVersion = structureVersion;
+                    _hotPlan = null;
+                    _eagerOnlyShapeKeys = null;
+                }
+                cache = _cache ??= new CompiledModelCache<T>();
+                _activeCalls++;
+            }
+            else
+            {
+                cache = null;
+            }
+        }
+
+        if (fallToEager || cache is null)
+            return eagerForward();
+
+        try
+        {
+            try
+            {
+                // Traces once (cache miss) or re-binds every input into the cached plan (cache
+                // hit) — either way the plan reflects THIS call's input data, so Execute()
+                // replays the current step. A changing timestep embedding is re-bound, never
+                // baked, which is the whole point of the multi-input path.
+                var plan = cache.GetOrCompileInference(inputs, () => eagerForward());
+                _lastCompiledVersion = structureVersion;
+                var result = plan.Execute();
+                System.Threading.Interlocked.Increment(ref _multiInputReplays);
+                return result;
+            }
+            catch (Exception ex) when (
+                // Same narrow fallback as the single-input path: tolerate compile/replay bugs,
+                // let truly-unrecoverable CLR failures propagate.
+                ex is not OutOfMemoryException &&
+                ex is not AccessViolationException &&
+                ex is not StackOverflowException &&
+                ex is not BadImageFormatException &&
+                ex is not InvalidProgramException &&
+                ex is not System.Threading.ThreadAbortException &&
+                ex is not AppDomainUnloadedException &&
+                ex is not CannotUnloadAppDomainException)
+            {
+                lock (_sync)
+                {
+                    _cache?.Invalidate();
+                    _lastCompiledVersion = -1;
+                }
+                System.Diagnostics.Trace.TraceWarning(
+                    "CompiledModelHost (multi-input) falling back to eager after compile/replay " +
+                    $"failure: {ex}");
+                if (keyOk)
+                {
+                    lock (_sync)
+                    {
+                        var current = _eagerOnlyShapeKeys;
+                        var next = current is null
+                            ? new HashSet<(long, int)>()
+                            : new HashSet<(long, int)>(current);
+                        next.Add((shapeKey, structureVersion));
+                        System.Threading.Volatile.Write(ref _eagerOnlyShapeKeys, next);
+                    }
+                }
+                return eagerForward();
+            }
+        }
+        finally
+        {
+            DrainPendingDisposals();
+        }
+    }
+
+    /// <summary>
+    /// Combined shape key over multiple inputs — folds each input's single-shape key
+    /// (see <see cref="TryComputeShapeKey"/>) into one value so distinct secondary-input
+    /// shapes never collide. Returns <c>false</c> (un-keyable) if any input's shape is
+    /// un-keyable (rank &gt; 4 or a dim &gt; 65535).
+    /// </summary>
+    private static bool TryComputeMultiShapeKey(Tensor<T>[] inputs, out long key)
+    {
+        key = 0;
+        unchecked
+        {
+            for (int i = 0; i < inputs.Length; i++)
+            {
+                if (!TryComputeShapeKey(inputs[i]._shape, out long k))
+                {
+                    key = 0;
+                    return false;
+                }
+                // Order-sensitive fold so [a,b] and [b,a] differ.
+                key = (key * 1000003L) ^ (k + unchecked((long)0x9E3779B97F4A7C15) * (i + 1));
+            }
+        }
+        return true;
     }
 
     /// <summary>

@@ -490,11 +490,21 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         using var streaming = BeginWeightStreamingForward();
         _lastInput = noisySample;
 
-        // Get timestep embedding
+        // Get timestep embedding (cheap MLP; computed eagerly each step so the per-step
+        // timestep stays a LIVE input the compiled plan re-binds rather than bakes).
         var timeEmbed = GetTimestepEmbedding(timestep);
         timeEmbed = ProjectTimeEmbedding(timeEmbed);
 
-        return streaming.Complete(Forward(noisySample, timeEmbed, conditioning));
+        // Compile the (expensive) DiT forward ONCE and replay it across the denoising loop,
+        // re-binding every per-step leaf — noisy sample, timestep embedding, optional
+        // conditioning — so a changing timestep is never baked (#1620 / AiDotNet.Tensors#616).
+        // Conditioning is declared as an input only when present, so an unconditional model
+        // never declares a leaf its forward doesn't read (which would fail closed to eager).
+        var inputs = conditioning is not null
+            ? new[] { noisySample, timeEmbed, conditioning }
+            : new[] { noisySample, timeEmbed };
+        return streaming.Complete(
+            PredictCompiledMulti(inputs, () => Forward(noisySample, timeEmbed, conditioning)));
     }
 
     /// <inheritdoc />
@@ -503,7 +513,18 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         EnsureLayersInitialized();
         using var streaming = BeginWeightStreamingForward();
         _lastInput = noisySample;
-        return streaming.Complete(Forward(noisySample, timeEmbedding, conditioning));
+        // Multi-input compiled replay: every per-step leaf — noisy sample, timestep embedding,
+        // optional conditioning — is re-bound each step, so a changing timestep embedding is
+        // never baked as a constant. The single-input PredictCompiled marks only the noisy
+        // sample as mutable and bakes the rest, which would replay step 0's embedding for the
+        // whole denoising loop (silent corruption — #1620). The multi-input compile
+        // (AiDotNet.Tensors#616) compiles the expensive forward once while keeping all per-step
+        // inputs live; the verify-then-trust gate keeps the output numerically identical to eager.
+        var inputs = conditioning is not null
+            ? new[] { noisySample, timeEmbedding, conditioning }
+            : new[] { noisySample, timeEmbedding };
+        return streaming.Complete(
+            PredictCompiledMulti(inputs, () => Forward(noisySample, timeEmbedding, conditioning)));
     }
 
     /// <summary>

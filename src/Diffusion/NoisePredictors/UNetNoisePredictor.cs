@@ -484,15 +484,6 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     }
 
 
-    /// <summary>
-    /// Per-instance compile cache for the UNet forward pass. Lazy-allocated
-    /// on first <see cref="PredictNoise"/> call when
-    /// <see cref="AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.EnableCompilation"/>
-    /// is on. Keyed by noisy-sample input shape — different shapes compile
-    /// different plans. Dropped when <see cref="ResetState"/> runs.
-    /// </summary>
-    private AiDotNet.Tensors.Engines.Compilation.CompiledModelCache<T>? _compiledInferenceCache;
-
     /// <inheritdoc />
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
@@ -542,19 +533,15 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             var timeEmbed = GetTimestepEmbedding(sampleTimestep);
             timeEmbed = ProjectTimeEmbedding(timeEmbed);
 
-            var cache = _compiledInferenceCache ??= new AiDotNet.Tensors.Engines.Compilation.CompiledModelCache<T>();
-            // Key includes conditioning presence so null-vs-present paths
-            // don't share plans (different traced graphs).
-            var key = BuildCompileKey(sampleNoisy, conditioning);
-            var plan = cache.GetOrCompileInference(
-                key,
-                () => ForwardUNet(sampleNoisy, timeEmbed, conditioning));
-            // Execute once to validate the plan replays correctly and warm
-            // workspace buffers. Dispose the output to avoid leaking the
-            // pooled tensor allocation from the warm-up.
-            var warmupOutput = plan.Execute();
-            if (warmupOutput is IDisposable disposableOutput)
-                disposableOutput.Dispose();
+            // Warm the SAME multi-input compiled path PredictNoise replays: one gated
+            // forward at the representative shapes traces + compiles the plan and records
+            // the verify-then-trust verdict, so the first real inference skips the trace
+            // cost. Conditioning is declared as an input only when present, matching the
+            // production call's leaf set (#1620 / AiDotNet.Tensors#616 multi-input compile).
+            var inputs = conditioning is not null
+                ? new[] { sampleNoisy, timeEmbed, conditioning }
+                : new[] { sampleNoisy, timeEmbed };
+            _ = PredictCompiledMulti(inputs, () => ForwardUNet(sampleNoisy, timeEmbed, conditioning));
             return true;
         }
         catch (Exception ex) when (
@@ -576,56 +563,18 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> PredictCompiledForward(Tensor<T> noisySample, Tensor<T> timeEmbed, Tensor<T>? conditioning)
     {
-        if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
-            return ForwardUNet(noisySample, timeEmbed, conditioning);
-
-        try
-        {
-            var cache = _compiledInferenceCache ??= new AiDotNet.Tensors.Engines.Compilation.CompiledModelCache<T>();
-            // Key includes conditioning presence so null-vs-present paths
-            // don't share plans (different traced graphs).
-            var key = BuildCompileKey(noisySample, conditioning);
-            var plan = cache.GetOrCompileInference(
-                key,
-                () => ForwardUNet(noisySample, timeEmbed, conditioning));
-            return plan.Execute();
-        }
-        catch (Exception ex) when (
-            ex is not OutOfMemoryException &&
-            ex is not StackOverflowException &&
-            ex is not AccessViolationException)
-        {
-            System.Diagnostics.Trace.TraceWarning(
-                $"UNetNoisePredictor.PredictCompiledForward fallback: " +
-                $"{ex.GetType().Name}: {ex.Message}");
-            return ForwardUNet(noisySample, timeEmbed, conditioning);
-        }
-    }
-
-    /// <summary>
-    /// Builds a composite cache key that includes BOTH the noisy-sample
-    /// shape AND the conditioning shape (or a sentinel for null). This
-    /// prevents a plan traced with conditioning=null from being replayed
-    /// with a conditioning tensor (different graph) or vice versa.
-    /// </summary>
-    private static int[] BuildCompileKey(Tensor<T> noisySample, Tensor<T>? conditioning)
-    {
-        var inputShape = noisySample._shape;
-        if (conditioning is null)
-        {
-            // Append a single -1 sentinel so "no conditioning" has a
-            // distinct key from any real conditioning shape.
-            var key = new int[inputShape.Length + 1];
-            Array.Copy(inputShape, key, inputShape.Length);
-            key[^1] = -1;
-            return key;
-        }
-        var condShape = conditioning._shape;
-        var compositeKey = new int[inputShape.Length + 1 + condShape.Length];
-        Array.Copy(inputShape, 0, compositeKey, 0, inputShape.Length);
-        compositeKey[inputShape.Length] = -1; // separator
-        Array.Copy(condShape, 0, compositeKey, inputShape.Length + 1, condShape.Length);
-        return compositeKey;
+        // Multi-input compiled replay: mark the noisy sample, the per-step timestep
+        // embedding, and optional conditioning as mutable input slots the plan re-binds
+        // every step (AiDotNet.Tensors#616), so the changing timestep is never baked as a
+        // constant. The single-input path re-bound only the noisy sample and baked the rest,
+        // which replayed step 0's timeEmbed for the whole denoising loop (silent corruption —
+        // #1620). The expensive ForwardUNet is compiled once; the verify-then-trust gate
+        // adopts the plan for a shape only after it matches eager, so output is numerically
+        // identical to eager (rejected shapes stay eager).
+        var inputs = conditioning is not null
+            ? new[] { noisySample, timeEmbed, conditioning }
+            : new[] { noisySample, timeEmbed };
+        return PredictCompiledMulti(inputs, () => ForwardUNet(noisySample, timeEmbed, conditioning));
     }
 
     /// <inheritdoc />
