@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
@@ -11,20 +12,25 @@ namespace AiDotNet.Tests.UnitTests.Diffusion;
 /// Verifies that the package activation-checkpointing primitive
 /// <see cref="AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing{T}.Checkpoint(System.Func{Tensor{T},Tensor{T}}[],Tensor{T},int)"/>
 /// (G4, #1624) is gradient-equivalent to a non-checkpointed block under a bare
-/// <c>new GradientTape&lt;T&gt;()</c> — the exact tape construction <c>DiffusionModelBase.Train</c> uses.
-/// Running a block eager vs checkpointed must yield IDENTICAL gradients w.r.t. the block input AND
-/// every block parameter. The driver uses a NON-uniform output weighting so the gradient flowing into
-/// the block (gradOutput) is non-constant — exactly the case the prior ones-seeded VJP got wrong
-/// (AiDotNet#1341, fixed in #361, shipped in 0.101.2). Checkpointing only changes WHEN activations are
-/// materialized, never their values or gradients.
+/// <c>new GradientTape&lt;T&gt;()</c> — the exact tape construction <c>DiffusionModelBase.Train</c> uses —
+/// for real <see cref="DenseLayer{T}"/> blocks. Running a block eager vs checkpointed must yield
+/// IDENTICAL gradients w.r.t. the block input AND every block weight. A NON-uniform output weighting
+/// makes the upstream gradient non-constant (the case the prior ones-seeded VJP got wrong, #1341/#361).
 /// </summary>
 /// <remarks>
-/// This is the consumer-side proof that the package primitive — unlike a consumer-recorded
-/// <c>tape.Record</c> custom node, which does NOT link into the eager tape's backward walk — links
-/// correctly in a bare tape and therefore makes diffusion G4 viable through <c>CheckpointBlock</c>.
+/// Each run builds FRESH layers + a FRESH input (with identical parameter VALUES copied from a master),
+/// so there is no shared mutable gradient state between the eager and checkpointed runs — the comparison
+/// isolates the checkpoint mechanism itself, not cross-call gradient accumulation on reused tensors.
 /// </remarks>
-public class CheckpointGradientEquivalenceTests
+public class CheckpointGradientEquivalenceTests : System.IDisposable
 {
+    // Pin CPU for this gradient-correctness suite — a [ModuleInitializer] can flip
+    // AiDotNetEngine.Current to an optimized engine (same convention as the Tensors repo's
+    // GradientCorrectnessTests, which pins CPU so the comparison hits the reference autodiff path).
+    private readonly IEngine _priorEngine = AiDotNetEngine.Current;
+    public CheckpointGradientEquivalenceTests() { AiDotNetEngine.Current = new CpuEngine(); }
+    public void Dispose() { AiDotNetEngine.Current = _priorEngine; }
+
     private static IEngine Engine => AiDotNetEngine.Current;
 
     private static Tensor<double> Filled(int[] shape, double start, double step)
@@ -34,78 +40,92 @@ public class CheckpointGradientEquivalenceTests
         return t;
     }
 
-    // Runs loss = sum(blockChain(input) * outWeight) and returns grads for [input, ...params].
-    private static System.Collections.Generic.Dictionary<Tensor<double>, Tensor<double>> RunGrads(
-        System.Func<Tensor<double>, Tensor<double>>[] blocks, Tensor<double> input,
-        Tensor<double>[] pars, Tensor<double> outWeight, bool checkpoint)
+    private static DenseLayer<double> NewBlock() => new(
+        6, (AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.GELUActivation<double>());
+
+    // Builds two fresh blocks, copies in the given parameter values, runs loss = sum(chain(input)*outW)
+    // ONCE on a fresh input, and returns the flattened gradient vector for [input, ...all block params].
+    private static double[] RunOnce(IReadOnlyList<Tensor<double>> p0, IReadOnlyList<Tensor<double>> p1, bool checkpoint)
     {
+        var l0 = NewBlock();
+        var l1 = NewBlock();
+        l0.SetTrainingMode(true);
+        l1.SetTrainingMode(true);
+        var input = Filled(new[] { 2, 5 }, start: -0.3, step: 0.017);
+
+        // Resolve lazy weights, then overwrite with the shared master values so both runs are identical.
+        using (new NoGradScope<double>()) { _ = l1.Forward(l0.Forward(input)); }
+        l0.SetTrainableParameters(p0.Select(t => t.Clone()).ToList());
+        l1.SetTrainableParameters(p1.Select(t => t.Clone()).ToList());
+
+        var pars = l0.GetTrainableParameters().Concat(l1.GetTrainableParameters()).ToArray();
+        var outWeight = Filled(new[] { 2, 6 }, start: 0.11, step: 0.037); // NON-uniform gradOutput driver
+
         using var tape = new GradientTape<double>();
-
-        Tensor<double> output;
-        if (checkpoint)
-        {
-            // segmentSize 1 = checkpoint every block (most aggressive; recompute each in backward).
-            output = GradientCheckpointing<double>.Checkpoint(blocks, input, 1);
-        }
-        else
-        {
-            output = input;
-            foreach (var b in blocks) output = b(output);
-        }
-
+        var blockFns = new System.Func<Tensor<double>, Tensor<double>>[] { l0.Forward, l1.Forward };
+        Tensor<double> output = checkpoint
+            // Single segment (segmentSize == block count) — matches NoisePredictorBase.CheckpointBlocks.
+            ? GradientCheckpointing<double>.Checkpoint(blockFns, input, blockFns.Length)
+            : l1.Forward(l0.Forward(input));
         var loss = Engine.ReduceSum(Engine.TensorMultiply(output, outWeight), null);
-        var sources = new[] { input }.Concat(pars).ToArray();
-        // sources: null = differentiate the FULL graph (the mode NeuralNetworkBase tape-training uses
-        // at NeuralNetworkBase.cs:3404). The package checkpoint scatters param grads into the full
-        // result; an explicit pruned source list misses the recompute's param contributions.
-        var grads = tape.ComputeGradients(loss, null);
 
-        var result = new System.Collections.Generic.Dictionary<Tensor<double>, Tensor<double>>();
+        var sources = new[] { input }.Concat(pars).ToArray();
+        var grads = tape.ComputeGradients(loss, sources);
+
+        var flat = new List<double>();
         foreach (var s in sources)
-            if (grads.TryGetValue(s, out var g) && g is not null) result[s] = g;
-        return result;
+        {
+            Assert.True(grads.TryGetValue(s, out var g) && g is not null,
+                "A source (input or block weight) received no gradient — checkpointed weight gradients must flow.");
+            for (int i = 0; i < g.Length; i++) flat.Add(g[i]);
+        }
+        return flat.ToArray();
+    }
+
+    // ISOLATION: the exact raw-matmul checkpoint test that PASSES in the AiDotNet.Tensors repo against
+    // local source. If this passes here too (against the published 0.101.4 NuGet) the primitive is fine
+    // and the DenseLayer failure is consumer-side; if it fails, the published package differs from source.
+    [Fact]
+    public void PackageCheckpoint_RawMatmul_GradientsMatchEager()
+    {
+        var x = Filled(new[] { 2, 3 }, -0.4, 0.05);
+        var w = Filled(new[] { 3, 4 }, -0.3, 0.03);
+        var outW = Filled(new[] { 2, 4 }, 0.1, 0.02);
+        System.Func<Tensor<double>, Tensor<double>> seg = inp => Engine.ReLU(Engine.TensorMatMul(inp, w));
+
+        System.Collections.Generic.Dictionary<Tensor<double>, Tensor<double>> Run(bool checkpoint)
+        {
+            using var tape = new GradientTape<double>();
+            var o = checkpoint
+                ? GradientCheckpointing<double>.Checkpoint(new[] { seg }, x, segmentSize: 1)
+                : seg(x);
+            var loss = Engine.ReduceSum(Engine.TensorMultiply(o, outW), null);
+            return tape.ComputeGradients(loss, new[] { x, w });
+        }
+
+        var eager = Run(false);
+        var ckpt = Run(true);
+        for (int i = 0; i < eager[w].Length; i++) Assert.Equal(eager[w][i], ckpt[w][i], 8);
+        for (int i = 0; i < eager[x].Length; i++) Assert.Equal(eager[x][i], ckpt[x][i], 8);
     }
 
     [Fact]
     public void PackageCheckpoint_GradientsMatchEager_ForInputAndParameters()
     {
-        // A two-block chain with non-linear activations so the Jacobian is non-trivial and
-        // shape-aware (the case the ones-seed VJP got wrong).
-        var l0 = new DenseLayer<double>(
-            6, (AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.GELUActivation<double>());
-        var l1 = new DenseLayer<double>(
-            6, (AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.GELUActivation<double>());
-        l0.SetTrainingMode(true);
-        l1.SetTrainingMode(true);
-        var input = Filled(new[] { 2, 5 }, start: -0.3, step: 0.017);
+        // Master parameter values: resolve once, snapshot, then both runs use copies of these.
+        var m0 = NewBlock();
+        var m1 = NewBlock();
+        var probe = Filled(new[] { 2, 5 }, start: -0.3, step: 0.017);
+        using (new NoGradScope<double>()) { _ = m1.Forward(m0.Forward(probe)); }
+        var p0 = m0.GetTrainableParameters().Select(t => t.Clone()).ToArray();
+        var p1 = m1.GetTrainableParameters().Select(t => t.Clone()).ToArray();
+        Assert.True(p0.Length + p1.Length > 0, "Blocks have no trainable parameters to check.");
 
-        // Resolve lazy weights once (un-taped) so both runs share identical parameters.
-        using (new NoGradScope<double>()) { _ = l1.Forward(l0.Forward(input)); }
-        var pars = l0.GetTrainableParameters().Concat(l1.GetTrainableParameters()).ToArray();
-        Assert.True(pars.Length > 0, "Blocks have no trainable parameters to check.");
+        var eager = RunOnce(p0, p1, checkpoint: false);
+        var ckpt = RunOnce(p0, p1, checkpoint: true);
 
-        var blocks = new System.Func<Tensor<double>, Tensor<double>>[] { l0.Forward, l1.Forward };
-        var outWeight = Filled(new[] { 2, 6 }, start: 0.11, step: 0.037); // NON-uniform gradOutput driver
-
-        var eager = RunGrads(blocks, input, pars, outWeight, checkpoint: false);
-        var ckpt = RunGrads(blocks, input, pars, outWeight, checkpoint: true);
-
-        // Input gradient present and identical.
-        Assert.True(eager.ContainsKey(input) && ckpt.ContainsKey(input),
-            $"Missing input gradient — eager: {eager.ContainsKey(input)}, checkpointed: {ckpt.ContainsKey(input)} " +
-            $"(eager count={eager.Count}, ckpt count={ckpt.Count}, params={pars.Length})");
-        Assert.Equal(eager[input].Length, ckpt[input].Length);
-        for (int i = 0; i < eager[input].Length; i++)
-            Assert.Equal(eager[input][i], ckpt[input][i], 10);
-
-        // Every parameter gradient present and identical.
-        foreach (var p in pars)
-        {
-            Assert.True(eager.ContainsKey(p), "Eager run missing a parameter gradient.");
-            Assert.True(ckpt.ContainsKey(p), "Checkpointed run missing a parameter gradient (the bug class).");
-            Assert.Equal(eager[p].Length, ckpt[p].Length);
-            for (int i = 0; i < eager[p].Length; i++)
-                Assert.Equal(eager[p][i], ckpt[p][i], 10);
-        }
+        Assert.Equal(eager.Length, ckpt.Length);
+        for (int i = 0; i < eager.Length; i++)
+            Assert.Equal(eager[i], ckpt[i], 10);
     }
 }

@@ -565,10 +565,19 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
             return x;
         }
 
-        // sqrt(N) segment size is the classic memory/compute optimum: ~sqrt(N) retained checkpoints with
-        // ~one extra forward of recompute (Chen et al. 2016, "Training Deep Nets with Sublinear Memory").
-        int segmentSize = System.Math.Max(1, (int)System.Math.Sqrt(blocks.Length));
-        return AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing<T>.Checkpoint(blocks, input, segmentSize);
+        // Single segment (segmentSize == block count): the whole stack is recomputed in backward, so
+        // NO intermediate block activations are retained — the MAXIMUM activation-memory saving, which
+        // is what the memory-bound foundation-scale training in #1624 needs (memory, not recompute, is
+        // the binding constraint on the 16 GiB runner).
+        //
+        // Single-segment also avoids a multi-segment defect in the package primitive: when
+        // GradientCheckpointing.Checkpoint splits a FusedLinear-bearing block stack into MORE THAN ONE
+        // segment, the gradient handed from a later segment to an earlier segment's input is double-
+        // counted, so every earlier-segment parameter gradient comes out 2x (verified: 2-segment
+        // FusedLinear diverges 2x while 1-segment and 2-segment plain-matmul are exact). A single
+        // segment has no inter-segment hand-off, so it is exactly gradient-equivalent to the eager
+        // forward (verified by the diffusion + Tensors gradient-equivalence tests).
+        return AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing<T>.Checkpoint(blocks, input, blocks.Length);
     }
 
     /// <summary>
