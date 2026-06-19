@@ -73,7 +73,14 @@ public class SASTDModel<T> : LatentDiffusionModelBase<T>
     private void InitializeLayers(UNetNoisePredictor<T>? predictor, StandardVAE<T>? vae, int? seed)
     {
         _predictor = predictor ?? new UNetNoisePredictor<T>(
-            architecture: Architecture, inputChannels: 5, outputChannels: LATENT_CHANNELS,
+            // Style Aligned (Hertz et al. 2023) is an inference-time shared-attention
+            // technique over a STANDARD Stable Diffusion U-Net: the noise predictor
+            // consumes the 4-channel latent and emits a 4-channel noise estimate — it
+            // does NOT add an input channel. inputChannels was 5 (a copy-paste from a
+            // latent+mask inpainting predictor), so the UNet's input conv expected 5
+            // channels while the diffusion latent (and every sibling StyleTransfer
+            // model) is 4 → shape mismatch on every forward/output/training test.
+            architecture: Architecture, inputChannels: LATENT_CHANNELS, outputChannels: LATENT_CHANNELS,
             baseChannels: 320, channelMultipliers: new[] { 1, 2, 4, 4 },
             numResBlocks: 2, attentionResolutions: new[] { 4, 2, 1 }, contextDim: 768, seed: seed);
         _vae = vae ?? new StandardVAE<T>(inputChannels: 3, latentChannels: LATENT_CHANNELS,
