@@ -488,36 +488,25 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// </summary>
     internal static long? StreamingThresholdOverride { get; set; }
 
-    // G4 (#1624) activation checkpointing. null = auto (engage by parameter-count threshold),
-    // true/false = explicit override.
-    private bool? _activationCheckpointing;
-
-    /// <summary>
-    /// Parameter-count threshold above which activation checkpointing engages by default. Activation
-    /// memory (not weights) is the training-time peak for deep transformers, so this is well below the
-    /// weight-streaming threshold.
-    /// </summary>
-    private const long DefaultCheckpointingThresholdParams = 100_000_000L;
-
-    /// <summary>Test/diagnostic override for <see cref="DefaultCheckpointingThresholdParams"/>. Process-global.</summary>
-    internal static long? CheckpointingThresholdOverride { get; set; }
+    // G4 (#1624) activation checkpointing. Opt-in, OFF by default — same default as PyTorch's
+    // torch.utils.checkpoint, which never engages automatically and must be requested per module.
+    private bool _activationCheckpointing;
 
     /// <summary>
     /// Whether this predictor recomputes block activations during backward instead of storing them
-    /// (activation checkpointing — the standard transformer memory/compute trade). Defaults to ON for
-    /// foundation-scale predictors (<see cref="ParameterCount"/> &gt; the threshold); set explicitly to
-    /// force on/off. Implemented via the package's tape-integrated
+    /// (activation checkpointing — the standard transformer memory/compute trade). <b>Opt-in: OFF by
+    /// default</b>, matching PyTorch's <c>torch.utils.checkpoint</c>, which is never enabled
+    /// automatically — set this to <c>true</c> to trade ~one extra forward of recompute for ~sqrt(N)
+    /// retained activations. Implemented via the package's tape-integrated
     /// <see cref="AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing{T}"/> primitive, which
-    /// recomputes each segment in backward with a correct VJP seed (AiDotNet.Tensors#361), so it is
-    /// mathematically gradient-equivalent to the non-checkpointed forward — verified for both the input
-    /// and the weight gradients by <c>PackageCheckpoint_GradientsMatchEager_ForInputAndParameters</c>
-    /// and end-to-end by <c>Transformer_with_checkpointing_actually_learns_loss_decreases</c>.
+    /// recomputes each segment in backward with a correct VJP seed (AiDotNet.Tensors#361/#643), so it
+    /// is mathematically gradient-equivalent to the non-checkpointed forward for both the input and the
+    /// weight gradients (verified by <c>PackageCheckpoint_GradientsMatchEager_ForInputAndParameters</c>).
     /// </summary>
     public bool ActivationCheckpointingEnabled
     {
-        get => _activationCheckpointing
-            ?? (ParameterCount > (CheckpointingThresholdOverride ?? DefaultCheckpointingThresholdParams));
-        internal set => _activationCheckpointing = value;
+        get => _activationCheckpointing;
+        set => _activationCheckpointing = value;
     }
 
     /// <summary>
