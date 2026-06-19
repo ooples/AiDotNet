@@ -42,45 +42,51 @@ internal static class Program
         var model = Construct(modelName);
         if (model is null) return 1;
 
-        var diff = (IDiffusionModel<float>)model;
-        var full = (IFullModel<float, Tensor<float>, Tensor<float>>)model;
-
-        var rng = new Random(42);
-        var input = RandomTensor(new[] { 1, 4, 64, 64 }, rng);
-
-        Console.WriteLine($"=== DiffusionTraceProbe: {modelName} ===");
-        Console.WriteLine($".NET {Environment.Version}  ParameterCount={SafeParamCount(full)}");
-
-        // Phase 1: warm-up noise-prediction probe (the test's errBefore measurement).
-        int probeT = Math.Max(1, diff.Scheduler.TrainTimesteps / 2);
-        var noisy = RandomTensor(new[] { 1, 4, 64, 64 }, rng);
-        var sw = Stopwatch.StartNew();
-        _ = diff.PredictNoise(noisy, probeT);
-        sw.Stop();
-        Console.WriteLine($"[PredictNoise warm-up]      {sw.Elapsed.TotalSeconds,8:F2} s");
-
-        // Phase 2: training loop (forward + backward) — the timeout test runs 5-10 iters.
-        sw.Restart();
-        for (int i = 0; i < trainIters; i++)
+        try
         {
-            full.Train(input, input);
-            Console.WriteLine($"  train iter {i + 1}/{trainIters}   {sw.Elapsed.TotalSeconds,8:F2} s cumulative");
-        }
-        sw.Stop();
-        Console.WriteLine($"[Train x{trainIters}]               {sw.Elapsed.TotalSeconds,8:F2} s total");
+            var diff = (IDiffusionModel<float>)model;
+            var full = (IFullModel<float, Tensor<float>, Tensor<float>>)model;
 
-        // Phase 3: full sampling Predict (DDIM loop x SD-UNet forward) — the heaviest call.
-        if (doPredict)
-        {
-            sw.Restart();
-            var output = full.Predict(input);
+            var rng = new Random(42);
+            var input = RandomTensor(new[] { 1, 4, 64, 64 }, rng);
+
+            Console.WriteLine($"=== DiffusionTraceProbe: {modelName} ===");
+            Console.WriteLine($".NET {Environment.Version}  ParameterCount={SafeParamCount(full)}");
+
+            // Phase 1: warm-up noise-prediction probe (the test's errBefore measurement).
+            int probeT = Math.Max(1, diff.Scheduler.TrainTimesteps / 2);
+            var noisy = RandomTensor(new[] { 1, 4, 64, 64 }, rng);
+            var sw = Stopwatch.StartNew();
+            _ = diff.PredictNoise(noisy, probeT);
             sw.Stop();
-            Console.WriteLine($"[Predict (sampling loop)]   {sw.Elapsed.TotalSeconds,8:F2} s  (out len {output.Length})");
-        }
+            Console.WriteLine($"[PredictNoise warm-up]      {sw.Elapsed.TotalSeconds,8:F2} s");
 
-        Console.WriteLine("=== done ===");
-        if (model is IDisposable d) d.Dispose();
-        return 0;
+            // Phase 2: training loop (forward + backward) — the timeout test runs 5-10 iters.
+            sw.Restart();
+            for (int i = 0; i < trainIters; i++)
+            {
+                full.Train(input, input);
+                Console.WriteLine($"  train iter {i + 1}/{trainIters}   {sw.Elapsed.TotalSeconds,8:F2} s cumulative");
+            }
+            sw.Stop();
+            Console.WriteLine($"[Train x{trainIters}]               {sw.Elapsed.TotalSeconds,8:F2} s total");
+
+            // Phase 3: full sampling Predict (DDIM loop x SD-UNet forward) — the heaviest call.
+            if (doPredict)
+            {
+                sw.Restart();
+                var output = full.Predict(input);
+                sw.Stop();
+                Console.WriteLine($"[Predict (sampling loop)]   {sw.Elapsed.TotalSeconds,8:F2} s  (out len {output.Length})");
+            }
+
+            Console.WriteLine("=== done ===");
+            return 0;
+        }
+        finally
+        {
+            if (model is IDisposable d) d.Dispose();
+        }
     }
 
     private static object? Construct(string modelName)
@@ -105,6 +111,14 @@ internal static class Program
         }
 
         var closed = open.MakeGenericType(typeof(float));
+
+        // Validate that the closed type implements IDiffusionModel<float> before attempting to cast it.
+        var diffusionModelInterface = typeof(IDiffusionModel<float>);
+        if (!diffusionModelInterface.IsAssignableFrom(closed))
+        {
+            Console.Error.WriteLine($"ERROR: {closed.Name} does not implement IDiffusionModel<float>.");
+            return null;
+        }
 
         // Pick the ctor with the most parameters that are ALL optional (matches the
         // (arch?, options?, scheduler?, predictor?, vae?, conditioner?, seed?) shape);

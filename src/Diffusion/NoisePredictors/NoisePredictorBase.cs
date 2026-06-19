@@ -517,6 +517,9 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
             // fails to engage here. We already confirmed RegisteredEntryCount == 0
             // above, so no LIVE model owns the pool — the leftover reservations belong
             // to a dead model and are safe to forcibly drop. Reset and reconfigure.
+            System.Diagnostics.Trace.TraceWarning(
+                "NoisePredictorBase.MaybeEngageWeightStreaming: recovering from orphaned " +
+                "streaming reservations by resetting WeightRegistry and reconfiguring.");
             WeightRegistry.Reset();
             WeightRegistry.Configure(offloadOptions);
         }
