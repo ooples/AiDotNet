@@ -237,6 +237,9 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
             // of T, not layers, and walking them adds noise for no benefit.
             if (ns.StartsWith("AiDotNet.Tensors", StringComparison.Ordinal)) return false;
             if (t.Name == "Vector`1" || t.Name == "Matrix`1" || t.Name == "Tensor`1") return false;
+            // Only walk types within known AiDotNet namespaces — caller-injected objects
+            // (custom ILossFunction implementations, etc.) are not walked.
+            if (!ns.StartsWith("AiDotNet", StringComparison.Ordinal)) return false;
             return true;
         });
 
