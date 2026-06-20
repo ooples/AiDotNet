@@ -182,9 +182,9 @@
          nested-arena escaped-buffer #1221 fix (#648), the GPU resident-weight version-gate (#649),
          and GPU conv-kernel arg-binding fixes (#644).
          Native packages (OneDNN/OpenBLAS/CLBlast) coreleased in lockstep at 0.101.7. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.101.7" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.101.7" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.101.7" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.102.0" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.102.0" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.102.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.101.7" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
