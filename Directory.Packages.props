@@ -166,8 +166,6 @@
            * Per-step heap growth flat in BOTH (-0.001 MiB/step: the per-step leak fix is consumer
              src, constant across the runs), and loss converges identically (1.27 -> 0.26) — the
              reduction is not from silently breaking training.
-         Native packages coreleased in lockstep at 0.101.2.
-
          0.101.2 -> 0.101.5: activation-checkpointing correctness, two fixes.
          (1) #643 (0.101.4): GradientCheckpointing.Checkpoint's recompute differentiated only w.r.t.
              the segment input, silently dropping every checkpointed layer's WEIGHT gradients.
@@ -176,13 +174,18 @@
              checkpoint node, so earlier-segment gradients came out 2x. 0.101.5 detaches each
              segment's input (matches torch.utils.checkpoint), making sqrt(N) multi-segment exact.
          Both are required for G4 (#1624) in the diffusion NoisePredictors (sqrt(N) checkpointing) and
-         for NeuralNetworkBase checkpointing. Only the core AiDotNet.Tensors package carries the fixes;
-         the native packages (no checkpoint code) stay at 0.101.2. NOTE: publish AiDotNet.Tensors
-         0.101.5 from PR #645 before this PR's CI can restore. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.101.5" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.101.2" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.101.2" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.101.2" />
+         for NeuralNetworkBase checkpointing.
+
+         0.101.5 -> 0.101.7: the merged MobileNetV3 batch=1 timeout work and supporting fixes —
+         #639 batch=1 BatchNormAffine fusion (#641, required by BatchNormalizationLayer's batch=1
+         training fallback, which calls Engine.BatchNormAffine), Conv2D core-saturation (#647), the
+         nested-arena escaped-buffer #1221 fix (#648), the GPU resident-weight version-gate (#649),
+         and GPU conv-kernel arg-binding fixes (#644).
+         Native packages (OneDNN/OpenBLAS/CLBlast) coreleased in lockstep at 0.101.7. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.101.7" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.101.7" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.101.7" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.101.7" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.9" />
