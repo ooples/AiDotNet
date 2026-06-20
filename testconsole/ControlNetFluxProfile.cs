@@ -34,7 +34,7 @@ internal static class ControlNetFluxProfile
             GC.Collect(2, GCCollectionMode.Forced, blocking: true);
             GC.WaitForPendingFinalizers();
             GC.Collect(2, GCCollectionMode.Forced, blocking: true);
-            _allocStart = GC.GetTotalAllocatedBytes(precise: true);
+            _allocStart = TotalAllocatedBytes();
             _heapStart = GC.GetTotalMemory(forceFullCollection: false);
             _g0 = GC.CollectionCount(0); _g1 = GC.CollectionCount(1); _g2 = GC.CollectionCount(2);
             _sw = Stopwatch.StartNew();
@@ -43,7 +43,7 @@ internal static class ControlNetFluxProfile
         public void Dispose()
         {
             _sw.Stop();
-            long allocEnd = GC.GetTotalAllocatedBytes(precise: true);
+            long allocEnd = TotalAllocatedBytes();
             long heapEnd = GC.GetTotalMemory(forceFullCollection: false);
             double gib(long b) => b / (1024.0 * 1024.0 * 1024.0);
             Console.WriteLine(
@@ -52,6 +52,17 @@ internal static class ControlNetFluxProfile
                 $"heap-delta={gib(heapEnd - _heapStart),7:F3} GiB  " +
                 $"GC(g0/g1/g2)={GC.CollectionCount(0) - _g0}/{GC.CollectionCount(1) - _g1}/{GC.CollectionCount(2) - _g2}");
         }
+    }
+
+    // Cumulative allocated bytes. GC.GetTotalAllocatedBytes is net5+; on net471
+    // fall back to the live heap size (approximate — net471 is not a profiling target).
+    private static long TotalAllocatedBytes()
+    {
+#if NET5_0_OR_GREATER
+        return GC.GetTotalAllocatedBytes(precise: true);
+#else
+        return GC.GetTotalMemory(forceFullCollection: false);
+#endif
     }
 
     // Disables weight-streaming auto-engagement by raising the internal
