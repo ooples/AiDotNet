@@ -293,9 +293,28 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             Layers.AddRange(LayerHelper<T>.CreateDefaultAutoEncoderLayers(Architecture));
         }
 
-        // EncodedSize = latent dimension = input width of the first decoder layer.
-        // Decode() starts at Layers[Count/2], so its input shape is the latent handoff.
-        EncodedSize = Layers[Layers.Count / 2].GetInputShape()[0];
+        // EncodedSize = latent dimension = the encoder's output (the decoder's input). The DEFAULT autoencoder
+        // builds DenseLayers with an output-size-only ctor, so the first decoder layer's INPUT shape is lazily
+        // inferred and reads as [0] at construction — reading it gave EncodedSize=0. Instead walk back from the
+        // decoder boundary to the bottleneck layer whose OUTPUT size IS known (DenseLayer stores its declared
+        // output size), and fall back to the decoder's input shape for custom-layer architectures where it's set.
+        EncodedSize = 0;
+        for (int idx = Layers.Count / 2 - 1; idx >= 0 && EncodedSize <= 0; idx--)
+        {
+            var outShape = Layers[idx].GetOutputShape();
+            if (outShape.Length > 0 && outShape[0] > 0)
+            {
+                EncodedSize = outShape[0];
+            }
+        }
+        if (EncodedSize <= 0 && Layers.Count > 0)
+        {
+            var decoderInput = Layers[Layers.Count / 2].GetInputShape();
+            if (decoderInput.Length > 0)
+            {
+                EncodedSize = decoderInput[0];
+            }
+        }
     }
 
     /// <summary>

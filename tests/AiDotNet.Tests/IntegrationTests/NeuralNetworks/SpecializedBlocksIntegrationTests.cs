@@ -165,19 +165,22 @@ public class SpecializedBlocksIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BottleneckBlock_ExpansionFactor_CorrectlyApplied()
     {
-        // Arrange - default expansion is 4
+        // Arrange - default expansion is 4. BottleneckBlock's ctor is (baseChannels, stride=1, …) — output channels
+        // = baseChannels * Expansion(4). (The earlier (64, 32) call mis-read the 2nd arg as outChannels when it is
+        // actually STRIDE, so baseChannels=64 → 256.) Input may have a different channel count (64) than the block's
+        // base (32); the downsample shortcut handles the 64→128 mismatch.
         int inChannels = 64;
-        int outChannels = 32;
+        int baseChannels = 32;
         int height = 8;
         int width = 8;
-        var block = new BottleneckBlock<float>(inChannels, outChannels);
+        var block = new BottleneckBlock<float>(baseChannels);
         var input = CreateRandomTensor<float>([1, inChannels, height, width]);
 
         // Act
         var output = block.Forward(input);
 
-        // Assert - output channels should be outChannels * 4
-        Assert.Equal(outChannels * 4, output.Shape[1]); // 32 * 4 = 128
+        // Assert - output channels should be baseChannels * 4
+        Assert.Equal(baseChannels * 4, output.Shape[1]); // 32 * 4 = 128
     }
 
     #endregion
@@ -327,6 +330,9 @@ public class SpecializedBlocksIntegrationTests
         int height = 8;
         int width = 8;
         var block = new DenseBlock<float>(numLayers, growthRate);
+        // DenseBlock infers its input-channel count lazily on first forward, so OutputChannels reads -1 until then.
+        // Run one forward with a [1, inputChannels, H, W] tensor to resolve it (OutputChannels = in + layers*growth).
+        block.Forward(CreateRandomTensor<float>([1, inputChannels, height, width]));
 
         // Assert - verify property calculation
         Assert.Equal(inputChannels + numLayers * growthRate, block.OutputChannels);

@@ -233,8 +233,15 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
         }
         else if (rank == 4) { c = input.Shape[1]; hOut = input.Shape[2]; wOut = input.Shape[3]; }
         else if (rank == 3) { c = input.Shape[0]; hOut = input.Shape[1]; wOut = input.Shape[2]; }
+        // Rank-2 / rank-1 are valid and already handled by Forward()/GetReductionAxes()/CalculateOutputShape():
+        // rank-2 [batch, features] has no spatial dims to pool → identity ([] reduction axes); rank-1 [features]
+        // reduces to a scalar. OnFirstForward only records shape metadata, so resolve a sane record instead of
+        // throwing (the throw was inconsistent with the rest of the layer and broke transformer/graph readouts
+        // that feed an already-flat [batch, features] tensor into global pooling).
+        else if (rank == 2) { c = input.Shape[1]; hOut = 1; wOut = 1; }
+        else if (rank == 1) { c = input.Shape[0]; hOut = 1; wOut = 1; }
         else throw new ArgumentException(
-            $"GlobalPoolingLayer requires rank-3, rank-4, or rank-5 input; got rank {rank}.",
+            $"GlobalPoolingLayer requires rank-1 through rank-5 input; got rank {rank}.",
             nameof(input));
         ResolveShapes(new[] { c, hOut, wOut }, new[] { c, 1, 1 });
     }

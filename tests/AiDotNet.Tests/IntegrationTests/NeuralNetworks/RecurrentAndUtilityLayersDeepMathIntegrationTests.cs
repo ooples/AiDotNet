@@ -114,9 +114,14 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     // ========================================================================
 
     [Fact(Timeout = 120000)]
-    public async Task GRU_HiddenStateCarriesOver_SecondCallDiffersFromFirst()
+    public async Task GRU_RepeatedForward_IsDeterministic_NoStateLeakAcrossCalls()
     {
         await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
+        // GRULayer.Forward INTENTIONALLY resets to a zero initial hidden state every pass (see the comment in
+        // GRULayer.Forward): standard non-streaming RNN semantics, so independent forward calls do NOT leak hidden
+        // state across one another. This is a deliberate design choice that preserves Clone-after-training parity
+        // and repeated-Predict determinism. Therefore two forwards on the same input must produce IDENTICAL output.
+        // (The old test asserted the opposite — carry-over — which was the behaviour deliberately removed.)
         var gru = new GRULayer<double>( hiddenSize: 3,
             activation: (IActivationFunction<double>?)null);
 
@@ -129,13 +134,10 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
 
         var output2 = gru.Forward(input);
 
-        bool differs = false;
         for (int i = 0; i < 3; i++)
         {
-            if (Math.Abs(output2[i] - o1vals[i]) > 1e-10)
-                differs = true;
+            Assert.Equal(o1vals[i], output2[i], 1e-10);
         }
-        Assert.True(differs, "Second GRU forward with same input should differ due to hidden state");
     }
 
     [Fact(Timeout = 120000)]

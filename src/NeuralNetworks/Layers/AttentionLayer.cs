@@ -851,6 +851,16 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             var primaryInput = inputs[0];
             var secondInput = inputs[1];
 
+            // Resolve _inputSize from the PRIMARY (query) input BEFORE the mask-vs-K/V disambiguation below.
+            // Weights are lazy and _inputSize stays the -1 sentinel until the first forward — so a perfectly valid
+            // cross-attention K/V tensor [batch, seqLen, inputSize] was mis-flagged "ambiguous" because its last
+            // dim was compared against -1. This call is idempotent (no-op once resolved), so the subsequent
+            // ForwardCrossAttention/ForwardMaskedAttention path is unchanged.
+            if (_inputSize <= 0)
+            {
+                EnsureInitializedFromInput(primaryInput);
+            }
+
             // Detect mask vs cross-attention key/value tensor:
             // - Mask shape: [batch, query_len, key_len] - typically [batch, seqLen, seqLen] for self-attention
             //   Masks must be at least 3D to have (batch, query, key) dimensions

@@ -398,8 +398,12 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task FullyConnectedLayer_ParameterCount()
     {
-        // FC layer with inputSize=3, outputSize=2 should have 3*2 + 2 = 8 parameters
+        // FC layer with inputSize=3, outputSize=2 should have 3*2 + 2 = 8 parameters.
+        // FullyConnectedLayer takes output-size only and lazily infers the input width on first forward, so its
+        // weight tensor (and thus ParameterCount) isn't materialized until a forward pass — run one with a
+        // 3-feature input to resolve [3,2] weights + [2] bias = 8.
         var layer = new FullyConnectedLayer<double>(2, (IActivationFunction<double>?)null);
+        layer.Forward(new Tensor<double>(new[] { 1, 3 }));
         Assert.Equal(8, (int)layer.ParameterCount);
     }
 
