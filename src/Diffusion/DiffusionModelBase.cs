@@ -781,7 +781,16 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// <see cref="DisableQuantizationAwareTraining"/>.
     /// </summary>
     public bool IsQuantizationAwareTrainingEnabled =>
-        _qatExplicit ?? (ParameterCount >= (QatThresholdOverride ?? DefaultQatThresholdParams));
+        // Opt-in, default OFF — matching the Train() contract comment, the project's
+        // streaming/activation-checkpointing convention, and PyTorch (torch QAT is always
+        // explicit, never engaged by model size). The previous auto-engage-by-parameter-
+        // count (>= 500M) silently turned QAT ON for every foundation-scale diffusion model:
+        // each train step then fake-quantized ALL ~1.8B weights (a serial ToVector copy of
+        // the full weight set + per-element requantize + copy-back), which a CPU profile
+        // measured at ~96s/iter of pure overhead — over half a Kandinsky train step — AND,
+        // being lossy, changed the training trajectory of the vanilla-DDPM contract tests.
+        // Foundation models that target int8 deployment opt in via EnableQuantizationAwareTraining().
+        _qatExplicit ?? false;
 
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
