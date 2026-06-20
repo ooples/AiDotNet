@@ -129,21 +129,17 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         if (!visited.Add(root)) yield break;
         stack.Push(root);
 
-        const System.Reflection.BindingFlags fieldFlags =
-            System.Reflection.BindingFlags.Instance |
-            System.Reflection.BindingFlags.Public |
-            System.Reflection.BindingFlags.NonPublic;
-
         while (stack.Count > 0)
         {
             var current = stack.Pop();
             var currentType = current.GetType();
             for (var t = currentType; t != null && t != typeof(object); t = t.BaseType)
             {
-                foreach (var field in t.GetFields(fieldFlags | System.Reflection.BindingFlags.DeclaredOnly))
+                // Cached, pre-filtered reference-type declared fields for this type — see
+                // GetDeclaredWalkableFields. Skips the per-field value-type/string probe
+                // (RuntimeType.IsPrimitiveImpl) that dominated the forward (#1646).
+                foreach (var field in GetDeclaredWalkableFields(t))
                 {
-                    if (field.FieldType.IsValueType || field.FieldType == typeof(string)) continue;
-
                     object? value;
                     try { value = field.GetValue(current); }
                     catch (Exception ex)
@@ -189,9 +185,18 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
                     }
                     else if (value is System.Collections.IEnumerable enumerable && value is not string)
                     {
+                        // We MUST enumerate the whole sequence: enumerating a streaming-placeholder
+                        // weight tensor (Tensor<T> as IEnumerable<float>) rehydrates it, and the
+                        // forward relies on that side effect (NoisePredictorWeightStreamingTests).
+                        // But value-type elements — the millions of boxed floats in a Tensor<T> /
+                        // float[] / double[] buffer — can never be, or own, a layer, so skip the
+                        // `visited` bookkeeping for them: hashing every boxed element
+                        // (RuntimeHelpers.GetHashCode) was the dominant walk cost (#1646). `continue`
+                        // still advances the enumerator, so rehydration is preserved.
                         foreach (var item in enumerable)
                         {
-                            if (item is null || !visited.Add(item)) continue;
+                            if (item is null || item is ValueType) continue;
+                            if (!visited.Add(item)) continue;
                             if (item is ILayer<T> nestedLayer)
                             {
                                 yield return nestedLayer;
@@ -223,16 +228,50 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// bounded; wrappers inside this assembly's namespaces are fair game.
     /// </summary>
     private static bool IsWalkableWrapper(Type type)
-    {
-        if (type.IsPrimitive || type.IsEnum) return false;
-        var ns = type.Namespace ?? string.Empty;
-        if (ns.StartsWith("System", StringComparison.Ordinal)) return false;
-        // Avoid recursing into low-level numeric containers — their fields are arrays
-        // of T, not layers, and walking them adds noise for no benefit.
-        if (ns.StartsWith("AiDotNet.Tensors", StringComparison.Ordinal)) return false;
-        if (type.Name == "Vector`1" || type.Name == "Matrix`1" || type.Name == "Tensor`1") return false;
-        return true;
-    }
+        => s_walkableWrapperCache.GetOrAdd(type, static t =>
+        {
+            if (t.IsPrimitive || t.IsEnum) return false;
+            var ns = t.Namespace ?? string.Empty;
+            if (ns.StartsWith("System", StringComparison.Ordinal)) return false;
+            // Avoid recursing into low-level numeric containers — their fields are arrays
+            // of T, not layers, and walking them adds noise for no benefit.
+            if (ns.StartsWith("AiDotNet.Tensors", StringComparison.Ordinal)) return false;
+            if (t.Name == "Vector`1" || t.Name == "Matrix`1" || t.Name == "Tensor`1") return false;
+            // Only walk types within known AiDotNet namespaces — caller-injected objects
+            // (custom ILossFunction implementations, etc.) are not walked.
+            if (!ns.StartsWith("AiDotNet", StringComparison.Ordinal)) return false;
+            return true;
+        });
+
+    // Per-type reflection-metadata caches. GetFields and "is this a walkable wrapper" are
+    // pure functions of the Type, so resolve each once across every instance and every
+    // forward instead of re-probing runtime type handles on the hot streaming path (#1646).
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, System.Reflection.FieldInfo[]> s_walkableFieldCache = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, bool> s_walkableWrapperCache = new();
+
+    /// <summary>
+    /// Reference-type, non-string instance fields declared directly on <paramref name="declaringType"/>.
+    /// Value-type and string fields are filtered out at cache-build time — they can never be,
+    /// or own, an <see cref="ILayer{T}"/> — so the walk never re-checks them. The walk calls
+    /// this once per type in the base chain (the caller iterates <c>BaseType</c>).
+    /// </summary>
+    private static System.Reflection.FieldInfo[] GetDeclaredWalkableFields(Type declaringType)
+        => s_walkableFieldCache.GetOrAdd(declaringType, static t =>
+        {
+            const System.Reflection.BindingFlags flags =
+                System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.NonPublic |
+                System.Reflection.BindingFlags.DeclaredOnly;
+            var fields = new List<System.Reflection.FieldInfo>();
+            foreach (var f in t.GetFields(flags))
+            {
+                var ft = f.FieldType;
+                if (ft.IsValueType || ft == typeof(string)) continue;
+                fields.Add(f);
+            }
+            return fields.ToArray();
+        });
 
     /// <summary>
     /// Runs <paramref name="eagerFallback"/> under the compile host — traces on
@@ -497,15 +536,38 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         // returns (runs resident) rather than reconfiguring the process-global registry.
         if (System.Threading.Interlocked.CompareExchange(ref _streamingEngaged, 1, 0) != 0) return;
 
-        WeightRegistry.Configure(new GpuOffloadOptions
+        var offloadOptions = new GpuOffloadOptions
         {
             StreamingPoolMaxResidentBytes = StreamingResidentCapOverride ?? ComputeResidentCapBytes(),
             TransparentAutoEviction = true,
-        });
+        };
+        try
+        {
+            WeightRegistry.Configure(offloadOptions);
+        }
+        catch (InvalidOperationException)
+        {
+            // Configure also throws on leftover ReservedBytes — orphaned streaming
+            // reservations from a PRIOR predictor whose first forward reserved weights
+            // (AllocateStreaming) but never reached RegisterResolvedStreamingWeights
+            // (its forward threw, or the model was disposed mid-stream). The registry
+            // is process-global, so those orphans accumulate across models in one
+            // process (a test shard runs many) until every subsequent streaming model
+            // fails to engage here. We already confirmed RegisteredEntryCount == 0
+            // above, so no LIVE model owns the pool — the leftover reservations belong
+            // to a dead model and are safe to forcibly drop. Reset and reconfigure.
+            System.Diagnostics.Trace.TraceWarning(
+                "NoisePredictorBase.MaybeEngageWeightStreaming: recovering from orphaned " +
+                "streaming reservations by resetting WeightRegistry and reconfiguring.");
+            WeightRegistry.Reset();
+            WeightRegistry.Configure(offloadOptions);
+        }
 
-        // ReflectInstanceLayers (not EnumerateLayers) so the engagement works for
-        // ANY predictor without requiring an EnumerateLayers override — it walks
-        // owned layer fields recursively, including those inside the DiT block list.
+        // Walk owned layer fields recursively (including those inside the DiT block list)
+        // and flag each for the streaming allocator. Iterated LAZILY: each layer is flagged
+        // as the walk yields it, BEFORE the walk descends into that layer — the layer's own
+        // lazy weight allocation (triggered while descending) reads UseStreamingAllocator, so
+        // the flag must be set first. Do NOT materialize this into a list and flag afterwards.
         foreach (var layer in ReflectInstanceLayers(this))
         {
             if (layer is LayerBase<T> lb) lb.UseStreamingAllocator = true;
@@ -533,6 +595,14 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     protected void RegisterResolvedStreamingWeights()
     {
         if (System.Threading.Volatile.Read(ref _streamingEngaged) == 0) return;
+
+        // The first forward runs every layer (a diffusion predictor exercises its whole graph
+        // each denoising step), so it resolves and registers all lazy weights. Skip the full
+        // graph re-walk on forwards 2..N — that per-forward walk was the dominant streaming
+        // cost on foundation models (#1646). Worst case a weight that only resolves on a later
+        // forward stays resident rather than streamed: identical output, slightly more RAM,
+        // never wrong.
+        if (System.Threading.Volatile.Read(ref _streamingWeightsRegistered) == 1) return;
 
         foreach (var layer in ReflectInstanceLayers(this))
         {
