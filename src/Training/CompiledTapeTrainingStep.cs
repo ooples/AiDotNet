@@ -972,7 +972,12 @@ public static class CompiledTapeTrainingStep<T>
         object? plan = _mpPlan;
         if (plan is null)
             throw new InvalidOperationException("MP plan cache state corrupted: key present but plan handle missing.");
-        return MixedPrecisionReflection.StepSgd(plan, parameters, learningRate);
+        // Loss-scale the SGD mixed-precision step (Tensors 0.102.0 / #650): without a GradScaler
+        // the FP16 backward grads can underflow to zero before reaching the FP32 masters. Persist
+        // one scaler (dynamic loss scale + skip-on-overflow handled inside Step) — matching the
+        // Adam/generic paths above, which already pass _mpScaler.
+        _mpScaler ??= MixedPrecisionReflection.CreateGradScaler(1024f);
+        return MixedPrecisionReflection.StepSgd(plan, parameters, learningRate, _mpScaler);
     }
 
     /// <summary>
