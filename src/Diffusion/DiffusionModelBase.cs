@@ -684,7 +684,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             sampleSpan.CopyTo(tensorSpan);
 
             // Predict the noise
-            var noisePrediction = PredictNoise(sampleTensor, timestep);
+            var noisePrediction = PredictNoiseStep(sampleTensor, timestep);
 
             // Copy prediction to pre-allocated vector (avoids ToVector() allocation).
             // Fail fast on length mismatch — silently truncating or leaving stale
@@ -750,6 +750,47 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
 
     /// <inheritdoc />
     public abstract Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep);
+
+    /// <summary>
+    /// Runs one denoising-step noise prediction, optionally inside a GPU deferred execution graph
+    /// (AiDotNet.Tensors #642) when <see cref="DiffusionModelOptions{T}.UseGpuExecutionGraph"/> is
+    /// enabled and the active engine is a CUDA <c>DirectGpuTensorEngine</c>. Recording the whole
+    /// forward into one graph keeps intermediates on-device, fuses kernels, overlaps streams, reuses
+    /// buffers, and drops per-op host round-trips — the substrate a CUDA-graph capture replays.
+    /// Any failure (or a non-CUDA / unavailable engine) transparently falls back to the eager
+    /// <see cref="PredictNoise"/>, so correctness is never worse than the eager path.
+    /// </summary>
+    protected Tensor<T> PredictNoiseStep(Tensor<T> noisySample, int timestep)
+    {
+        if (!_options.UseGpuExecutionGraph)
+            return PredictNoise(noisySample, timestep);
+
+        var engine = AiDotNetEngine.Current as AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
+        if (engine is null || !engine.IsGpuAvailable)
+            return PredictNoise(noisySample, timestep);
+
+        try
+        {
+            using var scope = engine.BeginDeferredScope();
+            if (scope is null)
+                return PredictNoise(noisySample, timestep);
+
+            // Ops inside PredictNoise route through DeferredScope.Current.RecordingBackend
+            // automatically; Execute() replays the recorded, optimized graph. The result tensor
+            // stays GPU-resident (lazy) and is materialised on first CPU read by the caller — its
+            // output buffer is owned by the activation cache, so it survives the scope dispose.
+            var prediction = PredictNoise(noisySample, timestep);
+            scope.Execute();
+            return prediction;
+        }
+        catch (System.Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                "DiffusionModelBase.PredictNoiseStep: deferred GPU forward failed, falling back to "
+              + $"eager PredictNoise (timestep {timestep}): {ex.GetType().Name}: {ex.Message}");
+            return PredictNoise(noisySample, timestep);
+        }
+    }
 
     /// <inheritdoc />
     /// <remarks>

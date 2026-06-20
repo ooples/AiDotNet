@@ -158,4 +158,32 @@ public class DiffusionModelOptions<T> : ModelOptions
     /// Leave as null to use the default MSE loss.</para>
     /// </remarks>
     public ILossFunction<T>? LossFunction { get; set; } = null;
+
+    /// <summary>
+    /// Gets or sets whether each denoising-step noise prediction runs inside a GPU deferred
+    /// execution graph (device-resident, fused, multi-stream) instead of eager per-op dispatch.
+    /// Default <c>false</c> (opt-in).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When enabled AND the active engine is a CUDA <c>DirectGpuTensorEngine</c>, each
+    /// <see cref="Diffusion.DiffusionModelBase{T}.PredictNoise"/> call is recorded into one fused
+    /// GPU execution graph (AiDotNet.Tensors #642) — keeping intermediates on-device across the
+    /// forward, applying kernel fusion / multi-stream overlap / buffer reuse, and eliminating
+    /// per-op host round-trips. This is the substrate a CUDA-graph capture replays. On any failure
+    /// the step transparently falls back to the eager forward, so correctness is never worse than
+    /// the eager path.
+    /// </para>
+    /// <para><b>Requires AiDotNet.Tensors with the #642 deferred-graph correctness fixes</b>
+    /// (GroupNorm arg-order, GroupNorm/InstanceNorm recording, FusedConv2D lazy download,
+    /// GPU-resident in-place activations). Until every op a given model's forward uses is verified
+    /// deferred-correct, leave this off — a not-yet-covered op could silently produce wrong-but-
+    /// finite output (which the eager fallback cannot detect). Validated end-to-end for the
+    /// GroupNorm→Swish→Conv ResBlock; attention / up- &amp; down-sampling / concat / projection paths
+    /// are pending the Tensors op-coverage audit.</para>
+    /// <para><b>For Beginners:</b> a speed switch for GPU image/audio generation. Leave it off
+    /// unless you've confirmed your model + Tensors version support it; when on, it makes the GPU
+    /// do a whole denoising step as one batched job instead of hundreds of tiny ones.</para>
+    /// </remarks>
+    public bool UseGpuExecutionGraph { get; set; } = false;
 }
