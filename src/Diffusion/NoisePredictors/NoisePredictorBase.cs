@@ -615,6 +615,29 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         long threshold = StreamingThresholdOverride ?? DefaultStreamingThresholdParams;
         if (ParameterCount <= threshold) return;
 
+        // Memory-aware engagement (S1): even above the parameter-count floor, only
+        // stream when the resident weight set would NOT fit comfortably in available
+        // host RAM. Streaming a model whose weights already fit can't reduce a
+        // footprint that's within budget — it only pays the per-access rehydrate /
+        // disk-IO overhead, which for a fits-in-RAM model turns a seconds-long
+        // forward into a multi-hour disk-thrash (measured: a 2.3 GB FLUX-class
+        // predictor ran ~1,670× slower and OOM'd under streaming vs resident).
+        // This mirrors PyTorch's policy: weights stay resident unless the user
+        // explicitly opts into device-map / CPU offload. The check is skipped when
+        // StreamingThresholdOverride is set, so controlled-scale tests can still
+        // force the streaming path on a small model on purpose.
+        if (StreamingThresholdOverride is null)
+        {
+            long available = GetAvailableMemoryBytesOrZero();
+            if (available > 0)
+            {
+                long weightBytes = checked(ParameterCount * (long)System.Runtime.CompilerServices.Unsafe.SizeOf<T>());
+                // Half of available RAM leaves headroom for activations, the optimizer
+                // state during training, and other live allocations on the host.
+                if (weightBytes <= available / 2) return;
+            }
+        }
+
         // Don't reconfigure (or clobber) a registry another model is using.
         if (WeightRegistry.GetStreamingReport().RegisteredEntryCount > 0) return;
 
@@ -761,6 +784,22 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         if (cap < min) cap = min;
         if (cap > max) cap = max;
         return cap;
+    }
+
+    /// <summary>
+    /// Best-effort available host memory in bytes, used by the memory-aware
+    /// streaming-engagement heuristic (<see cref="MaybeEngageWeightStreaming"/>).
+    /// Returns 0 when it can't be determined (net471, or the GC info API throws),
+    /// in which case the caller falls through to its parameter-count decision.
+    /// </summary>
+    private static long GetAvailableMemoryBytesOrZero()
+    {
+#if NET5_0_OR_GREATER
+        try { return GC.GetGCMemoryInfo().TotalAvailableMemoryBytes; }
+        catch { return 0; }
+#else
+        return 0;
+#endif
     }
 
     #endregion

@@ -14,6 +14,8 @@ class Program
     private static readonly Dictionary<string, Action> ProfileModes = new()
     {
         ["chronosbolt-profile"] = ChronosBoltProfile.Run,
+        ["controlnetflux-profile"] = ControlNetFluxProfile.Run,
+        ["controlnetflux-nostream"] = ControlNetFluxProfile.RunNoStream,
         ["timemoe-profile"]     = TimeMoEProfile.Run,
         ["timesfm-profile"]     = TimesFMProfile.Run,
         ["moment-profile"]      = MOMENTProfile.Run,
