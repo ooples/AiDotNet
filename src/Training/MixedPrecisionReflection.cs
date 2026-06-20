@@ -130,7 +130,25 @@ internal static class MixedPrecisionReflection
             }
         }
 
-        _stepMethod = planType.GetMethod(
+        // Step has historically had two shapes: the original 2-arg
+        // Step(IReadOnlyList<Tensor<float>>, float) and — from Tensors 0.102.0
+        // (PR #650) — the loss-scaled Step(IReadOnlyList<Tensor<float>>, float,
+        // GradScaler? scaler = null). Reflection's exact-type GetMethod won't
+        // resolve the 3-param overload from a 2-type signature, so prefer the
+        // 3-param form (by name + first-two-param types; GradScaler isn't
+        // expressible as typeof here) and fall back to the legacy 2-arg form for
+        // older packages. StepSgd dispatches on the resolved parameter count.
+        foreach (var m in planType.GetMethods(BindingFlags.Public | BindingFlags.Instance))
+        {
+            if (m.Name != "Step") continue;
+            var ps = m.GetParameters();
+            if (ps.Length != 3) continue;
+            if (ps[0].ParameterType != typeof(IReadOnlyList<Tensor<float>>)) continue;
+            if (ps[1].ParameterType != typeof(float)) continue;
+            _stepMethod = m;
+            break;
+        }
+        _stepMethod ??= planType.GetMethod(
             "Step",
             BindingFlags.Public | BindingFlags.Instance,
             binder: null,
@@ -184,13 +202,20 @@ internal static class MixedPrecisionReflection
             : trace.Invoke(null, new object[] { forwardAndLoss });
     }
 
-    /// <summary>Replay an SGD step against a previously-traced plan; returns the loss.</summary>
-    public static float StepSgd(object plan, IReadOnlyList<Tensor<float>> parameters, float learningRate)
+    /// <summary>Replay an SGD step against a previously-traced plan; returns the loss.
+    /// When <paramref name="gradScaler"/> is supplied and the resolved <c>Step</c> accepts
+    /// one (Tensors 0.102.0+), the backward seed is loss-scaled and grads are unscaled in
+    /// FP32 master space with skip-on-overflow — so FP16 gradients don't underflow to zero.
+    /// Falls back to the legacy 2-arg (unscaled) <c>Step</c> on older packages.</summary>
+    public static float StepSgd(object plan, IReadOnlyList<Tensor<float>> parameters, float learningRate, object? gradScaler = null)
     {
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         MethodInfo? step = _stepMethod;
         if (step is null) throw new InvalidOperationException("Mixed-precision API not available.");
-        object? result = step.Invoke(plan, new object[] { parameters, learningRate });
+        object?[] args = step.GetParameters().Length == 3
+            ? new object?[] { parameters, learningRate, gradScaler }
+            : new object?[] { parameters, learningRate };
+        object? result = step.Invoke(plan, args);
         return ExtractLoss(result);
     }
 
