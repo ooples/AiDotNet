@@ -3986,22 +3986,45 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     private volatile bool _inferenceAccelerationOptIn;
 
     /// <summary>
-    /// Process-wide opt-out for the auto compiled-inference path. Set
-    /// <c>AIDOTNET_DISABLE_AUTO_COMPILE=1</c> to force every model onto the plain
-    /// eager path (debugging a suspected compiled-plan defect, or pinning bit-exact
-    /// eager numerics). Read once.
+    /// Process-wide OPT-IN for the verify-then-trust compiled-inference path (#1622), OFF by default.
     /// </summary>
-    private static readonly bool s_autoCompileDisabled =
-        string.Equals(Environment.GetEnvironmentVariable("AIDOTNET_DISABLE_AUTO_COMPILE"), "1", StringComparison.Ordinal);
+    /// <remarks>
+    /// The AiDotNet.Tensors compiled lazy-graph executor (through 0.101.7) shares process-global scratch
+    /// buffers with the eager executor. The gate MUST execute a compiled plan once to compare it against
+    /// eager — and that single execution leaves the shared scratch in a state that makes every subsequent
+    /// eager forward for a REJECTED shape return the wrong value (the diffusion <c>NoisePredictorBase</c>
+    /// path, which has no value memo, shows this as a period-2 non-deterministic oscillation). Here the
+    /// single-input value memo returns a cached output for a confirmed-identical repeated input, so the
+    /// determinism symptom is masked — but a memo-MISS input (different data at a rejected shape, after a
+    /// compiled run) still reads the corrupted eager scratch and is numerically wrong. Until the package
+    /// isolates the two executors' scratch, the compiled-inference path is opt-in via
+    /// <c>AIDOTNET_ENABLE_AUTO_COMPILE=1</c>. Training is unaffected either way (the compiled path is
+    /// inference-only). Mirrors <c>NoisePredictorBase.s_autoCompiledInferenceEnabled</c>.
+    /// </remarks>
+    private static bool s_autoCompiledInferenceEnabled =
+        string.Equals(Environment.GetEnvironmentVariable("AIDOTNET_ENABLE_AUTO_COMPILE"), "1", StringComparison.Ordinal);
 
     /// <summary>
-    /// Whether the verify-then-trust compiled-inference path is currently engaged for this model:
-    /// either the caller explicitly opted in (<see cref="EnableInferenceAcceleration"/>) — which works
-    /// for a model of ANY size — or the model is foundation-scale (over the weight-streaming threshold)
-    /// in inference mode, where it auto-engages with zero config. Never during the global opt-out.
+    /// Test/diagnostic hook: overrides the process-wide compiled-inference opt-in
+    /// (<see cref="s_autoCompiledInferenceEnabled"/>) in-process, since the env var is read once at type
+    /// load. Returns the previous value so a test can restore it in teardown. Lets the verify-then-trust
+    /// gate's parity invariants stay covered without depending on the process environment.
+    /// </summary>
+    internal static bool SetAutoCompiledInferenceEnabledForTesting(bool enabled)
+    {
+        var prev = s_autoCompiledInferenceEnabled;
+        s_autoCompiledInferenceEnabled = enabled;
+        return prev;
+    }
+
+    /// <summary>
+    /// Whether the verify-then-trust compiled-inference path is currently engaged for this model. Requires
+    /// the process-wide opt-in (<see cref="s_autoCompiledInferenceEnabled"/>, default off — see its remarks
+    /// for the package scratch-corruption bug) AND either an explicit per-model opt-in
+    /// (<see cref="EnableInferenceAcceleration"/>, any size) or a foundation-scale model in inference mode.
     /// </summary>
     private bool InferenceAccelerationEngaged =>
-        !s_autoCompileDisabled
+        s_autoCompiledInferenceEnabled
         && (_inferenceAccelerationOptIn || (_streamingEngagedByAutoDetect && !IsTrainingMode));
 
     /// <summary>Whether the compiled-inference path is currently engaged for this model. Diagnostic/test hook.</summary>
@@ -4012,7 +4035,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// industry-standard explicit "compile this model" gesture (cf. <c>torch.compile</c>). Foundation-
     /// scale models auto-engage without this; small/medium models that are served repeatedly (the case
     /// where the one-time per-shape verification amortizes) call this once to opt in. Output stays
-    /// numerically identical to eager. No effect under the <c>AIDOTNET_DISABLE_AUTO_COMPILE</c> opt-out.
+    /// numerically identical to eager. Takes effect only when the process-wide opt-in
+    /// <c>AIDOTNET_ENABLE_AUTO_COMPILE=1</c> is set (default off — see
+    /// <see cref="s_autoCompiledInferenceEnabled"/> for the package scratch-corruption bug that gates it);
+    /// otherwise the model stays on the plain eager path.
     /// </summary>
     /// <param name="enabled">True to enable (default); false to opt back out.</param>
     public void EnableInferenceAcceleration(bool enabled = true)
