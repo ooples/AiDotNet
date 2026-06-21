@@ -15,6 +15,7 @@ class Program
     {
         ["chronosbolt-profile"] = ChronosBoltProfile.Run,
         ["controlnetflux-profile"] = ControlNetFluxProfile.Run,
+        ["audioldm-determinism"] = AudioLDMDeterminismProbe.Run,
         ["controlnetflux-nostream"] = ControlNetFluxProfile.RunNoStream,
         ["timemoe-profile"]     = TimeMoEProfile.Run,
         ["timesfm-profile"]     = TimesFMProfile.Run,

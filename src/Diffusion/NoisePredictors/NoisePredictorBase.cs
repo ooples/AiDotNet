@@ -50,13 +50,36 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// <see cref="PredictCompiled"/> call a diffusion denoising loop makes runs eager once per shape to
     /// confirm the compiled plan matches, then replays the trusted plan for the remaining 50+ steps —
     /// the dominant inference cost of a foundation-scale diffusion model. Output stays numerically
-    /// identical to eager (rejected/unverified shapes fall back to eager). Process-wide opt-out via
-    /// <c>AIDOTNET_DISABLE_AUTO_COMPILE=1</c>.
+    /// identical to eager (rejected/unverified shapes fall back to eager). Only consulted when the
+    /// compiled inference path is opted in (see <see cref="s_autoCompiledInferenceEnabled"/>); the
+    /// default-eager path never constructs a verdict.
     /// </summary>
     private readonly AiDotNet.NeuralNetworks.VerifiedInferenceGate<T> _inferenceGate = new();
 
-    private static readonly bool s_autoCompileDisabled =
-        string.Equals(System.Environment.GetEnvironmentVariable("AIDOTNET_DISABLE_AUTO_COMPILE"), "1", System.StringComparison.Ordinal);
+    /// <summary>
+    /// Auto-compiled inference replay (#1622) is OPT-IN for noise predictors and OFF by default.
+    /// </summary>
+    /// <remarks>
+    /// The AiDotNet.Tensors compiled lazy-graph executor (through 0.101.7) shares process-global
+    /// scratch buffers with the eager executor. The verify-then-trust gate MUST execute a compiled
+    /// plan once to compare it against eager — and that single compiled execution leaves the shared
+    /// scratch in a state that makes EVERY subsequent eager forward for a REJECTED shape oscillate
+    /// with period 2: non-deterministic across calls, and numerically wrong on half of them. Model
+    /// parameters and inputs are provably untouched (hashed identical across calls) and dropping the
+    /// cached plan does not help, so the corruption is in the package's global scratch, not anything
+    /// this layer owns. Diffusion noise predictors fall back to eager for any shape whose compiled
+    /// plan does not match (which is the common case for these architectures), so the previously
+    /// default-on path silently corrupted inference and broke <c>Predict_ShouldBeDeterministic</c>.
+    /// <para>
+    /// Until the package isolates the two executors' scratch buffers, the compiled inference replay
+    /// is opt-in via <c>AIDOTNET_ENABLE_AUTO_COMPILE=1</c> (set only after verifying a given model's
+    /// compiled path is both correct and side-effect-free). This does NOT affect #1624 foundation-scale
+    /// TRAINING: <see cref="PredictCompiledMulti"/> runs eager whenever a gradient tape is active, so
+    /// training never touches the compiled inference path regardless of this flag.
+    /// </para>
+    /// </remarks>
+    private static readonly bool s_autoCompiledInferenceEnabled =
+        string.Equals(System.Environment.GetEnvironmentVariable("AIDOTNET_ENABLE_AUTO_COMPILE"), "1", System.StringComparison.Ordinal);
 
     /// <summary>
     /// Monotonic layer-graph version. Concrete predictors bump this via
@@ -284,9 +307,11 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// <param name="eagerFallback">The eager forward pass (traced, replayed, or fallback).</param>
     protected Tensor<T> PredictCompiled(Tensor<T> input, Func<Tensor<T>> eagerFallback)
     {
-        // Direct compile host when the verify gate is opted out.
-        if (s_autoCompileDisabled)
-            return _compileHost.Predict(input, _layerStructureVersion, eagerFallback);
+        // Compiled inference replay is opt-in (see s_autoCompiledInferenceEnabled): the verify pass
+        // corrupts the package's shared eager/compiled scratch for rejected shapes. Default to pure
+        // eager, which is correct and bit-identical across calls.
+        if (!s_autoCompiledInferenceEnabled)
+            return eagerFallback();
 
         // #1622 L3b: front the compile host with the verify-then-trust gate so a compiled plan is
         // adopted for a shape only after it matches the eager forward — then replayed for the rest of
@@ -326,9 +351,11 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
             && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed)
             return eagerFallback();
 
-        // Direct compile host when the verify gate is opted out.
-        if (s_autoCompileDisabled)
-            return _compileHost.Predict(inputs, _layerStructureVersion, eagerFallback);
+        // Compiled inference replay is opt-in (see s_autoCompiledInferenceEnabled): the verify pass
+        // corrupts the package's shared eager/compiled scratch for rejected shapes. Default to pure
+        // eager, which is correct and bit-identical across the denoising loop and across calls.
+        if (!s_autoCompiledInferenceEnabled)
+            return eagerFallback();
 
         return _inferenceGate.Run(
             inputs,
