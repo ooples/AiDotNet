@@ -199,7 +199,11 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
         // Reparameterization trick: z = mean + std * epsilon
         // std = exp(0.5 * logVariance)
 
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        // Inference RNG: when no explicit seed is given, use a STABLE seed (not the
+        // advancing RandomGenerator) so repeated Sample(sameInput) calls reproduce —
+        // the determinism contract. VAEModelBase doesn't derive from DiffusionModelBase,
+        // so the stable seed is inlined here. (Training paths use RandomGenerator directly.)
+        var rng = RandomHelper.CreateSeededRandom(seed ?? 0);
         var epsilon = SampleNoise(mean._shape, rng);
 
         var result = new Tensor<T>(mean._shape);

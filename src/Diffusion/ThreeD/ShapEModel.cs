@@ -359,7 +359,7 @@ public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
 
         // Generate latent
         var latentShape = new[] { 1, 1, SHAPE_LATENT_DIM };
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latent = SampleNoiseTensor(latentShape, rng);
 
         Scheduler.SetTimesteps(numInferenceSteps);
@@ -411,7 +411,7 @@ public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
 
         // Generate shape latent
         var latentShape = new[] { 1, 1, SHAPE_LATENT_DIM };
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latent = SampleNoiseTensor(latentShape, rng);
 
         Scheduler.SetTimesteps(numInferenceSteps);
@@ -792,7 +792,7 @@ public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
     {
         var effectiveNumPoints = numPoints ?? DefaultPointCount;
         var latentSpan = latent.AsSpan();
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
 
         var points = new Tensor<T>(new[] { 1, effectiveNumPoints, 6 });
         var pointsSpan = points.AsWritableSpan();

@@ -413,6 +413,29 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             : RandomHelper.CreateSecureRandom();
     }
 
+    /// <summary>
+    /// Creates a reproducible RNG for the INFERENCE / generation path. When the
+    /// caller passes no explicit <paramref name="seed"/>, a STABLE seed (the
+    /// model's construction seed, else a fixed constant) is used — deliberately
+    /// NOT the advancing <see cref="RandomGenerator"/> — so that two
+    /// <c>Predict(sameInput)</c> calls draw the identical noise and produce the
+    /// identical output (the <c>Predict_ShouldBeDeterministic</c> contract every
+    /// diffusion model must honor), while callers wanting sample variety still
+    /// pass an explicit seed. Training intentionally keeps using
+    /// <see cref="RandomGenerator"/>, which MUST advance across steps to draw
+    /// fresh timesteps/noise each iteration.
+    /// </summary>
+    /// <param name="seed">Optional explicit seed; when null a stable seed is used.</param>
+    protected Random CreateInferenceRng(int? seed)
+        => RandomHelper.CreateSeededRandom(seed ?? _options.Seed ?? InferenceDefaultSeed);
+
+    /// <summary>
+    /// Fixed fallback seed for <see cref="CreateInferenceRng"/> when the model
+    /// was constructed without a seed — any constant works; it only needs to be
+    /// stable across calls so unseeded generation is reproducible.
+    /// </summary>
+    private const int InferenceDefaultSeed = 0;
+
     #region IDiffusionModel<T> Implementation
 
     /// <inheritdoc />
@@ -593,7 +616,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
                     nameof(initialSample));
             return initialSample;
         }
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         return SampleNoise((int)totalElements, rng);
     }
 

@@ -427,7 +427,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
         var latentShape = new[] { 1, IPA_LATENT_CHANNELS, latentHeight, latentWidth };
 
         // Initialize noise
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latents = SampleNoiseTensor(latentShape, rng);
 
         // Set up scheduler

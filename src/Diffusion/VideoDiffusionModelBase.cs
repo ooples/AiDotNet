@@ -142,7 +142,7 @@ public abstract class VideoDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         var videoLatentShape = new[] { 1, effectiveNumFrames, LatentChannels, latentHeight, latentWidth };
 
         // Generate initial noise for all frames
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latents = DiffusionNoiseHelper<T>.SampleGaussian(videoLatentShape, rng);
 
         // Set up scheduler
@@ -211,7 +211,7 @@ public abstract class VideoDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         var videoLatentShape = new[] { 1, effectiveNumFrames, LatentChannels, latentHeight, latentWidth };
 
         // Generate initial noise for all frames
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latents = DiffusionNoiseHelper<T>.SampleGaussian(videoLatentShape, rng);
 
         // Set up scheduler
@@ -288,7 +288,7 @@ public abstract class VideoDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         var startTimestep = Scheduler.Timesteps.Skip(startStep).First();
 
         // Add noise to latents at starting timestep
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         latents = AddNoiseToVideoLatents(latents, startTimestep, rng);
 
         // Denoising loop (starting from startStep)
@@ -431,7 +431,7 @@ public abstract class VideoDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         // Add noise augmentation to encourage motion
         if (noiseAugStrength > 0)
         {
-            var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+            var rng = CreateInferenceRng(seed);
             var noise = DiffusionNoiseHelper<T>.SampleGaussian(image._shape, rng);
             var scaledNoise = DiffusionNoiseHelper<T>.ScaleNoise(noise, noiseAugStrength);
 

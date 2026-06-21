@@ -328,7 +328,7 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
         var latentShape = new[] { 1, LatentChannels, latentHeight, latentWidth };
 
         // Generate initial noise
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latents = SampleNoiseTensor(latentShape, rng);
 
         // Set up scheduler
@@ -423,7 +423,7 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
         var startTimestep = Scheduler.Timesteps.Skip(startStep).First();
 
         // Add noise to latents at starting timestep
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var noise = SampleNoiseTensor(latentShape, rng);
         var noisyLatents = Scheduler.AddNoise(latents.ToVector(), noise.ToVector(), startTimestep);
         latents = new Tensor<T>(latentShape, noisyLatents);
@@ -495,7 +495,7 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
         }
 
         // Generate initial noise
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latents = SampleNoiseTensor(latentShape, rng);
 
         // Set up scheduler

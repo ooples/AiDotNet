@@ -399,7 +399,7 @@ public class AudioLDMModel<T> : AudioDiffusionModelBase<T>
         var startTimestep = Scheduler.Timesteps.Skip(startStep).FirstOrDefault();
 
         // Add noise at starting timestep
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var noise = SampleNoiseTensor(latent._shape, rng);
         latent = AddNoiseAtTimestep(latent, noise, startTimestep);
 

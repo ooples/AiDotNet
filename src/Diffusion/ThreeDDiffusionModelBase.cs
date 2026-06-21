@@ -127,7 +127,7 @@ public abstract class ThreeDDiffusionModelBase<T> : LatentDiffusionModelBase<T>,
         var pointCloudShape = new[] { 1, effectiveNumPoints, 3 };
 
         // Generate initial noise
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var points = DiffusionNoiseHelper<T>.SampleGaussian(pointCloudShape, rng);
 
         // Set up scheduler
@@ -218,7 +218,7 @@ public abstract class ThreeDDiffusionModelBase<T> : LatentDiffusionModelBase<T>,
             throw new NotSupportedException("This model does not support novel view synthesis.");
 
         var novelViews = new Tensor<T>[targetAngles.Length];
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
 
         // Encode input image
         var imageLatent = EncodeToLatent(inputImage, sampleMode: false);
@@ -327,7 +327,7 @@ public abstract class ThreeDDiffusionModelBase<T> : LatentDiffusionModelBase<T>,
 
         // Generate RGB values for each point
         var colorShape = new[] { pointShape[0], numPoints, 3 }; // [batch, points, RGB]
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var colors = DiffusionNoiseHelper<T>.SampleGaussian(colorShape, rng);
 
         // Set up scheduler

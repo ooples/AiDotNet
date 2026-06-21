@@ -536,7 +536,7 @@ public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
         }
 
         // Initialize random latent
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latent = SampleNoiseTensor(latentShape, rng);
 
         // Set up scheduler
@@ -689,7 +689,7 @@ public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
         var startTimestep = Scheduler.Timesteps.Skip(startStep).FirstOrDefault();
 
         // Add noise at starting timestep
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var noise = SampleNoiseTensor(latent._shape, rng);
         latent = AddNoiseAtTimestep(latent, noise, startTimestep);
 

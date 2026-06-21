@@ -262,7 +262,7 @@ public class DiffWaveModel<T> : DiffusionModelBase<T>
         var shape = new[] { 1, length };
 
         // Initialize with noise
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var audio = SampleNoise(shape, rng);
 
         // Set up scheduler
@@ -300,7 +300,7 @@ public class DiffWaveModel<T> : DiffusionModelBase<T>
     {
         var shape = new[] { batchSize, sampleLength };
 
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var audio = SampleNoise(shape, rng);
 
         Scheduler.SetTimesteps(numInferenceSteps);
