@@ -277,6 +277,16 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// <param name="eagerFallback">The eager forward pass (traced, replayed, verified, or fallback).</param>
     protected Tensor<T> PredictCompiledMulti(Tensor<T>[] inputs, Func<Tensor<T>> eagerFallback)
     {
+        // Under an active gradient tape (TRAINING), run eager directly. The compiled/lazy-graph
+        // host is an INFERENCE replay optimization; building + realizing the lazy graph while a
+        // tape is recording is pure overhead — measured ~14% of a foundation-scale diffusion
+        // train step (CompiledModelHost.Predict + LazyNode.Realize) — on top of the eager op
+        // record the backward needs anyway. Eager records the identical ops on the tape, so the
+        // gradients are unchanged; inference (no tape / NoGradScope) still gets the fast replay.
+        if (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed)
+            return eagerFallback();
+
         // Direct compile host when the verify gate is opted out.
         if (s_autoCompileDisabled)
             return _compileHost.Predict(inputs, _layerStructureVersion, eagerFallback);
