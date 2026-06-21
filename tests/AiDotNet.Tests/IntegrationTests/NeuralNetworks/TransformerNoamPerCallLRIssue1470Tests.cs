@@ -140,10 +140,25 @@ public class TransformerNoamPerCallLRIssue1470Tests
 
     /// <summary>
     /// End-to-end: a default-optimizer (Adam + Noam) Transformer trained via the
-    /// per-call minibatch pattern must (1) actually ENGAGE the fused-compiled
+    /// per-call minibatch pattern (<c>MaxIterations=1</c> + an external epoch loop
+    /// calling <c>model.Train</c>) must (1) actually ENGAGE the fused-compiled
     /// training path — proving Noam no longer forces the slow eager fallback —
     /// and (2) break through the uniform-softmax floor (loss &lt; ln(V)),
     /// proving the Noam LR ramped instead of freezing (#1470).
+    ///
+    /// <para>
+    /// <b>Methodology note (why a real minibatch):</b> each <c>Train</c> call
+    /// presents ALL <c>vocab</c> examples as one <c>[vocab, seqLen]</c> minibatch,
+    /// NOT one example per call. Presenting the 8 maps one-at-a-time (batch size 1)
+    /// is degenerate online SGD: each single example is driven to p≈1 and the next
+    /// call overwrites it (catastrophic interference), so the loss can never settle
+    /// below ln(V) no matter how correctly the Noam LR ramps — the convergence
+    /// proxy would then test the optimizer-interference property, not #1470. The
+    /// minibatch lets the averaged gradient fit all maps jointly, so convergence
+    /// cleanly isolates the thing under test: Noam ramping on the fused path.
+    /// (Verified: single-example overfit reaches p=1.0 stably; batch-1 cycling
+    /// diverges and worsens with training; the minibatch reaches avgNll≈0, 8/8.)
+    /// </para>
     /// </summary>
     [Fact]
     public async Task Transformer_PerCallTrain_DefaultNoam_EngagesFusedPath_AndConverges()
@@ -151,7 +166,7 @@ public class TransformerNoamPerCallLRIssue1470Tests
         await Task.Yield();
         const int vocab = 8;
         const int seqLen = 4;
-        const int totalEpochs = 400;
+        const int totalEpochs = 800;
         const int modelDim = 32;
         const int ffDim = 64;
         const int warmup = 64;   // small so the ramp clears warmup within the budget
@@ -179,14 +194,20 @@ public class TransformerNoamPerCallLRIssue1470Tests
 
         CompiledTapeTrainingStep<float>.ResetFusedStepCount();
 
+        // One minibatch of all `vocab` maps: input [vocab, seqLen], target
+        // [vocab, vocab] (one-hot). The deterministic byte-LM task maps the
+        // constant sequence [k,k,..] -> class (k+3) % vocab.
+        var batchInput = new Tensor<float>(new[] { vocab, seqLen });
+        var batchTarget = new Tensor<float>(new[] { vocab, vocab });
+        for (int k = 0; k < vocab; k++)
+        {
+            for (int s = 0; s < seqLen; s++) batchInput[k, s] = k;
+            batchTarget[k, (k + 3) % vocab] = 1f;
+        }
+
         for (int epoch = 0; epoch < totalEpochs; epoch++)
         {
-            for (int k = 0; k < vocab; k++)
-            {
-                var input = BuildAllKInput(k, seqLen);
-                var target = BuildOneHotTarget((k + 3) % vocab, vocab);
-                model.Train(input, target);
-            }
+            model.Train(batchInput, batchTarget);
         }
 
         long fusedSteps = CompiledTapeTrainingStep<float>.GetFusedStepCount();
@@ -196,7 +217,7 @@ public class TransformerNoamPerCallLRIssue1470Tests
         // was declined by TryGetFusedLrSchedule and every step fell back to the
         // eager tape (fusedSteps == 0). The fix maps Noam → LrSchedule.Noam so
         // the fast path engages.
-        _output.WriteLine($"fused steps engaged: {fusedSteps} / {totalEpochs * vocab}");
+        _output.WriteLine($"fused steps engaged: {fusedSteps} / {totalEpochs}");
         Assert.True(fusedSteps > 0,
             "Adam+Noam Transformer must engage the fused-compiled training path now that " +
             "LrSchedule.Noam exists — fusedSteps==0 means it's still forced onto the eager tape (#1470).");
