@@ -246,16 +246,16 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     {
         try
         {
-            return PredictCore(input);
+            return PredictForward(input);
         }
         catch (Exception ex) when (IsGpuTransientFailure(ex))
         {
             // A sticky GPU fault tripped the circuit breaker (engine is now CPU); retry on CPU.
-            return PredictCore(input);
+            return PredictForward(input);
         }
     }
 
-    private Tensor<T> PredictCore(Tensor<T> input)
+    private Tensor<T> PredictForward(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
         if (TryForwardGpuOptimized(input, out var gpuResult))

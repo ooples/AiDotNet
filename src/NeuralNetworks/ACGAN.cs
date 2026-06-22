@@ -595,12 +595,15 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         // AC-GAN doesn't use layers directly
     }
 
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
+        // Generator.Predict is a NESTED Predict: when the inference arena is enabled this
+        // opens a nested TensorArena and detaches the generator's output to a GC-owned tensor,
+        // which is safe to return through this model's own funnel (which detaches again).
         return Generator.Predict(input);
     }
 

@@ -1027,7 +1027,7 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         if (wasTraining) SetTrainingMode(false);
         try
         {
-            return PredictCore(input);
+            return PredictForward(input);
         }
         finally
         {
@@ -1035,7 +1035,7 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         }
     }
 
-    private Tensor<T> PredictCore(Tensor<T> input)
+    private Tensor<T> PredictForward(Tensor<T> input)
     {
         // Treat the raw input tensor as the modality payload (Perceiver-style:
         // arbitrary-shape input is projected to a fixed-dim token sequence by

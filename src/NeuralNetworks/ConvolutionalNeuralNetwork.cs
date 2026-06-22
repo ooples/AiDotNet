@@ -261,11 +261,11 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     /// represent (non-float, active tape, lazy/unmaterialized weights, a conv
     /// activation other than identity/ReLU, or a layer sequence outside the pattern).
     /// </summary>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         if (typeof(T) == typeof(float) && TryFusedConvStemPredict(input, out var fused))
             return fused;
-        return base.Predict(input);
+        return base.PredictCore(input);
     }
 
     // Cached scratch feature-map buffers for the conv/pool prefix (one per layer).
