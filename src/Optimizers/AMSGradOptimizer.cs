@@ -24,7 +24,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     /// <summary>
     /// The options specific to the AMSGrad optimizer.
@@ -73,6 +73,31 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
         _options = options ?? new AMSGradOptimizerOptions<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
+    }
+
+    /// <summary>
+    /// Describes this AMSGrad optimizer for the compiled fused-training kernel.
+    /// AMSGrad is Adam with a running maximum of the second moment, which the
+    /// Tensors fused kernel implements directly as
+    /// <see cref="Tensors.Engines.Compilation.OptimizerType.AMSGrad"/> (the same
+    /// variant <see cref="AdamOptimizer{T, TInput, TOutput}"/> selects when its
+    /// <c>UseAMSGrad</c> flag is set). Wiring it here lets a standalone
+    /// AMSGradOptimizer engage the compiled forward/backward fast path instead of
+    /// falling back to the eager autograd tape every step (the multi-× perf cliff).
+    /// Falls back (returns false) when an adaptive learning rate or an
+    /// unsupported LR scheduler is configured, exactly like the Adam/AdaMax specs.
+    /// </summary>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        if (_options.UseAdaptiveLearningRate) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+        config = new Fused.FusedOptimizerConfig(
+            Tensors.Engines.Compilation.OptimizerType.AMSGrad,
+            (float)GetCurrentLearningRate(),
+            (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon,
+            0f, schedule);
+        return true;
     }
 
     /// <summary>
