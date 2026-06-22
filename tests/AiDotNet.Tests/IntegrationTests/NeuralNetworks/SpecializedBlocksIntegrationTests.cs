@@ -167,6 +167,7 @@ public class SpecializedBlocksIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BottleneckBlock_ExpansionFactor_CorrectlyApplied()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         // Arrange - default expansion is 4. BottleneckBlock is parameterized by its base
         // width (PyTorch torchvision Bottleneck(inplanes, planes): output = planes * 4); the
         // ctor signature is (baseChannels, stride) and input channels resolve LAZILY on first
@@ -325,6 +326,7 @@ public class SpecializedBlocksIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DenseBlock_OutputChannels_CorrectlyCalculated()
     {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
         // Arrange - DenseBlock ctor only takes numLayers + growthRate; the
         // inputChannels component of OutputChannels resolves from the first
         // input.Shape (see DenseBlock.OnFirstForward).
