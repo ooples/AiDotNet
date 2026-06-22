@@ -2393,7 +2393,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                   || model.ClassName == "Helix"
                   || model.ClassName == "Octo"
                   || model.ClassName == "SigLIP2"
-                  || model.ClassName == "ViLT"))
+                  || model.ClassName == "ViLT"
+                  || model.ClassName == "Florence2"))
         {
             // These VisionLanguage models (GPT4Point — Qi et al. 2024;
             // Helix — Figure AI 2025; Octo — Octo Model Team 2024;
@@ -5338,6 +5339,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // gradients accumulate to NaN. Routed through the VL token-feature
             // InputShape branch, which applies this override.
             "SigLIP2" => true,
+            // Florence2 (Xiao et al. 2024): EmbeddingDim=768, 12 encoder transformer
+            // blocks + 6 decoder blocks (each decoder block runs causal self-attention
+            // AND cross-attention = 18 attention sublayers at d=768, fp64). Deeper than
+            // SigLIP2, so the default 10/30/50/200-iter training invariants overflow the
+            // 120 s timeout and let gradients drift to NaN. Routed through the VL
+            // token-feature InputShape branch, which applies this smoke-test override.
+            "Florence2" => true,
             // Gemma3 (Google 2025): VisionDim=1152, DecoderDim=3584, 27 vision
             // layers, 36 decoder layers, ImageSize=896 SigLIP-SO. Default Adam
             // step OOMs the test runner before even completing the warm-up
