@@ -146,10 +146,13 @@ public class Florence2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
                     _options.DropoutRate
                 )
             );
-            int lpb = _options.DropoutRate > 0 ? 6 : 5;
+            // CreateDefaultFlorence2Layers now emits ONE TransformerEncoderBlock per
+            // encoder layer (each block internally bundles attention + FFN + residual
+            // norms), optionally followed by a single enc->dec projection Dense, then
+            // the decoder blocks. So the encoder spans exactly NumLayers blocks (+1 for
+            // the projection when the encoder/decoder dims differ).
             _encoderEnd =
-                1
-                + _options.NumLayers * lpb
+                _options.NumLayers
                 + (_options.EmbeddingDim != _options.DecoderEmbeddingDim ? 1 : 0);
         }
     }
