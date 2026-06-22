@@ -434,6 +434,14 @@ public class TransformerEndToEndIntegrationTests
             outputSize: vocab,
             maxSequenceLength: ctxLen,
             vocabularySize: vocab,
+            // dropoutRate: 0 — these are TRAINING-PIPELINE memorization/overfit sanity tests (the
+            // docstrings: "after N steps overfitting a fixed example/batch the model should classify
+            // it"). Dropout is a regularizer whose purpose is to PREVENT overfitting, so the production
+            // default (0.1) works against what the test measures: the train-mode (dropped) vs eval-mode
+            // (full) forward gap caps eval accuracy on a short budget — V256/B32/100-steps lands at the
+            // 50% knife-edge with 0.1 but reaches 100% with 0.0 (verified). Disabling dropout for an
+            // overfit smoke test is standard practice; the >50% assertion is unchanged.
+            dropoutRate: 0.0,
             warmupSteps: 10,
             randomSeed: 42);
 
