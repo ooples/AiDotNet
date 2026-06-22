@@ -122,6 +122,17 @@ public class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 
     public List<Tensor<T>> ExtractFeatures(Tensor<T> input)
     {
+        // Backbones accept a single [C,H,W] image or a batched [N,C,H,W] tensor.
+        // MaxPool2D and the residual stages operate on rank-4 NCHW (MaxPool2D
+        // reads Shape[3]), so promote a rank-3 single image to [1,C,H,W]
+        // (matching SwinTransformer.EnsureBatchedNchw).
+        if (input.Shape.Length == 3)
+            input = input.Reshape(new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
+        else if (input.Shape.Length != 4)
+            throw new ArgumentException(
+                $"ResNet expects a [C,H,W] or [N,C,H,W] image tensor, but got rank-{input.Shape.Length} " +
+                $"[{string.Join(",", input.Shape.ToArray())}].", nameof(input));
+
         var features = new List<Tensor<T>>();
         var x = _conv1.Forward(input);
         x = _activation.Activate(x);
