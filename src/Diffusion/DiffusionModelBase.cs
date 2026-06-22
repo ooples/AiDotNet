@@ -773,7 +773,10 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         {
             using var scope = engine.BeginDeferredScope();
             if (scope is null)
+            {
+                DiffusionDeferredStepDiagnostics.RecordFellBack();
                 return PredictNoise(noisySample, timestep);
+            }
 
             // Ops inside PredictNoise route through DeferredScope.Current.RecordingBackend
             // automatically; Execute() replays the recorded, optimized graph. The result tensor
@@ -781,16 +784,38 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             // output buffer is owned by the activation cache, so it survives the scope dispose.
             var prediction = PredictNoise(noisySample, timestep);
             scope.Execute();
-            return prediction;
+            // Materialise the result to a GC-owned CPU tensor BEFORE the deferred scope disposes.
+            // The lazy result is GPU-resident and its backing buffer is owned by the scope's
+            // recording backend / activation cache, which is torn down on scope dispose — reading
+            // it AFTER dispose (as the denoise loop does, via AsSpan) yields recycled/garbage
+            // values. ToArray() forces the GPU->CPU download while the buffers are still alive,
+            // and wrapping in a fresh Tensor detaches from the scope-owned storage. (Mirrors the
+            // inference-arena DetachFromArena pattern.)
+            var dims = new int[prediction.Rank];
+            for (int d = 0; d < dims.Length; d++) dims[d] = prediction.Shape[d];
+            var materialized = new Tensor<T>(prediction.ToArray(), dims);
+            DiffusionDeferredStepDiagnostics.RecordExecuted();
+            return materialized;
         }
-        catch (System.Exception ex)
+        // Fall back to eager only for RECOVERABLE failures (an op not yet deferred-correct, a
+        // transient GPU/runtime fault, a deferred-scope rejection). Unrecoverable conditions
+        // (host OOM, access violation, stack overflow) are NOT masked — re-running the same
+        // forward eagerly cannot help and would hide a real fault behind a "never worse than
+        // eager" claim, exactly the silent-wrong-output risk #1650 is meant to avoid.
+        catch (System.Exception ex) when (!IsUnrecoverable(ex))
         {
+            DiffusionDeferredStepDiagnostics.RecordFellBack();
             System.Diagnostics.Trace.TraceWarning(
                 "DiffusionModelBase.PredictNoiseStep: deferred GPU forward failed, falling back to "
               + $"eager PredictNoise (timestep {timestep}): {ex.GetType().Name}: {ex.Message}");
             return PredictNoise(noisySample, timestep);
         }
     }
+
+    private static bool IsUnrecoverable(System.Exception ex) =>
+        ex is OutOfMemoryException
+           or System.StackOverflowException
+           or System.AccessViolationException;
 
     /// <inheritdoc />
     /// <remarks>
@@ -1623,4 +1648,33 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     }
 
     #endregion
+}
+
+/// <summary>
+/// Process-wide observability for the opt-in GPU deferred denoising step
+/// (<see cref="DiffusionModelOptions{T}.UseGpuExecutionGraph"/>, #642 / #1650). The step falls back
+/// to the eager forward on any recoverable failure, which would otherwise be invisible — a
+/// not-yet-deferred-correct op would silently run eagerly and look "fine". These counters let tests
+/// (and production telemetry) assert the deferred GPU graph ACTUALLY executed, rather than trusting a
+/// bit-equivalence that an eager fallback would also satisfy.
+/// </summary>
+internal static class DiffusionDeferredStepDiagnostics
+{
+    private static long _executed;
+    private static long _fellBack;
+
+    /// <summary>Number of denoising steps whose forward ran through the deferred GPU graph + Execute().</summary>
+    public static long ExecutedCount => System.Threading.Interlocked.Read(ref _executed);
+
+    /// <summary>Number of denoising steps that fell back to the eager forward (no GPU, null scope, or a recoverable deferred failure).</summary>
+    public static long FellBackCount => System.Threading.Interlocked.Read(ref _fellBack);
+
+    public static void Reset()
+    {
+        System.Threading.Interlocked.Exchange(ref _executed, 0);
+        System.Threading.Interlocked.Exchange(ref _fellBack, 0);
+    }
+
+    internal static void RecordExecuted() => System.Threading.Interlocked.Increment(ref _executed);
+    internal static void RecordFellBack() => System.Threading.Interlocked.Increment(ref _fellBack);
 }
