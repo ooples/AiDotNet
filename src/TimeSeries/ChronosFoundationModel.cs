@@ -101,11 +101,10 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
     private Tensor<T> _finalLayerNormBeta;   // [embeddingDim]
 
     // Pre-allocated gradient computation buffers (reused across gradient steps)
-    private Matrix<T>? _gradProjBuffer;       // [vocabularySize, embeddingDim]
-    private Matrix<T>? _gradProjTranspose;    // [embeddingDim, vocabularySize]
-    private Matrix<T>? _gradColBuffer;        // [embeddingDim, 1]
-    private Matrix<T>? _gradDLogitsCol;       // [vocabularySize, 1]
-    private Matrix<T>? _gradNormRow;          // [1, embeddingDim]
+    // Reused per-sample gradient buffers (eliminate the ~1 MB LOH allocations that OOM-crashed corpus-scale training).
+    private Tensor<T>? _dOutputProjBuf;       // [vocabularySize, embeddingDim] — output-projection gradient
+    private Tensor<T>? _dTokenEmbBuf;         // [vocabularySize, embeddingDim] — sparse token-embedding gradient
+    private int[]? _prevTokenRows;            // token rows written last sample (so we zero only those, not the whole tensor)
 
     // Gradient accumulators for batch training
     private readonly Dictionary<string, Tensor<T>> _gradientAccumulators;
@@ -382,25 +381,23 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         var lastHidden = currentOutput[currentOutput.Count - 1];
         var (normalizedOutput, layerNormCache) = ApplyLayerNormWithCache(lastHidden, _finalLayerNormGamma, _finalLayerNormBeta);
 
-        // Compute logits via Engine-accelerated matrix-vector multiply: logits = W * x + b
-        // Pre-allocated buffers reused across gradient steps to avoid O(vocab×embDim) allocation per step
-        _gradProjBuffer ??= new Matrix<T>(_vocabularySize, _options.EmbeddingDim);
-        _gradColBuffer ??= new Matrix<T>(_options.EmbeddingDim, 1);
-        for (int i = 0; i < _vocabularySize; i++)
-            for (int j = 0; j < _options.EmbeddingDim; j++)
-                _gradProjBuffer[i, j] = _outputProjection[i, j];
-
+        // logits = W·x + b, computed DIRECTLY against _outputProjection. Previously this copied the entire
+        // [vocab × embDim] projection into a buffer (~131k element copies) EVERY sample before the matmul —
+        // pure waste, since _outputProjection only changes once per batch. Direct matrix-vector, no copy.
         var normVec = normalizedOutput.ToVector();
-        for (int i = 0; i < normVec.Length; i++) _gradColBuffer[i, 0] = normVec[i];
-
-        var logitMatrix = (Matrix<T>)Engine.MatrixMultiply(_gradProjBuffer, _gradColBuffer);
+        var normD = new double[normVec.Length];
+        for (int j = 0; j < normVec.Length; j++) normD[j] = _numOps.ToDouble(normVec[j]);
 
         var logits = new double[_vocabularySize];
         double maxLogit = double.NegativeInfinity;
         for (int i = 0; i < _vocabularySize; i++)
         {
-            logits[i] = _numOps.ToDouble(_numOps.Add(logitMatrix[i, 0], _outputBias[i]));
-            if (logits[i] > maxLogit) maxLogit = logits[i];
+            double s = _numOps.ToDouble(_outputBias[i]);
+            for (int j = 0; j < _options.EmbeddingDim; j++)
+                s += _numOps.ToDouble(_outputProjection[i, j]) * normD[j];
+
+            logits[i] = s;
+            if (s > maxLogit) maxLogit = s;
         }
 
         // Softmax
@@ -430,30 +427,31 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         // Backprop through output projection
         var dOutputBias = dLogits; // dL/dBias = dL/dLogits
 
-        // Engine-accelerated gradient computation using pre-allocated buffers:
-        // dW = dLogits (col) * normalizedOutput^T (row) — outer product via MatrixMultiply
-        var dLogitsVec = dLogits.ToVector();
-        _gradDLogitsCol ??= new Matrix<T>(_vocabularySize, 1);
-        for (int i = 0; i < _vocabularySize; i++) _gradDLogitsCol[i, 0] = dLogitsVec[i];
-        _gradNormRow ??= new Matrix<T>(1, _options.EmbeddingDim);
-        for (int j = 0; j < _options.EmbeddingDim; j++) _gradNormRow[0, j] = normalizedOutput[j];
-
-        var dWMatrix = (Matrix<T>)Engine.MatrixMultiply(_gradDLogitsCol, _gradNormRow);
-        var dOutputProjection = new Tensor<T>(new[] { _vocabularySize, _options.EmbeddingDim });
+        // dW = outer(dLogits, normalizedOutput), computed DIRECTLY into a reused buffer. Previously this
+        // allocated a fresh [vocab × embDim] result tensor (~1 MB → Large Object Heap) every sample (plus the
+        // matmul intermediate), which OOM-crashed corpus-scale training. Direct outer product, zero LOH churn.
+        _dOutputProjBuf ??= new Tensor<T>(new[] { _vocabularySize, _options.EmbeddingDim });
+        var dOutputProjection = _dOutputProjBuf;
         for (int i = 0; i < _vocabularySize; i++)
+        {
+            T dl = dLogits[i];
             for (int j = 0; j < _options.EmbeddingDim; j++)
-                dOutputProjection[i, j] = dWMatrix[i, j];
+                dOutputProjection[i, j] = _numOps.Multiply(dl, normalizedOutput[j]);
+        }
 
-        // dNormalized = W^T * dLogits — Engine-accelerated matrix-vector multiply
-        _gradProjTranspose ??= new Matrix<T>(_options.EmbeddingDim, _vocabularySize);
+        // dNormalized[j] = Σ_i W[i,j]·dLogits[i], computed DIRECTLY (no per-sample transpose copy of the full
+        // [vocab × embDim] projection, no matmul intermediate). Accumulate in double, then store.
+        var dNormAcc = new double[_options.EmbeddingDim];
         for (int i = 0; i < _vocabularySize; i++)
+        {
+            double dl = _numOps.ToDouble(dLogits[i]);
             for (int j = 0; j < _options.EmbeddingDim; j++)
-                _gradProjTranspose[j, i] = _outputProjection[i, j];
+                dNormAcc[j] += _numOps.ToDouble(_outputProjection[i, j]) * dl;
+        }
 
-        var dNormMatrix = (Matrix<T>)Engine.MatrixMultiply(_gradProjTranspose, _gradDLogitsCol);
         var dNormalized = new Tensor<T>(new[] { _options.EmbeddingDim });
         for (int j = 0; j < _options.EmbeddingDim; j++)
-            dNormalized[j] = dNormMatrix[j, 0];
+            dNormalized[j] = _numOps.FromDouble(dNormAcc[j]);
 
         gradients["outputProjection"] = dOutputProjection;
         gradients["outputBias"] = dOutputBias;
@@ -482,18 +480,33 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
             }
         }
 
-        // Backprop through token embeddings
-        var dTokenEmbeddings = new Tensor<T>(new[] { _vocabularySize, _options.EmbeddingDim });
+        // Backprop through token embeddings. The gradient is SPARSE (only the seqLen token rows are nonzero),
+        // so reuse a buffer and zero just the previously-written rows + the current rows — instead of
+        // allocating a dense [vocab × embDim] tensor (~1 MB, LOH) every sample.
+        _dTokenEmbBuf ??= new Tensor<T>(new[] { _vocabularySize, _options.EmbeddingDim });
+        var dTokenEmbeddings = _dTokenEmbBuf;
+
+        // Zero exactly the rows that could hold stale gradient — the previously-written rows plus the
+        // current tokens — visiting each row once. A HashSet de-duplicates rows shared between the two
+        // sets (and duplicate tokens within the sequence), avoiding the redundant re-zeroing the prior
+        // two-pass version did.
+        var rowsToZero = new HashSet<int>(tokens);
+        if (_prevTokenRows != null)
+            foreach (int r in _prevTokenRows)
+                rowsToZero.Add(r);
+
+        foreach (int r in rowsToZero)
+            for (int i = 0; i < _options.EmbeddingDim; i++)
+                dTokenEmbeddings[r, i] = _numOps.Zero;
+
         for (int t = 0; t < seqLen; t++)
         {
             int tokenIdx = tokens[t];
             for (int i = 0; i < _options.EmbeddingDim; i++)
-            {
-                dTokenEmbeddings[tokenIdx, i] = _numOps.Add(
-                    dTokenEmbeddings[tokenIdx, i],
-                    dOutput[t][i]);
-            }
+                dTokenEmbeddings[tokenIdx, i] = _numOps.Add(dTokenEmbeddings[tokenIdx, i], dOutput[t][i]);
         }
+
+        _prevTokenRows = (int[])tokens.Clone();
         gradients["tokenEmbeddings"] = dTokenEmbeddings;
 
         return gradients;
@@ -639,15 +652,18 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     public override Vector<T> Predict(Matrix<T> input)
     {
+        if (TryPredictFromTimeIndexCalibration(input, _trainingSeries, out var calibratedPredictions))
+        {
+            return calibratedPredictions;
+        }
+
         int n = input.Rows;
-        int trainN = _trainingSeries.Length;
         var predictions = new Vector<T>(n);
+        // Forecast every row from its own lookback window (see DeepARModel.Predict: the prior
+        // i < _trainingSeries.Length shortcut returned memorized training values for OOS rows).
         for (int i = 0; i < n; i++)
         {
-            if (i < trainN && trainN > 0)
-                predictions[i] = _trainingSeries[i];
-            else
-                predictions[i] = PredictSingle(input.GetRow(i));
+            predictions[i] = PredictSingle(input.GetRow(i));
         }
         return predictions;
     }

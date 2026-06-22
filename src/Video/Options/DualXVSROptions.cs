@@ -56,6 +56,7 @@ public class DualXVSROptions : NeuralNetworkOptions
         ModelPath = other.ModelPath;
         OnnxOptions = other.OnnxOptions;
         LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
         DropoutRate = other.DropoutRate;
     }
 
@@ -97,6 +98,9 @@ public class DualXVSROptions : NeuralNetworkOptions
 
     /// <summary>Gets or sets the learning rate.</summary>
     public double LearningRate { get; set; } = 2e-4;
+
+    /// <summary>Gets or sets the decoupled weight decay for AdamW training.</summary>
+    public double WeightDecay { get; set; } = 0.01;
 
     /// <summary>Gets or sets the dropout rate.</summary>
     public double DropoutRate { get; set; } = 0.0;

@@ -184,6 +184,19 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
     /// The timestep projection and output head are always auxiliary (not user-overridable).
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// AutoDiff's <see cref="LayerBase{T}"/> chain mixes the main denoiser
+    /// with auxiliary timestep / output projections that take inputs sized
+    /// by the timestep embedding (not the data row from
+    /// <c>Architecture.InputWidth</c>). Skip the base class's architecture-
+    /// driven shape pre-walk so each layer resolves from its REAL first
+    /// input on the first <c>Forward</c>.
+    /// </summary>
+    protected override int[]? TryGetArchitectureInputShape()
+    {
+        return _usingCustomLayers ? base.TryGetArchitectureInputShape() : null;
+    }
+
     protected override void InitializeLayers()
     {
         Layers.Clear();
@@ -811,7 +824,7 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
                 { "DenoiserLayerCount", Layers.Count },
                 { "DenoiserLayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

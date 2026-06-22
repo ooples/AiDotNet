@@ -631,7 +631,7 @@ public class SegNeXt<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         return new ModelMetadata<T>
         {
             AdditionalInfo = additionalInfo,
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

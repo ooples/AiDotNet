@@ -189,7 +189,6 @@ var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
 
 Now that you've built your first models, explore:
 
-- [Core Concepts](./concepts) - Understand the architecture
-- [Tutorials](/tutorials/) - Task-specific guides
-- [Samples](/samples/) - Complete working examples
-- [API Reference](/api/) - Full API documentation
+- [Tutorials](../tutorials/) - Task-specific guides
+- [Samples](https://github.com/ooples/AiDotNet/tree/master/samples) - Complete working examples
+- [API Reference](../reference/index.md) - Full API documentation

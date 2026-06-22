@@ -821,7 +821,7 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
                 { "CycleConsistencyLambda", NumOps.ToDouble(_cycleConsistencyLambda) },
                 { "IdentityLambda", NumOps.ToDouble(_identityLambda) }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

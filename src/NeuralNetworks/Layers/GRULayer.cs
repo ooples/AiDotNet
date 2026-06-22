@@ -216,6 +216,15 @@ public partial class GRULayer<T> : LayerBase<T>
     private readonly bool _returnSequences;
 
     /// <summary>
+    /// When true, the hidden state carries over between successive Forward calls
+    /// (Keras-style <c>stateful=True</c>) instead of resetting to zeros each call.
+    /// Default false = the standard stateless contract (PyTorch nn.GRU's h0=zeros),
+    /// which keeps Clone-after-training parity and repeated-Predict determinism.
+    /// Call <see cref="ResetState"/> to clear the carried hidden state.
+    /// </summary>
+    private readonly bool _stateful;
+
+    /// <summary>
     /// The computation engine (CPU or GPU) for vectorized operations.
     /// </summary>
 
@@ -400,18 +409,29 @@ public partial class GRULayer<T> : LayerBase<T>
     /// but requires more data and time to train effectively.
     /// </para>
     /// </remarks>
-    public override long ParameterCount =>
-        // Before first forward, _inputSize is -1 (lazy sentinel) and the weight/bias
-        // tensors are zero-sized placeholders. Match what GetParameters() returns:
-        // an empty vector. Reporting a real parameter count from an unresolved input
-        // width would yield a negative number and disagree with the actual GetParameters()
-        // length. Subclasses that need to inspect the parameter layout pre-forward must
-        // call ResolveFromShape first.
-        _inputSize <= 0
-            ? 0
-            : _hiddenSize * _inputSize * 3 +  // Wz, Wr, Wh
-              _hiddenSize * _hiddenSize * 3 + // Uz, Ur, Uh
-              _hiddenSize * 3;                // bz, br, bh
+    public override long ParameterCount
+    {
+        get
+        {
+            // Match GetParameters()'s auto-resolution behaviour: when input
+            // size hasn't been pinned by a first Forward but hidden size is
+            // known, GetParameters resolves to the standard square default
+            // (inputSize == hiddenSize) and returns the full weight bank.
+            // Reporting 0 here while GetParameters returns the materialised
+            // vector causes NeuralNetworkBase.GetParameters to undersize the
+            // destination buffer and throw on the per-layer Slice copy
+            // (line 605 — the RelationalGCN smoke-test crash). Mirror the
+            // resolution rule so the two paths stay in sync.
+            int effectiveInputSize = _inputSize > 0
+                ? _inputSize
+                : (_hiddenSize > 0 ? _hiddenSize : 0);
+            if (effectiveInputSize <= 0)
+                return 0;
+            return _hiddenSize * effectiveInputSize * 3 +  // Wz, Wr, Wh
+                   _hiddenSize * _hiddenSize * 3 +         // Uz, Ur, Uh
+                   _hiddenSize * 3;                        // bz, br, bh
+        }
+    }
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -460,7 +480,8 @@ public partial class GRULayer<T> : LayerBase<T>
     public GRULayer(int hiddenSize,
                     bool returnSequences = false,
                     IActivationFunction<T>? activation = null,
-                    IActivationFunction<T>? recurrentActivation = null)
+                    IActivationFunction<T>? recurrentActivation = null,
+                    bool stateful = false)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, hiddenSize }, activation ?? new TanhActivation<T>())
     {
         if (hiddenSize <= 0)
@@ -469,6 +490,7 @@ public partial class GRULayer<T> : LayerBase<T>
         _hiddenSize = hiddenSize;
         _inputSize = -1;
         _returnSequences = returnSequences;
+        _stateful = stateful;
         _activation = activation ?? new TanhActivation<T>();
         _recurrentActivation = recurrentActivation ?? new SigmoidActivation<T>();
 
@@ -491,7 +513,8 @@ public partial class GRULayer<T> : LayerBase<T>
     public GRULayer(int hiddenSize,
                     IVectorActivationFunction<T> vectorActivation,
                     bool returnSequences = false,
-                    IVectorActivationFunction<T>? vectorRecurrentActivation = null)
+                    IVectorActivationFunction<T>? vectorRecurrentActivation = null,
+                    bool stateful = false)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, hiddenSize }, vectorActivation)
     {
         if (hiddenSize <= 0)
@@ -500,6 +523,7 @@ public partial class GRULayer<T> : LayerBase<T>
         _hiddenSize = hiddenSize;
         _inputSize = -1;
         _returnSequences = returnSequences;
+        _stateful = stateful;
         _vectorActivation = vectorActivation;
         _vectorRecurrentActivation = vectorRecurrentActivation ?? new SigmoidActivation<T>();
 
@@ -878,7 +902,17 @@ public partial class GRULayer<T> : LayerBase<T>
         // repeated-Predict determinism. Reset to a zero hidden state at the start of
         // every pass (TensorAllocator.Rent returns zero-initialized, engine-managed
         // storage — the same call the original first-pass init used).
-        _lastHiddenState = TensorAllocator.Rent<T>([batchSize, _hiddenSize]);
+        //
+        // When _stateful is set (Keras-style stateful=True), the hidden state is
+        // instead carried over from the previous Forward call — reset only on the
+        // first call (null) or when the batch size changes — and is cleared
+        // explicitly via ResetState().
+        if (!_stateful
+            || _lastHiddenState is null
+            || _lastHiddenState.Shape[0] != batchSize)
+        {
+            _lastHiddenState = TensorAllocator.Rent<T>([batchSize, _hiddenSize]);
+        }
 
         // Initialize list to store all hidden states if returning sequences
         if (_returnSequences)
@@ -1492,7 +1526,16 @@ public partial class GRULayer<T> : LayerBase<T>
     internal override Dictionary<string, string> GetMetadata()
     {
         var metadata = base.GetMetadata();
+        metadata["HiddenSize"] = _hiddenSize.ToString();
         metadata["ReturnSequences"] = _returnSequences.ToString();
+        // Persist the gate (recurrent) activation so deserialization restores it exactly. The base
+        // GetMetadata only records the candidate/scalar activation; without this, a non-default gate
+        // activation would be lost on a serialize/clone round-trip.
+        if (_recurrentActivation is not null)
+            metadata["RecurrentActivationType"] =
+                _recurrentActivation.GetType().AssemblyQualifiedName
+                ?? _recurrentActivation.GetType().FullName
+                ?? string.Empty;
         return metadata;
     }
 
@@ -1525,40 +1568,8 @@ public partial class GRULayer<T> : LayerBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        // Lazy ctor: if shape isn't resolved (placeholder W/U/b tensors
-        // with Length 0), infer inputSize from the param vector. Layout:
-        //   3*W[hiddenSize, inputSize] + 3*U[hiddenSize, hiddenSize] + 3*b[hiddenSize]
-        //   = 3*hiddenSize*(inputSize + hiddenSize + 1)
-        // → inputSize = total/(3*hiddenSize) - hiddenSize - 1.
-        if (!IsShapeResolved && _hiddenSize > 0)
-        {
-            int divisor = 3 * _hiddenSize;
-            if (parameters.Length % divisor == 0)
-            {
-                int candidateInput = parameters.Length / divisor - _hiddenSize - 1;
-                if (candidateInput > 0)
-                {
-                    // The divisibility check alone can pass for malformed
-                    // vectors that happen to land on a multiple of
-                    // 3*hiddenSize but don't actually correspond to any
-                    // valid (inputSize, hiddenSize) GRU layout. Reverify
-                    // the round-trip count exactly so we reject those
-                    // before they corrupt the resolved shape.
-                    long expectedCount = (long)_hiddenSize * candidateInput * 3 +
-                                         (long)_hiddenSize * _hiddenSize * 3 +
-                                         (long)_hiddenSize * 3;
-                    if (expectedCount != parameters.Length)
-                    {
-                        throw new ArgumentException(
-                            $"Parameter vector length {parameters.Length} does not match GRU layout " +
-                            $"for inferred inputSize={candidateInput}, hiddenSize={_hiddenSize} " +
-                            $"(expected {expectedCount}).",
-                            nameof(parameters));
-                    }
-                    ResolveFromShape(new[] { candidateInput });
-                }
-            }
-        }
+        MaterializeParameterStorageFor(parameters.Length);
+
         // Bulk copy from parameter vector into tensor storage — avoids per-element SetFlat calls
         int idx = 0;
         parameters.Slice(idx, _Wz.Length).AsSpan().CopyTo(_Wz.Data.Span); idx += _Wz.Length;
@@ -1570,6 +1581,104 @@ public partial class GRULayer<T> : LayerBase<T>
         parameters.Slice(idx, _bz.Length).AsSpan().CopyTo(_bz.Data.Span); idx += _bz.Length;
         parameters.Slice(idx, _br.Length).AsSpan().CopyTo(_br.Data.Span); idx += _br.Length;
         parameters.Slice(idx, _bh.Length).AsSpan().CopyTo(_bh.Data.Span);
+    }
+
+    private void MaterializeParameterStorageFor(int parameterLength)
+    {
+        int expectedLength = CheckedParameterCountFor(_inputSize);
+        bool storageMatches =
+            _inputSize > 0 &&
+            expectedLength == parameterLength &&
+            _Wz.Length == _hiddenSize * _inputSize &&
+            _Wr.Length == _hiddenSize * _inputSize &&
+            _Wh.Length == _hiddenSize * _inputSize &&
+            _Uz.Length == _hiddenSize * _hiddenSize &&
+            _Ur.Length == _hiddenSize * _hiddenSize &&
+            _Uh.Length == _hiddenSize * _hiddenSize &&
+            _bz.Length == _hiddenSize &&
+            _br.Length == _hiddenSize &&
+            _bh.Length == _hiddenSize;
+
+        if (storageMatches)
+            return;
+
+        int inferredInputSize = InferInputSizeFromParameterLength(parameterLength);
+        ReplaceParameterStorage(inferredInputSize);
+    }
+
+    private int InferInputSizeFromParameterLength(int parameterLength)
+    {
+        if (_hiddenSize <= 0)
+        {
+            throw new ArgumentException(
+                $"Cannot load GRU parameters with invalid hiddenSize={_hiddenSize}.",
+                nameof(parameterLength));
+        }
+
+        int divisor = 3 * _hiddenSize;
+        if (parameterLength <= 0 || parameterLength % divisor != 0)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length {parameterLength} does not match a GRU layout for hiddenSize={_hiddenSize}. " +
+                $"Expected 3 * hiddenSize * (inputSize + hiddenSize + 1) parameters.",
+                nameof(parameterLength));
+        }
+
+        int inputSize = parameterLength / divisor - _hiddenSize - 1;
+        if (inputSize <= 0 || CheckedParameterCountFor(inputSize) != parameterLength)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length {parameterLength} does not describe a valid GRU inputSize for hiddenSize={_hiddenSize}.",
+                nameof(parameterLength));
+        }
+
+        return inputSize;
+    }
+
+    private int CheckedParameterCountFor(int inputSize)
+    {
+        if (inputSize <= 0 || _hiddenSize <= 0)
+            return 0;
+
+        long count = (long)_hiddenSize * inputSize * 3 +
+                     (long)_hiddenSize * _hiddenSize * 3 +
+                     (long)_hiddenSize * 3;
+        if (count > int.MaxValue)
+        {
+            throw new InvalidOperationException(
+                $"GRU parameter count {count} exceeds the maximum supported vector length.");
+        }
+
+        return (int)count;
+    }
+
+    private void ReplaceParameterStorage(int inputSize)
+    {
+        ClearRegisteredParameters();
+
+        _inputSize = inputSize;
+        _Wz = AllocateLazyWeight([_hiddenSize, _inputSize]);
+        _Wr = AllocateLazyWeight([_hiddenSize, _inputSize]);
+        _Wh = AllocateLazyWeight([_hiddenSize, _inputSize]);
+        _Uz = AllocateLazyWeight([_hiddenSize, _hiddenSize]);
+        _Ur = AllocateLazyWeight([_hiddenSize, _hiddenSize]);
+        _Uh = AllocateLazyWeight([_hiddenSize, _hiddenSize]);
+        _bz = AllocateLazyWeight([_hiddenSize]);
+        _br = AllocateLazyWeight([_hiddenSize]);
+        _bh = AllocateLazyWeight([_hiddenSize]);
+
+        RegisterTrainableParameter(_Wz, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Wr, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Wh, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Uz, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Ur, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Uh, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bz, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_br, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_bh, PersistentTensorRole.Biases);
+
+        _isInitialized = true;
+        InvalidateGpuStackedWeights();
     }
 
     public override Vector<T> GetParameterGradients()

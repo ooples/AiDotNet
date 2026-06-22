@@ -924,49 +924,70 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
 
         var combinedImageFeatures = CombineImageFeatures(imageFeatures);
 
-        for (int step = 0; step < maxLength; step++)
+        if (_outputProjection is null)
         {
-            int seqLen = Math.Min(generatedIds.Count, _maxSequenceLength);
-            var embeddings = EmbedTextTokens(generatedIds.Take(seqLen).ToList());
-
-            var current = embeddings;
-            int gatedAttnIdx = 0;
-
-            for (int layer = 0; layer < _numLmLayers && layer < _languageModelLayers.Count; layer++)
-            {
-                if (layer % 4 == 0 && gatedAttnIdx < _gatedCrossAttentionLayers.Count)
-                {
-                    if (_gatedCrossAttentionLayers[gatedAttnIdx] is CrossAttentionLayer<T> crossAttn)
-                    {
-                        var attnOut = crossAttn.Forward(current, combinedImageFeatures);
-                        current = AddTensors(current, attnOut);
-                    }
-                    gatedAttnIdx++;
-                }
-
-                current = _languageModelLayers[layer].Forward(current);
-            }
-
-            if (_outputProjection is null)
-            {
-                break;
-            }
-
-            var lastPosition = Tensor<T>.CreateDefault([1, _lmHiddenDim], NumOps.Zero);
-            for (int j = 0; j < _lmHiddenDim; j++)
-            {
-                lastPosition[0, j] = current[seqLen - 1, j];
-            }
-
-            var logits = _outputProjection.Forward(lastPosition);
-            int nextToken = SampleFromLogits(logits);
-            generatedIds.Add(nextToken);
-
-            if (nextToken == eosTokenId)
-                break;
+            // Fail fast: without the output projection there are no logits to decode, so
+            // returning the (empty) suffix here would masquerade an unsupported state as a
+            // successful empty generation.
+            throw new InvalidOperationException(
+                "Output projection must be initialized before Flamingo text generation can produce logits.");
         }
 
-        return _tokenizer.Decode(generatedIds.Skip(inputIds.Count).ToList());
+        // The shared AutoregressiveDecoder owns the loop + greedy argmax + EOS stop. The per-step
+        // forward (text embed -> gated cross-attention every 4th LM layer -> output projection ->
+        // last-position logits) is supplied via the closure. Flamingo decodes greedily, matching the
+        // previous hand-rolled argmax (SampleFromLogits).
+        var newTokens = Generation.AutoregressiveDecoder<T>.Decode(
+            stepLogits: prev =>
+            {
+                if (prev.HasValue) generatedIds.Add(prev.Value);
+                // Slide the context to the most recent _maxSequenceLength tokens — Take(seqLen)
+                // would keep the FIRST tokens and silently drop every newly-generated token once
+                // the sequence exceeds the window, so later forward passes never see the latest token.
+                var contextIds = generatedIds
+                    .Skip(Math.Max(0, generatedIds.Count - _maxSequenceLength))
+                    .ToList();
+                if (contextIds.Count == 0)
+                {
+                    throw new InvalidOperationException("Generation requires at least one prompt token.");
+                }
+                int seqLen = contextIds.Count;
+                var embeddings = EmbedTextTokens(contextIds);
+
+                var current = embeddings;
+                int gatedAttnIdx = 0;
+                for (int layer = 0; layer < _numLmLayers && layer < _languageModelLayers.Count; layer++)
+                {
+                    if (layer % 4 == 0 && gatedAttnIdx < _gatedCrossAttentionLayers.Count)
+                    {
+                        if (_gatedCrossAttentionLayers[gatedAttnIdx] is CrossAttentionLayer<T> crossAttn)
+                        {
+                            var attnOut = crossAttn.Forward(current, combinedImageFeatures);
+                            current = AddTensors(current, attnOut);
+                        }
+                        gatedAttnIdx++;
+                    }
+
+                    current = _languageModelLayers[layer].Forward(current);
+                }
+
+                var lastPosition = Tensor<T>.CreateDefault([1, _lmHiddenDim], NumOps.Zero);
+                for (int j = 0; j < _lmHiddenDim; j++)
+                {
+                    lastPosition[0, j] = current[seqLen - 1, j];
+                }
+
+                var logits = _outputProjection.Forward(lastPosition);
+                int vocab = logits.Shape[1];
+                var v = new Vector<T>(vocab);
+                for (int i = 0; i < vocab; i++) v[i] = logits[0, i];
+                return v;
+            },
+            maxNewTokens: maxLength,
+            options: Generation.SamplingOptions.Greedy,
+            isEndToken: t => t == eosTokenId);
+
+        return _tokenizer.Decode(new List<int>(newTokens));
     }
 
     private Tensor<T> CombineImageFeatures(List<Tensor<T>> imageFeatures)
@@ -1000,24 +1021,6 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
         return Engine.TensorAdd(a, b);
-    }
-
-    private int SampleFromLogits(Tensor<T> logits)
-    {
-        int vocabSize = logits.Shape[1];
-        int maxIdx = 0;
-        T maxVal = logits[0, 0];
-
-        for (int i = 1; i < vocabSize; i++)
-        {
-            if (NumOps.GreaterThan(logits[0, i], maxVal))
-            {
-                maxVal = logits[0, i];
-                maxIdx = i;
-            }
-        }
-
-        return maxIdx;
     }
 
     #endregion
@@ -1082,8 +1085,11 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
             return gpuResult;
 
         SetTrainingMode(false);
-        var features = ExtractPerceiverFeatures(input);
-        return features;
+        return Accelerate(input, () =>
+        {
+            var features = ExtractPerceiverFeatures(input);
+            return features;
+        });
     }
 
     /// <inheritdoc/>
@@ -1153,7 +1159,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
                 { "ParameterCount", ParameterCount },
                 { "TaskType", Architecture.TaskType.ToString() }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

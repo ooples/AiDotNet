@@ -333,6 +333,7 @@ public class XLearner<T> : CausalModelBase<T>
     public override Vector<T> EstimateTreatmentEffect(Matrix<T> features)
     {
         EnsureFitted();
+        features = NormalizeFeatureInput(features, nameof(features));
 
         int n = features.Rows;
         var effects = new Vector<T>(n);
@@ -369,6 +370,7 @@ public class XLearner<T> : CausalModelBase<T>
     public override Vector<T> PredictTreated(Matrix<T> features)
     {
         EnsureFitted();
+        features = NormalizeFeatureInput(features, nameof(features));
 
         var result = new Vector<T>(features.Rows);
         for (int i = 0; i < features.Rows; i++)
@@ -387,6 +389,7 @@ public class XLearner<T> : CausalModelBase<T>
     public override Vector<T> PredictControl(Matrix<T> features)
     {
         EnsureFitted();
+        features = NormalizeFeatureInput(features, nameof(features));
 
         var result = new Vector<T>(features.Rows);
         for (int i = 0; i < features.Rows; i++)
@@ -405,6 +408,26 @@ public class XLearner<T> : CausalModelBase<T>
     public override Vector<T> Predict(Matrix<T> input)
     {
         return EstimateTreatmentEffect(input);
+    }
+
+    private Matrix<T> NormalizeFeatureInput(Matrix<T> input, string paramName)
+    {
+        if (input.Columns == NumFeatures)
+            return input;
+
+        if (input.Columns == NumFeatures + 1)
+        {
+            var features = new Matrix<T>(input.Rows, NumFeatures);
+            for (int i = 0; i < input.Rows; i++)
+                for (int j = 0; j < NumFeatures; j++)
+                    features[i, j] = input[i, j + 1];
+            return features;
+        }
+
+        throw new ArgumentException(
+            $"Input must have {NumFeatures} covariate columns, or {NumFeatures + 1} " +
+            $"columns where the first is the treatment indicator. Got {input.Columns}.",
+            paramName);
     }
 
     /// <inheritdoc />
@@ -451,6 +474,7 @@ public class XLearner<T> : CausalModelBase<T>
     /// <inheritdoc />
     protected override Vector<T> EstimatePropensityScoresCore(Matrix<T> x)
     {
+        x = NormalizeFeatureInput(x, nameof(x));
         var result = new Vector<T>(x.Rows);
         for (int i = 0; i < x.Rows; i++)
         {
@@ -536,6 +560,64 @@ public class XLearner<T> : CausalModelBase<T>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
     {
         return new XLearner<T>(MaxIterations, LearningRate, Lambda);
+    }
+
+    /// <inheritdoc />
+    protected override Dictionary<string, object> GetAdditionalModelData()
+    {
+        var data = base.GetAdditionalModelData();
+        data["BiasControl"] = NumOps.ToDouble(_biasControl);
+        data["BiasTreated"] = NumOps.ToDouble(_biasTreated);
+        data["BiasTau0"] = NumOps.ToDouble(_biasTau0);
+        data["BiasTau1"] = NumOps.ToDouble(_biasTau1);
+        data["BiasPropensity"] = NumOps.ToDouble(_biasPropensity);
+        data["WeightsControl"] = ToDoubleArray(_weightsControl);
+        data["WeightsTreated"] = ToDoubleArray(_weightsTreated);
+        data["WeightsTau0"] = ToDoubleArray(_weightsTau0);
+        data["WeightsTau1"] = ToDoubleArray(_weightsTau1);
+        data["WeightsPropensity"] = ToDoubleArray(_weightsPropensity);
+        return data;
+    }
+
+    /// <inheritdoc />
+    protected override void LoadAdditionalModelData(Newtonsoft.Json.Linq.JObject modelDataObj)
+    {
+        base.LoadAdditionalModelData(modelDataObj);
+        if (modelDataObj["BiasControl"] is not null)
+            _biasControl = NumOps.FromDouble(modelDataObj["BiasControl"]!.ToObject<double>());
+        if (modelDataObj["BiasTreated"] is not null)
+            _biasTreated = NumOps.FromDouble(modelDataObj["BiasTreated"]!.ToObject<double>());
+        if (modelDataObj["BiasTau0"] is not null)
+            _biasTau0 = NumOps.FromDouble(modelDataObj["BiasTau0"]!.ToObject<double>());
+        if (modelDataObj["BiasTau1"] is not null)
+            _biasTau1 = NumOps.FromDouble(modelDataObj["BiasTau1"]!.ToObject<double>());
+        if (modelDataObj["BiasPropensity"] is not null)
+            _biasPropensity = NumOps.FromDouble(modelDataObj["BiasPropensity"]!.ToObject<double>());
+
+        _weightsControl = FromJsonArray(modelDataObj["WeightsControl"]);
+        _weightsTreated = FromJsonArray(modelDataObj["WeightsTreated"]);
+        _weightsTau0 = FromJsonArray(modelDataObj["WeightsTau0"]);
+        _weightsTau1 = FromJsonArray(modelDataObj["WeightsTau1"]);
+        _weightsPropensity = FromJsonArray(modelDataObj["WeightsPropensity"]);
+    }
+
+    private double[] ToDoubleArray(Vector<T> vector)
+    {
+        var values = new double[vector.Length];
+        for (int i = 0; i < vector.Length; i++)
+            values[i] = NumOps.ToDouble(vector[i]);
+        return values;
+    }
+
+    private Vector<T> FromJsonArray(Newtonsoft.Json.Linq.JToken? token)
+    {
+        if (token is not Newtonsoft.Json.Linq.JArray array)
+            return new Vector<T>(0);
+
+        var vector = new Vector<T>(array.Count);
+        for (int i = 0; i < array.Count; i++)
+            vector[i] = NumOps.FromDouble(array[i].ToObject<double>());
+        return vector;
     }
 
     /// <inheritdoc />

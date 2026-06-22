@@ -89,6 +89,16 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly LinkPredictionDecoder _decoderType;
     private Tensor<T>? _cachedAdjacencyMatrix;
+    // Opt-in (EnableImplicitIdentityAdjacency): mirrors the GraphConvolutionalLayer
+    // implicitIdentityWhenUnset ctor flag at the model level. Default is strict (throw on a
+    // missing graph); when enabled, Predict/Train build an identity sized to the input.
+    private bool _implicitIdentityWhenUnset;
+    // Tracks whether _cachedAdjacencyMatrix came from EnsureDefaultAdjacencyForInput
+    // (auto-inferred identity) vs an explicit SetAdjacencyMatrix call. Explicit
+    // matrices are sticky — caller knows the graph; auto-inferred ones must be
+    // regenerated whenever the input node count changes (same contract as
+    // GraphClassificationModel / NodeClassificationModel).
+    private bool _usesFallbackAdjacency;
     private Tensor<T>? _nodeEmbeddings;
 
     /// <summary>
@@ -228,6 +238,7 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
     public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
     {
         _cachedAdjacencyMatrix = adjacencyMatrix;
+        _usesFallbackAdjacency = false;
 
         foreach (var layer in Layers)
         {
@@ -236,6 +247,65 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
                 graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
             }
         }
+    }
+    /// <summary>
+    /// Enables implicit self-loops-only (identity) tolerance for this model and its graph layers —
+    /// the model-level analogue of GraphConvolutionalLayer's implicitIdentityWhenUnset ctor flag.
+    /// Default is strict (Predict/Train throw on a missing graph); this is an explicit opt-in for
+    /// scaffold / clone / deserialize paths, propagated to the GCN layers so direct-layer paths
+    /// (e.g. GetNamedLayerActivations) tolerate too.
+    /// </summary>
+    public void EnableImplicitIdentityAdjacency()
+    {
+        _implicitIdentityWhenUnset = true;
+        foreach (var layer in Layers)
+        {
+            if (layer is NeuralNetworks.Layers.GraphConvolutionalLayer<T> gcn)
+            {
+                gcn.EnableImplicitIdentityAdjacency();
+            }
+        }
+    }
+
+
+    /// <summary>
+    /// Default-of-last-resort adjacency: when no explicit matrix was set, fall back to the
+    /// IDENTITY graph so scaffold invariants stay well-defined — per Kipf &amp; Welling 2017 §2,
+    /// with <c>A = I</c> the GCN encoder degenerates to a per-node dense transform. Production
+    /// callers SHOULD still call <see cref="SetAdjacencyMatrix"/> with the real graph structure.
+    /// Brings this model in line with the documented contract its siblings
+    /// (GraphClassificationModel / NodeClassificationModel) already implement.
+    /// </summary>
+    private void EnsureDefaultAdjacencyForInput(Tensor<T> input)
+    {
+        if (_cachedAdjacencyMatrix is null && !_implicitIdentityWhenUnset)
+        {
+            // PyTorch-Geometric contract: the graph is REQUIRED — call SetAdjacencyMatrix() with
+            // the real structure before Predict/Train. Implicit-identity tolerance is opt-in
+            // (EnableImplicitIdentityAdjacency / the layer's implicitIdentityWhenUnset), never a
+            // silent default that would let a GCN ignore all graph structure unnoticed.
+            throw new InvalidOperationException(
+                "Adjacency matrix must be set before Predict/Train: call SetAdjacencyMatrix() with " +
+                "the graph structure. Graph neural networks have no meaningful default graph.");
+        }
+
+        if (input.Rank < 1) return; // can't infer; let Forward throw with a clear shape error
+        int numNodes = input.Shape[0];
+
+        // Explicit matrices (from SetAdjacencyMatrix) are sticky. Auto-inferred ones must be
+        // regenerated when the input node count changes — otherwise the first inferred identity
+        // becomes stuck model state for a later differently-sized graph.
+        if (_cachedAdjacencyMatrix is not null
+            && (!_usesFallbackAdjacency || _cachedAdjacencyMatrix.Shape[0] == numNodes))
+        {
+            return;
+        }
+
+        var identity = new Tensor<T>(new[] { numNodes, numNodes });
+        for (int i = 0; i < numNodes; i++)
+            identity[i, i] = NumOps.One;
+        SetAdjacencyMatrix(identity);
+        _usesFallbackAdjacency = true;
     }
 
     /// <summary>
@@ -599,11 +669,7 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
     /// <returns>The node embeddings tensor.</returns>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (_cachedAdjacencyMatrix is null)
-        {
-            throw new InvalidOperationException(
-                "Adjacency matrix must be set using SetAdjacencyMatrix before calling Predict.");
-        }
+        EnsureDefaultAdjacencyForInput(input);
 
         foreach (var layer in Layers)
         {
@@ -620,11 +686,7 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
     /// <param name="expectedOutput">The expected output (edge scores).</param>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (_cachedAdjacencyMatrix is null)
-        {
-            throw new InvalidOperationException(
-                "Adjacency matrix must be set using SetAdjacencyMatrix before calling Train.");
-        }
+        EnsureDefaultAdjacencyForInput(input);
 
         foreach (var layer in Layers)
         {
@@ -711,13 +773,25 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
     /// </summary>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new LinkPredictionModel<T>(
+        var clone = new LinkPredictionModel<T>(
             architecture: Architecture,
             hiddenDim: HiddenDim,
             embeddingDim: EmbeddingDim,
             numLayers: NumLayers,
             dropoutRate: DropoutRate,
             decoderType: _decoderType);
+        // Graph STATE is model state in this stateful-adjacency design, so a clone of a configured
+        // model must stay usable: carry the implicit-identity opt-in and any explicit adjacency.
+        if (_implicitIdentityWhenUnset)
+        {
+            clone.EnableImplicitIdentityAdjacency();
+        }
+        else if (_cachedAdjacencyMatrix is not null)
+        {
+            clone.SetAdjacencyMatrix(_cachedAdjacencyMatrix);
+        }
+
+        return clone;
     }
 
     #endregion

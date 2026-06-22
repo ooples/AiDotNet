@@ -242,11 +242,30 @@ const links = [
       });
     }
 
-    // Sign out handlers
+    // Sign out handlers. Mirrors the AccountLayout sign-out fix:
+    // `scope: 'local'` for deterministic local-session clear (network
+    // revoke failures used to leave the localStorage token in place,
+    // making Sign Out a silent no-op), plus a defensive sb-* sweep so
+    // the next /login/ visit doesn't see a stale session and auto-
+    // redirect the user back to /account/.
     const signOutBtn = document.getElementById('nav-sign-out');
     const mobileSignOut = document.getElementById('mobile-sign-out');
     const signOut = async () => {
-      await supabase.auth.signOut();
+      try {
+        await supabase.auth.signOut({ scope: 'local' });
+      } catch (e) {
+        console.error('Sign out failed:', e);
+      }
+      try {
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('sb-') && k.endsWith('-auth-token')) {
+            localStorage.removeItem(k);
+          }
+        }
+      } catch {
+        // localStorage can throw in private-mode Safari; ignore.
+      }
       window.location.href = base;
     };
     if (signOutBtn) signOutBtn.addEventListener('click', signOut);

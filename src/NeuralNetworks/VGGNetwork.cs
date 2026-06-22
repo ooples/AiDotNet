@@ -364,7 +364,8 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
     {
         using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         SetTrainingMode(false);
-        return Forward(input);
+        // #1622 verify-then-trust compiled gate; no-op unless acceleration is engaged.
+        return Accelerate(input, () => Forward(input));
     }
 
     /// <summary>
@@ -477,7 +478,7 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
                 { "NumWeightLayers", _configuration.NumWeightLayers },
                 { "DropoutRate", _configuration.DropoutRate }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

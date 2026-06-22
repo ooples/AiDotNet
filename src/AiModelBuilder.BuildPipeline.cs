@@ -169,6 +169,29 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     pipelineFitted = true;
                 }
 
+                // TARGET scaling (ConfigureTargetScaling) on the streaming path: fit once on the first
+                // batch's targets (mirroring the feature pipeline's first-batch fit above), then transform
+                // every batch's targets so the model trains in scaled space. Predict inverse-transforms via
+                // PreprocessingInfo.InverseTransformPredictions.
+                TOutput[] processedOutputs = outputs;
+                if (_targetPipeline is not null)
+                {
+                    if (!_targetPipeline.IsFitted && outputs.Length > 0)
+                    {
+                        _targetPipeline.Fit(outputs[0] is Tensor<T> && outputs.Length > 1
+                            && TryStackTensorBatch(outputs.Cast<Tensor<T>>().ToArray(), out var batchedY)
+                            && batchedY is TOutput typedY
+                                ? typedY
+                                : outputs[0]);
+                    }
+
+                    processedOutputs = new TOutput[outputs.Length];
+                    for (int i = 0; i < outputs.Length; i++)
+                    {
+                        processedOutputs[i] = _targetPipeline.Transform(outputs[i]);
+                    }
+                }
+
                 // Apply preprocessing to each sample BEFORE stacking so the
                 // batched tensor reflects the transformed features. Same
                 // pipeline-output handling as the previous code.
@@ -200,7 +223,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 // bounced subclassed tensor types into the per-sample slow path
                 // for no good reason.
                 if (processedInputs.Length > 0 && processedInputs[0] is Tensor<T>
-                    && outputs.Length > 0 && outputs[0] is Tensor<T>
+                    && processedOutputs.Length > 0 && processedOutputs[0] is Tensor<T>
                     && _model is INeuralNetwork<T> nn)
                 {
                     // BUILDER-OPTIMIZER PLUMBING (closes review-comment #1265.f03A
@@ -246,7 +269,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     // preserves correctness for default loaders while
                     // letting padded loaders enjoy the batched fast path.
                     var inputArray = processedInputs.Cast<Tensor<T>>().ToArray();
-                    var outputArray = outputs.Cast<Tensor<T>>().ToArray();
+                    var outputArray = processedOutputs.Cast<Tensor<T>>().ToArray();
                     if (TryStackTensorBatch(inputArray, out var batchedInput) &&
                         TryStackTensorBatch(outputArray, out var batchedTarget))
                     {
@@ -285,7 +308,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     // forward" concept; each sample is an independent update.
                     for (int i = 0; i < processedInputs.Length; i++)
                     {
-                        var gradients = InterfaceGuard.GradientComputable(_model).ComputeGradients(processedInputs[i], outputs[i], lossFunction);
+                        var gradients = InterfaceGuard.GradientComputable(_model).ComputeGradients(processedInputs[i], processedOutputs[i], lossFunction);
                         // Pass the optimizer's CURRENT learning rate (which
                         // reflects scheduler / decay / step-counter state) instead
                         // of the constant InitialLearningRate. The previous code
@@ -311,7 +334,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
                         var prediction = _model.Predict(processedInputs[i]);
                         var predictionVector = ConversionsHelper.ConvertToVector<T, TOutput>(prediction);
-                        var targetVector = ConversionsHelper.ConvertToVector<T, TOutput>(outputs[i]);
+                        var targetVector = ConversionsHelper.ConvertToVector<T, TOutput>(processedOutputs[i]);
                         var loss = lossFunction.CalculateLoss(predictionVector, targetVector);
                         epochLoss = numOps.Add(epochLoss, loss);
                         epochBatches++;
@@ -374,8 +397,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         var options = new AiModelResultOptions<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
-            PreprocessingInfo = _preprocessingPipeline is not null && pipelineFitted
-                ? new PreprocessingInfo<T, TInput, TOutput>(_preprocessingPipeline)
+            PreprocessingInfo = (_preprocessingPipeline is not null && pipelineFitted) || _targetPipeline is not null
+                ? new PreprocessingInfo<T, TInput, TOutput>
+                {
+                    Pipeline = _preprocessingPipeline is not null && pipelineFitted ? _preprocessingPipeline : null,
+                    TargetPipeline = _targetPipeline,
+                }
                 : null,
             PostprocessingPipeline = _postprocessingPipeline,
             Tokenizer = _tokenizer,
@@ -401,7 +428,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             GraphStore = _graphStore,
             HybridGraphRetriever = _hybridGraphRetriever,
             LoRAConfiguration = _loraConfiguration,
-            AgentConfig = _agentConfig,
             MemoryConfig = _memoryConfig,
             // Weight-streaming telemetry — set on every result-build path
             // (supervised batch, AutoML, RL) so the streaming-data-loader
@@ -416,6 +442,47 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         AttachSafetyPipeline(nnResult);
         AttachAdversarialRobustness(nnResult);
         return nnResult;
+    }
+
+    private bool ShouldUseDirectSupervisedNeuralTraining(IFullModel<T, TInput, TOutput> model)
+    {
+        // Configured Transformer training needs the neural network training path
+        // so mixed precision and checkpoint-safe memory settings are actually
+        // consumed instead of evaluated through a black-box parameter search.
+        return model is NeuralNetworks.Transformer<T>
+            && (_mixedPrecisionConfig is not null || _memoryConfig is not null);
+    }
+
+    private OptimizationResult<T, TInput, TOutput> TrainTensorNeuralNetworkRows(
+        IFullModel<T, TInput, TOutput> model,
+        INeuralNetwork<T> neuralNetwork,
+        Tensor<T> xTrain,
+        Tensor<T> yTrain,
+        int epochs)
+    {
+        if (_optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> gbo
+            && neuralNetwork is NeuralNetworks.NeuralNetworkBase<T> neuralNetworkBase)
+        {
+            neuralNetworkBase.SetBaseTrainOptimizer(gbo);
+        }
+
+        int rows = xTrain.Rank >= 1 ? xTrain.Shape[0] : 1;
+        int iterations = 0;
+        for (int epoch = 0; epoch < epochs; epoch++)
+        {
+            for (int row = 0; row < rows; row++)
+            {
+                var rowIndex = new[] { row };
+                neuralNetwork.Train(GatherRows(xTrain, rowIndex), GatherRows(yTrain, rowIndex));
+                iterations++;
+            }
+        }
+
+        return new OptimizationResult<T, TInput, TOutput>
+        {
+            BestSolution = model,
+            Iterations = iterations,
+        };
     }
 
     /// <summary>
@@ -446,6 +513,34 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// a class of bug that bites only when the loader's last batch
     /// happens to be unevenly-sized (review-comment #1265.hc8I).
     /// </remarks>
+    /// <summary>Gathers the given leading-batch rows into a new tensor.</summary>
+    private static Tensor<T> GatherRows(Tensor<T> source, IReadOnlyList<int> rows)
+    {
+        int sourceRows = source.Rank >= 1 ? source.Shape[0] : 1;
+        int rowStride = sourceRows > 0 ? source.Length / sourceRows : source.Length;
+        var data = new T[rows.Count * rowStride];
+        var span = source.Data.Span;
+        for (int r = 0; r < rows.Count; r++)
+        {
+            int sourceOffset = rows[r] * rowStride;
+            int targetOffset = r * rowStride;
+            for (int c = 0; c < rowStride; c++)
+            {
+                data[targetOffset + c] = span[sourceOffset + c];
+            }
+        }
+
+        var shape = source.Rank <= 1
+            ? new[] { rows.Count }
+            : source.Shape.ToArray();
+        if (source.Rank > 1)
+        {
+            shape[0] = rows.Count;
+        }
+
+        return new Tensor<T>(shape, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(data));
+    }
+
     private static bool TryStackTensorBatch(Tensor<T>[] samples, out Tensor<T>? stacked)
     {
         stacked = null;
@@ -587,24 +682,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // Convert inputs to Matrix/Vector for internal processing
         var convertedX = ConversionsHelper.ConvertToMatrix<T, TInput>(x);
         var convertedY = ConversionsHelper.ConvertToVector<T, TOutput>(y);
-
-        // AGENT ASSISTANCE (if enabled)
-        AgentRecommendation<T, TInput, TOutput>? agentRecommendation = null;
-        if (_agentConfig != null && _agentConfig.IsEnabled)
-        {
-            try
-            {
-                agentRecommendation = await GetAgentRecommendationsAsync(x, y);
-                ApplyAgentRecommendations(agentRecommendation);
-            }
-            catch (Exception ex)
-            {
-                // Log warning but don't fail the build if agent assistance fails
-                // The build can proceed without agent recommendations
-                Console.WriteLine($"Warning: Agent assistance failed: {ex.Message}");
-                Console.WriteLine("Proceeding with model building without agent recommendations.");
-            }
-        }
 
         // AUTOML SEARCH (if configured and no model explicitly set)
         // AutoML finds the best model type and hyperparameters automatically
@@ -761,21 +838,20 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // which caused race conditions when multiple models were built concurrently.
         ConfigureDocumentTransformers(_model);
 
-        // Use defaults for the optimizer if not set. When the caller
-        // ALSO configured regularization but did not pick an optimizer,
-        // promote to AdamOptimizer (a GradientBasedOptimizerBase) so the
-        // SetRegularization wiring below succeeds instead of throwing
-        // — the regularization request is the strong signal that the user
-        // expects a gradient-based optimizer (review #1368 C88Kn:
-        // NormalOptimizer default + non-default regularization gave a
-        // surprising Build-time throw with no clear fix because the user
-        // never explicitly chose NormalOptimizer).
+        // Use defaults for the optimizer if not set. ConfigureRegularization
+        // and ConfigureDistributedTraining both require gradient semantics:
+        // regularization is applied in GradientBasedOptimizerBase, and DDP
+        // synchronizes gradients before applying an update. In those configured
+        // paths, promote the default to AdamOptimizer instead of constructing
+        // NormalOptimizer and failing later in the requested feature path.
         IOptimizer<T, TInput, TOutput> optimizer;
         if (_optimizer is not null)
         {
             optimizer = _optimizer;
         }
-        else if (_regularization is not null)
+        else if (_regularization is not null
+            || _distributedBackend is not null
+            || _distributedConfiguration is not null)
         {
             optimizer = new Optimizers.AdamOptimizer<T, TInput, TOutput>(_model);
         }
@@ -1182,7 +1258,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
                 preprocessingInfo = new PreprocessingInfo<T, TInput, TOutput>(
                     _preprocessingPipeline,
-                    targetPipeline: null
+                    targetPipeline: _targetPipeline
                 );
             }
             else
@@ -1225,7 +1301,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             bool isTimeSeriesModel = _model is TimeSeries.TimeSeriesModelBase<T>
                 || _autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesForecasting
                 || _autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesAnomalyDetection;
-            bool shuffleBeforeSplit = !isTimeSeriesModel;
+            // ConfigureTrainingGroups indices are defined by the CALLER against original row order
+            // (e.g. one trading date's cross-section per group). A shuffled split would make it
+            // impossible to know which original rows landed in the training partition, so groups
+            // force an order-preserving split: training rows = the first floor(0.7·n) rows.
+            bool shuffleBeforeSplit = !isTimeSeriesModel && _trainingGroups is null;
             (XTrain, yTrain, XVal, yVal, XTest, yTest) = DataSplitter.Split<T, TInput, TOutput>(
                 preparedX, preparedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: shuffleBeforeSplit);
 
@@ -1247,6 +1327,18 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 }
             }
 
+            // TARGET scaling (ConfigureTargetScaling): fit on TRAINING targets only, transform val/test
+            // into the same scaled space so in-build metrics compare like-with-like. Predict inverse-
+            // transforms outputs back to original units via PreprocessingInfo.InverseTransformPredictions.
+            if (_targetPipeline is not null)
+            {
+                yTrain = _targetPipeline.FitTransform(yTrain);
+#pragma warning disable CS8604 // yVal / yTest are assigned by DataSplitter.Split above
+                yVal = _targetPipeline.Transform(yVal);
+                yTest = _targetPipeline.Transform(yTest);
+#pragma warning restore CS8604
+            }
+
             if (_preprocessingPipeline is not null)
             {
                 // FitTransform on training data only — learns statistics from training set
@@ -1260,7 +1352,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
                 preprocessingInfo = new PreprocessingInfo<T, TInput, TOutput>(
                     _preprocessingPipeline,
-                    targetPipeline: null
+                    targetPipeline: _targetPipeline
                 );
 
                 preprocessedX = XTrain; // For downstream references
@@ -1271,6 +1363,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 // No preprocessing pipeline configured - pass through, but keep any training-only data preparation
                 preprocessedX = XTrain;
                 preprocessedY = yTrain;
+                if (_targetPipeline is not null)
+                {
+                    // Target-only scaling still needs a carrier so Predict can inverse-transform.
+                    preprocessingInfo = new PreprocessingInfo<T, TInput, TOutput> { TargetPipeline = _targetPipeline };
+                }
             }
         }
 
@@ -1848,8 +1945,73 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             // This is required for InitializeRandomSolution to access model.ParameterCount
             finalOptimizer.SetModel(model);
 
-            // Optimize the final model on the full training set
-            optimizationResult = finalOptimizer.Optimize(optimizationInputData);
+            if (_trainingGroups is not null
+                && model is NeuralNetworks.NeuralNetworkBase<T> groupedNet
+                && XTrain is Tensor<T> groupedX && yTrain is Tensor<T> groupedY)
+            {
+                // GROUPED training (ConfigureTrainingGroups): one fit per QUERY GROUP per epoch — the
+                // shape pairwise/listwise ranking losses require (pooled fits give the loss conflicting
+                // targets across groups and the net collapses to a constant). Epoch budget comes from the
+                // configured optimizer's MaxIterations, matching the facade's standard epoch source.
+                int groupedEpochs = finalOptimizer.GetOptions()?.MaxIterations ?? 100;
+                foreach (var group in _trainingGroups)
+                {
+                    foreach (var idx in group)
+                    {
+                        if (idx < 0 || idx >= groupedX.Shape[0])
+                        {
+                            throw new ArgumentOutOfRangeException(nameof(_trainingGroups),
+                                $"Training-group row index {idx} is outside the training partition (0..{groupedX.Shape[0] - 1}). " +
+                                "With training groups configured the split is ORDER-PRESERVING (no shuffle): the training " +
+                                "partition is the first floor(0.7·n) rows of the loaded data in their original order, so " +
+                                "group indices must reference rows inside that leading block. Rows beyond it form the " +
+                                "validation/test partitions (for date-grouped data, sort rows by date ascending so the " +
+                                "held-out partitions are the most RECENT dates — a leak-free temporal split).");
+                        }
+                    }
+                }
+
+                for (int epoch = 0; epoch < groupedEpochs; epoch++)
+                {
+                    foreach (var group in _trainingGroups)
+                    {
+                        if (group.Count == 0)
+                        {
+                            continue;
+                        }
+
+                        var groupX = GatherRows(groupedX, group);
+                        var groupY = GatherRows(groupedY, group);
+                        if (groupY.Rank == 1)
+                        {
+                            // Batch training produces [B, outputSize] predictions — promote rank-1
+                            // targets to a column [B, 1], exactly as TryStackTensorBatch does for
+                            // the streaming path's per-sample [1] targets.
+                            groupY = groupY.Reshape(new[] { groupY.Shape[0], 1 });
+                        }
+
+                        groupedNet.Train(groupX, groupY);
+                    }
+                }
+
+                optimizationResult = new OptimizationResult<T, TInput, TOutput>
+                {
+                    BestSolution = model,
+                };
+            }
+            else if (ShouldUseDirectSupervisedNeuralTraining(model)
+                && model is INeuralNetwork<T> neuralNetwork
+                && XTrain is Tensor<T> neuralX
+                && yTrain is Tensor<T> neuralY)
+            {
+                int epochs = finalOptimizer.GetOptions()?.MaxIterations ?? 100;
+                optimizationResult = TrainTensorNeuralNetworkRows(model, neuralNetwork, neuralX, neuralY, epochs);
+            }
+            else
+            {
+                // Optimize the final model on the full training set
+                optimizationResult = finalOptimizer.Optimize(optimizationInputData);
+            }
         }
 
         // ============================================================================
@@ -2276,8 +2438,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             QueryProcessors = _queryProcessors,
             LoRAConfiguration = _loraConfiguration,
             CrossValidationResult = cvResults,
-            AgentConfig = _agentConfig,
-            AgentRecommendation = agentRecommendation,
             DeploymentConfiguration = deploymentConfig,
             QuantizationInfo = quantizationInfo,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
@@ -2295,7 +2455,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             ProgramSynthesisServingClient = _programSynthesisServingClient,
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
             PromptTemplate = null,
-            PromptChain = null,
             PromptOptimizer = null,
             FewShotExampleSelector = null,
             PromptAnalyzer = null,

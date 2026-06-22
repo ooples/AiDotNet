@@ -52,6 +52,17 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
         Random = rng ?? RandomHelper.ThreadSafeRandom;
     }
 
+    /// <summary>
+    /// Returns an instance of this strategy that samples from the supplied
+    /// (typically seeded) <see cref="Random"/>, preserving the strategy's
+    /// distribution. Used by <c>LayerBase.InitializeLayerWeights</c> to make a
+    /// non-lazy strategy (e.g. He) reproducible when the layer has a pinned
+    /// <c>RandomSeed</c>. The base returns <c>this</c> (no re-seed support);
+    /// strategies whose constructor accepts a <see cref="Random"/> override this
+    /// to return a fresh seeded copy.
+    /// </summary>
+    public virtual IInitializationStrategy<T> WithSeededRandom(Random rng) => this;
+
     /// <inheritdoc />
     public abstract bool IsLazy { get; }
 

@@ -14,7 +14,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 public abstract class TransformerNERTestBase : NERModelTestBase
 {
     [Fact(Timeout = 120000)]
-    public async Task ContextualSensitivity_DifferentContext_DifferentLabels()
+    public virtual async Task ContextualSensitivity_DifferentContext_DifferentLabels()
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();

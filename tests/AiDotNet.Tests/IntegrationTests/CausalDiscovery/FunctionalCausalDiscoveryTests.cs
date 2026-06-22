@@ -91,11 +91,40 @@ public class FunctionalCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
+    /// <summary>
+    /// Deterministic NONLINEAR invertible chain X0 → X1 → X2. IGCI (Janzing
+    /// et al. 2012, "Information-geometric approach to inferring causal
+    /// directions", §2) infers direction from the correlation between log|f′|
+    /// and the input density — for a LINEAR f the derivative is constant, the
+    /// criterion is exactly zero in both directions, and the method is
+    /// explicitly unidentifiable (the paper's stated boundary case). The
+    /// shared ramp fixture is linear, so a paper-faithful IGCI correctly
+    /// reports no direction there. Smooth nonlinear monotone maps are IGCI's
+    /// designed regime.
+    /// </summary>
+    private static Matrix<double> CreateNonlinearDeterministicData()
+    {
+        int n = 100;
+        var data = new double[n, 3];
+        for (int i = 0; i < n; i++)
+        {
+            double x0 = 0.05 + 0.9 * i / (n - 1);   // uniform-ish on [0.05, 0.95]
+            double x1 = x0 * x0 * x0;               // nonlinear invertible: f(x) = x^3
+            double x2 = Math.Tanh(3.0 * x1);        // nonlinear invertible: g(x) = tanh(3x)
+
+            data[i, 0] = x0;
+            data[i, 1] = x1;
+            data[i, 2] = x2;
+        }
+
+        return new Matrix<double>(data);
+    }
+
     [Fact(Timeout = 120000)]
     public async Task IGCI_FindsCausalStructure()
     {
         var algo = new IGCIAlgorithm<double>();
-        var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
+        var graph = algo.DiscoverStructure(CreateNonlinearDeterministicData(), FeatureNames);
         CausalDiscoveryTestHelper.AssertMeaningfulGraph(graph);
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }

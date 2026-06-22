@@ -827,7 +827,13 @@ public class FederatedLearningDeepMathIntegrationTests
     /// Minimal mock model for federated learning aggregation tests.
     /// Implements IFullModel with controllable parameters.
     /// </summary>
-    private class FLMockModel : IFullModel<double, double[], double[]>
+    // Implements IParameterizable explicitly — FL aggregators call
+    // InterfaceGuard.Parameterizable(client) and require the runtime type
+    // to advertise IParameterizable<double, double[], double[]>. Without
+    // this, every FederatedLearningDeepMath test fails inside
+    // FedAvgFullModelAggregationStrategy.Aggregate.
+    private class FLMockModel : IFullModel<double, double[], double[]>,
+        IParameterizable<double, double[], double[]>
     {
         private double[] _parameters;
         private List<int> _activeFeatures;

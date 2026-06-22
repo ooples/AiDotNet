@@ -160,14 +160,20 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         SiameseNetworkOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _options = options ?? new SiameseNetworkOptions();
         Options = _options;
-        // Use CNN for 2D/3D input (images), FFNN for 1D input (features)
+        if (_options.EmbeddingSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "Siamese embedding size must be positive.");
+
+        var embeddingArchitecture = CreateEmbeddingArchitecture(architecture, _options.EmbeddingSize);
+
+        // Use CNN for 2D/3D input (images), FFNN for 1D input (features).
+        // The shared tower is an embedding function, not the final binary
+        // classifier. The parent Siamese model owns the sigmoid similarity
+        // head below, matching the Koch et al. one-shot Siamese design.
         _subnetwork = architecture.InputType == Enums.InputType.OneDimensional
-            ? (NeuralNetworkBase<T>)new FeedForwardNeuralNetwork<T>(architecture)
-            : new ConvolutionalNeuralNetwork<T>(architecture);
-        int embeddingSize = architecture.GetOutputShape()[0];
+            ? (NeuralNetworkBase<T>)new FeedForwardNeuralNetwork<T>(embeddingArchitecture)
+            : new ConvolutionalNeuralNetwork<T>(embeddingArchitecture);
         _outputLayer = new DenseLayer<T>(1, new SigmoidActivation<T>() as IActivationFunction<T>);
 
         // Initialize NumOps-based fields
@@ -190,6 +196,31 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         // Has to run AFTER _subnetwork and _outputLayer are assigned
         // because InitializeLayers reads them.
         InitializeLayers();
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+    }
+
+    private static NeuralNetworkArchitecture<T> CreateEmbeddingArchitecture(
+        NeuralNetworkArchitecture<T> architecture,
+        int embeddingSize)
+    {
+        if (architecture.Layers.Count > 0)
+            return architecture;
+
+        var embeddingArchitecture = new NeuralNetworkArchitecture<T>(
+            inputType: architecture.InputType,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            complexity: architecture.Complexity,
+            inputSize: architecture.InputSize,
+            inputHeight: architecture.InputHeight,
+            inputWidth: architecture.InputWidth,
+            inputDepth: architecture.InputDepth,
+            outputSize: embeddingSize,
+            shouldReturnFullSequence: architecture.ShouldReturnFullSequence,
+            imageEmbeddingDim: architecture.ImageEmbeddingDim,
+            textEmbeddingDim: architecture.TextEmbeddingDim,
+            inputFrames: architecture.InputFrames);
+        embeddingArchitecture.RandomSeed = architecture.RandomSeed;
+        return embeddingArchitecture;
     }
 
     /// <summary>
@@ -214,14 +245,19 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>A combined vector containing both embeddings.</returns>
     private Vector<T> CombineEmbeddings(Vector<T> embedding1, Vector<T> embedding2)
     {
-        var combined = new Vector<T>(embedding1.Length * 2);
-        for (int i = 0; i < embedding1.Length; i++)
-        {
-            combined[i] = embedding1[i];
-            combined[i + embedding1.Length] = embedding2[i];
-        }
-
-        return combined;
+        // Koch et al. 2015 (§3.2): the verification head is a single sigmoid unit
+        // over the COMPONENT-WISE L1 DISTANCE between the twin embeddings,
+        //   p = sigmoid( Σ_j α_j · |h1_j − h2_j| ),
+        // where the α_j are the output layer's learned weights. Feeding the L1
+        // distance |h1 − h2| (NOT a concatenation [h1; h2]) is what makes the
+        // similarity SYMMETRIC — sim(a, b) = sim(b, a) — which is the defining
+        // property of a Siamese metric. A concatenation head learns α·h1 + β·h2,
+        // an asymmetric function that no longer measures a distance.
+        var diff = (Vector<T>)Engine.Subtract(embedding1, embedding2);
+        var l1 = new Vector<T>(diff.Length);
+        for (int i = 0; i < diff.Length; i++)
+            l1[i] = NumOps.Abs(diff[i]);
+        return l1;
     }
 
     /// <summary>
@@ -473,28 +509,31 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
                     $"Input tensor must have shape [batchSize, 2, ...dimensions] for Siamese comparison. Got shape: {string.Join(",", input._shape)}");
             }
 
-            int batchSize = input.Shape[0];
-            var output = TensorAllocator.Rent<T>(new[] { batchSize, 1 });
-
-            // Process each pair in the batch
-            for (int b = 0; b < batchSize; b++)
+            return Accelerate(input, () =>
             {
-                // Extract the pair of inputs - GetSlice returns a tensor
-                var input1 = input.GetSlice(b).GetSlice(0);
-                var input2 = input.GetSlice(b).GetSlice(1);
+                int batchSize = input.Shape[0];
+                var output = TensorAllocator.Rent<T>(new[] { batchSize, 1 });
 
-                // Process each input through the shared subnetwork
-                var embedding1 = _subnetwork.Predict(input1).ToVector();
-                var embedding2 = _subnetwork.Predict(input2).ToVector();
+                // Process each pair in the batch
+                for (int b = 0; b < batchSize; b++)
+                {
+                    // Extract the pair of inputs - GetSlice returns a tensor
+                    var input1 = input.GetSlice(b).GetSlice(0);
+                    var input2 = input.GetSlice(b).GetSlice(1);
 
-                // Combine embeddings and compute similarity
-                var combinedEmbedding = CombineEmbeddings(embedding1, embedding2);
-                var similarityScore = _outputLayer.Forward(Tensor<T>.FromVector(combinedEmbedding)).ToVector();
+                    // Process each input through the shared subnetwork
+                    var embedding1 = _subnetwork.Predict(input1).ToVector();
+                    var embedding2 = _subnetwork.Predict(input2).ToVector();
 
-                output[b, 0] = similarityScore[0];
-            }
+                    // Combine embeddings and compute similarity
+                    var combinedEmbedding = CombineEmbeddings(embedding1, embedding2);
+                    var similarityScore = _outputLayer.Forward(Tensor<T>.FromVector(combinedEmbedding)).ToVector();
 
-            return output;
+                    output[b, 0] = similarityScore[0];
+                }
+
+                return output;
+            });
         }
         finally
         {
@@ -583,12 +622,14 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         var emb1 = _subnetwork.ForwardForTraining(input1);
         var emb2 = _subnetwork.ForwardForTraining(input2);
 
-        // Combine the two embeddings and run the similarity head. Concat
-        // along the trailing feature axis so the output layer sees twice the
-        // embedding width — matching CombineEmbeddings' shape contract.
-        int featureAxis = emb1.Rank - 1;
-        var combined = Engine.TensorConcatenate(new[] { emb1, emb2 }, featureAxis);
-        return _outputLayer.Forward(combined);
+        // Koch et al. 2015 verification head: component-wise L1 distance
+        // |emb1 − emb2| into the single sigmoid unit, p = sigmoid(Σ α_j |h1_j −
+        // h2_j|). TensorSubtract + TensorAbs are both tape-tracked (AbsBackward =
+        // grad · sign), so gradients flow back into the shared subnetwork. This
+        // matches CombineEmbeddings' shape contract (embedding width, not 2×) and
+        // keeps the similarity symmetric in the pair — see CombineEmbeddings.
+        var l1 = Engine.TensorAbs(Engine.TensorSubtract(emb1, emb2));
+        return _outputLayer.Forward(l1);
     }
 
     /// <summary>
@@ -640,8 +681,8 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     {
         // Deserialize the subnetwork
         _subnetwork = Architecture.InputType == Enums.InputType.OneDimensional
-            ? (NeuralNetworkBase<T>)new FeedForwardNeuralNetwork<T>(Architecture)
-            : new ConvolutionalNeuralNetwork<T>(Architecture);
+            ? (NeuralNetworkBase<T>)new FeedForwardNeuralNetwork<T>(CreateEmbeddingArchitecture(Architecture, _options.EmbeddingSize))
+            : new ConvolutionalNeuralNetwork<T>(CreateEmbeddingArchitecture(Architecture, _options.EmbeddingSize));
         var subNetworkCount = reader.ReadInt32();
         _subnetwork.Deserialize(reader.ReadBytes(subNetworkCount));
 
@@ -655,7 +696,6 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Initialize the output layer with the correct dimensions
-        int embeddingSize = Architecture.GetOutputShape()[0];
         _outputLayer = new DenseLayer<T>(1, new SigmoidActivation<T>() as IActivationFunction<T>);
         _outputLayer.SetParameters(outputLayerParams);
 
@@ -696,12 +736,12 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         {
             AdditionalInfo = new Dictionary<string, object>
             {
-                { "EmbeddingSize", Architecture.GetOutputShape()[0] },
+                { "EmbeddingSize", _options.EmbeddingSize },
                 { "SubnetworkType", _subnetwork.GetType().Name },
                 { "TotalParameters", GetParameterCount() },
                 { "InputShape", string.Join(",", Architecture.GetInputShape()) }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
 
         return metadata;

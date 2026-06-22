@@ -146,7 +146,16 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Fan et al. ICLR 2024 report Adam with a fixed 1e-5 learning rate
+        // for MG-TSD. Keep the native default on that paper scale: the larger
+        // framework Adam/AdamW defaults overstep the single-batch diffusion
+        // probe and produce the "loss(200 iters) > loss(50 iters)" pattern.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-5,
+                UseAdaptiveBetas = false
+            });
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);
@@ -221,6 +230,139 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
     {
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); ExtractLayerReferences(); }
         else if (_useNativeMode) { Layers.AddRange(LayerHelper<T>.CreateDefaultMGTSDLayers(Architecture, _contextLength, _forecastHorizon, _hiddenDimension, _numLayers, _numHeads, _numGranularities, _dropout)); ExtractLayerReferences(); }
+
+        // Manually resolve each sub-stage's lazy layers from its OWN known
+        // input shape so ParameterCount reports correctly before any forward
+        // — the base class's linear-chain ResolveLazyLayerShapes can't do this
+        // because MGTSD's Layers list isn't a single end-to-end pipeline:
+        // _inputProjection consumes [1, contextLength], _denoisingLayers
+        // consume [1, forecastHorizon + hiddenDimension + forecastHorizon + 1],
+        // and _outputProjection consumes the denoising stack's output shape.
+        // Propagating _inputProjection's output through the whole list would
+        // lock the denoising stack to hiddenDimension and break every real
+        // forward pass.
+        if (_useNativeMode)
+        {
+            int denoiseLen = _forecastHorizon + _hiddenDimension + _forecastHorizon + 1;
+            try
+            {
+                if (_inputProjection is AiDotNet.NeuralNetworks.Layers.LayerBase<T> ip && !ip.IsShapeResolved)
+                    ip.ResolveFromShape(new[] { 1, _contextLength });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "MGTSD: skipped resolving input-projection shape [1,{0}] (left lazy) - {1}",
+                    _contextLength, ex.Message);
+            }
+            int[] denoiseShape = new[] { 1, denoiseLen };
+            foreach (var layer in _denoisingLayers)
+            {
+                if (layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> lb && !lb.IsShapeResolved)
+                {
+                    try { lb.ResolveFromShape(denoiseShape); }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Trace.TraceWarning(
+                            "MGTSD: stopped denoising-layer pre-resolution at {0} with shape [{1}] - {2}",
+                            layer.GetType().Name, string.Join(",", denoiseShape), ex.Message);
+                        break;
+                    }
+                    try
+                    {
+                        var outShape = lb.GetOutputShape();
+                        if (outShape is { Length: > 0 } && System.Array.TrueForAll(outShape, d => d > 0))
+                            denoiseShape = outShape;
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Trace.TraceWarning(
+                            "MGTSD: failed reading output shape from {0}; keeping prior shape [{1}] - {2}",
+                            layer.GetType().Name, string.Join(",", denoiseShape), ex.Message);
+                    }
+                }
+            }
+            try
+            {
+                if (_outputProjection is AiDotNet.NeuralNetworks.Layers.LayerBase<T> op && !op.IsShapeResolved)
+                    op.ResolveFromShape(denoiseShape);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "MGTSD: skipped resolving output-projection shape [{0}] (left lazy) - {1}",
+                    string.Join(",", denoiseShape), ex.Message);
+            }
+        }
+    }
+
+    /// <summary>
+    /// MGTSD's <see cref="NeuralNetworkBase{T}.Layers"/> chain consumes the
+    /// concatenated [x_t | conditioning | guidance | t-embedding] pack of
+    /// length forecastHorizon + hiddenDimension + forecastHorizon + 1
+    /// (24 + 128 + 24 + 1 = 177 on the default options), NOT
+    /// Architecture.InputWidth (168 = contextLength). Suppress the base
+    /// class's architecture-driven ResolveLazyLayerShapes pre-walk so the
+    /// lazy denoising-stack layers resolve from the actual 177-width pack
+    /// the first time ForwardForTraining / ForwardNative builds it.
+    /// Without this override the pre-walk locks every lazy layer in the
+    /// stack to 128 and every real forward fails with "Tensors with shapes
+    /// [1, 177] and [1, 128] cannot be broadcast" — same root cause as
+    /// MisGAN / AutoDiffTabGenerator / GOGGLEGenerator.
+    /// </summary>
+    protected override int[]? TryGetArchitectureInputShape() => null;
+
+    /// <summary>
+    /// Override the base class's naive linear-chain Layers walk because MGTSD's
+    /// Layers list isn't a single pipeline — it's [inputProjection,
+    /// denoisingLayers..., outputProjection] where each stage takes a different
+    /// input shape (contextLength → hidden, denoiseLen=fh+hd+fh+1 →
+    /// denoise-stack output, denoise-stack output → forecastHorizon). Feeding
+    /// the contextLength input straight through every layer crashes on the
+    /// denoising-stack entry because the shapes don't match. Run the real
+    /// forward path and snapshot its intermediate activations instead.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode) return base.GetNamedLayerActivations(input);
+
+        var activations = new Dictionary<string, Tensor<T>>();
+        var conditioned = ApplyInstanceNormalization(input);
+        if (conditioned.Rank == 1) conditioned = conditioned.Reshape(new[] { 1, conditioned.Length });
+
+        // Stage 1: input projection — context-length input → hidden representation.
+        Tensor<T> condHidden = _inputProjection is not null
+            ? _inputProjection.Forward(conditioned)
+            : conditioned;
+        if (_inputProjection is not null)
+            activations[$"Layer_0_{_inputProjection.GetType().Name}"] = condHidden.Clone();
+
+        // Stage 2: build the [x_t | cond | guidance | t] denoising pack and
+        // walk the denoising stack on it. Use a zero noise tensor + the
+        // mid-schedule timestep so the activation magnitudes are reasonable.
+        int segLen = _forecastHorizon;
+        int condLen = Math.Min(condHidden.Length, _hiddenDimension);
+        int denoiseLen = segLen + condLen + segLen + 1;
+        var pack = new Tensor<T>(new[] { 1, denoiseLen });
+        condHidden.Data.Span.Slice(0, condLen).CopyTo(pack.Data.Span.Slice(segLen, condLen));
+        pack[0, denoiseLen - 1] = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * (_diffusionSteps / 2.0) / Math.Max(1, _diffusionSteps - 1)));
+        var current = pack;
+        int layerIdx = 1;
+        foreach (var layer in _denoisingLayers)
+        {
+            current = layer.Forward(current);
+            activations[$"Layer_{layerIdx}_{layer.GetType().Name}"] = current.Clone();
+            layerIdx++;
+        }
+
+        // Stage 3: output projection — denoising stack output → forecast.
+        if (_outputProjection is not null)
+        {
+            current = _outputProjection.Forward(current);
+            activations[$"Layer_{layerIdx}_{_outputProjection.GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
     }
 
     private void ExtractLayerReferences()
@@ -270,6 +412,23 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
     /// width in both paths — fixing the train(128)/inference(177) shape mismatch that previously
     /// made the whole training-test family throw broadcast errors (issue #1464).
     /// </remarks>
+    /// <summary>
+    /// Route the base class's TrainWithTape path through the constructor's
+    /// paper-aligned Adam optimizer (fixed lr=1e-5) rather than the framework
+    /// default Adam (lr=1e-3). The default optimizer oversteps this
+    /// diffusion denoiser on single-batch probes, producing the
+    /// "loss(200 iters) > loss(50 iters)" pattern in
+    /// MoreData_ShouldNotDegrade. Without this override, the
+    /// `_optimizer = ...` field assignment in the ctor would only be
+    /// observable through direct field access; the base class's TrainWithTape
+    /// path resolves its optimizer through GetOrCreateBaseOptimizer, which
+    /// returns its own default Adam unless an override (this) is provided.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+    {
+        return _optimizer ?? base.GetOrCreateBaseOptimizer();
+    }
+
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
         if (!_useNativeMode) { base.Train(input, expected); return; }
@@ -347,12 +506,17 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
         var span = denoisingInput.Data.Span;
         var x0 = _trainX0;
         var noise = _trainNoise;
-        for (int i = 0; i < segLen; i++)
+        // Vectorised x_t = √ᾱ_t·x_0 + √(1-ᾱ_t)·ε for the first segLen slots.
+        // x0 and noise are both [1, _forecastHorizon == segLen] by ForwardForTraining's
+        // construction, so the lengths match and Engine.TensorAdd /
+        // TensorMultiplyScalar take the SIMD path (guidance segment stays zero
+        // during training so we don't need it in the pack).
+        if (x0 is not null && noise is not null && x0.Length == segLen && noise.Length == segLen)
         {
-            // x_t = √ᾱ_t·x_0 + √(1-ᾱ_t)·ε  (guidance segment stays zero during training).
-            T x0i = (x0 is not null && i < x0.Length) ? x0[i] : NumOps.Zero;
-            T ei = (noise is not null && i < noise.Length) ? noise[i] : NumOps.Zero;
-            span[i] = NumOps.Add(NumOps.Multiply(sqrtAbar, x0i), NumOps.Multiply(sqrtOneMinus, ei));
+            var scaledX0 = Engine.TensorMultiplyScalar(x0, sqrtAbar);
+            var scaledNoise = Engine.TensorMultiplyScalar(noise, sqrtOneMinus);
+            var xtSeg = Engine.TensorAdd(scaledX0, scaledNoise);
+            xtSeg.Data.Span.Slice(0, segLen).CopyTo(span.Slice(0, segLen));
         }
         condHidden.Data.Span.Slice(0, condLen).CopyTo(span.Slice(segLen, condLen));
         span[segLen + condLen + segLen] = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _diffusionSteps - 1)));
@@ -546,12 +710,38 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
                 T coefXt = NumOps.Divide(NumOps.Multiply(NumOps.Sqrt(alphaT), oneMinusAbarPrev), oneMinusAbarT);
                 T sigmaT = t > 0 ? NumOps.Sqrt(NumOps.Divide(NumOps.Multiply(betaT, oneMinusAbarPrev), oneMinusAbarT)) : NumOps.Zero;
 
-                for (int i = 0; i < granLen && i < xt.Length; i++)
+                // Vectorised posterior step:
+                //   mean = coefX0·x̂_0 + coefXt·x_t
+                //   x_{t-1} = mean + σ_t·z   (z = 0 when t = 0)
+                // Build the mean as Engine.TensorAdd(scaled_x0, scaled_xt) so
+                // the per-element multiply/add runs in SIMD instead of a
+                // per-position NumOps chain. Noise sampling is inherently
+                // per-element, but we collect z once into a tensor and add
+                // it via TensorAdd + TensorMultiplyScalar — same SIMD path.
+                int len = Math.Min(granLen, xt.Length);
+                if (len > 0)
                 {
-                    T x0i = i < x0Pred.Length ? x0Pred[i] : NumOps.Zero;
-                    T meanT = NumOps.Add(NumOps.Multiply(coefX0, x0i), NumOps.Multiply(coefXt, xt[i]));
-                    T z = t > 0 ? SampleStandardNormal(rand) : NumOps.Zero;
-                    xt.Data.Span[i] = NumOps.Add(meanT, NumOps.Multiply(sigmaT, z));
+                    var x0Aligned = x0Pred.Length >= len
+                        ? Engine.TensorNarrow(
+                            x0Pred.Rank == 2 ? x0Pred : Engine.Reshape(x0Pred, new[] { 1, x0Pred.Length }),
+                            dim: x0Pred.Rank == 2 ? 1 : 0, start: 0, length: len)
+                        : x0Pred;
+                    var xtAligned = Engine.TensorNarrow(
+                        xt.Rank == 2 ? xt : Engine.Reshape(xt, new[] { 1, xt.Length }),
+                        dim: xt.Rank == 2 ? 1 : 0, start: 0, length: len);
+                    var scaledX0 = Engine.TensorMultiplyScalar(x0Aligned, coefX0);
+                    var scaledXt = Engine.TensorMultiplyScalar(xtAligned, coefXt);
+                    var meanTensor = Engine.TensorAdd(scaledX0, scaledXt);
+                    Tensor<T> next = meanTensor;
+                    if (t > 0)
+                    {
+                        var zData = new T[len];
+                        for (int i = 0; i < len; i++) zData[i] = SampleStandardNormal(rand);
+                        var z = new Tensor<T>(meanTensor._shape, new Vector<T>(zData));
+                        var scaledZ = Engine.TensorMultiplyScalar(z, sigmaT);
+                        next = Engine.TensorAdd(meanTensor, scaledZ);
+                    }
+                    next.Data.Span.Slice(0, len).CopyTo(xt.Data.Span.Slice(0, len));
                 }
             }
 

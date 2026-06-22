@@ -75,7 +75,10 @@ public class JambaLanguageModel<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         JambaOptions? options = null)
         : base(architecture,
-            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.TextGeneration))
+            // The LM head emits raw vocabulary logits. Match PyTorch's
+            // nn.CrossEntropyLoss contract by applying log-softmax inside
+            // the loss instead of treating logits as probabilities.
+            lossFunction ?? new LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new JambaOptions();
         Options = _options;
@@ -112,12 +115,15 @@ public class JambaLanguageModel<T> : NeuralNetworkBase<T>
     public override Tensor<T> Predict(Tensor<T> input)
     {
         SetTrainingMode(false);
-        var output = input;
-        for (int i = 0; i < Layers.Count; i++)
+        return Accelerate(input, () =>
         {
-            output = Layers[i].Forward(output);
-        }
-        return output;
+            var output = input;
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                output = Layers[i].Forward(output);
+            }
+            return output;
+        });
     }
 
     public override void UpdateParameters(Vector<T> gradients)
@@ -150,7 +156,7 @@ public class JambaLanguageModel<T> : NeuralNetworkBase<T>
                 { "MaxSeqLength", _maxSeqLength },
                 { "LayerCount", Layers.Count }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

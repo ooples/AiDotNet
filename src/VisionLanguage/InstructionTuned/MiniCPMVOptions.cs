@@ -38,5 +38,17 @@ public class MiniCPMVOptions : InstructionTunedVLMOptions
         SystemPrompt = other.SystemPrompt;
     }
 
-    public MiniCPMVOptions() { InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection; VisionDim = 1024; DecoderDim = 2304; ProjectionDim = 2304; NumVisionLayers = 24; NumDecoderLayers = 28; NumHeads = 36; ImageSize = 448; LanguageModelName = "MiniCPM"; MaxVisualTokens = 576; }
+    public MiniCPMVOptions()
+    {
+        InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;
+        VisionDim = 1024;
+        DecoderDim = 2304;
+        ProjectionDim = 2304;
+        NumVisionLayers = 24;
+        NumDecoderLayers = 28;
+        NumHeads = 36;
+        ImageSize = 448;
+        LanguageModelName = "MiniCPM";
+        MaxVisualTokens = 576;
+    }
 }

@@ -46,11 +46,38 @@ public class DeepLearningCausalDiscoveryTests
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
+    /// <summary>
+    /// Noisy i.i.d. SEM with the same chain (X0 → X1, X0/X1 → X2). GraN-DAG
+    /// (Lachapelle et al. 2020, §2) fits a Gaussian likelihood with per-node
+    /// noise variances; the noiseless rank-1 ramp puts that likelihood in its
+    /// degenerate zero-variance limit (density → ∞), so the score surface
+    /// carries no usable signal and a paper-faithful implementation finds
+    /// nothing. The paper's own experiments use stochastic SEM data.
+    /// </summary>
+    private static Matrix<double> CreateNoisySEMData()
+    {
+        int n = 200;
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
+        var data = new double[n, 3];
+        for (int i = 0; i < n; i++)
+        {
+            double x0 = rng.NextDouble() * 2.0 - 1.0;
+            double x1 = 2.0 * x0 + 0.5 + (rng.NextDouble() * 0.4 - 0.2);
+            double x2 = x0 + 0.3 * x1 + (rng.NextDouble() * 0.4 - 0.2);
+
+            data[i, 0] = x0;
+            data[i, 1] = x1;
+            data[i, 2] = x2;
+        }
+
+        return new Matrix<double>(data);
+    }
+
     [Fact(Timeout = 120000)]
     public async Task GraNDAG_FindsCausalStructure()
     {
         var algo = new GraNDAGAlgorithm<double>();
-        var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
+        var graph = algo.DiscoverStructure(CreateNoisySEMData(), FeatureNames);
         CausalDiscoveryTestHelper.AssertMeaningfulGraph(graph);
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }

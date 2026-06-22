@@ -43,10 +43,16 @@ namespace AiDotNet.VisionLanguage.Foundational;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("LXMERT: Learning Cross-Modality Encoder Representations from Transformers", "https://arxiv.org/abs/1908.07490", Year = 2019, Authors = "Tan and Bansal")]
+[ResearchPaper(
+    "LXMERT: Learning Cross-Modality Encoder Representations from Transformers",
+    "https://arxiv.org/abs/1908.07490",
+    Year = 2019,
+    Authors = "Tan and Bansal"
+)]
 public class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly LXMERTOptions _options;
+
     public override ModelOptions GetOptions() => _options;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -58,7 +64,12 @@ public class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<
     // text encoder + cross-modality encoder as auxiliary streams.
     private readonly List<ILayer<T>> _textCrossModalLayers = new List<ILayer<T>>();
 
-    public LXMERT(NeuralNetworkArchitecture<T> architecture, string modelPath, LXMERTOptions? options = null) : base(architecture)
+    public LXMERT(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        LXMERTOptions? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new LXMERTOptions();
         SyncImageSizeWithArchitecture();
@@ -76,7 +87,12 @@ public class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<
         InitializeLayers();
     }
 
-    public LXMERT(NeuralNetworkArchitecture<T> architecture, LXMERTOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    public LXMERT(
+        NeuralNetworkArchitecture<T> architecture,
+        LXMERTOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new LXMERTOptions();
         SyncImageSizeWithArchitecture();
@@ -93,7 +109,8 @@ public class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<
     {
         int h = Architecture.InputHeight;
         int w = Architecture.InputWidth;
-        if (h > 0 && w > 0 && h == w) _options.ImageSize = h;
+        if (h > 0 && w > 0 && h == w)
+            _options.ImageSize = h;
     }
 
     public int EmbeddingDimension => _options.FusionDim;
@@ -106,9 +123,11 @@ public class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p));
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(p));
         var c = p;
-        foreach (var l in Layers) c = l.Forward(c);
+        foreach (var l in Layers)
+            c = l.Forward(c);
         return L2Normalize(c);
     }
 
@@ -116,11 +135,13 @@ public class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(p);
 
         // Encoder 1: Object relationship encoder (vision features) — Layers
         var visionOut = p;
-        foreach (var l in Layers) visionOut = l.Forward(visionOut);
+        foreach (var l in Layers)
+            visionOut = l.Forward(visionOut);
 
         // Encoder 2 + 3: Language + cross-modality encoders — auxiliary stream.
         // The previous implementation walked _textCrossModalLayers with single-
@@ -148,7 +169,8 @@ public class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<
         int textEnd = textProjEnd + _options.NumTextLayers * blockSize;
 
         // Language encoder + projection: text-only self-attention.
-        for (int i = 0; i < textEnd; i++) textState = _textCrossModalLayers[i].Forward(textState);
+        for (int i = 0; i < textEnd; i++)
+            textState = _textCrossModalLayers[i].Forward(textState);
 
         // Cross-modality encoder: bidirectional cross-attention blocks.
         // Each block layout matches the factory exactly:
@@ -160,7 +182,11 @@ public class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<
         //   [5] DenseLayer FFN2                 on textState
         //   [6] LayerNorm                       on textState
         //   [7] (DropoutLayer)                  on textState (optional)
-        for (int blockStart = textEnd; blockStart < _textCrossModalLayers.Count; blockStart += crossBlockSize)
+        for (
+            int blockStart = textEnd;
+            blockStart < _textCrossModalLayers.Count;
+            blockStart += crossBlockSize
+        )
         {
             // Capture the pre-cross-attn streams so the second cross-attn
             // (vision → lang) gets the original textState, not the post-
@@ -183,7 +209,8 @@ public class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<
             textState = _textCrossModalLayers[blockStart + 4].Forward(textState);
             textState = _textCrossModalLayers[blockStart + 5].Forward(textState);
             textState = _textCrossModalLayers[blockStart + 6].Forward(textState);
-            if (crossBlockSize == 8) textState = _textCrossModalLayers[blockStart + 7].Forward(textState);
+            if (crossBlockSize == 8)
+                textState = _textCrossModalLayers[blockStart + 7].Forward(textState);
         }
 
         return visionOut.ConcatenateTensors(textState);
@@ -220,7 +247,8 @@ public class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture is DualStreamArchitecture<T> dual)
         {
             Layers.AddRange(dual.VisionLayers);
@@ -230,19 +258,29 @@ public class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<
         }
 
         int blockSize = _options.DropoutRate > 0 ? 6 : 5;
-        int visionLayerEnd = (_options.VisionDim != _options.FusionDim ? 1 : 0)
-            + 1 + _options.NumRelationshipLayers * blockSize;
+        int visionLayerEnd =
+            (_options.VisionDim != _options.FusionDim ? 1 : 0)
+            + 1
+            + _options.NumRelationshipLayers * blockSize;
 
         var allLayers = LayerHelper<T>.CreateDefaultCrossModalFusionLayers(
-            _options.VisionDim, _options.TextDim, _options.FusionDim,
-            _options.NumRelationshipLayers, _options.NumTextLayers, _options.NumCrossModalityLayers,
-            _options.NumHeads, _options.DropoutRate);
+            _options.VisionDim,
+            _options.TextDim,
+            _options.FusionDim,
+            _options.NumRelationshipLayers,
+            _options.NumTextLayers,
+            _options.NumCrossModalityLayers,
+            _options.NumHeads,
+            _options.DropoutRate
+        );
 
         int idx = 0;
         foreach (var layer in allLayers)
         {
-            if (idx < visionLayerEnd) Layers.Add(layer);
-            else _textCrossModalLayers.Add(layer);
+            if (idx < visionLayerEnd)
+                Layers.Add(layer);
+            else
+                _textCrossModalLayers.Add(layer);
             idx++;
         }
 
@@ -251,51 +289,73 @@ public class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<
 
     private Tensor<T> TokenizeText(string text)
     {
-        if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized.");
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
         var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
         return tokens;
     }
 
     public override Tensor<T> Predict(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
         SetTrainingMode(false);
         var c = PreprocessImage(input);
-        foreach (var l in Layers) c = l.Forward(c);
+        foreach (var l in Layers)
+            c = l.Forward(c);
         return c;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
         // Pass _optimizer through to TrainWithTape so the configured (or
         // defaulted) AdamW is used instead of the base class's
         // GetOrCreateBaseOptimizer default Adam at lr=1e-3. See
         // BridgeTower.Train for full rationale.
-        try { TrainWithTape(PreprocessImage(input), expected, _optimizer); }
-        finally { SetTrainingMode(false); }
+        try
+        {
+            TrainWithTape(PreprocessImage(input), expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
     {
-        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
         int idx = 0;
-        foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
         // Cross-modality stream is part of the trainable graph (registered
         // via RegisterAuxiliaryEncoderStream and surfaced through
         // GetExtraTrainableLayers), so its parameter slices live alongside
         // the vision encoder's in the flat parameter vector.
-        foreach (var l in _textCrossModalLayers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+        foreach (var l in _textCrossModalLayers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
     }
 
     /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-        => EnumerateAuxiliaryStreamTrainableLayers();
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
+        EnumerateAuxiliaryStreamTrainableLayers();
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
@@ -307,9 +367,13 @@ public class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<
         var m = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "LXMERT-Native" : "LXMERT-ONNX",
-            Description = "LXMERT: Learning Cross-Modality Encoder Representations from Transformers (Tan and Bansal, EMNLP 2019)",
+            Description =
+                "LXMERT: Learning Cross-Modality Encoder Representations from Transformers (Tan and Bansal, EMNLP 2019)",
             FeatureCount = _options.FusionDim,
-            Complexity = _options.NumRelationshipLayers + _options.NumTextLayers + _options.NumCrossModalityLayers
+            Complexity =
+                _options.NumRelationshipLayers
+                + _options.NumTextLayers
+                + _options.NumCrossModalityLayers,
         };
         m.AdditionalInfo["Architecture"] = "LXMERT";
         m.AdditionalInfo["FusionType"] = _options.FusionType.ToString();
@@ -334,7 +398,8 @@ public class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<
     {
         _useNativeMode = reader.ReadBoolean();
         string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionDim = reader.ReadInt32();
         _options.TextDim = reader.ReadInt32();
@@ -356,14 +421,19 @@ public class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<
 
     private void ThrowIfDisposed()
     {
-        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(LXMERT<T>));
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(LXMERT<T>));
     }
 
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
-        if (disposing) { OnnxModel?.Dispose(); }
+        if (disposing)
+        {
+            OnnxModel?.Dispose();
+        }
         base.Dispose(disposing);
     }
 }

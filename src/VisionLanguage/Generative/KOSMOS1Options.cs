@@ -33,5 +33,13 @@ public class KOSMOS1Options : GenerativeVLMOptions
         WeightDecay = other.WeightDecay;
     }
 
-    public KOSMOS1Options() { ArchitectureType = GenerativeArchitectureType.CausalMultimodal; VisionDim = 1024; DecoderDim = 2048; NumVisionLayers = 24; NumDecoderLayers = 24; NumHeads = 32; }
+    public KOSMOS1Options()
+    {
+        ArchitectureType = GenerativeArchitectureType.CausalMultimodal;
+        VisionDim = 1024;
+        DecoderDim = 2048;
+        NumVisionLayers = 24;
+        NumDecoderLayers = 24;
+        NumHeads = 32;
+    }
 }

@@ -169,20 +169,11 @@ public class Sora2Model<T> : VideoDiffusionModelBase<T>
 
     public override IDiffusionModel<T> Clone()
     {
-        var clonedPredictor = new DiTNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS,
-            hiddenSize: 4096,
-            numLayers: 48,
-            numHeads: 32,
-            patchSize: 2,
-            contextDim: CONTEXT_DIM);
-        clonedPredictor.SetParameters(_predictor.GetParameters());
-
-        return new Sora2Model<T>(
+                return new Sora2Model<T>(
             architecture: Architecture,
             options: Options as DiffusionModelOptions<T>,
             scheduler: Scheduler,
-            predictor: clonedPredictor,
+            predictor: (DiTNoisePredictor<T>)_predictor.Clone(),
             temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
             conditioner: _conditioner, // Conditioners are typically stateless; shared reference is safe
             defaultNumFrames: DefaultNumFrames,

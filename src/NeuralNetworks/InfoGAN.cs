@@ -476,15 +476,23 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         var trainableGen = (NeuralNetworkBase<T>)Generator;
         T generatorLoss = trainableGen.TrainWithCustomLoss(newGeneratorInput, genOutput =>
         {
-            // GAN loss: fool discriminator — BCE(disc(fake), real_labels)
-            var discScore = Discriminator.Predict(genOutput);
+            // GAN loss: fool discriminator — BCE(disc(fake), real_labels).
+            // Use ForwardForTraining (NOT Predict) so the discriminator's ops RECORD onto the
+            // generator's active gradient tape. Predict runs the eval/inference path (fused,
+            // non-recording), which left the tape with no edge from the loss back through the
+            // discriminator to genOutput — so d(GANloss)/d(generator) was zero and the generator
+            // never updated (GradientFlow_ShouldBeNonZeroAndFinite: "no parameters changed").
+            // Per Chen et al. 2016 (InfoGAN) the generator is trained by backpropagating the
+            // discriminator's adversarial signal AND the Q-network's mutual-information signal into
+            // the generator, which requires both subnetworks to be differentiated through here.
+            var discScore = Discriminator.ForwardForTraining(genOutput);
             var diff = Engine.TensorSubtract(discScore, allRealLabels);
             var squared = Engine.TensorMultiply(diff, diff);
             var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
             var ganLossTensor = Engine.ReduceMean(squared, allAxes, keepDims: false);
 
-            // Mutual information loss: Q(fake) should predict latent codes
-            var predictedCodes = QNetwork.Predict(genOutput);
+            // Mutual information loss: Q(fake) should predict latent codes — likewise tape-tracked.
+            var predictedCodes = QNetwork.ForwardForTraining(genOutput);
             var codeDiff = Engine.TensorSubtract(predictedCodes, capturedLatentCodes);
             var codeSq = Engine.TensorMultiply(codeDiff, codeDiff);
             var codeAxes = Enumerable.Range(0, codeSq.Shape.Length).ToArray();
@@ -930,7 +938,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
                 { "LatentCodeSize", _latentCodeSize },
                 { "MutualInfoCoefficient", NumOps.ToDouble(_mutualInfoCoefficient) }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

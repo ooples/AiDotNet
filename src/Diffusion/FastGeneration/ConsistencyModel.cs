@@ -670,18 +670,19 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new ConsistencyModel<T>(
+        // Lazy-preserving Clone (recipe from #1596): delegate to the predictor's and VAE's own Clone()
+        // (preserves materialized weights, reconstructs from actual config) instead of rebuilding a
+        // default-scale model and SetParameters(GetParameters()), which mismatches an injected non-default
+        // variant and re-randomizes the clone's unmaterialized lazy weights.
+        return new ConsistencyModel<T>(
+            noisePredictor: (UNetNoisePredictor<T>)_noisePredictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Value.Clone(),
             numTrainSteps: _numTrainSteps,
             sigmaMin: _sigmaMin,
             sigmaMax: _sigmaMax,
             rho: _rho,
             isDistilled: _isDistilled,
-            conditioner: _conditioner,
-            seed: RandomGenerator.Next());
-
-        clone.SetParameters(GetParameters());
-
-        return clone;
+            conditioner: _conditioner);
     }
 
     #endregion

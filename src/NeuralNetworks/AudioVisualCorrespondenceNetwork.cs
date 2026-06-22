@@ -1015,12 +1015,15 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        // VGG-style Dense encoder: simple sequential forward through all layers
-        // per Arandjelovic & Zisserman 2017
-        Tensor<T> current = input;
-        foreach (var layer in Layers)
-            current = layer.Forward(current);
-        return current;
+        return Accelerate(input, () =>
+        {
+            // VGG-style Dense encoder: simple sequential forward through all layers
+            // per Arandjelovic & Zisserman 2017
+            Tensor<T> current = input;
+            foreach (var layer in Layers)
+                current = layer.Forward(current);
+            return current;
+        });
     }
 
     /// <inheritdoc/>
@@ -1044,24 +1047,19 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
     }
 
     /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
+    public override void UpdateParameters(Vector<T> parameters)
     {
-        if (gradients.Length != ParameterCount)
-        {
-            throw new ArgumentException(
-                $"Gradient vector length ({gradients.Length}) must match parameter count ({ParameterCount}).",
-                nameof(gradients));
-        }
-
-        // Get current parameters
-        var currentParams = GetParameters();
-
-        // Apply gradient descent update: params = params - learning_rate * gradients
-        T learningRate = NumOps.FromDouble(0.001); // Default learning rate
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-
-        // Set the updated parameters
-        SetParameters(currentParams);
+        // NeuralNetworkBase.UpdateParameters contract: caller passes the NEW
+        // parameter values (post-optimizer-step), NOT raw gradients. The
+        // previous body misread the contract — it computed
+        // `currentParams - 0.001 * input` and called SetParameters with that,
+        // which on top of Adam's own update produced a double-step that
+        // collapsed weights to near-zero. Training_ShouldChangeParameters
+        // saw no movement because the second-step output happened to equal
+        // the first-step output's hash. Forward straight to SetParameters
+        // per the base contract — Adam already produced the correct new
+        // values.
+        SetParameters(parameters);
     }
 
     /// <inheritdoc/>

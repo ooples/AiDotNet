@@ -83,6 +83,16 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
     private Vector<T> _basisScales = new Vector<T>(0);
 
     /// <summary>
+    /// Knots fitted from the TRAINING feature distribution, one knot vector per feature
+    /// column. Reused at predict time so test-data basis functions are evaluated against
+    /// the same break-points the coefficients were learned over — without this, knots
+    /// were recomputed from each call's input data, and predictions on a held-out
+    /// distribution landed in a completely different basis (Hastie &amp; Tibshirani 1986
+    /// §4: knot placement is part of the fitted model, not a per-call decision).
+    /// </summary>
+    private List<Vector<T>>? _trainingKnots;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="GeneralizedAdditiveModel{T}"/> class.
     /// </summary>
     /// <param name="options">Optional configuration options for the Generalized Additive Model.</param>
@@ -164,9 +174,25 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
         ValidateInputs(x, y);
         TrainingFeatureCount = x.Columns;
 
-        // Use OLS as fallback to ensure reliable predictions
-        // GAM spline basis can be ill-conditioned on generic data
-        _useOLS = true;
+        // Fit spline basis per Hastie & Tibshirani 1986: each feature gets a
+        // smooth (truncated-power spline) basis with NumSplines knots and a
+        // small ridge penalty for stability — that's the "Additive" of GAM.
+        // The earlier OLS fallback collapsed every feature to a linear term,
+        // so GAM on quadratic data y = x₀² + 0.5·x₁ + noise scored R² ≈ 0.1
+        // (the linear part of a quadratic only explains a small fraction of
+        // variance). Spline fitting captures the curvature and lifts R² above
+        // the 0.3 detection threshold the integration test asserts.
+        _useOLS = false;
+        _basisFunctions = CreateBasisFunctions(x, storeFittedKnots: true);
+        FitModel(y);
+
+        // Also seed the linear (intercept + coeffs) path so callers that
+        // read Intercept / Coefficients directly (metadata, feature
+        // importance, downstream classification heads) still see sensible
+        // first-order summaries — OLS on the raw features alongside the
+        // spline fit. This doesn't drive Predict (which now always uses
+        // the spline path) but keeps the publicly-exposed linear
+        // descriptors meaningful.
         if (Options.UseIntercept)
         {
             var xWithInt = x.AddConstantColumn(NumOps.One);
@@ -186,10 +212,6 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
                 xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
             Coefficients = SolveSystem(xTx, xTy);
         }
-
-        // Also fit spline model for the spline-specific prediction path
-        _basisFunctions = CreateBasisFunctions(x);
-        FitModel(y);
     }
 
     /// <summary>
@@ -207,11 +229,19 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
     }
 
     /// <summary>
-    /// Creates basis functions for each feature in the input data.
+    /// Creates basis functions for each feature in the input data. During training
+    /// (<paramref name="storeFittedKnots"/> = true) the knots are computed from the
+    /// training feature distribution and stored on the model; at predict time the
+    /// stored training knots are reused so the test-data basis functions live in the
+    /// same basis the coefficients were fitted against.
     /// </summary>
     /// <param name="x">The feature matrix.</param>
-    /// <returns>A matrix of basis functions.</returns>
-    private Matrix<T> CreateBasisFunctions(Matrix<T> x)
+    /// <param name="storeFittedKnots">
+    /// True only inside <see cref="Train"/> — compute fresh knots from
+    /// <paramref name="x"/> and cache them on the model. False elsewhere (predict
+    /// path) — require the cached training knots and reuse them.
+    /// </param>
+    private Matrix<T> CreateBasisFunctions(Matrix<T> x, bool storeFittedKnots)
     {
         int numFeatures = x.Columns;
         // +1 for the intercept column
@@ -222,10 +252,31 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
         for (int i = 0; i < x.Rows; i++)
             basisFunctions[i, 0] = NumOps.One;
 
+        if (storeFittedKnots)
+        {
+            _trainingKnots = new List<Vector<T>>(numFeatures);
+        }
+        else if (_trainingKnots is null || _trainingKnots.Count != numFeatures)
+        {
+            throw new InvalidOperationException(
+                "GeneralizedAdditiveModel.Predict was called before Train, or the model was " +
+                "loaded without its fitted knot vectors. Train the model on data with the same " +
+                "feature count before predicting.");
+        }
+
         for (int i = 0; i < numFeatures; i++)
         {
             Vector<T> feature = x.GetColumn(i);
-            Vector<T> knots = CreateKnots(feature);
+            Vector<T> knots;
+            if (storeFittedKnots)
+            {
+                knots = CreateKnots(feature);
+                _trainingKnots!.Add(knots);
+            }
+            else
+            {
+                knots = _trainingKnots![i];
+            }
 
             for (int j = 0; j < _options.NumSplines; j++)
             {
@@ -348,7 +399,7 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
             return base.Predict(input);
         }
 
-        Matrix<T> inputBasisFunctions = CreateBasisFunctions(input);
+        Matrix<T> inputBasisFunctions = CreateBasisFunctions(input, storeFittedKnots: false);
 
         // Apply the same scaling used during training
         if (_basisScales.Length == inputBasisFunctions.Columns)
@@ -506,6 +557,41 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
             writer.Write(Convert.ToDouble(_coefficients[i]));
         }
 
+        // Write _basisScales — the per-column normalization factors FitModel divides the
+        // basis by before solving. Predict re-applies them, so without persisting them a
+        // deserialized model applies spline coefficients to UNSCALED bases and predicts wrong.
+        writer.Write(_basisScales.Length);
+        for (int i = 0; i < _basisScales.Length; i++)
+        {
+            writer.Write(Convert.ToDouble(_basisScales[i]));
+        }
+
+        // Write _trainingKnots — the per-feature knot positions fitted during Train.
+        // Predict reuses these so test-time basis functions live in the same basis
+        // the coefficients were learned over (see CreateBasisFunctions docstring).
+        // Without persisting them, Clone()/Deserialize() can't predict at all (the
+        // Predict path now requires non-null _trainingKnots).
+        // Format: int featureCount; for each feature: int knotCount + knot doubles.
+        // featureCount = -1 marks "never trained" (knots not yet fitted, so the
+        // model can still serialize before the first Train call without writing
+        // a fake empty list — Deserialize restores null in that case).
+        if (_trainingKnots is null)
+        {
+            writer.Write(-1);
+        }
+        else
+        {
+            writer.Write(_trainingKnots.Count);
+            foreach (var perFeatureKnots in _trainingKnots)
+            {
+                writer.Write(perFeatureKnots.Length);
+                for (int i = 0; i < perFeatureKnots.Length; i++)
+                {
+                    writer.Write(Convert.ToDouble(perFeatureKnots[i]));
+                }
+            }
+        }
+
         return ms.ToArray();
     }
 
@@ -581,6 +667,62 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
         for (int i = 0; i < length; i++)
         {
             _coefficients[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+
+        // Read _basisScales (see Serialize) so Predict scales inputs identically post-load.
+        // Guard for backward compatibility: payloads serialized before _basisScales
+        // was persisted have no trailing block, so fall back to unit scales (no-op
+        // scaling) when the stream is already exhausted.
+        if (ms.Position < ms.Length)
+        {
+            int scaleLen = reader.ReadInt32();
+            if (scaleLen < 0)
+                throw new InvalidDataException("Invalid GAM basis-scale length in serialized payload.");
+            _basisScales = new Vector<T>(scaleLen);
+            for (int i = 0; i < scaleLen; i++)
+            {
+                _basisScales[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+        }
+        else
+        {
+            _basisScales = new Vector<T>(_basisFunctions.Columns);
+            for (int i = 0; i < _basisScales.Length; i++)
+            {
+                _basisScales[i] = NumOps.One;
+            }
+        }
+
+        // Read _trainingKnots (see Serialize) so post-deserialize Predict uses the
+        // same knots Train fitted. Same backward-compat guard as _basisScales:
+        // pre-knot-persistence payloads simply lack this block.
+        if (ms.Position < ms.Length)
+        {
+            int featureCount = reader.ReadInt32();
+            if (featureCount < 0)
+            {
+                _trainingKnots = null;
+            }
+            else
+            {
+                _trainingKnots = new List<Vector<T>>(featureCount);
+                for (int f = 0; f < featureCount; f++)
+                {
+                    int knotCount = reader.ReadInt32();
+                    if (knotCount < 0)
+                        throw new InvalidDataException("Invalid GAM knot-count in serialized payload.");
+                    var knots = new Vector<T>(knotCount);
+                    for (int k = 0; k < knotCount; k++)
+                    {
+                        knots[k] = NumOps.FromDouble(reader.ReadDouble());
+                    }
+                    _trainingKnots.Add(knots);
+                }
+            }
+        }
+        else
+        {
+            _trainingKnots = null;
         }
     }
 

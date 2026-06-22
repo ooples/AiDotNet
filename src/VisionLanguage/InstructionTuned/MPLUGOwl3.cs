@@ -50,10 +50,16 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("mPLUG-Owl3: Towards Long Image-Sequence Understanding in Multi-Modal Large Language Models", "https://arxiv.org/abs/2408.04840", Year = 2024, Authors = "Ye et al.")]
+[ResearchPaper(
+    "mPLUG-Owl3: Towards Long Image-Sequence Understanding in Multi-Modal Large Language Models",
+    "https://arxiv.org/abs/2408.04840",
+    Year = 2024,
+    Authors = "Ye et al."
+)]
 public class MPLUGOwl3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MPLUGOwl3Options _options;
+
     public override ModelOptions GetOptions() => _options;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -64,9 +70,15 @@ public class MPLUGOwl3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     private readonly List<ILayer<T>> _abstractorLayers = new List<ILayer<T>>();
     private readonly List<ILayer<T>> _decoderLayers = new List<ILayer<T>>();
 
-    public MPLUGOwl3(NeuralNetworkArchitecture<T> architecture, string modelPath, MPLUGOwl3Options? options = null) : base(architecture)
+    public MPLUGOwl3(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        MPLUGOwl3Options? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new MPLUGOwl3Options();
+        _options.ValidateVisualSizing();
         SyncImageSizeWithArchitecture();
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
@@ -82,9 +94,15 @@ public class MPLUGOwl3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         InitializeLayers();
     }
 
-    public MPLUGOwl3(NeuralNetworkArchitecture<T> architecture, MPLUGOwl3Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    public MPLUGOwl3(
+        NeuralNetworkArchitecture<T> architecture,
+        MPLUGOwl3Options? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new MPLUGOwl3Options();
+        _options.ValidateVisualSizing();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
@@ -99,7 +117,8 @@ public class MPLUGOwl3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     {
         int h = Architecture.InputHeight;
         int w = Architecture.InputWidth;
-        if (h > 0 && w > 0 && h == w) _options.ImageSize = h;
+        if (h > 0 && w > 0 && h == w)
+            _options.ImageSize = h;
     }
 
     public int EmbeddingDimension => _options.DecoderDim;
@@ -113,9 +132,11 @@ public class MPLUGOwl3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p));
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(p));
         var c = p;
-        foreach (var l in Layers) c = l.Forward(c);
+        foreach (var l in Layers)
+            c = l.Forward(c);
         return L2Normalize(c);
     }
 
@@ -131,39 +152,51 @@ public class MPLUGOwl3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(p);
 
         var visionOut = p;
-        foreach (var l in Layers) visionOut = l.Forward(visionOut);
+        foreach (var l in Layers)
+            visionOut = l.Forward(visionOut);
 
         var abstractorOut = visionOut;
-        foreach (var l in _abstractorLayers) abstractorOut = l.Forward(abstractorOut);
+        foreach (var l in _abstractorLayers)
+            abstractorOut = l.Forward(abstractorOut);
 
         Tensor<T>? promptTokens = null;
-        if (prompt is not null) promptTokens = TokenizeText(prompt);
+        if (prompt is not null)
+            promptTokens = TokenizeText(prompt);
 
         var decoderInput = abstractorOut;
-        if (promptTokens is not null) decoderInput = abstractorOut.ConcatenateTensors(promptTokens);
+        if (promptTokens is not null)
+            decoderInput = abstractorOut.ConcatenateTensors(promptTokens);
 
         var output = decoderInput;
-        foreach (var l in _decoderLayers) output = l.Forward(output);
+        foreach (var l in _decoderLayers)
+            output = l.Forward(output);
 
         return output;
     }
 
-    public Tensor<T> Chat(Tensor<T> image, IEnumerable<(string Role, string Content)> conversationHistory, string userMessage)
+    public Tensor<T> Chat(
+        Tensor<T> image,
+        IEnumerable<(string Role, string Content)> conversationHistory,
+        string userMessage
+    )
     {
         ThrowIfDisposed();
         var sb = new System.Text.StringBuilder();
         sb.Append(_options.SystemPrompt);
-        foreach (var (role, content) in conversationHistory) sb.Append($"\n{role}: {content}");
+        foreach (var (role, content) in conversationHistory)
+            sb.Append($"\n{role}: {content}");
         sb.Append($"\nUser: {userMessage}\nAssistant:");
         return GenerateFromImage(image, sb.ToString());
     }
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture is TripleStreamArchitecture<T> triple)
         {
             Layers.AddRange(triple.VisionLayers);
@@ -181,17 +214,27 @@ public class MPLUGOwl3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         int abstractorLayerEnd = visionLayerEnd + aProj + _options.NumAbstractorLayers * aBlockSize;
 
         var allLayers = LayerHelper<T>.CreateDefaultPerceiverResamplerLayers(
-            _options.VisionDim, _options.AbstractorDim, _options.DecoderDim,
-            _options.NumVisionLayers, _options.NumAbstractorLayers, _options.NumDecoderLayers,
-            _options.MaxVisualTokens, _options.NumHeads, _options.NumAbstractorHeads,
-            _options.DropoutRate);
+            _options.VisionDim,
+            _options.AbstractorDim,
+            _options.DecoderDim,
+            _options.NumVisionLayers,
+            _options.NumAbstractorLayers,
+            _options.NumDecoderLayers,
+            _options.MaxVisualTokens,
+            _options.NumHeads,
+            _options.NumAbstractorHeads,
+            _options.DropoutRate
+        );
 
         int idx = 0;
         foreach (var layer in allLayers)
         {
-            if (idx < visionLayerEnd) Layers.Add(layer);
-            else if (idx < abstractorLayerEnd) _abstractorLayers.Add(layer);
-            else _decoderLayers.Add(layer);
+            if (idx < visionLayerEnd)
+                Layers.Add(layer);
+            else if (idx < abstractorLayerEnd)
+                _abstractorLayers.Add(layer);
+            else
+                _decoderLayers.Add(layer);
             idx++;
         }
 
@@ -201,11 +244,13 @@ public class MPLUGOwl3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 
     private Tensor<T> TokenizeText(string text)
     {
-        if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized.");
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
         var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
         return tokens;
     }
 
@@ -214,30 +259,46 @@ public class MPLUGOwl3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         ThrowIfDisposed();
         // Both paths must see the same preprocessed input.
         var c = PreprocessImage(input);
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(c);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(c);
         SetTrainingMode(false);
-        foreach (var l in Layers) c = l.Forward(c);
+        foreach (var l in Layers)
+            c = l.Forward(c);
         return c;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        try { TrainWithTape(PreprocessImage(input), expected, _optimizer); }
-        finally { SetTrainingMode(false); }
+        try
+        {
+            TrainWithTape(PreprocessImage(input), expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
     {
-        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
         int idx = 0;
-        foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
         // Sync the auxiliary streams (abstractor, decoder) too — see
         // OpenFlamingo.UpdateParameters for the same dual-stream rationale.
         foreach (var l in EnumerateAuxiliaryStreamTrainableLayers())
         {
-            if (l is null) continue;
+            if (l is null)
+                continue;
             int c = (int)l.ParameterCount;
             l.UpdateParameters(parameters.Slice(idx, c));
             idx += c;
@@ -245,8 +306,8 @@ public class MPLUGOwl3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     }
 
     /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-        => EnumerateAuxiliaryStreamTrainableLayers();
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
+        EnumerateAuxiliaryStreamTrainableLayers();
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
@@ -258,9 +319,11 @@ public class MPLUGOwl3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var m = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "mPLUG-Owl3-Native" : "mPLUG-Owl3-ONNX",
-            Description = "mPLUG-Owl3: Towards Long Image-Sequence Understanding in Multi-Modal Large Language Models (2024)",
+            Description =
+                "mPLUG-Owl3: Towards Long Image-Sequence Understanding in Multi-Modal Large Language Models (2024)",
             FeatureCount = _options.DecoderDim,
-            Complexity = _options.NumVisionLayers + _options.NumAbstractorLayers + _options.NumDecoderLayers
+            Complexity =
+                _options.NumVisionLayers + _options.NumAbstractorLayers + _options.NumDecoderLayers,
         };
         m.AdditionalInfo["Architecture"] = "mPLUG-Owl3";
         m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString();
@@ -287,7 +350,8 @@ public class MPLUGOwl3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     {
         _useNativeMode = reader.ReadBoolean();
         string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionDim = reader.ReadInt32();
         _options.AbstractorDim = reader.ReadInt32();
@@ -310,14 +374,19 @@ public class MPLUGOwl3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 
     private void ThrowIfDisposed()
     {
-        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(MPLUGOwl3<T>));
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(MPLUGOwl3<T>));
     }
 
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
-        if (disposing) { OnnxModel?.Dispose(); }
+        if (disposing)
+        {
+            OnnxModel?.Dispose();
+        }
         base.Dispose(disposing);
     }
 }

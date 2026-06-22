@@ -11,8 +11,20 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Inherits all neural network invariant tests and adds graph-specific invariants:
 /// self-loop stability, zero-input robustness, and structural sensitivity.
 /// </summary>
-public abstract class GraphNNModelTestBase : NeuralNetworkModelTestBase
+public abstract class GraphNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
 {
+    /// <summary>Opts a graph model into implicit self-loops-only adjacency (the model-level analogue
+    /// of GraphConvolutionalLayer's implicitIdentityWhenUnset flag), so the generic invariant tests
+    /// run under the strict graph contract — the scaffold equivalent of a PyG test supplying an
+    /// edge_index. No-op for models without the method. Matches the numerics of the previous
+    /// model-level default, so this moves no model-family tests.</summary>
+    protected TModel WireSyntheticGraph<TModel>(TModel model)
+    {
+        typeof(TModel).GetMethod("EnableImplicitIdentityAdjacency", System.Type.EmptyTypes)
+            ?.Invoke(model, null);
+        return model;
+    }
+
     // =====================================================
     // GRAPH INVARIANT: Self-Loops Should Not Cause Numerical Issues
     // A diagonal-heavy adjacency matrix (self-loops) is common in graph
@@ -27,29 +39,27 @@ public abstract class GraphNNModelTestBase : NeuralNetworkModelTestBase
         var network = CreateNetwork();
 
         // Create a diagonal-heavy input (simulating self-loops in adjacency)
-        var input = new Tensor<double>(InputShape);
-        int totalSize = 1;
-        foreach (var d in InputShape) totalSize *= d;
+        var input = new Tensor<T>(InputShape);
 
         // Fill with small values, then set diagonal-like positions to 1.0
         for (int i = 0; i < input.Length; i++)
-            input[i] = 0.01;
+            input[i] = NumOps.FromDouble(0.01);
 
         // Set diagonal elements (stride = last_dim + 1 for square-ish tensors)
         int lastDim = InputShape[InputShape.Length - 1];
         for (int i = 0; i < input.Length; i += lastDim + 1)
         {
             if (i < input.Length)
-                input[i] = 1.0;
+                input[i] = NumOps.FromDouble(1.0);
         }
 
         var output = network.Predict(input);
 
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.False(double.IsNaN(output[i]),
+            Assert.False(double.IsNaN(ConvertToDouble(output[i])),
                 $"Output[{i}] is NaN with self-loop input — numerical instability.");
-            Assert.False(double.IsInfinity(output[i]),
+            Assert.False(double.IsInfinity(ConvertToDouble(output[i])),
                 $"Output[{i}] is Infinity with self-loop input — overflow.");
         }
     }
@@ -67,7 +77,7 @@ public abstract class GraphNNModelTestBase : NeuralNetworkModelTestBase
         using var _arena = TensorArena.Create();
         var network = CreateNetwork();
 
-        var input = new Tensor<double>(InputShape);
+        var input = new Tensor<T>(InputShape);
         // All zeros by default
 
         var output = network.Predict(input);
@@ -75,9 +85,9 @@ public abstract class GraphNNModelTestBase : NeuralNetworkModelTestBase
         Assert.True(output.Length > 0, "Output should not be empty for zero input.");
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.False(double.IsNaN(output[i]),
+            Assert.False(double.IsNaN(ConvertToDouble(output[i])),
                 $"Output[{i}] is NaN for zero input — model should handle empty graphs.");
-            Assert.False(double.IsInfinity(output[i]),
+            Assert.False(double.IsInfinity(ConvertToDouble(output[i])),
                 $"Output[{i}] is Infinity for zero input.");
         }
     }
@@ -96,20 +106,20 @@ public abstract class GraphNNModelTestBase : NeuralNetworkModelTestBase
         var network = CreateNetwork();
 
         // Input 1: identity-like structure (strong self-connections)
-        var input1 = new Tensor<double>(InputShape);
+        var input1 = new Tensor<T>(InputShape);
         for (int i = 0; i < input1.Length; i++)
-            input1[i] = 0.1;
+            input1[i] = NumOps.FromDouble(0.1);
         int lastDim1 = InputShape[InputShape.Length - 1];
         for (int i = 0; i < input1.Length; i += lastDim1 + 1)
         {
             if (i < input1.Length)
-                input1[i] = 1.0;
+                input1[i] = NumOps.FromDouble(1.0);
         }
 
         // Input 2: uniform structure (all connections equal)
-        var input2 = new Tensor<double>(InputShape);
+        var input2 = new Tensor<T>(InputShape);
         for (int i = 0; i < input2.Length; i++)
-            input2[i] = 0.5;
+            input2[i] = NumOps.FromDouble(0.5);
 
         var output1 = network.Predict(input1);
         var output2 = network.Predict(input2);
@@ -118,7 +128,7 @@ public abstract class GraphNNModelTestBase : NeuralNetworkModelTestBase
         int minLen = Math.Min(output1.Length, output2.Length);
         for (int i = 0; i < minLen; i++)
         {
-            if (Math.Abs(output1[i] - output2[i]) > 1e-12)
+            if (Math.Abs(ConvertToDouble(output1[i]) - ConvertToDouble(output2[i])) > 1e-12)
             {
                 anyDifferent = true;
                 break;
@@ -129,3 +139,6 @@ public abstract class GraphNNModelTestBase : NeuralNetworkModelTestBase
             "model may be ignoring graph structure.");
     }
 }
+
+/// <summary>Double-precision default for <see cref="GraphNNModelTestBase{T}"/>.</summary>
+public abstract class GraphNNModelTestBase : GraphNNModelTestBase<double> { }

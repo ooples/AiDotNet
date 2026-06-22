@@ -21,12 +21,17 @@ public class TinyBERTNERTests : TransformerNERTestBase
     // with the 312-dim attention weights).
     protected override int[] InputShape => [8, 312];
 
+    // inputSize must equal TinyBERT's HiddenDimension (312): the model consumes pre-embedded hidden
+    // states of shape [seq, 312] (ExpectedInputShape = [MaxSequenceLength, HiddenDimension]). The old
+    // inputSize:128 only surfaced via the serialize/deserialize Clone roundtrip — the first encoder
+    // layer's input shape is recorded from the architecture, so deserialize resolved embeddingSize=128
+    // (128 % 12 heads != 0) even though the live forward resolves 312 from the real input.
     protected override INeuralNetworkModel<double> CreateNetwork()
         => new TinyBERTNER<double>(
             new NeuralNetworkArchitecture<double>(
                 inputType: InputType.OneDimensional,
                 taskType: NeuralNetworkTaskType.Regression,
-                inputSize: 128,
+                inputSize: 312,
                 outputSize: 4));
 
     /// <summary>
@@ -61,6 +66,42 @@ public class TinyBERTNERTests : TransformerNERTestBase
         Assert.True(anyDifferent,
             "TinyBERT encoder produces identical output for distinct random " +
             "inputs. Attention may be broken or all attention weights collapsed.");
+    }
+
+    /// <summary>
+    /// Same uniform-input-collapse rationale as
+    /// <see cref="DifferentInputs_ShouldProduceDifferentOutputs"/>: the base
+    /// TransformerNERTestBase probes with <c>CreateConstantTensor(0.3)</c> vs
+    /// <c>CreateConstantTensor(0.7)</c>, but LayerNorm normalises each uniform
+    /// token vector to the SAME zero-mean/unit-var pattern regardless of the
+    /// constant's value (a constant per-token vector has zero variance → the
+    /// LayerNorm output is the bias for any constant), so the encoder collapses
+    /// to identical output for 0.3 and 0.7 — a pre-training architectural
+    /// artifact, not broken attention. This manual scaffold must carry the same
+    /// random-input override the auto-scaffold emits for the TransformerNER
+    /// family (mirrors the three sibling overrides above); varied random inputs
+    /// exercise the per-position attention routing the assertion intends.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public override async Task ContextualSensitivity_DifferentContext_DifferentLabels()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        using var network = CreateNetwork();
+        var rng1 = ModelTestHelpers.CreateSeededRandom();
+        var rng2 = ModelTestHelpers.CreateSeededRandom(seed: 1729);
+        var input1 = CreateRandomTensor(InputShape, rng1);
+        var input2 = CreateRandomTensor(InputShape, rng2);
+        var labels1 = network.Predict(input1);
+        var labels2 = network.Predict(input2);
+        bool anyDifferent = false;
+        int minLen = System.Math.Min(labels1.Length, labels2.Length);
+        for (int i = 0; i < minLen; i++)
+        {
+            if (System.Math.Abs(labels1[i] - labels2[i]) > 1e-12) { anyDifferent = true; break; }
+        }
+        Assert.True(anyDifferent,
+            "TinyBERT NER produces identical labels for distinct random contexts — attention may be broken.");
     }
 
     /// <summary>

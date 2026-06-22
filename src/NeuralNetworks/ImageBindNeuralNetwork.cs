@@ -1517,13 +1517,16 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
             return gpuResult;
 
         SetTrainingMode(false);
-        var embedding = GetImageEmbedding(input);
-        var result = Tensor<T>.CreateDefault([1, embedding.Length], NumOps.Zero);
-        for (int i = 0; i < embedding.Length; i++)
+        return Accelerate(input, () =>
         {
-            result[0, i] = embedding[i];
-        }
-        return result;
+            var embedding = GetImageEmbedding(input);
+            var result = Tensor<T>.CreateDefault([1, embedding.Length], NumOps.Zero);
+            for (int i = 0; i < embedding.Length; i++)
+            {
+                result[0, i] = embedding[i];
+            }
+            return result;
+        });
     }
 
     /// <inheritdoc/>
@@ -1710,7 +1713,7 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
                 { "SupportedModalities", _supportedModalities.Select(m => m.ToString()).ToList() },
                 { "UseNativeMode", _useNativeMode }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

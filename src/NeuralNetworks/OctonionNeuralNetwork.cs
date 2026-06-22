@@ -183,7 +183,7 @@ public class OctonionNeuralNetwork<T> : NeuralNetworkBase<T>
             TensorValidator.ValidateShape(input, Architecture.GetInputShape(),
                 nameof(OctonionNeuralNetwork<T>), "prediction");
 
-            return Forward(input);
+            return Accelerate(input, () => Forward(input));
         }
         finally
         {
@@ -263,7 +263,7 @@ public class OctonionNeuralNetwork<T> : NeuralNetworkBase<T>
                 { "TaskType", Architecture.TaskType.ToString() },
                 { "ParameterCount", GetParameterCount() }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

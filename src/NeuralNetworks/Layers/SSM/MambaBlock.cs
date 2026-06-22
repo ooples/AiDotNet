@@ -339,6 +339,32 @@ internal partial class MambaBlock<T> : LayerBase<T>
         // Xavier for output projection
         InitializeTensor(_outputProjectionWeights);
         _outputProjectionBias.Fill(NumOps.Zero);
+
+        // Register ALL trainable parameters for tape-based autodiff at construction time. The tape training
+        // path (NeuralNetworkBase.Train -> TrainWithTape) collects registered parameters BEFORE the first
+        // UpdateParameters call, so registering here (not only inside UpdateParameters) is what lets the
+        // optimizer actually see and update this block's weights — otherwise CollectParameters finds nothing
+        // and every Train step is a silent no-op. _aLog and _dParam are learnable SSM parameters (Gu & Dao
+        // 2023) and MUST be registered too, or they would be excluded from gradient updates and make the
+        // registered-vs-flat parameter counts disagree.
+        RegisterTrainableParameters();
+    }
+
+    // Registers every trainable tensor with the autodiff/optimizer machinery. Called at init and re-called
+    // after UpdateParameters replaces tensor instances so the registry always points at the live tensors.
+    private void RegisterTrainableParameters()
+    {
+        RegisterTrainableParameter(_inputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_inputProjectionBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_convWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_convBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_xProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_dtProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_dtProjectionBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_aLog, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_dParam, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
     }
 
     private void InitializeTensor(Tensor<T> tensor)
@@ -411,12 +437,37 @@ internal partial class MambaBlock<T> : LayerBase<T>
         _lastB = bParam;
         _lastC = cParam;
 
-        // Step 6: Selective scan (core SSM computation) - delegated to S6Scan
-        var (scanOutput, hiddenStatesResult) = S6Scan<T>.SequentialScanForward(
-            siluOutput, delta, _aLog, bParam, cParam, _dParam,
-            batchSize, seqLen, _innerDimension, _stateDimension,
-            _initialHiddenState);
-        _lastHiddenStates = hiddenStatesResult;
+        // Step 6: Selective scan (core SSM computation).
+        // Fast path (no carried initial state AND caller doesn't need state output):
+        // use the engine's fused MambaSelectiveScanForward — a single tape op with
+        // an exact BPTT backward (AiDotNet.Tensors#523/#1464). It replaces S6Scan's
+        // per-timestep micro-op loop, which records O(seqLen) tape nodes and is the
+        // dominant Mamba cost — catastrophically so in double precision and at the
+        // long sequences 3D/vision Mamba models produce (e.g. SegMamba's 8^3 = 512
+        // tokens). The decomposed S6Scan path is retained for two cases:
+        //   1) a non-zero initial hidden state must be threaded across calls
+        //      (stateful inference from a previous chunk), OR
+        //   2) the caller will read GetHiddenState() after the forward — chunked
+        //      autoregressive inference relies on this even when starting from
+        //      zero state. Without it, _lastHiddenStates = null would leave the
+        //      caller with no carry to feed into the next chunk.
+        bool needsStateOutput = RequireHiddenStateOutput;
+        Tensor<T> scanOutput;
+        if (_initialHiddenState is null && !needsStateOutput)
+        {
+            scanOutput = Engine.MambaSelectiveScanForward(
+                siluOutput, delta, _aLog, bParam, cParam, _dParam);
+            _lastHiddenStates = null;
+        }
+        else
+        {
+            var (so, hiddenStatesResult) = S6Scan<T>.SequentialScanForward(
+                siluOutput, delta, _aLog, bParam, cParam, _dParam,
+                batchSize, seqLen, _innerDimension, _stateDimension,
+                _initialHiddenState);
+            scanOutput = so;
+            _lastHiddenStates = hiddenStatesResult;
+        }
         _initialHiddenState = null; // consumed
         _lastScanOutput = scanOutput;
 
@@ -657,17 +708,9 @@ internal partial class MambaBlock<T> : LayerBase<T>
         _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
         _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
 
-        // Register trainable parameters for tape-based autodiff
-        RegisterTrainableParameter(_inputProjectionWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_inputProjectionBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_convWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_convBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_xProjectionWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_dtProjectionWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_dtProjectionBias, PersistentTensorRole.Biases);
-        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
-
+        // Re-register against the new tensor instances created by the updates above (TensorAdd returns new
+        // tensors), so the autodiff registry tracks the live weights — now including _aLog and _dParam.
+        RegisterTrainableParameters();
     }
 
     /// <inheritdoc />
@@ -823,6 +866,16 @@ internal partial class MambaBlock<T> : LayerBase<T>
     /// </remarks>
     /// <returns>The hidden states tensor, or null if no forward pass has been performed.</returns>
     public Tensor<T>? GetHiddenState() => _lastHiddenStates;
+
+    /// <summary>
+    /// When true, the forward pass always routes through the decomposed S6Scan
+    /// path so the per-step hidden states are available via <see cref="GetHiddenState"/>
+    /// after the call. Set this to true on the encoder block of stateful / chunked
+    /// inference pipelines that read the trailing hidden state to seed the next
+    /// chunk; leave it false for end-to-end training and one-shot inference where
+    /// the fused <c>MambaSelectiveScanForward</c> fast path is preferred.
+    /// </summary>
+    public bool RequireHiddenStateOutput { get; set; }
 
     /// <summary>
     /// Sets the initial hidden state for the next forward pass.

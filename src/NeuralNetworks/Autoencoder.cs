@@ -293,28 +293,21 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             Layers.AddRange(LayerHelper<T>.CreateDefaultAutoEncoderLayers(Architecture));
         }
 
-        // EncodedSize = latent dimension = the encoder's output (the decoder's input). The DEFAULT autoencoder
-        // builds DenseLayers with an output-size-only ctor, so the first decoder layer's INPUT shape is lazily
-        // inferred and reads as [0] at construction — reading it gave EncodedSize=0. Instead walk back from the
-        // decoder boundary to the bottleneck layer whose OUTPUT size IS known (DenseLayer stores its declared
-        // output size), and fall back to the decoder's input shape for custom-layer architectures where it's set.
-        EncodedSize = 0;
-        for (int idx = Layers.Count / 2 - 1; idx >= 0 && EncodedSize <= 0; idx--)
+        // EncodedSize = latent dimension = the bottleneck (narrowest) width in the
+        // encoder→decoder stack. A Dense layer's OUTPUT width is concrete at
+        // construction, whereas the middle layer's INPUT shape (the latent handoff)
+        // is only resolved on the first forward — reading it here left EncodedSize
+        // at -1 for the default lazy layer stack. The autoencoder bottleneck is the
+        // narrowest layer by construction, so take the smallest positive layer
+        // output width.
+        int latent = int.MaxValue;
+        foreach (var layer in Layers)
         {
-            var outShape = Layers[idx].GetOutputShape();
-            if (outShape.Length > 0 && outShape[0] > 0)
-            {
-                EncodedSize = outShape[0];
-            }
+            var outShape = layer.GetOutputShape();
+            if (outShape is not null && outShape.Length > 0 && outShape[0] > 0)
+                latent = Math.Min(latent, outShape[0]);
         }
-        if (EncodedSize <= 0 && Layers.Count > 0)
-        {
-            var decoderInput = Layers[Layers.Count / 2].GetInputShape();
-            if (decoderInput.Length > 0)
-            {
-                EncodedSize = decoderInput[0];
-            }
-        }
+        EncodedSize = latent == int.MaxValue ? 0 : latent;
     }
 
     /// <summary>
@@ -893,14 +886,18 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        // Process input as a tensor through the network
-        var current = input;
-        for (int i = 0; i < Layers.Count; i++)
+        // Process input as a tensor through the network (wrapped in the #1622 verify-then-trust
+        // compiled gate; no-op unless acceleration is engaged).
+        return Accelerate(input, () =>
         {
-            current = Layers[i].Forward(current);
-        }
+            var current = input;
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                current = Layers[i].Forward(current);
+            }
 
-        return current;
+            return current;
+        });
     }
 
     /// <summary>

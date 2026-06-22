@@ -111,7 +111,19 @@ public class GraphCodeBERT<T> : CodeModelBase<T>
         ITokenizer? tokenizer = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), tokenizer)
     {
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // AdamW (Loshchilov & Hutter 2019) at lr=1e-5 with weight decay 0.01 — the
+        // standard BERT/RoBERTa optimizer (see CodeBERT). With the final LayerNorm
+        // the blow-up is gone; decoupled weight decay keeps the weights (and loss)
+        // from drifting up on longer runs and AMSGrad shrinks the step near
+        // convergence.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-5,
+                WeightDecay = 0.01,
+                UseAMSGrad = true
+            });
         InitializeLayersCore();
     }
 
@@ -142,6 +154,21 @@ public class GraphCodeBERT<T> : CodeModelBase<T>
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Route through TrainWithTape — same fix as CodeBERT.Train.
+        // GraphCodeBERT is a CodeBERT extension with data-flow attention
+        // per Guo et al. 2021 "GraphCodeBERT: Pre-training Code
+        // Representations with Data Flow" (arXiv:2009.08366). Backprop
+        // via the tape steps both the standard transformer parameters and
+        // the data-flow attention biases.
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override ModelMetadata<T> GetModelMetadata()

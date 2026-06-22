@@ -3,7 +3,6 @@ global using Formatting = Newtonsoft.Json.Formatting;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using AiDotNet.AdversarialRobustness.Safety;
-using AiDotNet.Agents;
 using AiDotNet.Benchmarking;
 using AiDotNet.Benchmarking.Models;
 using AiDotNet.CheckpointManagement;
@@ -27,7 +26,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
 using AiDotNet.Interpretability.Explainers;
 using AiDotNet.Interpretability.Helpers;
-using AiDotNet.LanguageModels;
+using AiDotNet.Agentic.Models;
+using AiDotNet.Agentic.Models.Connectors;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
@@ -527,46 +527,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal ILoRAConfiguration<T>? LoRAConfiguration { get; private set; }
 
     /// <summary>
-    /// Gets the agent configuration used during model building.
-    /// </summary>
-    /// <value>Agent configuration containing API keys and settings, or null if agent assistance wasn't used.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> If you enabled agent assistance during model building with ConfigureAgentAssistance(),
-    /// this property stores the configuration. The API key is stored here so you can use AskAsync() on the trained
-    /// model without providing the key again.
-    ///
-    /// Note: API keys are NOT serialized when saving the model to disk for security reasons.
-    /// </para>
-    /// </remarks>
-    [JsonIgnore]
-    internal AgentConfiguration<T>? AgentConfig { get; private set; }
-
-    /// <summary>
-    /// Gets the agent's recommendations made during model building.
-    /// </summary>
-    /// <value>Agent recommendations including suggested models and reasoning, or null if agent assistance wasn't used.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> If you used agent assistance during building, this contains all the recommendations
-    /// the agent made, such as:
-    /// - Which model type to use (e.g., "RidgeRegression")
-    /// - Why that model was chosen
-    /// - Suggested hyperparameter values
-    ///
-    /// You can examine these recommendations to understand why the agent made certain choices.
-    ///
-    /// Example:
-    /// <code>
-    /// if (result.AgentRecommendation != null)
-    /// {
-    ///     Console.WriteLine($"Agent selected: {result.AgentRecommendation.SuggestedModelType}");
-    ///     Console.WriteLine($"Reasoning: {result.AgentRecommendation.ModelSelectionReasoning}");
-    /// }
-    /// </code>
-    /// </para>
-    /// </remarks>
-    internal AgentRecommendation<T, TInput, TOutput>? AgentRecommendation { get; private set; }
-
-    /// <summary>
     /// Gets the deployment configuration for model export, caching, versioning, A/B testing, and telemetry.
     /// </summary>
     /// <value>Deployment configuration aggregating all deployment-related settings, or null if not configured.</value>
@@ -801,37 +761,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     internal IPromptTemplate? PromptTemplate { get; private set; }
 
-    /// <summary>
-    /// Gets or sets the prompt chain used for multi-step inference workflows.
-    /// </summary>
-    /// <value>An implementation of IPromptChain for sequential prompt processing, or null if not configured.</value>
-    /// <remarks>
-    /// <para>
-    /// Prompt chains enable complex multi-step workflows where the output of one prompt
-    /// becomes the input to the next. This supports patterns like:
-    /// - Sequential processing (translate → summarize → format)
-    /// - Conditional branching based on intermediate results
-    /// - Parallel execution of independent steps
-    /// - Map-reduce patterns for processing multiple items
-    /// </para>
-    /// <para><b>For Beginners:</b> A prompt chain is like an assembly line where each step does one thing.
-    ///
-    /// Example workflow:
-    /// <code>
-    /// // Chain: Translate → Summarize → Format
-    /// Step 1: Translate document from Spanish to English
-    /// Step 2: Summarize the translated document
-    /// Step 3: Format the summary as bullet points
-    /// </code>
-    ///
-    /// Each step takes the previous step's output as input, making complex tasks manageable.
-    /// Chains can also:
-    /// - Run steps in parallel when they don't depend on each other
-    /// - Branch based on conditions (if sentiment is negative, escalate)
-    /// - Loop over collections (summarize each chapter)
-    /// </para>
-    /// </remarks>
-    internal IChain<string, string>? PromptChain { get; private set; }
 
     /// <summary>
     /// Gets or sets the prompt optimizer used for automatic prompt improvement.
@@ -1360,10 +1289,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // Fine-tuning and adaptation
         LoRAConfiguration = options.LoRAConfiguration;
 
-        // Agent assistance
-        AgentConfig = options.AgentConfig;
-        AgentRecommendation = options.AgentRecommendation;
-
         // Deployment
         DeploymentConfiguration = options.DeploymentConfiguration;
         JitCompiledFunction = options.JitCompiledFunction;
@@ -1408,7 +1333,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         // Prompt Engineering
         PromptTemplate = options.PromptTemplate;
-        PromptChain = options.PromptChain;
         PromptOptimizer = options.PromptOptimizer;
         FewShotExampleSelector = options.FewShotExampleSelector;
         PromptAnalyzer = options.PromptAnalyzer;
@@ -1522,16 +1446,54 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <returns>A structured benchmark report.</returns>
     /// <remarks>
     /// <para>
+    /// Forwarding overload for callers that don't supply a chat client (suites
+    /// such as classification / regression metrics don't need one). Delegates
+    /// to the full overload below with <c>chatClient: null</c>.
+    /// </para>
+    /// </remarks>
+    public Task<BenchmarkReport> EvaluateBenchmarksAsync(
+        BenchmarkingOptions? options = null,
+        CancellationToken cancellationToken = default)
+        => EvaluateBenchmarksAsync(options, chatClient: null, cancellationToken);
+
+    /// <summary>
+    /// Forwarding overload for callers that supply only a chat client (reasoning /
+    /// generative suites with default options). Delegates to the full overload with
+    /// <c>options: null</c>. Restores the <c>EvaluateBenchmarksAsync(chatClient: ...)</c>
+    /// facade for back-compat.
+    /// </summary>
+    /// <param name="chatClient">Chat client used by reasoning / generative suites.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A structured benchmark report.</returns>
+    public Task<BenchmarkReport> EvaluateBenchmarksAsync(
+        IChatClient<T>? chatClient,
+        CancellationToken cancellationToken = default)
+        => EvaluateBenchmarksAsync(options: null, chatClient, cancellationToken);
+
+    /// <summary>
+    /// Runs benchmark suites against this model using the unified benchmark runner,
+    /// with an optional chat client for reasoning / generative benchmark suites.
+    /// </summary>
+    /// <param name="options">Benchmarking options (suites, sample size, failure policy).</param>
+    /// <param name="chatClient">Chat client used by reasoning / generative suites. <c>null</c>
+    /// is valid for non-generative suites (classification / regression metrics); reasoning
+    /// suites that need text generation will reject a null chat client up front in
+    /// <see cref="BenchmarkRunner"/>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A structured benchmark report.</returns>
+    /// <remarks>
+    /// <para>
     /// This method is facade-first: users select benchmark suites via enums and receive a structured report.
     /// It avoids requiring users to manually wire up benchmark implementations.
     /// </para>
     /// </remarks>
     public async Task<BenchmarkReport> EvaluateBenchmarksAsync(
-        BenchmarkingOptions? options = null,
+        BenchmarkingOptions? options,
+        IChatClient<T>? chatClient,
         CancellationToken cancellationToken = default)
     {
         var effectiveOptions = options ?? new BenchmarkingOptions();
-        var report = await BenchmarkRunner.RunAsync(this, effectiveOptions, cancellationToken).ConfigureAwait(false);
+        var report = await BenchmarkRunner.RunAsync(this, effectiveOptions, chatClient, cancellationToken).ConfigureAwait(false);
 
         if (effectiveOptions.AttachReportToResult)
         {
@@ -3212,8 +3174,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             LoRAConfiguration = LoRAConfiguration,
             CrossValidationResult = CrossValidationResult,
             AutoMLSummary = AutoMLSummary,
-            AgentConfig = AgentConfig,
-            AgentRecommendation = AgentRecommendation,
             DeploymentConfiguration = DeploymentConfiguration,
             // JIT compilation is parameter-specific, don't copy
             InferenceOptimizationConfig = InferenceOptimizationConfig,
@@ -3228,7 +3188,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             Tokenizer = Tokenizer,
             TokenizationConfig = TokenizationConfig,
             PromptTemplate = PromptTemplate,
-            PromptChain = PromptChain,
             PromptOptimizer = PromptOptimizer,
             FewShotExampleSelector = FewShotExampleSelector,
             PromptAnalyzer = PromptAnalyzer,
@@ -4960,8 +4919,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             LoRAConfiguration = LoRAConfiguration,
             CrossValidationResult = CrossValidationResult,
             AutoMLSummary = AutoMLSummary,
-            AgentConfig = AgentConfig,
-            AgentRecommendation = AgentRecommendation,
             DeploymentConfiguration = DeploymentConfiguration,
             // JIT compilation is model-specific, don't copy
             InferenceOptimizationConfig = InferenceOptimizationConfig,
@@ -4976,7 +4933,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             Tokenizer = Tokenizer,
             TokenizationConfig = TokenizationConfig,
             PromptTemplate = PromptTemplate,
-            PromptChain = PromptChain,
             PromptOptimizer = PromptOptimizer,
             FewShotExampleSelector = FewShotExampleSelector,
             PromptAnalyzer = PromptAnalyzer,
@@ -5172,8 +5128,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 LoRAConfiguration = deserializedObject.LoRAConfiguration;
                 CrossValidationResult = deserializedObject.CrossValidationResult;
                 AutoMLSummary = deserializedObject.AutoMLSummary;
-                AgentConfig = deserializedObject.AgentConfig;
-                AgentRecommendation = deserializedObject.AgentRecommendation;
                 DeploymentConfiguration = deserializedObject.DeploymentConfiguration;
                 // Weight-streaming telemetry — preserve through deserialize so
                 // a saved-and-loaded result keeps the report that was produced
@@ -5767,7 +5721,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Attaches prompt engineering components to this result.
     /// </summary>
     /// <param name="promptTemplate">The prompt template for formatting prompts.</param>
-    /// <param name="promptChain">The chain for multi-step prompt execution.</param>
     /// <param name="promptOptimizer">The optimizer for improving prompt quality.</param>
     /// <param name="fewShotExampleSelector">The selector for choosing relevant few-shot examples.</param>
     /// <param name="promptAnalyzer">The analyzer for prompt metrics and validation.</param>
@@ -5777,14 +5730,12 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     internal void AttachPromptEngineering(
         IPromptTemplate? promptTemplate,
-        IChain<string, string>? promptChain,
         IPromptOptimizer<T>? promptOptimizer,
         IFewShotExampleSelector<T>? fewShotExampleSelector,
         IPromptAnalyzer? promptAnalyzer,
         IPromptCompressor? promptCompressor)
     {
         PromptTemplate = promptTemplate;
-        PromptChain = promptChain;
         PromptOptimizer = promptOptimizer;
         FewShotExampleSelector = fewShotExampleSelector;
         PromptAnalyzer = promptAnalyzer;
@@ -5994,95 +5945,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         return PromptCompressor.CompressWithMetrics(prompt, options ?? CompressionOptions.Default);
     }
 
-    /// <summary>
-    /// Executes a prompt chain synchronously with the given input.
-    /// </summary>
-    /// <param name="input">The initial input to the chain.</param>
-    /// <returns>The output string from the chain execution.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when no prompt chain is configured.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method executes a multi-step prompt workflow where each step's output becomes
-    /// the next step's input. Chains enable complex workflows like translation followed
-    /// by summarization, or analysis followed by formatting.
-    /// </para>
-    /// <para><b>For Beginners:</b> A prompt chain runs multiple AI steps in sequence.
-    ///
-    /// Instead of doing everything in one big prompt, chains break tasks into steps:
-    /// <code>
-    /// // Chain example: Translate → Summarize → Extract Keywords
-    /// // Step 1: Translate document from Spanish to English
-    /// // Step 2: Summarize the translated document
-    /// // Step 3: Extract key points as bullet points
-    /// </code>
-    ///
-    /// Each step takes the previous step's output as input.
-    ///
-    /// Benefits of chains:
-    /// - Simpler prompts (each does one thing well)
-    /// - Better quality (specialized prompts perform better)
-    /// - Easier debugging (inspect intermediate results)
-    /// - Flexible workflows (add/remove/modify steps)
-    ///
-    /// Example:
-    /// <code>
-    /// string spanishDocument = "Documento en español...";
-    /// string result = modelResult.RunChain(spanishDocument);
-    ///
-    /// // Result is available in the returned value
-    /// </code>
-    /// </para>
-    /// </remarks>
-    public string RunChain(string input)
-    {
-        if (PromptChain == null)
-            throw new InvalidOperationException(
-                "No prompt chain configured. Use ConfigurePromptChain() in AiModelBuilder.");
-
-        return PromptChain.Run(input);
-    }
-
-    /// <summary>
-    /// Executes a prompt chain asynchronously with the given input.
-    /// </summary>
-    /// <param name="input">The initial input to the chain.</param>
-    /// <param name="cancellationToken">Token to cancel the operation.</param>
-    /// <returns>A task that resolves to the output string from the chain execution.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when no prompt chain is configured.</exception>
-    /// <remarks>
-    /// <para>
-    /// Async version of RunChain for non-blocking execution. Essential for chains
-    /// that make API calls to language models or perform other I/O operations.
-    /// </para>
-    /// <para><b>For Beginners:</b> Same as RunChain but doesn't block your program.
-    ///
-    /// Use this version when:
-    /// - Running in a web application (keeps server responsive)
-    /// - Processing many documents in parallel
-    /// - Making actual API calls to language models
-    ///
-    /// Example:
-    /// <code>
-    /// string result = await modelResult.RunChainAsync("Input text...");
-    /// // Result is available in the returned value
-    /// </code>
-    ///
-    /// For parallel processing:
-    /// <code>
-    /// var documents = new[] { "Doc 1", "Doc 2", "Doc 3" };
-    /// var tasks = documents.Select(doc => modelResult.RunChainAsync(doc));
-    /// var results = await Task.WhenAll(tasks);
-    /// </code>
-    /// </para>
-    /// </remarks>
-    public Task<string> RunChainAsync(string input, CancellationToken cancellationToken = default)
-    {
-        if (PromptChain == null)
-            throw new InvalidOperationException(
-                "No prompt chain configured. Use ConfigurePromptChain() in AiModelBuilder.");
-
-        return PromptChain.RunAsync(input, cancellationToken);
-    }
 
     /// <summary>
     /// Evaluates a reasoning benchmark using the configured facade (prompt chain or agent reasoning).
@@ -6092,18 +5954,17 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <param name="sampleSize">Optional number of problems to evaluate (null for all).</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>The benchmark evaluation result.</returns>
+    /// <param name="chatClient">The chat client used to answer each benchmark problem.</param>
     /// <remarks>
     /// <para>
     /// This method hides the benchmark wiring so users don't have to manually provide a
-    /// <c>Func&lt;string, Task&lt;string&gt;&gt;</c>. The default evaluation path is:
+    /// <c>Func&lt;string, Task&lt;string&gt;&gt;</c>: each benchmark problem is sent to the supplied
+    /// <paramref name="chatClient"/> and the model's text reply is scored.
     /// </para>
-    /// <list type="bullet">
-    /// <item><description>Use <see cref="PromptChain"/> (via <see cref="RunChainAsync"/>) when configured.</description></item>
-    /// <item><description>Otherwise, use agent reasoning (via <see cref="QuickReasonAsync"/>) when configured.</description></item>
-    /// </list>
     /// </remarks>
     public Task<AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult<TScore>> EvaluateBenchmarkAsync<TScore>(
         IBenchmark<TScore> benchmark,
+        IChatClient<T> chatClient,
         int? sampleSize = null,
         CancellationToken cancellationToken = default)
     {
@@ -6112,21 +5973,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             throw new ArgumentNullException(nameof(benchmark));
         }
 
-        Func<string, Task<string>> evaluateFunction;
+        Guard.NotNull(chatClient);
 
-        if (PromptChain != null)
-        {
-            evaluateFunction = problem => RunChainAsync(problem, cancellationToken);
-        }
-        else if (AgentConfig != null && AgentConfig.IsEnabled)
-        {
-            evaluateFunction = problem => QuickReasonAsync(problem, cancellationToken);
-        }
-        else
-        {
-            throw new InvalidOperationException(
-                "Benchmark evaluation requires either a prompt chain (ConfigurePromptChain) or agent assistance (ConfigureAgentAssistance).");
-        }
+        Func<string, Task<string>> evaluateFunction =
+            problem => chatClient.GenerateResponseAsync(problem, cancellationToken);
 
         return benchmark.EvaluateAsync(evaluateFunction, sampleSize, cancellationToken);
     }
@@ -6329,11 +6179,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <returns>True if a prompt compressor is configured; otherwise, false.</returns>
     public bool HasPromptCompressor => PromptCompressor != null;
 
-    /// <summary>
-    /// Checks whether a prompt chain is configured and available for use.
-    /// </summary>
-    /// <returns>True if a prompt chain is configured; otherwise, false.</returns>
-    public bool HasPromptChain => PromptChain != null;
 
     /// <summary>
     /// Checks whether a few-shot example selector is configured and available for use.
@@ -6793,25 +6638,18 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     public async Task<ReasoningResult<T>> ReasonAsync(
         string problem,
+        IChatClient<T> chatClient,
         ReasoningMode mode = ReasoningMode.Auto,
         ReasoningConfig? config = null,
         CancellationToken cancellationToken = default)
     {
-        if (AgentConfig == null || !AgentConfig.IsEnabled)
-        {
-            throw new InvalidOperationException(
-                "Reasoning requires agent configuration. Use ConfigureAgentAssistance() during model building " +
-                "to set up the LLM provider and API key required for reasoning capabilities.");
-        }
+        Guard.NotNull(chatClient);
 
         // Use stored config if none provided
         var effectiveConfig = config ?? ReasoningConfig ?? new ReasoningConfig();
 
-        // Create chat model from agent config
-        var chatModel = CreateChatModelFromAgentConfig();
-
         // Create internal Reasoner and delegate
-        var reasoner = new Reasoner<T>(chatModel);
+        var reasoner = new Reasoner<T>(chatClient);
         return await reasoner.SolveAsync(problem, mode, effectiveConfig, cancellationToken);
     }
 
@@ -6840,16 +6678,11 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     public async Task<string> QuickReasonAsync(
         string problem,
+        IChatClient<T> chatClient,
         CancellationToken cancellationToken = default)
     {
-        if (AgentConfig == null || !AgentConfig.IsEnabled)
-        {
-            throw new InvalidOperationException(
-                "Reasoning requires agent configuration. Use ConfigureAgentAssistance() during model building.");
-        }
-
-        var chatModel = CreateChatModelFromAgentConfig();
-        var reasoner = new Reasoner<T>(chatModel);
+        Guard.NotNull(chatClient);
+        var reasoner = new Reasoner<T>(chatClient);
         return await reasoner.QuickSolveAsync(problem, cancellationToken);
     }
 
@@ -6887,16 +6720,11 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     public async Task<ReasoningResult<T>> DeepReasonAsync(
         string problem,
+        IChatClient<T> chatClient,
         CancellationToken cancellationToken = default)
     {
-        if (AgentConfig == null || !AgentConfig.IsEnabled)
-        {
-            throw new InvalidOperationException(
-                "Reasoning requires agent configuration. Use ConfigureAgentAssistance() during model building.");
-        }
-
-        var chatModel = CreateChatModelFromAgentConfig();
-        var reasoner = new Reasoner<T>(chatModel);
+        Guard.NotNull(chatClient);
+        var reasoner = new Reasoner<T>(chatClient);
         return await reasoner.DeepSolveAsync(problem, cancellationToken);
     }
 
@@ -6936,43 +6764,13 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     public async Task<ReasoningResult<T>> ReasonWithConsensusAsync(
         string problem,
+        IChatClient<T> chatClient,
         int numAttempts = 5,
         CancellationToken cancellationToken = default)
     {
-        if (AgentConfig == null || !AgentConfig.IsEnabled)
-        {
-            throw new InvalidOperationException(
-                "Reasoning requires agent configuration. Use ConfigureAgentAssistance() during model building.");
-        }
-
-        var chatModel = CreateChatModelFromAgentConfig();
-        var reasoner = new Reasoner<T>(chatModel);
+        Guard.NotNull(chatClient);
+        var reasoner = new Reasoner<T>(chatClient);
         return await reasoner.SolveWithConsensusAsync(problem, numAttempts, cancellationToken);
-    }
-
-    /// <summary>
-    /// Creates a chat model from the agent configuration.
-    /// </summary>
-    private IChatModel<T> CreateChatModelFromAgentConfig()
-    {
-        if (AgentConfig == null)
-            throw new InvalidOperationException("Agent configuration is required.");
-
-        var apiKey = AgentKeyResolver.ResolveApiKey(
-            AgentConfig.ApiKey,
-            AgentConfig,
-            AgentConfig.Provider);
-
-        return AgentConfig.Provider switch
-        {
-            LLMProvider.OpenAI => new OpenAIChatModel<T>(apiKey),
-            LLMProvider.Anthropic => new AnthropicChatModel<T>(apiKey),
-            LLMProvider.AzureOpenAI => new AzureOpenAIChatModel<T>(
-                AgentConfig.AzureEndpoint ?? throw new InvalidOperationException("Azure endpoint required"),
-                apiKey,
-                AgentConfig.AzureDeployment ?? "gpt-4"),
-            _ => throw new ArgumentException($"Unknown provider: {AgentConfig.Provider}")
-        };
     }
 
     #endregion

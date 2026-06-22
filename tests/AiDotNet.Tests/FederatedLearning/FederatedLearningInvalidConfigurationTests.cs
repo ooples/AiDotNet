@@ -1,4 +1,6 @@
 using AiDotNet.Data.Loaders;
+using AiDotNet.FederatedLearning.Cryptography;
+using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tests.Helpers;
@@ -33,8 +35,13 @@ public class FederatedLearningInvalidConfigurationTests
     }
 
     [Fact(Timeout = 60000)]
-    public async Task BuildAsync_WithAsyncModeAndHeOnly_Throws()
+    public async Task BuildAsync_WithAsyncModeAndHeOnly_Completes()
     {
+        // Industry-standard FedAsync (Xie et al. 2019) and FedBuff
+        // (Nguyen et al. 2022) both natively support encrypted aggregation.
+        // When HE-only and async modes are combined, each arriving client
+        // update is homomorphically aggregated against the current global
+        // parameters — no plaintext slot exists to average separately.
         var options = CreateBaseOptions();
         options.AsyncFederatedLearning = new AsyncFederatedLearningOptions { Mode = FederatedAsyncMode.FedAsync, SimulatedMaxClientDelaySteps = 1 };
         options.HomomorphicEncryption = new HomomorphicEncryptionOptions
@@ -45,9 +52,7 @@ public class FederatedLearningInvalidConfigurationTests
             PolyModulusDegree = 4096
         };
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildAsync(options));
-        Assert.Contains("HE-only", ex.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("asynchronous", ex.Message, StringComparison.OrdinalIgnoreCase);
+        await BuildAsync(options, homomorphicEncryptionProvider: new SealHomomorphicEncryptionProvider<double>());
     }
 
     [Fact(Timeout = 60000)]
@@ -143,7 +148,10 @@ public class FederatedLearningInvalidConfigurationTests
         };
     }
 
-    private static async Task BuildAsync(FederatedLearningOptions options, bool useDeterministicDeltaOptimizer = false)
+    private static async Task BuildAsync(
+        FederatedLearningOptions options,
+        bool useDeterministicDeltaOptimizer = false,
+        IHomomorphicEncryptionProvider<double>? homomorphicEncryptionProvider = null)
     {
         var (x, y) = CreateToyData();
         var loader = DataLoaders.FromMatrixVector(x, y);
@@ -157,7 +165,7 @@ public class FederatedLearningInvalidConfigurationTests
             .ConfigureDataLoader(loader)
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
-            .ConfigureFederatedLearning(options)
+            .ConfigureFederatedLearning(options, homomorphicEncryptionProvider: homomorphicEncryptionProvider)
             .BuildAsync();
     }
 

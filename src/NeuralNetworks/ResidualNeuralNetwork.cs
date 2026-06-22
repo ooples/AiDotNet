@@ -497,14 +497,18 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        // CPU path: perform forward pass through all layers sequentially
-        var current = input;
-        foreach (var layer in Layers)
+        // CPU path: perform forward pass through all layers sequentially (wrapped in the #1622
+        // verify-then-trust compiled gate; no-op unless acceleration is engaged).
+        return Accelerate(input, () =>
         {
-            current = layer.Forward(current);
-        }
+            var current = input;
+            foreach (var layer in Layers)
+            {
+                current = layer.Forward(current);
+            }
 
-        return current;
+            return current;
+        });
     }
 
     /// <summary>
@@ -742,7 +746,7 @@ finally
                 { "InputSize", Architecture.CalculatedInputSize },
                 { "OutputSize", Architecture.CalculateOutputSize() }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

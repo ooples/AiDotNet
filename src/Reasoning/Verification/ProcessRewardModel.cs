@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using AiDotNet.Helpers;
+using AiDotNet.Agentic.Models;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Reasoning.Models;
@@ -45,14 +46,14 @@ namespace AiDotNet.Reasoning.Verification;
 internal class ProcessRewardModel<T> : IRewardModel<T>
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
-    private readonly IChatModel<T> _chatModel;
+    private readonly IChatClient<T> _chatModel;
     private readonly INumericOperations<T> _numOps;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ProcessRewardModel{T}"/> class.
     /// </summary>
     /// <param name="chatModel">The chat model used for reward scoring.</param>
-    public ProcessRewardModel(IChatModel<T> chatModel)
+    public ProcessRewardModel(IChatClient<T> chatModel)
     {
         Guard.NotNull(chatModel);
         _chatModel = chatModel;

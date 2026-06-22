@@ -17,12 +17,37 @@ const WEBHOOK_PRODUCT: ProductSlug = "aidotnet";
 // to — so the dash form is the only viable issuance path here.
 const WEBHOOK_PREFIX = "AIDN-PROD" as const;
 
-// Per-tier activation caps. Keeping them in one map so bumping a tier's
-// cap doesn't require hunting through the handlers.
-const TIER_MAX_ACTIVATIONS: Record<string, number> = {
-  professional: 10,
-  enterprise: 10,
+// Two separate tier vocabularies exist:
+//   * `profiles.subscription_tier` (free text, UI checks `=== 'pro'`)
+//   * `license_keys.tier` (enum `license_tier`: 'community' | 'professional' | 'enterprise')
+// Stripe Payment Link metadata.tier can be configured to either word
+// depending on dashboard history, so the webhook accepts both `pro` and
+// `professional` as synonyms and writes the CANONICAL name to each
+// column. Previous code wrote the same string to both columns, so one
+// side was always wrong (UI saw 'professional' and rendered Free, or the
+// license_keys insert failed the enum check).
+type TierAlias = "pro" | "professional" | "enterprise";
+interface CanonicalTier {
+  // Goes into profiles.subscription_tier — matches the value the
+  // billing/account UI checks for (`=== 'pro'`).
+  profileTier: string;
+  // Goes into license_keys.tier — must be a value of the
+  // public.license_tier enum.
+  licenseTier: "professional" | "enterprise";
+  // Used by AIDN-PROD-{TIER}-{32hex} key generation.
+  keySegment: string;
+  maxActivations: number;
+}
+const TIER_CANONICAL: Record<TierAlias, CanonicalTier> = {
+  pro:          { profileTier: "pro", licenseTier: "professional", keySegment: "PRO", maxActivations: 10 },
+  professional: { profileTier: "pro", licenseTier: "professional", keySegment: "PRO", maxActivations: 10 },
+  enterprise:   { profileTier: "enterprise", licenseTier: "enterprise", keySegment: "ENTERPRISE", maxActivations: 10 },
 };
+function resolveTier(raw: unknown): CanonicalTier | null {
+  if (typeof raw !== "string") return null;
+  const lower = raw.toLowerCase() as TierAlias;
+  return TIER_CANONICAL[lower] ?? null;
+}
 
 // Secrets are read lazily inside the request handler so the function can
 // be deployed BEFORE the project-level secrets are configured in the
@@ -170,16 +195,17 @@ async function handleCheckoutCompleted(
     throw new Error("cannot_resolve_user");
   }
 
-  // Derive the set of allowed tiers from TIER_MAX_ACTIVATIONS rather
-  // than hardcoding a parallel list. Adding a new paid tier becomes a
-  // one-line change to the map instead of needing to also update a
-  // separate validator list that can drift out of sync.
-  const tier = session.metadata?.tier;
-  if (!tier || !(tier in TIER_MAX_ACTIVATIONS)) {
-    throw new Error(`checkout.session.completed: invalid or missing tier '${tier}' in session metadata`);
+  // Resolve the raw Stripe metadata tier into the canonical pair of
+  // values for the two different tier columns. Accepts both 'pro' (UI
+  // vocabulary, what data-tier on pricing.astro emits) and 'professional'
+  // (legacy webhook-side vocabulary, what the public.license_tier enum
+  // requires) as synonyms so a partially-migrated Stripe dashboard config
+  // doesn't drop the license.
+  const rawTier = session.metadata?.tier;
+  const canonical = resolveTier(rawTier);
+  if (!canonical) {
+    throw new Error(`checkout.session.completed: invalid or missing tier '${rawTier}' in session metadata`);
   }
-
-  const maxActivations = TIER_MAX_ACTIVATIONS[tier];
 
   const stripeCustomerId = typeof session.customer === "string"
     ? session.customer
@@ -195,7 +221,7 @@ async function handleCheckoutCompleted(
   // for the customer; a stale profile row is a recoverable nit that
   // can be fixed manually via the admin panel.
   const profileUpdate: Record<string, string> = {
-    subscription_tier: tier,
+    subscription_tier: canonical.profileTier,
     subscription_status: "active",
   };
   if (stripeCustomerId) profileUpdate.stripe_customer_id = stripeCustomerId;
@@ -213,27 +239,28 @@ async function handleCheckoutCompleted(
     .select("id, license_key")
     .eq("user_id", userId)
     .eq("product", WEBHOOK_PRODUCT)
-    .eq("tier", tier)
+    .eq("tier", canonical.licenseTier)
     .eq("status", "active")
     .maybeSingle();
 
   if (existing) {
-    console.log(`User ${userId} already holds an active ${tier} license (${existing.id}). Stripe event was likely retried — no-op.`);
+    console.log(`User ${userId} already holds an active ${canonical.licenseTier} license (${existing.id}). Stripe event was likely retried — no-op.`);
     return;
   }
 
-  // Generate a fresh AIDN-PROD-{TIER_UPPER}-{32hex} key. Format must
+  // Generate a fresh AIDN-PROD-{KEY_SEGMENT}-{32hex} key. Format must
   // satisfy LicenseValidator.IsServerValidatedKeyFormat in the AiDotNet
   // client library: ≥4 dash-delimited segments, segment[0]=="AIDN", last
   // segment is ≥8 hex chars. Empirically verified that
-  // `AIDN-PROD-PROFESSIONAL-{32hex}` validates end-to-end through the
-  // online validate-license edge function path.
+  // `AIDN-PROD-PRO-{32hex}` and `AIDN-PROD-ENTERPRISE-{32hex}` both
+  // validate end-to-end through the online validate-license edge
+  // function path.
   //
   // Previous format (`aidn.{id}.{sig}`) was rejected by the client
   // library because the dotted form requires HMAC-SHA256 signing against
   // a build key the webhook does not have access to. See ooples/AiDotNet#1262.
   const keyHex = crypto.randomUUID().replace(/-/g, "");
-  const licenseKey = `${WEBHOOK_PREFIX}-${tier.toUpperCase()}-${keyHex}`;
+  const licenseKey = `${WEBHOOK_PREFIX}-${canonical.keySegment}-${keyHex}`;
 
   const { error: insertError } = await client
     .from("license_keys")
@@ -241,9 +268,9 @@ async function handleCheckoutCompleted(
       user_id: userId,
       license_key: licenseKey,
       product: WEBHOOK_PRODUCT,
-      tier,
+      tier: canonical.licenseTier,
       status: "active",
-      max_activations: maxActivations,
+      max_activations: canonical.maxActivations,
       stripe_subscription_id: subscriptionId,
       stripe_customer_id: stripeCustomerId,
       notes: `Issued by Stripe Checkout (session ${session.id})`,
@@ -254,7 +281,7 @@ async function handleCheckoutCompleted(
     throw insertError;
   }
 
-  console.log(`Issued ${tier} license ${licenseKey.substring(0, 12)}... for user ${userId}`);
+  console.log(`Issued ${canonical.licenseTier} license ${licenseKey.substring(0, 12)}... for user ${userId}`);
 
   // Best-effort key delivery email. The license row above is the source
   // of truth — failure here is logged but never thrown so a flaky email
@@ -267,7 +294,7 @@ async function handleCheckoutCompleted(
     await sendLicenseKeyEmail({
       to: recipient,
       licenseKey,
-      tier,
+      tier: canonical.licenseTier,
       product: WEBHOOK_PRODUCT,
       isExisting: false,
     });
@@ -343,27 +370,46 @@ async function handleSubscriptionUpdated(
   // add-on — are allowed by Stripe and the webhook should degrade
   // gracefully if one lands.
   //
-  // Strategy: walk every item, collect the tiers advertised in each
-  // price's metadata, and pick the highest-ranked tier we know about.
-  // Enterprise wins over professional; anything not in the known set
-  // is ignored rather than trusted. That means adding a "premium"
-  // tier later requires appending it to TIER_RANK below — which keeps
-  // the precedence explicit, unlike a blind `first item wins` fallback.
-  const TIER_RANK: Record<string, number> = {
+  // Strategy: walk every item, normalise each tier through resolveTier
+  // (which accepts both 'pro' and 'professional' aliases — see
+  // TIER_CANONICAL above), and pick the highest-ranked tier we know
+  // about. Enterprise wins over professional; anything resolveTier
+  // returns null for is ignored rather than trusted.
+  const TIER_LICENSE_RANK: Record<CanonicalTier["licenseTier"], number> = {
     professional: 1,
     enterprise: 2,
   };
-  const seenTiers = (subscription.items?.data ?? [])
-    .map((item) => item.price?.metadata?.tier as string | undefined)
-    .filter((t): t is string => typeof t === "string" && t in TIER_RANK);
-  const tier = seenTiers.length > 0
-    ? seenTiers.reduce((a, b) => (TIER_RANK[a] >= TIER_RANK[b] ? a : b))
-    : undefined;
+  const items = subscription.items?.data ?? [];
+  const seenCanonical = items
+    .map((item) => resolveTier(item.price?.metadata?.tier))
+    .filter((c): c is CanonicalTier => c !== null);
+
+  // If the subscription has items but NONE resolved to a known tier,
+  // fail loud. Silently updating `status` without `tier`/`max_activations`
+  // would leave the old entitlement in place after a plan change —
+  // exactly the "license still active for the wrong tier" footgun
+  // this handler is supposed to prevent. Stripe will retry the event
+  // and the admin can investigate the metadata drift in the meantime.
+  if (items.length > 0 && seenCanonical.length === 0) {
+    const rawTiers = items.map((it) => it.price?.metadata?.tier ?? '(missing)');
+    throw new Error(
+      `customer.subscription.updated: subscription ${subscription.id} has ${items.length} ` +
+      `item(s) but none of their price.metadata.tier values resolve to a canonical tier. ` +
+      `Saw: [${rawTiers.join(', ')}]. ` +
+      `Update Stripe Price metadata to one of: 'pro', 'professional', 'enterprise'.`
+    );
+  }
+
+  const winner = seenCanonical.length > 0
+    ? seenCanonical.reduce((a, b) =>
+        TIER_LICENSE_RANK[a.licenseTier] >= TIER_LICENSE_RANK[b.licenseTier] ? a : b
+      )
+    : null;
 
   const updateData: Record<string, string | number> = { status: licenseStatus };
-  if (tier && TIER_MAX_ACTIVATIONS[tier] !== undefined) {
-    updateData.tier = tier;
-    updateData.max_activations = TIER_MAX_ACTIVATIONS[tier];
+  if (winner) {
+    updateData.tier = winner.licenseTier;
+    updateData.max_activations = winner.maxActivations;
   }
 
   const { error } = await client
@@ -385,7 +431,9 @@ async function handleSubscriptionUpdated(
 
   if (stripeCustomerId) {
     const profileUpdate: Record<string, string> = { subscription_status: licenseStatus };
-    if (tier) profileUpdate.subscription_tier = tier;
+    // Use the profile-canonical tier name (`pro`/`enterprise`), not the
+    // license_keys enum name — billing/account UI checks `=== 'pro'`.
+    if (winner) profileUpdate.subscription_tier = winner.profileTier;
     const { error: profileError } = await client
       .from("profiles")
       .update(profileUpdate)

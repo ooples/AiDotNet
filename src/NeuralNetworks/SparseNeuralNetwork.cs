@@ -186,7 +186,7 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
         TensorValidator.ValidateShape(input, Architecture.GetInputShape(),
             nameof(SparseNeuralNetwork<T>), "prediction");
 
-        var predictions = Forward(input);
+        var predictions = Accelerate(input, () => Forward(input));
 
         IsTrainingMode = true;
 
@@ -440,7 +440,7 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
                 { "TaskType", Architecture.TaskType.ToString() },
                 { "ParameterCount", GetParameterCount() }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

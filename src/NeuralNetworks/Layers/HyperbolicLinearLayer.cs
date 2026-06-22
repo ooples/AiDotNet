@@ -247,22 +247,39 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
         T sqrtC = NumOps.Sqrt(c);
         T eps = NumOps.FromDouble(1e-7);
 
-        // Step 0: Project Euclidean input into Poincaré ball via exp_0.
-        // The Möbius matmul M⊗_c x requires x to be inside the ball (√c·||x|| < 1).
-        // exp_0(v) = tanh(√c·||v||) * v / (√c·||v||) — maps any Euclidean vector into the ball.
+        // Step 0: Project the Euclidean input into the Poincaré ball via the exponential
+        // map at the origin (Ganea et al. 2018, "Hyperbolic Neural Networks", eq. for
+        // exp_0^c): exp_0(v) = tanh(√c·||v||) · v / (√c·||v||). This is applied to the RAW
+        // input vector so the input MAGNITUDE is preserved — different-scale inputs map to
+        // different ball radii (||exp_0(v)|| = tanh(√c·||v||)/√c is a strictly increasing
+        // function of ||v|| until it saturates near the boundary), and the result is always
+        // inside the ball (radius < 1/√c).
         //
-        // Per Nickel & Kiela (2017), pre-normalize inputs to unit norm before exp_0
-        // to prevent tanh saturation which kills gradients for large-norm inputs.
-        var rawNormSq = Engine.ReduceSum(Engine.TensorMultiply(inputTensor, inputTensor), new[] { 1 }, keepDims: true);
-        var rawNorm = Engine.TensorSqrt(Engine.TensorAddScalar(rawNormSq, eps));
-        var normalizedInput = Engine.TensorBroadcastDivide(inputTensor, Engine.TensorAddScalar(rawNorm, eps));
-        // Now ||normalizedInput|| ≈ 1, so √c·||v|| ≈ √c which is well within tanh's linear region for c=1
-        var unitNormSq = Engine.ReduceSum(Engine.TensorMultiply(normalizedInput, normalizedInput), new[] { 1 }, keepDims: true);
-        var unitNorm = Engine.TensorSqrt(Engine.TensorAddScalar(unitNormSq, eps));
-        var sqrtCraw = Engine.TensorMultiplyScalar(unitNorm, sqrtC);
-        var tanhFactor0 = Engine.TensorTanh(sqrtCraw); // tanh(√c·1) ≈ tanh(1) ≈ 0.76 — good gradient region
-        var projScale0 = Engine.TensorDivide(tanhFactor0, Engine.TensorAddScalar(sqrtCraw, eps));
-        var ballInput = Engine.TensorBroadcastMultiply(projScale0, normalizedInput); // now inside ball
+        // The earlier code first normalized v to UNIT norm and ran exp_0 on that, which
+        // discarded the input magnitude entirely and made the layer scale-INVARIANT — a
+        // 10× input produced an identical output (ScaledInput_ShouldChangeOutput). That
+        // unit-normalization is the Nickel & Kiela (2017) recipe for re-projecting Poincaré
+        // EMBEDDINGS of a graph, not the HNN input exp-map; it does not belong here.
+        //
+        // We DO apply a fixed, dimension-aware scale 1/√d (d = input feature count) BEFORE
+        // exp_0. tanh saturates for arguments ≳ 3, so a raw d-dimensional input with
+        // O(1)-per-element values has ||v|| ≈ √d (e.g. √128 ≈ 11) and would land right on
+        // the ball boundary (radius ≈ 1), where the downstream Möbius arctanh is numerically
+        // stiff and training oscillates (MoreData_ShouldNotDegrade). Dividing by √d keeps the
+        // expected norm O(1) — independent of dimension — so typical inputs map to the stable
+        // ball interior, while the divisor is a CONSTANT, so RELATIVE input scale is fully
+        // preserved (a 10× input still maps to a 10×-larger pre-exp norm → a different
+        // radius). This is the standard "keep activations O(1) regardless of width" scaling,
+        // applied here so the exp-map operates in its well-conditioned region.
+        int inputFeatureDim = inputTensor.Shape[inputTensor.Rank - 1];
+        T invSqrtDim = NumOps.FromDouble(1.0 / Math.Sqrt(Math.Max(1, inputFeatureDim)));
+        var scaledInput = Engine.TensorMultiplyScalar(inputTensor, invSqrtDim);
+        var rawNormSq = Engine.ReduceSum(Engine.TensorMultiply(scaledInput, scaledInput), new[] { 1 }, keepDims: true);
+        var rawNorm = Engine.TensorSqrt(Engine.TensorAddScalar(rawNormSq, eps)); // ||v||/√d
+        var sqrtCraw = Engine.TensorMultiplyScalar(rawNorm, sqrtC);              // √c·||v||/√d
+        var tanhFactor0 = Engine.TensorTanh(sqrtCraw);                          // tanh(√c·||v||)
+        var projScale0 = Engine.TensorDivide(tanhFactor0, Engine.TensorAddScalar(sqrtCraw, eps)); // tanh(√c·||v||)/(√c·||v||)
+        var ballInput = Engine.TensorBroadcastMultiply(projScale0, scaledInput); // exp_0(v/√d), inside ball, relative scale preserved
 
         // Step 1: Linear projection Mx = x_ball @ W^T
         var weightsT = IsTrainingMode

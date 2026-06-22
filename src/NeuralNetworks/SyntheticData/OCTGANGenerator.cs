@@ -7,6 +7,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.SyntheticData;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -79,7 +80,11 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly OCTGANOptions<T> _options;
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    // Separate G/D optimizers (see CTGANGenerator for the divergence rationale).
+    // Both training steps route through TapeStepOver, which now takes the optimizer
+    // so the generator and discriminator never share Adam moment state.
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _generatorOptimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _discriminatorOptimizer;
     private ILossFunction<T> _lossFunction;
 
     // Synthetic tabular data infrastructure
@@ -100,8 +105,6 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     private FullyConnectedLayer<T>? _svddEmbeddingLayer;
 
     // Cached pre-activations for proper backward passes
-    private readonly List<Tensor<T>> _genPreActivations = new();
-    private readonly List<Tensor<T>> _discPreActivations = new();
 
     // SVDD center in embedding space
     private Tensor<T>? _svddCenter;
@@ -143,7 +146,17 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     {
         _options = options ?? new OCTGANOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        AdamOptimizer<T, Tensor<T>, Tensor<T>> MakeAdam() =>
+            new(this, new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = 0.5,
+                Beta2 = 0.9,
+                UseAdaptiveLearningRate = false,
+                UseAMSGrad = false,
+            });
+        _generatorOptimizer = optimizer ?? MakeAdam();
+        _discriminatorOptimizer = MakeAdam();
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
@@ -257,12 +270,16 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
                 T scaledLr = NumOps.FromDouble(_options.LearningRate / actualBatchSize);
 
-                for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
+                SetTrainingMode(true);
+                try
                 {
-                    TrainDiscriminatorStep(trainData, batchStart, batchEnd, scaledLr);
+                    for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
+                    {
+                        TrainDiscriminatorStep(trainData, batchStart, batchEnd, scaledLr);
+                    }
+                    TrainGeneratorStep(actualBatchSize, scaledLr);
                 }
-
-                TrainGeneratorStep(actualBatchSize, scaledLr);
+                finally { SetTrainingMode(false); }
                 UpdateSVDDCenter(trainData, batchStart, batchEnd);
             }
         }
@@ -420,22 +437,20 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         return distSq;
     }
 
-    private Tensor<T> ComputeSVDDGradient(Tensor<T> embedding)
-    {
-        if (_svddCenter is null) return new Tensor<T>(embedding._shape);
-
-        int len = Math.Min(embedding.Length, _svddCenter.Length);
-        var grad = new Tensor<T>([len]);
-        for (int j = 0; j < len; j++)
-        {
-            double diff = NumOps.ToDouble(embedding[j]) - NumOps.ToDouble(_svddCenter[j]);
-            grad[j] = NumOps.FromDouble(2.0 * diff);
-        }
-
-        return grad;
-    }
 
     #endregion
+
+    /// <summary>
+    /// Propagates the training/inference mode to the auxiliary sub-networks (generator batch-norm
+    /// and discriminator dropout) that live outside the base <c>Layers</c> collection, so generation
+    /// runs the generator batch-norm in inference mode with the learned running statistics.
+    /// </summary>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        foreach (var bn in _genBNLayers) bn.SetTrainingMode(isTraining);
+        foreach (var drop in _discDropoutLayers) drop.SetTrainingMode(isTraining);
+    }
 
     #region Forward Passes
 
@@ -456,7 +471,6 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
     private Tensor<T> DefaultGeneratorForward(Tensor<T> input)
     {
-        _genPreActivations.Clear();
         var current = input;
         var originalInput = CloneTensor(input);
 
@@ -474,7 +488,6 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
                 current = _genBNLayers[i].Forward(current);
             }
 
-            _genPreActivations.Add(CloneTensor(current));
             current = ApplyReLU(current);
         }
 
@@ -486,13 +499,11 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
     private Tensor<T> DiscriminatorForward(Tensor<T> input, bool isTraining)
     {
-        _discPreActivations.Clear();
         var current = input;
 
         for (int i = 0; i < _discLayers.Count; i++)
         {
             current = _discLayers[i].Forward(current);
-            _discPreActivations.Add(CloneTensor(current));
             current = ApplyLeakyReLU(current);
 
             if (isTraining)
@@ -515,47 +526,34 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
     private void TrainDiscriminatorStep(Matrix<T> trainData, int batchStart, int batchEnd, T scaledLr)
     {
+        // DeepSVDD critic (Xu et al. 2021 OCT-GAN): pull real embeddings toward the
+        // SVDD center and push generated ones away. Tape-connected; weight clipping
+        // keeps the critic Lipschitz-bounded.
         for (int i = batchStart; i < batchEnd; i++)
         {
-            var realRow = GetRow(trainData, i);
-            var realEmbedding = DiscriminatorForward(VectorToTensor(realRow), isTraining: true);
-
-            var realGrad = ComputeSVDDGradient(realEmbedding);
-            UpdateDiscriminatorParameters(scaledLr);
-
-            var noise = CreateStandardNormalVector(_options.EmbeddingDimension);
-            var fakeRow = GeneratorForward(VectorToTensor(noise));
-
-            var fakeEmbedding = DiscriminatorForward(fakeRow, isTraining: true);
-
-            var fakeGrad = ComputeSVDDGradient(fakeEmbedding);
-            var negFakeGrad = new Tensor<T>(fakeGrad._shape);
-            for (int j = 0; j < fakeGrad.Length; j++)
-            {
-                negFakeGrad[j] = NumOps.Negate(fakeGrad[j]);
-            }
-            UpdateDiscriminatorParameters(scaledLr);
-
-            ApplyGradientPenalty(realRow, TensorToVector(fakeRow, _dataWidth), scaledLr);
+            var realRow = VectorToTensor(GetRow(trainData, i));
+            var noise = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
+            using var tape = new GradientTape<T>();
+            var realEmb = DiscriminatorForward(realRow, isTraining: true);
+            var fakeRow = GeneratorForward(noise);
+            var fakeEmb = DiscriminatorForward(fakeRow, isTraining: true);
+            var loss = Engine.TensorSubtract(SvddDistSq(realEmb), SvddDistSq(fakeEmb));
+            TapeStepOver(tape, loss, BuildDiscriminatorLayerList(), _discriminatorOptimizer);
         }
+        ClipWeights(BuildDiscriminatorLayerList());
     }
 
     private void TrainGeneratorStep(int batchSize, T scaledLr)
     {
+        // Generator pulls its embeddings toward the SVDD center (look real).
         for (int i = 0; i < batchSize; i++)
         {
-            var noise = CreateStandardNormalVector(_options.EmbeddingDimension);
-            var fakeRow = GeneratorForward(VectorToTensor(noise));
-
-            var fakeEmbedding = DiscriminatorForward(fakeRow, isTraining: false);
-
-            var embGrad = ComputeSVDDGradient(fakeEmbedding);
-            var discInputGrad = ComputeDiscriminatorInputGradient(embGrad);
-            discInputGrad = SafeGradient(discInputGrad, 5.0);
-
-            _ = GeneratorForward(VectorToTensor(noise));
-
-            UpdateGeneratorParameters(scaledLr);
+            var noise = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
+            using var tape = new GradientTape<T>();
+            var fakeRow = GeneratorForward(noise);
+            var fakeEmb = DiscriminatorForward(fakeRow, isTraining: false);
+            var loss = SvddDistSq(fakeEmb);
+            TapeStepOver(tape, loss, BuildGeneratorLayerList(), _generatorOptimizer);
         }
     }
 
@@ -563,77 +561,7 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
     #region Gradient Penalty
 
-    private void ApplyGradientPenalty(Vector<T> realRow, Vector<T> fakeRow, T scaledLr)
-    {
-        double alpha = _random.NextDouble();
-        int len = Math.Min(realRow.Length, fakeRow.Length);
-        var interpolated = new Vector<T>(len);
 
-        for (int i = 0; i < len; i++)
-        {
-            interpolated[i] = NumOps.Add(
-                NumOps.Multiply(NumOps.FromDouble(alpha), realRow[i]),
-                NumOps.Multiply(NumOps.FromDouble(1.0 - alpha), fakeRow[i]));
-        }
-
-        var interpEmbedding = DiscriminatorForward(VectorToTensor(interpolated), isTraining: false);
-
-        var embGrad = ComputeSVDDGradient(interpEmbedding);
-        var inputGrad = ComputeDiscriminatorInputGradient(embGrad);
-
-        double gradNormSq = 0;
-        for (int i = 0; i < inputGrad.Length; i++)
-        {
-            double g = NumOps.ToDouble(inputGrad[i]);
-            gradNormSq += g * g;
-        }
-        double gradNorm = Math.Sqrt(gradNormSq + 1e-12);
-
-        double penaltyGradScale = 2.0 * _options.GradientPenaltyWeight * (gradNorm - 1.0) / gradNorm;
-
-        if (Math.Abs(penaltyGradScale) > 1e-10)
-        {
-            var reEmbedding = DiscriminatorForward(VectorToTensor(interpolated), isTraining: false);
-            var penaltyEmbGrad = ComputeSVDDGradient(reEmbedding);
-
-            for (int j = 0; j < penaltyEmbGrad.Length; j++)
-            {
-                penaltyEmbGrad[j] = NumOps.FromDouble(
-                    NumOps.ToDouble(penaltyEmbGrad[j]) * penaltyGradScale / (gradNorm + 1e-12));
-            }
-
-            UpdateDiscriminatorParameters(scaledLr);
-        }
-    }
-
-    private Tensor<T> ComputeDiscriminatorInputGradient(Tensor<T> outputGrad)
-    {
-        var current = outputGrad;
-
-        if (_svddEmbeddingLayer is not null)
-        {
-            int lastIdx = _discLayerDims.Count - 1;
-            var embParams = _svddEmbeddingLayer.GetParameters();
-            int embOutputSize = _discLayerDims[lastIdx].OutputSize;
-            int embInputSize = _discLayerDims[lastIdx].InputSize;
-            current = ManualLinearBackward(current, embParams, embOutputSize, embInputSize);
-        }
-
-        for (int i = _discLayers.Count - 1; i >= 0; i--)
-        {
-            if (i < _discPreActivations.Count)
-            {
-                current = ApplyLeakyReLUDerivative(current, _discPreActivations[i]);
-            }
-
-            var layerParams = _discLayers[i].GetParameters();
-            int layerOutputSize = _discLayerDims[i].OutputSize;
-            int layerInputSize = _discLayerDims[i].InputSize;
-            current = ManualLinearBackward(current, layerParams, layerOutputSize, layerInputSize);
-        }
-
-        return current;
-    }
 
     private Tensor<T> ManualLinearBackward(Tensor<T> outputGrad, Vector<T> layerParams,
         int outputSize, int inputSize)
@@ -661,162 +589,54 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
     #region Backward Passes
 
-    private void UpdateGeneratorParameters(T learningRate)
-    {
-        foreach (var layer in Layers)
-        {
-            layer.UpdateParameters(learningRate);
-        }
-        foreach (var bn in _genBNLayers)
-        {
-            bn.UpdateParameters(learningRate);
-        }
-    }
 
-    private void UpdateDiscriminatorParameters(T learningRate)
-    {
-        foreach (var layer in _discLayers)
-        {
-            layer.UpdateParameters(learningRate);
-        }
-        _svddEmbeddingLayer?.UpdateParameters(learningRate);
-    }
 
     #endregion
 
     #region Activation Functions
 
-    private Tensor<T> ApplyReLU(Tensor<T> input)
-    {
-        var result = new Tensor<T>(input._shape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            result[i] = NumOps.GreaterThan(input[i], NumOps.Zero) ? input[i] : NumOps.Zero;
-        }
-        return result;
-    }
+    private Tensor<T> ApplyReLU(Tensor<T> input) => Engine.TensorReLU(input);
 
-    private Tensor<T> ApplyReLUDerivative(Tensor<T> gradOutput, Tensor<T> preActivation)
-    {
-        int len = Math.Min(gradOutput.Length, preActivation.Length);
-        var result = new Tensor<T>(gradOutput._shape);
-        for (int i = 0; i < len; i++)
-        {
-            result[i] = NumOps.GreaterThan(preActivation[i], NumOps.Zero) ? gradOutput[i] : NumOps.Zero;
-        }
-        return result;
-    }
 
-    private Tensor<T> ApplyLeakyReLU(Tensor<T> input)
-    {
-        var result = new Tensor<T>(input._shape);
-        T slope = NumOps.FromDouble(0.2);
-        for (int i = 0; i < input.Length; i++)
-        {
-            double val = NumOps.ToDouble(input[i]);
-            result[i] = val > 0 ? input[i] : NumOps.Multiply(slope, input[i]);
-        }
-        return result;
-    }
+    private Tensor<T> ApplyLeakyReLU(Tensor<T> input) => Engine.TensorLeakyReLU(input, NumOps.FromDouble(0.2));
 
-    private Tensor<T> ApplyLeakyReLUDerivative(Tensor<T> gradOutput, Tensor<T> preActivation)
-    {
-        int len = Math.Min(gradOutput.Length, preActivation.Length);
-        var result = new Tensor<T>(gradOutput._shape);
-        T slope = NumOps.FromDouble(0.2);
-        for (int i = 0; i < len; i++)
-        {
-            if (NumOps.GreaterThan(preActivation[i], NumOps.Zero))
-            {
-                result[i] = gradOutput[i];
-            }
-            else
-            {
-                result[i] = NumOps.Multiply(slope, gradOutput[i]);
-            }
-        }
-        return result;
-    }
 
     private Tensor<T> ApplyOutputActivations(Tensor<T> output)
     {
         if (_transformer is null) return output;
-
-        var result = new Tensor<T>(output._shape);
+        var flat = output.Rank == 1 ? output : Engine.Reshape(output, new[] { output.Length });
+        var blocks = new List<Tensor<T>>();
         int idx = 0;
-
-        for (int col = 0; col < _columns.Count && idx < output.Length; col++)
+        for (int col = 0; col < _columns.Count && idx < flat.Length; col++)
         {
             var transform = _transformer.GetTransformInfo(col);
-
             if (transform.IsContinuous)
             {
-                if (idx < output.Length)
-                {
-                    double val = NumOps.ToDouble(output[idx]);
-                    result[idx] = NumOps.FromDouble(Math.Tanh(val));
-                    idx++;
-                }
-
+                blocks.Add(Engine.TensorTanh(Engine.TensorSlice(flat, new[] { idx }, new[] { 1 })));
+                idx++;
                 int numModes = transform.Width - 1;
                 if (numModes > 0)
                 {
-                    ApplySoftmaxBlock(output, result, ref idx, numModes);
+                    blocks.Add(Engine.TensorSoftmax(Engine.TensorSlice(flat, new[] { idx }, new[] { numModes }), axis: 0));
+                    idx += numModes;
                 }
             }
             else
             {
-                ApplySoftmaxBlock(output, result, ref idx, transform.Width);
+                blocks.Add(Engine.TensorSoftmax(Engine.TensorSlice(flat, new[] { idx }, new[] { transform.Width }), axis: 0));
+                idx += transform.Width;
             }
         }
-
-        return result;
+        if (blocks.Count == 0) return flat;
+        if (idx < flat.Length) blocks.Add(Engine.TensorSlice(flat, new[] { idx }, new[] { flat.Length - idx }));
+        return Engine.TensorConcatenate(blocks.ToArray(), axis: 0);
     }
 
-    private void ApplySoftmaxBlock(Tensor<T> input, Tensor<T> output, ref int idx, int count)
-    {
-        if (count <= 0) return;
-        int actualCount = Math.Min(count, input.Length - idx);
-        if (actualCount <= 0) return;
-        var slice = new Tensor<T>([actualCount]);
-        input.Data.Span.Slice(idx, actualCount).CopyTo(slice.Data.Span);
-        var result = Engine.Softmax(slice, -1);
-        result.Data.Span.CopyTo(output.Data.Span.Slice(idx, actualCount));
-        idx += actualCount;
-    }
 
     #endregion
 
     #region Gradient Safety
 
-    private Tensor<T> SafeGradient(Tensor<T> grad, double maxNorm)
-    {
-        double normSq = 0;
-        for (int i = 0; i < grad.Length; i++)
-        {
-            double val = NumOps.ToDouble(grad[i]);
-            if (double.IsNaN(val) || double.IsInfinity(val))
-            {
-                grad[i] = NumOps.Zero;
-            }
-            else
-            {
-                normSq += val * val;
-            }
-        }
-
-        double norm = Math.Sqrt(normSq);
-        if (norm > maxNorm && norm > 0)
-        {
-            double scale = maxNorm / norm;
-            for (int i = 0; i < grad.Length; i++)
-            {
-                grad[i] = NumOps.FromDouble(NumOps.ToDouble(grad[i]) * scale);
-            }
-        }
-
-        return grad;
-    }
 
     #endregion
 
@@ -860,12 +680,11 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         return v;
     }
 
-    private static Tensor<T> ConcatTensors(Tensor<T> a, Tensor<T> b)
+    private Tensor<T> ConcatTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>([a.Length + b.Length]);
-        for (int i = 0; i < a.Length; i++) result[i] = a[i];
-        for (int i = 0; i < b.Length; i++) result[a.Length + i] = b[i];
-        return result;
+        var a1 = a.Rank == 1 ? a : Engine.Reshape(a, new[] { a.Length });
+        var b1 = b.Rank == 1 ? b : Engine.Reshape(b, new[] { b.Length });
+        return Engine.TensorConcatenate(new[] { a1, b1 }, axis: 0);
     }
 
     private static Tensor<T> CloneTensor(Tensor<T> source)
@@ -919,24 +738,30 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     /// <inheritdoc />
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (!IsFitted)
-        {
-            throw new InvalidOperationException("Generator is not fitted. Call Fit() first.");
-        }
-
+        // Treats the input as the generator's latent noise (deterministic). Works
+        // before Fit (the generated ModelFamily tests call Predict without Fit).
         var noise = new Vector<T>(input.Length);
-        for (int i = 0; i < input.Length; i++)
-        {
-            noise[i] = input[i];
-        }
-
+        for (int i = 0; i < input.Length; i++) noise[i] = input[i];
         return GeneratorForward(VectorToTensor(noise));
     }
 
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Training is handled by Fit() for synthetic tabular generators
+        // Full OCT-GAN training (SVDD discriminator + generator) runs in Fit. This
+        // single-step entry point trains the generator (the Layers chain) to
+        // reconstruct the target via a tape step. The previous body was a no-op.
+        SetTrainingMode(true);
+        try
+        {
+            using var tape = new GradientTape<T>();
+            var output = GeneratorForward(input);
+            var flatOut = output.Rank == 1 ? output : Engine.Reshape(output, new[] { output.Length });
+            var target = expectedOutput.Rank == 1 ? expectedOutput : Engine.Reshape(expectedOutput, new[] { expectedOutput.Length });
+            var loss = ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(flatOut, target)));
+            TapeStepOver(tape, loss, BuildGeneratorLayerList(), _generatorOptimizer);
+        }
+        finally { SetTrainingMode(false); }
     }
 
     /// <inheritdoc />
@@ -966,6 +791,22 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         writer.Write(_dataWidth);
         writer.Write(_usingCustomLayers);
         writer.Write(IsFitted);
+
+        // The generator batch-norm layers (running mean/variance included) live outside the base
+        // Layers collection, and the fitted VGM transformer drives inverse-transform + per-column
+        // output activations. Both must be persisted or a loaded model generates garbage. (The SVDD
+        // center is a discriminator-training anchor only, never used by Generate, and is rebuilt by
+        // Fit, so it is intentionally not persisted.)
+        AuxLayerSerialization.WriteLayerList(writer, _genBNLayers);
+        if (_transformer is not null)
+        {
+            writer.Write(true);
+            _transformer.Serialize(writer);
+        }
+        else
+        {
+            writer.Write(false);
+        }
     }
 
     /// <inheritdoc />
@@ -974,14 +815,85 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         _dataWidth = reader.ReadInt32();
         _usingCustomLayers = reader.ReadBoolean();
         IsFitted = reader.ReadBoolean();
+
+        AuxLayerSerialization.ReadLayerList<T, BatchNormalizationLayer<T>>(
+            reader, _genBNLayers, (inShape, outShape) => new BatchNormalizationLayer<T>());
+
+        bool hasTransformer = reader.ReadBoolean();
+        if (hasTransformer)
+        {
+            _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
+            _transformer.Deserialize(reader);
+            _columns = new List<ColumnMetadata>(_transformer.Columns);
+        }
     }
 
     /// <inheritdoc />
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new OCTGANGenerator<T>(Architecture, _options, _optimizer, _lossFunction);
+        return new OCTGANGenerator<T>(Architecture, _options, _generatorOptimizer, _lossFunction);
     }
 
     #endregion
 
+
+    #region Tape Step Helpers
+
+    private void TapeStepOver(GradientTape<T> tape, Tensor<T> loss, IReadOnlyList<ILayer<T>> layers,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
+    {
+        var trainable = Training.TapeTrainingStep<T>.CollectParameters(layers);
+        if (trainable.Count == 0) return;
+        var grads = tape.ComputeGradients(loss, trainable);
+        T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
+        LastLoss = lossValue;
+        var ctx = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(trainable, grads, lossValue);
+        optimizer.Step(ctx);
+    }
+
+    private Tensor<T> ReduceToScalar(Tensor<T> t)
+        => Engine.ReduceSum(t, Enumerable.Range(0, t.Shape.Length).ToArray(), keepDims: false);
+
+    /// <summary>Tape-connected squared distance of an embedding to the (constant) SVDD center.</summary>
+    private Tensor<T> SvddDistSq(Tensor<T> embedding)
+    {
+        if (_svddCenter is null) return ReduceToScalar(Engine.TensorSquare(embedding));
+        var emb = embedding.Rank == 1 ? embedding : Engine.Reshape(embedding, new[] { embedding.Length });
+        return ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(emb, _svddCenter)));
+    }
+
+    private const double GanClip = 0.01;
+    private void ClipWeights(IReadOnlyList<ILayer<T>> layers)
+    {
+        T lo = NumOps.FromDouble(-GanClip), hi = NumOps.FromDouble(GanClip);
+        foreach (var layer in layers)
+        {
+            var ps = layer.GetParameters();
+            if (ps.Length == 0) continue;
+            bool changed = false;
+            for (int i = 0; i < ps.Length; i++)
+            {
+                if (NumOps.GreaterThan(ps[i], hi)) { ps[i] = hi; changed = true; }
+                else if (NumOps.LessThan(ps[i], lo)) { ps[i] = lo; changed = true; }
+            }
+            if (changed) layer.UpdateParameters(ps);
+        }
+    }
+
+    private IReadOnlyList<ILayer<T>> BuildGeneratorLayerList()
+    {
+        var all = new List<ILayer<T>>(Layers);
+        all.AddRange(_genBNLayers);
+        return all;
+    }
+
+    private IReadOnlyList<ILayer<T>> BuildDiscriminatorLayerList()
+    {
+        var all = new List<ILayer<T>>(_discLayers);
+        all.AddRange(_discDropoutLayers);
+        if (_svddEmbeddingLayer is not null) all.Add(_svddEmbeddingLayer);
+        return all;
+    }
+
+    #endregion
 }

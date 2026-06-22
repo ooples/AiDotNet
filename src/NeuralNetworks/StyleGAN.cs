@@ -860,7 +860,7 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
                 { "IntermediateLatentSize", _intermediateLatentSize },
                 { "StyleMixingEnabled", _enableStyleMixing }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

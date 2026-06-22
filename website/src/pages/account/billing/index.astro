@@ -180,12 +180,19 @@ const base = import.meta.env.BASE_URL;
       const upgradeBtn = document.getElementById('billing-upgrade-btn');
       const portalSection = document.getElementById('portal-section');
 
-      if (profile.subscription_tier === 'pro') {
+      // Accept both 'pro' (UI canonical) and the legacy 'professional'
+      // (stripe-webhook used to write this directly when the Stripe
+      // metadata tier was 'professional'). New webhook code normalises to
+      // 'pro', but existing profile rows may still carry 'professional'
+      // until the next checkout event — treat them as the same tier here
+      // so the Pro UI lights up instead of falling through to Free.
+      const tier = profile.subscription_tier;
+      if (tier === 'pro' || tier === 'professional') {
         if (planEl) planEl.textContent = 'Pro';
         if (priceEl) priceEl.textContent = '$29/month';
         if (upgradeBtn) upgradeBtn.textContent = 'Manage Plan';
         if (portalSection) portalSection.classList.remove('hidden');
-      } else if (profile.subscription_tier === 'enterprise') {
+      } else if (tier === 'enterprise') {
         if (planEl) planEl.textContent = 'Enterprise';
         if (priceEl) priceEl.textContent = 'Custom pricing';
         if (upgradeBtn) {

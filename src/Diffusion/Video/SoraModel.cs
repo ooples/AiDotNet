@@ -205,7 +205,7 @@ public class SoraModel<T> : VideoDiffusionModelBase<T>
     public override bool SupportsVideoToVideo => true;
 
     /// <inheritdoc />
-    public override long ParameterCount => _dit.ParameterCount + _temporalVAE.GetParameters().Length;
+    public override long ParameterCount => _dit.ParameterCount + _temporalVAE.ParameterCount;
 
     #endregion
 
@@ -349,7 +349,7 @@ public class SoraModel<T> : VideoDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         int ditCount = checked((int)_dit.ParameterCount);
-        var vaeCount = _temporalVAE.GetParameters().Length;
+        var vaeCount = checked((int)_temporalVAE.ParameterCount);
 
         if (parameters.Length != ditCount + vaeCount)
         {
@@ -388,17 +388,8 @@ public class SoraModel<T> : VideoDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedDit = new DiTNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS,
-            hiddenSize: HIDDEN_DIM,
-            numLayers: NUM_LAYERS,
-            numHeads: NUM_HEADS,
-            patchSize: PATCH_SIZE,
-            contextDim: CONTEXT_DIM);
-        clonedDit.SetParameters(_dit.GetParameters());
-
         return new SoraModel<T>(
-            dit: clonedDit,
+            dit: (DiTNoisePredictor<T>)_dit.Clone(),
             temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
             conditioner: _conditioner,
             defaultNumFrames: DefaultNumFrames,

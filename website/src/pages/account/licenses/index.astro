@@ -223,13 +223,33 @@ var builder = new AiModelBuilder&lt;double, double[], double&gt;(license);</code
             // means future maintainers can't accidentally introduce an
             // HTML-injection vector by interpolating a user-supplied
             // value (error message, email address, etc.) into the string.
-            subtitle.textContent = 'Please refresh in a minute. If the license still isn\'t here, email ';
+            subtitle.textContent = 'Please refresh in a minute. If the license still isn\'t here, ';
+
+            // Diagnostic mailto so support gets the user's auth context,
+            // session id (if available from Stripe redirect), URL, UA,
+            // and timestamp without the user having to gather any of it
+            // themselves. Previous behavior was a bare "email support"
+            // text link that opened an empty message — support couldn't
+            // tell which checkout failed without a back-and-forth.
+            const ts = new Date().toISOString();
+            const stripeSession = new URLSearchParams(window.location.search).get('session_id') || '(none)';
+            const body =
+              'My Stripe checkout completed but no license appeared in /account/licenses/.\n\n' +
+              'User ID: ' + session.user.id + '\n' +
+              'Email: ' + (session.user.email ?? '(no email on session)') + '\n' +
+              'Stripe checkout session_id: ' + stripeSession + '\n' +
+              'Page URL: ' + window.location.href + '\n' +
+              'Timestamp (UTC): ' + ts + '\n' +
+              'User Agent: ' + navigator.userAgent + '\n';
             const mailLink = document.createElement('a');
-            mailLink.href = 'mailto:support@aidotnet.dev';
+            mailLink.href =
+              'mailto:support@aidotnet.dev'
+              + '?subject=' + encodeURIComponent('[aidotnet.dev] License not issued after checkout')
+              + '&body=' + encodeURIComponent(body);
             mailLink.className = 'underline';
-            mailLink.textContent = 'support@aidotnet.dev';
+            mailLink.textContent = 'report to support';
             subtitle.appendChild(mailLink);
-            subtitle.append('.');
+            subtitle.append(' — the email is pre-filled with diagnostic details.');
           }
           iconLoading?.classList.add('hidden');
           iconWarning?.classList.remove('hidden');

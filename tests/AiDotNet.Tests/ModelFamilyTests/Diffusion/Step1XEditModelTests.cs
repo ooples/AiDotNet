@@ -4,11 +4,11 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-public class Step1XEditModelTests : DiffusionModelTestBase
+public class Step1XEditModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 16, 32, 32];
     protected override int[] OutputShape => [1, 16, 32, 32];
 
-    protected override IDiffusionModel<double> CreateModel()
-        => new Step1XEditModel<double>(seed: 42);
+    protected override IDiffusionModel<float> CreateModel()
+        => new Step1XEditModel<float>(seed: 42);
 }

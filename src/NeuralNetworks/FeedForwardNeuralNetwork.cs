@@ -197,7 +197,7 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
             return fused;
         }
 
-        var predictions = Forward(input);
+        var predictions = Accelerate(input, () => Forward(input));
 
         IsTrainingMode = true;
 
@@ -521,7 +521,7 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
                 { "TaskType", Architecture.TaskType.ToString() },
                 { "ParameterCount", GetParameterCount() }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

@@ -4,11 +4,12 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-public class LumaRay2ModelTests : DiffusionModelTestBase
+[Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4)
+public class LumaRay2ModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 16, 32, 32];
     protected override int[] OutputShape => [1, 16, 32, 32];
 
-    protected override IDiffusionModel<double> CreateModel()
-        => new LumaRay2Model<double>();
+    protected override IDiffusionModel<float> CreateModel()
+        => new LumaRay2Model<float>();
 }

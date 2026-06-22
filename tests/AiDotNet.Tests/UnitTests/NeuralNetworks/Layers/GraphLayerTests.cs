@@ -26,14 +26,32 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
         }
 
         [Fact(Timeout = 120000)]
-        public async Task GraphConvolutionalLayer_Forward_WithoutAdjacencyMatrix_ThrowsException()
+        public async Task GraphConvolutionalLayer_Forward_WithoutAdjacencyMatrix_DefaultsToIdentity()
         {
             // Arrange
             var layer = new GraphConvolutionalLayer<double>(inputFeatures: 10, outputFeatures: 16, (IActivationFunction<double>?)null);
             var input = new Tensor<double>([1, 5, 10]); // batch=1, nodes=5, features=10
 
-            // Act & Assert
-            Assert.Throws<InvalidOperationException>(() => layer.Forward(input));
+            // Act
+            var output = layer.Forward(input);
+
+            // Assert
+            Assert.Equal(3, output.Rank);
+            Assert.Equal(1, output.Shape[0]);
+            Assert.Equal(5, output.Shape[1]);
+            Assert.Equal(16, output.Shape[2]);
+
+            var adjacency = layer.GetAdjacencyMatrix();
+            Assert.NotNull(adjacency);
+            Assert.Equal(5, adjacency.Shape[0]);
+            Assert.Equal(5, adjacency.Shape[1]);
+            for (int i = 0; i < 5; i++)
+            {
+                for (int j = 0; j < 5; j++)
+                {
+                    Assert.Equal(i == j ? 1.0 : 0.0, adjacency[i, j]);
+                }
+            }
         }
 
         [Fact(Timeout = 120000)]

@@ -338,6 +338,6 @@ File.WriteAllText("aidotnet-config.schema.json", jsonSchema);
 
 ## See Also
 
-- [API Reference](../api/index.md) - Full API documentation
+- [API Reference](./index.md) - Full API documentation
 - [Getting Started](../getting-started/index.md) - Installation and first steps
 - [Tutorials](../tutorials/index.md) - Step-by-step guides

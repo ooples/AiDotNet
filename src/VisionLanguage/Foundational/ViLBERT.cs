@@ -49,10 +49,16 @@ namespace AiDotNet.VisionLanguage.Foundational;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("ViLBERT: Pretraining Task-Agnostic Visiolinguistic Representations for Vision-and-Language Tasks", "https://arxiv.org/abs/1908.02265", Year = 2019, Authors = "Lu et al.")]
+[ResearchPaper(
+    "ViLBERT: Pretraining Task-Agnostic Visiolinguistic Representations for Vision-and-Language Tasks",
+    "https://arxiv.org/abs/1908.02265",
+    Year = 2019,
+    Authors = "Lu et al."
+)]
 public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly ViLBERTOptions _options;
+
     public override ModelOptions GetOptions() => _options;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -61,6 +67,7 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
     private bool _disposed;
     private int _visionLayerEnd;
     private int _textLayerEnd;
+
     // Paper-prescribed task-head indices in the Layers list (Lu et al. 2019
     // §4: "we add a small classifier on top" — for every downstream task the
     // paper appends a pooled-token → Dense projection to the output size
@@ -69,9 +76,15 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
     // <see cref="ForwardForTraining"/> can apply the stream-specific head
     // after dual-stream routing without the task head participating in the
     // fusion chain.
-    private int _visionHeadStart; private int _textHeadStart;
+    private int _visionHeadStart;
+    private int _textHeadStart;
 
-    public ViLBERT(NeuralNetworkArchitecture<T> architecture, string modelPath, ViLBERTOptions? options = null) : base(architecture)
+    public ViLBERT(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        ViLBERTOptions? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new ViLBERTOptions();
         SyncImageSizeWithArchitecture();
@@ -89,7 +102,12 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
         InitializeLayers();
     }
 
-    public ViLBERT(NeuralNetworkArchitecture<T> architecture, ViLBERTOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    public ViLBERT(
+        NeuralNetworkArchitecture<T> architecture,
+        ViLBERTOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new ViLBERTOptions();
         SyncImageSizeWithArchitecture();
@@ -106,18 +124,25 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
     {
         int h = Architecture.InputHeight;
         int w = Architecture.InputWidth;
-        if (h > 0 && w > 0 && h == w) _options.ImageSize = h;
+        if (h > 0 && w > 0 && h == w)
+            _options.ImageSize = h;
     }
 
-    public int EmbeddingDimension => _options.FusionDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int FusionEmbeddingDim => _options.FusionDim; public int MaxSequenceLength => _options.MaxSequenceLength;
+    public int EmbeddingDimension => _options.FusionDim;
+    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageChannels => 3;
+    public int FusionEmbeddingDim => _options.FusionDim;
+    public int MaxSequenceLength => _options.MaxSequenceLength;
 
     public Tensor<T> EncodeImage(Tensor<T> image)
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p));
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(p));
         var c = p;
-        for (int i = 0; i < _visionLayerEnd; i++) c = Layers[i].Forward(c);
+        for (int i = 0; i < _visionLayerEnd; i++)
+            c = Layers[i].Forward(c);
         return L2Normalize(c);
     }
 
@@ -125,20 +150,24 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(p);
 
         // Encode vision through vision stream
         var visionOut = p;
-        for (int i = 0; i < _visionLayerEnd; i++) visionOut = Layers[i].Forward(visionOut);
+        for (int i = 0; i < _visionLayerEnd; i++)
+            visionOut = Layers[i].Forward(visionOut);
 
         // Encode text through text stream
         var textTokens = TokenizeText(text);
         var textOut = textTokens;
-        for (int i = _visionLayerEnd; i < _textLayerEnd; i++) textOut = Layers[i].Forward(textOut);
+        for (int i = _visionLayerEnd; i < _textLayerEnd; i++)
+            textOut = Layers[i].Forward(textOut);
 
         // Concatenate vision and text representations for co-attention fusion
         var fused = visionOut.ConcatenateTensors(textOut);
-        for (int i = _textLayerEnd; i < Layers.Count; i++) fused = Layers[i].Forward(fused);
+        for (int i = _textLayerEnd; i < Layers.Count; i++)
+            fused = Layers[i].Forward(fused);
         return fused;
     }
 
@@ -154,7 +183,8 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
         else
         {
             var c = textTokens;
-            for (int i = _visionLayerEnd; i < _textLayerEnd; i++) c = Layers[i].Forward(c);
+            for (int i = _visionLayerEnd; i < _textLayerEnd; i++)
+                c = Layers[i].Forward(c);
             textEmb = L2Normalize(c);
         }
         return CosineSimilarity(imageEmb, textEmb);
@@ -162,7 +192,8 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
@@ -173,10 +204,18 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
         }
         else
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultDualStreamFusionLayers(
-                _options.VisionDim, _options.TextDim, _options.FusionDim,
-                _options.NumVisionLayers, _options.NumTextLayers, _options.NumFusionLayers,
-                _options.NumHeads, _options.DropoutRate));
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultDualStreamFusionLayers(
+                    _options.VisionDim,
+                    _options.TextDim,
+                    _options.FusionDim,
+                    _options.NumVisionLayers,
+                    _options.NumTextLayers,
+                    _options.NumFusionLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate
+                )
+            );
             ComputeDualStreamBoundaries();
 
             // Task heads per Lu et al. 2019 §4: a small classifier sits on
@@ -219,22 +258,29 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
     private static Tensor<T> MeanPoolOverTokens(Tensor<T> input)
     {
         int rank = input.Shape.Length;
-        if (rank < 2) return input;
+        if (rank < 2)
+            return input;
         if (rank == 2)
         {
             // [N, D] -> [D]
             int n = input.Shape[0];
             int d = input.Shape[1];
             var output = new Tensor<T>([d]);
-            T scale = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().FromDouble(1.0 / n);
+            T scale = AiDotNet
+                .Tensors.Helpers.MathHelper.GetNumericOperations<T>()
+                .FromDouble(1.0 / n);
             for (int i = 0; i < d; i++)
             {
                 T sum = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().Zero;
                 for (int j = 0; j < n; j++)
                 {
-                    sum = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().Add(sum, input[j, i]);
+                    sum = AiDotNet
+                        .Tensors.Helpers.MathHelper.GetNumericOperations<T>()
+                        .Add(sum, input[j, i]);
                 }
-                output[i] = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().Multiply(sum, scale);
+                output[i] = AiDotNet
+                    .Tensors.Helpers.MathHelper.GetNumericOperations<T>()
+                    .Multiply(sum, scale);
             }
             return output;
         }
@@ -243,7 +289,9 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
         int nTokens = input.Shape[1];
         int dim = input.Shape[rank - 1];
         var pooled = new Tensor<T>([batch, dim]);
-        T invN = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().FromDouble(1.0 / nTokens);
+        T invN = AiDotNet
+            .Tensors.Helpers.MathHelper.GetNumericOperations<T>()
+            .FromDouble(1.0 / nTokens);
         for (int b = 0; b < batch; b++)
         {
             for (int k = 0; k < dim; k++)
@@ -251,9 +299,13 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
                 T sum = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().Zero;
                 for (int j = 0; j < nTokens; j++)
                 {
-                    sum = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().Add(sum, input[b, j, k]);
+                    sum = AiDotNet
+                        .Tensors.Helpers.MathHelper.GetNumericOperations<T>()
+                        .Add(sum, input[b, j, k]);
                 }
-                pooled[b, k] = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().Multiply(sum, invN);
+                pooled[b, k] = AiDotNet
+                    .Tensors.Helpers.MathHelper.GetNumericOperations<T>()
+                    .Multiply(sum, invN);
             }
         }
         return pooled;
@@ -262,17 +314,24 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
     private void ComputeDualStreamBoundaries()
     {
         int lpb = _options.DropoutRate > 0 ? 6 : 5;
-        _visionLayerEnd = 1 + _options.NumVisionLayers * lpb + (_options.VisionDim != _options.FusionDim ? 1 : 0);
-        _textLayerEnd = _visionLayerEnd + 1 + _options.NumTextLayers * lpb + (_options.TextDim != _options.FusionDim ? 1 : 0);
+        _visionLayerEnd =
+            1 + _options.NumVisionLayers * lpb + (_options.VisionDim != _options.FusionDim ? 1 : 0);
+        _textLayerEnd =
+            _visionLayerEnd
+            + 1
+            + _options.NumTextLayers * lpb
+            + (_options.TextDim != _options.FusionDim ? 1 : 0);
     }
 
     private Tensor<T> TokenizeText(string text)
     {
-        if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized.");
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
         var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
         return tokens;
     }
 
@@ -291,7 +350,8 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
     public override Tensor<T> Predict(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
         using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         SetTrainingMode(false);
         return RunStreamForInput(input);
@@ -314,17 +374,20 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
         if (isImage)
         {
             c = PreprocessImage(c);
-            for (int i = 0; i < _visionLayerEnd; i++) c = Layers[i].Forward(c);
+            for (int i = 0; i < _visionLayerEnd; i++)
+                c = Layers[i].Forward(c);
             ranVisionStream = true;
         }
         else if (isRegionFeatures)
         {
-            for (int i = 0; i < _visionLayerEnd; i++) c = Layers[i].Forward(c);
+            for (int i = 0; i < _visionLayerEnd; i++)
+                c = Layers[i].Forward(c);
             ranVisionStream = true;
         }
         else
         {
-            for (int i = _visionLayerEnd; i < _textLayerEnd; i++) c = Layers[i].Forward(c);
+            for (int i = _visionLayerEnd; i < _textLayerEnd; i++)
+                c = Layers[i].Forward(c);
             ranVisionStream = false;
         }
         // Paper §4: pooled [IMG]/[CLS] → Dense task head → output-size logits.
@@ -340,7 +403,15 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
         }
         return c;
     }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        TrainWithTape(input, expected);
+        SetTrainingMode(false);
+    }
 
     /// <summary>
     /// Same dual-stream routing as <see cref="Predict"/>, applied to the
@@ -371,7 +442,9 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
         bool isRegionFeatures = rank >= 2 && lastDim == _options.VisionDim;
         bool isImage = rank >= 3 && !isRegionFeatures;
         var current = input;
-        int streamStart, streamEnd, headIdx;
+        int streamStart,
+            streamEnd,
+            headIdx;
         if (isImage)
         {
             current = PreprocessImage(current);
@@ -405,13 +478,97 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
         }
         return activations;
     }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "ViLBERT-Native" : "ViLBERT-ONNX", Description = "ViLBERT: Pretraining Task-Agnostic Visiolinguistic Representations (Lu et al., NeurIPS 2019)", FeatureCount = _options.FusionDim, Complexity = _options.NumVisionLayers + _options.NumTextLayers + _options.NumFusionLayers }; m.AdditionalInfo["Architecture"] = "ViLBERT"; m.AdditionalInfo["FusionType"] = _options.FusionType.ToString(); return m; }
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.VisionDim); writer.Write(_options.TextDim); writer.Write(_options.FusionDim); writer.Write(_options.NumVisionLayers); writer.Write(_options.NumTextLayers); writer.Write(_options.NumFusionLayers); writer.Write(_options.NumHeads); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.VisionDim = reader.ReadInt32(); _options.TextDim = reader.ReadInt32(); _options.FusionDim = reader.ReadInt32(); _options.NumVisionLayers = reader.ReadInt32(); _options.NumTextLayers = reader.ReadInt32(); _options.NumFusionLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); if (_useNativeMode) ComputeDualStreamBoundaries(); }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new ViLBERT<T>(Architecture, mp, _options); return new ViLBERT<T>(Architecture, _options); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(ViLBERT<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; if (disposing) { OnnxModel?.Dispose(); } base.Dispose(disposing); }
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "ViLBERT-Native" : "ViLBERT-ONNX",
+            Description =
+                "ViLBERT: Pretraining Task-Agnostic Visiolinguistic Representations (Lu et al., NeurIPS 2019)",
+            FeatureCount = _options.FusionDim,
+            Complexity =
+                _options.NumVisionLayers + _options.NumTextLayers + _options.NumFusionLayers,
+        };
+        m.AdditionalInfo["Architecture"] = "ViLBERT";
+        m.AdditionalInfo["FusionType"] = _options.FusionType.ToString();
+        return m;
+    }
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_useNativeMode);
+        writer.Write(_options.ModelPath ?? string.Empty);
+        writer.Write(_options.ImageSize);
+        writer.Write(_options.VisionDim);
+        writer.Write(_options.TextDim);
+        writer.Write(_options.FusionDim);
+        writer.Write(_options.NumVisionLayers);
+        writer.Write(_options.NumTextLayers);
+        writer.Write(_options.NumFusionLayers);
+        writer.Write(_options.NumHeads);
+    }
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _useNativeMode = reader.ReadBoolean();
+        string mp = reader.ReadString();
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
+        _options.ImageSize = reader.ReadInt32();
+        _options.VisionDim = reader.ReadInt32();
+        _options.TextDim = reader.ReadInt32();
+        _options.FusionDim = reader.ReadInt32();
+        _options.NumVisionLayers = reader.ReadInt32();
+        _options.NumTextLayers = reader.ReadInt32();
+        _options.NumFusionLayers = reader.ReadInt32();
+        _options.NumHeads = reader.ReadInt32();
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        if (_useNativeMode)
+            ComputeDualStreamBoundaries();
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new ViLBERT<T>(Architecture, mp, _options);
+        return new ViLBERT<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(ViLBERT<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        if (disposing)
+        {
+            OnnxModel?.Dispose();
+        }
+        base.Dispose(disposing);
+    }
 }

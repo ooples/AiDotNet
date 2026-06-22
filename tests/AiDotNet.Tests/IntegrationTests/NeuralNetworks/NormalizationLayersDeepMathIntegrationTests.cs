@@ -21,10 +21,9 @@ public class NormalizationLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BatchNorm_Init_GammaIsOnes()
     {
-        // gamma initialized to 1.0 for each feature. Use the eager-init ctor (#1370): a NO-ARG BatchNorm can't
-        // know its feature count, so it lazy-inits gamma/beta to length 0 until the first forward — passing the
-        // feature count up front is the supported way to inspect init values without a forward pass.
-        var bn = new BatchNormalizationLayer<double>(3);
+        // gamma initialized to 1.0 for each feature. The parameterless ctor is LAZY (shape resolves
+        // on first Forward), so init-state assertions need the eager numFeatures ctor.
+        var bn = new BatchNormalizationLayer<double>(numFeatures: 3);
         var gamma = bn.GetGamma();
         Assert.Equal(3, gamma.Length);
         for (int i = 0; i < 3; i++)
@@ -34,8 +33,8 @@ public class NormalizationLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BatchNorm_Init_BetaIsZeros()
     {
-        // beta initialized to 0.0 for each feature (eager-init ctor #1370 — no-arg lazy-inits to length 0)
-        var bn = new BatchNormalizationLayer<double>(3);
+        // beta initialized to 0.0 for each feature (eager ctor — see GammaIsOnes note).
+        var bn = new BatchNormalizationLayer<double>(numFeatures: 3);
         var beta = bn.GetBeta();
         Assert.Equal(3, beta.Length);
         for (int i = 0; i < 3; i++)
@@ -45,7 +44,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BatchNorm_Init_RunningMeanIsZeros()
     {
-        var bn = new BatchNormalizationLayer<double>(3); // eager-init ctor #1370 (no-arg lazy-inits to length 0)
+        var bn = new BatchNormalizationLayer<double>(numFeatures: 3);
         var runningMean = bn.GetRunningMean();
         Assert.Equal(3, runningMean.Length);
         for (int i = 0; i < 3; i++)
@@ -55,7 +54,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BatchNorm_Init_RunningVarianceIsOnes()
     {
-        var bn = new BatchNormalizationLayer<double>(3); // eager-init ctor #1370 (no-arg lazy-inits to length 0)
+        var bn = new BatchNormalizationLayer<double>(numFeatures: 3);
         var runningVar = bn.GetRunningVariance();
         Assert.Equal(3, runningVar.Length);
         for (int i = 0; i < 3; i++)
@@ -85,8 +84,8 @@ public class NormalizationLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BatchNorm_ParameterCount_IsTwiceFeatureSize()
     {
-        // ParameterCount = gamma.Length + beta.Length = 2 * numFeatures (eager-init ctor #1370; 5 features → 10)
-        var bn = new BatchNormalizationLayer<double>(5);
+        // ParameterCount = gamma.Length + beta.Length = 2 * numFeatures
+        var bn = new BatchNormalizationLayer<double>(numFeatures: 5);
         Assert.Equal(10, (int)bn.ParameterCount);
     }
 
@@ -247,7 +246,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BatchNorm_ZeroInitGamma_SetsGammaToZero()
     {
-        var bn = new BatchNormalizationLayer<double>(3); // eager-init ctor #1370 (no-arg lazy-inits to length 0)
+        var bn = new BatchNormalizationLayer<double>(numFeatures: 3);
         bn.ZeroInitGamma();
 
         var gamma = bn.GetGamma();
@@ -356,9 +355,9 @@ public class NormalizationLayersDeepMathIntegrationTests
     public async Task BatchNorm_CustomEpsilon_AffectsScale()
     {
         // With large epsilon, scale = gamma / sqrt(runningVar + eps)
-        // eps=1.0: scale = 1 / sqrt(1 + 1) = 1/sqrt(2). The test must actually SET the custom epsilon (the no-arg
-        // default is LargeEpsilon=1e-5); size is lazy-inferred from the [1,1] forward input.
-        var bn = new BatchNormalizationLayer<double>(epsilon: 1.0);
+        // eps=1.0: scale = 1 / sqrt(1 + 1) = 1/sqrt(2). The test math assumes eps=1.0, so it
+        // must actually be passed (the default is 1e-5).
+        var bn = new BatchNormalizationLayer<double>(numFeatures: 1, epsilon: 1.0);
         bn.SetTrainingMode(false);
 
         var input = new Tensor<double>(new[] { 1, 1 }, new Vector<double>(new double[] { 4.0 }));
@@ -783,9 +782,9 @@ public class NormalizationLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BatchNorm_CustomMomentum_RunningStats()
     {
-        // momentum=0.5: runningMean = 0.5*old + 0.5*batch. The test must actually SET the custom momentum (the
-        // no-arg default is 0.9); size is lazy-inferred from the [2,1] forward input.
-        var bn = new BatchNormalizationLayer<double>(momentum: 0.5);
+        // momentum=0.5: runningMean = momentum*old + (1-momentum)*batch = 0.5*0 + 0.5*6 = 3.
+        // The test math assumes momentum=0.5, so it must actually be passed (the default is 0.9).
+        var bn = new BatchNormalizationLayer<double>(numFeatures: 1, momentum: 0.5);
         bn.SetTrainingMode(true);
 
         // batchMean = (4 + 8) / 2 = 6

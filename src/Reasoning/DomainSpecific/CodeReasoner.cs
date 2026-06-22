@@ -1,4 +1,6 @@
 using System.Linq;
+using AiDotNet.Agentic.Models;
+using AiDotNet.Agentic.Tools;
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.Reasoning.Strategies;
@@ -58,7 +60,7 @@ namespace AiDotNet.Reasoning.DomainSpecific;
 [ResearchPaper("Evaluating Large Language Models Trained on Code", "https://doi.org/10.48550/arXiv.2107.03374", Year = 2021, Authors = "Mark Chen, Jerry Tworek, Heewoo Jun, Qiming Yuan, Henrique Ponde de Oliveira Pinto, Jared Kaplan, Harri Edwards, Yuri Burda, Nicholas Joseph, Greg Brockman, Alex Ray, Raul Puri, Gretchen Krueger, Michael Petrov, Heidy Khlaaf, Girish Sastry, Pamela Mishkin, Brooke Chan, Scott Gray, Nick Ryder, Mikhail Pavlov, Alethea Power, Lukasz Kaiser, Mohammad Bavarian, Clemens Winter, Philippe Tillet, Felipe Petroski Such, Dave Cummings, Matthias Plappert, Fotios Chantzis, Elizabeth Barnes, Ariel Herbert-Voss, William Hebgen Guss, Alex Nichol, Alex Paino, Nikolas Tezak, Jie Tang, Igor Babuschkin, Suchir Balaji, Shantanu Jain, William Saunders, Christopher Hesse, Andrew N. Carr, Jan Leike, Josh Achiam, Vedant Misra, Evan Morikawa, Alec Radford, Matthew Knight, Miles Brundage, Mira Murati, Katie Mayer, Peter Welinder, Bob McGrew, Dario Amodei, Sam McCandlish, Ilya Sutskever, Wojciech Zaremba")]
 public class CodeReasoner<T> : IDomainReasoner<T>
 {
-    private readonly IChatModel<T> _chatModel;
+    private readonly IChatClient<T> _chatModel;
     private readonly ChainOfThoughtStrategy<T> _cotStrategy;
     private readonly TreeOfThoughtsStrategy<T> _totStrategy;
     private readonly CriticModel<T> _criticModel;
@@ -67,9 +69,21 @@ public class CodeReasoner<T> : IDomainReasoner<T>
     /// <summary>
     /// Initializes a new instance of the <see cref="CodeReasoner{T}"/> class.
     /// </summary>
-    /// <param name="chatModel">The chat model used for reasoning.</param>
+    /// <param name="chatModel">The chat client used for reasoning.</param>
     /// <param name="tools">Optional code-related tools (code execution, linters, etc.).</param>
-    public CodeReasoner(IChatModel<T> chatModel, IEnumerable<ITool>? tools = null)
+    /// <remarks>
+    /// <para>
+    /// <b>Breaking change (PR #1551, "agentic phase 2"):</b> the first parameter
+    /// type changed from <c>IChatModel&lt;T&gt;</c> to <c>IChatClient&lt;T&gt;</c>
+    /// and the tools parameter from <c>IEnumerable&lt;ITool&gt;?</c> to
+    /// <c>IEnumerable&lt;IAgentTool&gt;?</c>. Callers must migrate accordingly.
+    /// Per repository conventions we don't keep <c>[Obsolete]</c> shims for
+    /// agentic surface — see release notes for the migration map. Same change
+    /// applies to <c>LogicalReasoner&lt;T&gt;</c>, <c>MathematicalReasoner&lt;T&gt;</c>,
+    /// and <c>ScientificReasoner&lt;T&gt;</c>.
+    /// </para>
+    /// </remarks>
+    public CodeReasoner(IChatClient<T> chatModel, IEnumerable<IAgentTool>? tools = null)
     {
         Guard.NotNull(chatModel);
         _chatModel = chatModel;

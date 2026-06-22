@@ -99,26 +99,22 @@ public class SpecializedBlocksIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BottleneckBlock_ForwardPass_ProducesValidOutput()
     {
-        // Arrange - Bottleneck uses 1x1 -> 3x3 -> 1x1 pattern with expansion.
-        // Ctor is BottleneckBlock(baseChannels, stride=1): baseChannels is the
-        // bottleneck width and output channels = baseChannels * Expansion(4);
-        // inChannels is resolved lazily from the input at first forward. The
-        // earlier (inChannels, outChannels) call read the 2nd arg as stride=64,
-        // collapsing the 8x8 spatial map to 1x1. Use base=outChannels, stride=1
-        // (mirrors the sibling WithDownsample test's BottleneckBlock(base, stride)).
+        // Arrange - Bottleneck uses 1x1 -> 3x3 -> 1x1 pattern with expansion. The ctor is
+        // (baseChannels, stride): input channels resolve lazily on first Forward, and output
+        // channels = baseChannels * Expansion(4). Passing (in, out) here set stride=64.
         int inChannels = 64;
-        int outChannels = 64;
+        int baseChannels = 64;
         int height = 8;
         int width = 8;
-        var block = new BottleneckBlock<float>(baseChannels: outChannels);
+        var block = new BottleneckBlock<float>(baseChannels);
         var input = CreateRandomTensor<float>([2, inChannels, height, width]);
 
         // Act
         var output = block.Forward(input);
 
-        // Assert - output channels = outChannels * expansion (4)
+        // Assert - output channels = baseChannels * expansion (4)
         Assert.Equal(2, output.Shape[0]); // batch
-        Assert.Equal(outChannels * 4, output.Shape[1]); // channels * expansion
+        Assert.Equal(baseChannels * 4, output.Shape[1]); // channels * expansion
         Assert.Equal(height, output.Shape[2]);
         Assert.Equal(width, output.Shape[3]);
         Assert.False(ContainsNaN(output));
@@ -152,10 +148,10 @@ public class SpecializedBlocksIntegrationTests
     {
         // Arrange
         int inChannels = 64;
-        int outChannels = 64;
+        int baseChannels = 64;
         int height = 8;
         int width = 8;
-        var original = new BottleneckBlock<float>(inChannels, outChannels);
+        var original = new BottleneckBlock<float>(baseChannels);
         var input = CreateRandomTensor<float>([2, inChannels, height, width]);
         var originalOutput = original.Forward(input);
 
@@ -171,12 +167,12 @@ public class SpecializedBlocksIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BottleneckBlock_ExpansionFactor_CorrectlyApplied()
     {
-        // Arrange - default expansion is 4. BottleneckBlock's ctor is (baseChannels, stride=1, …) — output channels
-        // = baseChannels * Expansion(4). (The earlier (64, 32) call mis-read the 2nd arg as outChannels when it is
-        // actually STRIDE, so baseChannels=64 → 256.) Input may have a different channel count (64) than the block's
-        // base (32); the downsample shortcut handles the 64→128 mismatch.
+        // Arrange - default expansion is 4. BottleneckBlock is parameterized by its base
+        // width (PyTorch torchvision Bottleneck(inplanes, planes): output = planes * 4); the
+        // ctor signature is (baseChannels, stride) and input channels resolve LAZILY on first
+        // Forward, so passing (inChannels, outChannels) would mis-bind outChannels to stride.
         int inChannels = 64;
-        int baseChannels = 32;
+        int baseChannels = 32; // base width -> output = baseChannels * 4 = 128
         int height = 8;
         int width = 8;
         var block = new BottleneckBlock<float>(baseChannels);
@@ -329,18 +325,23 @@ public class SpecializedBlocksIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DenseBlock_OutputChannels_CorrectlyCalculated()
     {
-        // Arrange
+        // Arrange - DenseBlock ctor only takes numLayers + growthRate; the
+        // inputChannels component of OutputChannels resolves from the first
+        // input.Shape (see DenseBlock.OnFirstForward).
         int inputChannels = 32;
         int numLayers = 6;
         int growthRate = 16;
         int height = 8;
         int width = 8;
         var block = new DenseBlock<float>(numLayers, growthRate);
-        // DenseBlock infers its input-channel count lazily on first forward, so OutputChannels reads -1 until then.
-        // Run one forward with a [1, inputChannels, H, W] tensor to resolve it (OutputChannels = in + layers*growth).
-        block.Forward(CreateRandomTensor<float>([1, inputChannels, height, width]));
 
-        // Assert - verify property calculation
+        // OutputChannels reports the documented lazy sentinel until the first
+        // Forward reveals the input channel count.
+        Assert.Equal(-1, block.OutputChannels);
+        var input = CreateRandomTensor<float>([1, inputChannels, height, width]);
+        block.Forward(input);
+
+        // Assert - DenseNet concatenates the input with each layer's growth-rate output.
         Assert.Equal(inputChannels + numLayers * growthRate, block.OutputChannels);
         Assert.Equal(numLayers, block.NumLayers);
         Assert.Equal(growthRate, block.GrowthRate);

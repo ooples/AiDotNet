@@ -201,7 +201,7 @@ public class ToonCrafter<T> : FrameInterpolationBase<T>
                 { "GuidanceScale", _options.GuidanceScale },
                 { "Complexity", _options.NumDiffusionSteps * _options.NumResBlocks }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

@@ -374,7 +374,16 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
             var targetQ = new Tensor<T>([batchCount, 1]);
             for (int i = 0; i < batchCount; i++)
             {
-                var (nextAction, nextLogProb) = SampleAction(batch[i].NextState, false);
+                // SampleAction expects the policy network's output (mean+log_std
+                // pair of length 2*ActionSize), not a raw state vector. Forward
+                // the next state through the policy network first — passing the
+                // state directly indexed past its tail and raised
+                // ArgumentOutOfRangeException for [ActionSize + i].
+                var nextStateTensor = Tensor<T>.FromVector(batch[i].NextState);
+                var nextPolicyOutput = _policyNetwork.Predict(nextStateTensor).ToVector();
+                // Stochastic branch (training: true) so nextLogProb is the real log π(a'|s');
+                // the SAC critic target needs the entropy term y = r + γ(minQ' − α·nextLogProb).
+                var (nextAction, nextLogProb) = SampleAction(nextPolicyOutput, training: true);
                 var nextSA = ConcatenateStateAction(batch[i].NextState, nextAction);
                 var nextSATensor = Tensor<T>.FromVector(nextSA, [1, stateSize + actionSize]);
                 var q1Next = _q1TargetNetwork.Predict(nextSATensor).ToVector()[0];
@@ -397,9 +406,14 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
             var trainableActor = (NeuralNetworkBase<T>)_policyNetwork;
             T policyLoss = trainableActor.TrainWithCustomLoss(batchStates, actorOutput =>
             {
-                // actorOutput = [batchCount, actionSize*2] for continuous = [means, logStds]
+                // actorOutput = [batchCount, actionSize*2] for continuous = [means, logStds].
+                // TensorSlice takes (start, length) — length on axis 1 must be
+                // actionSize for the logStds half, not actionSize*2 (which is
+                // the FULL output width and would over-slice past the tensor's
+                // upper bound, throwing "Slice length 2*actionSize starting at
+                // actionSize exceeds axis 1 size 2*actionSize").
                 var means = Engine.TensorSlice(actorOutput, [0, 0], [batchCount, actionSize]);
-                var logStds = Engine.TensorSlice(actorOutput, [0, actionSize], [batchCount, actionSize * 2]);
+                var logStds = Engine.TensorSlice(actorOutput, [0, actionSize], [batchCount, actionSize]);
 
                 // Compute log-probabilities via engine ops
                 // Sample actions from policy for reparameterization

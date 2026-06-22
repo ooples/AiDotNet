@@ -6,7 +6,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class GraphGenerationModelTests : GraphNNModelTestBase
+public class GraphGenerationModelTests : GraphNNModelTestBase<float>
 {
     protected override int[] InputShape => [10, 16];
     protected override int[] OutputShape => [10, 10];
@@ -72,7 +72,7 @@ public class GraphGenerationModelTests : GraphNNModelTestBase
     /// arbitrarily low, leaving an unreachable MSE floor that swamps the
     /// real training signal. Issue #1332 cluster 6.
     /// </summary>
-    protected override Tensor<double> CreateRandomTargetTensor(int[] shape, System.Random rng)
+    protected override Tensor<float> CreateRandomTargetTensor(int[] shape, System.Random rng)
     {
         var target = base.CreateRandomTargetTensor(shape, rng);
         if (target.Rank >= 2)
@@ -88,12 +88,12 @@ public class GraphGenerationModelTests : GraphNNModelTestBase
             {
                 for (int j = i + 1; j < n; j++)
                 {
-                    double v = target[i, j];
+                    var v = target[i, j];
                     target[j, i] = v;
                 }
             }
             for (int i = 0; i < n; i++)
-                target[i, i] = 1.0;
+                target[i, i] = 1.0f;
         }
         return target;
     }
@@ -113,12 +113,12 @@ public class GraphGenerationModelTests : GraphNNModelTestBase
     /// tests received the LOSER's cached params — making the static cache
     /// non-deterministic across runs. Issue #1332 cluster 6.
     /// </summary>
-    private static Vector<double>? _savedParams;
+    private static Vector<float>? _savedParams;
     private static readonly object _savedParamsLock = new();
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
+    protected override INeuralNetworkModel<float> CreateNetwork()
     {
-        var network = new GraphGenerationModel<double>(inputFeatures: 16, maxNodes: 10);
+        var network = new GraphGenerationModel<float>(inputFeatures: 16, maxNodes: 10);
         lock (_savedParamsLock)
         {
             if (_savedParams == null)

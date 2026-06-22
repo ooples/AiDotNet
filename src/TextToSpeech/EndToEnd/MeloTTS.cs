@@ -178,7 +178,7 @@ public class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        var c = input;
+        SetTrainingMode(false); var c = input;
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
@@ -223,7 +223,8 @@ public class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         {
             Name = _useNativeMode ? "MeloTTS-Native" : "MeloTTS-ONNX",
             Description = "MeloTTS: High-quality Multilingual TTS (MyShell, 2024)",
-            FeatureCount = _options.HiddenDim
+            FeatureCount = _options.HiddenDim,
+            AdditionalInfo = new Dictionary<string, object> { ["HiddenDim"] = _options.HiddenDim, ["Mode"] = _useNativeMode ? "Native" : "ONNX" }
         };
     }
 

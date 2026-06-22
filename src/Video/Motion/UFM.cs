@@ -130,6 +130,19 @@ public class UFM<T> : OpticalFlowBase<T>
             Layers.Add(_outputConv);
     }
 
+    /// <summary>
+    /// UFM consumes two RGB frames concatenated channel-wise — 2 ×
+    /// Architecture.InputDepth = 6 channels — but Architecture.InputDepth
+    /// itself reports the SINGLE-FRAME count (3) so it matches the
+    /// architecture's per-frame metadata. Returning null suppresses the
+    /// base class's ResolveLazyLayerShapes pre-walk, which would size the
+    /// first ConvolutionalLayer (`_featureExtract`) for depth 3 and then
+    /// every real Train()/Predict() with the [1, 6, H, W] concat would
+    /// fail with "Expected input depth 3, but got 6". Same root-cause fix
+    /// as MisGAN / AutoDiffTabGenerator / GOGGLE / MGTSD.
+    /// </summary>
+    protected override int[]? TryGetArchitectureInputShape() => null;
+
     /// <inheritdoc/>
     protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
     {
@@ -234,7 +247,7 @@ public class UFM<T> : OpticalFlowBase<T>
                 { "NumFeatures", _numFeatures },
                 { "NumLayers", _numLayers }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 
@@ -250,6 +263,38 @@ public class UFM<T> : OpticalFlowBase<T>
     {
         _numFeatures = reader.ReadInt32();
         _numLayers = reader.ReadInt32();
+
+        // Reconnect the typed field references (_featureExtract,
+        // _processingBlocks, _outputConv) to the conv layers the base
+        // class deserialized into the Layers collection. Without this
+        // rewire, the freshly-constructed clone instance keeps pointing
+        // its typed fields at the UNTRAINED conv layers from its own
+        // InitializeNativeLayers call, while the trained weights live in
+        // Layers[0..end] — and EstimateFlow's forward pass uses the
+        // typed fields directly (not the Layers collection), so the
+        // clone predicts as if untrained. InitializeLayers (called from
+        // the ctor) emits the layers in stable order
+        // [_featureExtract, _processingBlocks[0..N-1], _outputConv], so
+        // we read them back in the same positions. Same fix pattern as
+        // GOGGLEGenerator.DeserializeNetworkSpecificData.
+        int expected = 1 + _numLayers + 1;
+        // Require EXACT count: the rebind reads layers at fixed positions
+        // [_featureExtract=0, _processingBlocks=1..N, _outputConv=1+N], so an
+        // unexpected layer count means the deserialized graph doesn't match this
+        // configuration and silently rebinding would point fields at wrong convs.
+        if (Layers.Count == expected)
+        {
+            if (Layers[0] is ConvolutionalLayer<T> fe) _featureExtract = fe;
+            _processingBlocks.Clear();
+            for (int i = 0; i < _numLayers; i++)
+            {
+                if (Layers[1 + i] is ConvolutionalLayer<T> block)
+                    _processingBlocks.Add(block);
+            }
+            // _outputConv is at its produced position 1 + _numLayers (not Count-1,
+            // which would pick the wrong layer if the count ever differs).
+            if (Layers[1 + _numLayers] is ConvolutionalLayer<T> oc) _outputConv = oc;
+        }
     }
 
     /// <inheritdoc/>

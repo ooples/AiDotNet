@@ -59,10 +59,16 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("BiomedCLIP: A Multimodal Biomedical Foundation Model Pretrained from Fifteen Million Scientific Image-Text Pairs", "https://arxiv.org/abs/2303.00915", Year = 2023, Authors = "Zhang et al.")]
+[ResearchPaper(
+    "BiomedCLIP: A Multimodal Biomedical Foundation Model Pretrained from Fifteen Million Scientific Image-Text Pairs",
+    "https://arxiv.org/abs/2303.00915",
+    Year = 2023,
+    Authors = "Zhang et al."
+)]
 public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly BiomedCLIPOptions _options;
+
     public override ModelOptions GetOptions() => _options;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -79,7 +85,9 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
     public BiomedCLIP(
         NeuralNetworkArchitecture<T> architecture,
         string imageEncoderModelPath,
-        BiomedCLIPOptions? options = null) : base(architecture)
+        BiomedCLIPOptions? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new BiomedCLIPOptions();
         SyncImageSizeWithArchitecture();
@@ -88,9 +96,15 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.VisionEmbeddingDim;
         if (string.IsNullOrWhiteSpace(imageEncoderModelPath))
-            throw new ArgumentException("Image encoder model path cannot be null or empty.", nameof(imageEncoderModelPath));
+            throw new ArgumentException(
+                "Image encoder model path cannot be null or empty.",
+                nameof(imageEncoderModelPath)
+            );
         if (!File.Exists(imageEncoderModelPath))
-            throw new FileNotFoundException($"ONNX model not found: {imageEncoderModelPath}", imageEncoderModelPath);
+            throw new FileNotFoundException(
+                $"ONNX model not found: {imageEncoderModelPath}",
+                imageEncoderModelPath
+            );
         _options.ImageEncoderModelPath = imageEncoderModelPath;
         OnnxImageEncoder = new OnnxModel<T>(imageEncoderModelPath, _options.OnnxOptions);
         if (_options.TextEncoderModelPath is { } tp && !string.IsNullOrEmpty(tp))
@@ -106,7 +120,9 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
     public BiomedCLIP(
         NeuralNetworkArchitecture<T> architecture,
         BiomedCLIPOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new BiomedCLIPOptions();
         SyncImageSizeWithArchitecture();
@@ -120,16 +136,19 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
         // stabilize. Paper-faithful lr=5e-4 with AdamW's decoupled weight
         // decay keeps the trajectory monotonically decreasing in MSE under
         // the test framework's default fixed-target regression contract.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = 5e-4,
-                Beta1 = 0.9,
-                Beta2 = 0.98,
-                Epsilon = 1e-6,
-                WeightDecay = 0.2,
-            });
+        _optimizer =
+            optimizer
+            ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = 5e-4,
+                    Beta1 = 0.9,
+                    Beta2 = 0.98,
+                    Epsilon = 1e-6,
+                    WeightDecay = 0.2,
+                }
+            );
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.VisionEmbeddingDim;
@@ -147,7 +166,8 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
     {
         int h = Architecture.InputHeight;
         int w = Architecture.InputWidth;
-        if (h > 0 && w > 0 && h == w) _options.ImageSize = h;
+        if (h > 0 && w > 0 && h == w)
+            _options.ImageSize = h;
     }
 
     public int EmbeddingDimension => _options.VisionEmbeddingDim;
@@ -167,7 +187,8 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
             if (OnnxImageEncoder is null)
                 throw new InvalidOperationException(
                     "Image encoding in ONNX mode requires a configured image encoder model path. "
-                    + "Provide one via the ONNX-mode constructor or BiomedCLIPOptions.ImageEncoderModelPath.");
+                        + "Provide one via the ONNX-mode constructor or BiomedCLIPOptions.ImageEncoderModelPath."
+                );
             return L2Normalize(OnnxImageEncoder.Run(p));
         }
         return L2Normalize(ForwardVisionEncoder(p));
@@ -188,7 +209,8 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
             if (OnnxTextEncoder is null)
                 throw new InvalidOperationException(
                     "Text encoding in ONNX mode requires a configured text encoder model path. "
-                    + "Set BiomedCLIPOptions.TextEncoderModelPath before constructing the model.");
+                        + "Set BiomedCLIPOptions.TextEncoderModelPath before constructing the model."
+                );
             return L2Normalize(OnnxTextEncoder.Run(t));
         }
         return L2Normalize(ForwardTextEncoder(t));
@@ -197,7 +219,8 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
     public Tensor<T>[] EncodeTexts(string[] texts)
     {
         var e = new Tensor<T>[texts.Length];
-        for (int i = 0; i < texts.Length; i++) e[i] = EncodeText(texts[i]);
+        for (int i = 0; i < texts.Length; i++)
+            e[i] = EncodeText(texts[i]);
         return e;
     }
 
@@ -214,13 +237,15 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
             logits[i] = NumOps.FromDouble(NumOps.ToDouble(CosineSimilarity(ie, te[i])) / temp);
         var probs = Softmax(logits);
         var r = new Dictionary<string, T>();
-        for (int i = 0; i < labels.Length; i++) r[labels[i]] = probs[i];
+        for (int i = 0; i < labels.Length; i++)
+            r[labels[i]] = probs[i];
         return r;
     }
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             // Caller-supplied layer graph: keep historic single-list behaviour.
@@ -240,10 +265,13 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
         // paper-faithful 224² architecture both produce the same
         // downstream token rank.
         int patchSize = System.Math.Max(1, _options.ImageSize / 16);
-        Layers.Add(new PatchEmbeddingLayer<T>(
-            patchSize: patchSize,
-            embeddingDim: _options.VisionEmbeddingDim,
-            expectedInputChannels: 3));
+        Layers.Add(
+            new PatchEmbeddingLayer<T>(
+                patchSize: patchSize,
+                embeddingDim: _options.VisionEmbeddingDim,
+                expectedInputChannels: 3
+            )
+        );
 
         // Split OpenCLIP factory output: vision portion → Layers, text → _textEncoderLayers.
         // Block size = 5 layers (or 6 with dropout). Vision block count = 2 + N×blockSize
@@ -258,12 +286,15 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
             numTextLayers: _options.NumTextLayers,
             numVisionHeads: _options.NumVisionHeads,
             numTextHeads: _options.NumTextHeads,
-            dropoutRate: _options.DropoutRate);
+            dropoutRate: _options.DropoutRate
+        );
         int idx = 0;
         foreach (var layer in openClip)
         {
-            if (idx < visionLayerCount) Layers.Add(layer);
-            else _textEncoderLayers.Add(layer);
+            if (idx < visionLayerCount)
+                Layers.Add(layer);
+            else
+                _textEncoderLayers.Add(layer);
             idx++;
         }
     }
@@ -283,16 +314,19 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
         // OnnxImageEncoder. Skipping PreprocessImage on the ONNX branch makes
         // the two paths produce different mean/std-offset inputs to the model.
         var current = PreprocessImage(input);
-        if (IsOnnxMode && OnnxImageEncoder is not null) return OnnxImageEncoder.Run(current);
+        if (IsOnnxMode && OnnxImageEncoder is not null)
+            return OnnxImageEncoder.Run(current);
         SetTrainingMode(false);
-        foreach (var l in Layers) current = l.Forward(current);
+        foreach (var l in Layers)
+            current = l.Forward(current);
         return current;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
         try
         {
@@ -323,12 +357,14 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
     protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
     {
         foreach (var layer in _textEncoderLayers)
-            if (layer is LayerBase<T> lb) yield return lb;
+            if (layer is LayerBase<T> lb)
+                yield return lb;
     }
 
     public override void UpdateParameters(Vector<T> parameters)
     {
-        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
         int idx = 0;
         foreach (var l in Layers)
         {
@@ -338,7 +374,8 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
         }
     }
 
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
@@ -347,9 +384,10 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
         var m = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "BiomedCLIP-Native" : "BiomedCLIP-ONNX",
-            Description = "BiomedCLIP: A Multimodal Biomedical Foundation Model (Zhang et al., 2023)",
+            Description =
+                "BiomedCLIP: A Multimodal Biomedical Foundation Model (Zhang et al., 2023)",
             FeatureCount = _options.ProjectionDim,
-            Complexity = _options.NumVisionLayers + _options.NumTextLayers
+            Complexity = _options.NumVisionLayers + _options.NumTextLayers,
         };
         m.AdditionalInfo["Architecture"] = "BiomedCLIP";
         m.AdditionalInfo["Domain"] = _options.Domain.ToString();
@@ -375,9 +413,11 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
     {
         _useNativeMode = reader.ReadBoolean();
         string ip = reader.ReadString();
-        if (!string.IsNullOrEmpty(ip)) _options.ImageEncoderModelPath = ip;
+        if (!string.IsNullOrEmpty(ip))
+            _options.ImageEncoderModelPath = ip;
         string tp = reader.ReadString();
-        if (!string.IsNullOrEmpty(tp)) _options.TextEncoderModelPath = tp;
+        if (!string.IsNullOrEmpty(tp))
+            _options.TextEncoderModelPath = tp;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionEmbeddingDim = reader.ReadInt32();
         _options.TextEmbeddingDim = reader.ReadInt32();
@@ -392,18 +432,24 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        if (!_useNativeMode && _options.ImageEncoderModelPath is { } mp && !string.IsNullOrEmpty(mp))
+        if (
+            !_useNativeMode
+            && _options.ImageEncoderModelPath is { } mp
+            && !string.IsNullOrEmpty(mp)
+        )
             return new BiomedCLIP<T>(Architecture, mp, _options);
         return new BiomedCLIP<T>(Architecture, _options);
     }
 
     private Tensor<T> TokenizeText(string text)
     {
-        if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized.");
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
         var enc = _tokenizer.Encode(text);
         int sl = Math.Min(enc.TokenIds.Count, _options.MaxSequenceLength);
         var tk = new Tensor<T>([sl]);
-        for (int i = 0; i < sl; i++) tk[i] = NumOps.FromDouble(enc.TokenIds[i]);
+        for (int i = 0; i < sl; i++)
+            tk[i] = NumOps.FromDouble(enc.TokenIds[i]);
         return tk;
     }
 
@@ -416,7 +462,8 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
     private Tensor<T> ForwardVisionEncoder(Tensor<T> input)
     {
         var c = input;
-        foreach (var layer in Layers) c = layer.Forward(c);
+        foreach (var layer in Layers)
+            c = layer.Forward(c);
         return c;
     }
 
@@ -427,18 +474,21 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
     private Tensor<T> ForwardTextEncoder(Tensor<T> tokens)
     {
         var c = tokens;
-        foreach (var layer in _textEncoderLayers) c = layer.Forward(c);
+        foreach (var layer in _textEncoderLayers)
+            c = layer.Forward(c);
         return c;
     }
 
     private void ThrowIfDisposed()
     {
-        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(BiomedCLIP<T>));
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(BiomedCLIP<T>));
     }
 
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         if (disposing)
         {

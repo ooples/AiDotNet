@@ -395,17 +395,8 @@ public class Mochi1Model<T> : VideoDiffusionModelBase<T>
     public override IDiffusionModel<T> Clone()
     {
         EnsureInitialized();
-        var clonedDit = new DiTNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS,
-            hiddenSize: HIDDEN_DIM,
-            numLayers: NUM_LAYERS,
-            numHeads: NUM_HEADS,
-            patchSize: PATCH_SIZE,
-            contextDim: CONTEXT_DIM);
-        clonedDit.SetParameters(_dit.GetParameters());
-
-        return new Mochi1Model<T>(
-            dit: clonedDit,
+                return new Mochi1Model<T>(
+            dit: (DiTNoisePredictor<T>)_dit.Clone(),
             temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
             conditioner: _conditioner,
             defaultNumFrames: DefaultNumFrames,

@@ -42,6 +42,10 @@ public class HeInitializationStrategy<T> : InitializationStrategyBase<T>
     }
 
     /// <inheritdoc />
+    public override IInitializationStrategy<T> WithSeededRandom(Random rng)
+        => new HeInitializationStrategy<T>(rng, _useNormal);
+
+    /// <inheritdoc />
     public override bool IsLazy => false;
 
     /// <inheritdoc />

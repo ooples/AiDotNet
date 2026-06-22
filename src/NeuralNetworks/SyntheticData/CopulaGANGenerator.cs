@@ -82,7 +82,13 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 public class CopulaGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly CopulaGANOptions<T> _options;
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    // Separate generator/discriminator optimizers — see CTGANGenerator for the
+    // full rationale: AdamOptimizer keeps one flat (_m,_v) moment buffer sized to
+    // the parameter count and resets the timestep when that count changes, so a
+    // single optimizer shared across G and D (different param counts) wiped the
+    // moments every alternating Step and diverged worse with more epochs.
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _generatorOptimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _discriminatorOptimizer;
     private ILossFunction<T> _lossFunction;
 
     // Synthetic tabular data infrastructure
@@ -187,7 +193,17 @@ public class CopulaGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
     {
         _options = options ?? new CopulaGANOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        AdamOptimizer<T, Tensor<T>, Tensor<T>> MakeAdam() =>
+            new(this, new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = 0.5,
+                Beta2 = 0.9,
+                UseAdaptiveLearningRate = false,
+                UseAMSGrad = false,
+            });
+        _generatorOptimizer = optimizer ?? MakeAdam();
+        _discriminatorOptimizer = MakeAdam();
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
@@ -346,27 +362,18 @@ public class CopulaGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Forward pass through generator
-        Tensor<T> prediction = Predict(input);
-
-        // Calculate loss
-        LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-        // Calculate error gradient
-        Tensor<T> error = prediction.Subtract(expectedOutput);
-
-        // Backpropagate error through generator
-
-        // Update generator parameters
-        UpdateNetworkParameters();
-    }
-
-    /// <summary>
-    /// Updates the parameters of all layers in the network based on computed gradients.
-    /// </summary>
-    private void UpdateNetworkParameters()
-    {
-        _optimizer.UpdateParameters(Layers);
+        // CopulaGAN is trained adversarially through Fit() / FitAsync (the copula
+        // transform is fit statistically and the GAN is trained with the
+        // alternating critic/generator loop). The NeuralNetworkBase supervised
+        // Train(input, expected) contract does not map onto a GAN's minimax
+        // objective — silently running a forward + loss but skipping every
+        // parameter update would report a misleading "training" loss while
+        // making zero learning progress, which is worse than failing fast.
+        throw new NotSupportedException(
+            "CopulaGAN is trained adversarially; the supervised Train(input, expected) " +
+            "contract does not map onto its minimax objective. Use Fit(IEnumerable<Tensor<T>>) " +
+            "or FitAsync to drive the alternating discriminator/generator loop, which fits " +
+            "the copula transform and runs the WGAN critic + generator updates.");
     }
 
     /// <inheritdoc />
@@ -697,7 +704,7 @@ public class CopulaGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
             discParams, grads, lossValue,
             realPacked, realPacked, ComputeForward, RecomputeLoss,
             parameterBuffer: null);
-        _optimizer.Step(context);
+        _discriminatorOptimizer.Step(context);
     }
 
     /// <summary>
@@ -747,7 +754,7 @@ public class CopulaGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
             genParams, grads, lossValue,
             genInput, genInput, ComputeForward, RecomputeLoss,
             parameterBuffer: null);
-        _optimizer.Step(context);
+        _generatorOptimizer.Step(context);
     }
 
     private (Tensor<T> realPacked, Tensor<T> fakePacked) BuildPackedRealAndFakeBatches(
@@ -1391,7 +1398,7 @@ public class CopulaGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
                 { "GeneratorLayerCount", Layers.Count },
                 { "GeneratorLayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 
@@ -1430,7 +1437,7 @@ public class CopulaGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
         return new CopulaGANGenerator<T>(
             Architecture,
             _options,
-            _optimizer,
+            _generatorOptimizer,
             _lossFunction);
     }
 

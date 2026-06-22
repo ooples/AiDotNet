@@ -277,6 +277,17 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         _middleBlocks = new List<VideoBlock>();
         _decoderBlocks = new List<VideoBlock>();
 
+        // Establish a deterministic per-layer init-seed sequence for the layers built
+        // below. NoisePredictorBase (unlike NeuralNetworkBase) does not call this, so
+        // without it every layer's lazy weight init falls back to the process-shared,
+        // order-dependent RandomHelper.ThreadSafeRandom — making the predictor's
+        // initial weights depend on how much unrelated work ran first. That is the
+        // root of the suite-position-dependent training-invariant flakiness (a model
+        // whose Training_ShouldReducePredictionError passes in isolation fails once
+        // sibling tests have advanced the shared RNG). With a seed the init becomes
+        // reproducible; with seed == null the scope is inert and the existing
+        // non-reproducible production default is preserved.
+        LayerInitializationSeedScope.ResetForModelConstruction(seed);
         InitializeLayers();
     }
 
@@ -299,7 +310,18 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             activation: new IdentityActivation<T>());
 
         // Time embedding MLP — lazy so constructor-time memory stays flat.
-        _timeEmbedMlp1 = LazyDense(_timeEmbeddingDim / 4, _timeEmbeddingDim, new SiLUActivation<T>());
+        // The first projection MUST take the full sinusoidal embedding width that
+        // NoisePredictorBase.GetTimestepEmbedding actually emits — [1, TimeEmbeddingDim]
+        // — not TimeEmbeddingDim/4. The earlier /4 input made the layer's CONSTRUCTION
+        // shape ([TimeEmbeddingDim/4]) disagree with its real forward input
+        // ([TimeEmbeddingDim]); the lazy DenseLayer then silently re-resolved to the
+        // larger forward shape, so a freshly-constructed clone (which has no forward to
+        // re-resolve it) kept the stale narrow shape and SetParameters threw a length
+        // mismatch on Clone. Per Ho et al. 2022 §3 / Dhariwal & Nichol 2021 the time
+        // embedding is a 2-layer MLP (Linear → SiLU → Linear) over the sinusoidal
+        // features; here the sinusoidal width already equals TimeEmbeddingDim
+        // (= 4·baseChannels), so both projections are [TimeEmbeddingDim → TimeEmbeddingDim].
+        _timeEmbedMlp1 = LazyDense(_timeEmbeddingDim, _timeEmbeddingDim, new SiLUActivation<T>());
         _timeEmbedMlp2 = LazyDense(_timeEmbeddingDim, _timeEmbeddingDim, new SiLUActivation<T>());
 
         // Image conditioning projection (for image-to-video)
@@ -456,6 +478,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
+        using var streaming = BeginWeightStreamingForward();
         _lastInput = noisySample;
 
         // Compute timestep embedding
@@ -463,16 +486,17 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         timeEmbed = ProjectTimeEmbedding(timeEmbed);
 
         // Forward pass
-        return ForwardVideoUNet(noisySample, timeEmbed, conditioning, imageCondition: null);
+        return streaming.Complete(ForwardVideoUNet(noisySample, timeEmbed, conditioning, imageCondition: null));
     }
 
     /// <inheritdoc />
     public override Tensor<T> PredictNoiseWithEmbedding(Tensor<T> noisySample, Tensor<T> timeEmbedding, Tensor<T>? conditioning = null)
     {
+        using var streaming = BeginWeightStreamingForward();
         _lastInput = noisySample;
 
         var timeEmbed = ProjectTimeEmbedding(timeEmbedding);
-        return ForwardVideoUNet(noisySample, timeEmbed, conditioning, imageCondition: null);
+        return streaming.Complete(ForwardVideoUNet(noisySample, timeEmbed, conditioning, imageCondition: null));
     }
 
     /// <summary>
@@ -494,12 +518,13 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             throw new InvalidOperationException("This predictor does not support image conditioning.");
         }
 
+        using var streaming = BeginWeightStreamingForward();
         _lastInput = noisySample;
 
         var timeEmbed = GetTimestepEmbedding(timestep);
         timeEmbed = ProjectTimeEmbedding(timeEmbed);
 
-        return ForwardVideoUNet(noisySample, timeEmbed, textConditioning, imageCondition);
+        return streaming.Complete(ForwardVideoUNet(noisySample, timeEmbed, textConditioning, imageCondition));
     }
 
     /// <summary>
@@ -1259,6 +1284,48 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         return (int)Math.Min(count, int.MaxValue);
     }
 
+    /// <summary>
+    /// Enumerates every layer in the EXACT order used by <see cref="GetParameters"/> /
+    /// <see cref="SetParameters"/> (input conv, time-embed MLPs, image-cond projection,
+    /// then each encoder/middle/decoder block's components, then the output conv). Used
+    /// by <see cref="Clone"/> for a paired per-layer weight copy that needs no shape-
+    /// resolution forward. Null slots (attention disabled at a level, or a pure
+    /// Downsample/Upsample block) are yielded as null so source and clone enumerations
+    /// stay index-aligned by construction.
+    /// </summary>
+    private IEnumerable<ILayer<T>?> EnumerateLayersInParameterOrder()
+    {
+        yield return _inputConv;
+        yield return _timeEmbedMlp1;
+        yield return _timeEmbedMlp2;
+        yield return _imageCondProjection;
+
+        foreach (var block in _encoderBlocks)
+            foreach (var layer in BlockLayersInParameterOrder(block))
+                yield return layer;
+        foreach (var block in _middleBlocks)
+            foreach (var layer in BlockLayersInParameterOrder(block))
+                yield return layer;
+        foreach (var block in _decoderBlocks)
+            foreach (var layer in BlockLayersInParameterOrder(block))
+                yield return layer;
+
+        yield return _outputConv;
+    }
+
+    // Must match AddBlockParameters / SetBlockParameters component order exactly.
+    private static IEnumerable<ILayer<T>?> BlockLayersInParameterOrder(VideoBlock block)
+    {
+        yield return block.SpatialResBlock;
+        yield return block.TimeCondProjection;
+        yield return block.TemporalResBlock;
+        yield return block.SpatialAttention;
+        yield return block.TemporalAttention;
+        yield return block.CrossAttention;
+        yield return block.Downsample;
+        yield return block.Upsample;
+    }
+
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
@@ -1302,6 +1369,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     private void AddBlockParameters(List<T> parameters, VideoBlock block)
     {
         AddLayerParameters(parameters, block.SpatialResBlock);
+        AddLayerParameters(parameters, block.TimeCondProjection);
         AddLayerParameters(parameters, block.TemporalResBlock);
         AddLayerParameters(parameters, block.SpatialAttention);
         AddLayerParameters(parameters, block.TemporalAttention);
@@ -1353,6 +1421,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     private void SetBlockParameters(VideoBlock block, Vector<T> parameters, ref int index)
     {
         SetLayerParameters(block.SpatialResBlock, parameters, ref index);
+        SetLayerParameters(block.TimeCondProjection, parameters, ref index);
         SetLayerParameters(block.TemporalResBlock, parameters, ref index);
         SetLayerParameters(block.SpatialAttention, parameters, ref index);
         SetLayerParameters(block.TemporalAttention, parameters, ref index);
@@ -1385,8 +1454,77 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             _clipTokenLength,
             LossFunction);
 
-        clone.SetParameters(GetParameters());
+        // Resolve the SOURCE's lazy layers so each source layer reports its real
+        // parameter shape below. The source's resolving forward packs its OWN
+        // (correct) weights, so the source stays self-consistent.
+        TriggerLazyShapeResolution();
+
+        // Paired per-layer copy. Crucially we do NOT run a resolving forward on the
+        // CLONE. Every layer's SetParameters self-resolves its shape without a forward:
+        // ConvolutionalLayer / DeconvolutionalLayer infer inputDepth from the incoming
+        // parameter-vector length, MultiHeadAttentionLayer allocates from its
+        // construction-known embedding dim, and DenseLayer is already shape-resolved at
+        // construction (LazyDense calls ResolveShapesOnly) — now that the time-embed MLP
+        // input width matches the real sinusoidal embedding, every construction shape
+        // equals the forward shape, so no layer silently re-resolves.
+        //
+        // A resolving forward on the clone would lazily initialise the clone's weights
+        // to fresh random values and build the fused-CPU weight pack from THOSE; the
+        // subsequent in-place SetParameters cannot invalidate that CPU pack
+        // (Engine.InvalidatePersistentTensor is a no-op without a GPU), so the clone's
+        // forward would read a stale pack built from random weights and diverge from the
+        // source by a small per-element amount (the Clone_ShouldProduceIdenticalOutput
+        // failure). Copying layer-by-layer from the already-resolved source skips the
+        // random-init/pack step entirely, so the clone's first real forward packs from
+        // the correct copied weights.
+        using (var srcEnum = EnumerateLayersInParameterOrder().GetEnumerator())
+        using (var cloneEnum = clone.EnumerateLayersInParameterOrder().GetEnumerator())
+        {
+            while (srcEnum.MoveNext() && cloneEnum.MoveNext())
+            {
+                var srcLayer = srcEnum.Current;
+                var cloneLayer = cloneEnum.Current;
+                if (srcLayer is null || cloneLayer is null)
+                    continue;
+                cloneLayer.SetParameters(srcLayer.GetParameters());
+            }
+        }
         return clone;
+    }
+
+    /// <summary>
+    /// Runs a single dummy forward through the network at the configured
+    /// spatial / frame size so every lazy layer (time-embedding MLPs,
+    /// temporal + cross attention, and the image-condition projection)
+    /// resolves its weight shapes. Used by <see cref="Clone"/> to make the
+    /// clone's layer parameter counts match the original's before
+    /// <see cref="SetParameters"/> copies weights across. Mirrors
+    /// UNetNoisePredictor.TriggerLazyShapeResolution.
+    /// </summary>
+    internal void TriggerLazyShapeResolution()
+    {
+        // Mirror the model's REAL Predict path exactly: a 4D image-mode forward
+        // with no conditioning. LatentDiffusionModelBase.Predict drives the
+        // denoising loop with a 4D latent [B, LatentChannels, H, W] and calls
+        // NoisePredictor.PredictNoise(sample, t, null) — so isVideo=false and
+        // the temporal-mixing, image-condition, and cross-attention layers are
+        // never touched. Resolving those here (via a 5D video pass) would leave
+        // them resolved on the clone but with state the real forward never
+        // exercises, and the temporal-mixing DenseLayer is sized strictly
+        // [_numFrames -> _numFrames] so any partial video pass risks shape
+        // mismatches. The lazy layers the real forward DOES use (input/output
+        // convs, spatial ResBlocks, spatial attention, time-embedding and FiLM
+        // MLPs) all resolve to spatial-independent shapes, so a tiny dummy
+        // resolves identical shapes on both source and clone at negligible cost.
+        // Layers left unresolved stay at 0 params on BOTH sides, so the
+        // GetParameters/SetParameters copy stays index-aligned. Mirrors
+        // UNetNoisePredictor.TriggerLazyShapeResolution.
+        int levels = _channelMultipliers.Length;
+        int side = 1 << System.Math.Max(0, levels - 1);
+        int sideH = System.Math.Min(_inputHeight, side);
+        int sideW = System.Math.Min(_inputWidth, side);
+        var dummy = new Tensor<T>(new[] { 1, _inputChannels, sideH, sideW });
+        _ = PredictNoise(dummy, timestep: 0, conditioning: null);
     }
 
     /// <inheritdoc />
@@ -1431,6 +1569,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     private void AddBlockGradients(List<T> gradients, VideoBlock block)
     {
         AddLayerGradients(gradients, block.SpatialResBlock);
+        AddLayerGradients(gradients, block.TimeCondProjection);
         AddLayerGradients(gradients, block.TemporalResBlock);
         AddLayerGradients(gradients, block.SpatialAttention);
         AddLayerGradients(gradients, block.TemporalAttention);

@@ -114,14 +114,14 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     // ========================================================================
 
     [Fact(Timeout = 120000)]
-    public async Task GRU_RepeatedForward_IsDeterministic_NoStateLeakAcrossCalls()
+    public async Task GRU_StatelessForward_SecondCallMatchesFirst()
     {
         await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
-        // GRULayer.Forward INTENTIONALLY resets to a zero initial hidden state every pass (see the comment in
-        // GRULayer.Forward): standard non-streaming RNN semantics, so independent forward calls do NOT leak hidden
-        // state across one another. This is a deliberate design choice that preserves Clone-after-training parity
-        // and repeated-Predict determinism. Therefore two forwards on the same input must produce IDENTICAL output.
-        // (The old test asserted the opposite — carry-over — which was the behaviour deliberately removed.)
+        // DEFAULT (stateful: false) is the STANDARD non-streaming RNN contract: every Forward
+        // starts from a zero initial hidden state, so a repeated Forward with the same input
+        // reproduces the first output exactly. This is what guarantees repeated-Predict
+        // determinism and Clone-after-training parity. (master #1584 corrected this test from a
+        // prior version that asserted carry-over against the then-stateless-only layer.)
         var gru = new GRULayer<double>( hiddenSize: 3,
             activation: (IActivationFunction<double>?)null);
 
@@ -136,8 +136,39 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
 
         for (int i = 0; i < 3; i++)
         {
-            Assert.Equal(o1vals[i], output2[i], 1e-10);
+            Assert.Equal(o1vals[i], output2[i], 10);
         }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GRU_HiddenStateCarriesOver_SecondCallDiffersFromFirst()
+    {
+        await Task.Yield(); // make the body truly async so [Fact(Timeout)] is enforced (xUnit v2)
+        // OPT-IN stateful: true (this PR's new GRULayer mode) => Keras-style cross-call hidden
+        // carry-over: a second Forward with the same input starts from the first call's FINAL
+        // hidden state and therefore produces a different output. The complementary stateless
+        // default is covered by GRU_StatelessForward_SecondCallMatchesFirst above; both contracts
+        // are real on the merged GRULayer, so both are exercised.
+        var gru = new GRULayer<double>( hiddenSize: 3,
+            activation: (IActivationFunction<double>?)null,
+            stateful: true);
+
+        var input = new Tensor<double>(new[] { 1, 2 }, new Vector<double>(new double[] { 1.0, 0.5 }));
+
+        var output1 = gru.Forward(input);
+        var o1vals = new double[3];
+        for (int i = 0; i < 3; i++)
+            o1vals[i] = output1[i];
+
+        var output2 = gru.Forward(input);
+
+        bool differs = false;
+        for (int i = 0; i < 3; i++)
+        {
+            if (Math.Abs(output2[i] - o1vals[i]) > 1e-10)
+                differs = true;
+        }
+        Assert.True(differs, "Second GRU forward with same input should differ due to hidden state carry-over");
     }
 
     [Fact(Timeout = 120000)]

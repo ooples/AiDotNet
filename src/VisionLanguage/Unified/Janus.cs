@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -8,7 +9,6 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
-using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.Unified;
 
@@ -55,19 +55,82 @@ namespace AiDotNet.VisionLanguage.Unified;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Janus: Decoupling Visual Encoding for Unified Multimodal Understanding and Generation", "https://arxiv.org/abs/2410.13848", Year = 2024, Authors = "Wu et al.")]
+[ResearchPaper(
+    "Janus: Decoupling Visual Encoding for Unified Multimodal Understanding and Generation",
+    "https://arxiv.org/abs/2410.13848",
+    Year = 2024,
+    Authors = "Wu et al."
+)]
 public class Janus<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {
-    private readonly JanusOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly JanusOptions _options;
+
+    public override ModelOptions GetOptions() => _options;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer; private bool _useNativeMode; private bool _disposed;
+    private readonly ITokenizer? _tokenizer;
+    private bool _useNativeMode;
+    private bool _disposed;
     private int _encoderLayerEnd;
 
-    public Janus(NeuralNetworkArchitecture<T> architecture, string modelPath, JanusOptions? options = null) : base(architecture) { _options = options ?? new JanusOptions(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
-    public Janus(NeuralNetworkArchitecture<T> architecture, JanusOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new JanusOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
+    public Janus(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        JanusOptions? options = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new JanusOptions();
+        _useNativeMode = false;
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
 
-    public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim; public bool SupportsGeneration => _options.SupportsGeneration;
-    public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
+    public Janus(
+        NeuralNetworkArchitecture<T> architecture,
+        JanusOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new JanusOptions();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    public int EmbeddingDimension => _options.DecoderDim;
+    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageChannels => 3;
+    public int MaxGenerationLength => _options.MaxGenerationLength;
+    public int DecoderEmbeddingDim => _options.DecoderDim;
+    public bool SupportsGeneration => _options.SupportsGeneration;
+
+    public Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(p));
+        var c = p;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            c = Layers[i].Forward(c);
+        return L2Normalize(c);
+    }
+
     /// <summary>
     /// Generates text from image using Janus's decoupled understanding encoder.
     /// Per the paper (DeepSeek, 2024), Janus decouples visual encoding into two paths:
@@ -108,6 +171,7 @@ public class Janus<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 
         return output;
     }
+
     /// <summary>
     /// Generates an image from text using Janus's decoupled generation encoder.
     /// Per the paper (DeepSeek, 2024), for generation, Janus uses a separate VQ
@@ -166,7 +230,8 @@ public class Janus<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
                 double prevContext = 0;
                 int lookback = Math.Min(t, 8);
                 for (int prev = t - lookback; prev < t; prev++)
-                    prevContext += (double)visualTokenIds[prev] / numVisTokens * Math.Exp(-(t - prev) * 0.3);
+                    prevContext +=
+                        (double)visualTokenIds[prev] / numVisTokens * Math.Exp(-(t - prev) * 0.3);
                 condLogit += prevContext * 0.5;
             }
 
@@ -185,7 +250,8 @@ public class Janus<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         // Step 4: VQ detokenizer - decode tokens to pixels
         int gridSize = 24;
         int patchSize = outSize / gridSize;
-        if (patchSize < 1) patchSize = 1;
+        if (patchSize < 1)
+            patchSize = 1;
 
         var result = new Tensor<T>([outPixels]);
         for (int gy = 0; gy < gridSize; gy++)
@@ -193,7 +259,8 @@ public class Janus<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
             for (int gx = 0; gx < gridSize; gx++)
             {
                 int tokenIdx = gy * gridSize + gx;
-                if (tokenIdx >= numGenTokens) break;
+                if (tokenIdx >= numGenTokens)
+                    break;
 
                 int tokenId = visualTokenIds[tokenIdx];
                 double r = ((tokenId * 7 + 13) % 256) / 255.0;
@@ -206,11 +273,17 @@ public class Janus<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
                     {
                         int imgY = gy * patchSize + py;
                         int imgX = gx * patchSize + px;
-                        if (imgY >= outSize || imgX >= outSize) continue;
+                        if (imgY >= outSize || imgX >= outSize)
+                            continue;
                         int pixelIdx = (imgY * outSize + imgX) * 3;
-                        if (pixelIdx + 2 >= outPixels) continue;
+                        if (pixelIdx + 2 >= outPixels)
+                            continue;
 
-                        double smooth = 0.9 + 0.1 * Math.Sin((double)px / patchSize * Math.PI) * Math.Sin((double)py / patchSize * Math.PI);
+                        double smooth =
+                            0.9
+                            + 0.1
+                                * Math.Sin((double)px / patchSize * Math.PI)
+                                * Math.Sin((double)py / patchSize * Math.PI);
                         result[pixelIdx] = NumOps.FromDouble(r * smooth);
                         result[pixelIdx + 1] = NumOps.FromDouble(g * smooth);
                         result[pixelIdx + 2] = NumOps.FromDouble(b * smooth);
@@ -220,22 +293,111 @@ public class Janus<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         }
         return result;
     }
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; } else { Layers.AddRange(LayerHelper<T>.CreateDefaultUnifiedBidirectionalLayers(_options.VisionDim, _options.DecoderDim, _options.DecoderDim, _options.DecoderDim, _options.NumVisionLayers, _options.NumDecoderLayers / 2, _options.NumDecoderLayers / 2, _options.NumHeads, _options.DropoutRate)); ComputeEncoderDecoderBoundary(); } }
-    private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + (_options.VisionDim != _options.DecoderDim ? 1 : 0); }
-    private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode)
+            return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            _encoderLayerEnd = Layers.Count / 2;
+        }
+        else
+        {
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultUnifiedBidirectionalLayers(
+                    _options.VisionDim,
+                    _options.DecoderDim,
+                    _options.DecoderDim,
+                    _options.DecoderDim,
+                    _options.NumVisionLayers,
+                    _options.NumDecoderLayers / 2,
+                    _options.NumDecoderLayers / 2,
+                    _options.NumHeads,
+                    _options.DropoutRate
+                )
+            );
+            ComputeEncoderDecoderBoundary();
+        }
+    }
+
+    private void ComputeEncoderDecoderBoundary()
+    {
+        int lpb = _options.DropoutRate > 0 ? 6 : 5;
+        _encoderLayerEnd =
+            1
+            + _options.NumVisionLayers * lpb
+            + (_options.VisionDim != _options.DecoderDim ? 1 : 0);
+    }
+
+    private Tensor<T> TokenizeText(string text)
+    {
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
+        var encoding = _tokenizer.Encode(text);
+        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
+        var tokens = new Tensor<T>([seqLen]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        return tokens;
+    }
+
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
+        var c = input;
+        foreach (var l in Layers)
+            c = l.Forward(c);
+        return c;
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        TrainWithTape(input, expected);
+        SetTrainingMode(false);
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Janus-Native" : "Janus-ONNX", Description = "Janus: decoupled visual encoding for understanding vs generation.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "Janus-Native" : "Janus-ONNX",
+            Description = "Janus: decoupled visual encoding for understanding vs generation.",
+            FeatureCount = _options.DecoderDim,
+            Complexity = _options.NumVisionLayers + _options.NumDecoderLayers,
+        };
         m.AdditionalInfo["Architecture"] = "Janus";
         m.AdditionalInfo["SupportsGeneration"] = _options.SupportsGeneration.ToString();
         m.AdditionalInfo["DecoupledEncoding"] = _options.EnableDecoupledEncoding.ToString();
         return m;
     }
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) {
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
         writer.Write(_useNativeMode);
         writer.Write(_options.ModelPath ?? string.Empty);
         writer.Write(_options.ImageSize);
@@ -248,10 +410,13 @@ public class Janus<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         writer.Write(_options.OutputImageSize);
         writer.Write(_options.EnableDecoupledEncoding);
     }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) {
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
         _useNativeMode = reader.ReadBoolean();
         string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionDim = reader.ReadInt32();
         _options.DecoderDim = reader.ReadInt32();
@@ -261,9 +426,28 @@ public class Janus<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         _options.SupportsGeneration = reader.ReadBoolean();
         _options.OutputImageSize = reader.ReadInt32();
         _options.EnableDecoupledEncoding = reader.ReadBoolean();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new Janus<T>(Architecture, mp, _options); return new Janus<T>(Architecture, _options); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(Janus<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new Janus<T>(Architecture, mp, _options);
+        return new Janus<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(Janus<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
 }

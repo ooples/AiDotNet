@@ -1190,7 +1190,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
             { "NumLayers", _numLayers },
             { "GuidanceScale", _guidanceScale }
         },
-        ModelData = this.Serialize()
+        ModelData = SerializeForMetadata()
     };
 
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)

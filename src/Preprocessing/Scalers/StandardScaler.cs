@@ -112,7 +112,12 @@ public class StandardScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             if (_withStd)
             {
                 T variance = StatisticsHelper<T>.CalculateVariance(column, means[colIdx]);
-                T std = NumOps.Sqrt(variance);
+
+                // A constant/near-constant column can produce a tiny NEGATIVE variance from
+                // floating-point cancellation; Sqrt of that is NaN, which then poisons every
+                // transformed value (and the exact-zero guard below would miss a NaN). Floor the
+                // variance at zero before the sqrt so a degenerate column degrades to "no scaling".
+                T std = NumOps.GreaterThan(variance, NumOps.Zero) ? NumOps.Sqrt(variance) : NumOps.Zero;
 
                 // Prevent division by zero - if std is zero, use 1 (no scaling)
                 stdDevs[colIdx] = NumOps.Compare(std, NumOps.Zero) == 0 ? NumOps.One : std;

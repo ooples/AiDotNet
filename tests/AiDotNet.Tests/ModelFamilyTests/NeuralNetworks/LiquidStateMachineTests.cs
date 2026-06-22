@@ -4,8 +4,8 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class LiquidStateMachineTests : NeuralNetworkModelTestBase
+public class LiquidStateMachineTests : NeuralNetworkModelTestBase<float>
 {
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new LiquidStateMachine<double>();
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new LiquidStateMachine<float>();
 }

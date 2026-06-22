@@ -12,16 +12,25 @@ public class ObfuscationTests
     [Fact(Timeout = 60000)]
     public async Task BuildKeyProvider_ReturnsEmpty_WhenNoEmbeddedResource()
     {
-        // In test/dev builds there is no embedded build key
-        var key = BuildKeyProvider.GetBuildKey();
-        Assert.NotNull(key);
-        Assert.Empty(key);
+        // Assert against the embedded RESOURCE state, not the runtime cache:
+        // the test ModuleInitializer overrides the cache process-wide so offline
+        // license validation can verify against a known test build key, which
+        // means `GetBuildKey()` reflects the override here. The dev-build
+        // contract this test guards is "the shipped DLL has no embedded
+        // build-key resource", which is what HasEmbeddedResource() checks
+        // directly (bypassing the cache).
+        Assert.False(BuildKeyProvider.HasEmbeddedResource());
     }
 
     [Fact(Timeout = 60000)]
     public async Task BuildKeyProvider_IsOfficialBuild_ReturnsFalse_InDevBuild()
     {
-        Assert.False(BuildKeyProvider.IsOfficialBuild);
+        // Same rationale as BuildKeyProvider_ReturnsEmpty_WhenNoEmbeddedResource:
+        // `IsOfficialBuild` reads through the test-overridden cache, so check
+        // the embedded resource directly. An "official build" by definition
+        // ships with the build-key resource embedded — a dev/fork build does
+        // not.
+        Assert.False(BuildKeyProvider.HasEmbeddedResource());
     }
 
     [Fact(Timeout = 60000)]

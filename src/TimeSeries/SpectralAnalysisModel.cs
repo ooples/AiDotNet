@@ -651,7 +651,7 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
         }
 
         // Add the serialized model data
-        metadata.ModelData = this.Serialize();
+        metadata.ModelData = SerializeForMetadata();
 
         return metadata;
     }

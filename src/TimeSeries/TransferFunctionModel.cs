@@ -717,7 +717,7 @@ public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
                 { "ResidualsMean", _residuals.Length > 0 ? Convert.ToDouble(_residuals.Mean()) : 0.0 },
                 { "ResidualsStdDev", _residuals.Length > 0 ? Convert.ToDouble(_residuals.StandardDeviation()) : 0.0 }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
 
         return metadata;

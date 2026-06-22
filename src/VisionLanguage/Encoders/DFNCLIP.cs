@@ -64,10 +64,16 @@ namespace AiDotNet.VisionLanguage.Encoders;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Data Filtering Networks", "https://arxiv.org/abs/2309.17425", Year = 2023, Authors = "Fang et al.")]
+[ResearchPaper(
+    "Data Filtering Networks",
+    "https://arxiv.org/abs/2309.17425",
+    Year = 2023,
+    Authors = "Fang et al."
+)]
 public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly DFNCLIPOptions _options;
+
     public override ModelOptions GetOptions() => _options;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -87,7 +93,9 @@ public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
     public DFNCLIP(
         NeuralNetworkArchitecture<T> architecture,
         string imageEncoderModelPath,
-        DFNCLIPOptions? options = null) : base(architecture)
+        DFNCLIPOptions? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new DFNCLIPOptions();
         SyncImageSizeWithArchitecture();
@@ -96,9 +104,15 @@ public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.VisionEmbeddingDim;
         if (string.IsNullOrWhiteSpace(imageEncoderModelPath))
-            throw new ArgumentException("Image encoder model path cannot be null or empty.", nameof(imageEncoderModelPath));
+            throw new ArgumentException(
+                "Image encoder model path cannot be null or empty.",
+                nameof(imageEncoderModelPath)
+            );
         if (!File.Exists(imageEncoderModelPath))
-            throw new FileNotFoundException($"ONNX model not found: {imageEncoderModelPath}", imageEncoderModelPath);
+            throw new FileNotFoundException(
+                $"ONNX model not found: {imageEncoderModelPath}",
+                imageEncoderModelPath
+            );
         _options.ImageEncoderModelPath = imageEncoderModelPath;
         OnnxImageEncoder = new OnnxModel<T>(imageEncoderModelPath, _options.OnnxOptions);
         if (_options.TextEncoderModelPath is { } tp && !string.IsNullOrEmpty(tp))
@@ -114,7 +128,9 @@ public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
     public DFNCLIP(
         NeuralNetworkArchitecture<T> architecture,
         DFNCLIPOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new DFNCLIPOptions();
         SyncImageSizeWithArchitecture();
@@ -125,16 +141,19 @@ public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
         // default Adam at lr=1e-3 without warmup oscillates on paper-scale
         // ViT-H/14 because the first-step Adam update overshoots before
         // the moments stabilize.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = 5e-4,
-                Beta1 = 0.9,
-                Beta2 = 0.98,
-                Epsilon = 1e-6,
-                WeightDecay = 0.2,
-            });
+        _optimizer =
+            optimizer
+            ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = 5e-4,
+                    Beta1 = 0.9,
+                    Beta2 = 0.98,
+                    Epsilon = 1e-6,
+                    WeightDecay = 0.2,
+                }
+            );
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.VisionEmbeddingDim;
@@ -154,7 +173,8 @@ public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
     {
         int h = Architecture.InputHeight;
         int w = Architecture.InputWidth;
-        if (h > 0 && w > 0 && h == w) _options.ImageSize = h;
+        if (h > 0 && w > 0 && h == w)
+            _options.ImageSize = h;
     }
 
     public int EmbeddingDimension => _options.VisionEmbeddingDim;
@@ -192,7 +212,8 @@ public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
     public Tensor<T>[] EncodeTexts(string[] texts)
     {
         var e = new Tensor<T>[texts.Length];
-        for (int i = 0; i < texts.Length; i++) e[i] = EncodeText(texts[i]);
+        for (int i = 0; i < texts.Length; i++)
+            e[i] = EncodeText(texts[i]);
         return e;
     }
 
@@ -209,13 +230,15 @@ public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
             logits[i] = NumOps.FromDouble(NumOps.ToDouble(CosineSimilarity(ie, te[i])) / temp);
         var probs = Softmax(logits);
         var r = new Dictionary<string, T>();
-        for (int i = 0; i < labels.Length; i++) r[labels[i]] = probs[i];
+        for (int i = 0; i < labels.Length; i++)
+            r[labels[i]] = probs[i];
         return r;
     }
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture is DualStreamArchitecture<T> dual)
         {
             Layers.AddRange(dual.VisionLayers);
@@ -228,10 +251,13 @@ public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
         // CI-fast 128² architecture and a paper-faithful 224² production
         // architecture produce the same downstream token rank.
         int patchSize = Math.Max(1, _options.ImageSize / 16);
-        Layers.Add(new PatchEmbeddingLayer<T>(
-            patchSize: patchSize,
-            embeddingDim: _options.VisionEmbeddingDim,
-            expectedInputChannels: 3));
+        Layers.Add(
+            new PatchEmbeddingLayer<T>(
+                patchSize: patchSize,
+                embeddingDim: _options.VisionEmbeddingDim,
+                expectedInputChannels: 3
+            )
+        );
 
         // OpenCLIP factory emits [vision: pre-norm, N×block, projection,
         //                         text:  pre-norm, N×block, projection].
@@ -246,12 +272,15 @@ public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
             numTextLayers: _options.NumTextLayers,
             numVisionHeads: _options.NumVisionHeads,
             numTextHeads: _options.NumTextHeads,
-            dropoutRate: _options.DropoutRate);
+            dropoutRate: _options.DropoutRate
+        );
         int idx = 0;
         foreach (var layer in openClip)
         {
-            if (idx < visionLayerCount) Layers.Add(layer);
-            else _textEncoderLayers.Add(layer);
+            if (idx < visionLayerCount)
+                Layers.Add(layer);
+            else
+                _textEncoderLayers.Add(layer);
             idx++;
         }
     }
@@ -269,7 +298,8 @@ public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
         // Native path normalizes via PreprocessImage; ONNX path must do the
         // same so the two encoders see identical mean/std-offset inputs.
         var current = PreprocessImage(input);
-        if (IsOnnxMode && OnnxImageEncoder is not null) return OnnxImageEncoder.Run(current);
+        if (IsOnnxMode && OnnxImageEncoder is not null)
+            return OnnxImageEncoder.Run(current);
         SetTrainingMode(false);
         foreach (var layer in Layers)
             current = layer.Forward(current);
@@ -278,7 +308,8 @@ public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
         // Forward-path entrypoint matches Predict (PreprocessImage → Layers).
         // TrainWithTape walks Layers, so the vision-only graph is what gets
@@ -292,13 +323,20 @@ public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
         // try/finally so a TrainWithTape throw doesn't leave the model
         // stuck in training mode (matches the BiomedCLIP / BridgeTower /
         // METER / BLIP3 Train pattern).
-        try { TrainWithTape(PreprocessImage(input), expected, _optimizer); }
-        finally { SetTrainingMode(false); }
+        try
+        {
+            TrainWithTape(PreprocessImage(input), expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
     {
-        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
         int idx = 0;
         foreach (var l in Layers)
         {
@@ -329,7 +367,8 @@ public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
     protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
     {
         foreach (var layer in _textEncoderLayers)
-            if (layer is LayerBase<T> lb) yield return lb;
+            if (layer is LayerBase<T> lb)
+                yield return lb;
     }
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
@@ -344,7 +383,7 @@ public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
             Name = _useNativeMode ? "DFN-CLIP-Native" : "DFN-CLIP-ONNX",
             Description = "DFN-CLIP: Data Filtering Networks (Fang et al., 2023)",
             FeatureCount = _options.ProjectionDim,
-            Complexity = _options.NumVisionLayers + _options.NumTextLayers
+            Complexity = _options.NumVisionLayers + _options.NumTextLayers,
         };
         m.AdditionalInfo["Architecture"] = "DFN-CLIP";
         m.AdditionalInfo["FilteringThreshold"] = _options.FilteringThreshold.ToString();
@@ -368,9 +407,11 @@ public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
     {
         _useNativeMode = reader.ReadBoolean();
         string ip = reader.ReadString();
-        if (!string.IsNullOrEmpty(ip)) _options.ImageEncoderModelPath = ip;
+        if (!string.IsNullOrEmpty(ip))
+            _options.ImageEncoderModelPath = ip;
         string tp = reader.ReadString();
-        if (!string.IsNullOrEmpty(tp)) _options.TextEncoderModelPath = tp;
+        if (!string.IsNullOrEmpty(tp))
+            _options.TextEncoderModelPath = tp;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionEmbeddingDim = reader.ReadInt32();
         _options.TextEmbeddingDim = reader.ReadInt32();
@@ -385,29 +426,37 @@ public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        if (!_useNativeMode && _options.ImageEncoderModelPath is { } mp && !string.IsNullOrEmpty(mp))
+        if (
+            !_useNativeMode
+            && _options.ImageEncoderModelPath is { } mp
+            && !string.IsNullOrEmpty(mp)
+        )
             return new DFNCLIP<T>(Architecture, mp, _options);
         return new DFNCLIP<T>(Architecture, _options);
     }
 
     private Tensor<T> TokenizeText(string text)
     {
-        if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized.");
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
         var enc = _tokenizer.Encode(text);
         int sl = Math.Min(enc.TokenIds.Count, _options.MaxSequenceLength);
         var tk = new Tensor<T>([sl]);
-        for (int i = 0; i < sl; i++) tk[i] = NumOps.FromDouble(enc.TokenIds[i]);
+        for (int i = 0; i < sl; i++)
+            tk[i] = NumOps.FromDouble(enc.TokenIds[i]);
         return tk;
     }
 
     private void ThrowIfDisposed()
     {
-        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(DFNCLIP<T>));
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(DFNCLIP<T>));
     }
 
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         if (disposing)
         {

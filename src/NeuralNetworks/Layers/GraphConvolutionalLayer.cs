@@ -196,6 +196,15 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </summary>
     private bool _useSparseAggregation = false;
 
+    // When true, a Forward with no adjacency set falls back to a self-loop
+    // identity adjacency instead of throwing. Off by default (a graph conv is
+    // undefined without a graph, Kipf & Welling 2017); models that legitimately
+    // run on plain sequences without an explicit graph (e.g. GraphCodeBERT on a
+    // token stream with no data-flow edges) opt in. DeserializationHelper
+    // reconstructs cloned/round-tripped graph layers with this enabled so a
+    // model whose adjacency is only set at runtime survives serialization.
+    private bool _implicitIdentityWhenUnset;
+
     /// <summary>
     /// Stores the gradients for the weights calculated during the backward pass.
     /// </summary>
@@ -341,7 +350,8 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// to transform this into 16 features per atom, you would use inputFeatures=8 and outputFeatures=16.
     /// </para>
     /// </remarks>
-    public GraphConvolutionalLayer(int inputFeatures, int outputFeatures, IActivationFunction<T>? activationFunction = null)
+    public GraphConvolutionalLayer(int inputFeatures, int outputFeatures, IActivationFunction<T>? activationFunction = null,
+        bool implicitIdentityWhenUnset = false)
         : base([inputFeatures], [outputFeatures], activationFunction ?? new IdentityActivation<T>())
     {
         if (inputFeatures <= 0)
@@ -354,6 +364,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             throw new ArgumentOutOfRangeException(nameof(outputFeatures), "Output features must be positive.");
         }
 
+        _implicitIdentityWhenUnset = implicitIdentityWhenUnset;
         InputFeatures = inputFeatures;
         OutputFeatures = outputFeatures;
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
@@ -511,6 +522,17 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// In a molecule, it would show which atoms are bonded to each other.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Post-construction equivalent of the <c>implicitIdentityWhenUnset</c> ctor flag: enables the
+    /// self-loops-only (identity) tolerance for callers that constructed the layer strictly but later
+    /// need the scaffold / clone / deserialize tolerance. The default remains strict (throw on a
+    /// missing graph); this is an explicit opt-in, never a silent default.
+    /// </summary>
+    public void EnableImplicitIdentityAdjacency()
+    {
+        _implicitIdentityWhenUnset = true;
+    }
+
     public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
     {
         // Check if we need to re-extract edges (new matrix or first time)
@@ -642,13 +664,69 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// and data from its neighbors in the graph.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Auto-default to an identity adjacency when no graph structure has been
+    /// wired up — every node only attends to itself, so A·X·W reduces to X·W
+    /// (a per-node linear transform). This is the graph-convolution identity
+    /// element and is the natural fallback for downstream pipelines (e.g.
+    /// GraphCodeBERT's Predict probe in the test scaffold) that don't have a
+    /// data-flow graph computed for the synthetic input. Previously the CPU
+    /// path threw and required every caller to wire SetAdjacencyMatrix before
+    /// any forward — incompatible with the model-family scaffold's
+    /// "Predict(random input)" probes.
+    /// </summary>
+    /// <remarks>
+    /// Shared by <see cref="Forward"/> and <see cref="ForwardGpu"/> so the two
+    /// paths keep an identical graph-setup contract. The identity is also
+    /// rebuilt when an existing dense adjacency's node count no longer matches
+    /// the current input (the previous auto-set was sticky and could go
+    /// shape-stale when the node count changed between calls).
+    /// </remarks>
+    private void EnsureDenseAdjacencyForInput(Tensor<T> input)
+    {
+        if (_useSparseAggregation) return;
+
+        int inferredNumNodes = input.Shape.Length >= 2
+            ? input.Shape[input.Shape.Length - 2]
+            : 1;
+
+        // With no supplied graph, use self-loops only. This is equivalent to
+        // Â = I in the Kipf-Welling propagation H' = Â·H·W, so the layer remains
+        // a well-defined per-node transform while production callers can still
+        // provide the real graph via SetAdjacencyMatrix or SetEdges.
+        if (_adjacencyMatrix is null)
+        {
+            if (!_implicitIdentityWhenUnset)
+                throw new InvalidOperationException(
+                    "GraphConvolutionalLayer requires an adjacency matrix. Call " +
+                    "SetAdjacencyMatrix(...) with the graph structure before Forward.");
+
+            var identity = new Tensor<T>(new[] { inferredNumNodes, inferredNumNodes });
+            for (int i = 0; i < inferredNumNodes; i++)
+                identity[i, i] = NumOps.One;
+            SetAdjacencyMatrix(identity);
+            return;
+        }
+
+        // A previously-set dense adjacency can go shape-stale if the node count
+        // changes between calls; rebuild an identity of the right size so the
+        // matmul stays well-formed (the adjacency was supplied, just outdated).
+        bool mismatched2D = _adjacencyMatrix.Shape.Length == 2
+            && (_adjacencyMatrix.Shape[0] != inferredNumNodes
+                || _adjacencyMatrix.Shape[1] != inferredNumNodes);
+
+        if (mismatched2D)
+        {
+            var identity = new Tensor<T>(new[] { inferredNumNodes, inferredNumNodes });
+            for (int i = 0; i < inferredNumNodes; i++)
+                identity[i, i] = NumOps.One;
+            SetAdjacencyMatrix(identity);
+        }
+    }
+
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        // Check that either adjacency matrix or edge indices are set
-        if (_adjacencyMatrix == null && !_useSparseAggregation)
-        {
-            throw new InvalidOperationException("Graph structure must be set using SetAdjacencyMatrix or SetEdges before calling Forward.");
-        }
+        EnsureDenseAdjacencyForInput(input);
 
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
@@ -821,11 +899,13 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         if (backend == null)
             throw new InvalidOperationException("GPU backend unavailable");
 
-        // Check that graph structure is set
-        if (_adjacencyMatrix == null && !_useSparseAggregation)
-            throw new InvalidOperationException("Graph structure must be set using SetAdjacencyMatrix or SetEdges before calling ForwardGpu.");
-
         var input = inputs[0];
+
+        // Mirror Forward's graph-setup contract: auto-default to an identity
+        // adjacency (or rebuild a shape-stale one) instead of throwing, so the
+        // GPU path accepts the same "no graph wired" inference scenarios the
+        // CPU path already supports.
+        EnsureDenseAdjacencyForInput(input);
 
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
@@ -1027,7 +1107,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         int outputFeatures = bias.Length;
 
         // Reshape bias from [outputFeatures] to [1, 1, outputFeatures]
-        var biasReshaped = bias.Reshape([1, 1, outputFeatures]);
+        var biasReshaped = Engine.Reshape(bias, [1, 1, outputFeatures]);
 
         // Tile across batch and node dimensions: [batchSize, numNodes, outputFeatures]
         var broadcast = Engine.TensorTile(biasReshaped, [batchSize, numNodes, 1]);
@@ -1042,11 +1122,11 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     private Tensor<T> BatchedMatMul3Dx2D(Tensor<T> input3D, Tensor<T> weights2D, int batch, int rows, int cols, int outputCols)
     {
         // Flatten batch dimension: [batch, rows, cols] -> [batch * rows, cols]
-        var flattened = input3D.Reshape([batch * rows, cols]);
+        var flattened = Engine.Reshape(input3D, [batch * rows, cols]);
         // Standard 2D matmul: [batch * rows, cols] @ [cols, output_cols] -> [batch * rows, output_cols]
         var result = Engine.TensorMatMul(flattened, weights2D);
         // Unflatten: [batch * rows, output_cols] -> [batch, rows, output_cols]
-        return result.Reshape([batch, rows, outputCols]);
+        return Engine.Reshape(result, [batch, rows, outputCols]);
     }
 
     private Tensor<T>? _weightsVelocity;

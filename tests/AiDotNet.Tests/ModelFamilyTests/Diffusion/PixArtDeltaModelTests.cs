@@ -4,11 +4,12 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-public class PixArtDeltaModelTests : DiffusionModelTestBase
+[Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4)
+public class PixArtDeltaModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 4, 32, 32];
     protected override int[] OutputShape => [1, 4, 32, 32];
 
-    protected override IDiffusionModel<double> CreateModel()
-        => new PixArtDeltaModel<double>(seed: 42);
+    protected override IDiffusionModel<float> CreateModel()
+        => new PixArtDeltaModel<float>(seed: 42);
 }

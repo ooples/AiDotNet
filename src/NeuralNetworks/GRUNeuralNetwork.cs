@@ -255,13 +255,17 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
             layer.SetTrainingMode(false);
         }
 
-        var current = input;
-        foreach (var layer in Layers)
+        // Wrapped in the #1622 verify-then-trust compiled gate; no-op unless acceleration is engaged.
+        return Accelerate(input, () =>
         {
-            current = layer.Forward(current);
-        }
+            var current = input;
+            foreach (var layer in Layers)
+            {
+                current = layer.Forward(current);
+            }
 
-        return current;
+            return current;
+        });
     }
 
     /// <summary>
@@ -368,7 +372,7 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
                 { "InputSize", Architecture.InputSize },
                 { "OutputSize", Architecture.OutputSize },
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

@@ -242,7 +242,7 @@ public class VisionMambaModel<T> : NeuralNetworkBase<T>
     public override Tensor<T> Predict(Tensor<T> input)
     {
         SetTrainingMode(false);
-        return RunForward(input);
+        return Accelerate(input, () => RunForward(input));
     }
 
     /// <summary>
@@ -378,7 +378,7 @@ public class VisionMambaModel<T> : NeuralNetworkBase<T>
                 { "NumPatches", _numPatches },
                 { "LayerCount", Layers.Count }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

@@ -5,6 +5,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
@@ -95,7 +96,7 @@ public class MobileNetV2Network<T> : NeuralNetworkBase<T>
     /// <param name="architecture">The architecture defining the structure of the neural network.</param>
     /// <param name="configuration">The MobileNetV2-specific configuration.</param>
     /// <param name="optimizer">Optional optimizer for training (default: Adam).</param>
-    /// <param name="lossFunction">Optional loss function (default: based on task type).</param>
+    /// <param name="lossFunction">Optional loss function (default: cross-entropy with logits).</param>
     /// <param name="maxGradNorm">Maximum gradient norm for gradient clipping (default: 1.0).</param>
     /// <summary>
     /// Initializes a new instance with default settings.
@@ -117,10 +118,11 @@ public class MobileNetV2Network<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         double maxGradNorm = 1.0,
         MobileNetV2Options? options = null)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), maxGradNorm)
     {
         _options = options ?? new MobileNetV2Options();
         Options = _options;
+        _fusedTrainingDisabled = _options.DisableFusedOptimizerStep;
         Guard.NotNull(configuration);
         _configuration = configuration;
 
@@ -129,10 +131,32 @@ public class MobileNetV2Network<T> : NeuralNetworkBase<T>
             InputType.ThreeDimensional,
             nameof(MobileNetV2Network<T>));
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
+        _lossFunction = LossFunction;
+
+        EnsureDeterministicBlas();
 
         InitializeLayers();
+    }
+
+    private AdamOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+    {
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-4,
+                Epsilon = 1e-6,
+                UseAMSGrad = true
+            });
+    }
+
+    private static bool _determinismSet;
+    private static void EnsureDeterministicBlas()
+    {
+        if (_determinismSet) return;
+        _determinismSet = true;
+        AiDotNet.Tensors.Helpers.BlasProvider.SetDeterministicMode(true);
     }
 
     /// <summary>
@@ -226,6 +250,14 @@ public class MobileNetV2Network<T> : NeuralNetworkBase<T>
             // Use MobileNetV2-specific layer configuration
             Layers.AddRange(LayerHelper<T>.CreateDefaultMobileNetV2Layers(Architecture, _configuration));
         }
+
+        SetAllLayersEvalMode();
+    }
+
+    private void SetAllLayersEvalMode()
+    {
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(false);
     }
 
     /// <summary>
@@ -318,8 +350,10 @@ public class MobileNetV2Network<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        SetAllLayersEvalMode();
         using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        return Forward(input);
+        // #1622 verify-then-trust compiled gate; no-op unless acceleration is engaged.
+        return Accelerate(input, () => Forward(input));
     }
 
     /// <inheritdoc />
@@ -329,8 +363,16 @@ public class MobileNetV2Network<T> : NeuralNetworkBase<T>
         // targets) to 4D so ForwardForTraining's raw layer iteration
         // receives the 4D tensor BatchNormalizationLayer needs. See
         // ResNet/VGG Train() for the same pattern.
+        SetTrainingMode(true);
+        foreach (var layer in Layers)
+        {
+            if (layer is BatchNormalizationLayer<T>)
+                layer.SetTrainingMode(false);
+        }
+
         var (processedInput, processedTarget) = EnsureBatchForCnnTraining(input, expectedOutput);
         TrainWithTape(processedInput, processedTarget, _optimizer);
+        SetTrainingMode(false);
     }
 
     /// <inheritdoc />
@@ -360,7 +402,7 @@ public class MobileNetV2Network<T> : NeuralNetworkBase<T>
                 { "LayerCount", Layers.Count },
                 { "ParameterCount", GetParameterCount() }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 
@@ -433,7 +475,18 @@ public class MobileNetV2Network<T> : NeuralNetworkBase<T>
             _configuration.InputWidth,
             _configuration.InputChannels);
 
-        return new MobileNetV2Network<T>(Architecture, config, _optimizer, _lossFunction);
+        return new MobileNetV2Network<T>(
+            Architecture,
+            config,
+            lossFunction: _lossFunction,
+            options: new MobileNetV2Options(_options));
+    }
+
+    /// <inheritdoc />
+    public override void Deserialize(byte[] data)
+    {
+        base.Deserialize(data);
+        SetAllLayersEvalMode();
     }
 
     /// <inheritdoc />

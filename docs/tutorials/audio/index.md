@@ -518,4 +518,4 @@ var normalized = audio.Normalize();
 
 - [Speech Recognition Sample](../../../samples/audio/SpeechRecognition/)
 - [Text-to-Speech Sample](../../../samples/audio/TextToSpeech/)
-- [Audio API Reference](../../api/)
+- [Audio API Reference](../../reference/)

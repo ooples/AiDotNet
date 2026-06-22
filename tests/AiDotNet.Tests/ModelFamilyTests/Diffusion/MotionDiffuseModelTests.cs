@@ -4,11 +4,11 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-public class MotionDiffuseModelTests : DiffusionModelTestBase
+public class MotionDiffuseModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 4, 32, 32];
     protected override int[] OutputShape => [1, 4, 32, 32];
 
-    protected override IDiffusionModel<double> CreateModel()
-        => new MotionDiffuseModel<double>(seed: 42);
+    protected override IDiffusionModel<float> CreateModel()
+        => new MotionDiffuseModel<float>(seed: 42);
 }

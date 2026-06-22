@@ -159,25 +159,18 @@ public class DiffusionResBlock<T> : LayerBase<T>
         // `block2.SetParameters(block1.GetParameters()) ⇒ block2(x) == block1(x)`
         // determinism contract relied on by tests and checkpoint reload.
         //
-        // We trigger materialization by running one probe forward through the
-        // whole block (with NoGradScope so the tape stays clean), then reset
-        // per-step state. Memory cost: one [1, C, S, S] tensor's worth of
-        // intermediate activations per block at construction time, returned
-        // to the pool by ResetState. Cheap relative to one training step.
-        {
-            using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-            var probeInput = new Tensor<T>([1, inChannels, spatialSize, spatialSize]);
-            if (timeEmbedDim > 0)
-            {
-                var probeTime = new Tensor<T>([1, timeEmbedDim]);
-                Forward(probeInput, probeTime);
-            }
-            else
-            {
-                Forward(probeInput);
-            }
-            ResetState();
-        }
+        // Sublayers are left FULLY LAZY here — no shape resolution and no weight
+        // allocation in the ctor. At paper scale eager allocation was the dominant
+        // construction cost (a single SD U-Net is ~860M params, ~7 GB at double) and
+        // OOM'd the 16 GB CI runner on construction alone (Unit-03b). The owning
+        // UNetNoisePredictor resolves every sublayer's TRUE shape via its shape-only
+        // forward (ResolveShapesViaForward) before any ParameterCount / GetParameters
+        // read — the single source of truth that matches the real forward exactly —
+        // and weights materialise on demand at that GetParameters or the first real
+        // Forward. The SetParameters(GetParameters()) determinism contract is
+        // unaffected: GetParameters resolves shapes then materialises, and
+        // SetParameters overwrites the values.
+        _ = inChannels; _ = outChannels; _ = spatialSize; _ = timeEmbedDim;
     }
 
     /// <summary>

@@ -4,7 +4,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class NEATTests : NeuralNetworkModelTestBase
+public class NEATTests : NeuralNetworkModelTestBase<float>
 {
     // Default NEAT: inputSize=10, outputSize=1
     // Must use 2D shapes [batch, features] because NEAT.Train and ExtractTrainingData
@@ -39,6 +39,29 @@ public class NEATTests : NeuralNetworkModelTestBase
     // those produce loss far above 1e-4.
     protected override double MemorizationTaskAbsoluteLossFloor => 1e-4;
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new NEAT<double>();
+    // NEAT is a topology-AUGMENTING evolutionary algorithm (Stanley & Miikkulainen
+    // 2002): one Train call evolves a population for many generations and ADDS
+    // connections/nodes, so GetParameters() grows in length and the parameter-L2 norm
+    // necessarily rises with the complexifying genome. The single-step "L2 within 2×"
+    // invariant assumes a fixed-topology gradient optimizer and does not apply here —
+    // weight-magnitude stability is instead enforced by NEAT's bounded per-connection
+    // weight clamp, and convergence by Training_ShouldReduceLoss / the memorization task.
+    protected override bool OptimizerStepParamL2InvariantApplicable => false;
+
+    // Seed the architecture so NEAT's evolutionary RNG (selection/crossover/mutation) is
+    // deterministic and reproducible (the standard NEAT-Python contract). Without a seed
+    // the evolution draws from the process-shared RNG, making TrainingError_ShouldNotExceed
+    // TestError suite-position-dependent (pass in isolation, flake when interleaved).
+    protected override INeuralNetworkModel<float> CreateNetwork()
+    {
+        var architecture = new NeuralNetworkArchitecture<float>(
+            inputType: AiDotNet.Enums.InputType.OneDimensional,
+            taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 1)
+        {
+            RandomSeed = 42
+        };
+        return new NEAT<float>(architecture, populationSize: 150);
+    }
 }

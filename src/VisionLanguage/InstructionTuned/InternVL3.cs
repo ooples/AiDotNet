@@ -56,20 +56,82 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("InternVL3: Exploring Advanced Training and Test-Time Recipes for Open-Source Multimodal Models", "https://arxiv.org/abs/2504.10479", Year = 2025, Authors = "Zhu et al.")]
+[ResearchPaper(
+    "InternVL3: Exploring Advanced Training and Test-Time Recipes for Open-Source Multimodal Models",
+    "https://arxiv.org/abs/2504.10479",
+    Year = 2025,
+    Authors = "Zhu et al."
+)]
 public class InternVL3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
-    private readonly InternVL3Options _options; public override ModelOptions GetOptions() => _options;
+    private readonly InternVL3Options _options;
+
+    public override ModelOptions GetOptions() => _options;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer; private bool _useNativeMode; private bool _disposed;
+    private readonly ITokenizer? _tokenizer;
+    private bool _useNativeMode;
+    private bool _disposed;
     private int _encoderLayerEnd;
 
-    public InternVL3(NeuralNetworkArchitecture<T> architecture, string modelPath, InternVL3Options? options = null) : base(architecture) { _options = options ?? new InternVL3Options(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
-    public InternVL3(NeuralNetworkArchitecture<T> architecture, InternVL3Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new InternVL3Options(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
+    public InternVL3(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        InternVL3Options? options = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new InternVL3Options();
+        _useNativeMode = false;
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
 
-    public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim; public string LanguageModelName => _options.LanguageModelName;
+    public InternVL3(
+        NeuralNetworkArchitecture<T> architecture,
+        InternVL3Options? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new InternVL3Options();
+        _options.ValidateVisualSizing();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
 
-    public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
+    public int EmbeddingDimension => _options.DecoderDim;
+    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageChannels => 3;
+    public int MaxGenerationLength => _options.MaxGenerationLength;
+    public int DecoderEmbeddingDim => _options.DecoderDim;
+    public string LanguageModelName => _options.LanguageModelName;
+
+    public Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(p));
+        var c = p;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            c = Layers[i].Forward(c);
+        return L2Normalize(c);
+    }
 
     /// <summary>
     /// Generates text using InternVL3's advanced training and test-time recipes.
@@ -85,7 +147,8 @@ public class InternVL3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(p);
 
         int psFactor = _options.PixelShuffleFactor;
 
@@ -113,20 +176,30 @@ public class InternVL3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         return output;
     }
 
-    public Tensor<T> Chat(Tensor<T> image, IEnumerable<(string Role, string Content)> conversationHistory, string userMessage)
+    public Tensor<T> Chat(
+        Tensor<T> image,
+        IEnumerable<(string Role, string Content)> conversationHistory,
+        string userMessage
+    )
     {
         ThrowIfDisposed();
         var sb = new System.Text.StringBuilder();
         sb.Append(_options.SystemPrompt);
-        foreach (var (role, content) in conversationHistory) sb.Append($"\n{role}: {content}");
+        foreach (var (role, content) in conversationHistory)
+            sb.Append($"\n{role}: {content}");
         sb.Append($"\nUser: {userMessage}\nAssistant:");
         return GenerateFromImage(image, sb.ToString());
     }
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; }
+        if (!_useNativeMode)
+            return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            _encoderLayerEnd = Layers.Count / 2;
+        }
         else
         {
             // Validate visual-patch options only when building the default VLM stack —
@@ -135,26 +208,156 @@ public class InternVL3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
             // options are irrelevant and validation would spuriously reject custom-
             // layer setups.
             ValidateVisualPatchOptions(_options.ImageSize, _options.MaxVisualTokens);
-            Layers.AddRange(LayerHelper<T>.CreateDefaultPixelShuffleProjectorLayers(_options.VisionDim, _options.VisionDim * 2, _options.DecoderDim, _options.NumVisionLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, patchSize: ComputePatchSize()));
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultPixelShuffleProjectorLayers(
+                    _options.VisionDim,
+                    _options.VisionDim * 2,
+                    _options.DecoderDim,
+                    _options.NumVisionLayers,
+                    _options.NumDecoderLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate,
+                    patchSize: ComputePatchSize()
+                )
+            );
             ComputeEncoderDecoderBoundary();
         }
         ValidateEncoderDecoderBoundary(_encoderLayerEnd);
     }
 
-    private int ComputePatchSize() => ComputeVisualPatchSize(_options.ImageSize, _options.MaxVisualTokens, roundUp: true);
-    // +2 leading layers from the helper: PatchEmbedding + LayerNorm.
-    private void ComputeEncoderDecoderBoundary() { _encoderLayerEnd = ComputeVisionLanguageBoundary(leadingLayerCount: 2, visionLayerCount: _options.NumVisionLayers, visionBlockLayerCount: TransformerBlockLayerCount(_options.DropoutRate), trailingLayerCount: 5); }
-    private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
+    private int ComputePatchSize() =>
+        ComputeVisualPatchSize(_options.ImageSize, _options.MaxVisualTokens, roundUp: true);
 
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+    // +2 leading layers from the helper: PatchEmbedding + LayerNorm.
+    private void ComputeEncoderDecoderBoundary()
+    {
+        _encoderLayerEnd = ComputeVisionLanguageBoundary(
+            leadingLayerCount: 2,
+            visionLayerCount: _options.NumVisionLayers,
+            visionBlockLayerCount: TransformerBlockLayerCount(_options.DropoutRate),
+            trailingLayerCount: 5
+        );
+    }
+
+    private Tensor<T> TokenizeText(string text)
+    {
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
+        var encoding = _tokenizer.Encode(text);
+        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
+        var tokens = new Tensor<T>([seqLen]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        return tokens;
+    }
+
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
+        var c = input;
+        foreach (var l in Layers)
+            c = l.Forward(c);
+        return c;
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        TrainWithTape(input, expected);
+        SetTrainingMode(false);
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "InternVL3-Native" : "InternVL3-ONNX", Description = "InternVL3: Exploring Advanced Training and Test-Time Recipes for Open-Source Multimodal Models (2025)", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "InternVL3"; m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString(); m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName; m.AdditionalInfo["DynamicResolution"] = _options.EnableDynamicResolution.ToString(); return m; }
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.VisionDim); writer.Write(_options.DecoderDim); writer.Write(_options.ProjectionDim); writer.Write(_options.NumVisionLayers); writer.Write(_options.NumDecoderLayers); writer.Write(_options.NumHeads); writer.Write(_options.PixelShuffleFactor); writer.Write(_options.EnableDynamicResolution); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.VisionDim = reader.ReadInt32(); _options.DecoderDim = reader.ReadInt32(); _options.ProjectionDim = reader.ReadInt32(); _options.NumVisionLayers = reader.ReadInt32(); _options.NumDecoderLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); _options.PixelShuffleFactor = reader.ReadInt32(); _options.EnableDynamicResolution = reader.ReadBoolean(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new InternVL3<T>(Architecture, mp, _options); return new InternVL3<T>(Architecture, _options); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(InternVL3<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "InternVL3-Native" : "InternVL3-ONNX",
+            Description =
+                "InternVL3: Exploring Advanced Training and Test-Time Recipes for Open-Source Multimodal Models (2025)",
+            FeatureCount = _options.DecoderDim,
+            Complexity = _options.NumVisionLayers + _options.NumDecoderLayers,
+        };
+        m.AdditionalInfo["Architecture"] = "InternVL3";
+        m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString();
+        m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
+        m.AdditionalInfo["DynamicResolution"] = _options.EnableDynamicResolution.ToString();
+        return m;
+    }
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_useNativeMode);
+        writer.Write(_options.ModelPath ?? string.Empty);
+        writer.Write(_options.ImageSize);
+        writer.Write(_options.VisionDim);
+        writer.Write(_options.DecoderDim);
+        writer.Write(_options.ProjectionDim);
+        writer.Write(_options.NumVisionLayers);
+        writer.Write(_options.NumDecoderLayers);
+        writer.Write(_options.NumHeads);
+        writer.Write(_options.PixelShuffleFactor);
+        writer.Write(_options.EnableDynamicResolution);
+    }
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _useNativeMode = reader.ReadBoolean();
+        string mp = reader.ReadString();
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
+        _options.ImageSize = reader.ReadInt32();
+        _options.VisionDim = reader.ReadInt32();
+        _options.DecoderDim = reader.ReadInt32();
+        _options.ProjectionDim = reader.ReadInt32();
+        _options.NumVisionLayers = reader.ReadInt32();
+        _options.NumDecoderLayers = reader.ReadInt32();
+        _options.NumHeads = reader.ReadInt32();
+        _options.PixelShuffleFactor = reader.ReadInt32();
+        _options.EnableDynamicResolution = reader.ReadBoolean();
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new InternVL3<T>(Architecture, mp, _options);
+        return new InternVL3<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(InternVL3<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
 }

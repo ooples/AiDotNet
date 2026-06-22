@@ -499,15 +499,19 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        // CPU path: forward pass through all layers
-        var current = input;
-
-        foreach (var layer in Layers)
+        // CPU path: forward pass through all layers (wrapped in the #1622 verify-then-trust compiled
+        // gate; no-op unless acceleration is engaged).
+        return Accelerate(input, () =>
         {
-            current = layer.Forward(current);
-        }
+            var current = input;
 
-        return current;
+            foreach (var layer in Layers)
+            {
+                current = layer.Forward(current);
+            }
+
+            return current;
+        });
     }
 
     /// <summary>
@@ -753,7 +757,7 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
                 { "ExplorationRate", Convert.ToDouble(_epsilon) },
                 { "ReplayBufferSize", _replayBuffer.Count }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

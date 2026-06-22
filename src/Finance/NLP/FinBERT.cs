@@ -876,14 +876,47 @@ public class FinBERT<T> : FinancialNLPModelBase<T>
             inputData[i] = (long)NumOps.ToDouble(input.Data.Span[i]);
         }
 
+        var tensorShape = new[] { 1, _maxSequenceLength };
         var inputTensor = new OnnxTensors.DenseTensor<long>(
             inputData,
-            new[] { 1, _maxSequenceLength });
+            tensorShape);
 
         var inputs = new List<NamedOnnxValue>
         {
             NamedOnnxValue.CreateFromTensor("input_ids", inputTensor)
         };
+
+        // Standard exported BERT ONNX graphs (e.g. ProsusAI/finbert via optimum)
+        // require attention_mask and token_type_ids in addition to input_ids.
+        // Only add the inputs the loaded session actually declares so that
+        // models exported without them continue to work unchanged.
+        var declaredInputs = OnnxSession.InputMetadata;
+
+        if (declaredInputs.ContainsKey("attention_mask"))
+        {
+            // attention_mask: 1 for real (non-pad) token positions, 0 for padding.
+            long padTokenId = _vocabulary.TryGetValue("[PAD]", out int padId) ? padId : 0L;
+            var attentionData = new long[inputData.Length];
+            for (int i = 0; i < inputData.Length; i++)
+            {
+                attentionData[i] = inputData[i] == padTokenId ? 0L : 1L;
+            }
+
+            var attentionTensor = new OnnxTensors.DenseTensor<long>(
+                attentionData,
+                tensorShape);
+            inputs.Add(NamedOnnxValue.CreateFromTensor("attention_mask", attentionTensor));
+        }
+
+        if (declaredInputs.ContainsKey("token_type_ids"))
+        {
+            // token_type_ids: all 0s for single-sentence classification.
+            var tokenTypeData = new long[inputData.Length];
+            var tokenTypeTensor = new OnnxTensors.DenseTensor<long>(
+                tokenTypeData,
+                tensorShape);
+            inputs.Add(NamedOnnxValue.CreateFromTensor("token_type_ids", tokenTypeTensor));
+        }
 
         using var results = OnnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();

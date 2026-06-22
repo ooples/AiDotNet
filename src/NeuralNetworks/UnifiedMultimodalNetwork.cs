@@ -156,7 +156,14 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         _numTransformerLayers = numTransformerLayers;
         _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSeededRandom(42);
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
-        _optimizer = optimizer ?? new Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // AdamW (decoupled weight decay) is the canonical optimizer for multimodal transformers:
+        // Lumina-T2X (Gao et al. 2024) and its Gemma 2B text encoder both train with AdamW +
+        // weight decay 0.01. Plain Adam has no mechanism to bound the classification-head logits,
+        // so under CrossEntropyWithLogitsLoss the logits inflate without limit as training
+        // continues (correct-class logit → +∞, others → −∞). Decoupled weight decay establishes a
+        // stable equilibrium where the logit magnitude — and therefore the loss — plateaus instead
+        // of drifting, which is the paper-faithful behaviour for a regularized transformer.
+        _optimizer = optimizer ?? new Optimizers.AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         SupportedInputModalities = new List<ModalityType>
         {
@@ -198,35 +205,60 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
                 Architecture, _embeddingDimension, _numTransformerLayers));
         }
 
-        // Distribute layers to internal fields
+        BindLayerFieldsFromLayers();
+    }
+
+    [System.Diagnostics.CodeAnalysis.MemberNotNull(
+        nameof(_textEncoder), nameof(_imageEncoder), nameof(_audioEncoder), nameof(_videoEncoder),
+        nameof(_transformerLayers), nameof(_crossModalAttention),
+        nameof(_textDecoder), nameof(_imageDecoder), nameof(_audioDecoder), nameof(_videoDecoder),
+        nameof(_fusionLayer), nameof(_classificationHead), nameof(_generationHead))]
+    private void BindLayerFieldsFromLayers()
+    {
+        int expectedLayerCount = 4 + _numTransformerLayers + 4 + 4 + 3;
+        if (Layers.Count < expectedLayerCount)
+        {
+            throw new InvalidDataException(
+                $"UnifiedMultimodalNetwork expected at least {expectedLayerCount} layers, found {Layers.Count}.");
+        }
+
+        TLayer RequireLayer<TLayer>(int index, string role)
+            where TLayer : class, ILayer<T>
+        {
+            if (Layers[index] is TLayer layer)
+                return layer;
+
+            throw new InvalidDataException(
+                $"UnifiedMultimodalNetwork layer {index} for {role} must be {typeof(TLayer).Name}, found {Layers[index].GetType().Name}.");
+        }
+
         int idx = 0;
 
-        // 4 modality encoders
-        _textEncoder = (DenseLayer<T>)Layers[idx++];
-        _imageEncoder = (DenseLayer<T>)Layers[idx++];
-        _audioEncoder = (DenseLayer<T>)Layers[idx++];
-        _videoEncoder = (DenseLayer<T>)Layers[idx++];
+        _textEncoder = RequireLayer<DenseLayer<T>>(idx++, "text encoder");
+        _imageEncoder = RequireLayer<DenseLayer<T>>(idx++, "image encoder");
+        _audioEncoder = RequireLayer<DenseLayer<T>>(idx++, "audio encoder");
+        _videoEncoder = RequireLayer<DenseLayer<T>>(idx++, "video encoder");
 
-        // Unified transformer layers
         _transformerLayers = new MultiHeadAttentionLayer<T>[_numTransformerLayers];
         for (int i = 0; i < _numTransformerLayers; i++)
-            _transformerLayers[i] = (MultiHeadAttentionLayer<T>)Layers[idx++];
+        {
+            _transformerLayers[i] = RequireLayer<MultiHeadAttentionLayer<T>>(idx++, $"transformer layer {i}");
+        }
 
-        // Cross-modal attention (4 layers)
         _crossModalAttention = new MultiHeadAttentionLayer<T>[4];
         for (int i = 0; i < 4; i++)
-            _crossModalAttention[i] = (MultiHeadAttentionLayer<T>)Layers[idx++];
+        {
+            _crossModalAttention[i] = RequireLayer<MultiHeadAttentionLayer<T>>(idx++, $"cross-modal attention {i}");
+        }
 
-        // 4 modality decoders
-        _textDecoder = (DenseLayer<T>)Layers[idx++];
-        _imageDecoder = (DenseLayer<T>)Layers[idx++];
-        _audioDecoder = (DenseLayer<T>)Layers[idx++];
-        _videoDecoder = (DenseLayer<T>)Layers[idx++];
+        _textDecoder = RequireLayer<DenseLayer<T>>(idx++, "text decoder");
+        _imageDecoder = RequireLayer<DenseLayer<T>>(idx++, "image decoder");
+        _audioDecoder = RequireLayer<DenseLayer<T>>(idx++, "audio decoder");
+        _videoDecoder = RequireLayer<DenseLayer<T>>(idx++, "video decoder");
 
-        // Fusion and output heads
-        _fusionLayer = (DenseLayer<T>)Layers[idx++];
-        _classificationHead = (DenseLayer<T>)Layers[idx++];
-        _generationHead = (DenseLayer<T>)Layers[idx++];
+        _fusionLayer = RequireLayer<DenseLayer<T>>(idx++, "fusion layer");
+        _classificationHead = RequireLayer<DenseLayer<T>>(idx++, "classification head");
+        _generationHead = RequireLayer<DenseLayer<T>>(idx++, "generation head");
     }
 
     #endregion
@@ -984,16 +1016,121 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        var inputVec = input.ToVector();
-        var multimodalInput = new MultimodalInput<T>
+        // Match NeuralNetworkBase.Predict's eval-mode wrapper so stateful
+        // layers (Dropout, BatchNorm batch-stats vs running-stats, the
+        // attention-layer dropout in the transformer stack) behave
+        // deterministically. The base override is skipped because we
+        // override Predict directly. NoGradScope additionally suppresses
+        // tape recording during inference.
+        using var _noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
         {
-            Modality = ModalityType.Text,
-            InternalData = input
-        };
+            return PredictCore(input);
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
+    }
 
-        var embedding = Encode(multimodalInput);
-        var embeddingTensor = Tensor<T>.FromVector(embedding);
-        return _classificationHead.Forward(embeddingTensor);
+    private Tensor<T> PredictCore(Tensor<T> input)
+    {
+        // Treat the raw input tensor as the modality payload (Perceiver-style:
+        // arbitrary-shape input is projected to a fixed-dim token sequence by
+        // the input encoder, then the unified transformer processes the
+        // sequence, and a task head produces the classification logits). The
+        // previous Predict wrapped input in a MultimodalInput{Modality=Text}
+        // but routed through EncodeText(input.TextContent) — input.TextContent
+        // was never set, so EncodeText returned an all-zero 512-dim vector and
+        // the network produced the same output for ANY input tensor (caught by
+        // DifferentInputs_ShouldProduceDifferentOutputs and the
+        // collapse-detection guards downstream).
+        //
+        // Use _textEncoder as the input projection (it's the encoder slot
+        // wired through the input modality path), run the unified transformer
+        // stack, then the classification head. The decoders/cross-modal
+        // attention are exercised only by Generate(); a single-input Predict
+        // doesn't activate them, mirroring the Perceiver decoder pattern
+        // where the classification task head sees just the latents.
+        //
+        // Pass the raw input directly into _textEncoder; the lazy
+        // ResolveLazyLayerShapes has already pinned the layer to
+        // embeddingDim → embeddingDim, and the test fixtures hand exactly an
+        // embeddingDim-shape tensor. FlattenToExpectedSize miscomputes the
+        // expected dim (it divides total params by output dim and gets
+        // inputDim + 1 due to the bias term) so it pads/truncates needlessly.
+        //
+        // Reshape a rank-1 [features] input to rank-2 [1, features] so the
+        // textEncoder's final output stays rank-2 and the classification
+        // head sees [1, embedDim] → [1, outputSize]. Running through the
+        // shared transformer stack as well so Predict goes through the same
+        // ResolveLazyLayerShapes path that Train will exercise, keeping the
+        // Predict ↔ Clone parity invariant tight: the original and the
+        // clone walk the same set of lazy-init triggers in the same order.
+        // Reshapes use tensor.Reshape here because Predict runs under NoGradScope
+        // (eval mode) and the inference path doesn't need tape connectivity. Using
+        // Engine.Reshape in eval mode triggers an AutoTracer.RecordOp cache keyed
+        // only on input SHAPE, so two different-VALUE constant inputs with the
+        // same shape resolve to the same cached plan output — making
+        // DifferentInputs_ShouldProduceDifferentOutputs collapse to identical
+        // outputs even though the underlying tensors differ. ForwardForTraining
+        // (the tape-recording path) is what needs Engine.Reshape; Predict does
+        // not — its forward pass goes through DenseLayer / MHA which already
+        // handle rank adaptation internally.
+        var shapedInput = input.Rank == 1
+            ? input.Reshape(new[] { 1, input.Shape[0] })
+            : input;
+        var encoded = _textEncoder.Forward(shapedInput);
+        // Wrap rank-2 [B, D] as rank-3 [B, seq=1, D] for the transformer stack,
+        // then unwrap back to rank-2 for the classification head.
+        Tensor<T> transformed = encoded.Rank == 2
+            ? encoded.Reshape(new[] { encoded.Shape[0], 1, encoded.Shape[1] })
+            : encoded;
+        // Apply transformer layers with residual connections. Standard
+        // Transformer block (Vaswani et al. 2017 §3.1) is `x' = x + MHA(x)`,
+        // not `x' = MHA(x)`. Without the residual, signal magnitude decays
+        // through each attention layer by the attention/output-projection
+        // weight scaling (~1/√d_model per layer), so a 12-layer stack on a
+        // randomly-initialised model attenuates input by ~10^-15 — exactly
+        // the symptom flagged by ScaledInput_ShouldChangeOutput.
+        foreach (var layer in _transformerLayers)
+        {
+            var attended = layer.Forward(transformed);
+            // Engine.TensorAdd is the vectorized residual add. Skip when
+            // shapes don't match (e.g. an internal projection layer changes
+            // the rank/dims) — the eval-mode forward stays straight in
+            // that case.
+            transformed = ShapesMatch(transformed, attended)
+                ? Engine.TensorAdd(transformed, attended)
+                : attended;
+        }
+        var pooled = transformed.Rank == 3
+            ? transformed.Reshape(new[] { transformed.Shape[0], transformed.Shape[2] })
+            : transformed;
+        // The classification head emits raw logits; CrossEntropyWithLogitsLoss applies
+        // log-softmax internally during training (so ForwardForTraining returns logits).
+        // The INFERENCE prediction of a multi-class classifier, however, is the class
+        // probability DISTRIBUTION — softmax over the class axis (Goodfellow et al. 2016
+        // §6.2.2; standard for every softmax-classifier head). Returning the normalized
+        // distribution rather than unbounded logits is both the paper-faithful contract
+        // (Predict yields P(class | input), summing to 1) and numerically well-behaved:
+        // because softmax saturates toward the one-hot target as the correct-class logit
+        // grows, the output cannot drift past the target, so continued training converges
+        // monotonically instead of inflating without bound.
+        var logits = _classificationHead.Forward(pooled);
+        return Engine.Softmax(logits, axis: -1);
+    }
+
+    /// <summary>True iff the two tensors are element-wise broadcastable
+    /// without any reshape (same rank, same dim values).</summary>
+    private static bool ShapesMatch(Tensor<T> a, Tensor<T> b)
+    {
+        if (a.Shape.Length != b.Shape.Length || a.Length != b.Length) return false;
+        for (int i = 0; i < a.Shape.Length; i++)
+            if (a.Shape[i] != b.Shape[i]) return false;
+        return true;
     }
 
     /// <inheritdoc/>
@@ -1010,10 +1147,57 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         }
     }
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
+    /// <summary>
+    /// Training-mode forward — same architecture as <see cref="Predict"/> but routes
+    /// every reshape through <see cref="IEngine.Reshape{T}"/> so the gradient tape
+    /// stays connected end-to-end. The inference Predict can use
+    /// <c>tensor.Reshape</c> because eval-mode skips tape recording, but
+    /// ForwardForTraining MUST register reshapes with the tape — otherwise the
+    /// backward pass can't trace gradients back through the rank-1→rank-2 input
+    /// adapter or the rank-3↔rank-2 transformer wrap, leaving the encoder/
+    /// classification head with zero gradient signal
+    /// (Training_ShouldChangeParameters, GradientFlow_ShouldBeNonZeroAndFinite,
+    /// and the full training cascade all gated on this fix per project memory
+    /// feedback_tensor_reshape_gradient.md).
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
-        SetParameters(gradients);
+        var shapedInput = input.Rank == 1
+            ? Engine.Reshape(input, new[] { 1, input.Shape[0] })
+            : input;
+        var encoded = _textEncoder.Forward(shapedInput);
+        Tensor<T> transformed = encoded.Rank == 2
+            ? Engine.Reshape(encoded, new[] { encoded.Shape[0], 1, encoded.Shape[1] })
+            : encoded;
+        foreach (var layer in _transformerLayers)
+        {
+            var attended = layer.Forward(transformed);
+            // Engine.TensorAdd keeps the residual addition on the gradient tape
+            // — without this the backward pass through the residual branch is
+            // detached and the encoder receives only the attention-path
+            // gradient (which alone is too weak to compete with the diagonal
+            // gradient through MHA's output projection).
+            transformed = Engine.TensorAdd(transformed, attended);
+        }
+        var pooled = transformed.Rank == 3
+            ? Engine.Reshape(transformed, new[] { transformed.Shape[0], transformed.Shape[2] })
+            : transformed;
+        return _classificationHead.Forward(pooled);
+    }
+
+    /// <inheritdoc/>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        // NeuralNetworkBase.UpdateParameters contract: the caller passes the
+        // NEW parameter values (post-optimizer-step), NOT raw gradients. The
+        // parameter name is `parameters` on the base abstract — the prior
+        // override here used `gradients` and treated them as the new params
+        // too (which happens to be correct), but I temporarily mis-read the
+        // contract as "raw gradients" and added an lr·gradients subtract that
+        // produced double-application when the optimizer ALSO did Adam math
+        // upstream. Forward unchanged to SetParameters, which is the
+        // documented contract.
+        SetParameters(parameters);
     }
 
     /// <inheritdoc/>
@@ -1024,7 +1208,23 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
             Name = "UnifiedMultimodalNetwork",
             FeatureCount = _embeddingDimension,
             Complexity = _numTransformerLayers * 4,
-            Description = "Unified multimodal network for any-to-any modality generation"
+            Description = "Unified multimodal network for any-to-any modality generation",
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                // Golden-pattern required keys (neural-network metadata contract):
+                // ModelType, Architecture, InputShape, OutputShape, ParameterCount.
+                { "ModelType", nameof(UnifiedMultimodalNetwork<T>) },
+                { "Architecture", $"UnifiedMultimodalNetwork ({_numTransformerLayers} transformer layers, embeddingDim={_embeddingDimension}, maxSeq={_maxSequenceLength})" },
+                { "InputShape", Architecture.GetInputShape() },
+                { "OutputShape", Architecture.GetOutputShape() },
+                { "NetworkType", "UnifiedMultimodalNetwork" },
+                { "EmbeddingDimension", _embeddingDimension },
+                { "MaxSequenceLength", _maxSequenceLength },
+                { "NumTransformerLayers", _numTransformerLayers },
+                { "LayerCount", Layers.Count },
+                { "ParameterCount", GetParameterCount() }
+            },
+            ModelData = this.Serialize()
         };
     }
 
@@ -1039,9 +1239,19 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
+        int embeddingDimension = reader.ReadInt32();
+        int maxSequenceLength = reader.ReadInt32();
+        int numTransformerLayers = reader.ReadInt32();
+
+        if (embeddingDimension != _embeddingDimension ||
+            maxSequenceLength != _maxSequenceLength ||
+            numTransformerLayers != _numTransformerLayers)
+        {
+            throw new InvalidDataException(
+                "Serialized UnifiedMultimodalNetwork configuration does not match the target instance.");
+        }
+
+        BindLayerFieldsFromLayers();
     }
 
     /// <inheritdoc/>
@@ -1057,6 +1267,17 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
+        // Force shape resolution before reading ParameterCount per layer.
+        // Without this, a freshly-cloned model (whose lazy DenseLayers carry
+        // the InputShape=-1 sentinel until first Forward) reports
+        // ParameterCount=0 for every encoder/decoder, and the orig→cloned
+        // SetParameters loop silently drops every parameter — defeating
+        // Clone() and surfacing as Clone_ShouldProduceIdenticalOutput
+        // divergence. Mirrors AudioVisualCorrespondenceNetwork.GetParameters
+        // / SetParameters / ParameterCount. Idempotent (short-circuits via
+        // _layerShapesResolved on subsequent calls).
+        ResolveLazyLayerShapes();
+
         var allParams = new List<T>();
 
         void AddLayerParams(ILayer<T> layer)
@@ -1097,6 +1318,12 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Resolve lazy InputShape across every sublayer so each layer's
+        // ParameterCount returns its real weight count, not 0. Without this
+        // the loop below sizes every slice to 0 and writes nothing, leaving
+        // the clone with fresh random weights instead of the original's.
+        ResolveLazyLayerShapes();
+
         var offset = 0;
 
         void SetLayerParams(ILayer<T> layer)
@@ -1137,6 +1364,12 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
     {
         get
         {
+            // Resolve lazy InputShape so the encoder/decoder lazy DenseLayers
+            // report their true parameter count (otherwise InputShape=-1 →
+            // count=0 immediately after construction, failing
+            // Parameters_ShouldBeNonEmpty before any Forward).
+            ResolveLazyLayerShapes();
+
             var count = 0;
 
             count += (int)_textEncoder.ParameterCount;
@@ -1163,16 +1396,7 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
     /// <inheritdoc/>
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
-        var copy = new UnifiedMultimodalNetwork<T>(
-            Architecture,
-            _embeddingDimension,
-            _maxSequenceLength,
-            _numTransformerLayers,
-            _optimizer,
-            _lossFunction);
-
-        copy.SetParameters(GetParameters());
-        return copy;
+        return base.DeepCopy();
     }
 
     #endregion

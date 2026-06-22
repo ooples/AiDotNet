@@ -4,11 +4,12 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-public class IPAdapterPlusModelTests : DiffusionModelTestBase
+[Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4)
+public class IPAdapterPlusModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 4, 64, 64];
     protected override int[] OutputShape => [1, 4, 64, 64];
 
-    protected override IDiffusionModel<double> CreateModel()
-        => new IPAdapterPlusModel<double>(seed: 42);
+    protected override IDiffusionModel<float> CreateModel()
+        => new IPAdapterPlusModel<float>(seed: 42);
 }

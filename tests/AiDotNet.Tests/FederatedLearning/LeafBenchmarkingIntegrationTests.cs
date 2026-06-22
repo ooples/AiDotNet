@@ -12,6 +12,13 @@ namespace AiDotNet.Tests.FederatedLearning;
 
 public class LeafBenchmarkingIntegrationTests
 {
+    // u1's y values are [0, 0] so the regression model
+    // (trained on {(1,2,3)->0, (4,5,6)->1, (7,8,9)->1}) gets sample[0]
+    // correct and sample[1] WRONG. Seeded sampling that picks sample[0]
+    // yields a different accuracy than sampling that picks sample[1] —
+    // EvaluateBenchmarksAsync_WithSeededSampling_IsDeterministicAndSeedAffectsSelection
+    // relies on this asymmetry to prove that different seeds change the
+    // selected sample.
     private const string TinyLeafJson = @"
 {
   ""users"": [""u1"", ""u2""],
@@ -22,7 +29,7 @@ public class LeafBenchmarkingIntegrationTests
         [[1, 2], [3]],
         [[4, 5], [6]]
       ],
-      ""y"": [0, 1]
+      ""y"": [0, 0]
     },
     ""u2"": {
       ""x"": [

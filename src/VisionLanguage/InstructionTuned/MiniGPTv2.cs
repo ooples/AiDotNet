@@ -50,10 +50,16 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("MiniGPT-v2: Large Language Model as a Unified Interface for Vision-Language Multi-task Learning", "https://arxiv.org/abs/2310.09478", Year = 2023, Authors = "Chen et al.")]
+[ResearchPaper(
+    "MiniGPT-v2: Large Language Model as a Unified Interface for Vision-Language Multi-task Learning",
+    "https://arxiv.org/abs/2310.09478",
+    Year = 2023,
+    Authors = "Chen et al."
+)]
 public class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MiniGPTv2Options _options;
+
     public override ModelOptions GetOptions() => _options;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -64,9 +70,15 @@ public class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     private readonly List<ILayer<T>> _qFormerLayers = new List<ILayer<T>>();
     private readonly List<ILayer<T>> _decoderLayers = new List<ILayer<T>>();
 
-    public MiniGPTv2(NeuralNetworkArchitecture<T> architecture, string modelPath, MiniGPTv2Options? options = null) : base(architecture)
+    public MiniGPTv2(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        MiniGPTv2Options? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new MiniGPTv2Options();
+        _options.ValidateVisualSizing();
         SyncImageSizeWithArchitecture();
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
@@ -82,9 +94,15 @@ public class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         InitializeLayers();
     }
 
-    public MiniGPTv2(NeuralNetworkArchitecture<T> architecture, MiniGPTv2Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    public MiniGPTv2(
+        NeuralNetworkArchitecture<T> architecture,
+        MiniGPTv2Options? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new MiniGPTv2Options();
+        _options.ValidateVisualSizing();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
@@ -99,7 +117,8 @@ public class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     {
         int h = Architecture.InputHeight;
         int w = Architecture.InputWidth;
-        if (h > 0 && w > 0 && h == w) _options.ImageSize = h;
+        if (h > 0 && w > 0 && h == w)
+            _options.ImageSize = h;
     }
 
     public int EmbeddingDimension => _options.DecoderDim;
@@ -113,9 +132,11 @@ public class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p));
+        if (IsOnnxMode && OnnxModel is not null)
+            return L2Normalize(OnnxModel.Run(p));
         var c = p;
-        foreach (var l in Layers) c = l.Forward(c);
+        foreach (var l in Layers)
+            c = l.Forward(c);
         return L2Normalize(c);
     }
 
@@ -134,15 +155,18 @@ public class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(p);
 
         // Step 1: Frozen ViT-G/14 vision encoder
         var visionOut = p;
-        foreach (var l in Layers) visionOut = l.Forward(visionOut);
+        foreach (var l in Layers)
+            visionOut = l.Forward(visionOut);
 
         // Step 2: Q-Former cross-attention layers
         var qFormerOut = visionOut;
-        foreach (var l in _qFormerLayers) qFormerOut = l.Forward(qFormerOut);
+        foreach (var l in _qFormerLayers)
+            qFormerOut = l.Forward(qFormerOut);
 
         // Fuse features with prompt tokens via ConcatenateTensors
         Tensor<T> fusedInput;
@@ -157,24 +181,31 @@ public class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         }
 
         var output = fusedInput;
-        foreach (var l in _decoderLayers) output = l.Forward(output);
+        foreach (var l in _decoderLayers)
+            output = l.Forward(output);
 
         return output;
     }
 
-    public Tensor<T> Chat(Tensor<T> image, IEnumerable<(string Role, string Content)> conversationHistory, string userMessage)
+    public Tensor<T> Chat(
+        Tensor<T> image,
+        IEnumerable<(string Role, string Content)> conversationHistory,
+        string userMessage
+    )
     {
         ThrowIfDisposed();
         var sb = new System.Text.StringBuilder();
         sb.Append(_options.SystemPrompt);
-        foreach (var (role, content) in conversationHistory) sb.Append($"\n{role}: {content}");
+        foreach (var (role, content) in conversationHistory)
+            sb.Append($"\n{role}: {content}");
         sb.Append($"\nUser: {userMessage}\nAssistant:");
         return GenerateFromImage(image, sb.ToString());
     }
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture is TripleStreamArchitecture<T> triple)
         {
             // Vision, Q-Former, and decoder supplied as named streams.
@@ -188,22 +219,33 @@ public class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 
         int blockSize = _options.DropoutRate > 0 ? 6 : 5;
         int qfBlockSize = _options.DropoutRate > 0 ? 8 : 7;
-        int visionLayerEnd = 1 + _options.NumVisionLayers * blockSize;
+        // 2 + ...: PatchEmbeddingLayer + pre-norm, then N×vision-block.
+        int visionLayerEnd = 2 + _options.NumVisionLayers * blockSize;
         int qfProj = _options.VisionDim != _options.QFormerDim ? 1 : 0;
         int qFormerLayerEnd = visionLayerEnd + qfProj + _options.NumQFormerLayers * qfBlockSize;
 
         var allLayers = LayerHelper<T>.CreateDefaultQFormerGenerativeLayers(
-            _options.VisionDim, _options.QFormerDim, _options.DecoderDim,
-            _options.NumVisionLayers, _options.NumQFormerLayers, _options.NumDecoderLayers,
-            _options.NumQueryTokens, _options.NumHeads, _options.NumQFormerHeads,
-            _options.DropoutRate);
+            _options.VisionDim,
+            _options.QFormerDim,
+            _options.DecoderDim,
+            _options.NumVisionLayers,
+            _options.NumQFormerLayers,
+            _options.NumDecoderLayers,
+            _options.NumQueryTokens,
+            _options.NumHeads,
+            _options.NumQFormerHeads,
+            _options.DropoutRate
+        );
 
         int idx = 0;
         foreach (var layer in allLayers)
         {
-            if (idx < visionLayerEnd) Layers.Add(layer);
-            else if (idx < qFormerLayerEnd) _qFormerLayers.Add(layer);
-            else _decoderLayers.Add(layer);
+            if (idx < visionLayerEnd)
+                Layers.Add(layer);
+            else if (idx < qFormerLayerEnd)
+                _qFormerLayers.Add(layer);
+            else
+                _decoderLayers.Add(layer);
             idx++;
         }
 
@@ -213,11 +255,13 @@ public class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 
     private Tensor<T> TokenizeText(string text)
     {
-        if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized.");
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
         var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        for (int i = 0; i < seqLen; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
         return tokens;
     }
 
@@ -229,30 +273,46 @@ public class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         // PreprocessImage. Without this, the ONNX fast path would diverge
         // silently from native.
         var c = PreprocessImage(input);
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(c);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(c);
         SetTrainingMode(false);
-        foreach (var l in Layers) c = l.Forward(c);
+        foreach (var l in Layers)
+            c = l.Forward(c);
         return c;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        try { TrainWithTape(PreprocessImage(input), expected, _optimizer); }
-        finally { SetTrainingMode(false); }
+        try
+        {
+            TrainWithTape(PreprocessImage(input), expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
     {
-        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
         int idx = 0;
-        foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
         // Sync the auxiliary streams (Q-Former, decoder) too — see
         // OpenFlamingo.UpdateParameters for the same dual-stream rationale.
         foreach (var l in EnumerateAuxiliaryStreamTrainableLayers())
         {
-            if (l is null) continue;
+            if (l is null)
+                continue;
             int c = (int)l.ParameterCount;
             l.UpdateParameters(parameters.Slice(idx, c));
             idx += c;
@@ -260,8 +320,8 @@ public class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     }
 
     /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-        => EnumerateAuxiliaryStreamTrainableLayers();
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
+        EnumerateAuxiliaryStreamTrainableLayers();
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
@@ -273,9 +333,11 @@ public class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var m = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "MiniGPT-v2-Native" : "MiniGPT-v2-ONNX",
-            Description = "MiniGPT-v2: Large Language Model as a Unified Interface for Vision-Language Multi-task Learning (Chen et al., 2023)",
+            Description =
+                "MiniGPT-v2: Large Language Model as a Unified Interface for Vision-Language Multi-task Learning (Chen et al., 2023)",
             FeatureCount = _options.DecoderDim,
-            Complexity = _options.NumVisionLayers + _options.NumQFormerLayers + _options.NumDecoderLayers
+            Complexity =
+                _options.NumVisionLayers + _options.NumQFormerLayers + _options.NumDecoderLayers,
         };
         m.AdditionalInfo["Architecture"] = "MiniGPT-v2";
         m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString();
@@ -302,7 +364,8 @@ public class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     {
         _useNativeMode = reader.ReadBoolean();
         string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
         _options.ImageSize = reader.ReadInt32();
         _options.VisionDim = reader.ReadInt32();
         _options.QFormerDim = reader.ReadInt32();
@@ -325,14 +388,19 @@ public class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 
     private void ThrowIfDisposed()
     {
-        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(MiniGPTv2<T>));
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(MiniGPTv2<T>));
     }
 
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
-        if (disposing) { OnnxModel?.Dispose(); }
+        if (disposing)
+        {
+            OnnxModel?.Dispose();
+        }
         base.Dispose(disposing);
     }
 }

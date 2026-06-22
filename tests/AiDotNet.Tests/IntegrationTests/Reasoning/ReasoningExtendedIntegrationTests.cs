@@ -1,5 +1,9 @@
+using AiDotNet.Agentic.Models;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using System.Collections.Generic;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Reasoning.Components;
 using AiDotNet.Reasoning.ComputeScaling;
@@ -1210,27 +1214,26 @@ public class ReasoningExtendedIntegrationTests
     #region Mock Classes
 
     /// <summary>
-    /// Mock IChatModel for testing components that require it.
+    /// Mock IChatClient for testing components that require it.
     /// </summary>
-    private class MockChatModel<T> : IChatModel<T>
+    private class MockChatModel<T> : IChatClient<T>
     {
-        public string ModelName => "MockChatModel";
-        public int MaxContextTokens => 4096;
-        public int MaxGenerationTokens => 1024;
+        public string ModelId => "MockChatModel";
 
-        public Task<string> GenerateAsync(string prompt, CancellationToken cancellationToken = default)
-        {
-            return Task.FromResult("{\"contradictory\": false}");
-        }
+        public Task<ChatResponse> GetResponseAsync(
+            IReadOnlyList<ChatMessage> messages,
+            ChatOptions? options = null,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(new ChatResponse(ChatMessage.Assistant("{\"contradictory\": false}")));
 
-        public string Generate(string prompt)
+        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+            IReadOnlyList<ChatMessage> messages,
+            ChatOptions? options = null,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            return "{\"contradictory\": false}";
-        }
-
-        public Task<string> GenerateResponseAsync(string prompt, CancellationToken cancellationToken = default)
-        {
-            return GenerateAsync(prompt, cancellationToken);
+            await Task.CompletedTask;
+            yield return ChatResponseUpdate.ForText("{\"contradictory\": false}");
+            yield return ChatResponseUpdate.ForFinish(ChatFinishReason.Stop);
         }
     }
 

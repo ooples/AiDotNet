@@ -150,10 +150,21 @@ public class SpikingFullSubNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         var result = ComputeISTFT(enhanced, audio.Length);
         if (EnhancementStrength < 1.0)
         {
+            // result = s · result + (1 − s) · audio  via vectorised Engine ops
+            // when shapes match; falls back to scalar min-length blending.
             T s = NumOps.FromDouble(EnhancementStrength);
             T inv = NumOps.FromDouble(1.0 - EnhancementStrength);
-            for (int i = 0; i < result.Length && i < audio.Length; i++)
-                result[i] = NumOps.Add(NumOps.Multiply(s, result[i]), NumOps.Multiply(inv, audio[i]));
+            if (result.Length == audio.Length && result._shape.SequenceEqual(audio._shape))
+            {
+                var scaledResult = Engine.TensorMultiplyScalar(result, s);
+                var scaledNoisy = Engine.TensorMultiplyScalar(audio, inv);
+                result = Engine.TensorAdd(scaledResult, scaledNoisy);
+            }
+            else
+            {
+                for (int i = 0; i < result.Length && i < audio.Length; i++)
+                    result[i] = NumOps.Add(NumOps.Multiply(s, result[i]), NumOps.Multiply(inv, audio[i]));
+            }
         }
         return result;
     }
@@ -303,6 +314,10 @@ public class SpikingFullSubNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
     private Tensor<T> ApplyMask(Tensor<T> stft, Tensor<T> mask)
     {
+        // Engine.TensorMultiply for the shapes-match fast path; per-element
+        // loop with min-length truncation as the mismatched-shape fallback.
+        if (stft.Length == mask.Length && stft._shape.SequenceEqual(mask._shape))
+            return Engine.TensorMultiply(stft, mask);
         var result = new Tensor<T>(stft._shape);
         for (int i = 0; i < Math.Min(stft.Length, mask.Length); i++)
             result[i] = NumOps.Multiply(stft[i], mask[i]);

@@ -321,7 +321,13 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
     {
         EnsureInitializedFromInput(input);
 
-        if (IsTrainingMode)
+        // #1624: _lastInput / _lastMean / _lastVariance are manual-backward state.
+        // Under tape autodiff Engine.LayerNorm records its own backward state, so
+        // these are write-only and only pin a redundant reference to each
+        // activation. Cache only when no tape is recording (or the safety hatch is
+        // set). See LayerBase.ShouldCacheActivationsForManualBackward.
+        bool cacheForManualBackward = IsTrainingMode && ShouldCacheActivationsForManualBackward;
+        if (cacheForManualBackward)
         {
             _lastInput = input;
         }
@@ -336,7 +342,7 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
             out var mean,
             out var variance);
 
-        if (IsTrainingMode)
+        if (cacheForManualBackward)
         {
             _lastMean = mean;
             _lastVariance = variance;

@@ -50,6 +50,23 @@ public class MLPMixerBlockLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Persists the constructor arguments so the deserializer can rebuild this layer
+    /// at the same shape. Without this override the layer is reconstructed with default
+    /// patch/hidden/expansion values and SetParameters throws because the temporal-mixer
+    /// expand/contract Dense widths (numPatches × expansionFactor) and the channel-mixer
+    /// widths (hiddenDim × expansionFactor) drive the per-sublayer parameter counts.
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        metadata["NumPatches"] = _numPatches.ToString(ci);
+        metadata["HiddenDim"] = _hiddenDim.ToString(ci);
+        metadata["ExpansionFactor"] = _expansionFactor.ToString(ci);
+        return metadata;
+    }
+
+    /// <summary>
     /// Initializes a new <see cref="MLPMixerBlockLayer{T}"/>.
     /// </summary>
     /// <param name="numPatches">Sequence length (axis that the temporal mixer operates on).</param>

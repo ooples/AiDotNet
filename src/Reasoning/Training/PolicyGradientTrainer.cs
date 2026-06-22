@@ -1,3 +1,4 @@
+using AiDotNet.Agentic.Models;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Reasoning.Models;
@@ -138,7 +139,7 @@ namespace AiDotNet.Reasoning.Training;
 /// </remarks>
 internal class PolicyGradientTrainer<T>
 {
-    private readonly IChatModel<T> _model;
+    private readonly IChatClient<T> _model;
     private readonly IRewardModel<T>? _rewardModel;
     private readonly INumericOperations<T> _numOps;
     private readonly double _learningRate;
@@ -158,7 +159,7 @@ internal class PolicyGradientTrainer<T>
     /// <param name="entropyCoefficient">Entropy regularization coefficient.</param>
     /// <param name="useBaseline">Whether to use baseline for variance reduction.</param>
     public PolicyGradientTrainer(
-        IChatModel<T> model,
+        IChatClient<T> model,
         IRewardModel<T>? rewardModel = null,
         double learningRate = 0.0001,
         double discountFactor = 0.99,

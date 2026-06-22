@@ -327,6 +327,13 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
                 "Edge adjacency must be set via SetEdgeAdjacency before calling Forward.");
         }
 
+        // Guard the empty-mesh case up front: MeshCNN data is [numEdges, channels], and an
+        // edge count of 0 produces a degenerate [1, 0, channels] tensor at the GlobalPooling
+        // reshape that fails downstream with an opaque pooling error. Fail fast with a clear
+        // message instead.
+        if (input.Rank >= 1 && input.Shape[0] == 0)
+            throw new ArgumentException("Cannot pool over empty edge dimension (0 edges).", nameof(input));
+
         PropagateAdjacencyToLayers();
 
         Tensor<T> output = input;
@@ -494,7 +501,7 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
                 { "DropoutRate", _options.DropoutRate },
                 { "LayerCount", Layers.Count }
             },
-            ModelData = this.Serialize()
+            ModelData = SerializeForMetadata()
         };
     }
 

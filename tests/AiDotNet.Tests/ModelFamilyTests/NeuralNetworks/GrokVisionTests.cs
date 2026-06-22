@@ -21,7 +21,8 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 /// streaming (NeuralNetworkBase.TryAutoEnableWeightStreaming) engages on
 /// the layer-by-layer parameter budget, matching production deployment.
 /// </summary>
-public class GrokVisionTests : NeuralNetworkModelTestBase
+[Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4): serialized so its forward gets the whole machine
+public class GrokVisionTests : NeuralNetworkModelTestBase<float>
 {
     // [batch=1, num_tokens=4, vision_dim=1024]. vision_dim must equal
     // GrokVisionOptions.VisionDim (1024) so the first MultiHeadAttention's
@@ -32,9 +33,9 @@ public class GrokVisionTests : NeuralNetworkModelTestBase
     // Decoder emits DecoderDim (8192) per token.
     protected override int[] OutputShape => [1, 4, 8192];
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new GrokVision<double>(
-            architecture: new NeuralNetworkArchitecture<double>(
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new GrokVision<float>(
+            architecture: new NeuralNetworkArchitecture<float>(
                 inputType: InputType.OneDimensional,
                 taskType: NeuralNetworkTaskType.TextGeneration,
                 inputSize: 1024,

@@ -9,7 +9,20 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 public class VocoderOptions : TtsModelOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>
-    public VocoderOptions() { }
+    public VocoderOptions()
+    {
+        // Neural vocoder generators (HiFi-GAN, MelGAN, BigVGAN, UnivNet, Vocos,
+        // WaveGlow, ParallelWaveGAN, WaveNet, …) contain NO dropout in their
+        // generation path — they use weight normalization on the conv weights
+        // instead (Kong et al. 2020; Kumar et al. 2019; Lee et al. 2023; etc.).
+        // The TtsModelOptions default of 0.1 inserts DropoutLayers that are both
+        // non-paper-faithful AND destabilize training: dropout draws from a
+        // process-shared RNG, so on a small fixed-target task the per-step mask
+        // noise prevents the generator from converging (it plateaus at the
+        // dropout noise floor instead of memorizing), and the outcome becomes
+        // order-dependent on other models' RNG draws. Default to 0 here.
+        DropoutRate = 0.0;
+    }
 
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>

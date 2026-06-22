@@ -126,6 +126,7 @@ public class YamlConfigSourceGenerator : IIncrementalGenerator
                 MethodName = method.Name,
                 SectionName = sectionName,
                 ParameterType = paramType,
+                ParameterName = firstParam.Name,
                 ParameterTypeName = paramType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                 IsNullable = firstParam.NullableAnnotation == NullableAnnotation.Annotated
                     || (paramType is INamedTypeSymbol nts && nts.Name == "Nullable"),
@@ -238,7 +239,7 @@ public class YamlConfigSourceGenerator : IIncrementalGenerator
                 ParameterType = markedType,
                 ParameterTypeName = markedType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                 IsNullable = false,
-                IsAbstract = true,
+                IsAbstract = markedType.TypeKind == TypeKind.Interface || markedType.IsAbstract,
                 IsAttributeDiscovered = true,
             };
 
@@ -259,7 +260,9 @@ public class YamlConfigSourceGenerator : IIncrementalGenerator
             {
                 Method = info,
                 YamlPropertyName = ToCamelCase(sectionName),
-                ConcreteImplementations = FindImplementations(markedType, compilation),
+                ConcreteImplementations = markedType.TypeKind == TypeKind.Class && !markedType.IsAbstract
+                    ? GetSelfImplementationIfRegisterable(markedType)
+                    : FindImplementations(markedType, compilation),
             };
 
             // Only add if implementations were found.
@@ -619,7 +622,8 @@ internal static class YamlParamsHelper
         var interfaceSections = sections
             .Where(s => s.ConcreteImplementations.Count > 0 &&
                 (s.Method.Category == SectionCategory.Interface ||
-                 (s.Method.Category == SectionCategory.PocoConfig && s.Method.IsAbstract)))
+                 (s.Method.Category == SectionCategory.PocoConfig && s.Method.IsAbstract) ||
+                 (s.Method.Category == SectionCategory.PocoConfig && s.Method.IsAttributeDiscovered)))
             .ToList();
 
         var sb = new StringBuilder();
@@ -858,7 +862,8 @@ internal static class YamlParamsHelper
         var registrySections = sections
             .Where(s => s.ConcreteImplementations.Count > 0 &&
                 (s.Method.Category == SectionCategory.Interface ||
-                 (s.Method.Category == SectionCategory.PocoConfig && s.Method.IsAbstract)))
+                 (s.Method.Category == SectionCategory.PocoConfig && s.Method.IsAbstract) ||
+                 (s.Method.Category == SectionCategory.PocoConfig && s.Method.IsAttributeDiscovered)))
             .ToList();
 
         var sb = new StringBuilder();
@@ -935,6 +940,7 @@ internal static class YamlParamsHelper
             var category = section.Method.Category switch
             {
                 SectionCategory.Interface => "Interface",
+                SectionCategory.PocoConfig when section.Method.IsAttributeDiscovered && section.ConcreteImplementations.Count > 0 => "Interface",
                 SectionCategory.PocoConfig when section.Method.IsAbstract && !ContainsTypeParameters(section.Method.ParameterType) => "AbstractNonGeneric",
                 SectionCategory.PocoConfig when section.Method.IsAbstract && ContainsTypeParameters(section.Method.ParameterType) => "AbstractGeneric",
                 SectionCategory.PocoConfig when ContainsTypeParameters(section.Method.ParameterType) => "ConcreteGeneric",
@@ -950,7 +956,15 @@ internal static class YamlParamsHelper
             var pocoProps = new List<string>();
             if (section.Method.Category == SectionCategory.PocoConfig && !ContainsTypeParameters(section.Method.ParameterType) && !section.Method.IsAbstract)
             {
-                if (section.Method.ParameterType is INamedTypeSymbol namedType)
+                if (IsScalarYamlParameter(section.Method.ParameterType))
+                {
+                    var paramName = string.IsNullOrWhiteSpace(section.Method.ParameterName)
+                        ? ToCamelCase(section.Method.SectionName)
+                        : ToCamelCase(section.Method.ParameterName);
+                    var jsonType = GetJsonSchemaType(section.Method.ParameterType);
+                    pocoProps.Add($"\"{paramName}:{jsonType}\"");
+                }
+                else if (section.Method.ParameterType is INamedTypeSymbol namedType)
                 {
                     foreach (var member in namedType.GetMembers())
                     {
@@ -1042,6 +1056,89 @@ internal static class YamlParamsHelper
         return "object";
     }
 
+    private static bool IsScalarYamlParameter(ITypeSymbol type)
+    {
+        if (type is INamedTypeSymbol { Name: "Nullable", TypeArguments.Length: 1 } nullable)
+        {
+            type = nullable.TypeArguments[0];
+        }
+
+        if (type.TypeKind == TypeKind.Enum) return true;
+
+        return type.SpecialType is SpecialType.System_Boolean
+            or SpecialType.System_Int32
+            or SpecialType.System_Int64
+            or SpecialType.System_Single
+            or SpecialType.System_Double
+            or SpecialType.System_String;
+    }
+
+    private static List<ImplementationInfo> GetSelfImplementationIfRegisterable(INamedTypeSymbol symbol)
+    {
+        if (!IsEffectivelyPublicForGeneratedCode(symbol) ||
+            !HasOnlyResolvableTypeParametersForRegistry(symbol))
+        {
+            return new List<ImplementationInfo>();
+        }
+
+        var hasPublicCtor = symbol.Constructors.Any(c =>
+            c.DeclaredAccessibility == Accessibility.Public &&
+            !c.IsImplicitlyDeclared);
+        var hasImplicitDefaultCtor = symbol.Constructors.Any(c =>
+            c.IsImplicitlyDeclared &&
+            c.DeclaredAccessibility == Accessibility.Public);
+
+        if (!hasPublicCtor && !hasImplicitDefaultCtor)
+        {
+            return new List<ImplementationInfo>();
+        }
+
+        return new List<ImplementationInfo>
+        {
+            new ImplementationInfo
+            {
+                ShortName = symbol.Name,
+                FullyQualifiedName = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                    .Replace("global::", ""),
+            },
+        };
+    }
+
+    private static bool IsEffectivelyPublicForGeneratedCode(INamedTypeSymbol symbol)
+    {
+        for (INamedTypeSymbol? current = symbol; current is not null; current = current.ContainingType)
+        {
+            if (current.DeclaredAccessibility != Accessibility.Public)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool HasOnlyResolvableTypeParametersForRegistry(INamedTypeSymbol symbol)
+    {
+        var allowed = new HashSet<string>(StringComparer.Ordinal) { "T", "TInput", "TOutput" };
+        var allTypeParams = new List<ITypeParameterSymbol>();
+        var current = symbol;
+        while (current is not null)
+        {
+            allTypeParams.AddRange(current.TypeParameters);
+            current = current.ContainingType;
+        }
+
+        foreach (var tp in allTypeParams)
+        {
+            if (!allowed.Contains(tp.Name))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     // ───────────────────────────────────────────────────────────────
     // Helpers
     // ───────────────────────────────────────────────────────────────
@@ -1110,6 +1207,7 @@ internal static class YamlParamsHelper
         public string MethodName { get; set; } = "";
         public string SectionName { get; set; } = "";
         public ITypeSymbol? ParameterType { get; set; }
+        public string ParameterName { get; set; } = "";
         public string ParameterTypeName { get; set; } = "";
         public bool IsNullable { get; set; }
         public bool IsAbstract { get; set; }
@@ -1212,9 +1310,12 @@ internal static class YamlParamsHelper
                     c.IsImplicitlyDeclared &&
                     c.DeclaredAccessibility == Accessibility.Public);
 
-                // Skip nested types that aren't publicly accessible.
-                if (symbol.ContainingType is not null &&
-                    symbol.DeclaredAccessibility != Accessibility.Public)
+                // Skip types that aren't publicly accessible from generated code. This must check the
+                // FULL containment chain, not just nested types: top-level INTERNAL types in referenced
+                // assemblies (e.g. FormattedLogValues : IReadOnlyList<...> in Microsoft.Extensions.Logging)
+                // match broad BCL interfaces like IReadOnlyList<T> and would be emitted as typeof(...)
+                // references the generated registry cannot compile against (CS0122).
+                if (!IsEffectivelyPublic(symbol))
                 {
                     hasPublicCtor = false;
                     hasImplicitDefaultCtor = false;
@@ -1246,6 +1347,23 @@ internal static class YamlParamsHelper
             {
                 nestedType.Accept(this);
             }
+        }
+
+        /// <summary>
+        /// True when the type and every containing type is declared public — i.e. generated code in
+        /// another assembly can legally reference it via <c>typeof(...)</c>.
+        /// </summary>
+        private static bool IsEffectivelyPublic(INamedTypeSymbol symbol)
+        {
+            for (INamedTypeSymbol? current = symbol; current is not null; current = current.ContainingType)
+            {
+                if (current.DeclaredAccessibility != Accessibility.Public)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         /// <summary>

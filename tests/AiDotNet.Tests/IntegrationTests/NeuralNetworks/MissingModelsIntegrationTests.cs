@@ -206,6 +206,9 @@ public class MissingModelsIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GraphModels_RequireAdjacencyMatrix()
     {
+        await Task.Yield();
+        // Strict PyTorch-Geometric contract: graph task models REQUIRE the graph structure — Predict
+        // throws when no adjacency was set and the implicit-identity tolerance was not opted into.
         int numNodes = 3;
         int inputFeatures = 2;
         int numClasses = 2;

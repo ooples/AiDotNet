@@ -52,4 +52,4 @@ Console.WriteLine($"Predicted price: ${predictedPrice:N0}");
 
 - [Classification Tutorial](../classification/index.md) - Predict categories
 - [Time Series Tutorial](../time-series/index.md) - Forecast future values
-- [API Reference](../../api/index.md) - Full documentation
+- [API Reference](../../reference/index.md) - Full documentation

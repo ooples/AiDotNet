@@ -7,6 +7,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 
@@ -43,6 +44,19 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// compilation is disabled or fails.
     /// </summary>
     private readonly AiDotNet.NeuralNetworks.CompiledModelHost<T> _compileHost;
+
+    /// <summary>
+    /// Verify-then-trust gate (#1622 L3b) shared with <c>NeuralNetworkBase</c>: the per-step
+    /// <see cref="PredictCompiled"/> call a diffusion denoising loop makes runs eager once per shape to
+    /// confirm the compiled plan matches, then replays the trusted plan for the remaining 50+ steps —
+    /// the dominant inference cost of a foundation-scale diffusion model. Output stays numerically
+    /// identical to eager (rejected/unverified shapes fall back to eager). Process-wide opt-out via
+    /// <c>AIDOTNET_DISABLE_AUTO_COMPILE=1</c>.
+    /// </summary>
+    private readonly AiDotNet.NeuralNetworks.VerifiedInferenceGate<T> _inferenceGate = new();
+
+    private static readonly bool s_autoCompileDisabled =
+        string.Equals(System.Environment.GetEnvironmentVariable("AIDOTNET_DISABLE_AUTO_COMPILE"), "1", System.StringComparison.Ordinal);
 
     /// <summary>
     /// Monotonic layer-graph version. Concrete predictors bump this via
@@ -115,21 +129,17 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         if (!visited.Add(root)) yield break;
         stack.Push(root);
 
-        const System.Reflection.BindingFlags fieldFlags =
-            System.Reflection.BindingFlags.Instance |
-            System.Reflection.BindingFlags.Public |
-            System.Reflection.BindingFlags.NonPublic;
-
         while (stack.Count > 0)
         {
             var current = stack.Pop();
             var currentType = current.GetType();
             for (var t = currentType; t != null && t != typeof(object); t = t.BaseType)
             {
-                foreach (var field in t.GetFields(fieldFlags | System.Reflection.BindingFlags.DeclaredOnly))
+                // Cached, pre-filtered reference-type declared fields for this type — see
+                // GetDeclaredWalkableFields. Skips the per-field value-type/string probe
+                // (RuntimeType.IsPrimitiveImpl) that dominated the forward (#1646).
+                foreach (var field in GetDeclaredWalkableFields(t))
                 {
-                    if (field.FieldType.IsValueType || field.FieldType == typeof(string)) continue;
-
                     object? value;
                     try { value = field.GetValue(current); }
                     catch (Exception ex)
@@ -175,9 +185,18 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
                     }
                     else if (value is System.Collections.IEnumerable enumerable && value is not string)
                     {
+                        // We MUST enumerate the whole sequence: enumerating a streaming-placeholder
+                        // weight tensor (Tensor<T> as IEnumerable<float>) rehydrates it, and the
+                        // forward relies on that side effect (NoisePredictorWeightStreamingTests).
+                        // But value-type elements — the millions of boxed floats in a Tensor<T> /
+                        // float[] / double[] buffer — can never be, or own, a layer, so skip the
+                        // `visited` bookkeeping for them: hashing every boxed element
+                        // (RuntimeHelpers.GetHashCode) was the dominant walk cost (#1646). `continue`
+                        // still advances the enumerator, so rehydration is preserved.
                         foreach (var item in enumerable)
                         {
-                            if (item is null || !visited.Add(item)) continue;
+                            if (item is null || item is ValueType) continue;
+                            if (!visited.Add(item)) continue;
                             if (item is ILayer<T> nestedLayer)
                             {
                                 yield return nestedLayer;
@@ -209,16 +228,50 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// bounded; wrappers inside this assembly's namespaces are fair game.
     /// </summary>
     private static bool IsWalkableWrapper(Type type)
-    {
-        if (type.IsPrimitive || type.IsEnum) return false;
-        var ns = type.Namespace ?? string.Empty;
-        if (ns.StartsWith("System", StringComparison.Ordinal)) return false;
-        // Avoid recursing into low-level numeric containers — their fields are arrays
-        // of T, not layers, and walking them adds noise for no benefit.
-        if (ns.StartsWith("AiDotNet.Tensors", StringComparison.Ordinal)) return false;
-        if (type.Name == "Vector`1" || type.Name == "Matrix`1" || type.Name == "Tensor`1") return false;
-        return true;
-    }
+        => s_walkableWrapperCache.GetOrAdd(type, static t =>
+        {
+            if (t.IsPrimitive || t.IsEnum) return false;
+            var ns = t.Namespace ?? string.Empty;
+            if (ns.StartsWith("System", StringComparison.Ordinal)) return false;
+            // Avoid recursing into low-level numeric containers — their fields are arrays
+            // of T, not layers, and walking them adds noise for no benefit.
+            if (ns.StartsWith("AiDotNet.Tensors", StringComparison.Ordinal)) return false;
+            if (t.Name == "Vector`1" || t.Name == "Matrix`1" || t.Name == "Tensor`1") return false;
+            // Only walk types within known AiDotNet namespaces — caller-injected objects
+            // (custom ILossFunction implementations, etc.) are not walked.
+            if (!ns.StartsWith("AiDotNet", StringComparison.Ordinal)) return false;
+            return true;
+        });
+
+    // Per-type reflection-metadata caches. GetFields and "is this a walkable wrapper" are
+    // pure functions of the Type, so resolve each once across every instance and every
+    // forward instead of re-probing runtime type handles on the hot streaming path (#1646).
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, System.Reflection.FieldInfo[]> s_walkableFieldCache = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, bool> s_walkableWrapperCache = new();
+
+    /// <summary>
+    /// Reference-type, non-string instance fields declared directly on <paramref name="declaringType"/>.
+    /// Value-type and string fields are filtered out at cache-build time — they can never be,
+    /// or own, an <see cref="ILayer{T}"/> — so the walk never re-checks them. The walk calls
+    /// this once per type in the base chain (the caller iterates <c>BaseType</c>).
+    /// </summary>
+    private static System.Reflection.FieldInfo[] GetDeclaredWalkableFields(Type declaringType)
+        => s_walkableFieldCache.GetOrAdd(declaringType, static t =>
+        {
+            const System.Reflection.BindingFlags flags =
+                System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.NonPublic |
+                System.Reflection.BindingFlags.DeclaredOnly;
+            var fields = new List<System.Reflection.FieldInfo>();
+            foreach (var f in t.GetFields(flags))
+            {
+                var ft = f.FieldType;
+                if (ft.IsValueType || ft == typeof(string)) continue;
+                fields.Add(f);
+            }
+            return fields.ToArray();
+        });
 
     /// <summary>
     /// Runs <paramref name="eagerFallback"/> under the compile host — traces on
@@ -229,8 +282,59 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// </summary>
     /// <param name="input">Shape key for the compile cache.</param>
     /// <param name="eagerFallback">The eager forward pass (traced, replayed, or fallback).</param>
-    protected Tensor<T> PredictCompiled(Tensor<T> input, Func<Tensor<T>> eagerFallback) =>
-        _compileHost.Predict(input, _layerStructureVersion, eagerFallback);
+    protected Tensor<T> PredictCompiled(Tensor<T> input, Func<Tensor<T>> eagerFallback)
+    {
+        // Direct compile host when the verify gate is opted out.
+        if (s_autoCompileDisabled)
+            return _compileHost.Predict(input, _layerStructureVersion, eagerFallback);
+
+        // #1622 L3b: front the compile host with the verify-then-trust gate so a compiled plan is
+        // adopted for a shape only after it matches the eager forward — then replayed for the rest of
+        // the denoising loop. Output stays numerically identical to eager (rejected shapes stay eager).
+        return _inferenceGate.Run(
+            input,
+            _layerStructureVersion,
+            eager: eagerFallback,
+            compiled: () => _compileHost.Predict(input, _layerStructureVersion, eagerFallback),
+            onDecision: (enabled, reason) => AiDotNet.Helpers.InferenceDiagnostics.RecordDecision(
+                area: "NoisePredictorBase", feature: "AutoCompiledInference", enabled: enabled, reason: reason));
+    }
+
+    /// <summary>
+    /// Multi-input compiled replay for a forward that reads SEVERAL per-call-varying leaves —
+    /// the diffusion per-step <see cref="Forward"/> reads the noisy sample, the per-step timestep
+    /// embedding, and optional conditioning. The single-input <see cref="PredictCompiled"/> bakes
+    /// every leaf but the first as a constant, so it would replay step 0's timestep embedding for
+    /// the whole denoising loop (silent corruption); this overload marks EVERY tensor in
+    /// <paramref name="inputs"/> as a mutable slot the compiled plan re-binds each step
+    /// (AiDotNet.Tensors#616), compiling the expensive forward once while keeping the per-step
+    /// inputs live. The verify-then-trust gate still adopts the compiled plan for a shape only
+    /// after it matches eager, so output stays numerically identical to eager.
+    /// </summary>
+    /// <param name="inputs">The per-step mutable input leaves, in a stable order. Each must be a
+    /// tensor the forward reads directly; otherwise compile fails closed and this falls back to eager.</param>
+    /// <param name="eagerFallback">The eager forward pass (traced, replayed, verified, or fallback).</param>
+    protected Tensor<T> PredictCompiledMulti(Tensor<T>[] inputs, Func<Tensor<T>> eagerFallback)
+    {
+        // Direct compile host when the verify gate is opted out.
+        if (s_autoCompileDisabled)
+            return _compileHost.Predict(inputs, _layerStructureVersion, eagerFallback);
+
+        return _inferenceGate.Run(
+            inputs,
+            _layerStructureVersion,
+            eager: eagerFallback,
+            compiled: () => _compileHost.Predict(inputs, _layerStructureVersion, eagerFallback),
+            onDecision: (enabled, reason) => AiDotNet.Helpers.InferenceDiagnostics.RecordDecision(
+                area: "NoisePredictorBase", feature: "AutoCompiledMultiInputInference", enabled: enabled, reason: reason));
+    }
+
+    /// <summary>
+    /// Count of successful multi-input compiled-plan executions on this predictor's compile
+    /// host (the per-step denoising path). Test/diagnostic hook: a test can assert this grew
+    /// to confirm the compiled plan actually ran rather than silently falling back to eager.
+    /// </summary>
+    internal long CompiledMultiInputReplays => _compileHost.MultiInputReplays;
 
     /// <summary>
     /// Async overload of <see cref="PredictCompiled"/> — routes through
@@ -264,6 +368,9 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         // immediately — important when the caller is invalidating because the
         // old graph holds memory we want to reclaim now.
         _compileHost.Invalidate();
+        // The gate's verdicts/memo are version-scoped (stale entries are ignored after the bump), but
+        // clear eagerly so the memo's retained input/output clones are released now too.
+        _inferenceGate.Clear();
     }
 
     /// <summary>
@@ -360,6 +467,247 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
             shapeMode: AiDotNet.NeuralNetworks.SymbolicShapeMode.BatchDynamic,
             modelIdentity: GetType().FullName ?? GetType().Name);
     }
+
+    #region Transparent Weight Streaming (Tensors #602 / issue #430)
+
+    // 0 = not engaged, 1 = engaged. Int (not bool) so the engage transition can be claimed
+    // atomically via Interlocked.CompareExchange — concurrent callers on the same instance
+    // then can't both reconfigure the process-global WeightRegistry.
+    private int _streamingEngaged;
+
+    // 0 = no successful weight registration yet, 1 = resolved lazy weights have
+    // been registered with the streaming pool at least once.
+    private int _streamingWeightsRegistered;
+
+    /// <summary>
+    /// Parameter-count threshold above which <see cref="MaybeEngageWeightStreaming"/>
+    /// engages disk-backed weight streaming for the denoising forward loop. 500 M
+    /// is the same memory-pressure inflection point <c>NeuralNetworkBase</c> uses.
+    /// </summary>
+    private const long DefaultStreamingThresholdParams = 500_000_000L;
+
+    /// <summary>
+    /// Test/diagnostic override for <see cref="DefaultStreamingThresholdParams"/> so
+    /// controlled-scale tests can exercise the streaming path without a
+    /// foundation-scale model. <c>null</c> ⇒ use the default. Process-global.
+    /// </summary>
+    internal static long? StreamingThresholdOverride { get; set; }
+
+    /// <summary>
+    /// Test/diagnostic override for the streaming pool's resident-byte cap so a
+    /// small model can be forced to page (the auto-cap is sized for foundation
+    /// models). <c>null</c> ⇒ use <see cref="ComputeResidentCapBytes"/>.
+    /// </summary>
+    internal static long? StreamingResidentCapOverride { get; set; }
+
+    /// <summary>
+    /// Engages transparent weight streaming for this predictor when it is large
+    /// enough to pressure host RAM. Idempotent — runs at most once per instance.
+    /// <para>
+    /// When engaged it configures the process-wide <see cref="WeightRegistry"/> for
+    /// transparent auto-eviction and flags every owned layer to allocate its lazy
+    /// weights through the disk-backed streaming pool. Combined with
+    /// <see cref="RegisterResolvedStreamingWeights"/> (called after the first
+    /// forward resolves weights), the multi-step denoising loop then keeps only a
+    /// bounded resident set: each weight auto-rehydrates on access and the
+    /// symmetric owner-drop evicts cold ones.
+    /// </para>
+    /// <para>
+    /// <b>Safety guard.</b> The registry is process-global and
+    /// <see cref="WeightRegistry.Configure"/> throws on a pool that already has
+    /// live handles. So this only engages when the registry is empty — if another
+    /// model currently owns a streaming session, this predictor runs resident
+    /// rather than clobbering it. The common single-model inference path sees an
+    /// empty registry.
+    /// </para>
+    /// </summary>
+    protected void MaybeEngageWeightStreaming()
+    {
+        if (System.Threading.Volatile.Read(ref _streamingEngaged) != 0) return;
+
+        long threshold = StreamingThresholdOverride ?? DefaultStreamingThresholdParams;
+        if (ParameterCount <= threshold) return;
+
+        // Don't reconfigure (or clobber) a registry another model is using.
+        if (WeightRegistry.GetStreamingReport().RegisteredEntryCount > 0) return;
+
+        // Atomically claim engagement: if a concurrent call on this same instance already
+        // won the race, that thread owns the WeightRegistry.Configure below and this one
+        // returns (runs resident) rather than reconfiguring the process-global registry.
+        if (System.Threading.Interlocked.CompareExchange(ref _streamingEngaged, 1, 0) != 0) return;
+
+        var offloadOptions = new GpuOffloadOptions
+        {
+            StreamingPoolMaxResidentBytes = StreamingResidentCapOverride ?? ComputeResidentCapBytes(),
+            TransparentAutoEviction = true,
+        };
+        try
+        {
+            WeightRegistry.Configure(offloadOptions);
+        }
+        catch (InvalidOperationException)
+        {
+            // Configure also throws on leftover ReservedBytes — orphaned streaming
+            // reservations from a PRIOR predictor whose first forward reserved weights
+            // (AllocateStreaming) but never reached RegisterResolvedStreamingWeights
+            // (its forward threw, or the model was disposed mid-stream). The registry
+            // is process-global, so those orphans accumulate across models in one
+            // process (a test shard runs many) until every subsequent streaming model
+            // fails to engage here. We already confirmed RegisteredEntryCount == 0
+            // above, so no LIVE model owns the pool — the leftover reservations belong
+            // to a dead model and are safe to forcibly drop. Reset and reconfigure.
+            System.Diagnostics.Trace.TraceWarning(
+                "NoisePredictorBase.MaybeEngageWeightStreaming: recovering from orphaned " +
+                "streaming reservations by resetting WeightRegistry and reconfiguring.");
+            WeightRegistry.Reset();
+            WeightRegistry.Configure(offloadOptions);
+        }
+
+        // Walk owned layer fields recursively (including those inside the DiT block list)
+        // and flag each for the streaming allocator. Iterated LAZILY: each layer is flagged
+        // as the walk yields it, BEFORE the walk descends into that layer — the layer's own
+        // lazy weight allocation (triggered while descending) reads UseStreamingAllocator, so
+        // the flag must be set first. Do NOT materialize this into a list and flag afterwards.
+        foreach (var layer in ReflectInstanceLayers(this))
+        {
+            if (layer is LayerBase<T> lb) lb.UseStreamingAllocator = true;
+        }
+    }
+
+    /// <summary>
+    /// Starts a predictor forward that may need transparent weight streaming.
+    /// The returned scope registers resolved lazy weights on successful completion
+    /// and releases any in-flight streaming reservations if the first forward fails.
+    /// </summary>
+    protected WeightStreamingForwardScope BeginWeightStreamingForward()
+    {
+        MaybeEngageWeightStreaming();
+        return new WeightStreamingForwardScope(this);
+    }
+
+    /// <summary>
+    /// Registers this predictor's now-resolved weights with the streaming pool,
+    /// dropping their resident in-memory copies to disk-backed storage. No-op
+    /// unless <see cref="MaybeEngageWeightStreaming"/> engaged. Called after the
+    /// first forward resolves the lazy weights, so from the second forward on the
+    /// transparent auto-rehydrate + owner-drop keep the resident set bounded.
+    /// </summary>
+    protected void RegisterResolvedStreamingWeights()
+    {
+        if (System.Threading.Volatile.Read(ref _streamingEngaged) == 0) return;
+
+        // The first forward runs every layer (a diffusion predictor exercises its whole graph
+        // each denoising step), so it resolves and registers all lazy weights. Skip the full
+        // graph re-walk on forwards 2..N — that per-forward walk was the dominant streaming
+        // cost on foundation models (#1646). Worst case a weight that only resolves on a later
+        // forward stays resident rather than streamed: identical output, slightly more RAM,
+        // never wrong.
+        if (System.Threading.Volatile.Read(ref _streamingWeightsRegistered) == 1) return;
+
+        foreach (var layer in ReflectInstanceLayers(this))
+        {
+            if (layer is not LayerBase<T> lb) continue;
+            foreach (var tensor in lb.GetTrainableParameters())
+            {
+                // Skip placeholders (lazy weights not yet resolved) and tensors
+                // already registered (idempotent across forwards).
+                if (tensor is null || tensor.Length == 0 || tensor.StreamingPoolHandle >= 0) continue;
+                tensor.Lifetime = WeightLifetime.Streaming;
+                WeightRegistry.RegisterWeight(tensor);
+            }
+        }
+
+        System.Threading.Volatile.Write(ref _streamingWeightsRegistered, 1);
+    }
+
+    private void ReleaseStreamingWeights(bool includeRegistered)
+    {
+        if (System.Threading.Volatile.Read(ref _streamingEngaged) == 0) return;
+
+        foreach (var layer in ReflectInstanceLayers(this))
+        {
+            if (layer is not LayerBase<T> lb) continue;
+            foreach (var tensor in lb.GetTrainableParameters())
+            {
+                if (tensor is null || tensor.Lifetime != WeightLifetime.Streaming) continue;
+                if (!includeRegistered && tensor.StreamingPoolHandle >= 0) continue;
+
+                try
+                {
+                    WeightRegistry.UnregisterWeight(tensor);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"NoisePredictorBase: failed to release streaming weight " +
+                        $"from {layer.GetType().Name}: {ex.GetType().Name}: {ex.Message}");
+                }
+            }
+        }
+
+        if (includeRegistered)
+        {
+            System.Threading.Volatile.Write(ref _streamingWeightsRegistered, 0);
+        }
+    }
+
+    /// <summary>
+    /// Per-forward streaming guard used by concrete predictors. Call
+    /// <see cref="Complete"/> with the final output immediately before returning.
+    /// </summary>
+    protected sealed class WeightStreamingForwardScope : IDisposable
+    {
+        private readonly NoisePredictorBase<T> _owner;
+        private bool _completed;
+
+        internal WeightStreamingForwardScope(NoisePredictorBase<T> owner)
+        {
+            _owner = owner;
+        }
+
+        public Tensor<T> Complete(Tensor<T> result)
+        {
+            _owner.RegisterResolvedStreamingWeights();
+            _completed = true;
+            return result;
+        }
+
+        public void Dispose()
+        {
+            if (!_completed)
+            {
+                var firstForwardDidNotRegister =
+                    System.Threading.Volatile.Read(ref _owner._streamingWeightsRegistered) == 0;
+                _owner.ReleaseStreamingWeights(includeRegistered: firstForwardDidNotRegister);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Resident-byte cap for the streaming pool: half the host's available managed
+    /// memory, clamped to [512 MiB, 8 GiB]. Big enough for several layers' working
+    /// set (so a single op never needs more than the cap), small enough to leave
+    /// headroom for activations and runtime on a 16 GB host.
+    /// </summary>
+    private static long ComputeResidentCapBytes()
+    {
+        long cap;
+#if NET5_0_OR_GREATER
+        long avail = 0;
+        try { avail = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes; } catch { /* fall through */ }
+        cap = avail > 0 ? avail / 2 : 4L * 1024 * 1024 * 1024;
+#else
+        // GCMemoryInfo isn't available on net471; use a conservative fixed cap.
+        cap = 4L * 1024 * 1024 * 1024;
+#endif
+        const long min = 512L * 1024 * 1024;
+        const long max = 8L * 1024 * 1024 * 1024;
+        if (cap < min) cap = min;
+        if (cap > max) cap = max;
+        return cap;
+    }
+
+    #endregion
 
     #region Lazy Layer Factories
 
@@ -1064,6 +1412,8 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     {
         if (_disposed || !disposing) return;
         _disposed = true;
+
+        ReleaseStreamingWeights(includeRegistered: true);
 
         _compileHost.Dispose();
 
