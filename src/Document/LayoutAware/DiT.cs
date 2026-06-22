@@ -550,7 +550,7 @@ public class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumen
     #region NeuralNetworkBase Implementation
 
     /// <inheritdoc/>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         var preprocessed = PreprocessDocument(input);
         return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);

@@ -660,7 +660,7 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     /// which can be used for classification, clustering, or visualization.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
         if (TryForwardGpuOptimized(input, out var gpuResult))

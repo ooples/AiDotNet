@@ -265,7 +265,7 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     /// To control the class, use <see cref="GenerateConditional"/> instead.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         Generator.SetTrainingMode(false);
 

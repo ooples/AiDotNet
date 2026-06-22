@@ -339,7 +339,7 @@ public class FactorTransformer<T> : FinancialModelBase<T>, IFactorModel<T>
     /// to compute factor signals from the input data.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? PredictNative(input) : PredictOnnx(input);
     }

@@ -224,7 +224,7 @@ public class TabTransformerNetwork<T> : NeuralNetworkBase<T>
     /// The output is the network's best guess based on its current learned parameters.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
         if (TryForwardGpuOptimized(input, out var gpuResult))

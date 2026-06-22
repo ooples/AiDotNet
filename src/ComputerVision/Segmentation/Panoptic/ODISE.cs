@@ -197,7 +197,7 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     /// continues to consume raw logits via <see cref="Forward"/>).
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // Both modes must return the same semantics — per-pixel class
         // probabilities along the class dim (Xu et al. 2023 §3 paper

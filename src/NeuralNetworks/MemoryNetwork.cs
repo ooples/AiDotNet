@@ -323,7 +323,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     /// - Finally formulate an answer based on both the question and what you remembered
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
         if (TryForwardGpuOptimized(input, out var gpuResult))

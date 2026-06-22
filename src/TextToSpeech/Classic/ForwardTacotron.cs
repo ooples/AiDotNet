@@ -197,7 +197,7 @@ public class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
 
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)

@@ -254,7 +254,7 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
     public override bool SupportsTraining => _useNativeMode;
 
     /// <inheritdoc/>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // Force eval mode so the DropoutLayers emitted by the helper (when
         // options.DropoutRate > 0) are bypassed and repeated Predict calls

@@ -200,7 +200,7 @@ public class NeuralVaR<T> : RiskModelBase<T>
     /// <b>For Beginners:</b> In the NeuralVaR model, Predict produces predictions from input data. This is the main inference step of the NeuralVaR architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // Inference mode is REQUIRED here: the stack contains
         // BatchNormalizationLayers, which in training mode normalize across the

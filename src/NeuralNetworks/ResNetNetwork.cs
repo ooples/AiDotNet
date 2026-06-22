@@ -486,7 +486,7 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
     // class defaults IsTrainingMode=true at construction, which would let
     // BatchNorm use batch stats instead of the (zero-init) running stats
     // and produce non-deterministic Predict output across calls.
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         SetTrainingMode(false);

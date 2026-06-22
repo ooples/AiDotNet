@@ -704,7 +704,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         /// </summary>
         /// <param name="input">Tensor containing input function values followed by query locations.</param>
         /// <returns>Predicted output tensor.</returns>
-        public override Tensor<T> Predict(Tensor<T> input)
+        protected override Tensor<T> PredictCore(Tensor<T> input)
         {
             if (input == null)
             {

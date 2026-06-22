@@ -229,7 +229,7 @@ public class UNINEXT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     /// <b>For Beginners:</b> Pass an image to get unified instance perception predictions.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? Forward(input) : PredictOnnx(input);
     }

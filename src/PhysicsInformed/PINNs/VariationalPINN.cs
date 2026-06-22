@@ -480,7 +480,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// </summary>
         /// <param name="input">Input tensor.</param>
         /// <returns>Predicted output tensor.</returns>
-        public override Tensor<T> Predict(Tensor<T> input)
+        protected override Tensor<T> PredictCore(Tensor<T> input)
         {
             bool wasTraining = IsTrainingMode;
             SetTrainingMode(false);

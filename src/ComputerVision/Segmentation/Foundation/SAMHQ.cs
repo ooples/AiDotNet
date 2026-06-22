@@ -232,7 +232,7 @@ public class SAMHQ<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     /// The HQ output token ensures boundary precision is significantly better than standard SAM.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? Forward(input) : PredictOnnx(input);
     }

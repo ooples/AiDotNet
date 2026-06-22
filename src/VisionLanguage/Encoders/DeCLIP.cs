@@ -217,7 +217,7 @@ public class DeCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
         );
     }
 
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxImageEncoder is not null)

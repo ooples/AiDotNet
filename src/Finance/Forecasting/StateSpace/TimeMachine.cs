@@ -431,7 +431,7 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     /// In native mode, it runs through our custom multi-scale layer implementation.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
     }

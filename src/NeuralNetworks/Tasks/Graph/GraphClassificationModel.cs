@@ -624,7 +624,7 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
     /// </summary>
     /// <param name="input">The input tensor containing node features.</param>
     /// <returns>The prediction tensor with class probabilities.</returns>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         EnsureDefaultAdjacencyForInput(input);
 

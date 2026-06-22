@@ -232,7 +232,7 @@ public class RegionCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
         );
     }
 
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         // Normalize ONNX inputs the same way the native path does — both

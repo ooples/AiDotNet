@@ -457,7 +457,7 @@ public class UniTS<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the UniTS model, Predict produces predictions from input data. This is the main inference step of the UniTS architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? Forward(input) : ForecastOnnx(input);
     }

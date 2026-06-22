@@ -10,10 +10,11 @@ namespace AiDotNet.NeuralNetworks;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Default <c>false</c> — this is rolled out incrementally (the <c>PredictCore</c> funnel + a
-/// representative cross-section first; flip default-on later once a broad set is validated
-/// bit-identical). Seeded from the environment variable <c>AIDOTNET_INFERENCE_ARENA=1</c> (matching
-/// the existing <c>AIDOTNET_*</c> toggle convention) and settable in code for tests.
+/// Default <c>ON</c> — per the facade pattern, this is an industry-standard zero-config default
+/// (PyTorch's caching allocator is always on for inference): callers get the allocation win without
+/// opting in. Every <c>NeuralNetworkBase{T}</c> model routes through the <c>PredictCore</c> funnel,
+/// and the forward is bit-identical with the arena on or off. Set <c>AIDOTNET_INFERENCE_ARENA=0</c>
+/// to disable (escape hatch), or set <see cref="Enabled"/> in code (e.g. for A/B alloc tests).
 /// </para>
 /// <para>
 /// Process-wide by design: <c>TensorArena.Current</c> is <c>[ThreadStatic]</c>, so concurrent
@@ -25,11 +26,11 @@ public static class InferenceArenaSettings
 {
     /// <summary>
     /// Whether <see cref="NeuralNetworkBase{T}.Predict"/> opens a per-call <c>TensorArena</c>
-    /// around the forward. Default <c>false</c>; set <c>AIDOTNET_INFERENCE_ARENA=1</c> to opt in.
+    /// around the forward. Default <c>true</c>; set <c>AIDOTNET_INFERENCE_ARENA=0</c> to disable.
     /// </summary>
     public static bool Enabled { get; set; } =
-        string.Equals(
+        !string.Equals(
             Environment.GetEnvironmentVariable("AIDOTNET_INFERENCE_ARENA"),
-            "1",
+            "0",
             StringComparison.Ordinal);
 }

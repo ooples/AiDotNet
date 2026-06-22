@@ -466,7 +466,7 @@ public class TimeGrad<T> : ForecastingModelBase<T>
     /// a forecast. It starts from pure noise and gradually denoises to produce a prediction.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
     }

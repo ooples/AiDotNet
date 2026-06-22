@@ -105,7 +105,7 @@ public class EmotiVoice<T> : TtsModelBase<T>, IEndToEndTts<T>
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultStyleTTSLayers(_options.HiddenDim, _options.EmotionDim, _options.MelChannels, _options.NumEncoderLayers, _options.NumEmotionLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, inputFeatureDim: _options.MelChannels)); }
     // Predict must execute in eval mode so Dropout/BN behave deterministically;
     // restore prior training-mode state to keep nested Train→Predict invariants.
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); bool prev = IsTrainingMode; SetTrainingMode(false); try { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; } finally { SetTrainingMode(prev); } }
+    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); bool prev = IsTrainingMode; SetTrainingMode(false); try { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; } finally { SetTrainingMode(prev); } }
     // Train routes through the explicit _optimizer field so paper-faithful
     // EmotiVoiceOptions hyperparameters (LearningRate, Beta1/2, Epsilon)
     // are honoured. The try/finally restores eval mode on exception.

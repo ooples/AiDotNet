@@ -201,7 +201,7 @@ public abstract class FrameInterpolationBase<T> : VideoNeuralNetworkBase<T>
     ///         directly.</item>
     /// </list>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
         // Rank-4 always means a frame *sequence* [N, C, H, W]. Treating it as

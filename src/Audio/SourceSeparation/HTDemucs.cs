@@ -163,7 +163,7 @@ public class HTDemucs<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
             numStems: _options.NumStems, dropoutRate: _options.DropoutRate));
     }
 
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {

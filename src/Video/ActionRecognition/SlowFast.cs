@@ -500,7 +500,7 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         return new Tensor<T>(outputShape, new Vector<T>(outputData));
     }
 
-    public override Tensor<T> Predict(Tensor<T> input) => Classify(input);
+    protected override Tensor<T> PredictCore(Tensor<T> input) => Classify(input);
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {

@@ -242,7 +242,7 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     /// you would use this method to classify new digit images.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         try
         {

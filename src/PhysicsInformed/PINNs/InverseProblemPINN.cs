@@ -696,7 +696,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
         }
 
         /// <inheritdoc/>
-        public override Tensor<T> Predict(Tensor<T> input)
+        protected override Tensor<T> PredictCore(Tensor<T> input)
         {
             Tensor<T> output = input;
             foreach (var layer in Layers)

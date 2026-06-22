@@ -187,7 +187,7 @@ public class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
             numSections: _options.NumSections, dropoutRate: _options.DropoutRate));
     }
 
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);

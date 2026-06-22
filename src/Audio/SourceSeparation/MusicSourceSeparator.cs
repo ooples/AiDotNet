@@ -428,7 +428,7 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
     /// <summary>
     /// Predicts source masks from spectrogram magnitude.
     /// </summary>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         if (IsOnnxMode && OnnxEncoder is not null)
         {

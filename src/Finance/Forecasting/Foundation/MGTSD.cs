@@ -379,7 +379,7 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
     #region NeuralNetworkBase Overrides
 
     public override bool SupportsTraining => _useNativeMode;
-    public override Tensor<T> Predict(Tensor<T> input) => _useNativeMode ? ForwardNative(input) : ForecastOnnx(input);
+    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? ForwardNative(input) : ForecastOnnx(input);
 
     /// <summary>
     /// Tape-aware training forward. Runs the existing Layers stack as a

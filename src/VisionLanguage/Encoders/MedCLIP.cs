@@ -219,7 +219,7 @@ public class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
         );
     }
 
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxImageEncoder is not null)

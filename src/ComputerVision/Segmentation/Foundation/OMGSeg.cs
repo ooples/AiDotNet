@@ -228,7 +228,7 @@ public class OMGSeg<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     /// <b>For Beginners:</b> Pass an image to get segmentation predictions for the configured task.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? Forward(input) : PredictOnnx(input);
     }

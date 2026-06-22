@@ -157,7 +157,7 @@ public abstract class VideoSuperResolutionBase<T> : VideoNeuralNetworkBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return Upscale(input);
     }

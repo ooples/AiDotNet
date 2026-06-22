@@ -240,7 +240,7 @@ public class Mask2Former<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     /// masked cross-attention.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         if (!_useNativeMode) return PredictOnnx(input);
 

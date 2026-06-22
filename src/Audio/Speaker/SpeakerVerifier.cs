@@ -477,7 +477,7 @@ public class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>
     /// <summary>
     /// Makes a prediction using the model.
     /// </summary>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // For speaker verifier, prediction returns the embedding
         return _embeddingExtractor.ExtractEmbedding(input);

@@ -390,7 +390,7 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return EstimateDepth(input);
     }

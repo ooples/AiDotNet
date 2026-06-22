@@ -471,7 +471,7 @@ public class TSDiff<T> : ForecastingModelBase<T>
     /// <para><b>For Beginners:</b> Runs the self-guided diffusion process to generate forecasts.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
     }

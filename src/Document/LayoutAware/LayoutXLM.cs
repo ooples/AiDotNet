@@ -677,7 +677,7 @@ public class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
     /// the HuggingFace LayoutLMv2/XLM call surface: a single forward that infers the
     /// modality from the supplied tensor's shape.
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));

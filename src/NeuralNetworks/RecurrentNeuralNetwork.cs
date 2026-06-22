@@ -240,7 +240,7 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
     /// but also remembers previous messages to provide context.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // Validate input
         if (input == null)

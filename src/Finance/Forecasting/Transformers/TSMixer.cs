@@ -490,7 +490,7 @@ public class TSMixer<T> : ForecastingModelBase<T>
     /// It automatically chooses between native and ONNX execution based on how the model was created.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? Forward(input) : ForecastOnnx(input);
     }

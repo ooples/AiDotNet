@@ -347,7 +347,7 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
     ///   - Token indices ([L] or [B,L]) → text stream
     /// Callers that need the fused multi-modal output should use <see cref="FuseImageText"/>.
     /// </summary>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)

@@ -279,7 +279,7 @@ public class SegNeXt<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     /// In ONNX mode, the ONNX runtime handles everything for optimized inference.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         if (!_useNativeMode)
         {

@@ -535,7 +535,7 @@ public abstract class SequenceLabelingNERBase<T> : NERNeuralNetworkBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // Mirror NeuralNetworkBase.Predict's contract:
         //   1. NoGradScope so inference doesn't grow the autodiff tape and

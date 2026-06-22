@@ -373,7 +373,7 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     /// by leveraging the rich dynamics of the reservoir.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // Clear any stored state from previous predictions (must be done before GPU path too)
         ResetState();
