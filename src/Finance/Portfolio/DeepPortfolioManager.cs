@@ -197,7 +197,7 @@ public class DeepPortfolioManager<T> : PortfolioOptimizerBase<T>
     /// <b>For Beginners:</b> In the DeepPortfolioManager model, Predict produces predictions from input data. This is the main inference step of the DeepPortfolioManager architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         var current = input;
         foreach (var layer in Layers) current = layer.Forward(current);

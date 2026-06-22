@@ -224,7 +224,7 @@ public class ViTCoMer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     /// that exchange information, producing segmentation maps with excellent boundary quality.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return !_useNativeMode ? PredictOnnx(input) : Forward(input);
     }

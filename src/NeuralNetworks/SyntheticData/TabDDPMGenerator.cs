@@ -256,7 +256,7 @@ public class TabDDPMGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     #region Neural Network Methods (GANDALF Pattern)
 
     /// <inheritdoc/>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;

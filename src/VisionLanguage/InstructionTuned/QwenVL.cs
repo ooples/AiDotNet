@@ -275,7 +275,7 @@ public class QwenVL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     /// the encoder-only fast path callers reach for when they want
     /// pre-fusion image features (zero-shot retrieval, similarity, etc.).
     /// </summary>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         // Normalize ONNX inputs the same way the native path does — both

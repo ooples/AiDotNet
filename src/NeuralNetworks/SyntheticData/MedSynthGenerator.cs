@@ -419,7 +419,7 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     #region NeuralNetworkBase Overrides
 
     /// <inheritdoc />
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // Deterministic VAE reconstruction of the input row (encode → latent mean →
         // decode). Adapts to the input width when unfitted so the model is a valid

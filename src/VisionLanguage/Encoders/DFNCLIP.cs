@@ -292,7 +292,7 @@ public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
     /// <see cref="EncodeText"/>; the contrastive image-text path goes
     /// through <see cref="ComputeSimilarity"/>.
     /// </summary>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         // Native path normalizes via PreprocessImage; ONNX path must do the

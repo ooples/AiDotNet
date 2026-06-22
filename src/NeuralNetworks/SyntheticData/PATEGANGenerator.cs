@@ -896,7 +896,7 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // Treats the input as the generator's latent noise (deterministic). The
         // generator layers adapt to the input width on first forward, so this works

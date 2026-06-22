@@ -167,7 +167,7 @@ public class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
             upsampleFactor: _options.UpsampleFactor, dropoutRate: _options.DropoutRate));
     }
 
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);

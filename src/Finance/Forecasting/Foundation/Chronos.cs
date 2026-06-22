@@ -497,7 +497,7 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
     /// <b>For Beginners:</b> In the Chronos model, Predict produces predictions from input data. This is the main inference step of the Chronos architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // Go through Forecast (which dequantizes token logits into a scalar
         // trajectory) so Predict's output shape matches what

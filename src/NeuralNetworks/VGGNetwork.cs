@@ -360,7 +360,7 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
     // Clone()'s deserialized copy ends up in eval mode (the deserializer
     // calls SetTrainingMode(false)), so original and clone diverge by the
     // dropout mask.
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         SetTrainingMode(false);

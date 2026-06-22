@@ -195,7 +195,7 @@ public class SwinUNETR<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     /// <b>For Beginners:</b> Pass an image to get a per-pixel class prediction map.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
+    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
 
     /// <summary>
     /// Performs one training step.

@@ -736,7 +736,7 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // Treats the input as the generator's latent noise (deterministic). Works
         // before Fit (the generated ModelFamily tests call Predict without Fit).

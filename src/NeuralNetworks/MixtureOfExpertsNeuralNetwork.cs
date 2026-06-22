@@ -291,7 +291,7 @@ public class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
     /// running all experts for every input, while maintaining high quality predictions.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // Ensure the network is in inference mode
         IsTrainingMode = false;

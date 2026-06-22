@@ -238,7 +238,7 @@ public class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionM
         return tokens;
     }
 
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)

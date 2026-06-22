@@ -323,7 +323,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         /// </summary>
         /// <param name="input">Input tensor with state and time.</param>
         /// <returns>Predicted derivative tensor.</returns>
-        public override Tensor<T> Predict(Tensor<T> input)
+        protected override Tensor<T> PredictCore(Tensor<T> input)
         {
             if (input.Rank != 2 || input.Shape[1] != _stateDim + 1)
             {

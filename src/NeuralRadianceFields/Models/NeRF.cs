@@ -1145,7 +1145,7 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
     /// <summary>
     /// Makes a prediction using the model.
     /// </summary>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);
         return ForwardWithMemory(input);

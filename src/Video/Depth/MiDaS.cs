@@ -275,7 +275,7 @@ public class MiDaS<T> : NeuralNetworkBase<T>
         return new Tensor<T>(outputShape, new Vector<T>(outputData));
     }
 
-    public override Tensor<T> Predict(Tensor<T> input) => EstimateDepth(input);
+    protected override Tensor<T> PredictCore(Tensor<T> input) => EstimateDepth(input);
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {

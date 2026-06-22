@@ -7,7 +7,6 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
-using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
@@ -411,9 +410,9 @@ public class ETSformer<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the ETSformer model, Predict produces predictions from input data. This is the main inference step of the ETSformer architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
+        return Forecast(input, null);
     }
 
     /// <summary>

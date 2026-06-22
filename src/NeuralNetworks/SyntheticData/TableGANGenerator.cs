@@ -954,7 +954,7 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     /// <c>TableGANGeneratorTests.Fit_TinyDataset_MarksGeneratorAsFitted</c>.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         if (_usingCustomLayers)
         {

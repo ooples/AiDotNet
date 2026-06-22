@@ -3032,7 +3032,7 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
         MarkSpatialIndexDirty();
     }
 
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return ForwardWithMemory(input);
     }

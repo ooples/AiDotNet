@@ -552,7 +552,7 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
     /// <b>For Beginners:</b> In the TimesFM model, Predict produces predictions from input data. This is the main inference step of the TimesFM architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
     }

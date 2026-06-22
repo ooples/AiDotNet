@@ -423,7 +423,7 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
     /// <param name="input">Edge features tensor.</param>
     /// <returns>Classification logits.</returns>
     /// <inheritdoc />
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         bool wasTraining = IsTrainingMode;
 

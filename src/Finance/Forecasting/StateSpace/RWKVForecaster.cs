@@ -236,7 +236,7 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
     public override bool SupportsTraining => _useNativeMode;
 
     /// <inheritdoc/>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? Forward(input) : ForecastOnnx(input);
     }

@@ -493,7 +493,7 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     /// for certain types of inputs like images.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
         if (TryForwardGpuOptimized(input, out var gpuResult))

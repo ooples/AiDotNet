@@ -427,7 +427,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// based on its spiking activity throughout the simulation.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
         if (TryForwardGpuOptimized(input, out var gpuResult))

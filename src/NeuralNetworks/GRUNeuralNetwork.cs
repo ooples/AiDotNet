@@ -241,7 +241,7 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     /// by considering each word in context with the ones before it.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
         if (TryForwardGpuOptimized(input, out var gpuResult))

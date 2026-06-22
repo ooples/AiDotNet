@@ -527,7 +527,7 @@ public class FEDformer<T> : ForecastingModelBase<T>
     /// The frequency-domain processing makes this fast even for long sequences.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return Forecast(input);
     }

@@ -3062,7 +3062,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// override this method.
     /// </para>
     /// </remarks>
-    public virtual Tensor<T> Predict(Tensor<T> input)
+    protected virtual Tensor<T> PredictCore(Tensor<T> input)
     {
         using var _ = new NoGradScope<T>();
 
@@ -3212,6 +3212,61 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // success-only side effect, so it stays in finally.
             if (wasTraining) SetTrainingMode(true);
         }
+    }
+
+    /// <summary>
+    /// Inference entry point. A thin funnel over <see cref="PredictCore"/> that — when the
+    /// forward caching allocator is enabled (<see cref="InferenceArenaSettings.Enabled"/>,
+    /// #1661 / Tensors #661) — runs the forward inside a per-call <c>TensorArena</c> so
+    /// intermediate-tensor buffers are recycled (~98% allocation reduction, bit-identical
+    /// output), then copies the result out to a GC-owned tensor so it survives arena disposal.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This runs the model on your input and returns the prediction.
+    /// The optional "arena" is just a reusable scratch pad for the temporary tensors a forward
+    /// pass creates — turning it on makes repeated predictions allocate far less memory while
+    /// producing the exact same numbers.</para>
+    /// <para>
+    /// <b>Extension point:</b> override <see cref="PredictCore"/> (not this method) to customize
+    /// inference, so the model stays on the arena fast path. Models that still override
+    /// <c>Predict</c> directly keep working unchanged — they simply bypass the arena until
+    /// migrated to <see cref="PredictCore"/> (the migration is incremental, not all-or-nothing).
+    /// </para>
+    /// <para>
+    /// Nesting-safe: composite models (GANs, ensembles) call a sub-model's <c>Predict</c> inside
+    /// their own forward; <c>TensorArena.Create</c> stacks and restores the outer arena on
+    /// dispose, and each level detaches its own output, so a nested call's result is a safe
+    /// GC-owned copy in the outer scope.
+    /// </para>
+    /// </remarks>
+    public virtual Tensor<T> Predict(Tensor<T> input)
+    {
+        // Opt-in, default-off (see InferenceArenaSettings). When off this is exactly the
+        // pre-#1661 behavior with zero added overhead — one boolean check then PredictCore.
+        if (!InferenceArenaSettings.Enabled)
+            return PredictCore(input);
+
+        // Run the forward inside a per-call arena. The arena recycles intermediate Rent-backed
+        // buffers; it Resets/returns them to the cross-arena pool on Dispose (no mid-forward
+        // recycling, so intermediates stay valid for the whole forward). The output is copied
+        // out (DetachFromArena) before Dispose so the returned tensor is GC-owned and survives.
+        using var arena = TensorArena.Create();
+        var output = PredictCore(input);
+        return DetachFromArena(output);
+    }
+
+    /// <summary>
+    /// Copies <paramref name="output"/> out of the active <c>TensorArena</c> into a GC-owned
+    /// tensor so it survives the arena's <c>Dispose</c> (which recycles Rent-backed buffers).
+    /// <c>ToArray()</c> materializes any GPU/lazy result and always returns a fresh plain array
+    /// (never arena-routed), so the wrapped tensor is fully detached from the recycled scope.
+    /// </summary>
+    private static Tensor<T> DetachFromArena(Tensor<T> output)
+    {
+        var shape = new int[output.Rank];
+        for (int i = 0; i < shape.Length; i++)
+            shape[i] = output.Shape[i];
+        return new Tensor<T>(output.ToArray(), shape);
     }
 
     /// <summary>

@@ -322,7 +322,7 @@ public class RVM<T> : NeuralNetworkBase<T>
         return new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
     }
 
-    public override Tensor<T> Predict(Tensor<T> input) => Forward(input);
+    protected override Tensor<T> PredictCore(Tensor<T> input) => Forward(input);
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {

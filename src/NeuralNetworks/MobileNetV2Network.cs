@@ -348,7 +348,7 @@ public class MobileNetV2Network<T> : NeuralNetworkBase<T>
     /// runs through the tape for gradient flow; only inference bypasses the
     /// plan cache.
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetAllLayersEvalMode();
         using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();

@@ -207,7 +207,7 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // Set eval mode on all layers for inference (BN uses running stats)
         foreach (var layer in Layers)

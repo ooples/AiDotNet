@@ -882,7 +882,7 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
     /// Makes a prediction by encoding input features and decoding to adjacency matrix.
     /// Uses the mean of the latent distribution (no sampling) for deterministic inference.
     /// </summary>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
         if (TryForwardGpuOptimized(input, out var gpuResult))

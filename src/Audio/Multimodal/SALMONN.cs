@@ -185,7 +185,7 @@ public class SALMONN<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
             lmHiddenDim: _options.LMHiddenDim, dropoutRate: _options.DropoutRate));
     }
 
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);

@@ -686,7 +686,7 @@ public class REaLTabFormerGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabular
     #region NeuralNetworkBase Required Overrides
 
     /// <inheritdoc />
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // For standard NN prediction, run through transformer layers
         var current = input;

@@ -263,7 +263,7 @@ public class RIFE<T> : FrameInterpolationBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // Input should be concatenated frames [B, 2*C, H, W]
         return ProcessInterpolation(input, 0.5);

@@ -1940,7 +1940,7 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
             LossFunction);
     }
 
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);
         return ForwardWithMemory(input);

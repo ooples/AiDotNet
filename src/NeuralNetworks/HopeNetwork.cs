@@ -485,7 +485,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
     /// Makes a prediction on the given input (required by NeuralNetworkBase).
     /// For Hope, this is equivalent to Forward pass.
     /// </summary>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         if (input == null)
             throw new ArgumentNullException(nameof(input));

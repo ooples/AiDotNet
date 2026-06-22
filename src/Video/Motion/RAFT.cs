@@ -243,7 +243,7 @@ public class RAFT<T> : OpticalFlowBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         var frame1 = SliceChannels(input, 0, _channels);
         var frame2 = SliceChannels(input, _channels, _channels * 2);

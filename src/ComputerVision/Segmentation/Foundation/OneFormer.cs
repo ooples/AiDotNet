@@ -238,7 +238,7 @@ public class OneFormer<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     /// guides which type of segmentation output is produced.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return !_useNativeMode ? PredictOnnx(input) : Forward(input);
     }

@@ -236,7 +236,7 @@ public class EVACLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
         );
     }
 
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         // Both paths must see the same preprocessed input.

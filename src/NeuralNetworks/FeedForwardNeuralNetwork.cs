@@ -178,7 +178,7 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
     /// working with data that naturally has multiple dimensions.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // Ensure the network is in inference mode
         IsTrainingMode = false;

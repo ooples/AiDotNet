@@ -356,7 +356,7 @@ public class FILM<T> : FrameInterpolationBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // Expects concatenated frame pair [B, C*2, H, W]
         // Split into two frames and interpolate at t=0.5

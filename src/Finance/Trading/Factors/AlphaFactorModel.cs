@@ -313,7 +313,7 @@ public class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T>
     /// your market data into factor signals and then into expected excess returns.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? PredictNative(input) : PredictOnnx(input);
     }

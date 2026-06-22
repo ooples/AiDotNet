@@ -306,7 +306,7 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
     /// <see cref="EncodeText"/>; the contrastive image-text path goes
     /// through <see cref="ComputeSimilarity"/> / <see cref="ZeroShotClassify"/>.
     /// </summary>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         // Both paths must see the same preprocessed input: native path forwards

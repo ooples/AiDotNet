@@ -485,7 +485,7 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     /// <param name="input">The input tensor to process.</param>
     /// <returns>A tensor containing the network's prediction.</returns>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;

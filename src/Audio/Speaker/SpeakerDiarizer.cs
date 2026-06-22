@@ -577,7 +577,7 @@ public class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T>
     /// </summary>
     /// <param name="input">Input tensor (audio features).</param>
     /// <returns>Output tensor (speaker probabilities per frame).</returns>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
 

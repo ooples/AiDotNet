@@ -466,7 +466,7 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
                 _weights[i, j] = parameters[idx++];
     }
 
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
         if (TryForwardGpuOptimized(input, out var gpuResult))

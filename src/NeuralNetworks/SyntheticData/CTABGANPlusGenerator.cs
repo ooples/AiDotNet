@@ -306,7 +306,7 @@ public class CTABGANPlusGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
     /// previous output and the original input concatenated together.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;

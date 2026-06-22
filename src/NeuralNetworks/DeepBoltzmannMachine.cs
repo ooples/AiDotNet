@@ -601,7 +601,7 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// It propagates the input up through all hidden layers and then back down to generate
     /// a reconstruction of the original input.
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
         if (TryForwardGpuOptimized(input, out var gpuResult))

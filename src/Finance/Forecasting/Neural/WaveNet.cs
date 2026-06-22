@@ -411,7 +411,7 @@ public class WaveNet<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the WaveNet model, Predict produces predictions from input data. This is the main inference step of the WaveNet architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
     }

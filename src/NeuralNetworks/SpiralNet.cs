@@ -512,7 +512,7 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
     /// <param name="input">Vertex features tensor.</param>
     /// <returns>Classification logits.</returns>
     /// <inheritdoc />
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         if (_spiralIndicesPerLevel.Count == 0)
         {

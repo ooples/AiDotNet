@@ -182,7 +182,7 @@ public class AudioMAE<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         else Layers.AddRange(LayerHelper<T>.CreateDefaultAudioMAELayers(patchFeatureSize: _options.PatchSize * _options.PatchSize, embeddingDim: _options.EncoderEmbeddingDim, numEncoderLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumEncoderHeads, feedForwardDim: (int)(_options.EncoderEmbeddingDim * _options.FeedForwardRatio), numClasses: ClassLabels.Count, dropoutRate: _options.DropoutRate));
     }
 
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {

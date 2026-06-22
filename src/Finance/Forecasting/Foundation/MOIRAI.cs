@@ -686,7 +686,7 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
     /// <b>For Beginners:</b> In the MOIRAI model, Predict produces predictions from input data. This is the main inference step of the MOIRAI architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // Go through Forecast (which extracts point/median predictions from the
         // mixture/quantile head) so Predict's output shape matches what

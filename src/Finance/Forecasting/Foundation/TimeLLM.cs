@@ -466,7 +466,7 @@ public class TimeLLM<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the TimeLLM model, Predict produces predictions from input data. This is the main inference step of the TimeLLM architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? Forward(input) : ForecastOnnx(input);
     }

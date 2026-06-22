@@ -295,7 +295,7 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
     /// <summary>
     /// Runs the generator forward pass with residual connections and pre-activation caching.
     /// </summary>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
