@@ -7,6 +7,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace AiDotNetTests.IntegrationTests.NeuralNetworks;
 
@@ -39,6 +40,10 @@ public sealed class InferenceArenaCollection { }
 [Collection("InferenceArena")]
 public class InferenceArenaPredictTests
 {
+    private readonly ITestOutputHelper _output;
+
+    public InferenceArenaPredictTests(ITestOutputHelper output) => _output = output;
+
     // ── model builders ──────────────────────────────────────────────────────────
 
     // ConvolutionalNeuralNetwork<double>: double dtype intentionally skips the float-only fused
@@ -190,6 +195,8 @@ public class InferenceArenaPredictTests
 
         // #661 measured ~95% reduction at steady state; a generous 0.75 bound is well clear of that
         // while tolerating the process-wide GC counter picking up some concurrent-test noise.
+        double reduction = noArena == 0 ? 0 : 100.0 * (noArena - arena) / noArena;
+        _output.WriteLine($"per-forward alloc: noArena={noArena:N0} B  arena={arena:N0} B  reduction={reduction:F1}%");
         Assert.True(arena < noArena * 3 / 4,
             $"arena per-forward alloc ({arena} B) should be well under the non-arena path ({noArena} B).");
     }
