@@ -6270,6 +6270,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         using var tape = new GradientTape<T>(
             clip ? new GradientTapeOptions { Persistent = true } : null);
+        // #1662 lever #1: the clipped two-pass path reuses the persistent tape across the norm
+        // pass and the apply pass. ComputeGradientsStreaming releases activations by default
+        // (the process-global GradientTape<T>.ReleaseStreamingActivations), which would make the
+        // second pass throw "activations released" — so for the clipped path keep them resident,
+        // saving/restoring the flag so the setting never leaks to other tapes/steps. (The
+        // unclipped single-pass path keeps the default release, freeing each grad as produced.)
+        bool savedStreamingRelease = GradientTape<T>.ReleaseStreamingActivations;
+        if (clip) GradientTape<T>.ReleaseStreamingActivations = false;
+        try
+        {
         var output = ForwardForTraining(input);
 
         // Align target rank to the tape-tracked output (reshape the leaf target,
@@ -6300,9 +6310,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // beats classic collect-then-step on memory + cache locality while matching its trajectory
         // exactly. The Auto path stays on the 8-bit OOM-survival variant for now; flipping the
         // unclipped-fitting Auto default to this FP path is gated on the §5d PyTorch-CPU proof.
+        // Precision is independent of clipping: clip only selects single-pass (unclipped) vs
+        // two-pass-norm (clipped); both use the bit-identical full-precision optimizer when the
+        // user opts in (ForceOn) and a full-precision variant exists.
         bool fullPrecisionStreaming =
             StreamingTraining == StreamingTrainingMode.ForceOn
-            && !clip
             && Training.StreamingOptimizerResolver<T>.SupportsFullPrecision(resolvedOptimizer, useStreamingDefaults);
 
         var streamingOptimizer = GetOrCreateStreamingOptimizer(
@@ -6394,6 +6406,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // update paths (TrainWithTape, batch eager) call this at the same point.
         InvalidateWeightCachesAfterSuccessfulWeightUpdate();
         StepSchedulerIfSupported(resolvedOptimizer);
+        }
+        finally
+        {
+            if (clip) GradientTape<T>.ReleaseStreamingActivations = savedStreamingRelease;
+        }
     }
 
     protected void TrainWithTape(Tensor<T> input, Tensor<T> expected,

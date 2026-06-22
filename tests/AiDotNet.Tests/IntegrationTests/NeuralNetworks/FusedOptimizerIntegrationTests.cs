@@ -150,6 +150,51 @@ public class FusedOptimizerIntegrationTests
     }
 
     /// <summary>
+    /// #1662 lever #1 clipped gate (the COMMON case — MaxGradNorm defaults to 1.0): the
+    /// full-precision two-pass clipped fused optimizer-in-backward must track the classic
+    /// clip-then-step eager path to float precision. The fused path streams once to accumulate
+    /// the global grad norm (activations kept resident — the persistent-tape fix), then streams
+    /// again folding the same clip scale before the Adam update. PyTorch's
+    /// apply_optimizer_in_backward does NOT support gradient clipping at all, so this is a
+    /// capability they lack, not just a perf delta.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task FusedInBackward_Clipped_MatchesClassicAdam_ToFloatPrecision()
+    {
+        await Task.CompletedTask;
+
+        var input = CreateRandomTensor(new[] { 16, 4 }, seed: 42);
+        var target = CreateRandomTensor(new[] { 16, 2 }, seed: 43);
+
+        var classic = BuildMlp();
+        var fused = BuildMlp();
+        classic.Predict(CreateRandomTensor(new[] { 1, 4 }, seed: 99));
+        fused.Predict(CreateRandomTensor(new[] { 1, 4 }, seed: 99));
+        fused.UpdateParameters(classic.GetParameters());
+
+        // CLIPPED (MaxGradNorm = 1.0, the default) — exercises the two-pass clipped fused path.
+        classic.SetMaxGradNormForTest(1.0);
+        fused.SetMaxGradNormForTest(1.0);
+        classic.StreamingTraining = StreamingTrainingMode.ForceOff;
+        fused.StreamingTraining = StreamingTrainingMode.ForceOn;
+
+        var classicOpt = BuildAdam(classic, learningRate: 0.01);
+        var fusedOpt = BuildAdam(fused, learningRate: 0.01);
+
+        for (int step = 0; step < 20; step++)
+        {
+            classic.TrainPublic(input, target, classicOpt);
+            fused.TrainPublic(input, target, fusedOpt);
+            Assert.Equal((double)classic.LastLossPublic, (double)fused.LastLossPublic, 3);
+        }
+
+        var pc = SnapshotParameters(classic);
+        var pf = SnapshotParameters(fused);
+        Assert.False(AnyParameterDiffers(pc, pf, 1e-3f),
+            "clipped two-pass fused optimizer-in-backward diverged from classic clipped Adam beyond float precision");
+    }
+
+    /// <summary>
     /// End-to-end validation of the FP16-activation training path for a NON-Adam fused
     /// optimizer (Tensors #574 + AiDotNet #1543). With <c>AIDOTNET_FP16_ACTIVATIONS=1</c>,
     /// <c>T=float</c>, <c>EnableCompilation=true</c>, and RMSprop (a fused-mappable optimizer
