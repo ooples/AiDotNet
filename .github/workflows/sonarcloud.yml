@@ -9,7 +9,10 @@ on:
       - master
       - main
   pull_request:
-    types: [opened, synchronize, reopened]
+    # ready_for_review is REQUIRED: the build/test/sonar jobs below are gated on
+    # `github.event.pull_request.draft != true`, so without this event type a draft→ready
+    # transition never re-triggers them and the PR is left with no Build/Tests run.
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
     inputs:
       pr_number:

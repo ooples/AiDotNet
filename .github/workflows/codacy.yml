@@ -11,6 +11,9 @@ on:
       - '**.csproj'
       - '.github/workflows/codacy.yml'
   pull_request:
+    # Include ready_for_review (default types omit it): the codacy job is gated on
+    # draft != true, so a draft→ready transition must re-trigger it.
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [ master, main ]
     paths:
       - '**.cs'
