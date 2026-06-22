@@ -573,6 +573,22 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         // Pre-allocate reusable noise prediction vector to avoid per-step allocation
         var noisePredVec = new Vector<T>(sample.Length);
 
+        // Forward caching allocator (Tensors #661 consumer wiring, second boundary
+        // after NeuralNetworkBase.Predict): a NoisePredictorBase forward is NOT a
+        // NeuralNetworkBase.Predict call, so its per-step intermediate tensors are
+        // never recycled by the Predict funnel. Run the whole denoise loop inside one
+        // TensorArena and Reset() per step so every step's predictor + scheduler
+        // intermediates are recycled rather than GC-churned — ~50 forwards per
+        // generation is the dominant inference-time allocation source. The carried
+        // latent (`sample`) is the one value that must survive each Reset, so it is
+        // detached to a GC-owned buffer below. The pre-allocated `sampleTensor` /
+        // `noisePredVec` are created above (outside the arena) and are therefore GC.
+        // Gated by the same default-on flag as the Predict funnel; null = no arena.
+        // (The async GenerateAsyncCore path is intentionally NOT wrapped: TensorArena.Current
+        // is [ThreadStatic] and `await ...ConfigureAwait(false)` can resume on another thread,
+        // which would desynchronise the arena scope — an async-aware arena is a separate change.)
+        using var arena = InferenceArenaSettings.Enabled ? TensorArena.Create() : null;
+
         // Iterative denoising loop
         foreach (var timestep in _scheduler.Timesteps)
         {
@@ -605,6 +621,19 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
                 timestep,
                 sample,
                 NumOps.Zero);
+
+            // Detach the carried latent to a GC-owned buffer so it survives the
+            // arena Reset() below: Vector arithmetic in _scheduler.Step routes its
+            // output through TensorAllocator.Rent (arena Tier-0), so without this copy
+            // `sample` would point into recycled scratch on the next step. new Vector<T>(len)
+            // allocates a plain GC array; arena?.Reset() then recycles every other per-step
+            // tensor (predictor intermediates, scheduler temporaries).
+            if (arena != null)
+            {
+                var detached = new Vector<T>(sample.Length);
+                sample.AsSpan().CopyTo(detached.AsWritableSpan());
+                sample = detached;
+            }
 
             // NaN/Inf guard per Ho et al. 2020 §3.2: a trained DDPM produces
             // bounded predictions ε ≈ N(0, I), but an untrained / randomly-
