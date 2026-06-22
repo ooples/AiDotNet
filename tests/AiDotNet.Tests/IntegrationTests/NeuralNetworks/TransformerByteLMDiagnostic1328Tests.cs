@@ -392,9 +392,19 @@ public class TransformerByteLMDiagnostic1328Tests
 
             model.Train(BuildAllKInput(2, seqLen), BuildOneHotTarget(5, vocab));
 
-            int moved = 0, stuck = 0;
+            int moved = 0, stuck = 0, evaluated = 0;
             foreach (var r in records)
             {
+                // Skip genuinely-empty params: a dual-mode layer can expose a 0-element placeholder it never uses
+                // in this configuration (e.g. EmbeddingLayer._projectionWeights stays [0,0] in pure-lookup mode and
+                // is intentionally kept registered for GetParameters/SetParameters count stability). An empty param
+                // has nothing to move — counting it as "stuck" is a false positive, not a gradient-flow bug.
+                if (r.t.Length == 0)
+                {
+                    _output.WriteLine($"  [EMPTY] {r.n}  shape=[{string.Join(",", r.t.Shape.ToArray())}] — unused dual-mode placeholder, skipped");
+                    continue;
+                }
+                evaluated++;
                 var aft = r.t.AsSpan().ToArray();
                 double ss = 0;
                 for (int i = 0; i < aft.Length; i++) { double d = aft[i] - r.before[i]; ss += d * d; }
@@ -404,6 +414,7 @@ public class TransformerByteLMDiagnostic1328Tests
                 _output.WriteLine($"  [{v}] {r.n}  shape=[{string.Join(",", r.t.Shape.ToArray())}]  L2(∆)={l2:E6}");
             }
             _output.WriteLine($"Summary: {moved} moved, {stuck} stuck.");
+            Assert.True(evaluated > 0, "No non-empty trainable parameters were evaluated; movement check is vacuous.");
             Assert.True(stuck == 0, $"{stuck} params still stuck after #1331 fix.");
         }
         finally
