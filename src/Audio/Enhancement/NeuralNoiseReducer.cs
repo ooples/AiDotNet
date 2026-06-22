@@ -1091,6 +1091,19 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         metadata.SetProperty("EnhancementStrength", EnhancementStrength);
         metadata.SetProperty("UseNativeMode", _useNativeMode);
 
+        // Also surface the model-specific hyperparameters via AdditionalInfo —
+        // the canonical metadata channel consumers (and the model-family
+        // invariant tests) read; SetProperty above writes the separate
+        // Properties dictionary, leaving AdditionalInfo empty otherwise.
+        metadata.AdditionalInfo["SampleRate"] = SampleRate;
+        metadata.AdditionalInfo["FFTSize"] = _fftSize;
+        metadata.AdditionalInfo["HopSize"] = _hopSize;
+        metadata.AdditionalInfo["NumStages"] = _numStages;
+        metadata.AdditionalInfo["BaseFilters"] = _baseFilters;
+        metadata.AdditionalInfo["BottleneckDim"] = _bottleneckDim;
+        metadata.AdditionalInfo["EnhancementStrength"] = EnhancementStrength;
+        metadata.AdditionalInfo["UseNativeMode"] = _useNativeMode;
+
         return metadata;
     }
 
