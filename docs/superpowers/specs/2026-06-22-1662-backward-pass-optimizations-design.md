@@ -26,7 +26,7 @@ Master pins `AiDotNet.Tensors` **0.94.2**; the Tensors repo is published through
 
 ### Acceptance gate (from the issue)
 
-Measured per-step training **peak-RSS and allocation reduction** on the #1624 canonical shape — **SimCSE\<float\> dim=384, 10 layers, fused-optimizer path** — with the **loss trajectory unchanged**. Each lever ships with a bit-identical-trajectory (or fp-tol bit-close) test. No test weakening; paper-scale shapes preserved.
+Measured per-step training **peak-RSS and allocation reduction** on the #1624 canonical shape — **SimCSE\<float\> dim=384, 10 layers, fused-optimizer path** — with the **loss trajectory unchanged**. Each lever ships with a bit-identical-trajectory (or fp-tol bit-close) test. No test weakening; paper-scale shapes preserved. **Additionally (lever #1): a `--trainbench` head-to-head must show AiDotNet handily beating a torch CPU baseline on per-step wall time, peak RSS, and per-step allocation on the acceptance shape — the default-on flip (§5a) is gated on this proof.**
 
 ---
 
@@ -48,7 +48,7 @@ The AiDotNet **draft** PR for #1662 may sit red until the Tensors release is pub
 **Problem:** the per-step arena only recycles backward grad buffers that flow through `Rent`/arena. Allocations that bypass it (`new Tensor<T>`, `AutoTensorCache.RentOrAllocate` when its pool is disabled, temporary `new T[]` / `Vector<T>`) still churn GC every training step.
 
 **Approach:**
-1. **Measurement first.** Add a `--trainbench` mode to `ConvParallelProbe` (mirrors the existing `--attnblock` / `--arena alloc_MB/fwd` style): builds a small transformer/MLP block, runs `forward → backward → optimizer-step` in a loop, and reports per-step **managed allocation** (`GC.GetAllocatedBytesForCurrentThread`) and peak working set. This gives a before/after number for the audit.
+1. **Measurement first.** Add a `--trainbench` mode to `ConvParallelProbe` (mirrors the existing `--attnblock` / `--arena alloc_MB/fwd` style): builds a small transformer/MLP block, runs `forward → backward → optimizer-step` in a loop, and reports per-step **managed allocation** (`GC.GetAllocatedBytesForCurrentThread`), **peak working set**, and **per-step wall time**. This is both the before/after number for the audit AND the §5d proof harness: it emits machine-readable metrics so a torch CPU baseline (a committed `trainbench_torch.py` on the same shape/optimizer) can be diffed against it to prove AiDotNet wins on every metric.
 2. **Audit & fix.** Walk `BackwardFunctions.cs` and the CpuEngine `*Backward` ops; route arena-bypassing allocations through the per-step arena `Rent`. One op at a time, re-measuring with `--trainbench`.
 3. **Fused grad-norm reduction helper.** While in the backward path, add a reduction that produces each gradient's sum-of-squares contribution as it is computed (the grad is already hot in cache). This is consumed by lever #1's two-pass clipped path so the norm pass costs ~0 extra sweeps.
 
@@ -71,34 +71,30 @@ The AiDotNet **draft** PR for #1662 may sit red until the Tensors release is pub
 
 ## 5. Lever #1 — optimizer-in-backward, adaptive hybrid (AiDotNet)
 
-**Problem:** training currently collects all gradients, then steps the optimizer once. Peak grad memory is O(all params' grads).
+**Problem:** for the common case (models that fit in memory), training collects the *full* gradient set, then steps the optimizer once — the same collect-then-step strategy as PyTorch, and **not superior**.
 
-**Foundation that already exists:** `GradientTape.ComputeGradientsStreaming(loss, sources, onSourceGradient)` walks the graph in reverse, releases activations topologically, and fires a **per-source gradient callback** — but today it only *frees*; it does not step the optimizer. Lever #1 pushes the optimizer update into that callback.
+**What already exists (and why it is NOT enough).** `GradientTape.ComputeGradientsStreaming(loss, sources, onSourceGradient)` walks the graph in reverse, releases activations topologically, and fires a per-source gradient callback. `NeuralNetworkBase.TrainWithTapeStreaming` (~L6294-6382) *already* uses it to do single-pass fused optimizer-in-backward (unclipped) and two-pass-norm (clipped). **BUT** this path is wired purely as an **OOM-survival** mechanism: `ShouldUseStreamingTraining()` Auto engages it **only when `footprint > 0.5 × available RAM`** (L6207). For models that fit, the **classic collect-then-step path** (L6999-7028) runs — the full gradient set is resident and a single whole-set `opt.Step(context)` sweep follows. So:
+- The common case ties PyTorch (collect-then-step), it does not beat it.
+- The clipped streaming path does a **full second backward** (2× backward compute) — a throughput *loss* on a fitting model.
 
-**The clipping barrier.** Exact global-norm gradient clipping computes a single scalar `c = min(1, max_norm / ‖g‖)` that depends on *every* gradient, and Adam consumes `c·g` / `(c·g)²` non-linearly. So no parameter can be stepped until the final gradient is produced — a hard synchronization barrier. PyTorch lives with this by holding all grads in memory and doing a separate post-backward foreach clip+step. Three regimes follow:
+**What lever #1 must actually deliver (non-duplicative):**
 
-### 5a. Unclipped path — single-pass fused step (the double win)
-In the `onSourceGradient` callback, apply the optimizer's per-parameter fused update for that gradient the moment it is produced, then free it.
-- **Memory:** peak grad = O(largest layer's grad), not O(all params). Strict win over PyTorch.
-- **Throughput:** each gradient is stepped while still hot in L2, and we never run PyTorch's separate optimizer sweep over all params. Locality win over PyTorch.
-- **Bit-identical** to collect-then-step.
+### 5a. Promote single-pass fused optimizer-in-backward to the common-case default (unclipped)
+Engage the existing `streamingOptimizer.Apply(source, grad)` single-pass path for unclipped training on models **that fit**, not just on OOM. This is the clean double-win: peak grad = O(largest layer) and each gradient is stepped while hot in L2 (no separate optimizer sweep). **Bit-identical** to collect-then-step. Lower/replace the `ShouldUseStreamingTraining` Auto gate (or add a dedicated `FusedOptimizerInBackward` engagement) so it is **default-on for unclipped**, with a `ForceOff` escape hatch. **Rollout is gated on the §5d PyTorch-comparison proof.**
 
-### 5b. Clipped path (global-norm) — two-pass with fused norm
-- **Pass 1:** stream gradients, accumulate global sum-of-squares (via lever #4's in-backward reduction — near-free), free each grad. O(largest-grad) memory.
-- Compute global norm and clip scale `c`.
-- **Pass 2:** stream again, applying the `c`-scaled fused optimizer step per parameter.
-- **Bit-identical** to collect-then-step. Wins on memory; the cost is one extra backward recompute (so ~matches PyTorch throughput, never worse on trajectory). Beating PyTorch on *both* axes here is mathematically precluded by the barrier while staying bit-identical.
+### 5b. Clipped path — bit-identical stays two-pass
+The global-norm barrier forces clipped + bit-identical into 2× backward (compute the global norm before any param can be stepped). Keep the existing two-pass-norm path for clipped runs; it wins on memory and ties/loses on throughput. We do not regress it.
 
 ### 5c. Opt-in fast-clip — single-pass even when clipping (OFF by default)
-An explicitly opt-in mode using a running/EMA grad-norm from the prior step (NFNet-style adaptive clipping, Brock et al. 2021) to set the clip scale, enabling a single fused pass even under clipping.
-- **NOT bit-identical** — a documented approximation. **OFF by default.**
-- Excluded from the bit-identical-trajectory gate; has its own convergence test (training converges, does not diverge).
-- Never engages unless explicitly enabled.
+The only way to win *single-pass* under clipping is to drop the barrier: a running/EMA grad-norm from the prior step (NFNet-style adaptive clipping, Brock et al. 2021) sets the clip scale, enabling one fused pass. **NOT bit-identical** — a documented approximation, **OFF by default**, excluded from the bit-identical gate, with its own convergence test. This is what makes clipped training also beat PyTorch when the user opts in.
+
+### 5d. Proof harness — handily beat PyTorch on ALL metrics
+A `--trainbench` PyTorch-comparison (see §3) producing hard numbers on the acceptance shape: **per-step wall time, peak RSS, and per-step managed allocation**, AiDotNet vs a torch CPU baseline. The §5a default-on flip does not land until this shows AiDotNet winning on every metric. This proof is a required deliverable, not a nice-to-have.
 
 ### Optimizer-interface integration
-Today the fused step is `optimizer.Step(TapeStepContext<T>)`, stepping the whole parameter set, with `ApplyGradientClipping` called just before it. Lever #1 needs a **per-source/per-slice fused step** entry point the streaming callback can invoke, mapping each source tensor to its optimizer-state slice (Adam `m`/`v`). The per-slice updates **must advance Adam `m`/`v` identically** to the whole-vector `Step`, which the bit-identical gate verifies. Exact mechanism (extend `IGradientBasedOptimizer` / `TapeStepContext` vs a new per-parameter step API) is resolved in the implementation plan.
+The single-pass path already calls `streamingOptimizer.Apply(source, grad)` per gradient (the per-slice fused step exists). The §5a work is to **engage that path for fitting models** when unclipped, not to rebuild it — i.e. replace/augment the `ShouldUseStreamingTraining` Auto gate with a `FusedOptimizerInBackward` default-on-for-unclipped decision, retaining `ForceOff`. The per-slice updates **must advance Adam `m`/`v` identically** to the whole-vector classic `opt.Step(context)`; the bit-identical gate verifies this on a multi-layer model.
 
-**Correctness gate:** bit-identical training trajectory vs collect-then-step on the #1624 SimCSE\<float\> dim=384, 10-layer shape (`FusedOptimizerIntegrationTests`-style); Adam `m`/`v` identical per step; per-step training peak-RSS and allocation reduction asserted.
+**Correctness gate:** bit-identical training trajectory (and per-step Adam `m`/`v`) of fused-optimizer-in-backward vs the classic collect-then-step path on the #1624 SimCSE\<float\> dim=384, 10-layer shape; per-step peak-RSS and managed-allocation reduction asserted; the §5d harness shows AiDotNet beating the torch CPU baseline on per-step wall time, peak RSS, and allocation. Fast-clip (§5c) is excluded from the bit-identical gate and has its own convergence test.
 
 ---
 
