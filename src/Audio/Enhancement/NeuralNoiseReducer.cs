@@ -421,11 +421,14 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         var samples = audio.ToVector().ToArray();
         var enhanced = ProcessOverlapAdd(samples);
 
+        // Write straight into the tensor's flat storage. Tensor<T>.ToVector()
+        // returns a COPY (it allocates a fresh Vector<T> and flattens into it),
+        // so writing to that copy and returning `result` would discard every
+        // value and yield an all-zero tensor.
         var result = new Tensor<T>([enhanced.Length]);
-        var resultVector = result.ToVector();
         for (int i = 0; i < enhanced.Length; i++)
         {
-            resultVector[i] = enhanced[i];
+            result[i] = enhanced[i];
         }
         return result;
     }
@@ -590,11 +593,14 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         var samples = audioChunk.ToVector().ToArray();
         var enhanced = ProcessStreamingChunk(samples);
 
+        // Write straight into the tensor's flat storage. Tensor<T>.ToVector()
+        // returns a COPY (it allocates a fresh Vector<T> and flattens into it),
+        // so writing to that copy and returning `result` would discard every
+        // value and yield an all-zero tensor.
         var result = new Tensor<T>([enhanced.Length]);
-        var resultVector = result.ToVector();
         for (int i = 0; i < enhanced.Length; i++)
         {
-            resultVector[i] = enhanced[i];
+            result[i] = enhanced[i];
         }
         return result;
     }
@@ -750,12 +756,13 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
             }
         }
 
-        // Create input tensor from magnitudes
+        // Create input tensor from magnitudes. Write directly to the tensor's
+        // flat indexer — ToVector() returns a copy, so writing to it would be
+        // discarded and the model would see an all-zero spectrum.
         var input = new Tensor<T>([1, processedMagnitudes.Length, 1]);
-        var inputVector = input.ToVector();
         for (int i = 0; i < processedMagnitudes.Length; i++)
         {
-            inputVector[i] = processedMagnitudes[i];
+            input[i] = processedMagnitudes[i];
         }
 
         Tensor<T> mask;
@@ -917,12 +924,14 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         // Compute magnitude spectrum
         var (magnitudes, _) = ComputeSTFT(windowed);
 
-        // Reshape to [1, freq_bins, 1]
+        // Reshape to [1, freq_bins, 1]. Write directly to the tensor's flat
+        // indexer — ToVector() returns a COPY, so writing to it would be
+        // discarded and the network would receive an all-zero spectrogram
+        // (the cause of the constant sigmoid(0)=0.5 degenerate output).
         var result = new Tensor<T>([1, magnitudes.Length, 1]);
-        var resultVector = result.ToVector();
         for (int i = 0; i < magnitudes.Length; i++)
         {
-            resultVector[i] = magnitudes[i];
+            result[i] = magnitudes[i];
         }
 
         return result;
