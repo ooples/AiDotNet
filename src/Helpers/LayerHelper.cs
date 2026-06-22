@@ -23090,43 +23090,34 @@ public static class LayerHelper<T>
         int encoderFfnDim = encoderEmbeddingDim * 4;
         int decoderFfnDim = decoderEmbeddingDim * 4;
 
-        // === DaViT Vision Encoder (simplified: standard MHA approximation) ===
-        // Note: Real DaViT alternates spatial window attention (odd layers) and channel group
-        // attention (even layers). This uses standard MHA as a simplified approximation.
-        yield return new LayerNormalizationLayer<T>();
+        // === Florence-2 (Xiao et al. 2024): DaViT vision encoder + seq2seq decoder ===
+        // The previous stack was a residual-LESS sequence (LN -> MHA -> LN -> Dense ->
+        // Dense -> LN) with no-arg LAZY LayerNorms — divergent from the paper on two
+        // counts that also broke the tests: (a) transformer/DaViT blocks are PRE-NORM
+        // RESIDUAL units (x = x + Sublayer(LN(x)), Vaswani 2017 §3.1 / DaViT's dual-
+        // attention units), and (b) a no-arg lazy LayerNorm could be pinned to the wrong
+        // feature dim by an off-contract forward and then mismatch (the gamma(128) vs
+        // input(768) crash in Predict). Build the transformer CORE faithfully with
+        // TransformerEncoderBlock / TransformerDecoderBlock, which wrap attention + FFN
+        // in residual connections and size their LayerNorms EAGERLY to the hidden dim.
+        //
+        // NOTE: the full DaViT vision tower (conv patch-embed stem + 4 hierarchical
+        // stages 128/256/512/1024 with patch-merging and DUAL spatial-window +
+        // channel-group attention, Ding et al. 2022) needs window/channel-attention and
+        // patch-merging primitives that AiDotNet does not yet provide; the encoder here
+        // is the faithful pre-norm residual transformer it reduces to at a single scale.
 
+        // Encoder: pre-norm residual transformer blocks (DaViT spatial+FFN residual unit).
         for (int i = 0; i < numEncoderLayers; i++)
-        {
-            // Standard multi-head attention (approximates DaViT dual attention)
-            yield return new MultiHeadAttentionLayer<T>(numEncoderHeads, (encoderEmbeddingDim) / (numEncoderHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(encoderFfnDim, geluActivation);
-            yield return new DenseLayer<T>(encoderEmbeddingDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-        }
+            yield return new TransformerEncoderBlock<T>(encoderEmbeddingDim, numEncoderHeads, encoderFfnDim, dropoutRate, geluActivation);
 
-        // Encoder-to-decoder projection
+        // Encoder-to-decoder projection (only when the dims differ).
         if (encoderEmbeddingDim != decoderEmbeddingDim)
             yield return new DenseLayer<T>(decoderEmbeddingDim, identityActivation);
 
-        // === Multi-task Decoder ===
+        // Multi-task seq2seq decoder: pre-norm residual self-attn + cross-attn + FFN.
         for (int i = 0; i < numDecoderLayers; i++)
-        {
-            // Causal self-attention
-            var decoderSelfAttn = new MultiHeadAttentionLayer<T>(numDecoderHeads, (decoderEmbeddingDim) / (numDecoderHeads));
-            decoderSelfAttn.UseCausalMask = true;
-            yield return decoderSelfAttn;
-            yield return new LayerNormalizationLayer<T>();
-            // Cross-attention to encoder features (query from decoder, key/value from encoder)
-            yield return new CrossAttentionLayer<T>(decoderEmbeddingDim, encoderEmbeddingDim, numDecoderHeads);
-            yield return new LayerNormalizationLayer<T>();
-            // Feed-forward
-            yield return new DenseLayer<T>(decoderFfnDim, geluActivation);
-            yield return new DenseLayer<T>(decoderEmbeddingDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-        }
+            yield return new TransformerDecoderBlock<T>(decoderEmbeddingDim, numDecoderHeads, decoderFfnDim, dropoutRate);
     }
 
     /// <summary>
@@ -30054,30 +30045,31 @@ public static class LayerHelper<T>
         int convPadding = 1)
     {
         int freqBins = fftSize / 2 + 1;
-        int currentFilters = baseFilters;
-        int currentFreqDim = freqBins;
 
-        // Encoder
+        // Fully-connected spectral-mapping network (Xu et al. 2015, "A Regression
+        // Approach to Speech Enhancement Based on Deep Neural Networks"). The model
+        // consumes a SINGLE STFT magnitude frame — there is no time axis to convolve
+        // over, so a square 2-D conv stack (kernel 4 over a width-1 frame) is
+        // structurally invalid. A leading Flatten makes the stack rank-agnostic so
+        // it accepts both the audio-API spectrum ([1,freqBins,1]) and the generic
+        // tensor-test input ([1,64,32]) and always emits a fixed [.,freqBins] mask.
+        // (conv* params retained on the signature for source compatibility, unused.)
+        _ = convKernelSize; _ = convStride; _ = convPadding;
+        yield return new FlattenLayer<T>();
+
+        // Encoder: stacked fully-connected hidden layers (LeakyReLU), narrowing
+        // toward the bottleneck (keeps the numStages depth knob meaningful).
+        int dim = bottleneckDim * 2;
         for (int stage = 0; stage < numStages; stage++)
         {
-            int inputFilters = stage == 0 ? 1 : currentFilters / 2;
-            yield return new ConvolutionalLayer<T>(
-                outputDepth: currentFilters,
-                kernelSize: convKernelSize,
-                stride: convStride,
-                padding: convPadding,
-                activationFunction: new LeakyReLUActivation<T>());
-
-            currentFreqDim = (currentFreqDim + 2 * convPadding - convKernelSize) / convStride + 1;
-            if (stage < numStages - 1)
-                currentFilters *= 2;
+            yield return new DenseLayer<T>(dim, (IActivationFunction<T>)new LeakyReLUActivation<T>());
+            dim = Math.Max(bottleneckDim, dim / 2);
         }
 
         // Bottleneck
-        int bottleneckInputSize = currentFilters * currentFreqDim;
         yield return new DenseLayer<T>(bottleneckDim, (IActivationFunction<T>)new ReLUActivation<T>());
 
-        // Output projection (simplified decoder)
+        // Output projection: a per-frequency-bin soft mask in [0, 1].
         yield return new DenseLayer<T>(freqBins, (IActivationFunction<T>)new SigmoidActivation<T>());
     }
 

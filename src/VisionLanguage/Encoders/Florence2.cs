@@ -101,7 +101,18 @@ public class Florence2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
     {
         _options = options ?? new Florence2Options();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Florence-2 is a deep (12 encoder + 6 decoder transformer-block) seq2seq
+        // model. The paper fine-tunes AdamW WITH learning-rate warmup; without warmup
+        // a deep transformer at the AdamW default LR (1e-3) overshoots a far target in
+        // the first un-warmed steps and loss RISES (observed: 16.6 -> 64.6 in one step).
+        // ViT/transformer fine-tuning uses 1e-4..1e-5, so pin the conservative stable
+        // end (1e-5) as the paper-faithful default — matching the sibling SigLIP2 encoder.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-5,
+            });
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.EmbeddingDim;
@@ -146,10 +157,13 @@ public class Florence2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
                     _options.DropoutRate
                 )
             );
-            int lpb = _options.DropoutRate > 0 ? 6 : 5;
+            // CreateDefaultFlorence2Layers now emits ONE TransformerEncoderBlock per
+            // encoder layer (each block internally bundles attention + FFN + residual
+            // norms), optionally followed by a single enc->dec projection Dense, then
+            // the decoder blocks. So the encoder spans exactly NumLayers blocks (+1 for
+            // the projection when the encoder/decoder dims differ).
             _encoderEnd =
-                1
-                + _options.NumLayers * lpb
+                _options.NumLayers
                 + (_options.EmbeddingDim != _options.DecoderEmbeddingDim ? 1 : 0);
         }
     }
@@ -170,7 +184,12 @@ public class Florence2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
+        // Thread the model's own optimizer (AdamW @ 1e-5 — the deep-transformer-safe
+        // rate set in the ctor) into the tape step. The 2-arg overload silently used
+        // the base default optimizer (LR 1e-3), at which this deep stack overshoots and
+        // loss RISES on the first step (16.6 -> 64.6); the sibling SigLIP2 likewise
+        // passes its _optimizer here.
+        TrainWithTape(input, expected, _optimizer);
         SetTrainingMode(false);
     }
 
