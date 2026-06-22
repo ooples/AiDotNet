@@ -6141,6 +6141,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     public StreamingTrainingMode StreamingTraining { get; set; } = StreamingTrainingMode.Auto;
 
+    /// <summary>
+    /// #1662 lever #1 (§5c) — opt-in single-pass approximate gradient clipping for the streaming
+    /// (optimizer-in-backward) path. When <c>true</c> and clipping is active, the clip scale is
+    /// computed from an EMA of the PREVIOUS step's global grad-norm instead of the exact current
+    /// norm, so even clipped training runs in ONE backward pass (no 2× norm pass). This is an
+    /// approximation (NFNet-style adaptive clipping, Brock et al. 2021): it is NOT bit-identical
+    /// to exact <c>clip_grad_norm_</c> and changes the trajectory. Default: <c>false</c> (exact
+    /// two-pass). Only meaningful when streaming is engaged (e.g. <see cref="StreamingTrainingMode.ForceOn"/>).
+    /// </summary>
+    public bool FastApproxGradClip { get; set; } = false;
+
+    // EMA of the global grad-norm for FastApproxGradClip; < 0 until seeded on the first clipped
+    // fast-clip step. Persists across steps so the estimate tracks the run.
+    private double _fastClipEmaNorm = -1.0;
+    private const double FastClipEmaBeta = 0.9;
+
     /// <summary>Learning rate used by the default streaming 8-bit Adam epilogue. Defaults
     /// to 1e-4 — the conservative rate large-transformer/foundation-model
     /// training uses, which stays stable under 8-bit moment quantization. When
@@ -6267,17 +6283,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // clipping is off, one streaming pass suffices and the tape is non-persistent.
         double maxGradNorm = MaxGradNormValue;
         bool clip = maxGradNorm > 0.0;
+        // #1662 lever #1 (§5c): opt-in fast-clip turns the clipped case into a SINGLE streaming
+        // pass by clipping with an EMA of the previous step's global grad-norm (NFNet-style
+        // adaptive clipping) instead of the exact current-step norm. Only the exact path needs
+        // the two-pass-over-a-persistent-tape dance; fast-clip and unclipped are single-pass.
+        bool twoPass = clip && !FastApproxGradClip;
 
         using var tape = new GradientTape<T>(
-            clip ? new GradientTapeOptions { Persistent = true } : null);
-        // #1662 lever #1: the clipped two-pass path reuses the persistent tape across the norm
-        // pass and the apply pass. ComputeGradientsStreaming releases activations by default
-        // (the process-global GradientTape<T>.ReleaseStreamingActivations), which would make the
-        // second pass throw "activations released" — so for the clipped path keep them resident,
-        // saving/restoring the flag so the setting never leaks to other tapes/steps. (The
-        // unclipped single-pass path keeps the default release, freeing each grad as produced.)
+            twoPass ? new GradientTapeOptions { Persistent = true } : null);
+        // The exact-clip two-pass path reuses the persistent tape across the norm pass and the
+        // apply pass. ComputeGradientsStreaming releases activations by default (the process-
+        // global GradientTape<T>.ReleaseStreamingActivations), which would make the second pass
+        // throw "activations released" — so for that path keep them resident, saving/restoring
+        // the flag so the setting never leaks. (Single-pass paths keep the default release.)
         bool savedStreamingRelease = GradientTape<T>.ReleaseStreamingActivations;
-        if (clip) GradientTape<T>.ReleaseStreamingActivations = false;
+        if (twoPass) GradientTape<T>.ReleaseStreamingActivations = false;
         try
         {
         var output = ForwardForTraining(input);
@@ -6341,7 +6361,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     streamingOptimizer.Apply(source, grad);
                 });
         }
-        else
+        else if (twoPass)
         {
             // Clip set = layer-owned trainable params only (NOT the extras), matching
             // the eager ApplyGradientClipping call site exactly so the global norm and
@@ -6391,6 +6411,48 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     streamingOptimizer.Apply(source, grad);
                 });
         }
+        else
+        {
+            // #1662 lever #1 (§5c) FAST-CLIP — opt-in, NOT bit-identical. Clip with an EMA of the
+            // PREVIOUS step's global grad-norm so the whole step is a SINGLE streaming pass even
+            // when clipping (no 2× backward). The exact current-step norm is accumulated in the
+            // same pass and folded into the EMA for next step. First step (no EMA): don't clip,
+            // just seed. NFNet-style adaptive clipping (Brock et al. 2021); documented approximation.
+            var clipSet = new HashSet<Tensor<T>>(
+                trainableParams, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+
+            double emaNorm = _fastClipEmaNorm;            // < 0 until seeded
+            bool haveEma = emaNorm >= 0.0;
+            bool scaleDown = haveEma && emaNorm > maxGradNorm;
+            T scale = scaleDown
+                ? NumOps.FromDouble(maxGradNorm / (emaNorm + 1e-6))
+                : NumOps.One;
+
+            double curNormSq = 0.0;
+            tape.ComputeGradientsStreaming(lossTensor, sources,
+                (source, grad) =>
+                {
+                    if (grad is null || grad.Length == 0) return;
+                    if (clipSet.Contains(source))
+                    {
+                        var span = grad.Data.Span;
+                        int len = grad.Length;
+                        for (int i = 0; i < len; i++)
+                        {
+                            double v = NumOps.ToDouble(span[i]); // unscaled — feeds the true-norm EMA
+                            curNormSq += v * v;
+                            if (scaleDown) span[i] = NumOps.Multiply(span[i], scale);
+                        }
+                    }
+                    streamingOptimizer.Apply(source, grad);
+                });
+
+            // Fold this step's exact norm into the EMA for the next step's clip estimate.
+            double curNorm = Math.Sqrt(curNormSq);
+            _fastClipEmaNorm = haveEma
+                ? FastClipEmaBeta * emaNorm + (1.0 - FastClipEmaBeta) * curNorm
+                : curNorm;
+        }
 
         // Post-step hook: first-order optimizers already updated each parameter in place during
         // Apply (no-op here); a full-gradient optimizer like streaming L-BFGS buffered the
@@ -6409,7 +6471,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
         finally
         {
-            if (clip) GradientTape<T>.ReleaseStreamingActivations = savedStreamingRelease;
+            if (twoPass) GradientTape<T>.ReleaseStreamingActivations = savedStreamingRelease;
         }
     }
 

@@ -195,6 +195,41 @@ public class FusedOptimizerIntegrationTests
     }
 
     /// <summary>
+    /// #1662 lever #1 (§5c) fast-clip convergence: the opt-in single-pass approximate clip
+    /// (EMA of the prior step's grad-norm) must train stably — loss decreases and stays finite —
+    /// even though it is NOT bit-identical to exact clipping. This is the path that lets clipped
+    /// training run in one backward pass (a capability PyTorch's apply_optimizer_in_backward lacks
+    /// entirely). It need not match the exact-clip trajectory, only converge.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task FastClip_SinglePass_ReducesLoss_AndStaysFinite()
+    {
+        await Task.CompletedTask;
+
+        var input = CreateRandomTensor(new[] { 16, 4 }, seed: 42);
+        var target = CreateRandomTensor(new[] { 16, 2 }, seed: 43);
+
+        var net = BuildMlp();
+        net.Predict(CreateRandomTensor(new[] { 1, 4 }, seed: 99));
+        net.SetMaxGradNormForTest(1.0);            // clipping ON
+        net.FastApproxGradClip = true;             // single-pass approximate
+        net.StreamingTraining = StreamingTrainingMode.ForceOn;
+
+        var optimizer = BuildAdam(net, learningRate: 0.01);
+
+        double first = double.NaN, last = 0.0;
+        for (int step = 0; step < 30; step++)
+        {
+            net.TrainPublic(input, target, optimizer);
+            last = net.LastLossPublic;
+            Assert.False(double.IsNaN(last) || double.IsInfinity(last),
+                $"fast-clip produced non-finite loss at step {step}");
+            if (step == 0) first = last;
+        }
+        Assert.True(last < first, $"fast-clip did not reduce loss: {first} -> {last}");
+    }
+
+    /// <summary>
     /// End-to-end validation of the FP16-activation training path for a NON-Adam fused
     /// optimizer (Tensors #574 + AiDotNet #1543). With <c>AIDOTNET_FP16_ACTIVATIONS=1</c>,
     /// <c>T=float</c>, <c>EnableCompilation=true</c>, and RMSprop (a fused-mappable optimizer
