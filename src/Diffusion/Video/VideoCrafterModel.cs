@@ -331,7 +331,7 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
         var videoLatentShape = new[] { 1, effectiveNumFrames, LatentChannels, latentHeight, latentWidth };
 
         // Generate initial noise
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latents = DiffusionNoiseHelper<T>.SampleGaussian(videoLatentShape, rng);
 
         Scheduler.SetTimesteps(numInferenceSteps);
@@ -388,7 +388,7 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
         var videoLatentShape = new[] { 1, effectiveNumFrames, LatentChannels, latentHeight, latentWidth };
 
         // Generate initial noise
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latents = DiffusionNoiseHelper<T>.SampleGaussian(videoLatentShape, rng);
 
         Scheduler.SetTimesteps(numInferenceSteps);
@@ -473,7 +473,7 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
         var videoLatentShape = new[] { 1, effectiveNumFrames, LatentChannels, latentHeight, latentWidth };
 
         // Generate initial noise
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latents = DiffusionNoiseHelper<T>.SampleGaussian(videoLatentShape, rng);
 
         Scheduler.SetTimesteps(numInferenceSteps);

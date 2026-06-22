@@ -303,16 +303,20 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
 
         int halfLayers = _numLayers / 2;
 
-        // Encoder: store activations for skip connections
+        // Encoder: store activations for skip connections.
+        // G4 (#1624): each block is checkpointed individually (recompute its activations in backward) —
+        // gradient-equivalent. Per-block rather than one whole-stack checkpoint because the long skip
+        // connections need each pre-block activation captured, which a single fused segment would hide.
         var skipActivations = new Tensor<T>[halfLayers];
         for (int i = 0; i < halfLayers; i++)
         {
             skipActivations[i] = CloneTensor(patches);
-            patches = ApplyBlock(_encoderBlocks[i], patches);
+            var encBlock = _encoderBlocks[i];
+            patches = CheckpointBlocks(new System.Func<Tensor<T>, Tensor<T>>[] { h => ApplyBlock(encBlock, h) }, patches);
         }
 
         // Middle block
-        patches = ApplyBlock(_middleBlock, patches);
+        patches = CheckpointBlocks(new System.Func<Tensor<T>, Tensor<T>>[] { h => ApplyBlock(_middleBlock, h) }, patches);
 
         // Decoder with skip connections
         for (int i = 0; i < halfLayers; i++)
@@ -321,7 +325,8 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
             // Concatenate along feature dimension and project
             patches = ConcatenateTensors(patches, skipActivations[skipIdx]);
             patches = _skipProjections[i].Forward(patches);
-            patches = ApplyBlock(_decoderBlocks[i], patches);
+            var decBlock = _decoderBlocks[i];
+            patches = CheckpointBlocks(new System.Func<Tensor<T>, Tensor<T>>[] { h => ApplyBlock(decBlock, h) }, patches);
         }
 
         // Final norm and unpatchify
@@ -517,25 +522,47 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
         return c;
     }
 
+    /// <summary>
+    /// The full non-null layer list in canonical serialization order (patch/time embeds, encoder blocks,
+    /// middle block, each decoder block followed by its skip projection, final norm, output projection).
+    /// GetParameters/SetParameters/GetParameterChunks/SetParameterChunks all walk this one sequence so they
+    /// can never drift out of order.
+    /// </summary>
+    private IEnumerable<ILayer<T>> UViTLayerSequence()
+    {
+        yield return _patchEmbed;
+        yield return _timeEmbed1;
+        yield return _timeEmbed2;
+
+        foreach (var block in _encoderBlocks)
+            foreach (var layer in BlockLayers(block)) yield return layer;
+
+        foreach (var layer in BlockLayers(_middleBlock)) yield return layer;
+
+        for (int i = 0; i < _decoderBlocks.Count; i++)
+        {
+            foreach (var layer in BlockLayers(_decoderBlocks[i])) yield return layer;
+            yield return _skipProjections[i];
+        }
+
+        yield return _finalNorm;
+        yield return _outputProj;
+    }
+
+    private static IEnumerable<ILayer<T>> BlockLayers(UViTBlock block)
+    {
+        if (block.Norm1 != null) yield return block.Norm1;
+        if (block.Attention != null) yield return block.Attention;
+        if (block.Norm2 != null) yield return block.Norm2;
+        if (block.MLP1 != null) yield return block.MLP1;
+        if (block.MLP2 != null) yield return block.MLP2;
+    }
+
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
         var allParams = new List<T>();
-        AddLayerParams(allParams, _patchEmbed);
-        AddLayerParams(allParams, _timeEmbed1);
-        AddLayerParams(allParams, _timeEmbed2);
-
-        foreach (var block in _encoderBlocks) AddBlockParams(allParams, block);
-        AddBlockParams(allParams, _middleBlock);
-
-        for (int i = 0; i < _decoderBlocks.Count; i++)
-        {
-            AddBlockParams(allParams, _decoderBlocks[i]);
-            AddLayerParams(allParams, _skipProjections[i]);
-        }
-
-        AddLayerParams(allParams, _finalNorm);
-        AddLayerParams(allParams, _outputProj);
+        foreach (var layer in UViTLayerSequence()) AddLayerParams(allParams, layer);
 
         var result = new Vector<T>(allParams.Count);
         for (int i = 0; i < allParams.Count; i++) result[i] = allParams[i];
@@ -545,25 +572,51 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        // Previously this set only the patch/time-embed layers and stopped — leaving every encoder/
+        // middle/decoder block, skip projection, final norm and output projection at their random-init
+        // values (so Clone / optimizer round-trips silently produced a wrong model). Walk the full
+        // canonical sequence so the whole network round-trips. Lazy layers must already be resolved
+        // (Clone probe-forwards first) — DenseLayer self-resolves from the vector length, attention
+        // layers need their shapes materialized before the assignment lands.
         int offset = 0;
-        offset = SetLayerParams(_patchEmbed, parameters, offset);
-        offset = SetLayerParams(_timeEmbed1, parameters, offset);
-        offset = SetLayerParams(_timeEmbed2, parameters, offset);
+        foreach (var layer in UViTLayerSequence()) offset = SetLayerParams(layer, parameters, offset);
+    }
+
+    /// <inheritdoc />
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        // #1624: one chunk per layer in the canonical sequence, index-identical to GetParameters,
+        // without materializing the full aggregate.
+        foreach (var layer in UViTLayerSequence())
+        {
+            var p = layer.GetParameters();
+            if (p.Length > 0) yield return new Tensor<T>(new[] { p.Length }, p);
+        }
+    }
+
+    /// <inheritdoc />
+    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        using var e = chunks.GetEnumerator();
+        foreach (var layer in UViTLayerSequence())
+        {
+            if (layer.ParameterCount == 0) continue;
+            if (!e.MoveNext())
+                throw new System.ArgumentException(
+                    "SetParameterChunks received fewer chunks than U-ViT has parameterized layers.",
+                    nameof(chunks));
+            layer.SetParameters(e.Current.ToVector());
+        }
+        if (e.MoveNext())
+            throw new System.ArgumentException(
+                "SetParameterChunks received more chunks than U-ViT has parameterized layers.",
+                nameof(chunks));
     }
 
     private static void AddLayerParams(List<T> list, ILayer<T> layer)
     {
         var p = layer.GetParameters();
         for (int i = 0; i < p.Length; i++) list.Add(p[i]);
-    }
-
-    private static void AddBlockParams(List<T> list, UViTBlock block)
-    {
-        if (block.Norm1 != null) AddLayerParams(list, block.Norm1);
-        if (block.Attention != null) AddLayerParams(list, block.Attention);
-        if (block.Norm2 != null) AddLayerParams(list, block.Norm2);
-        if (block.MLP1 != null) AddLayerParams(list, block.MLP1);
-        if (block.MLP2 != null) AddLayerParams(list, block.MLP2);
     }
 
     private static int SetLayerParams(ILayer<T> layer, Vector<T> parameters, int offset)
@@ -588,7 +641,23 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
             numHeads: _numHeads,
             patchSize: _patchSize,
             contextDim: _contextDim);
-        clone.SetParameters(GetParameters());
+        // The block attention layers only allocate weights on the first Forward; a fresh clone has
+        // resolved shapes but unallocated weights, so SetParameters/SetParameterChunks would land into
+        // nothing and the clone would re-RNG-init on its first real forward, diverging from the source.
+        // When the source has been materialized, probe-forward the clone through the same path first so
+        // the weights exist, THEN copy. Mirrors MMDiTXNoisePredictor.Clone.
+        if (_patchEmbed.IsInitialized)
+        {
+            int probeSpatial = (int)System.Math.Sqrt(_maxPatches) * _patchSize;
+            var probe = new Tensor<T>(new[] { 1, _inputChannels, probeSpatial, probeSpatial });
+            clone.PredictNoise(probe, timestep: 0, conditioning: null);
+        }
+        // _posEmbed is a random-init Tensor<T> field that is NOT part of Get/SetParameters and is not a
+        // trainable layer, so neither the COW share nor the SetParameters fallback below copies it —
+        // without this the clone keeps its own RNG-drawn positional embedding and diverges from the
+        // source. Copy-on-write share it (O(1) until either side writes).
+        if (_posEmbed is not null) clone._posEmbed = (Tensor<T>)_posEmbed.CloneShared();
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         return clone;
     }
 

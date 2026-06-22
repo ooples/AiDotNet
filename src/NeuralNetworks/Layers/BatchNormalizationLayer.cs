@@ -682,6 +682,50 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
 
             return output;
         }
+        else if (IsTrainingMode)
+        {
+            // #639: batch=1 TRAINING fallback. Batch variance is undefined for a single
+            // sample, so we normalize with the running statistics (same VALUE as inference)
+            // — but route it through the single differentiable BatchNormAffine engine op
+            // instead of the manual sqrt/divide/subtract/broadcast decomposition. Two wins:
+            //   1. Op-count: the compiled-plan replay records ONE op per BN layer instead of
+            //      the ~4-op cached-scale broadcast chain (the batch=1 op explosion in #639).
+            //   2. Correctness: BatchNormAffine carries an exact backward to x, gamma AND beta
+            //      every step. The cached-scale path below can DETACH the gamma/beta gradient
+            //      whenever _cachedInferenceScale/_cachedInferenceShift are reused from a prior
+            //      step (they were built off-tape), silently zeroing the affine-parameter grads.
+            // mean/variance are constant running stats here (batch=1 never updates them), so the
+            // captured references stay valid across compiled-plan replays.
+            _lastMean = _runningMean;
+            _lastVariance = _runningVariance;
+
+            // Compute the affine scale/shift ON-TAPE every step (NOT cached) so gamma and beta keep
+            // their gradients through this batch=1 training fallback — the property #639 wanted from the
+            // fused Engine.BatchNormAffine. That fused op is not yet in the referenced AiDotNet.Tensors
+            // package, so use the manual decomposition (gradient-equivalent: gamma/beta stay live, and
+            // ApplyInferenceAnyRank applies the channel-broadcast multiply-add for any rank). Bump the
+            // package and restore Engine.BatchNormAffine once it ships (#639).
+            var epsilonVec = Tensor<T>.CreateDefault(_runningVariance._shape, _epsilon);
+            var stdDev = Engine.TensorSqrt(Engine.TensorAdd(_runningVariance, epsilonVec));
+            var affineScale = Engine.TensorDivide(_gamma, stdDev);
+            var affineShift = Engine.TensorSubtract(
+                _beta, Engine.TensorDivide(Engine.TensorMultiply(_gamma, _runningMean), stdDev));
+            var output = ApplyInferenceAnyRank(input, affineScale, affineShift);
+
+            // Restore pre-flatten rank for the features-last path.
+            if (flattenedFeaturesLast && preFlattenShape is not null)
+            {
+                output = Engine.Reshape(output, preFlattenShape);
+            }
+
+            // Preserve original rank.
+            if (_inputWas1D)
+            {
+                output = Engine.Reshape(output, [output.Length]);
+            }
+
+            return output;
+        }
         else
         {
             // Inference: Use running statistics

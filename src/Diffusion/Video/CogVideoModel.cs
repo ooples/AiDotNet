@@ -288,9 +288,14 @@ public class CogVideoModel<T> : VideoDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var baseChannels = _variant == "5B" ? 384 : 320;
-
-                        return new CogVideoModel<T>(
+        // #1624: compose the clone from each sub-model's own Clone(). The model cannot share weights at
+        // its own level: a fresh CogVideoModel's VideoUNetPredictor has UNRESOLVED lazy layers, so a
+        // model-level parameter transfer (COW share or flat SetParameters) cannot reshape the clone to the
+        // source's resolved 573M-parameter structure and silently produces a wrong-sized network. Each
+        // sub-model's Clone() resolves its own lazy shapes first and applies the memory-efficient transfer
+        // internally (VideoUNetPredictor: paired per-layer copy that avoids the fused-CPU stale-pack
+        // divergence; TemporalVAE: copy-on-write), so the composed clone is both correct and OOM-safe.
+        return new CogVideoModel<T>(
             videoUnet: (VideoUNetPredictor<T>)_videoUnet.Clone(),
             temporalVae: (TemporalVAE<T>)_temporalVae.Clone(),
             conditioner: _conditioner,

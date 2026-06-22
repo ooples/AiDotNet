@@ -764,7 +764,7 @@ public class AudioVAE<T> : VAEModelBase<T>
             _numResBlocks);
 
         // Preserve trained weights
-        clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         return clone;
     }
 

@@ -1264,7 +1264,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         if (_preserveMaterializedParameters)
         {
             clone.TriggerLazyShapeResolution();
-            clone.SetParameters(GetParameters());
+            if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         }
         else
         {

@@ -1963,6 +1963,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         _skipParameterBufferVersion = -1;
         Training.TapeTrainingStep<T>.InvalidateCache();
         InvalidateLayerInfoCache();
+        // Layer structure changed — re-test for a cross-batch BatchNorm layer next ShouldMicroBatch
+        // call. Without this, a model that cached "no BatchNorm" before a BatchNorm layer was added
+        // would still micro-batch (G8) and silently compute per-chunk BN statistics.
+        _hasCrossBatchNormCached = null;
         // Layer structure changed — drop stale compiled inference plans.
         _compileHost.Invalidate();
         // Also drop compiled fused training plans and reset sticky-disable
@@ -3486,6 +3490,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 (inp, tgt) => ForwardForTraining(inp),
                 (pred, tgt) => loss.ComputeTapeLoss(pred, tgt),
                 parameterBuffer: null);
+            // Past the point of no return: weights are about to be written in place (#1624 OOM-retry gate).
+            MarkTrainMutationStarted();
             optimizer.Step(context);
             // GPU weight-cache coherence after the grad-accum aggregated step.
             // See InvalidateWeightCachesAfterSuccessfulWeightUpdate.
@@ -3990,22 +3996,45 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     private volatile bool _inferenceAccelerationOptIn;
 
     /// <summary>
-    /// Process-wide opt-out for the auto compiled-inference path. Set
-    /// <c>AIDOTNET_DISABLE_AUTO_COMPILE=1</c> to force every model onto the plain
-    /// eager path (debugging a suspected compiled-plan defect, or pinning bit-exact
-    /// eager numerics). Read once.
+    /// Process-wide OPT-IN for the verify-then-trust compiled-inference path (#1622), OFF by default.
     /// </summary>
-    private static readonly bool s_autoCompileDisabled =
-        string.Equals(Environment.GetEnvironmentVariable("AIDOTNET_DISABLE_AUTO_COMPILE"), "1", StringComparison.Ordinal);
+    /// <remarks>
+    /// The AiDotNet.Tensors compiled lazy-graph executor (through 0.101.7) shares process-global scratch
+    /// buffers with the eager executor. The gate MUST execute a compiled plan once to compare it against
+    /// eager — and that single execution leaves the shared scratch in a state that makes every subsequent
+    /// eager forward for a REJECTED shape return the wrong value (the diffusion <c>NoisePredictorBase</c>
+    /// path, which has no value memo, shows this as a period-2 non-deterministic oscillation). Here the
+    /// single-input value memo returns a cached output for a confirmed-identical repeated input, so the
+    /// determinism symptom is masked — but a memo-MISS input (different data at a rejected shape, after a
+    /// compiled run) still reads the corrupted eager scratch and is numerically wrong. Until the package
+    /// isolates the two executors' scratch, the compiled-inference path is opt-in via
+    /// <c>AIDOTNET_ENABLE_AUTO_COMPILE=1</c>. Training is unaffected either way (the compiled path is
+    /// inference-only). Mirrors <c>NoisePredictorBase.s_autoCompiledInferenceEnabled</c>.
+    /// </remarks>
+    private static bool s_autoCompiledInferenceEnabled =
+        string.Equals(Environment.GetEnvironmentVariable("AIDOTNET_ENABLE_AUTO_COMPILE"), "1", StringComparison.Ordinal);
 
     /// <summary>
-    /// Whether the verify-then-trust compiled-inference path is currently engaged for this model:
-    /// either the caller explicitly opted in (<see cref="EnableInferenceAcceleration"/>) — which works
-    /// for a model of ANY size — or the model is foundation-scale (over the weight-streaming threshold)
-    /// in inference mode, where it auto-engages with zero config. Never during the global opt-out.
+    /// Test/diagnostic hook: overrides the process-wide compiled-inference opt-in
+    /// (<see cref="s_autoCompiledInferenceEnabled"/>) in-process, since the env var is read once at type
+    /// load. Returns the previous value so a test can restore it in teardown. Lets the verify-then-trust
+    /// gate's parity invariants stay covered without depending on the process environment.
+    /// </summary>
+    internal static bool SetAutoCompiledInferenceEnabledForTesting(bool enabled)
+    {
+        var prev = s_autoCompiledInferenceEnabled;
+        s_autoCompiledInferenceEnabled = enabled;
+        return prev;
+    }
+
+    /// <summary>
+    /// Whether the verify-then-trust compiled-inference path is currently engaged for this model. Requires
+    /// the process-wide opt-in (<see cref="s_autoCompiledInferenceEnabled"/>, default off — see its remarks
+    /// for the package scratch-corruption bug) AND either an explicit per-model opt-in
+    /// (<see cref="EnableInferenceAcceleration"/>, any size) or a foundation-scale model in inference mode.
     /// </summary>
     private bool InferenceAccelerationEngaged =>
-        !s_autoCompileDisabled
+        s_autoCompiledInferenceEnabled
         && (_inferenceAccelerationOptIn || (_streamingEngagedByAutoDetect && !IsTrainingMode));
 
     /// <summary>Whether the compiled-inference path is currently engaged for this model. Diagnostic/test hook.</summary>
@@ -4016,7 +4045,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// industry-standard explicit "compile this model" gesture (cf. <c>torch.compile</c>). Foundation-
     /// scale models auto-engage without this; small/medium models that are served repeatedly (the case
     /// where the one-time per-shape verification amortizes) call this once to opt in. Output stays
-    /// numerically identical to eager. No effect under the <c>AIDOTNET_DISABLE_AUTO_COMPILE</c> opt-out.
+    /// numerically identical to eager. Takes effect only when the process-wide opt-in
+    /// <c>AIDOTNET_ENABLE_AUTO_COMPILE=1</c> is set (default off — see
+    /// <see cref="s_autoCompiledInferenceEnabled"/> for the package scratch-corruption bug that gates it);
+    /// otherwise the model stays on the plain eager path.
     /// </summary>
     /// <param name="enabled">True to enable (default); false to opt back out.</param>
     public void EnableInferenceAcceleration(bool enabled = true)
@@ -5711,13 +5743,38 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Fresh step: no parameter has been mutated yet, so an OOM during the forward/backward
+        // (allocation) phase is safe to retry. MarkTrainMutationStarted() flips this true the moment
+        // any in-place weight/moment write begins, after which the OOM-retry below stands down.
+        _trainMutationStarted = false;
         try
         {
             TrainCore(input, expectedOutput);
         }
-        catch (Exception ex) when (IsGpuTransientFailure(ex))
+        catch (Exception ex) when (IsGpuTransientFailure(ex) && !_trainMutationStarted)
         {
-            // A sticky GPU fault tripped the circuit breaker (engine is now CPU); retry on CPU.
+            // A sticky GPU fault tripped the circuit breaker (engine is now CPU); retry on CPU — but only
+            // if no weight has been written yet, otherwise replaying the step would double-apply the update.
+            TrainCore(input, expectedOutput);
+        }
+        catch (OutOfMemoryException) when (!_memoryLeversForced && !_trainMutationStarted)
+        {
+            // Reactive memory levers (#1624). The full-precision, full-batch step exhausted RAM. Latch the
+            // 8-bit optimizer (G2 — ~1.5x model size less moment state) and micro-batch accumulation (G8 —
+            // caps the activation peak) ON, drop the fp32 optimizer so it rebuilds as 8-bit, reclaim the
+            // failed step's transients, and retry. Models that fit never reach this path, so they keep exact
+            // fp32 full-batch training (no convergence change); only a model that would otherwise crash pays
+            // the levers' cost. If the retry still OOMs, the exception propagates (the levers weren't enough).
+            _memoryLeversForced = true;
+            // Rebuild the optimizer as 8-bit ONLY when it was lazily defaulted. A caller's
+            // explicitly-configured optimizer (AdamW / attached LR scheduler / AMSGrad via the builder)
+            // must be preserved — silently swapping it for the default 8-bit Adam would change the
+            // training trajectory. The micro-batch lever (G8) still caps the activation peak either way.
+            if (!_baseTrainOptimizerExplicitlyConfigured)
+                _baseTrainOptimizer = null;
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
             TrainCore(input, expectedOutput);
         }
     }
@@ -5735,6 +5792,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // <c>[C,H,W]</c> / <c>[seq,F]</c> / <c>[F]</c> or batched
         // <c>[B,C,H,W]</c> / <c>[B,seq,F]</c> / <c>[B,F]</c> — both work.
         (input, expectedOutput) = NormalizeBatchDim(input, expectedOutput);
+
+        // G8 (#1624) — gradient micro-batch accumulation. For a large model with a batch big enough to
+        // make activations a memory problem, process the batch in small chunks (forward+backward per
+        // chunk, accumulate gradients, one optimizer step) to cap the activation peak that OOMs the
+        // 8c/16 GB runner. This is gradient-EQUIVALENT to the full-batch step (verified by the Issue1296
+        // accumulation test) EXCEPT for cross-batch normalization (BatchNorm computes per-chunk batch
+        // statistics), so it is gated to models without a BatchNorm layer. AIDOTNET_MICROBATCH=0 disables.
+        if (ShouldMicroBatch(input))
+        {
+            TrainWithGradientAccumulation(input, expectedOutput, MicroBatchChunkSize);
+            return;
+        }
 
         SetTrainingMode(true);
         try
@@ -5766,6 +5835,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // helper so all training entry points keep the same
                 // OnBatchEnd contract. Closes #1270.yYuK.
                 var opt = GetOrCreateBaseOptimizer();
+                // Legacy per-layer update writes weights in place (#1624 OOM-retry gate).
+                MarkTrainMutationStarted();
                 opt.UpdateParameters(Layers);
                 StepSchedulerIfSupported(opt);
             }
@@ -6368,6 +6439,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 (source, grad) =>
                 {
                     if (grad is null || grad.Length == 0) return;
+                    // Streaming optimizer writes this source's weights in place (#1624 OOM-retry gate).
+                    MarkTrainMutationStarted();
                     streamingOptimizer.Apply(source, grad);
                 });
         }
@@ -6418,6 +6491,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                         for (int i = 0; i < len; i++)
                             span[i] = NumOps.Multiply(span[i], scale);
                     }
+                    // Streaming optimizer writes this source's weights in place (#1624 OOM-retry gate).
+                    MarkTrainMutationStarted();
                     streamingOptimizer.Apply(source, grad);
                 });
         }
@@ -7128,6 +7203,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
             if (!mpSkipOptimizerStep)
             {
+                // Tape optimizer step writes weights in place (#1624 OOM-retry gate).
+                MarkTrainMutationStarted();
                 opt.Step(context);
             }
 
@@ -8003,6 +8080,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 trainableParams, grads, lossValue,
                 input, input, ComputeForward, RecomputeLoss);
 
+            // Tape optimizer step writes weights in place (#1624 OOM-retry gate).
+            MarkTrainMutationStarted();
             opt.Step(context);
             // GPU weight-cache coherence after the custom-loss step.
             // See InvalidateWeightCachesAfterSuccessfulWeightUpdate.
@@ -8095,6 +8174,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(
             trainableParams, grads, lossValue);
 
+        // Tape optimizer step writes weights in place (#1624 OOM-retry gate).
+        MarkTrainMutationStarted();
         opt.Step(context);
         // GPU weight-cache coherence after the precomputed-loss step.
         // See InvalidateWeightCachesAfterSuccessfulWeightUpdate.
@@ -8134,13 +8215,175 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
     {
+        if (_baseTrainOptimizer is not null) return _baseTrainOptimizer;
+
+        // G2 (#1624) — optimizer-state memory ladder. Standard fp32 Adam keeps two moment buffers (m, v),
+        // each the size of the model: 2x the weights, the dominant training-step memory cost after the
+        // parameters. The rungs trade that footprint against convergence/throughput:
+        //   fp32 (4B/elem, default)  →  BF16 (2B, proactive)  →  8-bit block-quant (1B, reactive on OOM).
+        //
+        // 8-bit (most aggressive) is engaged ONLY reactively, after a step has actually OOM'd, because the
+        // block quantization measurably changes the update. BF16 keeps the full fp32 exponent (only the
+        // mantissa shortens), so it changes Adam's trajectory far less and can be engaged proactively for
+        // large models — halving resident moment memory before an OOM ever happens. Per-parameter expansion
+        // keeps only one parameter's moments at full precision at a time, so the resident state stays at the
+        // compressed width. AIDOTNET_ADAM8BIT=1 / AIDOTNET_BF16_ADAM=1 force a rung for testing; =0 pins it off.
+        if (ShouldUseEightBitOptimizer())
+            return _baseTrainOptimizer = new Adam8BitOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
+        if (ShouldUseBFloat16Optimizer())
+            return _baseTrainOptimizer = new Adam8BitOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new Models.Options.Adam8BitOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    UseBFloat16MomentStorage = true,
+                    UseAMSGrad = false,
+                });
+
         // Standard Adam with AMSGrad pinned OFF locally (not relying on the
         // AdamOptimizerOptions default) so the fused compiled-training kernel can map
         // this optimizer and engage — if that external default ever flips, the fused
         // fast path must not silently regress.
-        return _baseTrainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+        return _baseTrainOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { UseAMSGrad = false });
+    }
+
+    /// <summary>
+    /// G2 proactive rung: whether to store optimizer moments as BF16 (half the fp32 footprint, minimal
+    /// convergence impact). Unlike the 8-bit rung this CAN be size-gated, because BF16 keeps the full
+    /// float32 exponent and changes Adam's trajectory negligibly. Engages only for models large enough
+    /// that fp32 moment state is a real memory concern (and where the per-step pack/unpack overhead is
+    /// worth it), so small/medium models keep plain fp32 Adam unchanged. <c>AIDOTNET_BF16_ADAM</c>
+    /// overrides: <c>1/true/on</c> forces it; <c>0/false/off</c> pins it off.
+    /// </summary>
+    private bool ShouldUseBFloat16Optimizer()
+    {
+        var env = Environment.GetEnvironmentVariable("AIDOTNET_BF16_ADAM");
+        if (env == "0" || string.Equals(env, "false", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(env, "off", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (env == "1" || string.Equals(env, "true", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(env, "on", StringComparison.OrdinalIgnoreCase))
+            return true;
+        // ~50M params ⇒ ~400 MB fp32 moment state (2 buffers x 4B); BF16 halves that to ~200 MB. Below
+        // this the fp32 state is small enough that the pack/unpack overhead isn't worth it.
+        const long bf16ParamThreshold = 50_000_000L;
+        return ParameterCount >= bf16ParamThreshold;
+    }
+
+    /// <summary>
+    /// G2 engagement decision: whether to use the 8-bit Adam optimizer (quantized moment state). Engaged
+    /// <em>reactively</em> — only after a training step has actually run out of memory at full precision
+    /// (<see cref="_memoryLeversForced"/>) — so models that fit keep exact fp32 Adam and never change
+    /// convergence. <c>AIDOTNET_ADAM8BIT</c> overrides: <c>0/false/off</c> pins fp32 even under memory
+    /// pressure; <c>1/true/on</c> forces 8-bit (for parity testing). A size threshold is deliberately NOT
+    /// used: 8-bit moment state slightly changes the update, so engaging it on a model that fits is a
+    /// needless convergence regression — the OOM is the only signal that the trade is worth making.
+    /// </summary>
+    private bool ShouldUseEightBitOptimizer()
+    {
+        var env = Environment.GetEnvironmentVariable("AIDOTNET_ADAM8BIT");
+        if (env == "0" || string.Equals(env, "false", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(env, "off", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (env == "1" || string.Equals(env, "true", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(env, "on", StringComparison.OrdinalIgnoreCase))
+            return true;
+        return _memoryLeversForced;
+    }
+
+    /// <summary>G8 micro-batch chunk size: the per-step batch processed at once when accumulating.</summary>
+    private const int MicroBatchChunkSize = 8;
+
+    private bool? _hasCrossBatchNormCached;
+
+    /// <summary>
+    /// G8 engagement decision: split this training step into <see cref="MicroBatchChunkSize"/>-row chunks
+    /// and accumulate gradients, capping the peak activation memory. Like G2 this is engaged
+    /// <em>reactively</em> — only after a full-batch step has actually OOM'd (<see cref="_memoryLeversForced"/>)
+    /// — so a model that fits runs the exact full-batch step and never pays the extra forward/backward
+    /// passes. Several correctness gates apply even under memory pressure: the batch must be larger than a
+    /// chunk, training must go through the tape with a <c>LossFunctionBase</c> (required by
+    /// <see cref="TrainWithGradientAccumulation"/>), and the model must have NO BatchNorm layer (whose
+    /// per-chunk batch statistics would make accumulation non-equivalent to the full-batch step). If a
+    /// BatchNorm model OOMs, G8 stays off (correctness over recovery) and only G2 applies.
+    /// <c>AIDOTNET_MICROBATCH</c> overrides: <c>0</c> disables; <c>1</c> forces (subject to the gates).
+    /// </summary>
+    private bool ShouldMicroBatch(Tensor<T> input)
+    {
+        var env = Environment.GetEnvironmentVariable("AIDOTNET_MICROBATCH");
+        if (env is "0" || string.Equals(env, "false", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(env, "off", StringComparison.OrdinalIgnoreCase))
+            return false;
+        bool force = env is "1" || string.Equals(env, "true", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(env, "on", StringComparison.OrdinalIgnoreCase);
+
+        // Engage reactively (after an OOM) or when explicitly forced; a fitting model keeps the full step.
+        if (!force && !_memoryLeversForced) return false;
+
+        // Correctness-necessary gates (apply even when forced): a batch big enough to chunk, a tape loss,
+        // and no cross-batch normalization (else accumulation ≠ full-batch step).
+        if (input.Rank < 1 || input.Shape[0] <= MicroBatchChunkSize) return false;
+        if (LossFunction is not LossFunctions.LossFunctionBase<T>) return false;
+        if (HasCrossBatchNormalization()) return false;
+
+        // Must have something tape-trainable to accumulate over. Check trainable LAYERS (which exist even
+        // before the first forward resolves lazy weights) rather than CollectParameters — that returns 0
+        // for a lazy model pre-forward, which would make the very first (still-lazy) step skip G8 and
+        // re-enter the full-batch path that just OOM'd. TrainWithGradientAccumulation re-collects
+        // parameters after each chunk forward, so lazy layers are handled correctly downstream.
+        if (AiDotNet.Helpers.CopyOnWriteCloneHelper.CollectTrainableLayers<T>(this).Count == 0)
+        {
+            using var e = GetExtraTrainableTensors().GetEnumerator();
+            if (!e.MoveNext()) return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Set once a training step has OOM'd at full precision/full batch; latches the reactive G2 (8-bit
+    /// optimizer) and G8 (micro-batch accumulation) memory levers ON for all subsequent steps of this model.
+    /// </summary>
+    private bool _memoryLeversForced;
+
+    /// <summary>
+    /// True once the current <see cref="Train(Tensor{T}, Tensor{T})"/> step has begun an in-place parameter
+    /// or moment-buffer mutation (optimizer step / streaming apply / legacy update). The reactive OOM-retry
+    /// in <see cref="Train(Tensor{T}, Tensor{T})"/> only retries when this is <c>false</c>: once any weight
+    /// has been partially written, retrying the same logical step from that corrupted intermediate state is
+    /// unsafe, so the OOM is rethrown instead. Set via <see cref="MarkTrainMutationStarted"/> at each
+    /// non-transactional write boundary; reset at the start/end of each <c>Train</c> call.
+    /// </summary>
+    private bool _trainMutationStarted;
+
+    /// <summary>
+    /// Marks that an in-place training write (optimizer.Step / streaming Apply / legacy UpdateParameters) is
+    /// about to begin, so a subsequent OOM is rethrown rather than retried from partially-mutated state.
+    /// See <see cref="_trainMutationStarted"/>.
+    /// </summary>
+    protected void MarkTrainMutationStarted() => _trainMutationStarted = true;
+
+    /// <summary>
+    /// Whether any layer reachable from this model performs cross-batch normalization (a BatchNorm layer),
+    /// whose statistics depend on the whole batch — making G8 micro-batching non-equivalent. Cached; the
+    /// layer graph is stable after construction. LayerNorm/GroupNorm/InstanceNorm/RMSNorm are per-sample
+    /// and therefore micro-batch-safe.
+    /// </summary>
+    private bool HasCrossBatchNormalization()
+    {
+        if (_hasCrossBatchNormCached is { } cached) return cached;
+        bool found = false;
+        foreach (var layer in AiDotNet.Helpers.CopyOnWriteCloneHelper.CollectTrainableLayers<T>(this))
+        {
+            if (layer is AiDotNet.NeuralNetworks.Layers.BatchNormalizationLayer<T>)
+            {
+                found = true;
+                break;
+            }
+        }
+        _hasCrossBatchNormCached = found;
+        return found;
     }
 
     /// <summary>
@@ -8226,6 +8469,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     internal virtual void SetBaseTrainOptimizer(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
     {
         _baseTrainOptimizer = optimizer;
+        _baseTrainOptimizerExplicitlyConfigured = optimizer is not null;
     }
 
     /// <summary>
@@ -8233,6 +8477,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Lazily initialized on first use (Adam with default settings).
     /// </summary>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _baseTrainOptimizer;
+
+    /// <summary>
+    /// True when the base-train optimizer was supplied explicitly via
+    /// <see cref="SetBaseTrainOptimizer"/> (e.g. <c>AiModelBuilder.ConfigureOptimizer</c>) rather than
+    /// lazily defaulted. The reactive OOM memory-lever recovery must NOT silently replace a caller's
+    /// optimizer (AdamW / attached LR scheduler / AMSGrad) with the default 8-bit Adam.
+    /// </summary>
+    private bool _baseTrainOptimizerExplicitlyConfigured;
 
     /// <summary>
     /// Contiguous parameter buffer for zero-copy flat parameter access.
@@ -9176,8 +9428,41 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// - Save a snapshot of your model at a particular point in training
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// COW lever (G6, issue #1624): when <c>true</c> (the default), <see cref="DeepCopy"/> shares each
+    /// weight tensor's backing STORAGE with the clone via the Tensors copy-on-write
+    /// <c>Tensor&lt;T&gt;.CloneShared()</c> (O(1)-until-write) instead of materializing a full second
+    /// copy through the serialize-roundtrip / flatten paths. The first in-place write on either side
+    /// privatizes that tensor, so the result is observationally identical to a deep copy — but an
+    /// inference-only clone (e.g. the <c>Clone_ShouldProduceIdenticalOutput</c> family) never writes,
+    /// so it stays O(1) and no longer OOMs the 16 GB runner on large models. Unlike the proven-unsafe
+    /// by-reference weight-sharing clone (it shared the SAME tensor object → training corrupted both),
+    /// CloneShared hands the clone a DISTINCT tensor that shares storage until write. Set to
+    /// <c>false</c> (or <c>AIDOTNET_COW_DEEPCOPY=0</c>) to force the eager full-copy path everywhere.
+    /// </summary>
+    // Default ON. The COW DeepCopy is correct for every model by construction: it shares trainable
+    // tensors ONLY when the reflection walk fully accounts for the model's ParameterCount and copies
+    // serialization extras (BatchNorm running stats) eagerly, and otherwise FALLS BACK to the eager
+    // full-fidelity copy (models whose GetParameters reads weights outside the trainable-layer graph —
+    // nested sub-models / custom VAE/Siamese layouts — and lazy layers are auto-detected and fall back).
+    // So it never produces a less-faithful clone than the eager path. Validated: ResNet/VGG/SimCSE and
+    // other large-model Clone_AfterTraining tests that OOM'd on the eager clone's memory doubling now
+    // PASS at O(1)-until-write; FT/Tab/DenseNet/Autoencoder/CNN share verified-correct; VAE/Siamese/LSTM
+    // fall back (LSTM's failure is a pre-existing eager #1221 lazy-deserialize bug, not COW). Set
+    // AIDOTNET_COW_DEEPCOPY=0 (or false/off) to force the eager full-copy path everywhere.
+    internal static bool UseCopyOnWriteDeepCopy { get; set; } =
+        Environment.GetEnvironmentVariable("AIDOTNET_COW_DEEPCOPY") is not { } e ||
+        !(e == "0" || string.Equals(e, "false", StringComparison.OrdinalIgnoreCase) ||
+          string.Equals(e, "off", StringComparison.OrdinalIgnoreCase));
+
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
+        // G6 COW fast path: share weight-tensor storage instead of materializing a second full copy.
+        // Falls back to the eager paths below for any model it cannot share safely (layer-count or
+        // parameter-count mismatch, a layer whose SetTrainableParameters can't re-sync its fields).
+        if (UseCopyOnWriteDeepCopy && TryDeepCopyCopyOnWrite(out var cowCopy))
+            return cowCopy;
+
         // DeepCopy is a training-internal in-memory clone, not a user-facing
         // save/load. We route through the private SerializeInternalUnchecked /
         // DeserializeInternalUnchecked helpers rather than the public virtual
@@ -9308,6 +9593,140 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             }
         }
         return copy;
+    }
+
+    /// <summary>
+    /// G6 COW lever (#1624): builds the clone by sharing each layer's weight-tensor STORAGE with the
+    /// original via the Tensors copy-on-write <c>CloneShared()</c> (O(1)-until-write), instead of the
+    /// eager serialize-roundtrip / flatten copy. Mirrors the large-model layer-by-layer copy path
+    /// (parameters + serialization extras; network architecture comes from <see cref="CreateNewInstance"/>),
+    /// so it has the same fidelity as that already-accepted path — it just shares storage rather than
+    /// duplicating it. Returns <c>false</c> (and the caller falls back to the eager paths) for any model
+    /// it cannot map 1:1 (layer-count or per-layer parameter-count mismatch, e.g. a custom layer whose
+    /// <c>SetTrainableParameters</c> cannot re-sync its fields).
+    /// </summary>
+    private bool TryDeepCopyCopyOnWrite(out IFullModel<T, Tensor<T>, Tensor<T>> result)
+    {
+        var copy = CreateNewInstance();
+        result = copy;
+        if (copy is not NeuralNetworkBase<T> copyBase)
+        {
+            (copy as IDisposable)?.Dispose();
+            return false;
+        }
+
+        // A COW clone keeps its (shared) weights resident; suppress its independent weight-streaming
+        // auto-enable so it does not re-Configure the process-wide singleton streaming pool owned by the
+        // original (same guard the eager large/serialize paths use). Must run before any SetTrainingMode.
+        copyBase.DisableAutoStreaming();
+
+        // Full-fidelity reflection walk: captures every trainable layer reachable from the model — both
+        // those in the base _layers list AND those held in dedicated fields (e.g. a tabular transformer's
+        // feature tokenizer / encoder stack / final layer-norm), which a _layers-only walk would miss,
+        // silently leaving the clone with fresh-random weights for those components.
+        var srcLayers = AiDotNet.Helpers.CopyOnWriteCloneHelper.CollectTrainableLayers<T>(this);
+        var dstLayers = AiDotNet.Helpers.CopyOnWriteCloneHelper.CollectTrainableLayers<T>(copyBase);
+        if (srcLayers.Count == 0 || srcLayers.Count != dstLayers.Count)
+        {
+            (copy as IDisposable)?.Dispose();
+            return false;
+        }
+
+        // GetExtraTrainableTensors() are raw trainable tensors the model owns OUTSIDE any layer (e.g.
+        // ViT's cls_token / positional embeddings), which training DOES update. The reflection walk
+        // above shares only LAYER tensors, and ParameterCount excludes the extras — so the coverage
+        // guard below (walked layer tensors vs ParameterCount) can't detect them, and a COW share would
+        // leave the clone's extras fresh-random and diverging after training. Fall back to the eager
+        // full-fidelity copy whenever the model carries any extra trainable tensor.
+        using (var extras = GetExtraTrainableTensors().GetEnumerator())
+        {
+            if (extras.MoveNext())
+            {
+                (copy as IDisposable)?.Dispose();
+                return false;
+            }
+        }
+
+        // Coverage guard: the share only transfers the tensors GetTrainableParameters exposes. If the
+        // model's total ParameterCount includes MORE than that — a model whose GetParameters reads
+        // weights NOT surfaced through a trainable layer (a nested sub-model's own parameters, a custom
+        // VAE/Siamese/RNN layout) — the share would be incomplete and the clone would diverge after
+        // training. Detect that cheaply (no flatten, side-effect-free) by comparing the walked tensor
+        // element count to ParameterCount, and fall back to the eager full-fidelity copy if they differ.
+        long walkedParamCount = 0;
+        for (int i = 0; i < srcLayers.Count; i++)
+        {
+            var tp = srcLayers[i].GetTrainableParameters();
+            for (int p = 0; p < tp.Count; p++) walkedParamCount += tp[p].Length;
+        }
+        if (walkedParamCount != ParameterCount)
+        {
+            (copy as IDisposable)?.Dispose();
+            return false;
+        }
+
+        for (int i = 0; i < srcLayers.Count; i++)
+        {
+            var src = srcLayers[i];
+            var dst = dstLayers[i];
+
+            // Resolve a lazy destination LayerBase from the source's input shape so its parameter list
+            // exists (and won't re-initialize over the shared tensors on first forward) before we map it.
+            if (dst is LayerBase<T> dstBase && src is LayerBase<T> srcBase
+                && !dstBase.IsShapeResolved && srcBase.ParameterCount > 0)
+            {
+                int[] s = srcBase.GetInputShape();
+                if (s is { Length: > 0 } && Array.TrueForAll(s, d => d > 0))
+                {
+                    try { dstBase.ResolveFromShape(s); }
+                    catch (ArgumentException) { /* layer rejects this shape; leave lazy */ }
+                }
+            }
+
+            // Share trainable tensors copy-on-write (privatizes on the first in-place write to either side).
+            var sp = src.GetTrainableParameters();
+            var dp = dst.GetTrainableParameters();
+            if (sp.Count != dp.Count)
+            {
+                (copy as IDisposable)?.Dispose();
+                return false;
+            }
+            if (sp.Count > 0)
+            {
+                var shared = new Tensor<T>[sp.Count];
+                for (int p = 0; p < sp.Count; p++)
+                    shared[p] = (Tensor<T>)sp[p].CloneShared();
+                dst.SetTrainableParameters(shared);
+            }
+
+            // Copy serialization EXTRAS (non-trainable trained state NOT in GetTrainableParameters —
+            // e.g. BatchNorm running mean/variance) eagerly; they are small. SetExtraParameters
+            // self-allocates and validates against the (now-resolved) destination shape, so copy whenever
+            // the SOURCE has them — gating on the destination's current count would drop them for a fresh
+            // lazy layer. If the destination can't accept them, fall back to the eager full-fidelity copy.
+            if (src is AiDotNet.NeuralNetworks.Layers.ILayerSerializationExtras<T> srcExtras
+                && srcExtras.ExtraParameterCount > 0)
+            {
+                if (dst is AiDotNet.NeuralNetworks.Layers.ILayerSerializationExtras<T> dstExtras)
+                {
+                    try { dstExtras.SetExtraParameters(srcExtras.GetExtraParameters()); }
+                    catch (ArgumentException)
+                    {
+                        (copy as IDisposable)?.Dispose();
+                        return false;
+                    }
+                }
+                else
+                {
+                    (copy as IDisposable)?.Dispose();
+                    return false;
+                }
+            }
+        }
+
+        copyBase.InvalidateParameterCountCache();
+        copyBase.SetTrainingMode(false);
+        return true;
     }
 
     /// <summary>

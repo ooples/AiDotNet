@@ -622,15 +622,16 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
 
             // Materialize/size projection weights on demand (lazy sizing). The
             // placeholder is zero-sized ([0,0]); if the input feature dimension
-            // changes between calls, return the previously rented buffer to the pool
-            // before renting a new one — otherwise the old buffer is leaked from the
-            // allocator's free list and degrades pooling over long runs with varying
-            // input shapes.
+            // changes between calls. #1643: these are TRAINABLE, long-lived weights —
+            // allocate from the arena's PINNED tier so an active TensorArena's Reset()
+            // (this projection materializes lazily inside the first training forward)
+            // can't recycle them as transient activations and corrupt the weights.
+            // RentPinned degrades to a plain heap Tensor<T> when no arena is active.
+            // No TensorAllocator.Return on the old buffer: pinned/heap tensors aren't
+            // pool-managed, so a rare input-shape change simply drops it to GC.
             if (_projectionWeights.Length == 0 || _projectionWeights.Shape[0] != inputFeatures)
             {
-                if (_projectionWeights.Length > 0)
-                    TensorAllocator.Return(_projectionWeights);
-                _projectionWeights = TensorAllocator.Rent<T>([inputFeatures, embeddingDim]);
+                _projectionWeights = TensorAllocator.RentPinned<T>([inputFeatures, embeddingDim]);
                 InitializeProjectionWeights(_projectionWeights, inputFeatures, embeddingDim);
                 // Keep the registered trainable tensor in sync with the materialized
                 // projection so tape-based training sees the real weights.
@@ -821,15 +822,15 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             // Linear projection for continuous input: input @ _projectionWeights
             int inputFeatures = inputTensor.Shape[^1];
 
-            // Create projection weights if needed (lazy initialization).
-            // Return the previously rented buffer to the pool before renting a replacement
-            // when the input feature dimension changes between calls — see comment above
-            // the matching block in the non-GPU forward path for details.
+            // Create projection weights if needed (lazy initialization). #1643: these are
+            // TRAINABLE, long-lived weights — allocate from the arena's PINNED tier so an
+            // active TensorArena's Reset() can't recycle them as transients and corrupt
+            // the weights (see the matching block in the non-GPU forward path). No
+            // TensorAllocator.Return on the old buffer: pinned/heap tensors aren't
+            // pool-managed, so a rare input-shape change simply drops it to GC.
             if (_projectionWeights.Length == 0 || _projectionWeights.Shape[0] != inputFeatures)
             {
-                if (_projectionWeights.Length > 0)
-                    TensorAllocator.Return(_projectionWeights);
-                _projectionWeights = TensorAllocator.Rent<T>([inputFeatures, embeddingDim]);
+                _projectionWeights = TensorAllocator.RentPinned<T>([inputFeatures, embeddingDim]);
                 InitializeProjectionWeights(_projectionWeights, inputFeatures, embeddingDim);
                 RegisterTrainableParameter(_projectionWeights, PersistentTensorRole.Weights);
             }

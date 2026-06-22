@@ -510,7 +510,7 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
             var latentShape = new[] { 1, SDXL_LATENT_CHANNELS, latentHeight, latentWidth };
 
             // Generate initial noise
-            var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+            var rng = CreateInferenceRng(seed);
             var latents = SampleNoiseTensor(latentShape, rng);
 
             // Set up scheduler
@@ -713,7 +713,7 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
         var latentHeight = height / SDXL_VAE_SCALE_FACTOR;
         var latentWidth = width / SDXL_VAE_SCALE_FACTOR;
         var latentShape = new[] { 1, SDXL_LATENT_CHANNELS, latentHeight, latentWidth };
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latents = SampleNoiseTensor(latentShape, rng);
 
         Scheduler.SetTimesteps(numInferenceSteps);
@@ -820,7 +820,7 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
         var latentHeight = height / SDXL_VAE_SCALE_FACTOR;
         var latentWidth = width / SDXL_VAE_SCALE_FACTOR;
         var latentShape = new[] { 1, SDXL_LATENT_CHANNELS, latentHeight, latentWidth };
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latents = SampleNoiseTensor(latentShape, rng);
 
         Scheduler.SetTimesteps(numInferenceSteps);

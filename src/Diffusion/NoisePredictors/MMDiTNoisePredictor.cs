@@ -473,21 +473,47 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         var textConditioning = conditioning ?? new Tensor<T>(new[] { batch, 1, _contextDim });
         var textTokens = _contextProj.Forward(textConditioning);
 
-        // Process through joint (double-stream) blocks
-        foreach (var block in _jointBlocks)
+        // Process through joint (double-stream) blocks.
+        // G4 (#1624): the joint blocks are DUAL-stream — each threads an (image, text) token PAIR — so
+        // they don't fit the single-residual-stream CheckpointBlocks primitive directly. Pack the two
+        // streams into one tensor along the token axis [B, Ni+Nt, D], checkpoint the packed stack, then
+        // unpack. The per-block wrapper splits the packed tensor back into image/text with the
+        // differentiable TensorNarrow (records NarrowBackward) and re-concatenates with the
+        // differentiable TensorConcatenate, so the wrapper is a pure differentiable function of the
+        // packed residual stream — exactly what the (multi-segment-correct, 0.101.5) primitive needs.
+        // Token counts are invariant across joint blocks, so the split sizes are constant.
+        int numTextTokens = textTokens.Shape[1];
+        var packed = ConcatenateSequences(imageTokens, textTokens); // [B, Ni+Nt, D]
+        var jointForwards = new System.Func<Tensor<T>, Tensor<T>>[_jointBlocks.Count];
+        for (int i = 0; i < _jointBlocks.Count; i++)
         {
-            (imageTokens, textTokens) = ForwardJointBlock(imageTokens, textTokens, timeEmbed, block);
+            var block = _jointBlocks[i];
+            jointForwards[i] = p =>
+            {
+                var img = Engine.TensorNarrow(p, 1, 0, numImageTokens);
+                var txt = Engine.TensorNarrow(p, 1, numImageTokens, numTextTokens);
+                var (imgOut, txtOut) = ForwardJointBlock(img, txt, timeEmbed, block);
+                return Engine.TensorConcatenate<T>(new[] { imgOut, txtOut }, axis: 1);
+            };
         }
+        packed = CheckpointBlocks(jointForwards, packed);
+        imageTokens = Engine.TensorNarrow(packed, 1, 0, numImageTokens);
+        textTokens = Engine.TensorNarrow(packed, 1, numImageTokens, numTextTokens);
 
         // Process through single-stream blocks (FLUX-style)
         if (_singleBlocks.Count > 0)
         {
             // Concatenate text and image tokens for single-stream processing
             var combined = ConcatenateSequences(textTokens, imageTokens);
-            foreach (var block in _singleBlocks)
+            // G4 (#1624): checkpoint the single-stream block stack (recompute activations in backward)
+            // — gradient-equivalent. timeEmbed is captured as a constant in each closure.
+            var blockForwards = new System.Func<Tensor<T>, Tensor<T>>[_singleBlocks.Count];
+            for (int i = 0; i < _singleBlocks.Count; i++)
             {
-                combined = ForwardSingleBlock(combined, timeEmbed, block);
+                var block = _singleBlocks[i];
+                blockForwards[i] = h => ForwardSingleBlock(h, timeEmbed, block);
             }
+            combined = CheckpointBlocks(blockForwards, combined);
             // Extract image tokens from the combined sequence
             imageTokens = ExtractImageTokens(combined, textTokens.Shape[1], numImageTokens);
         }
@@ -895,29 +921,35 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         Tensor<T> q, Tensor<T> k, Tensor<T> v,
         double scale, int batch, int queryLen, int keyLen, int headDim)
     {
-        // Reshape Q, K, V for multi-head: [batch, seq, hidden] -> [batch*heads, seq, headDim]
-        var qReshaped = ReshapeForHeads(q, batch, queryLen, _numHeads, headDim);
-        var kReshaped = ReshapeForHeads(k, batch, keyLen, _numHeads, headDim);
-        var vReshaped = ReshapeForHeads(v, batch, keyLen, _numHeads, headDim);
+        // Route through the engine's fused, FlashAttention-backed SDPA rather than a
+        // hand-rolled matmul → scale → softmax → matmul. The fused kernel never
+        // materializes the O(seq²) scores matrix and fuses the transpose/scale/softmax
+        // passes into one autodiff-aware op — the same primitive measured under PyTorch's
+        // SDPA (AiDotNet.Tensors #476/#479). The previous naive path ran ~7 ops, each a
+        // full pass + fresh allocation, twice per joint block × every layer × every
+        // denoising step — the dominant cost that pushed the dual-stream predictors past
+        // the test budget. DiT's SelfAttentionLayer already uses the fast path; this
+        // brings the MMDiT family (Flux/MMDiTX/EMMDiT/AsymmDiT) to parity.
+        //
+        // The engine SDPA splits heads via the [B, H, S, D] 4-D layout (FusedAttention
+        // does NOT head-split a rank-3 input), so reshape to that before the call and
+        // collapse heads back after.
+        var q4 = ToHeads4D(q, batch, queryLen, _numHeads, headDim);
+        var k4 = ToHeads4D(k, batch, keyLen, _numHeads, headDim);
+        var v4 = ToHeads4D(v, batch, keyLen, _numHeads, headDim);
 
-        // Attention scores: Q * K^T using batched matmul.
-        // Engine.TensorTranspose only handles rank-2; for rank-3
-        // [B*H, keyLen, headDim] use TensorPermute to swap axes 1 and 2,
-        // producing [B*H, headDim, keyLen] which the batched matmul expects.
-        var kTransposed = Engine.TensorPermute<T>(kReshaped, new[] { 0, 2, 1 });
-        var scores = Engine.TensorBatchMatMul<T>(qReshaped, kTransposed);
+        var attn4 = Engine.ScaledDotProductAttention<T>(q4, k4, v4, mask: null, scale: scale, out _);
 
-        // Scale
-        scores = Engine.TensorMultiplyScalar<T>(scores, NumOps.FromDouble(scale));
+        // [B, H, queryLen, D] -> [B, queryLen, H, D] -> [B, queryLen, hidden]
+        var attnBshd = Engine.TensorPermute<T>(attn4, new[] { 0, 2, 1, 3 });
+        return Engine.Reshape(attnBshd, new[] { batch, queryLen, _numHeads * headDim });
+    }
 
-        // Softmax over last axis
-        var attnWeights = Engine.Softmax<T>(scores, axis: -1);
-
-        // Apply attention to values
-        var attnOutput = Engine.TensorBatchMatMul<T>(attnWeights, vReshaped);
-
-        // Reshape back: [batch*heads, seq, headDim] -> [batch, seq, hidden]
-        return ReshapeFromHeads(attnOutput, batch, queryLen, _numHeads, headDim);
+    /// <summary>[B, seq, H·D] → [B, H, seq, D] for the engine's multi-head SDPA.</summary>
+    private Tensor<T> ToHeads4D(Tensor<T> x, int batch, int seq, int numHeads, int headDim)
+    {
+        var split = Engine.Reshape(x, new[] { batch, seq, numHeads, headDim });
+        return Engine.TensorPermute<T>(split, new[] { 0, 2, 1, 3 });
     }
 
     private static Tensor<T> ReshapeForHeads(Tensor<T> tensor, int batch, int seq, int numHeads, int headDim)
@@ -1111,6 +1143,88 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         offset = SetLayerParams(_finalNorm, parameters, offset);
         offset = SetLayerParams(_adalnModulation, parameters, offset);
         SetLayerParams(_outputProj, parameters, offset);
+    }
+
+    /// <summary>
+    /// The full layer list in the EXACT order GetParameters/SetParameters serialize it. Streaming and the
+    /// flat path share this sequence so the chunk concatenation stays index-identical to GetParameters.
+    /// </summary>
+    private IEnumerable<ILayer<T>> MMDiTLayerSequence()
+    {
+        yield return _patchEmbed;
+        yield return _timeEmbed1;
+        yield return _timeEmbed2;
+        yield return _contextProj;
+
+        foreach (var block in _jointBlocks)
+        {
+            yield return block.ImageNorm1;
+            yield return block.ImageQProj;
+            yield return block.ImageKProj;
+            yield return block.ImageVProj;
+            yield return block.ImageOutProj;
+            yield return block.ImageNorm2;
+            yield return block.ImageMLP1;
+            yield return block.ImageMLP2;
+            yield return block.ImageAdaLN;
+            yield return block.TextNorm1;
+            yield return block.TextQProj;
+            yield return block.TextKProj;
+            yield return block.TextVProj;
+            yield return block.TextOutProj;
+            yield return block.TextNorm2;
+            yield return block.TextMLP1;
+            yield return block.TextMLP2;
+            yield return block.TextAdaLN;
+        }
+
+        foreach (var block in _singleBlocks)
+        {
+            yield return block.Norm;
+            yield return block.QProj;
+            yield return block.KProj;
+            yield return block.VProj;
+            yield return block.OutProj;
+            yield return block.MLP1;
+            yield return block.MLP2;
+            yield return block.AdaLN;
+        }
+
+        yield return _finalNorm;
+        yield return _adalnModulation;
+        yield return _outputProj;
+    }
+
+    /// <inheritdoc />
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        // #1624: one chunk per layer in the canonical MMDiTLayerSequence order, so the flat
+        // concatenation is index-identical to GetParameters without materializing the full
+        // multi-billion-parameter aggregate that overflows/OOMs at default size.
+        foreach (var layer in MMDiTLayerSequence())
+        {
+            var p = layer.GetParameters();
+            if (p.Length > 0) yield return new Tensor<T>(new[] { p.Length }, p);
+        }
+    }
+
+    /// <inheritdoc />
+    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        using var e = chunks.GetEnumerator();
+        foreach (var layer in MMDiTLayerSequence())
+        {
+            if (layer.ParameterCount == 0) continue;
+            if (!e.MoveNext())
+                throw new System.ArgumentException(
+                    "SetParameterChunks received fewer chunks than MMDiT has parameterized layers.",
+                    nameof(chunks));
+            layer.SetParameters(e.Current.ToVector());
+        }
+        if (e.MoveNext())
+            throw new System.ArgumentException(
+                "SetParameterChunks received more chunks than MMDiT has parameterized layers.",
+                nameof(chunks));
     }
 
     private void AddLayerParams(List<T> allParams, ILayer<T> layer)

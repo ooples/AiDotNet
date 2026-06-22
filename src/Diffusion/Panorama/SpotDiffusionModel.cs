@@ -126,7 +126,7 @@ public class SpotDiffusionModel<T> : LatentDiffusionModelBase<T>
             vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
             seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         return clone;
     }
 

@@ -596,10 +596,16 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
 
         // Process through transformer blocks — every block's AdaLN reads
         // `adaLnEmbed` (= timeEmbed + classEmbed when class-conditional).
-        foreach (var block in _blocks)
+        // G4 (#1624): checkpoint each block (recompute activations in backward) — gradient-equivalent.
+        // Each closure is a pure function of the residual stream; the AdaLN/cross-attn conditioning is
+        // captured as a constant and its gradient is propagated correctly by the checkpoint recompute.
+        var blockForwards = new System.Func<Tensor<T>, Tensor<T>>[_blocks.Count];
+        for (int i = 0; i < _blocks.Count; i++)
         {
-            hidden = ForwardBlock(hidden, adaLnEmbed, crossAttnCond, block);
+            var block = _blocks[i];
+            blockForwards[i] = h => ForwardBlock(h, adaLnEmbed, crossAttnCond, block);
         }
+        hidden = CheckpointBlocks(blockForwards, hidden);
 
         // Final norm and projection with AdaLN (also uses the combined embedding)
         hidden = FinalLayerWithAdaLN(hidden, adaLnEmbed);

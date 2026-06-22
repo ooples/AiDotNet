@@ -186,7 +186,7 @@ public class TrainingEfficientLCM<T> : LatentDiffusionModelBase<T>
     {
         var clone = new TrainingEfficientLCM<T>(
             conditioner: _conditioner, loraRank: _loraRank, seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         return clone;
     }
 

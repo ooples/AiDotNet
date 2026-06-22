@@ -347,7 +347,7 @@ public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
         var latentW = MVDREAM_IMAGE_SIZE / 8;
         var latentShape = new[] { numViews, MVDREAM_LATENT_CHANNELS, latentH, latentW };
 
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latents = SampleNoiseTensor(latentShape, rng);
 
         // Set up scheduler
@@ -479,7 +479,7 @@ public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
         var latentW = inputImage.Shape[3] / 8;
         var latentShape = new[] { numViews, MVDREAM_LATENT_CHANNELS, latentH, latentW };
 
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latents = SampleNoiseTensor(latentShape, rng);
 
         // Set input view latent (first view is the input)

@@ -153,7 +153,7 @@ public class ReferenceOnlyModel<T> : LatentDiffusionModelBase<T>
     public override IDiffusionModel<T> Clone()
     {
         var clone = new ReferenceOnlyModel<T>(conditioner: _conditioner, referenceWeight: _referenceWeight, seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         return clone;
     }
 

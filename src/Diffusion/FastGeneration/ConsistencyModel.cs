@@ -457,7 +457,7 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
         var latentShape = new[] { 1, CM_LATENT_CHANNELS, latentHeight, latentWidth };
 
         // Initialize with noise at maximum sigma
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latents = SampleNoiseTensor(latentShape, rng);
 
         // Scale noise by sigma_max

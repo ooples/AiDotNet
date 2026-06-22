@@ -357,7 +357,7 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
         var pointCloudShape = new[] { 1, effectiveNumPoints, POINTE_LATENT_CHANNELS };
 
         // Generate initial noise
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var points = SampleNoiseTensor(pointCloudShape, rng);
 
         // Set up scheduler
@@ -430,7 +430,7 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
 
         // Generate point cloud
         var pointCloudShape = new[] { 1, effectiveNumPoints, POINTE_LATENT_CHANNELS };
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var points = SampleNoiseTensor(pointCloudShape, rng);
 
         Scheduler.SetTimesteps(numInferenceSteps);

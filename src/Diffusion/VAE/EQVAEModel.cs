@@ -324,7 +324,7 @@ public class EQVAEModel<T> : VAEModelBase<T>
         var clone = new EQVAEModel<T>(
             _inputChannels, _latentChannels, _baseChannels,
             _equivarianceWeight, LossFunction);
-        clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         return clone;
     }
 

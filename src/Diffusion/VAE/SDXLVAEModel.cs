@@ -319,7 +319,7 @@ public class SDXLVAEModel<T> : VAEModelBase<T>
         var clone = new SDXLVAEModel<T>(
             _inputChannels, _latentChannels, _baseChannels,
             _channelMultipliers, LossFunction);
-        clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         return clone;
     }
 

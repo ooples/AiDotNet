@@ -427,7 +427,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
         var latentShape = new[] { 1, IPA_LATENT_CHANNELS, latentHeight, latentWidth };
 
         // Initialize noise
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latents = SampleNoiseTensor(latentShape, rng);
 
         // Set up scheduler
@@ -567,7 +567,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
             conditioner: _conditioner,
             seed: RandomGenerator.Next());
 
-        clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         clone.ImagePromptWeight = _imagePromptWeight;
 
         return clone;

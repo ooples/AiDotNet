@@ -166,27 +166,14 @@ public class FlagDiTPredictor<T> : NoisePredictorBase<T>
             _ffn2[i] = LazyDense(ffnDim, _hiddenSize);
             // adaLN-zero: produces 6 modulation vectors per block; zero-init so each block starts
             // as identity (gate=0 → residual passes through unchanged). Peebles & Xie 2022 §3.2.
-            _adaLN[i] = LazyDense(_hiddenSize, _hiddenSize * 6);
-            ZeroInitialize(_adaLN[i]);
+            // LazyDenseZero keeps the layer deferred (no weight allocation at construction) yet
+            // zero-fills on first resolve — eager zero-init would OOM at Flag-DiT scale (#1624).
+            _adaLN[i] = LazyDenseZero(_hiddenSize, _hiddenSize * 6);
         }
 
         _finalNorm = new RMSNormalizationLayer<T>(_hiddenSize);
-        _finalAdaLN = LazyDense(_hiddenSize, _hiddenSize * 2);
-        ZeroInitialize(_finalAdaLN);
+        _finalAdaLN = LazyDenseZero(_hiddenSize, _hiddenSize * 2);
         _outputProj = LazyDense(_hiddenSize, _patchDim);
-    }
-
-    /// <summary>
-    /// Zero-initialises a (lazy) Dense layer's weights AND biases so its output is 0 until trained.
-    /// Resolves the layer first (so the weight tensors exist), then fills them. Used for the
-    /// adaLN-zero modulation projections (Peebles &amp; Xie 2022): zero modulation means every block
-    /// and the final layer begin as the identity, which is the documented stable DiT initialization.
-    /// </summary>
-    private void ZeroInitialize(DenseLayer<T> layer)
-    {
-        layer.ResolveFromShape(new[] { 1, _hiddenSize });
-        var p = layer.GetParameters();
-        layer.SetParameters(new Vector<T>(p.Length)); // Vector<T>(n) is zero-filled
     }
 
     private long CalculateParameterCount()
@@ -226,8 +213,12 @@ public class FlagDiTPredictor<T> : NoisePredictorBase<T>
         }
 
         var hidden = _patchEmbed.Forward(Patchify(x));   // [B, seq, hidden]
-        for (int i = 0; i < _numLayers; i++)
-            hidden = ForwardBlock(hidden, cond, i);
+        // G4 (#1624): checkpoint each block (recompute activations in backward) — gradient-equivalent.
+        // Each closure is a pure function of the residual stream; `cond` is captured as a constant and
+        // its gradient is propagated correctly by the package checkpoint's recompute.
+        var blockForwards = new System.Func<Tensor<T>, Tensor<T>>[_numLayers];
+        for (int i = 0; i < _numLayers; i++) { int idx = i; blockForwards[i] = h => ForwardBlock(h, cond, idx); }
+        hidden = CheckpointBlocks(blockForwards, hidden);
         hidden = FinalLayer(hidden, cond);                // [B, seq, hidden] -> norm/adaLN
         var patches = _outputProj.Forward(hidden);        // [B, seq, patchDim]
         var output = Unpatchify(patches, height, width);  // [B, C, H, W]
@@ -360,6 +351,42 @@ public class FlagDiTPredictor<T> : NoisePredictorBase<T>
         foreach (var layer in FlagDiTLayerSequence()) offset = Load(layer, parameters, offset);
     }
 
+    /// <inheritdoc />
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        // #1624: one chunk per layer in the SAME canonical order as GetParameters/SetParameters, so
+        // the flat concatenation of chunks is index-identical to GetParameters() (the per-index
+        // correspondence contract) WITHOUT ever materializing the full multi-billion-parameter
+        // aggregate that overflows/OOMs at Flag-DiT / Lumina scale.
+        foreach (var layer in FlagDiTLayerSequence())
+        {
+            var p = layer.GetParameters();
+            if (p.Length > 0) yield return new Tensor<T>(new[] { p.Length }, p);
+        }
+    }
+
+    /// <inheritdoc />
+    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        // Consume one chunk per parameterized layer in the same canonical order — one chunk in flight
+        // at a time, never a flat aggregate. Skips zero-parameter layers symmetrically with
+        // GetParameterChunks above.
+        using var e = chunks.GetEnumerator();
+        foreach (var layer in FlagDiTLayerSequence())
+        {
+            if (layer.ParameterCount == 0) continue;
+            if (!e.MoveNext())
+                throw new ArgumentException(
+                    "SetParameterChunks received fewer chunks than Flag-DiT has parameterized layers.",
+                    nameof(chunks));
+            layer.SetParameters(e.Current.ToVector());
+        }
+        if (e.MoveNext())
+            throw new ArgumentException(
+                "SetParameterChunks received more chunks than Flag-DiT has parameterized layers.",
+                nameof(chunks));
+    }
+
     protected override Vector<T> GetParameterGradients()
     {
         var all = new List<T>();
@@ -418,7 +445,7 @@ public class FlagDiTPredictor<T> : NoisePredictorBase<T>
     {
         var clone = new FlagDiTPredictor<T>(_inputChannels, _hiddenSize, _numLayers, _numHeads,
             _numKVHeads, _contextDim, _latentSize);
-        clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         return clone;
     }
 }

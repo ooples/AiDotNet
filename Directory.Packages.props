@@ -154,16 +154,44 @@
          gated on: Dense -> LayerNorm -> GELU -> Dense now routes its between-matmul ops through the
          FP16-native path instead of the eager FP32 fallback. 0.96.0 supersedes master's 0.95.2;
          Native packages coreleased in lockstep at 0.96.0. -->
-    <!-- 0.96.3: carried the FP16 non-Adam fused-optimizer fix —
-         FusedOptimizerIntegrationTests.Fp16Activations_NonAdamFusedOptimizer_DescendsLoss
-         (FP16 RMSprop) was a training no-op (bit-identical first/last loss) on 0.96.1; fixed there. -->
-    <!-- 0.97.2: published (from master); supersedes 0.96.3.
-         Native packages coreleased in lockstep at 0.97.2. -->
-    <!-- 0.102.3: latest published; carries #658 — forward-GEMM core saturation
-         default-on (s_forwardPackBothBlocking + s_singleRegion, opt-out
-         AIDOTNET_GEMM_FORWARD_PACKBOTH=0 / AIDOTNET_GEMM_SINGLE_REGION=0; ~1.3-2x on
-         transformer/training GEMM shapes) + net471 PackAOnly non-4x4 tail bugfix.
-         Native packages coreleased in lockstep at 0.102.3. -->
+    <!-- 0.101.2: latest published; supersedes 0.98.0. Pulls in the #1624-class OOM/perf work
+         (COW clone, byte-budgeted arena, fused-path per-step arena, streaming clean/dirty eviction,
+         activation-aware autotuner) that this PR's training-scale fixes build on.
+
+         Measured 0.98.0 -> 0.101.2 on the canonical #1624 leak shape (SimCSE<float> dim=384,
+         10 layers, fused-optimizer path under one never-Reset() outer TensorArena, CPU, 31 steps),
+         same local src, version the only variable:
+           * Peak RSS      1404 MiB -> 949 MiB   (-32%, the number that OOMs the 16 GiB runner)
+           * Total alloc   2422 MiB -> 1173 MiB  (-52%; alloc/step 78 -> 38 MiB)
+           * Per-step heap growth flat in BOTH (-0.001 MiB/step: the per-step leak fix is consumer
+             src, constant across the runs), and loss converges identically (1.27 -> 0.26) — the
+             reduction is not from silently breaking training.
+         0.101.2 -> 0.101.5: activation-checkpointing correctness, two fixes.
+         (1) #643 (0.101.4): GradientCheckpointing.Checkpoint's recompute differentiated only w.r.t.
+             the segment input, silently dropping every checkpointed layer's WEIGHT gradients.
+         (2) #645 (0.101.5): multi-segment recompute double-counted earlier segments — a later
+             segment's recompute followed its (non-detached) input back into the earlier segment's
+             checkpoint node, so earlier-segment gradients came out 2x. 0.101.5 detaches each
+             segment's input (matches torch.utils.checkpoint), making sqrt(N) multi-segment exact.
+         Both are required for G4 (#1624) in the diffusion NoisePredictors (sqrt(N) checkpointing) and
+         for NeuralNetworkBase checkpointing.
+
+         0.101.5 -> 0.101.7: the merged MobileNetV3 batch=1 timeout work and supporting fixes —
+         #639 batch=1 BatchNormAffine fusion (#641, required by BatchNormalizationLayer's batch=1
+         training fallback, which calls Engine.BatchNormAffine), Conv2D core-saturation (#647), the
+         nested-arena escaped-buffer #1221 fix (#648), the GPU resident-weight version-gate (#649),
+         and GPU conv-kernel arg-binding fixes (#644).
+         Native packages (OneDNN/OpenBLAS/CLBlast) coreleased in lockstep.
+         Bumped 0.101.7 -> 0.102.2: brings the #632 compiled-inference MemoryPlanning aliasing fix
+         (BlasBatch hoist vs memory planning in attention inference — the root cause of the diffusion
+         Predict_ShouldBeDeterministic failures, which reproduced on 0.101.7 and is gone on 0.102.x),
+         plus the Phase C fp16-weight / fp32-master mixed-precision storage (#650).
+
+         Bumped 0.102.2 -> 0.102.3 (from master, #658): forward-GEMM core saturation default-on
+         (s_forwardPackBothBlocking + s_singleRegion, opt-out AIDOTNET_GEMM_FORWARD_PACKBOTH=0 /
+         AIDOTNET_GEMM_SINGLE_REGION=0; ~1.3-2x on transformer/training GEMM shapes) + the net471
+         PackAOnly non-4x4 scalar-tail bugfix. 0.102.3 is a linear superset of 0.102.2, so the #632 /
+         Phase C deps above are retained. -->
     <PackageVersion Include="AiDotNet.Tensors" Version="0.102.3" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.102.3" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.102.3" />

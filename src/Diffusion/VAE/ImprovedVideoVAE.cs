@@ -330,7 +330,7 @@ public class ImprovedVideoVAE<T> : VAEModelBase<T>
         var clone = new ImprovedVideoVAE<T>(
             _inputChannels, _latentChannels, _baseChannels,
             _temporalDownsample, LossFunction);
-        clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         return clone;
     }
 

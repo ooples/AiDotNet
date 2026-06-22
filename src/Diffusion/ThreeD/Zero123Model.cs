@@ -288,7 +288,7 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
         var latentShape = new[] { 1, Z123_LATENT_CHANNELS, latentHeight, latentWidth };
 
         // Initialize noise
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latents = SampleNoiseTensor(latentShape, rng);
 
         var effectiveGuidanceScale = guidanceScale ?? GuidanceScale;
@@ -536,7 +536,7 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
             vae: (StandardVAE<T>)_vae.Clone(),
             seed: RandomGenerator.Next());
 
-        clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         return clone;
     }
 

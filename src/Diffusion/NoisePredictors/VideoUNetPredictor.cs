@@ -1477,6 +1477,10 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         // failure). Copying layer-by-layer from the already-resolved source skips the
         // random-init/pack step entirely, so the clone's first real forward packs from
         // the correct copied weights.
+        //
+        // NOTE: deliberately NOT routed through the global COW helper (TryShareParametersFrom):
+        // its O(1)-until-write share is correct in principle, but this predictor's fused-CPU
+        // weight pack requires the explicit paired copy above to avoid the stale-pack divergence.
         using (var srcEnum = EnumerateLayersInParameterOrder().GetEnumerator())
         using (var cloneEnum = clone.EnumerateLayersInParameterOrder().GetEnumerator())
         {

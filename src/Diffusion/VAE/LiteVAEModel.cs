@@ -283,7 +283,7 @@ public class LiteVAEModel<T> : VAEModelBase<T>
     {
         var clone = new LiteVAEModel<T>(
             _inputChannels, _latentChannels, _baseChannels, LossFunction);
-        clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         return clone;
     }
 

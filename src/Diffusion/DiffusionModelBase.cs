@@ -1,5 +1,7 @@
 ﻿using System.Linq;
 using AiDotNet.Autodiff;
+using AiDotNet.Deployment.Optimization.Quantization;
+using AiDotNet.Deployment.Optimization.Quantization.Training;
 using AiDotNet.Engines;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
@@ -131,6 +133,31 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// Active feature indices used by the model.
     /// </summary>
     private HashSet<int> _activeFeatureIndices = new HashSet<int>();
+
+    /// <summary>
+    /// G5 (#1624) quantization-aware-training hook, created lazily on the first <see cref="Train"/> step
+    /// once <see cref="IsQuantizationAwareTrainingEnabled"/> is true.
+    /// </summary>
+    private QATTrainingHook<T>? _qatHook;
+
+    /// <summary>QAT config (explicit or default). Captured by <see cref="EnableQuantizationAwareTraining"/>.</summary>
+    private QuantizationConfiguration? _qatConfig;
+
+    /// <summary>
+    /// Explicit QAT override: <c>null</c> = auto (engage by the parameter-count threshold),
+    /// <c>true</c>/<c>false</c> = forced on/off.
+    /// </summary>
+    private bool? _qatExplicit;
+
+    /// <summary>
+    /// Parameter-count threshold at/above which QAT engages by DEFAULT (G5, #1624). Foundation-scale
+    /// diffusion models are the int8-deployment targets, so they train quantization-aware by default;
+    /// smaller models stay full-precision unless QAT is requested explicitly.
+    /// </summary>
+    private const long DefaultQatThresholdParams = 500_000_000L;
+
+    /// <summary>Test/diagnostic override for <see cref="DefaultQatThresholdParams"/>. Process-global.</summary>
+    internal static long? QatThresholdOverride { get; set; }
 
     /// <summary>
     /// The learning rate converted to type T for training computations.
@@ -284,6 +311,42 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// </summary>
     public virtual IEnumerable<Tensor<T>> GetParameterChunks() => System.Linq.Enumerable.Empty<Tensor<T>>();
 
+    /// <summary>
+    /// Streaming counterpart to <see cref="SetParameters"/>: assigns weights from per-tensor
+    /// chunks in <see cref="GetParameterChunks"/> order without materializing a flat aggregate.
+    /// Default buffers the chunks into one flat <see cref="Vector{T}"/> and delegates to
+    /// <see cref="SetParameters"/> (back-compatible for tractable stacks); foundation-scale
+    /// subclasses override to consume one chunk at a time and stay flat-free.
+    /// </summary>
+    public virtual void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
+        // Detach any copy-on-write-shared weights before mutating in place — SetParameters writes
+        // through raw spans that bypass the COW write barrier, so without this a chunk assignment
+        // could corrupt a sibling clone. Same guard Train() applies.
+        EnsureOwnWeights();
+
+        var buffered = new List<Tensor<T>>();
+        long total = 0;
+        foreach (var chunk in chunks)
+        {
+            if (chunk is null)
+                throw new ArgumentException("Chunk sequence contains a null tensor.", nameof(chunks));
+            buffered.Add(chunk);
+            total += chunk.Length;
+        }
+
+        var flat = new Vector<T>(checked((int)total));
+        int offset = 0;
+        foreach (var chunk in buffered)
+        {
+            var v = chunk.ToVector();
+            for (int i = 0; i < v.Length; i++) flat[offset++] = v[i];
+        }
+
+        SetParameters(flat);
+    }
+
     /// <inheritdoc/>
     public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
 
@@ -349,6 +412,29 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
     }
+
+    /// <summary>
+    /// Creates a reproducible RNG for the INFERENCE / generation path. When the
+    /// caller passes no explicit <paramref name="seed"/>, a STABLE seed (the
+    /// model's construction seed, else a fixed constant) is used — deliberately
+    /// NOT the advancing <see cref="RandomGenerator"/> — so that two
+    /// <c>Predict(sameInput)</c> calls draw the identical noise and produce the
+    /// identical output (the <c>Predict_ShouldBeDeterministic</c> contract every
+    /// diffusion model must honor), while callers wanting sample variety still
+    /// pass an explicit seed. Training intentionally keeps using
+    /// <see cref="RandomGenerator"/>, which MUST advance across steps to draw
+    /// fresh timesteps/noise each iteration.
+    /// </summary>
+    /// <param name="seed">Optional explicit seed; when null a stable seed is used.</param>
+    protected Random CreateInferenceRng(int? seed)
+        => RandomHelper.CreateSeededRandom(seed ?? _options.Seed ?? InferenceDefaultSeed);
+
+    /// <summary>
+    /// Fixed fallback seed for <see cref="CreateInferenceRng"/> when the model
+    /// was constructed without a seed — any constant works; it only needs to be
+    /// stable across calls so unseeded generation is reproducible.
+    /// </summary>
+    private const int InferenceDefaultSeed = 0;
 
     #region IDiffusionModel<T> Implementation
 
@@ -530,7 +616,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
                     nameof(initialSample));
             return initialSample;
         }
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         return SampleNoise((int)totalElements, rng);
     }
 
@@ -687,11 +773,80 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// </list>
     /// You can control the step size by setting the LearningRate in the options.</para>
     /// </remarks>
+    /// <summary>
+    /// Forces quantization-aware training ON (G5, #1624): from the next <see cref="Train"/> step the
+    /// forward pass uses fake-quantized weights (quantize→dequantize, simulating int8 inference
+    /// precision) while keeping full-precision shadow weights that the optimizer updates (a
+    /// straight-through estimator), so the model learns weights that survive post-training int8
+    /// quantization. Foundation-scale models already engage this <b>by default</b> (above
+    /// <see cref="DefaultQatThresholdParams"/>); call this to force it on a smaller model or to override
+    /// the config. QAT is lossy — it changes the training trajectory. Pass a
+    /// <see cref="QuantizationConfiguration"/> to tune bit width / symmetry; default is symmetric int8.
+    /// </summary>
+    public void EnableQuantizationAwareTraining(QuantizationConfiguration? config = null)
+    {
+        _qatExplicit = true;
+        _qatConfig = config;
+        _qatHook = null; // rebuilt lazily in Train with the new config
+    }
+
+    /// <summary>Forces quantization-aware training OFF, overriding the parameter-count default.</summary>
+    public void DisableQuantizationAwareTraining()
+    {
+        _qatExplicit = false;
+        _qatHook = null;
+    }
+
+    /// <summary>
+    /// Whether quantization-aware training is engaged for <see cref="Train"/> (G5, #1624). Defaults to ON
+    /// for foundation-scale models (<see cref="ParameterCount"/> ≥ <see cref="DefaultQatThresholdParams"/>)
+    /// and OFF for smaller ones, unless overridden via <see cref="EnableQuantizationAwareTraining"/> /
+    /// <see cref="DisableQuantizationAwareTraining"/>.
+    /// </summary>
+    public bool IsQuantizationAwareTrainingEnabled =>
+        // Opt-in, default OFF — matching the Train() contract comment, the project's
+        // streaming/activation-checkpointing convention, and PyTorch (torch QAT is always
+        // explicit, never engaged by model size). The previous auto-engage-by-parameter-
+        // count (>= 500M) silently turned QAT ON for every foundation-scale diffusion model:
+        // each train step then fake-quantized ALL ~1.8B weights (a serial ToVector copy of
+        // the full weight set + per-element requantize + copy-back), which a CPU profile
+        // measured at ~96s/iter of pure overhead — over half a Kandinsky train step — AND,
+        // being lossy, changed the training trajectory of the vanilla-DDPM contract tests.
+        // Foundation models that target int8 deployment opt in via EnableQuantizationAwareTraining().
+        _qatExplicit ?? false;
+
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // Copy-on-write: if this model shares weight tensors with a clone/parent, give it a private
         // copy before we mutate weights in place below, so the other model isn't corrupted.
         EnsureOwnWeights();
+
+        // G5 (#1624) quantization-aware training (opt-in, default OFF). Fake-quantize the weights the
+        // forward will use, keeping full-precision shadows to restore before the optimizer update — the
+        // straight-through estimator: gradients computed against the quantized values update the
+        // full-precision weights. Quantization happens OUTSIDE the gradient tape, so the STE is implicit
+        // (the tape treats the quantized values as the leaf weights). On the very first step the lazy
+        // layers aren't resolved yet (empty/zero-length collection) so this is a natural no-op warmup.
+        Tensor<T>[]? qatParams = null;
+        Vector<T>[]? qatShadows = null;
+        if (IsQuantizationAwareTrainingEnabled)
+        {
+            _qatHook ??= new QATTrainingHook<T>(_qatConfig ?? new QuantizationConfiguration { QATWarmupEpochs = 0 });
+            qatParams = CollectTrainableParameters();
+            if (qatParams.Length > 0)
+            {
+                _qatHook.Reset(); // fresh per-tensor scales each step, tracking the current weight range
+                qatShadows = new Vector<T>[qatParams.Length];
+                for (int i = 0; i < qatParams.Length; i++)
+                {
+                    qatShadows[i] = qatParams[i].ToVector();
+                    if (qatShadows[i].Length == 0) continue;
+                    var quantized = _qatHook.ApplyFakeQuantization(qatShadows[i], "qat_param_" + i);
+                    var span = qatParams[i].Data.Span;
+                    for (int k = 0; k < span.Length && k < quantized.Length; k++) span[k] = quantized[k];
+                }
+            }
+        }
 
         // Tape-based direct per-tensor SGD step. The forward pass records Engine
         // ops onto the thread-local gradient tape, backward returns per-tensor
@@ -770,6 +925,19 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             ? NumOps.FromDouble(MaxGradNorm / gradNorm)
             : NumOps.One;
         T effectiveLr = NumOps.Multiply(LearningRate, clipScale);
+
+        // G5 (#1624): restore the full-precision shadow weights before the optimizer step, so the
+        // update lands on full precision (straight-through estimator). The forward used the quantized
+        // values; the gradients are computed against them but applied to the full-precision weights.
+        if (qatParams is not null && qatShadows is not null)
+        {
+            for (int i = 0; i < qatParams.Length; i++)
+            {
+                var span = qatParams[i].Data.Span;
+                var shadow = qatShadows[i];
+                for (int k = 0; k < span.Length && k < shadow.Length; k++) span[k] = shadow[k];
+            }
+        }
 
         // Per-tensor SGD: param -= effectiveLr * grad, applied in place so registered
         // tensor references stay stable across training steps.
@@ -1240,6 +1408,31 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
                 CollectLayerParameters(val, allParams, visited);
             }
         }
+    }
+
+    /// <summary>
+    /// COW clone lever (#1624): shares each trainable weight tensor's STORAGE with <paramref name="source"/>
+    /// via the Tensors copy-on-write <c>Tensor&lt;T&gt;.CloneShared()</c> (O(1)-until-write), instead of the
+    /// flat <c>GetParameters()</c> → <c>SetParameters()</c> round-trip that materializes the entire model a
+    /// second time (and a giant intermediate flat vector) — the source of the large-diffusion-model Clone
+    /// OOM on the 16 GB runner. The first in-place write to either side privatizes that tensor, so the clone
+    /// is observationally identical to the flat-copy clone. Fidelity is equivalent to the existing path
+    /// because both transfer exactly the model's trainable tensors (diffusion models carry no non-trainable
+    /// running statistics / serialization extras) — this just shares them rather than copying.
+    ///
+    /// <para>Walks <paramref name="source"/> and <c>this</c> in parallel via reflection (identical type ⇒
+    /// identical field order ⇒ matching layer order, the same assumption <see cref="CollectTrainableParameters"/>
+    /// already relies on) and re-binds each destination layer's parameters through
+    /// <see cref="Interfaces.ITrainableLayer{T}.SetTrainableParameters"/>. Returns <c>false</c> if the
+    /// trainable-layer structure does not match 1:1 (the caller then falls back to the flat copy), and never
+    /// leaves a half-shared clone — structure is fully verified before any sharing.</para>
+    /// </summary>
+    protected bool TryShareParametersFrom(DiffusionModelBase<T> source)
+    {
+        if (!AiDotNet.Helpers.CopyOnWriteCloneHelper.TryShareTrainableParameters<T>(source, this))
+            return false;
+        InvalidateTrainableParametersCache();
+        return true;
     }
 
     /// <summary>

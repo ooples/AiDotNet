@@ -1068,6 +1068,7 @@ public static class DeserializationHelper
             int kernelSize = TryGetInt(additionalParams, "FilterSize") ?? 3;
             int stride = TryGetInt(additionalParams, "Stride") ?? 1;
             int padding = TryGetInt(additionalParams, "Padding") ?? 0;
+            int groups = TryGetInt(additionalParams, "Groups") ?? 1; // #639 depthwise marker
             // outputShape can be rank-4 [batch, depth, height, width] (NCHW) when
             // serialized after a batched forward, OR rank-3 [depth, height, width]
             // when GetOutputShape() returns the layer-only shape (no batch axis).
@@ -1086,8 +1087,10 @@ public static class DeserializationHelper
             // Try the 7-param ctor first (added nonlinearityForInit for paper-faithful
             // Conv→BN→LeakyReLU init gain). Fall back to the 6-param ctor for
             // backwards compatibility with older builds.
+            // #639: prefer the 8-param ctor that carries `groups` (depthwise) when present.
+            var ctor8 = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, initStrategyType, activationFuncType, typeof(int) });
             var ctor7 = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, initStrategyType, activationFuncType });
-            var ctor = ctor7 ?? type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, initStrategyType });
+            var ctor = ctor8 ?? ctor7 ?? type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, initStrategyType });
             if (ctor is null)
             {
                 throw new MissingLayerCtorException($"Cannot find ConvolutionalLayer constructor.");
@@ -1098,9 +1101,11 @@ public static class DeserializationHelper
             // Pass null for nonlinearityForInit on deserialization — weights are
             // restored from the saved parameter vector, so InitializeWeights
             // never runs and the gain choice is moot for the clone path.
-            instance = ctor7 is not null
-                ? ctor.Invoke(new object?[] { outputDepth, kernelSize, stride, padding, activation, null, null })
-                : ctor.Invoke(new object?[] { outputDepth, kernelSize, stride, padding, activation, null });
+            instance = ctor8 is not null
+                ? ctor.Invoke(new object?[] { outputDepth, kernelSize, stride, padding, activation, null, null, groups })
+                : ctor7 is not null
+                    ? ctor.Invoke(new object?[] { outputDepth, kernelSize, stride, padding, activation, null, null })
+                    : ctor.Invoke(new object?[] { outputDepth, kernelSize, stride, padding, activation, null });
 
             // Pre-resolve the lazy layer using the serialized inputShape so SetParameters
             // sees the correct InputDepth and the kernel/bias counts match the saved

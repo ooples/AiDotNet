@@ -149,7 +149,9 @@ public class Flux2SchnellModel<T> : LatentDiffusionModelBase<T>
     public override IDiffusionModel<T> Clone()
     {
         var clone = new Flux2SchnellModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
+        // #1624: O(1)-until-write copy-on-write parameter share (avoids the full-model flatten copy that
+        // OOMs the 16 GB runner). Falls back to the flat copy if the structure doesn't match 1:1.
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         return clone;
     }
 

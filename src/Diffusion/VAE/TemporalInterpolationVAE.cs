@@ -197,7 +197,7 @@ public class TemporalInterpolationVAE<T> : VAEModelBase<T>
             baseChannels: _baseChannels,
             interpolationFactor: _interpolationFactor,
             latentScaleFactor: _latentScaleFactor);
-        clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         return clone;
     }
 
@@ -311,7 +311,7 @@ public class TemporalInterpolationVAE<T> : VAEModelBase<T>
             baseChannels: _baseChannels,
             interpolationFactor: _interpolationFactor,
             latentScaleFactor: _latentScaleFactor);
-        clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         return clone;
     }
 

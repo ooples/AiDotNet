@@ -360,7 +360,7 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
         var latentShape = new[] { 1, RIFF_LATENT_CHANNELS, latentHeight, latentWidth };
 
         // Initialize noise
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latents = SampleNoiseTensor(latentShape, rng);
 
         // Set up scheduler
@@ -459,7 +459,7 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
         var latentShape = new[] { 1, RIFF_LATENT_CHANNELS, latentHeight, latentWidth };
 
         // Initialize noise
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latents = SampleNoiseTensor(latentShape, rng);
 
         var effectiveGuidanceScale = guidanceScale ?? GuidanceScale;

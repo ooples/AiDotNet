@@ -190,7 +190,7 @@ public class Imagen3Model<T> : LatentDiffusionModelBase<T>
         StandardVAE<T>? vae,
         int? seed)
     {
-        _predictor = predictor ?? new SiTPredictor<T>(seed: seed);
+        _predictor = predictor ?? new SiTPredictor<T>(inputChannels: IMAGEN3_LATENT_CHANNELS, seed: seed);
 
         _vae = vae ?? new StandardVAE<T>(
             inputChannels: 3,

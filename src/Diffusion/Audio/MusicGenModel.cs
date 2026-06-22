@@ -640,7 +640,7 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
         }
 
         // Initialize random latent
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var latent = SampleNoiseTensor(latentShape, rng);
 
         // Set up scheduler
@@ -712,7 +712,7 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
         }
 
         // Initialize with partial noise (more structure from prompt)
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var rng = CreateInferenceRng(seed);
         var noise = SampleNoiseTensor(latentShape, rng);
 
         // Blend prompt latent into initial state

@@ -118,9 +118,15 @@ internal sealed class VerifiedInferenceGate<T>
             bool parity = OutputsClose(reference, candidate);
             _verdicts[shapeKey] = (parity ? VerdictTrusted : VerdictRejected, structureVersion);
             onDecision?.Invoke(parity, parity ? "compiled-matches-eager" : "compiled-diverged-stay-eager");
-            // The eager reference is the source of truth on the verify call, so a divergent (rejected)
-            // compiled plan never leaks a wrong value to the caller.
-            output = reference;
+            // On parity, return a CLONE of the compiled candidate (not the eager reference): every
+            // subsequent trusted call replays the compiled plan, so returning eager here would make the
+            // first call differ from the rest by the compiled path's legitimate ~ULP op-order rounding —
+            // breaking determinism (Predict(x) twice not bit-identical) even though both are within
+            // tolerance of eager. CLONE because the compile host hands back a RECYCLED output buffer that
+            // the next compiled call overwrites; returning it directly would let a later call mutate this
+            // result. On rejection the eager reference is the source of truth, so a divergent compiled plan
+            // never leaks a wrong value.
+            output = parity ? (Tensor<T>)candidate.CloneDeepCopy() : reference;
         }
 
         StoreMemo(shapeKey, valueHash, structureVersion, input, output);
@@ -181,9 +187,12 @@ internal sealed class VerifiedInferenceGate<T>
         bool parity = OutputsClose(reference, candidate);
         _verdicts[shapeKey] = (parity ? VerdictTrusted : VerdictRejected, structureVersion);
         onDecision?.Invoke(parity, parity ? "compiled-matches-eager" : "compiled-diverged-stay-eager");
-        // The eager reference is the source of truth on the verify call, so a divergent compiled
-        // plan never leaks a wrong value to the caller.
-        return reference;
+        // On parity, return a CLONE of the compiled candidate so the verify call matches every subsequent
+        // trusted replay (returning eager here would differ by the compiled path's legitimate ~ULP op-order
+        // rounding, breaking determinism across the denoising loop). CLONE because the compile host hands
+        // back a RECYCLED output buffer the next compiled call overwrites. On rejection the eager reference
+        // is the source of truth, so a divergent compiled plan never leaks a wrong value to the caller.
+        return parity ? (Tensor<T>)candidate.CloneDeepCopy() : reference;
     }
 
     /// <summary>FNV-1a fold of every input's shape (rank-tagged) so distinct secondary shapes don't collide.</summary>
