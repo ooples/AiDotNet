@@ -185,7 +185,17 @@ public class TransformerNoamPerCallLRIssue1470Tests
             outputSize: vocab,
             maxSequenceLength: seqLen,
             vocabularySize: vocab,
-            warmupSteps: warmup);
+            warmupSteps: warmup,
+            // This is a CONVERGENCE test for the fused Noam LR ramp (#1470), not a dropout test.
+            // Two reasons to pin these: (1) dropoutRate:0 — the production default (0.1) is a
+            // regularizer that fights the memorization this test measures, and the train-mode-
+            // (dropped) vs eval-mode-(full) forward gap then caps eval accuracy on a short budget;
+            // (2) randomSeed:42 — without a seed the dropout mask stream uses the non-reproducible
+            // ThreadSafeRandom, so the test's convergence became ORDER-DEPENDENT (passed alone at
+            // avgNll≈1.36, intermittently failed when run after other tests advanced the shared
+            // stream). Both make the Noam-ramp signal deterministic and isolated.
+            dropoutRate: 0.0,
+            randomSeed: 42);
 
         var model = new Transformer<float>(
             arch,
