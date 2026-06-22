@@ -113,7 +113,7 @@ public class AdversarialImageEvaluator<T> : NeuralNetworkBase<T>, IImageSafetyMo
     /// in [0, 1]. Input shape: <c>[C, H, W]</c> (single sample) or <c>[B, C, H, W]</c>
     /// (batched). Output shape: <c>[1]</c> or <c>[B, 1]</c> respectively.
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
 

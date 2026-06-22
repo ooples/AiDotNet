@@ -155,7 +155,7 @@ public class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     public virtual void Unfreeze() => IsFrozen = false;
     public (int Height, int Width) GetExpectedInputSize() => (640, 640);
 
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         var features = ExtractFeatures(input);
         if (features.Count == 0)
