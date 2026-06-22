@@ -6,16 +6,33 @@ namespace AiDotNet.Training;
 
 internal static class StreamingOptimizerResolver<T>
 {
+    /// <summary>
+    /// #1662 lever #1: whether a BIT-IDENTICAL full-precision streaming variant exists for this
+    /// configured optimizer. The common-case fused-in-backward default (§5a) engages only when
+    /// this is true, so a model that fits in memory never silently switches to a non-bit-identical
+    /// streaming update. Currently Adam-family (plain Adam + the streaming default); other families
+    /// keep the classic path until their full-precision streaming variant lands.
+    /// </summary>
+    public static bool SupportsFullPrecision(
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
+        bool useStreamingDefaults)
+    {
+        if (useStreamingDefaults) return true; // streaming default is Adam
+        return Resolve(optimizer, 0.0).Kind == StreamingKind.Adam;
+    }
+
     public static string BuildKey(
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
         bool useStreamingDefaults,
-        double streamingWeightDecay)
+        double streamingWeightDecay,
+        bool fullPrecision = false)
     {
+        string prec = fullPrecision ? "FP|" : "Q8|";
         if (useStreamingDefaults)
-            return "DefaultAdam|" + streamingWeightDecay;
+            return prec + "DefaultAdam|" + streamingWeightDecay;
 
         StreamingConfig c = Resolve(optimizer, streamingWeightDecay);
-        return string.Join("|",
+        return prec + string.Join("|",
             optimizer.GetType().FullName ?? optimizer.GetType().Name,
             c.Kind,
             c.Beta1, c.Beta2, c.Epsilon, c.Decay, c.Rho, c.Momentum, c.WeightDecay,
@@ -27,16 +44,25 @@ internal static class StreamingOptimizerResolver<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
         bool useStreamingDefaults,
         double fallbackLearningRate,
-        double fallbackWeightDecay)
+        double fallbackWeightDecay,
+        bool fullPrecision = false)
     {
         double lr = useStreamingDefaults ? fallbackLearningRate : ResolveLearningRate(optimizer, fallbackLearningRate);
 
         if (useStreamingDefaults)
         {
-            return new StreamingAdam8Bit<T>(lr, weightDecay: fallbackWeightDecay);
+            return fullPrecision
+                ? new FullPrecisionStreamingAdam<T>(lr, weightDecay: fallbackWeightDecay)
+                : new StreamingAdam8Bit<T>(lr, weightDecay: fallbackWeightDecay);
         }
 
         StreamingConfig c = Resolve(optimizer, fallbackWeightDecay);
+
+        // #1662 lever #1: bit-identical full-precision variants for the common-case fused default.
+        // Only reached when SupportsFullPrecision gated engagement (Adam-family today).
+        if (fullPrecision && c.Kind == StreamingKind.Adam)
+            return new FullPrecisionStreamingAdam<T>(lr, c.Beta1, c.Beta2, c.Epsilon, c.WeightDecay);
+
         switch (c.Kind)
         {
             case StreamingKind.AdamW:

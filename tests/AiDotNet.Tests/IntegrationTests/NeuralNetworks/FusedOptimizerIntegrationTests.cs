@@ -97,6 +97,59 @@ public class FusedOptimizerIntegrationTests
     }
 
     /// <summary>
+    /// #1662 lever #1 (§5a) bit-identical gate: single-pass full-precision fused
+    /// optimizer-in-backward (<see cref="StreamingTrainingMode.ForceOn"/>, unclipped, Adam) must
+    /// track the classic collect-then-step eager path to floating-point precision. Both networks
+    /// start from identical parameters and train on identical data; the fused path consumes each
+    /// gradient and applies the Adam update the moment it's produced (O(largest-grad) peak memory,
+    /// hot-in-cache) while classic materializes the full gradient set and steps once. Adam is
+    /// element-wise independent given a shared step t, so the trajectories must coincide.
+    ///
+    /// <para>The fused optimizer accumulates moments in <c>double</c> while classic Adam runs in
+    /// <c>float</c>, so agreement is to float precision (the fused path is marginally MORE accurate),
+    /// not literally bit-identical. The 1e-3 tolerance cleanly separates "tracks classic" (~1e-6
+    /// drift) from a broken update (orders-of-magnitude divergence).</para>
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task FusedInBackward_Unclipped_MatchesClassicAdam_ToFloatPrecision()
+    {
+        await Task.CompletedTask;
+
+        var input = CreateRandomTensor(new[] { 16, 4 }, seed: 42);
+        var target = CreateRandomTensor(new[] { 16, 2 }, seed: 43);
+
+        var classic = BuildMlp();
+        var fused = BuildMlp();
+        // Materialize layer weights, then force IDENTICAL initial parameters on both.
+        classic.Predict(CreateRandomTensor(new[] { 1, 4 }, seed: 99));
+        fused.Predict(CreateRandomTensor(new[] { 1, 4 }, seed: 99));
+        fused.UpdateParameters(classic.GetParameters());
+
+        // Classic eager collect-then-step (compilation off by default) vs full-precision fused
+        // optimizer-in-backward. Explicitly UNCLIPPED (MaxGradNorm defaults to 1.0) so this
+        // exercises the single-pass fused path, not the two-pass clipped one.
+        classic.SetMaxGradNormForTest(0.0);
+        fused.SetMaxGradNormForTest(0.0);
+        classic.StreamingTraining = StreamingTrainingMode.ForceOff;
+        fused.StreamingTraining = StreamingTrainingMode.ForceOn;
+
+        var classicOpt = BuildAdam(classic, learningRate: 0.01);
+        var fusedOpt = BuildAdam(fused, learningRate: 0.01);
+
+        for (int step = 0; step < 20; step++)
+        {
+            classic.TrainPublic(input, target, classicOpt);
+            fused.TrainPublic(input, target, fusedOpt);
+            Assert.Equal((double)classic.LastLossPublic, (double)fused.LastLossPublic, 3);
+        }
+
+        var pc = SnapshotParameters(classic);
+        var pf = SnapshotParameters(fused);
+        Assert.False(AnyParameterDiffers(pc, pf, 1e-3f),
+            "full-precision fused optimizer-in-backward diverged from classic Adam beyond float precision");
+    }
+
+    /// <summary>
     /// End-to-end validation of the FP16-activation training path for a NON-Adam fused
     /// optimizer (Tensors #574 + AiDotNet #1543). With <c>AIDOTNET_FP16_ACTIVATIONS=1</c>,
     /// <c>T=float</c>, <c>EnableCompilation=true</c>, and RMSprop (a fused-mappable optimizer
@@ -626,6 +679,9 @@ public class FusedOptimizerIntegrationTests
         public override bool SupportsTraining => true;
 
         public void AddLayer(ILayer<float> layer) => AddLayerToCollection(layer);
+
+        /// <summary>Test-only: set the global grad-norm clip threshold (0 disables clipping).</summary>
+        public void SetMaxGradNormForTest(double value) => MaxGradNorm = NumOps.FromDouble(value);
 
         public void TrainPublic(
             Tensor<float> input, Tensor<float> target,

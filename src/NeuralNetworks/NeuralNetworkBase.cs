@@ -6210,12 +6210,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     private Training.IStreamingOptimizer<T> GetOrCreateStreamingOptimizer(
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> resolvedOptimizer,
-        bool useStreamingDefaults)
+        bool useStreamingDefaults,
+        bool fullPrecision = false)
     {
         string key = Training.StreamingOptimizerResolver<T>.BuildKey(
             resolvedOptimizer,
             useStreamingDefaults,
-            StreamingTrainingWeightDecay);
+            StreamingTrainingWeightDecay,
+            fullPrecision);
 
         if (_streamingOptimizerState is null || _streamingOptimizerKey != key)
         {
@@ -6223,7 +6225,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 resolvedOptimizer,
                 useStreamingDefaults,
                 StreamingTrainingLearningRate,
-                StreamingTrainingWeightDecay);
+                StreamingTrainingWeightDecay,
+                fullPrecision);
             _streamingOptimizerKey = key;
         }
 
@@ -6291,9 +6294,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         foreach (var t in GetExtraTrainableTensors())
             if (t is not null && t.Length > 0) sources.Add(t);
 
+        // #1662 lever #1 (§5a): use the BIT-IDENTICAL full-precision streaming optimizer when the
+        // user has explicitly opted into streaming (ForceOn) for an UNCLIPPED model whose optimizer
+        // has a full-precision variant. This is the single-pass fused optimizer-in-backward that
+        // beats classic collect-then-step on memory + cache locality while matching its trajectory
+        // exactly. The Auto path stays on the 8-bit OOM-survival variant for now; flipping the
+        // unclipped-fitting Auto default to this FP path is gated on the §5d PyTorch-CPU proof.
+        bool fullPrecisionStreaming =
+            StreamingTraining == StreamingTrainingMode.ForceOn
+            && !clip
+            && Training.StreamingOptimizerResolver<T>.SupportsFullPrecision(resolvedOptimizer, useStreamingDefaults);
+
         var streamingOptimizer = GetOrCreateStreamingOptimizer(
             resolvedOptimizer,
-            useStreamingDefaults);
+            useStreamingDefaults,
+            fullPrecisionStreaming);
         streamingOptimizer.BeginStep();
 
         if (!clip)
