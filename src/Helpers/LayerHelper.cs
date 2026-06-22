@@ -30054,30 +30054,31 @@ public static class LayerHelper<T>
         int convPadding = 1)
     {
         int freqBins = fftSize / 2 + 1;
-        int currentFilters = baseFilters;
-        int currentFreqDim = freqBins;
 
-        // Encoder
+        // Fully-connected spectral-mapping network (Xu et al. 2015, "A Regression
+        // Approach to Speech Enhancement Based on Deep Neural Networks"). The model
+        // consumes a SINGLE STFT magnitude frame — there is no time axis to convolve
+        // over, so a square 2-D conv stack (kernel 4 over a width-1 frame) is
+        // structurally invalid. A leading Flatten makes the stack rank-agnostic so
+        // it accepts both the audio-API spectrum ([1,freqBins,1]) and the generic
+        // tensor-test input ([1,64,32]) and always emits a fixed [.,freqBins] mask.
+        // (conv* params retained on the signature for source compatibility, unused.)
+        _ = convKernelSize; _ = convStride; _ = convPadding;
+        yield return new FlattenLayer<T>();
+
+        // Encoder: stacked fully-connected hidden layers (LeakyReLU), narrowing
+        // toward the bottleneck (keeps the numStages depth knob meaningful).
+        int dim = bottleneckDim * 2;
         for (int stage = 0; stage < numStages; stage++)
         {
-            int inputFilters = stage == 0 ? 1 : currentFilters / 2;
-            yield return new ConvolutionalLayer<T>(
-                outputDepth: currentFilters,
-                kernelSize: convKernelSize,
-                stride: convStride,
-                padding: convPadding,
-                activationFunction: new LeakyReLUActivation<T>());
-
-            currentFreqDim = (currentFreqDim + 2 * convPadding - convKernelSize) / convStride + 1;
-            if (stage < numStages - 1)
-                currentFilters *= 2;
+            yield return new DenseLayer<T>(dim, (IActivationFunction<T>)new LeakyReLUActivation<T>());
+            dim = Math.Max(bottleneckDim, dim / 2);
         }
 
         // Bottleneck
-        int bottleneckInputSize = currentFilters * currentFreqDim;
         yield return new DenseLayer<T>(bottleneckDim, (IActivationFunction<T>)new ReLUActivation<T>());
 
-        // Output projection (simplified decoder)
+        // Output projection: a per-frequency-bin soft mask in [0, 1].
         yield return new DenseLayer<T>(freqBins, (IActivationFunction<T>)new SigmoidActivation<T>());
     }
 

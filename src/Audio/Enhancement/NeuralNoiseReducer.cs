@@ -390,8 +390,13 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         _encoderLayers.Clear();
         Layers.AddRange(layers);
 
-        // Assign internal references for forward pass
-        int expectedCount = _numStages + 2; // encoder stages + bottleneck + output
+        // Assign internal references for forward pass. The default stack
+        // (CreateNeuralNoiseReducerLayers) leads with a FlattenLayer so the dense
+        // spectral-mapping net is rank-agnostic; skip it when indexing the
+        // encoder/bottleneck/output references (a custom Architecture without a
+        // leading Flatten uses offset 0).
+        int offset = layers.Count > 0 && layers[0] is NeuralNetworks.Layers.FlattenLayer<T> ? 1 : 0;
+        int expectedCount = offset + _numStages + 2; // [flatten] + encoder stages + bottleneck + output
         if (layers.Count < expectedCount)
         {
             throw new ArgumentException(
@@ -401,9 +406,9 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         }
 
         for (int i = 0; i < _numStages; i++)
-            _encoderLayers.Add(layers[i]);
-        _bottleneckLayer = layers[_numStages];
-        _outputLayer = layers[_numStages + 1];
+            _encoderLayers.Add(layers[offset + i]);
+        _bottleneckLayer = layers[offset + _numStages];
+        _outputLayer = layers[offset + _numStages + 1];
     }
 
     #endregion
