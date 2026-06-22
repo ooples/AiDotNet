@@ -650,6 +650,13 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
                 System.Diagnostics.Trace.TraceWarning(
                     $"DiffusionModelBase.Generate: sanitized {sanitizedCount} non-finite element(s) at timestep {timestep}.");
             }
+
+            // Recycle this step's intermediates (predictor activations + scheduler
+            // temporaries) for the next step. The only value carried forward —
+            // `sample` — was detached to GC above, and sampleTensor/noisePredVec
+            // live outside the arena, so the reset is safe. Without this the arena
+            // would accumulate all ~50 steps and only free on loop exit.
+            arena?.Reset();
         }
 
         return new Tensor<T>(shape, sample);
