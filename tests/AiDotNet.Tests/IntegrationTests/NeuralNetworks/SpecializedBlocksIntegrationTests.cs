@@ -99,12 +99,18 @@ public class SpecializedBlocksIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BottleneckBlock_ForwardPass_ProducesValidOutput()
     {
-        // Arrange - Bottleneck uses 1x1 -> 3x3 -> 1x1 pattern with expansion
+        // Arrange - Bottleneck uses 1x1 -> 3x3 -> 1x1 pattern with expansion.
+        // Ctor is BottleneckBlock(baseChannels, stride=1): baseChannels is the
+        // bottleneck width and output channels = baseChannels * Expansion(4);
+        // inChannels is resolved lazily from the input at first forward. The
+        // earlier (inChannels, outChannels) call read the 2nd arg as stride=64,
+        // collapsing the 8x8 spatial map to 1x1. Use base=outChannels, stride=1
+        // (mirrors the sibling WithDownsample test's BottleneckBlock(base, stride)).
         int inChannels = 64;
         int outChannels = 64;
         int height = 8;
         int width = 8;
-        var block = new BottleneckBlock<float>(inChannels, outChannels);
+        var block = new BottleneckBlock<float>(baseChannels: outChannels);
         var input = CreateRandomTensor<float>([2, inChannels, height, width]);
 
         // Act
