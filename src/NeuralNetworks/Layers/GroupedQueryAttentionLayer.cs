@@ -56,7 +56,14 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     // The weight shapes are fully derivable from the dimension fields above, so ParameterCount is
     // exact while deferred and GetParameters/SetParameters are correct once materialized. Eager
     // callers (the default) are completely unaffected.
-    private bool _weightsDeferred;
+    //
+    // volatile + _materializeLock make the one-time materialization safe even if a future caller
+    // invokes Forward on a shared instance from multiple threads (today CheckpointBlocks and the
+    // diffusion sampling loop are sequential, so it never races): the lock-free fast path reads the
+    // flag with acquire semantics, and EnsureWeightsMaterialized flips it to false LAST (release)
+    // so any thread seeing false also sees the fully-allocated tensors — never a half-built state.
+    private volatile bool _weightsDeferred;
+    private readonly object _materializeLock = new();
 
     // Q projection: [embDim, numHeads * headDim]
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
@@ -233,16 +240,24 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     /// </summary>
     private void EnsureWeightsMaterialized()
     {
+        // Lock-free fast path: once materialized the volatile read observes false and (by the
+        // release write below) the fully-published weight tensors.
         if (!_weightsDeferred) return;
-        // Clear the flag first: InitializeParameters reads the (now full-sized) weights, and the
-        // flag must already reflect the eager state to keep ParameterCount consistent during init.
-        _weightsDeferred = false;
-        _queryWeights = new Tensor<T>([_embeddingDimension, _numHeads * _headDimension]);
-        _keyWeights = new Tensor<T>([_embeddingDimension, _numKVHeads * _headDimension]);
-        _valueWeights = new Tensor<T>([_embeddingDimension, _numKVHeads * _headDimension]);
-        _outputWeights = new Tensor<T>([_numHeads * _headDimension, _embeddingDimension]);
-        _outputBias = new Tensor<T>([_embeddingDimension]);
-        InitializeParameters();
+        lock (_materializeLock)
+        {
+            // Double-check under the lock: another thread may have materialized while we waited.
+            if (!_weightsDeferred) return;
+            _queryWeights = new Tensor<T>([_embeddingDimension, _numHeads * _headDimension]);
+            _keyWeights = new Tensor<T>([_embeddingDimension, _numKVHeads * _headDimension]);
+            _valueWeights = new Tensor<T>([_embeddingDimension, _numKVHeads * _headDimension]);
+            _outputWeights = new Tensor<T>([_numHeads * _headDimension, _embeddingDimension]);
+            _outputBias = new Tensor<T>([_embeddingDimension]);
+            InitializeParameters();
+            // Flip the flag LAST (volatile release): a concurrent reader either sees true and
+            // blocks on the lock above, or sees false with every tensor allocated + initialized —
+            // never the in-between state the previous flag-first ordering allowed.
+            _weightsDeferred = false;
+        }
     }
 
     /// <summary>
