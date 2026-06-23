@@ -174,6 +174,53 @@ public class DiffusionGpuExecutionGraphFallbackTests
     // #1650/#638 speedup measurement: run a long denoising on CUDA with the predictor's CUDA-graph capture
     // (AIDOTNET_DIFFUSION_CUDA_GRAPH=1). The RIG logs per-step EAGER (warmup) vs REPLAY (cuGraphLaunch) timings
     // (AIDOTNET_INFGRAPH_TIMING=1); raise AIDOTNET_INFGRAPH_WARMUP for more eager baseline samples. Skips off CUDA.
+    // #1650/#638 floor analysis: which UNet sections dominate the per-step GPU compute (the replay floor is
+    // compute-bound, ~27ms = 99%, not host transfer). Set AIDOTNET_PROFILE_SYNC=1 so each section is synced →
+    // its elapsed is real GPU time. Aggregates per-section totals to %TEMP%/aidotnet_section_profile.txt. Skips off CUDA.
+    [Fact(Timeout = 300000)]
+    public async Task GpuGraph_ProfileSections_OnCuda()
+    {
+        await Task.CompletedTask;
+        var prevEngine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        try
+        {
+            bool isCuda = false;
+            try
+            {
+                var ge = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine();
+                if (ge.SupportsGpu) { AiDotNet.Tensors.Engines.AiDotNetEngine.Current = ge; isCuda = true; }
+            }
+            catch { }
+            if (!isCuda) return;
+
+            var sink = new System.Collections.Concurrent.ConcurrentQueue<(string section, double ms)>();
+            AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<float>.ForwardProfilingSink = sink;
+            try
+            {
+                var shape = new[] { 1, 3, 32, 32 };
+                var model = new DDPMModel<float>(architecture: null, options: Options(useGpuExecutionGraph: false), seed: 42);
+                _ = model.Generate(shape, numInferenceSteps: 6, seed: 42); // eager forwards feed the sink
+            }
+            finally { AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<float>.ForwardProfilingSink = null; }
+
+            // Aggregate by section PREFIX (enc[0].resblock, enc[1].resblock → "resblock") to see which op TYPE dominates.
+            var totals = new System.Collections.Generic.Dictionary<string, (double ms, int n)>();
+            foreach (var (section, ms) in sink)
+            {
+                var key = System.Text.RegularExpressions.Regex.Replace(section, @"\[\d+\]", "");
+                var cur = totals.TryGetValue(key, out var v) ? v : (0.0, 0);
+                totals[key] = (cur.Item1 + ms, cur.Item2 + 1);
+            }
+            var sb = new System.Text.StringBuilder();
+            double grand = 0; foreach (var kv in totals) grand += kv.Value.ms;
+            foreach (var kv in System.Linq.Enumerable.OrderByDescending(totals, k => k.Value.ms))
+                sb.AppendLine($"{kv.Key,-24} {kv.Value.ms,9:F2} ms  {100 * kv.Value.ms / grand,5:F1}%  (n={kv.Value.n})");
+            sb.AppendLine($"{"TOTAL",-24} {grand,9:F2} ms");
+            try { System.IO.File.WriteAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet_section_profile.txt"), sb.ToString()); } catch { }
+        }
+        finally { AiDotNet.Tensors.Engines.AiDotNetEngine.Current = prevEngine; }
+    }
+
     [Fact(Timeout = 300000)]
     public async Task GpuGraph_Timing_ReplayVsEager_OnCuda()
     {

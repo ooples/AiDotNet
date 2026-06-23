@@ -767,9 +767,15 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
         var sink = ForwardProfilingSink;
         var sw = sink is null ? null : System.Diagnostics.Stopwatch.StartNew();
+        // When profiling GPU compute (not host enqueue), block on the stream before each stamp so the elapsed
+        // captures that section's actual GPU time (AIDOTNET_PROFILE_SYNC=1). Off by default — adds a sync/section.
+        var syncEngine = sink is not null
+            && System.Environment.GetEnvironmentVariable("AIDOTNET_PROFILE_SYNC") == "1"
+            ? Engine as AiDotNet.Tensors.Engines.DirectGpuTensorEngine : null;
         void Tick(string section)
         {
             if (sw is null || sink is null) return;
+            syncEngine?.SynchronizeStream();
             sw.Stop();
             sink.Enqueue((section, sw.Elapsed.TotalMilliseconds));
             sw.Restart();
