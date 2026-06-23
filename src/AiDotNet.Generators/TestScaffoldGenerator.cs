@@ -183,6 +183,45 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "GraphCodeBERT",
     };
 
+    // Models whose generated test class runs in <float> instead of the default
+    // <double> (#1679 / training-perf tracker #1624). These models' single FORWARD
+    // is fast, but their training/clone tests OOM or time out on the 16 GB CI runner
+    // because double precision DOUBLES the training footprint (gradients + optimizer
+    // state + activations). Running them in float halves that footprint and roughly
+    // halves per-op cost — eliminating the OOM/timeout — while keeping every code path
+    // and the self-relative training invariants intact. The generated scaffold emits
+    // `<float>` for the test base, factory return type, and constructor (see the
+    // floatify step in EmitGeneratedTestClass). The model family base must have a
+    // generic `<T>` form (NeuralNetwork/Embedding/Diffusion/VisionLanguage/AudioNN/
+    // TTS/NER/Segmentation all do).
+    private static readonly System.Collections.Generic.HashSet<string> Fp32TestClassNames =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+    {
+        // --- #1624 training/perf-bound inventory (OOM / TIMEOUT in training/clone) ---
+        // Embedding family
+        "BGE", "ColBERT", "InstructorEmbedding", "MatryoshkaEmbedding", "SGPT",
+        "SPLADE", "SimCSE", "TransformerEmbeddingNetwork", "FastText",
+        // NeuralNetwork family (vision backbones + memory nets)
+        "CapsuleNetwork", "EfficientNetNetwork", "MobileNetV3Network", "ResNetNetwork",
+        "VGGNetwork", "VisionTransformer",
+        // Diffusion family (Flux / ControlNet / video / point-cloud)
+        "CogVideoModel", "ControlNetFluxModel", "ControlNetPlusPlusFluxModel",
+        "FlowEditModel", "Flux2Model", "Flux2SchnellModel", "FluxInpaintingModel",
+        "FluxSchnellModel", "PointEModel", "SenseFlowModel", "TransfusionModel",
+        // VisionLanguage family
+        "SmolVLM",
+        // NOTE: EmotiVoice (TTS), TinyBERTNER (NER), UNet3D (Segmentation) are also in
+        // the #1624 inventory but their family bases (TTSModelTestBase / NERModelTestBase /
+        // SegmentationTestBase) are currently double-only (no generic <T> form) and do
+        // arithmetic directly on the element type, so floating them needs a base-class
+        // generic-ization first — tracked as a focused follow-up to avoid risky shared-base
+        // edits in this PR.
+        // --- Whisper / ASR family (large-v3-scale defaults; same double-timeout) ---
+        "DistilWhisper", "FasterWhisper", "KotobaWhisper", "WhisperLargeV3",
+        "WhisperLargeV3Turbo", "WhisperLive", "WhisperX", "Moonshine", "WhisperCPP",
+        "CanaryFlash", "NeMoMultitask",
+    };
+
     // Attribute metadata names
     private const string ModelDomainAttr = "AiDotNet.Attributes.ModelDomainAttribute";
     private const string ModelCategoryAttr = "AiDotNet.Attributes.ModelCategoryAttribute";
@@ -2079,6 +2118,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         var baseClassName = GetBaseClassName(family);
         var factoryMethodName = GetFactoryMethodName(family);
         var returnTypeCode = GetReturnTypeCode(family);
+
+        // #1679: emit this model's scaffold in <float> rather than the default <double>
+        // (training-perf OOM/timeout mitigation — see Fp32TestClassNames). Switch the
+        // generic family base, the factory return type, and the constructor's type args
+        // to float. Only the generic-type-argument occurrences of `double` are rewritten;
+        // the `double`-keyword tolerance/return-type overrides emitted below are untouched.
+        bool useFloat = Fp32TestClassNames.Contains(model.ClassName);
+        if (useFloat)
+        {
+            baseClassName += "<float>";
+            returnTypeCode = FloatifyGenericArgs(returnTypeCode);
+            constructorExpr = FloatifyGenericArgs(constructorExpr);
+            factoryBody = FloatifyGenericArgs(factoryBody);
+        }
 
         var sb = new StringBuilder();
         // Multi-type-parameter models may need Tensor<> and/or Matrix<>/Vector<> usings
@@ -5597,6 +5650,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
             _ => ctx,
         };
+    }
+
+    /// <summary>
+    /// Rewrites the generic TYPE-ARGUMENT occurrences of <c>double</c> to <c>float</c>
+    /// in an emitted code fragment (e.g. <c>Foo&lt;double&gt;</c>,
+    /// <c>new Bar&lt;double, Tensor&lt;double&gt;&gt;(...)</c>,
+    /// <c>IDiffusionModel&lt;double&gt;</c>). Used by the #1679 float-by-default path.
+    /// Only touches <c>double</c> immediately inside angle brackets, so it never
+    /// rewrites a <c>double</c> keyword used as a method return type or a literal.
+    /// </summary>
+    private static string FloatifyGenericArgs(string code)
+    {
+        if (string.IsNullOrEmpty(code)) return code;
+        return code
+            .Replace("<double>", "<float>")
+            .Replace("<double,", "<float,")
+            .Replace(", double>", ", float>")
+            .Replace(",double>", ",float>")
+            .Replace(", double,", ", float,")
+            .Replace(",double,", ",float,");
     }
 
     private static string GetBaseClassName(TestFamily family)
