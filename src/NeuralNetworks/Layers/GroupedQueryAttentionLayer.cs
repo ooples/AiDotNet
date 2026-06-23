@@ -47,6 +47,17 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     private readonly int _embeddingDimension;
     private readonly int _headsPerGroup;
 
+    // Deferred (lazy) weight allocation (#1671). When true, the projection weights are left
+    // zero-sized at construction and materialized (allocated + initialized) on first use. A
+    // foundation-scale stack (e.g. Flag-DiT's 32 layers × 4096 hidden) otherwise eagerly
+    // allocates ~1.3 B weights per model in the constructor — gigabytes and >10 s before a
+    // single forward, which defeats the weight-streaming forward path and the cheap-construction
+    // contract the sibling DenseLayer lazy path (NoisePredictorBase.LazyDense) already honors.
+    // The weight shapes are fully derivable from the dimension fields above, so ParameterCount is
+    // exact while deferred and GetParameters/SetParameters are correct once materialized. Eager
+    // callers (the default) are completely unaffected.
+    private bool _weightsDeferred;
+
     // Q projection: [embDim, numHeads * headDim]
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _queryWeights;
@@ -135,8 +146,16 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     /// Gets the total number of trainable parameters.
     /// </summary>
     public override long ParameterCount =>
-        _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
-        _outputWeights.Length + _outputBias.Length;
+        _weightsDeferred
+            // Weights not yet materialized: derive the exact count from the dimensions so
+            // callers iterating ParameterCount before the first forward (e.g. a parent
+            // predictor's CalculateParameterCount) get the real value without forcing allocation.
+            ? (long)_embeddingDimension * (_numHeads * _headDimension)        // Q
+              + 2L * _embeddingDimension * (_numKVHeads * _headDimension)     // K + V
+              + (long)(_numHeads * _headDimension) * _embeddingDimension      // output
+              + _embeddingDimension                                          // output bias
+            : _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
+              _outputWeights.Length + _outputBias.Length;
 
     /// <summary>
     /// Creates a new Grouped-Query Attention layer.
@@ -152,7 +171,8 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
         int numHeads,
         int numKVHeads,
         IActivationFunction<T>? activationFunction = null,
-        IInitializationStrategy<T>? initializationStrategy = null)
+        IInitializationStrategy<T>? initializationStrategy = null,
+        bool deferAllocation = false)
         : base(
             [sequenceLength, embeddingDimension],
             [sequenceLength, embeddingDimension],
@@ -176,16 +196,52 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
         _embeddingDimension = embeddingDimension;
         _headsPerGroup = numHeads / numKVHeads;
 
-        // Q projection: full-sized [embDim, numHeads * headDim]
-        _queryWeights = new Tensor<T>([embeddingDimension, numHeads * _headDimension]);
-        // K/V projections: reduced [embDim, numKVHeads * headDim]
-        _keyWeights = new Tensor<T>([embeddingDimension, numKVHeads * _headDimension]);
-        _valueWeights = new Tensor<T>([embeddingDimension, numKVHeads * _headDimension]);
-        // Output projection: [numHeads * headDim, embDim]
-        _outputWeights = new Tensor<T>([numHeads * _headDimension, embeddingDimension]);
-        _outputBias = new Tensor<T>([embeddingDimension]);
-
         InitializationStrategy = initializationStrategy ?? Initialization.InitializationStrategies<T>.Eager;
+        _weightsDeferred = deferAllocation;
+
+        if (deferAllocation)
+        {
+            // Defer the expensive projection-weight allocation to first use (see _weightsDeferred).
+            // Zero-sized placeholders keep the fields non-null; EnsureWeightsMaterialized allocates
+            // the real shapes and runs InitializeParameters before any forward / GetParameters /
+            // SetParameters reads them.
+            _queryWeights = new Tensor<T>([0]);
+            _keyWeights = new Tensor<T>([0]);
+            _valueWeights = new Tensor<T>([0]);
+            _outputWeights = new Tensor<T>([0]);
+            _outputBias = new Tensor<T>([0]);
+        }
+        else
+        {
+            // Q projection: full-sized [embDim, numHeads * headDim]
+            _queryWeights = new Tensor<T>([embeddingDimension, numHeads * _headDimension]);
+            // K/V projections: reduced [embDim, numKVHeads * headDim]
+            _keyWeights = new Tensor<T>([embeddingDimension, numKVHeads * _headDimension]);
+            _valueWeights = new Tensor<T>([embeddingDimension, numKVHeads * _headDimension]);
+            // Output projection: [numHeads * headDim, embDim]
+            _outputWeights = new Tensor<T>([numHeads * _headDimension, embeddingDimension]);
+            _outputBias = new Tensor<T>([embeddingDimension]);
+
+            InitializeParameters();
+        }
+    }
+
+    /// <summary>
+    /// Materializes deferred projection weights on first use (allocate at the real shape, then
+    /// initialize via <see cref="InitializeParameters"/>). No-op for eager-constructed layers and
+    /// after the first materialization. See the <c>deferAllocation</c> constructor parameter.
+    /// </summary>
+    private void EnsureWeightsMaterialized()
+    {
+        if (!_weightsDeferred) return;
+        // Clear the flag first: InitializeParameters reads the (now full-sized) weights, and the
+        // flag must already reflect the eager state to keep ParameterCount consistent during init.
+        _weightsDeferred = false;
+        _queryWeights = new Tensor<T>([_embeddingDimension, _numHeads * _headDimension]);
+        _keyWeights = new Tensor<T>([_embeddingDimension, _numKVHeads * _headDimension]);
+        _valueWeights = new Tensor<T>([_embeddingDimension, _numKVHeads * _headDimension]);
+        _outputWeights = new Tensor<T>([_numHeads * _headDimension, _embeddingDimension]);
+        _outputBias = new Tensor<T>([_embeddingDimension]);
         InitializeParameters();
     }
 
@@ -238,6 +294,7 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        EnsureWeightsMaterialized();
         _originalInputShape = input._shape;
 
         int rank = input.Shape.Length;
@@ -444,6 +501,7 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
+        EnsureWeightsMaterialized();
         if (_queryWeightsGradient == null || _keyWeightsGradient == null ||
             _valueWeightsGradient == null || _outputWeightsGradient == null ||
             _outputBiasGradient == null)
@@ -462,6 +520,7 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
+        EnsureWeightsMaterialized();
         int totalParams = _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
                           _outputWeights.Length + _outputBias.Length;
         var parameters = new Vector<T>(totalParams);
@@ -478,6 +537,7 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
+        EnsureWeightsMaterialized();
         var gradTensors = new[] { _queryWeightsGradient, _keyWeightsGradient, _valueWeightsGradient, _outputWeightsGradient, _outputBiasGradient };
         var weightTensors = new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights, _outputBias };
         int totalParams = weightTensors.Sum(w => w.Length);
@@ -513,6 +573,7 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        EnsureWeightsMaterialized();
         int expectedParams = _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
                              _outputWeights.Length + _outputBias.Length;
         if (parameters.Length != expectedParams)
