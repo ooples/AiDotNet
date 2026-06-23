@@ -688,7 +688,16 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     /// eval still gets the same forward via <c>PredictCore</c>.
     /// </para>
     /// </summary>
-    public override Tensor<T> ForwardForTraining(Tensor<T> input) => ForwardTape(input);
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        // Match the base ForwardForTraining's reproducibility contract: propagate the
+        // architecture seed to every layer before the first training forward so any
+        // seed-derived/lazy layer init is deterministic under a fixed seed. The base
+        // does this in its ForwardForTraining, which this override otherwise bypasses;
+        // without it, NTM's training-trajectory invariants flake run-to-run (#1670).
+        EnsureLayerRandomSeedsWired();
+        return ForwardTape(input);
+    }
 
     /// <summary>
     /// Performs a forward pass through the Neural Turing Machine. Routes
