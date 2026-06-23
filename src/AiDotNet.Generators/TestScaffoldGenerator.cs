@@ -1810,6 +1810,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumEncoderLayers = 1, NumDecoderLayers = 1, NumAttentionHeads = 4, " +
                     "VocabSize = 4, MaxTextLength = 8, DropoutRate = 0.0, ComputeType = \"float32\", BeamSize = 1 })";
             }
+            else if (model.ClassName == "WhisperTimestamped" && model.TypeParameterCount == 1)
+            {
+                // WhisperTimestamped's production defaults mirror Whisper
+                // large-v3 (1280-wide, 32 encoder + 32 decoder layers, 51866
+                // vocab — ~1.5B params). The native ctor sizes its layer stack
+                // from WhisperTimestampedOptions, NOT from the architecture
+                // dims, so the architecture-only fallback below would build the
+                // full production model and the invariant scaffold's repeated
+                // CPU training steps hit the xUnit 120 s timeout before any
+                // assertion runs (#1670). Keep the same paper contract (log-mel
+                // sequence -> encoder/decoder + cross-attention stack ->
+                // per-frame vocabulary logits) at smoke-test width/depth/vocab.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputHeight: 8, inputWidth: 80, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.SpeechRecognition.WhisperFamily.WhisperTimestampedOptions " +
+                    "{ SampleRate = 16000, NumMels = 80, EncoderDim = 64, DecoderDim = 64, " +
+                    "NumEncoderLayers = 1, NumDecoderLayers = 1, NumAttentionHeads = 4, " +
+                    "VocabSize = 4, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "JambaLanguageModel" && model.TypeParameterCount == 1)
             {
                 // Jamba's production default is a high-vocab hybrid LM head.

@@ -642,20 +642,26 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     }
 
     /// <summary>
-    /// Forward path used by the training tape. Routes through the same
-    /// NTM-specific memory pipeline as <see cref="Predict"/> so the tape
-    /// captures the controller → memory → output operations the test
-    /// suite then evaluates. The default
+    /// Forward path used by the training tape — routes directly through the
+    /// NTM-specific tape-aware <see cref="ForwardTape"/> memory pipeline
+    /// (controller → read/write addressing → output), the SAME function
+    /// <see cref="Predict"/> evaluates. The default
     /// <see cref="NeuralNetworkBase{T}.ForwardForTraining"/> iterates
-    /// <c>Layers</c> sequentially as a generic feed-forward stack, which
-    /// is wrong for NTM: it produces a different output than Predict
-    /// (no read/write addressing), so the gradient step is computed
-    /// against one network and the loss is measured against another.
-    /// Training_ShouldReduceLoss then sees loss moving in arbitrary
-    /// directions because the path the optimizer is improving isn't the
-    /// path the test checks. Issue #1332 cluster 1.1.
+    /// <c>Layers</c> as a generic feed-forward stack — wrong for NTM (no
+    /// read/write addressing), so the optimizer would improve a different
+    /// network than the test checks (issue #1332 cluster 1.1).
+    /// <para>
+    /// Issue #1670: this must NOT delegate to <see cref="Predict"/>. With the
+    /// inference arena enabled by default (<see cref="InferenceArenaSettings"/>),
+    /// <c>Predict</c> copies its result out via <c>DetachFromArena</c>
+    /// (<c>new Tensor(output.ToArray())</c>), which SEVERS the gradient tape —
+    /// the loss then has no path back to any parameter and every gradient is
+    /// zero (Train is a silent no-op: GradientFlow / Training_ShouldChangeParameters
+    /// fail). Calling <see cref="ForwardTape"/> directly keeps the tape intact;
+    /// eval still gets the same forward via <c>PredictCore</c>.
+    /// </para>
     /// </summary>
-    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Predict(input);
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => ForwardTape(input);
 
     /// <summary>
     /// Performs a forward pass through the Neural Turing Machine. Routes
