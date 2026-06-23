@@ -93,13 +93,45 @@ internal static class CopyOnWriteCloneHelper
         var layers = new List<ITrainableLayer<T>>();
         // CollectInto walks arbitrary instance fields, so it is necessarily typed `object?` internally;
         // the public entry point constrains the root to a model so callers can't pass an unrelated graph.
-        CollectInto(root, layers, new HashSet<object>(TensorReferenceComparer<object>.Instance));
+        try
+        {
+            CollectInto(root, layers, new HashSet<object>(TensorReferenceComparer<object>.Instance), 0);
+        }
+        catch (CollectDepthExceededException)
+        {
+            // Absolute backstop: a pathologically deep/cyclic object graph that the visited-set could
+            // not bound. Returning an empty list makes TryShareTrainableParameters fall back to the
+            // eager flat copy (always correct, just not COW-shared) instead of risking a host stack
+            // overflow. With the leaf-skips below this is unreachable for every real model graph — so a
+            // trip is a genuine regression signal (a new self-regenerating field type), NOT a routine
+            // event. Surface it via Trace (observable in Release; the codebase's existing diagnostic
+            // idiom) rather than swallowing it silently, otherwise the COW-disabling fallback would
+            // quietly reintroduce the large-Clone() OOM pressure (#1624) with zero observability.
+            System.Diagnostics.Trace.TraceWarning(
+                $"CopyOnWriteCloneHelper: trainable-layer walk for '{root.GetType().FullName}' exceeded " +
+                $"MaxWalkDepth ({MaxWalkDepth}) and fell back to the eager Clone copy. This is expected to " +
+                "be unreachable — investigate a newly-introduced self-regenerating field type in the model " +
+                "object graph (the #1669 failure class).");
+            layers.Clear();
+        }
         return layers;
     }
 
-    private static void CollectInto<T>(object? obj, List<ITrainableLayer<T>> layers, HashSet<object> visited)
+    /// <summary>
+    /// Hard ceiling on the reflective walk's recursion depth. Real model object graphs nest only a few
+    /// dozen levels, so this is a conservative ~5–10× margin above any legitimate depth: it never trips
+    /// for a real model, yet caps frames well short of a host stack overflow. The guard exists purely as
+    /// a fail-safe so a previously-unseen self-regenerating field type can never stack-overflow the test
+    /// host (the failure mode behind #1669) before the pointer/leaf skips below intercept it.
+    /// </summary>
+    private const int MaxWalkDepth = 256;
+
+    private sealed class CollectDepthExceededException : System.Exception { }
+
+    private static void CollectInto<T>(object? obj, List<ITrainableLayer<T>> layers, HashSet<object> visited, int depth)
     {
         if (obj is null || !visited.Add(obj)) return;
+        if (depth > MaxWalkDepth) throw new CollectDepthExceededException();
         if (obj is ITrainableLayer<T> trainable) layers.Add(trainable);
 
         var type = obj.GetType();
@@ -114,17 +146,34 @@ internal static class CopyOnWriteCloneHelper
                 field.FieldType == typeof(string) || field.FieldType == typeof(Tensor<T>))
                 continue;
 
+            // Skip unmanaged pointer fields (void*, byte*, T*, ...). Reflecting a pointer field via
+            // FieldInfo.GetValue boxes it into a FRESH System.Reflection.Pointer object on EVERY call,
+            // and that wrapper's own `_ptr` field is itself a pointer — so following it spirals into
+            // unbounded recursion (a brand-new Pointer per level, never deduped by the visited set),
+            // stack-overflowing the host. A pointer can never reference an ITrainableLayer, so it is
+            // always a leaf. This was the single shared cycle behind #1669's NN/Generated shard host
+            // crashes: any model whose graph transitively reached a native pointer (e.g. the
+            // foundation-scale weight-streaming / mmap path) hit it.
+            if (field.FieldType.IsPointer)
+                continue;
+
             var val = field.GetValue(obj);
             if (val is null) continue;
+
+            // Defensive companion to the IsPointer field-skip above: a pointer can also surface through
+            // an object-/interface-typed field, where the declared FieldType is not IsPointer but the
+            // runtime value is a System.Reflection.Pointer. Treat it as a leaf too so the same
+            // wrap-per-call spiral cannot recur via that path.
+            if (val is System.Reflection.Pointer) continue;
 
             if (val is IEnumerable enumerable && val is not string)
             {
                 foreach (var item in enumerable)
-                    CollectInto(item, layers, visited);
+                    CollectInto(item, layers, visited, depth + 1);
             }
             else
             {
-                CollectInto(val, layers, visited);
+                CollectInto(val, layers, visited, depth + 1);
             }
         }
     }

@@ -669,11 +669,22 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         // latent (`sample`) is the one value that must survive each Reset, so it is
         // detached to a GC-owned buffer below. The pre-allocated `sampleTensor` /
         // `noisePredVec` are created above (outside the arena) and are therefore GC.
-        // Gated by the same default-on flag as the Predict funnel; null = no arena.
         // (The async GenerateAsyncCore path is intentionally NOT wrapped: TensorArena.Current
         // is [ThreadStatic] and `await ...ConfigureAwait(false)` can resume on another thread,
         // which would desynchronise the arena scope — an async-aware arena is a separate change.)
-        using var arena = InferenceArenaSettings.Enabled ? TensorArena.Create() : null;
+        //
+        // Gated by DiffusionDenoiseEnabled (default OFF), NOT the default-on Predict-funnel flag:
+        // unlike the single-shot Predict funnel, the multi-step denoise loop is NOT arena-safe.
+        // Diffusion forward layers hold cross-forward cached tensors (e.g. DiffusionResBlock's
+        // pre-allocated GroupNorm output buffer; attention reshape scratch) first allocated inside
+        // this arena scope; the per-step Reset() recycles that memory, so a later step's allocation
+        // aliases a still-referenced cached buffer and corrupts its shape — observed as a downsample
+        // conv output emerging with a stale [B, H*W, C] attention layout, surfacing as "Input has N
+        // channels but layer expects M" (and a native host crash when it corrupts the shared pool).
+        // Re-enable only after the layer caches are made arena-safe. See issue #1668.
+        using var arena = (InferenceArenaSettings.Enabled && InferenceArenaSettings.DiffusionDenoiseEnabled)
+            ? TensorArena.Create()
+            : null;
 
         // Iterative denoising loop
         foreach (var timestep in _scheduler.Timesteps)
