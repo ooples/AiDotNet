@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNetTestConsole;
 
@@ -46,6 +47,21 @@ internal static class NtmDeterminismProbe
         Console.WriteLine($"  baseline           : {Fingerprint(MoreDataMirror())}");
         Perturb();
         Console.WriteLine($"  after perturb ops  : {Fingerprint(MoreDataMirror())}");
+
+        // DECISIVE: the real xUnit tests each wrap their body in `using var _arena =
+        // TensorArena.Create()`. Mimic that — run MoreData-mirror INSIDE an arena,
+        // then run OTHER perturbing ops INSIDE their own arenas (like other test
+        // methods), then MoreData-mirror in a fresh arena again. If the arena's
+        // process-global scratch is the culprit, the post-perturb fingerprint diverges.
+        Console.WriteLine("--- arena-wrapped (mimics per-test TensorArena.Create) ---");
+        string arenaBaseline = Fingerprint(InArena(MoreDataMirror));
+        for (int k = 0; k < 5; k++) InArenaAction(Perturb);
+        string arenaAfter = Fingerprint(InArena(MoreDataMirror));
+        Console.WriteLine($"  arena baseline       : {arenaBaseline}");
+        Console.WriteLine($"  arena after-perturb  : {arenaAfter}");
+        Console.WriteLine(arenaBaseline == arenaAfter
+            ? "=> ARENA path is order-INDEPENDENT too — TensorArena scratch is NOT the culprit."
+            : "=> ARENA path is order-DEPENDENT: TensorArena process-global scratch corrupts NTM training across arenas => CONFIRMED root cause (Tensors package).");
 
         string trainedCold = Fingerprint(BuildTrainProbe());
         var t2 = new NeuralTuringMachine<float>();
@@ -112,6 +128,19 @@ internal static class NtmDeterminismProbe
         net.SetTrainingMode(false);
         var clone = (NeuralTuringMachine<float>)net.Clone();
         clone.Predict(x);
+    }
+
+    // Run a body inside a TensorArena, exactly like each xUnit test method does.
+    private static Vector<float> InArena(Func<Vector<float>> body)
+    {
+        using var _arena = TensorArena.Create();
+        return body();
+    }
+
+    private static void InArenaAction(Action body)
+    {
+        using var _arena = TensorArena.Create();
+        body();
     }
 
     private static Tensor<float> RandFrom(Random rng, int[] shape)

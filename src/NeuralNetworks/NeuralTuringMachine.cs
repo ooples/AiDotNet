@@ -2078,6 +2078,17 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     /// <param name="expectedOutput">The expected output tensor.</param>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Issue #1670: force full parameter materialization before the first training
+        // step. NTM's DenseLayers initialize LAZILY (on first Forward); when training
+        // is driven from an already-warmed-but-not-fully-materialized state (e.g. an
+        // eval Predict probe materialized only part of the graph), the optimizer's
+        // parameter collection on the first step can race the remaining lazy init,
+        // making the trained trajectory non-deterministic run-to-run (~10% flake on
+        // MoreData_ShouldNotDegrade). Reading GetParameters() here forces every layer
+        // to resolve deterministically (seeds are wired at construction) BEFORE the
+        // tape trainer collects them, eliminating the timing-dependent variance.
+        _ = GetParameters();
+
         // Handle 1D input/output: reshape to [1, features]
         if (input.Rank == 1) input = input.Reshape([1, input.Length]);
         if (expectedOutput.Rank == 1) expectedOutput = expectedOutput.Reshape([1, expectedOutput.Length]);
