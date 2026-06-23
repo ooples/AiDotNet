@@ -53,7 +53,8 @@ internal static class WhisperTimestampedProfile
         var model = options is null ? new WhisperTimestamped<T>(architecture) : new WhisperTimestamped<T>(architecture, options);
         ctorSw.Stop();
         long paramCount = 0;
-        try { paramCount = model.GetParameterCount(); } catch { /* fall through */ }
+        try { paramCount = model.GetParameterCount(); }
+        catch (Exception ex) { Console.WriteLine($"  (GetParameterCount failed: {ex.GetType().Name}: {ex.Message})"); }
         Console.WriteLine($"ctor          : {ctorSw.Elapsed.TotalSeconds,8:F3} s   params={paramCount:N0}  (~{paramCount * (double)bytes / 1e9:F2} GB {precision} weights)");
 
         var rng = new Random(42);

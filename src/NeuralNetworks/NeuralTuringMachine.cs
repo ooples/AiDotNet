@@ -366,14 +366,27 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     /// </summary>
     private void InitializeMemory()
     {
+        // Issue #1670: seed the initial-memory draw so NTM construction is
+        // REPRODUCIBLE under the test harness's seed (Architecture.RandomSeed,
+        // populated from DefaultRandomSeedOverride). The previous
+        // MathHelper.GetNormalRandom call drew from an unseeded global RNG, so
+        // the initial memory differed on every construction. That was harmless
+        // while training was a no-op, but once ForwardForTraining was routed
+        // onto the tape (training actually updates parameters now), the
+        // run-to-run memory variance made the training-trajectory invariants
+        // (MoreData_ShouldNotDegrade, TrainingError_ShouldNotExceedTestError)
+        // flake. Falls back to a time-seeded RNG in production (no architecture
+        // seed), preserving the original per-instance randomness there — the
+        // same seed/fallback contract the layer-weight initializers use.
+        var rng = Architecture.RandomSeed is int memSeed ? new Random(memSeed) : new Random();
         for (int m = 0; m < _memories.Count; m++)
         {
             for (int i = 0; i < _memorySize; i++)
             {
                 for (int j = 0; j < _memoryVectorSize; j++)
                 {
-                    // Initialize with values from normal distribution for better training stability
-                    _memories[m][i, j] = MathHelper.GetNormalRandom(NumOps.Zero, NumOps.FromDouble(0.1));
+                    // Normal(0, 0.1) via Box-Muller for better training stability.
+                    _memories[m][i, j] = NumOps.FromDouble(NextGaussian(rng, 0.0, 0.1));
                 }
             }
         }
@@ -390,6 +403,20 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
                 _initialMemoryTemplate[i, j] = v;
                 _initialMemoryTensor[i, j] = v;
             }
+    }
+
+    /// <summary>
+    /// Draws a sample from Normal(mean, stdDev) using the Box-Muller transform on a
+    /// caller-supplied (seedable) <see cref="Random"/>, so the initial-memory draw in
+    /// <see cref="InitializeMemory"/> is reproducible under a fixed seed (#1670).
+    /// </summary>
+    private static double NextGaussian(Random rng, double mean, double stdDev)
+    {
+        // 1 - NextDouble() keeps u1 in (0, 1] so Log(u1) is finite.
+        double u1 = 1.0 - rng.NextDouble();
+        double u2 = 1.0 - rng.NextDouble();
+        double standardNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+        return mean + stdDev * standardNormal;
     }
 
     /// <summary>
@@ -1320,24 +1347,28 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     /// <returns>A combined tensor of all outputs.</returns>
     private Tensor<T> CombineSequenceOutputs(List<Tensor<T>> outputs)
     {
+        if (outputs.Count == 0)
+            throw new ArgumentException("At least one output tensor is required.", nameof(outputs));
+
+        // Single-step: return the per-timestep [batch, outputSize] tensor as-is —
+        // it is already on the tape from ForwardTape.
+        if (outputs.Count == 1)
+            return outputs[0];
+
+        // Issue #1670: assemble the [batch, seq, outputSize] sequence with tape-aware
+        // ops. The earlier version allocated a fresh Tensor and copied values via scalar
+        // indexing, which SEVERS the autodiff tape — so multi-step (rank-3) sequence
+        // training became a silent no-op even after ForwardForTraining was routed to
+        // ForwardTape. Engine.Reshape (adds the seq axis) + Engine.TensorConcatenate
+        // (along that axis) keep every timestep's output connected to its parameters.
         int batchSize = outputs[0].Shape[0];
-        int sequenceLength = outputs.Count;
         int outputSize = outputs[0].Shape[1];
 
-        var combined = new Tensor<T>(new int[] { batchSize, sequenceLength, outputSize });
+        var expanded = new Tensor<T>[outputs.Count];
+        for (int t = 0; t < outputs.Count; t++)
+            expanded[t] = Engine.Reshape(outputs[t], [batchSize, 1, outputSize]);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int t = 0; t < sequenceLength; t++)
-            {
-                for (int o = 0; o < outputSize; o++)
-                {
-                    combined[b, t, o] = outputs[t][b, o];
-                }
-            }
-        }
-
-        return combined;
+        return Engine.TensorConcatenate(expanded, axis: 1);
     }
 
     /// <summary>
