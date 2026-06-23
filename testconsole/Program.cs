@@ -25,6 +25,8 @@ class Program
         ["nbeats-profile"]      = NBEATSProfile.Run,
         ["autoformer-profile"]  = AutoformerProfile.Run,
         ["resnet50-profile"]    = ResNet50Profile.Run,
+        ["whispertimestamped-profile"] = WhisperTimestampedProfile.Run,
+        ["whispertimestamped-profile-f32"] = WhisperTimestampedProfile.RunFloat,
         ["clone-diag"]          = CloneDiag.Run,
         ["ngboost-profile"]     = NGBoostProfile.Run,
         ["svc-profile"]         = SVCProfile.Run,

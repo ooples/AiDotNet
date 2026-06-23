@@ -181,6 +181,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // ModelFamilyTests/CodeModel runs the same architecture shape at smoke
         // scale (2 layers, 64 dim, 32 seq, 128 vocab, UseDataFlow=true).
         "GraphCodeBERT",
+
+        // WhisperTimestamped (Louradour 2023): production defaults mirror Whisper
+        // large-v3 (EncoderDim/DecoderDim=1280, 32+32 layers, NumHeads=20, vocab
+        // 51866 — ~631M params). Profiled (#1670, dotnet-trace + testconsole
+        // whispertimestamped-profile, AIDOTNET_DISABLE_GPU=1 to match CI): a single
+        // forward is ~2.4s in FLOAT but ~153s in DOUBLE (the fp64 CPU GEMM path is
+        // ~60-80x slower than fp32), and the generated scaffold runs `<double>`, so
+        // the 30-250-step training invariants blow the 120s CI budget. The native
+        // ctor sizes its stack from WhisperTimestampedOptions (not the architecture),
+        // so the auto-generator can't shrink it. The manual WhisperTimestampedTests
+        // scaffold in ModelFamilyTests/NeuralNetworks runs the same encoder/decoder +
+        // cross-attention architecture at reduced <float> scale (Janus/Donut precedent),
+        // exercising every code path in seconds.
+        "WhisperTimestamped",
     };
 
     // Attribute metadata names
@@ -1809,27 +1823,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "{ SampleRate = 16000, NumMels = 80, EncoderDim = 64, DecoderDim = 64, " +
                     "NumEncoderLayers = 1, NumDecoderLayers = 1, NumAttentionHeads = 4, " +
                     "VocabSize = 4, MaxTextLength = 8, DropoutRate = 0.0, ComputeType = \"float32\", BeamSize = 1 })";
-            }
-            else if (model.ClassName == "WhisperTimestamped" && model.TypeParameterCount == 1)
-            {
-                // WhisperTimestamped's production defaults mirror Whisper
-                // large-v3 (1280-wide, 32 encoder + 32 decoder layers, 51866
-                // vocab — ~1.5B params). The native ctor sizes its layer stack
-                // from WhisperTimestampedOptions, NOT from the architecture
-                // dims, so the architecture-only fallback below would build the
-                // full production model and the invariant scaffold's repeated
-                // CPU training steps hit the xUnit 120 s timeout before any
-                // assertion runs (#1670). Keep the same paper contract (log-mel
-                // sequence -> encoder/decoder + cross-attention stack ->
-                // per-frame vocabulary logits) at smoke-test width/depth/vocab.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 8, inputWidth: 80, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.SpeechRecognition.WhisperFamily.WhisperTimestampedOptions " +
-                    "{ SampleRate = 16000, NumMels = 80, EncoderDim = 64, DecoderDim = 64, " +
-                    "NumEncoderLayers = 1, NumDecoderLayers = 1, NumAttentionHeads = 4, " +
-                    "VocabSize = 4, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "JambaLanguageModel" && model.TypeParameterCount == 1)
             {
