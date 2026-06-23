@@ -757,8 +757,11 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// enabled and the active engine is a CUDA <c>DirectGpuTensorEngine</c>. Recording the whole
     /// forward into one graph keeps intermediates on-device, fuses kernels, overlaps streams, reuses
     /// buffers, and drops per-op host round-trips — the substrate a CUDA-graph capture replays.
-    /// Any failure (or a non-CUDA / unavailable engine) transparently falls back to the eager
-    /// <see cref="PredictNoise"/>, so correctness is never worse than the eager path.
+    /// A recoverable failure (or a non-CUDA / unavailable engine) transparently falls back to the
+    /// eager <see cref="PredictNoise"/> — but only failures that surface as exceptions are caught;
+    /// an op that is not yet deferred-correct can still silently produce wrong-but-finite output, so
+    /// this is NOT an unconditional "never worse than eager" guarantee (see
+    /// <see cref="DiffusionModelOptions{T}.UseGpuExecutionGraph"/>).
     /// </summary>
     protected Tensor<T> PredictNoiseStep(Tensor<T> noisySample, int timestep)
     {
@@ -767,7 +770,14 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
 
         var engine = AiDotNetEngine.Current as AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
         if (engine is null || !engine.IsGpuAvailable)
+        {
+            // Enabled but there is no CUDA engine to record into → this IS a fallback per the
+            // diagnostics contract (the "no GPU" case documented on
+            // DiffusionDeferredStepDiagnostics.FellBackCount), so count it rather than returning
+            // eager silently and undercounting non-CUDA fallbacks.
+            DiffusionDeferredStepDiagnostics.RecordFellBack();
             return PredictNoise(noisySample, timestep);
+        }
 
         try
         {

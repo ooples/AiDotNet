@@ -48,13 +48,16 @@ public class DiffusionGpuExecutionGraphCudaTests
     /// signal #1650 deferred: a not-yet-deferred-correct op in the UNet (conv / GroupNorm /
     /// attention) would either trip the fallback (executed==0) or diverge from eager here.
     /// </summary>
-    // Flip to true once AiDotNet consumes an AiDotNet.Tensors build whose deferred-execution-graph
-    // substrate (#642/#652) computes the DDPM UNet forward correctly. Verified on a GTX 1660 Ti with
-    // Tensors 0.102.3: the deferred graph EXECUTES every step (no fallback) but its denoise output
-    // diverges ~100% from the eager-GPU forward (maxAbsDiff ~2.1e3 vs magnitude ~2.0e3) — a Tensors
-    // substrate correctness bug, NOT this PR's wiring (materialising the result before scope dispose
-    // does not change it). Gated rather than left red so CI/GPU runs stay green; un-skip with the fix.
-    private const bool TensorsDeferredGraphFixed = false;
+    // RUNTIME gate (env var), NOT a compile-time const, so the test can be exercised on a CUDA box
+    // with a fixed AiDotNet.Tensors build WITHOUT a source edit: set AIDOTNET_TEST_DEFERRED_GRAPH=1.
+    // Default off because the current Tensors deferred-execution-graph substrate (#642/#652) computes
+    // the DDPM UNet forward incorrectly — verified on a GTX 1660 Ti with Tensors 0.102.3: the deferred
+    // graph EXECUTES every step (no fallback) but its denoise output diverges ~100% from the eager-GPU
+    // forward (maxAbsDiff ~2.1e3 vs magnitude ~2.0e3) — a Tensors substrate correctness bug, NOT this
+    // PR's wiring (materialising the result before scope dispose does not change it). Gated rather than
+    // left red so CI/GPU runs stay green; set the env var once consuming the fixed Tensors build.
+    private static bool TensorsDeferredGraphFixed =>
+        System.Environment.GetEnvironmentVariable("AIDOTNET_TEST_DEFERRED_GRAPH") == "1";
 
     [SkippableFact]
     public void Cuda_DeferredGraph_Denoise_MatchesEagerGpu_AndActuallyExecuted()
@@ -67,7 +70,7 @@ public class DiffusionGpuExecutionGraphCudaTests
         Skip.IfNot(TensorsDeferredGraphFixed,
             "Blocked on a Tensors deferred-execution-graph (#642/#652) correctness bug: the deferred " +
             "DDPM UNet denoise diverges ~100% from the eager-GPU forward (proven on a GTX 1660 Ti). " +
-            "Un-skip when consuming the fixed Tensors build.");
+            "Set AIDOTNET_TEST_DEFERRED_GRAPH=1 to run this once consuming a fixed Tensors build.");
 
         var previous = AiDotNetEngine.Current;
         try
@@ -118,9 +121,11 @@ public class DiffusionGpuExecutionGraphCudaTests
         }
         finally
         {
+            // Restore whatever engine was active before the test, THEN dispose the test's GPU engine.
+            // A trailing ResetToCpu() previously clobbered this restore — it forced CPU regardless of
+            // `previous`, polluting any subsequent test that expected the prior engine to remain active.
             AiDotNetEngine.Current = previous;
             gpu?.Dispose();
-            AiDotNetEngine.ResetToCpu();
         }
     }
 }

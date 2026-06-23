@@ -49,6 +49,7 @@ public class DiffusionModelOptions<T> : ModelOptions
         ClipSample = other.ClipSample;
         DefaultInferenceSteps = other.DefaultInferenceSteps;
         LossFunction = other.LossFunction;
+        UseGpuExecutionGraph = other.UseGpuExecutionGraph;
     }
 
     /// <summary>
@@ -160,27 +161,35 @@ public class DiffusionModelOptions<T> : ModelOptions
     public ILossFunction<T>? LossFunction { get; set; } = null;
 
     /// <summary>
-    /// Gets or sets whether each denoising-step noise prediction runs inside a GPU deferred
-    /// execution graph (device-resident, fused, multi-stream) instead of eager per-op dispatch.
-    /// Default <c>false</c> (opt-in).
+    /// Gets or sets whether each synchronous denoising-step noise prediction runs inside a GPU
+    /// deferred execution graph (device-resident, fused, multi-stream) instead of eager per-op
+    /// dispatch. Default <c>false</c> (opt-in).
     /// </summary>
+    /// <value><c>true</c> to record each synchronous denoising step into one fused GPU deferred
+    /// execution graph (CUDA <c>DirectGpuTensorEngine</c> only); <c>false</c> (the default) to use
+    /// eager per-op dispatch.</value>
     /// <remarks>
     /// <para>
-    /// When enabled AND the active engine is a CUDA <c>DirectGpuTensorEngine</c>, each
-    /// <see cref="Diffusion.DiffusionModelBase{T}.PredictNoise"/> call is recorded into one fused
-    /// GPU execution graph (AiDotNet.Tensors #642) — keeping intermediates on-device across the
-    /// forward, applying kernel fusion / multi-stream overlap / buffer reuse, and eliminating
-    /// per-op host round-trips. This is the substrate a CUDA-graph capture replays. On any failure
-    /// the step transparently falls back to the eager forward, so correctness is never worse than
-    /// the eager path.
+    /// When enabled AND the active engine is a CUDA <c>DirectGpuTensorEngine</c>, each SYNCHRONOUS
+    /// <see cref="Diffusion.DiffusionModelBase{T}.PredictNoise"/> call (the <c>Generate</c> path, via
+    /// <c>PredictNoiseStep</c>) is recorded into one fused GPU execution graph (AiDotNet.Tensors #642)
+    /// — keeping intermediates on-device across the forward, applying kernel fusion / multi-stream
+    /// overlap / buffer reuse, and eliminating per-op host round-trips. This is the substrate a
+    /// CUDA-graph capture replays.
     /// </para>
-    /// <para><b>Requires AiDotNet.Tensors with the #642 deferred-graph correctness fixes</b>
-    /// (GroupNorm arg-order, GroupNorm/InstanceNorm recording, FusedConv2D lazy download,
+    /// <para><b>Applies to synchronous generation only.</b> The asynchronous loop (<c>GenerateAsync</c>
+    /// → <c>PredictNoiseAsync</c>) routes through the compile host's async execution path and does NOT
+    /// consult this flag, so enabling it has no effect on <c>GenerateAsync</c>.</para>
+    /// <para><b>Correctness caveat — this is NOT an unconditional "never worse than eager" guarantee.</b>
+    /// A deferred forward that throws a recoverable exception transparently falls back to the eager
+    /// <see cref="Diffusion.DiffusionModelBase{T}.PredictNoise"/>, so <i>detected</i> failures are safe;
+    /// but an op that is not yet deferred-correct can silently produce wrong-but-finite output, which
+    /// the fallback CANNOT detect. <b>Requires AiDotNet.Tensors with the #642 deferred-graph correctness
+    /// fixes</b> (GroupNorm arg-order, GroupNorm/InstanceNorm recording, FusedConv2D lazy download,
     /// GPU-resident in-place activations). Until every op a given model's forward uses is verified
-    /// deferred-correct, leave this off — a not-yet-covered op could silently produce wrong-but-
-    /// finite output (which the eager fallback cannot detect). Validated end-to-end for the
-    /// GroupNorm→Swish→Conv ResBlock; attention / up- &amp; down-sampling / concat / projection paths
-    /// are pending the Tensors op-coverage audit.</para>
+    /// deferred-correct, leave this off. Validated end-to-end for the GroupNorm→Swish→Conv ResBlock;
+    /// attention / up- &amp; down-sampling / concat / projection paths are pending the Tensors
+    /// op-coverage audit.</para>
     /// <para><b>For Beginners:</b> a speed switch for GPU image/audio generation. Leave it off
     /// unless you've confirmed your model + Tensors version support it; when on, it makes the GPU
     /// do a whole denoising step as one batched job instead of hundreds of tiny ones.</para>
