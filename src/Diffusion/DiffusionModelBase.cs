@@ -774,9 +774,16 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// this is NOT an unconditional "never worse than eager" guarantee (see
     /// <see cref="DiffusionModelOptions{T}.UseGpuExecutionGraph"/>).
     /// </summary>
+    // #1650/#638: the predictor's own CUDA-graph STREAM capture (AIDOTNET_DIFFUSION_CUDA_GRAPH=1, handled inside
+    // PredictNoise) and the #642 deferred-recording scope are MUTUALLY EXCLUSIVE graph mechanisms on the same
+    // engine stream — running the deferred scope around a PredictNoise that itself stream-captures conflicts.
+    // When stream capture is on it SUPERSEDES the deferred scope, so skip the scope and let PredictNoise capture.
+    private static readonly bool s_predictorStreamCapture =
+        System.Environment.GetEnvironmentVariable("AIDOTNET_DIFFUSION_CUDA_GRAPH") == "1";
+
     protected Tensor<T> PredictNoiseStep(Tensor<T> noisySample, int timestep)
     {
-        if (!_options.UseGpuExecutionGraph)
+        if (!_options.UseGpuExecutionGraph || s_predictorStreamCapture)
             return PredictNoise(noisySample, timestep);
 
         var engine = AiDotNetEngine.Current as AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
@@ -792,7 +799,12 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
 
         try
         {
-            using var scope = engine.BeginDeferredScope();
+            // ExecuteEagerlyWhileRecording=true is REQUIRED for correctness: the RecordingGpuBackend overrides
+            // only a subset of ops, so non-overridden UNet ops (GroupNorm, reductions, upsample, concat) would
+            // otherwise execute eagerly mid-record reading not-yet-produced buffers → garbage (#1650/#642 trace-
+            // by-execution fix). Without it the deferred path silently produces wrong-but-finite denoising.
+            using var scope = engine.BeginDeferredScope(
+                new AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions { ExecuteEagerlyWhileRecording = true });
             if (scope is null)
             {
                 DiffusionDeferredStepDiagnostics.RecordFellBack();

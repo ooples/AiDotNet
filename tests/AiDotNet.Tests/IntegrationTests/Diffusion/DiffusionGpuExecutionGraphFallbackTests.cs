@@ -73,4 +73,132 @@ public class DiffusionGpuExecutionGraphFallbackTests
         // not-yet-audited GPU graph path on a CUDA box.
         Assert.False(new DiffusionModelOptions<float>().UseGpuExecutionGraph);
     }
+
+    /// <summary>
+    /// CUDA-hardware verification of the GPU deferred-execution-graph denoising path (the audit the original
+    /// #1650 draft deferred). Runs ONLY when a CUDA <c>DirectGpuTensorEngine</c> is the active engine
+    /// (set AIDOTNET_DIRECTGPU_BACKENDS=cuda); skipped (no-op pass) on CPU/CI so it never turns CI red.
+    /// Proves (1) the deferred-graph output matches eager GPU output to float tolerance — so every UNet op
+    /// (attention, up/down-sample, concat, projection, ResBlocks) is deferred-correct — and (2) the deferred
+    /// path engaged for EVERY step (no silent eager fallback that would mask an incorrect op).
+    /// </summary>
+    [Fact(Timeout = 300000)]
+    public async Task UseGpuExecutionGraph_OnCuda_MatchesEagerOutput_AndGraphEngagedEveryStep()
+    {
+        await Task.Yield();
+
+        void Log(string s) { try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet_diff1650.txt"), s + System.Environment.NewLine); } catch { } }
+
+        // The AiDotNet test harness defaults to CpuEngine; explicitly auto-detect/activate the GPU so this
+        // test actually exercises the CUDA deferred path (set AIDOTNET_DIRECTGPU_BACKENDS=cuda to constrain
+        // to CUDA). Save/restore Current so we don't perturb other tests.
+        var prevEngine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        try
+        {
+            // Directly construct + adopt the DirectGpu (CUDA) engine. AutoDetect's correctness PROBE can
+            // reject a working GPU in some harness configs; this test IS its own correctness gate, so adopt
+            // the engine whenever SupportsGpu and verify directly. Set AIDOTNET_DIRECTGPU_BACKENDS=cuda.
+            bool isCuda = false;
+            try
+            {
+                var ge = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine();
+                Log($"DirectGpu ctor: SupportsGpu={ge.SupportsGpu} Name={ge.Name}");
+                if (ge.SupportsGpu)
+                {
+                    AiDotNet.Tensors.Engines.AiDotNetEngine.Current = ge;
+                    isCuda = true;
+                }
+            }
+            catch (System.Exception ex) { Log($"DirectGpu ctor FAILED: {ex.GetType().Name}: {ex.Message}"); }
+            if (!isCuda)
+                return; // CPU/CI: skip — the deferred GPU path only exists on CUDA hardware.
+
+            const int seed = 42;
+            const int steps = 4;
+            // MUST match the default UNet (channels=3 RGB, imageSize=32) — a mismatched channel count makes
+            // PredictNoise return a zero-noise fallback that never runs the UNet (records 0 ops). The original
+            // [1,4,8,8] silently hit that fallback, which is why nothing recorded.
+            var shape = new[] { 1, 3, 32, 32 };
+
+            // ONE model instance, flag toggled between the two Generate() calls. Two separate same-seed
+            // instances do NOT produce identical weights (instance/global-state seeding differences), so
+            // comparing two instances tests nothing. The same instance with the flag flipped isolates the
+            // deferred path exactly: identical weights + same compiled plan, only UseGpuExecutionGraph differs.
+            var opts = Options(useGpuExecutionGraph: false);
+            var model = new DDPMModel<float>(architecture: null, options: opts, seed: seed);
+
+            var eagerOutput = model.Generate(shape, numInferenceSteps: steps, seed: seed); // flag OFF
+
+            // The predictor's CUDA-graph STREAM capture (#1650/#638, AIDOTNET_DIFFUSION_CUDA_GRAPH=1) is the
+            // canonical, faster path; it SUPERSEDES the #642 deferred-recording scope (PredictNoiseStep skips the
+            // scope when it's on — mutual exclusion). So the deferred-scope diagnostics are exercised only when
+            // the env is OFF; the correctness check (1) runs for BOTH and proves whichever GPU-graph path is
+            // active matches eager.
+            bool predictorStreamCapture =
+                System.Environment.GetEnvironmentVariable("AIDOTNET_DIFFUSION_CUDA_GRAPH") == "1";
+
+            DiffusionDeferredStepDiagnostics.Reset();
+            opts.UseGpuExecutionGraph = true; // flip the SAME instance onto the GPU graph path
+            var graphOutput = model.Generate(shape, numInferenceSteps: steps, seed: seed); // flag ON
+            Log($"after graph.Generate: executed={DiffusionDeferredStepDiagnostics.ExecutedCount} fellBack={DiffusionDeferredStepDiagnostics.FellBackCount} predictorCapture={predictorStreamCapture}");
+            { var n = System.Math.Min(8, eagerOutput.Length); var sb = new System.Text.StringBuilder();
+              for (int i = 0; i < n; i++) sb.Append($"[{i}] eager={eagerOutput[i]:F4} graph={graphOutput[i]:F4}  ");
+              Log("SAMPLES: " + sb.ToString()); }
+
+            if (!predictorStreamCapture)
+            {
+                // (2) Coverage for the #642 deferred-scope path: it engaged for EVERY step, NO eager fallback —
+                // so the correctness check below actually exercises the GPU graph (not a masked fallback to eager).
+                Assert.Equal(0L, DiffusionDeferredStepDiagnostics.FellBackCount);
+                Assert.Equal((long)steps, DiffusionDeferredStepDiagnostics.ExecutedCount);
+            }
+
+            // (1) Correctness: GPU-graph output == eager GPU output to float tolerance (fusion / reduction
+            // ordering differs at the last ULPs; a not-graph-correct op would diverge far beyond this).
+            Assert.Equal(eagerOutput.Shape, graphOutput.Shape);
+            Assert.Equal(eagerOutput.Length, graphOutput.Length);
+            double maxAbsDiff = 0;
+            for (int i = 0; i < eagerOutput.Length; i++)
+                maxAbsDiff = System.Math.Max(maxAbsDiff, System.Math.Abs((double)eagerOutput[i] - graphOutput[i]));
+            Log($"RAN ON CUDA: executed={DiffusionDeferredStepDiagnostics.ExecutedCount} fellBack={DiffusionDeferredStepDiagnostics.FellBackCount} maxAbsDiff={maxAbsDiff:E4}");
+            Assert.True(maxAbsDiff < 1e-3,
+                $"GPU-graph denoising diverged from eager GPU output: maxAbsDiff={maxAbsDiff:E4} (expected < 1e-3) "
+              + "— an op in the UNet forward is not graph-correct.");
+        }
+        finally
+        {
+            AiDotNet.Tensors.Engines.AiDotNetEngine.Current = prevEngine;
+        }
+    }
+
+    // #1650/#638 speedup measurement: run a long denoising on CUDA with the predictor's CUDA-graph capture
+    // (AIDOTNET_DIFFUSION_CUDA_GRAPH=1). The RIG logs per-step EAGER (warmup) vs REPLAY (cuGraphLaunch) timings
+    // (AIDOTNET_INFGRAPH_TIMING=1); raise AIDOTNET_INFGRAPH_WARMUP for more eager baseline samples. Skips off CUDA.
+    [Fact(Timeout = 300000)]
+    public async Task GpuGraph_Timing_ReplayVsEager_OnCuda()
+    {
+        await Task.CompletedTask;
+        var prevEngine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        try
+        {
+            bool isCuda = false;
+            try
+            {
+                var ge = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine();
+                if (ge.SupportsGpu) { AiDotNet.Tensors.Engines.AiDotNetEngine.Current = ge; isCuda = true; }
+            }
+            catch { }
+            if (!isCuda) return;
+
+            const int seed = 42;
+            var shape = new[] { 1, 3, 32, 32 };
+            var model = new DDPMModel<float>(architecture: null, options: Options(useGpuExecutionGraph: true), seed: seed);
+            var outp = model.Generate(shape, numInferenceSteps: 40, seed: seed);
+            Assert.Equal(shape[1] * shape[2] * shape[3], outp.Length);
+        }
+        finally
+        {
+            AiDotNet.Tensors.Engines.AiDotNetEngine.Current = prevEngine;
+        }
+    }
 }
