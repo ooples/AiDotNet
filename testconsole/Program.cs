@@ -27,6 +27,7 @@ class Program
         ["resnet50-profile"]    = ResNet50Profile.Run,
         ["whispertimestamped-profile"] = WhisperTimestampedProfile.Run,
         ["whispertimestamped-profile-f32"] = WhisperTimestampedProfile.RunFloat,
+        ["ntm-determinism-probe"] = NtmDeterminismProbe.Run,
         ["clone-diag"]          = CloneDiag.Run,
         ["ngboost-profile"]     = NGBoostProfile.Run,
         ["svc-profile"]         = SVCProfile.Run,
