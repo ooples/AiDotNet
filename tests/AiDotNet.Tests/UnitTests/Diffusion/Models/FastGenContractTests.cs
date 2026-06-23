@@ -11,6 +11,11 @@ namespace AiDotNet.Tests.UnitTests.Diffusion.Models;
 /// <summary>
 /// Contract tests for Phases 4, 6, and 7: T2I models, fast generation, schedulers, and VAEs.
 /// </summary>
+// Shares one xUnit collection with NewConditionerContractTests so the two classes' tests run
+// sequentially (tests within a collection never run in parallel). The foundation-scale FLUX/MMDiT
+// round-trip + clone tests materialize multi-GB FP32 models; serializing keeps at most one resident
+// at a time so the 16 GB CI runner does not OOM under parallel execution.
+[Collection("DiffusionFoundationScaleSerial")]
 public class FastGenContractTests : DiffusionUnitTestBase
 {
     #region Phase 4 — New T2I Models
@@ -565,15 +570,19 @@ public class FastGenContractTests : DiffusionUnitTestBase
         Assert.Equal(model.ParameterCount, (int)clone.ParameterCount);
     }
 
-    [Fact(Timeout = 120000)]
+    // FP32 (production-canonical for FLUX): a materialized ~12B-param FluxSchnell at FP64 would dwarf
+    // the 16 GB CI runner. Clone is lazy-preserving (a never-forwarded model materializes nothing), so
+    // this stays cheap; the timeout is a generous foundation-scale ceiling.
+    [Fact(Timeout = 600000)]
     public async Task FluxSchnellModel_Clone_CreatesIndependentCopy()
     {
-        var model = new FluxSchnellModel<double>();
+        var model = new FluxSchnellModel<float>();
         var clone = model.Clone();
 
         Assert.NotNull(clone);
         Assert.NotSame(model, clone);
-        Assert.Equal(model.ParameterCount, (int)clone.ParameterCount);
+        // Compare as long: FluxSchnell exceeds int.MaxValue parameters, so an (int) cast would overflow.
+        Assert.Equal(model.ParameterCount, clone.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
@@ -607,82 +616,20 @@ public class FastGenContractTests : DiffusionUnitTestBase
         Assert.Equal(parameters.Length, retrieved.Length);
     }
 
-    [Fact(Timeout = 120000)]
+    // FP32 (production-canonical) so a materialized foundation-scale model fits the 16 GB CI runner —
+    // FP64 (~34 GB) would OOM; serialized via the collection so only one foundation-scale model is
+    // resident at a time. Timeout sized for a streaming round-trip over billions of parameters.
+    [Fact(Timeout = 600000)]
     public async Task Flux2Model_GetSetParameters_RoundTrips()
     {
         await Task.Yield();
-        var model = new Flux2Model<double>();
+        var model = new Flux2Model<float>();
 
-        // Flux 2 is foundation-scale (>2.1B params): a flat GetParameters()/SetParameters() round-trip
-        // overflows Vector<T>.Length's int contract and OOMs the host. Round-trip through the streaming
-        // chunk API (#1624) instead, which never materializes a flat aggregate. This asserts the same
-        // contract — SetParameterChunks ACTUALLY writes the values it is given — one chunk in flight at
-        // a time. We feed DETERMINISTIC replacement chunks (distinct from the model's current weights)
-        // so a no-op setter cannot pass: the assertion checks the read-back equals what we wrote.
-        static int[] ShapeToArray(Tensor<double> t)
-        {
-            var s = t.Shape;
-            var dims = new int[s.Length];
-            for (int i = 0; i < s.Length; i++) dims[i] = s[i];
-            return dims;
-        }
-
-        long total = 0;
-        var shapes = new List<int[]>();
-        foreach (var chunk in model.GetParameterChunks())
-        {
-            shapes.Add(ShapeToArray(chunk));
-            total += chunk.Length;
-        }
-        Assert.True(total > 0);
-        Assert.True(shapes.Count > 0);
-
-        // Build replacement chunks shaped like the model's, filled with a deterministic ramp keyed off a
-        // running global index so every element across every chunk is distinct and reproducible.
-        Tensor<double> MakeReplacement(int[] shape, long startIndex)
-        {
-            int len = 1;
-            foreach (var d in shape) len *= d;
-            var data = new double[len];
-            for (int i = 0; i < len; i++)
-                data[i] = ((startIndex + i) % 997) * 0.001 - 0.5; // bounded, distinct, non-trivial
-            return new Tensor<double>(shape, new Vector<double>(data));
-        }
-
-        IEnumerable<Tensor<double>> ReplacementChunks()
-        {
-            long start = 0;
-            foreach (var shape in shapes)
-            {
-                yield return MakeReplacement(shape, start);
-                int len = 1;
-                foreach (var d in shape) len *= d;
-                start += len;
-            }
-        }
-
-        model.SetParameterChunks(ReplacementChunks());
-
-        // Read the parameters back and assert they equal the deterministic values we wrote — a no-op
-        // (or partial) setter would leave the original random weights and fail here.
-        long retrieved = 0;
-        long globalIndex = 0;
-        int chunkIdx = 0;
-        foreach (var chunk in model.GetParameterChunks())
-        {
-            Assert.Equal(shapes[chunkIdx], ShapeToArray(chunk));
-            var v = chunk.ToVector();
-            for (int i = 0; i < v.Length; i++)
-            {
-                double expected = ((globalIndex + i) % 997) * 0.001 - 0.5;
-                Assert.Equal(expected, v[i], 10);
-            }
-            globalIndex += v.Length;
-            retrieved += chunk.Length;
-            chunkIdx++;
-        }
-        Assert.Equal(total, retrieved);
-        Assert.Equal(shapes.Count, chunkIdx);
+        // Flux 2 is foundation-scale: a flat GetParameters()/SetParameters() round-trip overflows the
+        // int-bounded Vector<T>/List<T> length and OOMs. The allocation-free streaming chunk API (#1624)
+        // yields the resident weight tensors by reference, so the round-trip never builds a flat
+        // aggregate; AssertParameterChunksRoundTrip writes/reads them in place.
+        AssertParameterChunksRoundTrip(model.GetParameterChunks, model.SetParameterChunks);
     }
 
     #endregion

@@ -140,10 +140,14 @@ public class FluxSchnellModel<T> : LatentDiffusionModelBase<T>
     public override IDiffusionModel<T> Clone()
     {
         var clone = new FluxSchnellModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
-        // Field-by-field clone — bypasses the int-bounded flat
-        // Vector<T> that GetParameters/SetParameters round-trip would
-        // require for ~12B FLUX-scale weights.
-        clone._predictor.SetParameters(_predictor.GetParameters());
+        // Scale-safe + lazy-preserving: only copy the foundation-scale (~12B-param FLUX) predictor's
+        // weights if it was actually forwarded. A never-forwarded model's weights are still lazy
+        // (unmaterialized), so there is nothing to copy and the clone stays lazy too — copying would
+        // pointlessly materialize the predictor twice (source + clone) and OOM. When a copy IS needed it
+        // streams per-tensor chunks (#1624), never the int-bounded flat Vector<T> that
+        // SetParameters(GetParameters()) builds (which threw "Array dimensions exceeded supported range").
+        if (_predictor.WasForwarded)
+            clone._predictor.SetParameterChunks(_predictor.GetParameterChunks());
         clone._vae.SetParameters(_vae.GetParameters());
         return clone;
     }

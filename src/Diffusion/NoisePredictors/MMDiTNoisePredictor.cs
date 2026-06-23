@@ -1195,16 +1195,27 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         yield return _outputProj;
     }
 
+    /// <summary>
+    /// True once this predictor has run at least one forward pass (its lazy weights are materialized).
+    /// A never-forwarded foundation-scale model has nothing materialized to copy, so callers (e.g. a
+    /// wrapping model's <c>Clone</c>) can skip the multi-GB parameter copy entirely and stay lazy.
+    /// </summary>
+    public bool WasForwarded => _patchEmbed.IsInitialized;
+
     /// <inheritdoc />
     public override IEnumerable<Tensor<T>> GetParameterChunks()
     {
-        // #1624: one chunk per layer in the canonical MMDiTLayerSequence order, so the flat
-        // concatenation is index-identical to GetParameters without materializing the full
-        // multi-billion-parameter aggregate that overflows/OOMs at default size.
+        // #1624 zero-copy: materialize each layer's lazy weights, then yield its resident trainable
+        // tensors BY REFERENCE — one chunk per tensor, in canonical MMDiTLayerSequence × GetTrainable
+        // order — instead of concatenating each layer's params into a transient multi-GB Vector<T>
+        // (which GC-thrashes/OOMs at >2.1B FLUX/MMDiT scale). Consumers (Clone, LatentDiffusionModelBase)
+        // pair Get/SetParameterChunks and count chunks dynamically, so per-tensor framing is consistent.
         foreach (var layer in MMDiTLayerSequence())
         {
-            var p = layer.GetParameters();
-            if (p.Length > 0) yield return new Tensor<T>(new[] { p.Length }, p);
+            if (layer is not LayerBase<T> lb) continue;
+            lb.MaterializeParameters();
+            foreach (var t in lb.GetTrainableParameters())
+                if (t.Length > 0) yield return t;
         }
     }
 
@@ -1214,16 +1225,30 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         using var e = chunks.GetEnumerator();
         foreach (var layer in MMDiTLayerSequence())
         {
-            if (layer.ParameterCount == 0) continue;
-            if (!e.MoveNext())
-                throw new System.ArgumentException(
-                    "SetParameterChunks received fewer chunks than MMDiT has parameterized layers.",
-                    nameof(chunks));
-            layer.SetParameters(e.Current.ToVector());
+            if (layer is not LayerBase<T> lb) continue;
+            lb.MaterializeParameters();
+            var dst = lb.GetTrainableParameters();
+            // Pull one chunk per non-empty trainable tensor and copy the values IN PLACE
+            // (CopyTrainableParametersFrom: no rebinding — which would alias clone↔source — and no flat
+            // aggregate). Empty slots stay aligned to keep the per-tensor index identical to the getter.
+            bool anyNonEmpty = false;
+            foreach (var t in dst) if (t.Length > 0) { anyNonEmpty = true; break; }
+            if (!anyNonEmpty) continue;
+            var incoming = new Tensor<T>[dst.Count];
+            for (int i = 0; i < dst.Count; i++)
+            {
+                if (dst[i].Length == 0) { incoming[i] = dst[i]; continue; }
+                if (!e.MoveNext())
+                    throw new System.ArgumentException(
+                        "SetParameterChunks received fewer chunks than MMDiT has parameter tensors.",
+                        nameof(chunks));
+                incoming[i] = e.Current;
+            }
+            lb.CopyTrainableParametersFrom(incoming);
         }
         if (e.MoveNext())
             throw new System.ArgumentException(
-                "SetParameterChunks received more chunks than MMDiT has parameterized layers.",
+                "SetParameterChunks received more chunks than MMDiT has parameter tensors.",
                 nameof(chunks));
     }
 

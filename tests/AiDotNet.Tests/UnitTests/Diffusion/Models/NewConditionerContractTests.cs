@@ -13,6 +13,9 @@ namespace AiDotNet.Tests.UnitTests.Diffusion.Models;
 /// matching the PyTorch convention where model construction and tokenizer loading are
 /// separate concerns.
 /// </summary>
+// Shares one xUnit collection with FastGenContractTests so the two classes' foundation-scale FP32
+// round-trip tests run sequentially (one multi-GB model resident at a time → no 16 GB CI OOM).
+[Collection("DiffusionFoundationScaleSerial")]
 public class NewConditionerContractTests : DiffusionUnitTestBase
 {
     #region Text Conditioner Constructor Tests
@@ -111,30 +114,25 @@ public class NewConditionerContractTests : DiffusionUnitTestBase
 
     #region Parameterizable Contract Tests
 
-    [Fact(Timeout = 120000)]
+    // FP32 (production-canonical) so a materialized foundation-scale predictor fits the 16 GB CI runner;
+    // serialized via the collection so only one is resident at a time. The allocation-free streaming
+    // chunk API (#1624) yields the resident weight tensors by reference — a flat GetParameters() instead
+    // builds a List<T> that exceeds the max array element count ("Array dimensions exceeded supported
+    // range") at >2.1B parameters.
+    [Fact(Timeout = 600000)]
     public async Task MMDiTXNoisePredictor_GetSetParameters_RoundTrips()
     {
-        var predictor = new MMDiTXNoisePredictor<double>();
-
-        var parameters = predictor.GetParameters();
-        Assert.True(parameters.Length > 0);
-
-        predictor.SetParameters(parameters);
-        var retrieved = predictor.GetParameters();
-        Assert.Equal(parameters.Length, retrieved.Length);
+        await Task.Yield();
+        var predictor = new MMDiTXNoisePredictor<float>();
+        AssertParameterChunksRoundTrip(predictor.GetParameterChunks, predictor.SetParameterChunks);
     }
 
-    [Fact(Timeout = 120000)]
+    [Fact(Timeout = 600000)]
     public async Task FluxDoubleStreamPredictor_GetSetParameters_RoundTrips()
     {
-        var predictor = new FluxDoubleStreamPredictor<double>();
-
-        var parameters = predictor.GetParameters();
-        Assert.True(parameters.Length > 0);
-
-        predictor.SetParameters(parameters);
-        var retrieved = predictor.GetParameters();
-        Assert.Equal(parameters.Length, retrieved.Length);
+        await Task.Yield();
+        var predictor = new FluxDoubleStreamPredictor<float>();
+        AssertParameterChunksRoundTrip(predictor.GetParameterChunks, predictor.SetParameterChunks);
     }
 
     [Fact(Timeout = 120000)]
