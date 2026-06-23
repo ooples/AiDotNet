@@ -174,6 +174,29 @@ public class DiffusionResBlock<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Propagates eval/training mode to the block's nested sublayers.
+    /// </summary>
+    /// <remarks>
+    /// LayerBase.SetTrainingMode only walks RegisterSubLayer-registered children, which
+    /// this block never populates (its sublayers are private fields), so without this
+    /// override <c>model.SetTrainingMode(false)</c> would never reach the convolutions —
+    /// leaving them on the allocating tape/training Forward branch (Conv2D + CPU
+    /// broadcast-add) during inference instead of the zero-alloc, GPU-resident inference
+    /// fast path (Conv2DInto + in-place bias). Mirrors PyTorch <c>nn.Module.train(mode)</c>
+    /// walking <c>self.children()</c> recursively.
+    /// </remarks>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        _norm1.SetTrainingMode(isTraining);
+        _conv1.SetTrainingMode(isTraining);
+        _timeMlp.SetTrainingMode(isTraining);
+        _norm2.SetTrainingMode(isTraining);
+        _conv2.SetTrainingMode(isTraining);
+        _skipConv?.SetTrainingMode(isTraining);
+    }
+
+    /// <summary>
     /// Declares named input ports. When <c>timeEmbedDim &gt; 0</c> this
     /// block accepts a second <c>time_embed</c> input alongside the
     /// feature-map <c>input</c>.
