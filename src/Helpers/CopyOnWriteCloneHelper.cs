@@ -102,7 +102,16 @@ internal static class CopyOnWriteCloneHelper
             // Absolute backstop: a pathologically deep/cyclic object graph that the visited-set could
             // not bound. Returning an empty list makes TryShareTrainableParameters fall back to the
             // eager flat copy (always correct, just not COW-shared) instead of risking a host stack
-            // overflow. With the leaf-skips below this is unreachable for every real model graph.
+            // overflow. With the leaf-skips below this is unreachable for every real model graph — so a
+            // trip is a genuine regression signal (a new self-regenerating field type), NOT a routine
+            // event. Surface it via Trace (observable in Release; the codebase's existing diagnostic
+            // idiom) rather than swallowing it silently, otherwise the COW-disabling fallback would
+            // quietly reintroduce the large-Clone() OOM pressure (#1624) with zero observability.
+            System.Diagnostics.Trace.TraceWarning(
+                $"CopyOnWriteCloneHelper: trainable-layer walk for '{root.GetType().FullName}' exceeded " +
+                $"MaxWalkDepth ({MaxWalkDepth}) and fell back to the eager Clone copy. This is expected to " +
+                "be unreachable — investigate a newly-introduced self-regenerating field type in the model " +
+                "object graph (the #1669 failure class).");
             layers.Clear();
         }
         return layers;
@@ -110,11 +119,12 @@ internal static class CopyOnWriteCloneHelper
 
     /// <summary>
     /// Hard ceiling on the reflective walk's recursion depth. Real model object graphs nest only a few
-    /// dozen levels; this guard exists purely so a previously-unseen self-regenerating field type can
-    /// never stack-overflow the test host (the failure mode behind #1669). It is set far above any
-    /// legitimate depth so it never trips for a real model.
+    /// dozen levels, so this is a conservative ~5–10× margin above any legitimate depth: it never trips
+    /// for a real model, yet caps frames well short of a host stack overflow. The guard exists purely as
+    /// a fail-safe so a previously-unseen self-regenerating field type can never stack-overflow the test
+    /// host (the failure mode behind #1669) before the pointer/leaf skips below intercept it.
     /// </summary>
-    private const int MaxWalkDepth = 1024;
+    private const int MaxWalkDepth = 256;
 
     private sealed class CollectDepthExceededException : System.Exception { }
 
