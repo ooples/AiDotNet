@@ -33,4 +33,28 @@ public static class InferenceArenaSettings
             Environment.GetEnvironmentVariable("AIDOTNET_INFERENCE_ARENA"),
             "0",
             StringComparison.Ordinal);
+
+    /// <summary>
+    /// Whether the multi-step diffusion denoise loop (<c>DiffusionModelBase.Generate</c>) opens a
+    /// per-step <c>TensorArena</c>. Default <c>OFF</c> — distinct from the single-shot
+    /// <see cref="Enabled"/> Predict funnel, which is bit-identical and safe.
+    /// </summary>
+    /// <remarks>
+    /// The denoise loop is NOT arena-safe: diffusion forward layers hold <em>cross-forward</em>
+    /// cached tensors (e.g. <c>DiffusionResBlock</c>'s pre-allocated GroupNorm output buffer, and
+    /// attention reshape scratch) that are first allocated <em>inside</em> the arena scope. The
+    /// per-step <c>arena.Reset()</c> then recycles that memory, so a later step's allocation aliases
+    /// a still-referenced cached buffer and corrupts its shape/data — observed as a downsample conv
+    /// output emerging with a stale <c>[B, H*W, C]</c> attention layout, surfacing downstream as
+    /// "Input has N channels but layer expects M" (and, when it corrupts the shared pool, a native
+    /// host crash). Single-step <c>Predict</c> never hits this because there is no second step to
+    /// recycle into. Re-enable ONLY after the diffusion layer caches are made arena-safe
+    /// (GC-allocated, or pinned across <c>Reset()</c>). Opt in with
+    /// <c>AIDOTNET_INFERENCE_ARENA_DIFFUSION=1</c>.
+    /// </remarks>
+    public static bool DiffusionDenoiseEnabled { get; set; } =
+        string.Equals(
+            Environment.GetEnvironmentVariable("AIDOTNET_INFERENCE_ARENA_DIFFUSION"),
+            "1",
+            StringComparison.Ordinal);
 }
