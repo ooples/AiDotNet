@@ -1026,11 +1026,14 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         });
     }
 
-    /// <inheritdoc/>
-    public override Tensor<T> ForwardForTraining(Tensor<T> input)
-    {
-        return Predict(input);
-    }
+    // Issue #1670: do NOT override ForwardForTraining to call Predict. With the
+    // inference arena enabled by default, Predict copies its result out via
+    // DetachFromArena (new Tensor(output.ToArray())), which SEVERS the gradient
+    // tape — the loss then has no path back to any parameter and training is a
+    // silent no-op. This model's forward is a plain sequential layer stack
+    // (see PredictCore), which is exactly what the tape-preserving base
+    // NeuralNetworkBase.ForwardForTraining already does, so the override is
+    // removed and the base (correct) implementation is used.
 
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
