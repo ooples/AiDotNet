@@ -614,6 +614,18 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
             // Use default layer configuration if no layers are provided
             Layers.AddRange(LayerHelper<T>.CreateDefaultNTMLayers(Architecture, _memorySize, _memoryVectorSize, _controllerSize));
         }
+
+        // Issue #1670: wire the architecture seed into every layer NOW, at
+        // construction — not lazily on the first training forward. NTM's
+        // DenseLayers initialize their weights LAZILY (on first Forward) via the
+        // RandomSeed-honoring InitializeParameters path. The training-trajectory
+        // invariants (MoreData_ShouldNotDegrade) probe the network with an EVAL
+        // Predict() BEFORE the first Train(), and the eval path doesn't wire
+        // seeds — so without this the weights initialized unseeded (then got
+        // cloned), making the borderline cross-task comparison flip run-to-run.
+        // Wiring here makes lazy init deterministic regardless of whether eval or
+        // training runs first. No-op in production (no architecture seed).
+        EnsureLayerRandomSeedsWired();
     }
 
     /// <summary>
