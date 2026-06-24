@@ -1,0 +1,82 @@
+<Solution>
+  <Folder Name="/advanced/">
+    <Project Path="advanced/MetaLearning/MetaLearning.csproj" />
+  </Folder>
+  <Folder Name="/advanced/DistributedTraining/">
+    <Project Path="advanced/DistributedTraining/DDP/DDP.csproj" />
+    <Project Path="advanced/DistributedTraining/FSDP/FSDP.csproj" />
+  </Folder>
+  <Folder Name="/advanced/SelfSupervisedLearning/">
+    <Project Path="advanced/SelfSupervisedLearning/SimCLR/SimCLR.csproj" />
+  </Folder>
+  <Folder Name="/audio/">
+    <Project Path="audio/TextToSpeech/TextToSpeech.csproj" />
+  </Folder>
+  <Folder Name="/audio/SpeechRecognition/">
+    <Project Path="audio/SpeechRecognition/Whisper/Whisper.csproj" />
+  </Folder>
+  <Folder Name="/classification/" />
+  <Folder Name="/classification/BinaryClassification/">
+    <Project Path="classification/BinaryClassification/SentimentAnalysis/SentimentAnalysis.csproj" />
+    <Project Path="classification/BinaryClassification/SpamDetection/SpamDetection.csproj" />
+  </Folder>
+  <Folder Name="/classification/MultiClassification/">
+    <Project Path="classification/MultiClassification/IrisClassification/IrisClassification.csproj" />
+  </Folder>
+  <Folder Name="/clustering/">
+    <Project Path="clustering/AnomalyDetection/AnomalyDetection.csproj" />
+    <Project Path="clustering/CustomerSegmentation/CustomerSegmentation.csproj" />
+  </Folder>
+  <Folder Name="/computer-vision/">
+    <Project Path="computer-vision/ImageClassification/ImageClassification.csproj" />
+    <Project Path="computer-vision/OCR/OCR.csproj" />
+  </Folder>
+  <Folder Name="/computer-vision/ObjectDetection/">
+    <Project Path="computer-vision/ObjectDetection/YOLOv8Detection/YOLOv8Detection.csproj" />
+  </Folder>
+  <Folder Name="/deployment/">
+    <Project Path="deployment/ModelServing/ModelServing.csproj" />
+    <Project Path="deployment/Quantization/Quantization.csproj" />
+    <Project Path="deployment/TelcoChurnOnnxExport/TelcoChurnOnnxExport.csproj" />
+  </Folder>
+  <Folder Name="/end-to-end/">
+    <Project Path="end-to-end/ChatbotWithRAG/ChatbotWithRAG.csproj" />
+    <Project Path="end-to-end/ImageClassificationWebApp/ImageClassificationWebApp.csproj" />
+    <Project Path="end-to-end/SpeechAssistant/SpeechAssistant.csproj" />
+  </Folder>
+  <Folder Name="/getting-started/">
+    <Project Path="getting-started/BasicClassification/BasicClassification.csproj" />
+    <Project Path="getting-started/BasicRegression/BasicRegression.csproj" />
+    <Project Path="getting-started/HelloWorld/HelloWorld.csproj" />
+  </Folder>
+  <Folder Name="/llm-fine-tuning/">
+    <Project Path="llm-fine-tuning/LoRA/LoRA.csproj" />
+    <Project Path="llm-fine-tuning/QLoRA/QLoRA.csproj" />
+  </Folder>
+  <Folder Name="/nlp/">
+    <Project Path="nlp/Embeddings/Embeddings.csproj" />
+    <Project Path="nlp/TextClassification/TextClassification.csproj" />
+  </Folder>
+  <Folder Name="/nlp/RAG/">
+    <Project Path="nlp/RAG/BasicRAG/BasicRAG.csproj" />
+    <Project Path="nlp/RAG/GraphRAG/GraphRAG.csproj" />
+  </Folder>
+  <Folder Name="/regression/">
+    <Project Path="regression/DemandForecasting/DemandForecasting.csproj" />
+    <Project Path="regression/PricePrediction/PricePrediction.csproj" />
+  </Folder>
+  <Folder Name="/reinforcement-learning/">
+    <Project Path="reinforcement-learning/CartPole/CartPole.csproj" />
+    <Project Path="reinforcement-learning/DeepQLearning/DeepQLearning.csproj" />
+  </Folder>
+  <Folder Name="/time-series/">
+    <Project Path="time-series/AnomalyDetection/AnomalyDetection.csproj" />
+    <Project Path="time-series/Forecasting/Forecasting.csproj" />
+  </Folder>
+  <Folder Name="/video/">
+    <Project Path="video/VideoGeneration/VideoGeneration.csproj" />
+  </Folder>
+  <Project Path="../src/AiDotNet.csproj" />
+  <Project Path="../src/AiDotNet.Generators/AiDotNet.Generators.csproj" />
+  <Project Path="../src/AiDotNet.Serving/AiDotNet.Serving.csproj" />
+</Solution>
