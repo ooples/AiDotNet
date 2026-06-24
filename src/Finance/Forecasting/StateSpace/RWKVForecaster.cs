@@ -488,7 +488,7 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
         {
             current = current.Reshape(new[] { batchSize * seqLen, _numFeatures });
             current = _inputEmbedding.Forward(current);
-            current = current.Reshape(new[] { batchSize, seqLen, _modelDimension });
+            current = Engine.Reshape(current, new[] { batchSize, seqLen, _modelDimension });
         }
 
         // RWKV layers: [batch, seqLen, modelDim] -> [batch, seqLen, modelDim]
@@ -556,7 +556,7 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
         {
             current = current.Reshape(new[] { batchSize * seqLen, _numFeatures });
             current = _inputEmbedding.Forward(current);
-            current = current.Reshape(new[] { batchSize, seqLen, _modelDimension });
+            current = Engine.Reshape(current, new[] { batchSize, seqLen, _modelDimension });
             activations["InputEmbedding"] = current.Clone();
         }
 
