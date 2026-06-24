@@ -11,7 +11,7 @@ using Xunit;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class TinyBERTNERTests : TransformerNERTestBase
+public class TinyBERTNERTests : TransformerNERTestBase<float>
 {
     // TinyBERT overrides TransformerNEROptions.HiddenDimension to 312
     // (vs the 768 default used by BERT-base). The generator's default
@@ -26,9 +26,9 @@ public class TinyBERTNERTests : TransformerNERTestBase
     // inputSize:128 only surfaced via the serialize/deserialize Clone roundtrip — the first encoder
     // layer's input shape is recorded from the architecture, so deserialize resolved embeddingSize=128
     // (128 % 12 heads != 0) even though the live forward resolves 312 from the real input.
-    protected override INeuralNetworkModel<double> CreateNetwork()
-        => new TinyBERTNER<double>(
-            new NeuralNetworkArchitecture<double>(
+    protected override INeuralNetworkModel<float> CreateNetwork()
+        => new TinyBERTNER<float>(
+            new NeuralNetworkArchitecture<float>(
                 inputType: InputType.OneDimensional,
                 taskType: NeuralNetworkTaskType.Regression,
                 inputSize: 312,
