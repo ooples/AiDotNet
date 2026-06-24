@@ -156,7 +156,13 @@ public class FlagDiTPredictor<T> : NoisePredictorBase<T>
         {
             _attnNormPre[i] = new RMSNormalizationLayer<T>(_hiddenSize);
             _attnNormPost[i] = new RMSNormalizationLayer<T>(_hiddenSize);
-            _attn[i] = new GroupedQueryAttentionLayer<T>(_seqLen, _hiddenSize, _numHeads, _numKVHeads);
+            // deferAllocation: keep the GQA projection weights zero-sized until the first forward,
+            // matching the LazyDense FFN/adaLN layers above. Without this the 32-layer × 4096-hidden
+            // Flag-DiT stack eagerly allocates ~1.3 B attention weights in the constructor (#1671:
+            // DefaultConstruction >10 s timeout); the weight-streaming forward path materializes them
+            // on demand.
+            _attn[i] = new GroupedQueryAttentionLayer<T>(_seqLen, _hiddenSize, _numHeads, _numKVHeads,
+                deferAllocation: true);
             // RoPE: resolution-agnostic rotary position embedding (Su et al. 2021; Flag-DiT §3.1).
             _attn[i].ConfigurePositionalEncoding(PositionalEncodingType.Rotary, ropeTheta: 10000.0,
                 maxSequenceLength: System.Math.Max(_seqLen, 64));
