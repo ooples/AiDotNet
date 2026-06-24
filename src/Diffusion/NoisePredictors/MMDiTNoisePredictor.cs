@@ -261,7 +261,11 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         List<MMDiTSingleBlock>? customSingleBlocks)
     {
         var patchDim = _inputChannels * _patchSize * _patchSize;
-        var timeEmbedDim = _hiddenSize * 4;
+        // Faithful MMDiT/SD3: the timestep MLP outputs hidden_size and every joint/single block's AdaLN
+        // is Linear(hidden_size, k*hidden_size). An earlier 4*hidden_size here inflated each AdaLN
+        // (image + text + single) 4x — the dominant per-block parameter cost and a driver of the
+        // foundation-scale OOM (issue #1672). See DiTNoisePredictor for the same fix.
+        var timeEmbedDim = _hiddenSize;
 
         // Patch embedding: linear projection from flattened patch to hidden dim.
         // Use LazyDense so weight tensors stay unallocated until Forward() — full
