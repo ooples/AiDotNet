@@ -44,6 +44,47 @@ public abstract class NERModelTestBase<T> : NeuralNetworkModelTestBase<T>
         return tensor;
     }
 
+    /// <summary>
+    /// NER override of <see cref="NeuralNetworkModelTestBase{T}.Training_ShouldReduceLoss"/>.
+    /// The base measures the loss with <c>MeasureLoss(network, network.Predict(input), target)</c>.
+    /// For an NER model that is the WRONG quantity: <c>Predict</c> ARGMAX-DECODES the
+    /// <c>[seq, NumLabels]</c> emission scores down to discrete label IDs <c>[seq]</c>, and the
+    /// family's loss is CrossEntropyWithLogits — so the base ends up computing cross-entropy
+    /// over already-decoded integer label IDs (where raw logits are expected). That number is
+    /// meaningless and does not move with training, even though the model trains correctly on
+    /// real cross-entropy over the logits. We therefore measure the model's ACTUAL training
+    /// objective via <see cref="INeuralNetworkModel{T}.GetLastLoss"/> — the same source the
+    /// (passing) <c>LossStrictlyDecreasesOnMemorizationTask</c> uses — i.e. the loss the
+    /// optimizer is actually minimizing. (TinyBERTNER/TransformerNER #1679.)
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public override async Task Training_ShouldReduceLoss()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        using var network = CreateNetwork();
+        if (TrainingInvariantsNotApplicable(network)) return;
+        var input = CreateRandomTensor(InputShape, rng);
+        var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
+
+        // Baseline = the model's own loss after the first optimizer step.
+        network.Train(input, target);
+        double initialLoss = ConvertToDouble(network.GetLastLoss());
+
+        for (int i = 0; i < TrainingIterations * 3; i++)
+            network.Train(input, target);
+        double finalLoss = ConvertToDouble(network.GetLastLoss());
+
+        if (!double.IsNaN(initialLoss) && !double.IsNaN(finalLoss))
+        {
+            Assert.True(finalLoss <= initialLoss + TrainingLossReductionTolerance,
+                $"Training did not reduce the model's own loss (CrossEntropy over logits, via " +
+                $"GetLastLoss): initial={initialLoss:F6}, final={finalLoss:F6}. " +
+                "Gradient computation or parameter update may be broken.");
+        }
+    }
+
     // =====================================================
     // NER INVARIANT: Output Length Related to Input
     // NER models produce one label per token. Output length
