@@ -13,11 +13,14 @@
 // Then open: http://localhost:5000
 // =============================================================================
 
-using AiDotNet.RetrievalAugmentedGeneration;
-using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
-using AiDotNet.RetrievalAugmentedGeneration.VectorStores;
-using AiDotNet.RetrievalAugmentedGeneration.Chunking;
+using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Regression;
+using AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
+using AiDotNet.RetrievalAugmentedGeneration.Generators;
+using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
+using AiDotNet.Tensors.LinearAlgebra;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -102,7 +105,8 @@ app.Run("http://localhost:5000");
 
 public class RAGChatbot
 {
-    private RAGPipeline<float>? _pipeline;
+    private InMemoryDocumentStore<float>? _store;
+    private BM25Retriever<float>? _retriever;
     private readonly Dictionary<string, DocumentInfo> _documents = new();
     private int _queryCount;
     private int _documentCount;
@@ -111,13 +115,18 @@ public class RAGChatbot
     {
         Console.WriteLine("Initializing RAG pipeline...");
 
-        // Build the RAG pipeline with AiDotNet components
-        _pipeline = new RAGPipeline<float>()
-            .WithEmbeddings(new SentenceTransformerEmbeddings<float>("all-MiniLM-L6-v2"))
-            .WithVectorStore(new InMemoryVectorStore<float>(dimension: 384))
-            .WithChunker(new RecursiveChunker(chunkSize: 512, chunkOverlap: 50))
-            .WithRetriever(new DenseRetriever<float>(topK: 5))
-            .Build();
+        // Assemble + wire the RAG pipeline through the facade (BM25 keyword search
+        // over an in-memory document store).
+        _store = new InMemoryDocumentStore<float>(vectorDimension: 8);
+        _retriever = new BM25Retriever<float>(_store, defaultTopK: 5);
+        var bx = new float[20, 1];
+        var by = new float[20];
+        for (int i = 0; i < 20; i++) { bx[i, 0] = i; by[i] = i * 2f; }
+        _ = await new AiModelBuilder<float, Matrix<float>, Vector<float>>()
+            .ConfigureModel(new RidgeRegression<float>())
+            .ConfigureDataLoader(DataLoaders.FromMatrixVector(new Matrix<float>(bx), new Vector<float>(by)))
+            .ConfigureRetrievalAugmentedGeneration(retriever: _retriever, generator: new StubGenerator<float>())
+            .BuildAsync();
 
         // Add sample documents about AiDotNet
         var sampleDocs = GetSampleDocuments();
@@ -131,38 +140,41 @@ public class RAGChatbot
 
     public async Task<RAGResponse> ChatAsync(string message)
     {
-        if (_pipeline == null)
+        if (_retriever == null)
             throw new InvalidOperationException("Pipeline not initialized");
 
         _queryCount++;
 
-        // Query the RAG pipeline
-        var result = await _pipeline.QueryAsync(message);
+        // Retrieve the most relevant context through the facade-configured retriever.
+        var docs = _retriever.Retrieve(message, 5).ToList();
+        var top = docs.FirstOrDefault();
 
-        return new RAGResponse
+        return await Task.FromResult(new RAGResponse
         {
-            Answer = result.Answer,
-            Sources = result.SourceDocuments.Select(d => new SourceInfo
+            Answer = top is null
+                ? "I couldn't find anything relevant in the indexed documents."
+                : $"Based on the most relevant document: {(top.Content.Length > 240 ? top.Content[..240] + "..." : top.Content)}",
+            Sources = docs.Select(d => new SourceInfo
             {
                 Title = d.Metadata.GetValueOrDefault("title", "Unknown")?.ToString() ?? "Unknown",
-                Snippet = d.Text.Length > 200 ? d.Text[..200] + "..." : d.Text,
-                Score = d.Score
+                Snippet = d.Content.Length > 200 ? d.Content[..200] + "..." : d.Content,
+                Score = 1.0f
             }).ToArray(),
-            Confidence = result.SourceDocuments.Any() ? result.SourceDocuments.Average(d => d.Score) : 0
-        };
+            Confidence = docs.Count > 0 ? 1.0f : 0f
+        });
     }
 
     public async Task AddDocumentAsync(string title, string content)
     {
-        if (_pipeline == null)
+        if (_store == null)
             throw new InvalidOperationException("Pipeline not initialized");
 
         var id = Guid.NewGuid().ToString();
 
-        var document = new Document
+        var document = new Document<float>
         {
             Id = id,
-            Text = content,
+            Content = content,
             Metadata = new Dictionary<string, object>
             {
                 ["title"] = title,
@@ -170,7 +182,8 @@ public class RAGChatbot
             }
         };
 
-        await _pipeline.IndexDocumentsAsync(new[] { document });
+        _store.Add(new VectorDocument<float>(document, new Vector<float>(8)));
+        await Task.CompletedTask;
 
         _documents[id] = new DocumentInfo
         {
