@@ -28,6 +28,8 @@ namespace AiDotNet.Attributes;
 /// </para>
 /// </remarks>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-public sealed class GenerateFloatTestScaffoldAttribute : Attribute
+// #1680 review: internal, not public — this is generator plumbing only models inside src apply, discovered
+// by the TestScaffoldGenerator from metadata; it must not widen the published package API surface.
+internal sealed class GenerateFloatTestScaffoldAttribute : Attribute
 {
 }

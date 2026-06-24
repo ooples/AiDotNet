@@ -67,6 +67,14 @@ public class GeneratedFloatScaffoldSmokeTests
         // ...and we must NOT have accidentally floated every model.
         Assert.True(doubleScaffolds.Count > 0,
             "No generated scaffold inherits a <double> test base — the float rewrite leaked to all models.");
+
+        // #1680 review: a bare count check still passes if the float path regresses to a single accidental
+        // model. Pin the roster by name — a known auto-generated opt-in must resolve to <float>, and a stable
+        // auto-generated opt-out must resolve to <double>. WhisperLargeV3 is a Fp32TestClassNames opt-in with
+        // no manual scaffold (so it IS auto-generated); ABINet is a stable auto-generated double model not in
+        // any float roster. If the float rewrite silently stops floating the Whisper/ASR family, this fails.
+        Assert.Contains(floatScaffolds, t => t.Name == "WhisperLargeV3Tests");
+        Assert.Contains(doubleScaffolds, t => t.Name == "ABINetTests");
     }
 
     [Fact]
@@ -81,4 +89,6 @@ public class GeneratedFloatScaffoldSmokeTests
                 $"Generated scaffold {scaffold.Name} resolved to an unexpected precision '{precision}'.");
         }
     }
+
+
 }

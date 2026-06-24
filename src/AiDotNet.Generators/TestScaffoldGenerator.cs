@@ -3285,7 +3285,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("}");
 
         var hintName = GeneratorHelpers.StripGenericSuffix(model.FullyQualifiedName).Replace(".", "_") + "Tests.g.cs";
-        context.AddSource(hintName, sb.ToString());
+        var generated = sb.ToString();
+        if (useFloat)
+        {
+            // #1680 review: the model-typed fragments (base class, factory, constructor, return type) are
+            // floated above, but the scaffold BODY still emits hard-coded Tensor<double>/<double> overrides for
+            // some families. Emitting those alongside a <float> base produces a partial (mixed-precision)
+            // scaffold that compiles but runs the double cost the opt-in is meant to avoid. Float the WHOLE
+            // scaffold with the type-arg-safe rewriter (GeneratedTestFloatify touches generic <double> type-args
+            // ONLY — never the `double` keyword or tolerance literals), so a float opt-in is always emitted as a
+            // fully-<float> class. A construct it genuinely cannot float (e.g. a non-generic double-only base
+            // alias) then surfaces as a loud compile error in the test build rather than a silent mixed scaffold.
+            generated = FloatifyGenericArgs(generated);
+        }
+        context.AddSource(hintName, generated);
     }
 
     /// <summary>
@@ -5714,13 +5727,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
     // Source-of-truth check for the [GenerateFloatTestScaffold] opt-in (#1679): the going-forward way
     // a model self-declares that its generated scaffold should run in <float>, unioned with the legacy
-    // Fp32TestClassNames list. Matched by simple name so it resolves whether or not the attribute
-    // symbol is available in the current compilation.
+    // Fp32TestClassNames list. Matched by FULL metadata name (namespace + type) — not the simple name,
+    // which would also match an unrelated same-named attribute from another namespace/assembly and float a
+    // model by accident (#1680 review). Reading metadata works whether or not the attribute symbol is
+    // referenced by the current compilation.
     private static bool HasFloatScaffoldAttribute(INamedTypeSymbol modelClass)
     {
         foreach (var attr in modelClass.GetAttributes())
         {
-            if (attr.AttributeClass?.Name == "GenerateFloatTestScaffoldAttribute")
+            var ac = attr.AttributeClass;
+            if (ac?.Name == "GenerateFloatTestScaffoldAttribute"
+                && ac.ContainingNamespace?.ToDisplayString() == "AiDotNet.Attributes")
                 return true;
         }
         return false;
