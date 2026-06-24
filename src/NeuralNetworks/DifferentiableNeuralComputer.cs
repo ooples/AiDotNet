@@ -1027,24 +1027,125 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         Tensor<T> controllerOutput = ProcessThroughController(controllerInput);
         PinElements(controllerOutput);
 
-        // Parse the controller output to get memory interface signals
-        var interfaceOutput = ParseControllerOutput(controllerOutput);
+        // #1678: fully-differentiable, tape-tracked memory interaction. The read vectors are produced by
+        // Engine tensor ops (content addressing / write / read) instead of the legacy Matrix/Vector +
+        // NumOps scalar math, so the gradient flows from the loss back through the memory operations to the
+        // controller's interface signals (the old path ran off the autodiff tape and severed that gradient).
+        Tensor<T> readVectorsTensor = ComputeReadVectorsDifferentiable(controllerOutput);
 
-        // Update memory based on interface signals
-        UpdateMemory(interfaceOutput);
-        PinElements(_memory);
-
-        // Read from memory based on interface signals
-        List<Vector<T>> newReadVectors = ReadFromMemory(interfaceOutput);
-
-        // Update read vectors for the next time step
-        _readVectors = newReadVectors;
-
-        // Combine controller output with read vectors to produce final output
-        Tensor<T> finalOutput = CombineControllerOutputWithReadVectors(controllerOutput, newReadVectors);
+        // Combine controller output with read vectors to produce final output.
+        Tensor<T> finalOutput = CombineControllerOutputWithReadVectors(controllerOutput, readVectorsTensor);
         PinElements(finalOutput);
 
         return finalOutput;
+    }
+
+    /// <summary>
+    /// #1678 — fully-differentiable, tape-tracked memory interaction. Every operation runs through the
+    /// Engine (content addressing, write, read) on <see cref="Tensor{T}"/>, so the gradient of the loss
+    /// flows back through the memory ops to the controller's interface signals. The industry-standard DNC
+    /// (Graves et al. 2016, DeepMind reference impl) keeps memory differentiable for exactly this reason;
+    /// the legacy <c>Matrix&lt;T&gt;</c>/<c>Vector&lt;T&gt;</c> + <c>NumOps</c> scalar path ran off the tape
+    /// and severed it. Memory starts empty each step (per-call reset), so temporal links / allocation are
+    /// degenerate and the gradient-critical path is write-vector/gates → memory → read keys/modes → read.
+    /// </summary>
+    /// <param name="controllerOutput">The controller's hidden output [1, directSize + interfaceSize].</param>
+    /// <returns>The concatenated read vectors [1, readHeads * memoryWordSize], tape-connected.</returns>
+    private Tensor<T> ComputeReadVectorsDifferentiable(Tensor<T> controllerOutput)
+    {
+        int w = _memoryWordSize;
+        int n = _memorySize;
+        int r = _readHeads;
+        int interfaceSize = CalculateDNCInterfaceSize(w, r);
+        int total = controllerOutput.Shape[1];
+        int directSize = total - interfaceSize;
+
+        // Interface signals occupy the trailing interfaceSize columns; the leading directSize columns are
+        // the controller's direct output consumed by CombineControllerOutputWithReadVectors. TensorNarrow
+        // keeps the slice on the tape so gradients reach controllerOutput.
+        Tensor<T> iface = Engine.TensorNarrow(controllerOutput, dim: 1, start: directSize, length: interfaceSize);
+        Tensor<T> Field(int off, int len) => Engine.TensorNarrow(iface, dim: 1, start: off, length: len);
+
+        int o = 0;
+        Tensor<T> writeVec = Field(o, w); o += w;                                     // [1, W]
+        Tensor<T> erase = Engine.Sigmoid(Field(o, w)); o += w;                        // [1, W] in (0,1)
+        Tensor<T> writeKey = Field(o, w); o += w;                                     // [1, W]
+        // β ≥ 1 content-addressing strength (DNC §2.1.4 oneplus = 1 + softplus).
+        Tensor<T> writeStrength = Engine.TensorAddScalar(Engine.Softplus(Field(o, 1)), NumOps.One); o += 1; // [1,1]
+        o += 1;                                                                       // allocation gate (degenerate under per-call reset)
+        Tensor<T> writeGate = Engine.Sigmoid(Field(o, 1)); o += 1;                    // [1,1]
+
+        // Empty memory leaf for this step (ResetMemoryState zeros persistent state).
+        Tensor<T> memory = new Tensor<T>([n, w]);
+
+        // Write weighting = writeGate · contentAddressing(M, writeKey). Allocation is degenerate on empty
+        // memory, so the content+gate term carries the write distribution. [N,1].
+        Tensor<T> writeWeight = Engine.TensorBroadcastMultiply(
+            ContentAddressingTensor(memory, writeKey, writeStrength), writeGate);
+
+        // M' = M ∘ (1 − w ⊗ erase) + w ⊗ writeVec   (erase term vanishes on empty M). [N,W].
+        Tensor<T> wErase = Engine.TensorMatMul(writeWeight, erase);                   // [N,1]·[1,W] = [N,W]
+        Tensor<T> keep = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(wErase, NumOps.FromDouble(-1.0)), NumOps.One);
+        Tensor<T> written = Engine.TensorMatMul(writeWeight, writeVec);               // [N,W]
+        Tensor<T> memoryAfter = Engine.TensorAdd(Engine.TensorMultiply(memory, keep), written); // [N,W]
+
+        int readOff = o;
+        int modesBase = readOff + r * (w + 1);
+        var readVecs = new List<Tensor<T>>(r);
+        for (int i = 0; i < r; i++)
+        {
+            Tensor<T> readKey = Field(readOff + i * (w + 1), w);                                              // [1,W]
+            Tensor<T> readStrength = Engine.TensorAddScalar(Engine.Softplus(Field(readOff + i * (w + 1) + w, 1)), NumOps.One); // [1,1]
+            // Read modes (backward, content, forward) → softmax; temporal links are zero under reset, so the
+            // read weighting collapses to content_mode · contentAddressing(M', readKey). [N,1].
+            Tensor<T> contentMode = Engine.TensorNarrow(Engine.Softmax(Field(modesBase + i * 3, 3), axis: 1), dim: 1, start: 1, length: 1); // [1,1]
+            Tensor<T> readWeight = Engine.TensorBroadcastMultiply(
+                ContentAddressingTensor(memoryAfter, readKey, readStrength), contentMode); // [N,1]
+            // read vector = w_rᵀ · M'  → [1,N]·[N,W] = [1,W].
+            Tensor<T> readVec = Engine.TensorMatMul(Engine.Reshape(readWeight, [1, n]), memoryAfter);
+            readVecs.Add(readVec);
+        }
+
+        // Keep the detached read-vector state in sync for the next step's controller-input context.
+        UpdateReadVectorState(readVecs);
+
+        return r == 1 ? readVecs[0] : Engine.TensorConcatenate(readVecs.ToArray(), axis: 1); // [1, R*W]
+    }
+
+    /// <summary>
+    /// Tape-tracked cosine-similarity content addressing: softmax over locations of
+    /// strength · cos(memoryRow, key). Returns a [N, 1] weighting. All ops run on the Engine so the
+    /// gradient flows to <paramref name="key"/> and <paramref name="strength"/>.
+    /// </summary>
+    private Tensor<T> ContentAddressingTensor(Tensor<T> memory, Tensor<T> key, Tensor<T> strength)
+    {
+        int n = memory.Shape[0];
+        int w = memory.Shape[1];
+        T eps = NumOps.FromDouble(1e-8);
+
+        Tensor<T> dot = Engine.TensorMatMul(memory, Engine.Reshape(key, [w, 1]));                       // [N,1]
+        Tensor<T> mNorm = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(memory, memory), new[] { 1 }, keepDims: true)); // [N,1]
+        Tensor<T> kNorm = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(key, key), new[] { 1 }, keepDims: true));       // [1,1]
+        Tensor<T> denom = Engine.TensorAddScalar(Engine.TensorBroadcastMultiply(mNorm, kNorm), eps);    // [N,1]
+        Tensor<T> cos = Engine.TensorMultiply(dot, Engine.TensorReciprocal(denom));                     // [N,1]
+        Tensor<T> scaled = Engine.TensorBroadcastMultiply(cos, strength);                               // [N,1] (β broadcast)
+        return Engine.Softmax(scaled, axis: 0);                                                         // [N,1]
+    }
+
+    /// <summary>
+    /// Mirrors the tape-tracked read vectors back into the detached <c>_readVectors</c> / <c>_memory</c>
+    /// bookkeeping used by the next step's <see cref="PrepareControllerInput"/> (no gradient role).
+    /// </summary>
+    private void UpdateReadVectorState(List<Tensor<T>> readVecs)
+    {
+        _readVectors = new List<Vector<T>>(readVecs.Count);
+        foreach (var rv in readVecs)
+        {
+            var span = rv.ToArray();
+            var v = new Vector<T>(_memoryWordSize);
+            for (int j = 0; j < _memoryWordSize && j < span.Length; j++) v[j] = span[j];
+            _readVectors.Add(v);
+        }
     }
 
     /// <summary>
@@ -1424,7 +1525,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// the optimal way to combine these sources of information.
     /// </para>
     /// </remarks>
-    private Tensor<T> CombineControllerOutputWithReadVectors(Tensor<T> controllerOutput, List<Vector<T>> readVectors)
+    private Tensor<T> CombineControllerOutputWithReadVectors(Tensor<T> controllerOutput, Tensor<T> readVectorsTensor)
     {
         // Graves et al. 2016 §2 eq. 8: y_t = W_y [v_t; r_t^1; ...; r_t^R]
         // where v_t is the controller's direct output (controllerOutput sliced to
@@ -1442,24 +1543,12 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // layers via the standard Layers-chain backward pass.
         Tensor<T> controllerDirect = Engine.TensorNarrow(controllerOutput, dim: 1, start: 0, length: controllerDirectOutputSize);
 
-        // Build the read-vectors contribution as a constant Tensor<T>. Memory ops
-        // (UpdateMemory / ReadFromMemory) operate on the _memory Matrix<T> in
-        // raw C# math and therefore escape the tape — that's an acknowledged
-        // implementation gap relative to the fully-differentiable DNC paper. The
-        // controller still learns to use memory through the forward pass; the
-        // memory-op gradient path remains a known follow-up.
-        Tensor<T> readVectorsTensor = new Tensor<T>(new[] { 1, _readHeads * _memoryWordSize });
-        int writeOffset = 0;
-        for (int i = 0; i < _readHeads; i++)
-        {
-            for (int j = 0; j < _memoryWordSize; j++)
-            {
-                readVectorsTensor[0, writeOffset++] = readVectors[i][j];
-            }
-        }
+        // readVectorsTensor is tape-connected (produced by ComputeReadVectorsDifferentiable via Engine
+        // tensor ops), so the output projection's gradient now flows through the memory operations back to
+        // the controller's interface signals — closing the previously-documented off-tape gap (#1678).
 
-        // Concatenate controller-direct (tape-connected) with read-vectors (constants)
-        // along the feature axis so the output projection sees [v_t; r_t^1; ...; r_t^R].
+        // Concatenate controller-direct with read-vectors along the feature axis so the output projection
+        // sees [v_t; r_t^1; ...; r_t^R].
         Tensor<T> combined = Engine.TensorConcatenate(new[] { controllerDirect, readVectorsTensor }, axis: 1);
 
         // Apply the output projection (Graves 2016 §2 eq. 8 W_y). This is the final
