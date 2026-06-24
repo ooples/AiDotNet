@@ -1,0 +1,65 @@
+name: Samples (build + run)
+
+# Compiles AND runs every example under samples/ so that API drift can never again
+# silently break the published examples (root cause of the "broken examples everywhere"
+# report: the samples were in no solution, so CI never built them). The build step
+# catches compile breakage; the run step catches runtime/crash regressions. Examples are
+# short, CPU-only, self-contained console apps (no datasets/models/GPU required).
+on:
+  push:
+    branches: [ master ]
+    paths: [ 'samples/**', 'src/**', '.github/workflows/samples.yml' ]
+  pull_request:
+    paths: [ 'samples/**', 'src/**', '.github/workflows/samples.yml' ]
+  workflow_dispatch:
+
+concurrency:
+  group: samples-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-run:
+    name: Build & run samples
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # Examples are illustrative CPU programs; keep CI deterministic and off any GPU.
+      AIDOTNET_DISABLE_GPU: '1'
+      DOTNET_NOLOGO: '1'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10.0
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore samples solution
+        run: dotnet restore samples/Samples.slnx
+
+      # Limit parallelism so the big shared AiDotNet dependency doesn't OOM the runner.
+      - name: Build all samples (compile check)
+        run: dotnet build samples/Samples.slnx -c Release --no-restore -m:2
+
+      # Execute every runnable sample (console apps with a Main / top-level statements) and
+      # fail if any crashes (non-zero exit). A per-sample timeout guards against a hang.
+      - name: Run all samples
+        shell: bash
+        run: |
+          set -uo pipefail
+          fail=0
+          while IFS= read -r proj; do
+            name=$(basename "$proj" .csproj)
+            echo "::group::run $name"
+            if timeout 240s dotnet run --project "$proj" -c Release --no-build; then
+              echo "PASS: $name"
+            else
+              code=$?
+              echo "::error::FAIL ($code): $name"
+              fail=1
+            fi
+            echo "::endgroup::"
+          done < <(find samples -name '*.csproj' | sort)
+          exit $fail
