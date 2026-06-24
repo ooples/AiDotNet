@@ -33,7 +33,7 @@ var assistant = app.Services.GetRequiredService<SpeechAssistantService>();
 await assistant.InitializeAsync();
 
 // Serve static HTML UI
-app.MapGet("/", () => Results.Content(GetHtmlUI(), "text/html"));
+app.MapGet("/", () => Results.Content(HtmlContent.GetHtmlUI(), "text/html"));
 
 // Speech Recognition endpoints
 app.MapPost("/api/transcribe", async (HttpRequest request, SpeechAssistantService service) =>
@@ -393,7 +393,9 @@ public enum AudioFormat { WAV, MP3, OGG }
 // HTML UI
 // =============================================================================
 
-static string GetHtmlUI() => """
+static class HtmlContent
+{
+    public static string GetHtmlUI() => """
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -813,3 +815,4 @@ static string GetHtmlUI() => """
 </body>
 </html>
 """;
+}

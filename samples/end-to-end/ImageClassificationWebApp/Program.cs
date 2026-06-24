@@ -41,7 +41,7 @@ app.UseStaticFiles();
 app.UseRouting();
 
 // API Endpoints
-app.MapGet("/", () => Results.Content(GetHomePage(), "text/html"));
+app.MapGet("/", () => Results.Content(HtmlContent.GetHomePage(), "text/html"));
 
 app.MapPost("/api/classify", async (HttpRequest request, ImageClassificationService service) =>
 {
@@ -325,7 +325,9 @@ public class ModelInfo
 // =============================================
 // HTML Home Page
 // =============================================
-static string GetHomePage() => """
+static class HtmlContent
+{
+    public static string GetHomePage() => """
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -577,3 +579,4 @@ static string GetHomePage() => """
 </body>
 </html>
 """;
+}

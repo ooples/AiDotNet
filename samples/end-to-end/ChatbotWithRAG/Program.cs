@@ -36,7 +36,7 @@ var chatbot = app.Services.GetRequiredService<RAGChatbot>();
 await chatbot.InitializeAsync();
 
 // Serve static HTML UI
-app.MapGet("/", () => Results.Content(GetHtmlUI(), "text/html"));
+app.MapGet("/", () => Results.Content(HtmlContent.GetHtmlUI(), "text/html"));
 
 // REST API endpoints
 app.MapPost("/api/chat", async (ChatRequest request, RAGChatbot bot) =>
@@ -409,7 +409,9 @@ public class Document
 // HTML UI
 // =============================================================================
 
-static string GetHtmlUI() => """
+static class HtmlContent
+{
+    public static string GetHtmlUI() => """
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -828,3 +830,4 @@ static string GetHtmlUI() => """
 </body>
 </html>
 """;
+}
