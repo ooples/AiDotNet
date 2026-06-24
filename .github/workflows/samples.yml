@@ -36,30 +36,34 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Restore samples solution
-        run: dotnet restore samples/Samples.slnx
+      # Build the shared library once so each sample reuses it instead of rebuilding.
+      - name: Build shared AiDotNet library
+        run: dotnet build src/AiDotNet.csproj -c Release
 
-      # Limit parallelism so the big shared AiDotNet dependency doesn't OOM the runner.
-      - name: Build all samples (compile check)
-        run: dotnet build samples/Samples.slnx -c Release --no-restore -m:2
-
-      # Execute every runnable sample (console apps with a Main / top-level statements) and
-      # fail if any crashes (non-zero exit). A per-sample timeout guards against a hang.
-      - name: Run all samples
+      # Build + run each sample ONE AT A TIME, reclaiming its output before the next.
+      # Every sample's bin/ copies the large AiDotNet dependency (~1.4 GB each), so
+      # materializing all ~36 at once (e.g. building the whole solution) would exhaust the
+      # runner's disk. Building sequentially and deleting bin/obj after each keeps peak disk
+      # bounded to roughly one sample. `dotnet run` compiles the sample (reusing the
+      # prebuilt library) AND runs it, so a compile error or a non-zero exit both fail the job.
+      - name: Build + run each sample (disk-bounded)
         shell: bash
         run: |
           set -uo pipefail
           fail=0
           while IFS= read -r proj; do
             name=$(basename "$proj" .csproj)
-            echo "::group::run $name"
-            if timeout 240s dotnet run --project "$proj" -c Release --no-build; then
+            dir=$(dirname "$proj")
+            echo "::group::$name"
+            if timeout 300s dotnet run --project "$proj" -c Release; then
               echo "PASS: $name"
             else
               code=$?
               echo "::error::FAIL ($code): $name"
               fail=1
             fi
+            # Reclaim the ~1.4 GB output copy before moving to the next sample.
+            rm -rf "$dir/bin" "$dir/obj"
             echo "::endgroup::"
           done < <(find samples -name '*.csproj' | sort)
           exit $fail
