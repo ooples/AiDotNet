@@ -468,7 +468,7 @@ public class Sundial<T> : TimeSeriesFoundationModelBase<T>
             current = layer.Forward(current);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
-            current = current.Reshape(new[] { current.Shape[1] });
+            current = Engine.Reshape(current, new[] { current.Shape[1] });
 
         return current;
     }

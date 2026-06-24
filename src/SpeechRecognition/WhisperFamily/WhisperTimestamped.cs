@@ -108,7 +108,34 @@ public class WhisperTimestamped<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) { if (MelSpec is not null) return MelSpec.Forward(rawAudio); return rawAudio; }
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
-    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "WhisperTimestamped-Native" : "WhisperTimestamped-ONNX", Description = "WhisperTimestamped: cross-attention word timestamps (Louradour, 2023)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers };
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var additionalInfo = new Dictionary<string, object>
+        {
+            { "ModelName", "WhisperTimestamped" },
+            { "Mode", _useNativeMode ? "Native" : "ONNX" },
+            { "SampleRate", _options.SampleRate },
+            { "NumMels", _options.NumMels },
+            { "EncoderDim", _options.EncoderDim },
+            { "DecoderDim", _options.DecoderDim },
+            { "NumEncoderLayers", _options.NumEncoderLayers },
+            { "NumDecoderLayers", _options.NumDecoderLayers },
+            { "NumAttentionHeads", _options.NumAttentionHeads },
+            { "VocabSize", _options.VocabSize },
+            { "Language", _options.Language },
+            { "MinWordConfidence", _options.MinWordConfidence },
+        };
+
+        return new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "WhisperTimestamped-Native" : "WhisperTimestamped-ONNX",
+            Description = "WhisperTimestamped: cross-attention word timestamps (Louradour, 2023)",
+            FeatureCount = _options.NumMels,
+            Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers,
+            AdditionalInfo = additionalInfo,
+            ModelData = SerializeForMetadata(),
+        };
+    }
     protected override void SerializeNetworkSpecificData(BinaryWriter w) { w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty); w.Write(_options.SampleRate); w.Write(_options.EncoderDim); w.Write(_options.DecoderDim); w.Write(_options.NumEncoderLayers); w.Write(_options.NumDecoderLayers); w.Write(_options.NumAttentionHeads); w.Write(_options.NumMels); w.Write(_options.VocabSize); w.Write(_options.DropoutRate); w.Write(_options.Language); w.Write(_options.MinWordConfidence); }
     protected override void DeserializeNetworkSpecificData(BinaryReader r) { _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.DecoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32(); _options.NumDecoderLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32(); _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString(); _options.MinWordConfidence = r.ReadDouble(); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new WhisperTimestamped<T>(Architecture, mp, _options); return new WhisperTimestamped<T>(Architecture, _options); }

@@ -25,24 +25,24 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 /// Do not override them; slow or saturating tests at paper scale are
 /// model-side performance bugs to fix in the model code.
 /// </remarks>
-public class EmotiVoiceTests : TTSModelTestBase
+public class EmotiVoiceTests : TTSModelTestBase<float>
 {
     // Regression for #1311: mel/prosody-width input (80 channels) must be
     // projected into EmotiVoice's 384-d hidden state before the first MHA.
     protected override int[] InputShape => [1, 32, 80];
     protected override int[] OutputShape => [1, 32, 80];
 
-    protected override INeuralNetworkModel<double> CreateNetwork()
+    protected override INeuralNetworkModel<float> CreateNetwork()
     {
         // Architecture's input size mirrors the mel/prosody feature grid;
         // outputSize is the mel-channel count (80 per upstream config).
-        var architecture = new NeuralNetworkArchitecture<double>(
+        var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.TwoDimensional,
             taskType: NeuralNetworkTaskType.Regression,
             inputSize: 32 * 80,
             outputSize: 80);
 
-        return new EmotiVoice<double>(architecture, new EmotiVoiceOptions());
+        return new EmotiVoice<float>(architecture, new EmotiVoiceOptions());
     }
 
     [Fact]
@@ -72,7 +72,7 @@ public class EmotiVoiceTests : TTSModelTestBase
     public void Predict_MelWidthInput_ProjectsToHiddenAndReturnsMelChannels()
     {
         using var network = CreateNetwork();
-        var input = new Tensor<double>(InputShape);
+        var input = new Tensor<float>(InputShape);
 
         var output = network.Predict(input);
 

@@ -289,12 +289,15 @@ public class VisionMambaModel<T> : NeuralNetworkBase<T>
         int patchDim = _patchSize * _patchSize * _channels;
         var patchesFlat = patches.Reshape(batchSize * _numPatches, patchDim);
         var embeddedFlat = Engine.TensorMatMul(patchesFlat, _patchProjectionWeights);
-        var bias2D = _patchProjectionBias.Reshape(1, _modelDimension);
+        // Issue #1678: Engine.Reshape (tape-safe), NOT tensor.Reshape — a raw reshape of the trainable
+        // bias/positional-embedding weights or of a tape-tracked intermediate severs the gradient path
+        // (the param never learns / the upstream projection is disconnected from the loss).
+        var bias2D = Engine.Reshape(_patchProjectionBias, new[] { 1, _modelDimension });
         embeddedFlat = Engine.TensorBroadcastAdd(embeddedFlat, bias2D);
-        var embedded = embeddedFlat.Reshape(batchSize, _numPatches, _modelDimension);
+        var embedded = Engine.Reshape(embeddedFlat, new[] { batchSize, _numPatches, _modelDimension });
 
         // Add positional embedding
-        var posEmb3D = _positionalEmbedding.Reshape(1, _numPatches, _modelDimension);
+        var posEmb3D = Engine.Reshape(_positionalEmbedding, new[] { 1, _numPatches, _modelDimension });
         embedded = Engine.TensorBroadcastAdd(embedded, posEmb3D);
 
         // Step 3: Apply scan pattern
@@ -335,11 +338,11 @@ public class VisionMambaModel<T> : NeuralNetworkBase<T>
 
         // Step 7: Classification head
         var logits = Engine.TensorMatMul(normedPooled, _classifierWeights);
-        var clsBias = _classifierBias.Reshape(1, _numClasses);
+        var clsBias = Engine.Reshape(_classifierBias, new[] { 1, _numClasses });
         logits = Engine.TensorBroadcastAdd(logits, clsBias);
 
         if (rank == 3)
-            return logits.Reshape(_numClasses);
+            return Engine.Reshape(logits, new[] { _numClasses });
 
         return logits;
     }
