@@ -778,12 +778,15 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     // PredictNoise) and the #642 deferred-recording scope are MUTUALLY EXCLUSIVE graph mechanisms on the same
     // engine stream — running the deferred scope around a PredictNoise that itself stream-captures conflicts.
     // When stream capture is on it SUPERSEDES the deferred scope, so skip the scope and let PredictNoise capture.
-    private static readonly bool s_predictorStreamCapture =
+    // Read the env LIVE each call (not a cached static): it's the mutual-exclusion switch between the predictor's
+    // stream capture and the #642 deferred scope, so a value cached before the env is set could wrap a
+    // stream-capturing PredictNoise in the deferred scope. A per-step env read is negligible. (CodeRabbit #671/#1650)
+    private static bool PredictorStreamCapture =>
         System.Environment.GetEnvironmentVariable("AIDOTNET_DIFFUSION_CUDA_GRAPH") == "1";
 
-    protected Tensor<T> PredictNoiseStep(Tensor<T> noisySample, int timestep)
+    private Tensor<T> PredictNoiseStep(Tensor<T> noisySample, int timestep)
     {
-        if (!_options.UseGpuExecutionGraph || s_predictorStreamCapture)
+        if (!_options.UseGpuExecutionGraph || PredictorStreamCapture)
             return PredictNoise(noisySample, timestep);
 
         var engine = AiDotNetEngine.Current as AiDotNet.Tensors.Engines.DirectGpuTensorEngine;

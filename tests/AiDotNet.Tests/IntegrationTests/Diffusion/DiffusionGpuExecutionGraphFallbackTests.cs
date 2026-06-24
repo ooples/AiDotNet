@@ -143,6 +143,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
                 System.Environment.GetEnvironmentVariable("AIDOTNET_DIFFUSION_CUDA_GRAPH") == "1";
 
             DiffusionDeferredStepDiagnostics.Reset();
+            AiDotNet.Tensors.Engines.Gpu.ResidentInferenceGraph.GraphLaunchesExecuted = 0; // #1650: stream-capture engagement counter
             opts.UseGpuExecutionGraph = true; // flip the SAME instance onto the GPU graph path
             var graphOutput = model.Generate(shape, numInferenceSteps: steps, seed: seed); // flag ON
             Log($"after graph.Generate: executed={DiffusionDeferredStepDiagnostics.ExecutedCount} fellBack={DiffusionDeferredStepDiagnostics.FellBackCount} predictorCapture={predictorStreamCapture}");
@@ -156,6 +157,15 @@ public class DiffusionGpuExecutionGraphFallbackTests
                 // so the correctness check below actually exercises the GPU graph (not a masked fallback to eager).
                 Assert.Equal(0L, DiffusionDeferredStepDiagnostics.FellBackCount);
                 Assert.Equal((long)steps, DiffusionDeferredStepDiagnostics.ExecutedCount);
+            }
+            else
+            {
+                // (2') Stream-capture path: assert the resident graph actually CAPTURED + REPLAYED (engagement
+                // counter > 0). Without this, a silent fallback to eager would leave output parity intact and the
+                // bug undetected — exactly the gap CodeRabbit flagged (#1650). steps=4 ⇒ ≥1 capture-run + replays.
+                Assert.True(AiDotNet.Tensors.Engines.Gpu.ResidentInferenceGraph.GraphLaunchesExecuted > 0,
+                    "Stream-capture mode (AIDOTNET_DIFFUSION_CUDA_GRAPH=1) ran but the resident graph never launched "
+                  + "— it silently fell back to eager (the captured/replayed path did not engage).");
             }
 
             // (1) Correctness: GPU-graph output == eager GPU output to float tolerance (fusion / reduction
@@ -186,7 +196,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
     [Fact(Timeout = 300000)]
     public async Task GpuGraph_ProfileSections_OnCuda()
     {
-        await Task.CompletedTask;
+        await Task.Yield(); // genuine async yield so [Fact(Timeout)] is enforced (xUnit v2)
         var prevEngine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
         try
         {
@@ -230,7 +240,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
     [Fact(Timeout = 300000)]
     public async Task GpuGraph_Timing_ReplayVsEager_OnCuda()
     {
-        await Task.CompletedTask;
+        await Task.Yield(); // genuine async yield so [Fact(Timeout)] is enforced (xUnit v2)
         var prevEngine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
         try
         {
@@ -263,7 +273,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
     [Fact(Timeout = 120000)]
     public async Task Fp16Conv_PrimitiveMatchesFp32Conv_OnCuda()
     {
-        await Task.CompletedTask;
+        await Task.Yield(); // genuine async yield so [Fact(Timeout)] is enforced (xUnit v2)
         AiDotNet.Tensors.Engines.DirectGpu.CUDA.CudaBackend backend;
         try { backend = new AiDotNet.Tensors.Engines.DirectGpu.CUDA.CudaBackend(); if (!backend.IsAvailable) return; }
         catch { return; }
@@ -279,7 +289,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
     [Fact(Timeout = 120000)]
     public async Task Fp16Conv_PrimitiveMatchesFp32Conv_OnHip()
     {
-        await Task.CompletedTask;
+        await Task.Yield(); // genuine async yield so [Fact(Timeout)] is enforced (xUnit v2)
         AiDotNet.Tensors.Engines.DirectGpu.HIP.HipBackend backend;
         try { backend = new AiDotNet.Tensors.Engines.DirectGpu.HIP.HipBackend(); if (!backend.IsAvailable) return; }
         catch { return; }
@@ -289,7 +299,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
     [Fact(Timeout = 120000)]
     public async Task Fp16Conv_PrimitiveMatchesFp32Conv_OnOpenCl()
     {
-        await Task.CompletedTask;
+        await Task.Yield(); // genuine async yield so [Fact(Timeout)] is enforced (xUnit v2)
         AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend backend;
         try { backend = new AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend(); if (!backend.IsAvailable) return; }
         catch { return; }
@@ -299,7 +309,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
     [Fact(Timeout = 120000)]
     public async Task Fp16Conv_PrimitiveMatchesFp32Conv_OnMetal()
     {
-        await Task.CompletedTask;
+        await Task.Yield(); // genuine async yield so [Fact(Timeout)] is enforced (xUnit v2)
         AiDotNet.Tensors.Engines.DirectGpu.Metal.MetalBackend backend;
         try { backend = new AiDotNet.Tensors.Engines.DirectGpu.Metal.MetalBackend(); if (!backend.IsAvailable) return; }
         catch { return; }
@@ -309,7 +319,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
     [Fact(Timeout = 120000)]
     public async Task Fp16Conv_PrimitiveMatchesFp32Conv_OnVulkan()
     {
-        await Task.CompletedTask;
+        await Task.Yield(); // genuine async yield so [Fact(Timeout)] is enforced (xUnit v2)
         AiDotNet.Tensors.Engines.DirectGpu.Vulkan.VulkanBackend backend;
         try { backend = AiDotNet.Tensors.Engines.DirectGpu.Vulkan.VulkanBackend.Instance; if (backend is null || !backend.IsAvailable) return; }
         catch { return; }
@@ -319,7 +329,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
     [Fact(Timeout = 120000)]
     public async Task Fp16Conv_PrimitiveMatchesFp32Conv_OnWebGpu()
     {
-        await Task.CompletedTask;
+        await Task.Yield(); // genuine async yield so [Fact(Timeout)] is enforced (xUnit v2)
         AiDotNet.Tensors.Engines.DirectGpu.WebGpu.WebGpuBackend backend;
         try { backend = new AiDotNet.Tensors.Engines.DirectGpu.WebGpu.WebGpuBackend(); if (!backend.IsAvailable) return; }
         catch { return; }
@@ -386,7 +396,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
     [Fact(Timeout = 300000)]
     public async Task Fp16Conv_TrajectoryMatchesFp32_OnCuda()
     {
-        await Task.CompletedTask;
+        await Task.Yield(); // genuine async yield so [Fact(Timeout)] is enforced (xUnit v2)
         void Log(string s) { try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet_fp16precision.txt"), s + System.Environment.NewLine); } catch { } }
 
         var prevEngine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
@@ -476,7 +486,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
     [Fact(Timeout = 180000)]
     public async Task Fp16Act_TinyUNet_NoNaN_OnCuda()
     {
-        await Task.CompletedTask;
+        await Task.Yield(); // genuine async yield so [Fact(Timeout)] is enforced (xUnit v2)
         var prevEngine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
         var prevAct = AiDotNet.Tensors.Engines.DirectGpuTensorEngine.Fp16ActOverride;
         var prevConv = AiDotNet.Tensors.Engines.DirectGpuTensorEngine.Fp16ConvOverride;
@@ -524,7 +534,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
     [Fact(Timeout = 120000)]
     public async Task Fp16ActKernels_MatchFp32_OnCuda()
     {
-        await Task.CompletedTask;
+        await Task.Yield(); // genuine async yield so [Fact(Timeout)] is enforced (xUnit v2)
         AiDotNet.Tensors.Engines.DirectGpu.CUDA.CudaBackend be;
         try { be = new AiDotNet.Tensors.Engines.DirectGpu.CUDA.CudaBackend(); if (!be.IsAvailable) return; }
         catch { return; }
@@ -574,7 +584,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
     [Fact(Timeout = 300000)]
     public async Task Fp16Act_TrajectoryMatchesFp32_OnCuda()
     {
-        await Task.CompletedTask;
+        await Task.Yield(); // genuine async yield so [Fact(Timeout)] is enforced (xUnit v2)
         void Log(string s) { try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet_fp16precision.txt"), s + System.Environment.NewLine); } catch { } }
         var prevEngine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
         var prevConv = AiDotNet.Tensors.Engines.DirectGpuTensorEngine.Fp16ConvOverride;
@@ -626,7 +636,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
     [Fact(Timeout = 300000)]
     public async Task TensorCoreGemmThesis_OnCuda()
     {
-        await Task.CompletedTask;
+        await Task.Yield(); // genuine async yield so [Fact(Timeout)] is enforced (xUnit v2)
         AiDotNet.Tensors.Engines.DirectGpu.CUDA.CudaBackend backend;
         try { backend = new AiDotNet.Tensors.Engines.DirectGpu.CUDA.CudaBackend(); if (!backend.IsAvailable) return; }
         catch { return; }
@@ -676,6 +686,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
         // FULL FP16 conv (im2col_kn_fp16hw + GemmFp16, incl. im2col overhead) vs FP32 Conv2D at the UNet's
         // ACTUAL shapes (mostly N=256 after downsampling). hw=spatial, so N=hw*hw.
         var hbb = backend as AiDotNet.Tensors.Engines.Gpu.IGpuHalfPrecisionBackend;
+        double worstFullRel = 0; // correctness gate: the FP16 full-conv path must match the FP32 reference
         void BenchFullFp16(int inC, int outC, int hw)
         {
             int N = hw * hw, K = inC * 9, M = outC;
@@ -695,11 +706,19 @@ public class DiffusionGpuExecutionGraphFallbackTests
             for (int i = 0; i < iters; i++) { backend.UnfoldKNFp16Hw(inB, colH, 1, inC, hw, hw, 3, 3, 1, 1, 1, 1, 1, 1); hbb.GemmFp16In32fOut(wH, colH, outF16, M, N, K); }
             backend.Synchronize(); sw.Stop();
             double f16 = sw.Elapsed.TotalMilliseconds * 1000.0 / iters;
-            Log($"FULL conv [inC={inC} outC={outC} {hw}x{hw} N={N}]  FP32-Winograd={f32:F1}us  FP16(im2col+TC-GEMM)={f16:F1}us  speedup={f32 / f16:F2}x");
+            // CORRECTNESS (not just timing): the FP16 conv-as-GEMM must match the FP32 Winograd reference.
+            var o32 = new float[M * N]; var o16 = new float[M * N];
+            backend.DownloadBuffer(outF32, o32); backend.DownloadBuffer(outF16, o16);
+            double sqd = 0, sqr = 0; for (int i = 0; i < o32.Length; i++) { double d = (double)o32[i] - o16[i]; sqd += d * d; sqr += (double)o32[i] * o32[i]; }
+            double rel = System.Math.Sqrt(sqd / System.Math.Max(sqr, 1e-12));
+            worstFullRel = System.Math.Max(worstFullRel, rel);
+            Log($"FULL conv [inC={inC} outC={outC} {hw}x{hw} N={N}]  FP32-Winograd={f32:F1}us  FP16(im2col+TC-GEMM)={f16:F1}us  speedup={f32 / f16:F2}x  relL2={rel:P3}");
         }
         BenchFullFp16(128, 128, 32);  // N=1024
         BenchFullFp16(256, 256, 16);  // N=256
         BenchFullFp16(512, 256, 16);  // N=256, K=4608
         BenchFullFp16(256, 256, 8);   // N=64
+        // The microbench is also a correctness test: FP16-multiply/FP32-accumulate ⇒ ~3e-4; a layout/dtype bug diverges O(1).
+        Assert.True(worstFullRel < 0.01, $"FP16 conv-as-GEMM diverged from FP32 Winograd: worst relL2={worstFullRel:P3} (expected < 1%).");
     }
 }
