@@ -337,6 +337,15 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     private Matrix<T> _temporalLinkMatrix;
 
     /// <summary>
+    /// When true, <see cref="ProcessInput"/> does NOT reset the memory state at the start of the forward
+    /// pass, so the carried memory/usage/link state persists across calls. Set only by
+    /// <see cref="ProcessSequence"/> (after an initial reset) so a sequence evolves real DNC state across
+    /// its timesteps. It stays false for single Predict / training forwards, which reset per call for
+    /// deterministic re-evaluation replay (see the reset comment in <see cref="ProcessInput"/>).
+    /// </summary>
+    private bool _suppressMemoryReset;
+
+    /// <summary>
     /// Gets or sets the list of vectors read from memory.
     /// </summary>
     /// <value>A list of vectors, each of length MemoryWordSize, representing content read from memory.</value>
@@ -807,7 +816,9 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         return memoryWordSize + // Write vector
                memoryWordSize + // Erase vector
                memoryWordSize + // Write key
-               3 + // Write strength, allocation gate, write gate
+               1 + // Write strength
+               readHeads + // Free gates (one per read head — controls memory deallocation, Graves §2.1.1)
+               2 + // Allocation gate, write gate
                readHeads * memoryWordSize + // Read keys
                readHeads + // Read strengths
                3 * readHeads; // Read modes (backward, content, forward)
@@ -1017,7 +1028,12 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // exactly the failure surface of #1332 cluster 2
         // (ForwardPass_ShouldBeFinite_AfterTraining, GradientFlow_*,
         // OptimizerStep_ParamL2_DoesNotExplode all share this cascade).
-        ResetMemoryState();
+        // ProcessSequence suppresses this so a sequence carries real memory state across its timesteps;
+        // single Predict / training forwards keep the per-call reset for replay determinism.
+        if (!_suppressMemoryReset)
+        {
+            ResetMemoryState();
+        }
 
         // Previous read vectors are concatenated with the input to provide context
         Tensor<T> controllerInput = PrepareControllerInput(input);
@@ -1041,16 +1057,34 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     }
 
     /// <summary>
-    /// #1678 — fully-differentiable, tape-tracked memory interaction. Every operation runs through the
-    /// Engine (content addressing, write, read) on <see cref="Tensor{T}"/>, so the gradient of the loss
-    /// flows back through the memory ops to the controller's interface signals. The industry-standard DNC
-    /// (Graves et al. 2016, DeepMind reference impl) keeps memory differentiable for exactly this reason;
-    /// the legacy <c>Matrix&lt;T&gt;</c>/<c>Vector&lt;T&gt;</c> + <c>NumOps</c> scalar path ran off the tape
-    /// and severed it. Memory starts empty each step (per-call reset), so temporal links / allocation are
-    /// degenerate and the gradient-critical path is write-vector/gates → memory → read keys/modes → read.
+    /// Full Differentiable Neural Computer memory interaction (Graves et al. 2016, "Hybrid computing using a
+    /// neural network with dynamic external memory") implemented with tape-tracked <see cref="Tensor{T}"/>
+    /// <see cref="Engine"/> ops, so the gradient of the loss flows back through the memory operations to the
+    /// controller's interface signals — the legacy <c>Matrix&lt;T&gt;</c>/<c>Vector&lt;T&gt;</c>/<c>NumOps</c>
+    /// path ran off the autodiff tape and severed that gradient (#1678).
     /// </summary>
-    /// <param name="controllerOutput">The controller's hidden output [1, directSize + interfaceSize].</param>
+    /// <param name="controllerOutput">The controller output [1, controllerSize + interfaceSize].</param>
     /// <returns>The concatenated read vectors [1, readHeads * memoryWordSize], tape-connected.</returns>
+    /// <remarks>
+    /// <para>
+    /// This performs every stage of the DNC write/read cycle: content-based write addressing, dynamic memory
+    /// <b>allocation</b> (usage → free-list → allocation weighting), gated write (allocation + content), the
+    /// erase/add memory update, precedence + <b>temporal-link</b> bookkeeping, and content + forward/backward
+    /// temporal read addressing across all read heads.
+    /// </para>
+    /// <para>
+    /// <b>Tape topology.</b> The differentiable learning signal flows through content addressing (write/read
+    /// keys and strengths), the allocation/write gates, the erase/write vectors, and the read-mode mixture —
+    /// every continuous interface signal. The discrete/historical bookkeeping (usage, the allocation sort,
+    /// precedence, temporal links) is maintained as <i>carried detached state</i> per Graves §2.1: the
+    /// allocation ordering is a non-differentiable sort, and under the per-forward memory reset used for
+    /// training-replay determinism (see <see cref="ProcessInput"/>) the usage/temporal terms are degenerate
+    /// (no prior writes/reads to retain), so detaching them changes no training gradient. All state (memory,
+    /// usage, write/read weightings, precedence, links) is mirrored back each step so sequence processing
+    /// (<see cref="ProcessSequence"/>), serialization, and auxiliary-loss diagnostics observe the real
+    /// evolving DNC state rather than a zero-memory shortcut.
+    /// </para>
+    /// </remarks>
     private Tensor<T> ComputeReadVectorsDifferentiable(Tensor<T> controllerOutput)
     {
         int w = _memoryWordSize;
@@ -1058,58 +1092,213 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         int r = _readHeads;
         int interfaceSize = CalculateDNCInterfaceSize(w, r);
         int total = controllerOutput.Shape[1];
-        int directSize = total - interfaceSize;
 
-        // Interface signals occupy the trailing interfaceSize columns; the leading directSize columns are
-        // the controller's direct output consumed by CombineControllerOutputWithReadVectors. TensorNarrow
-        // keeps the slice on the tape so gradients reach controllerOutput.
+        // #1681 (review): fail fast with an explicit expected-vs-actual width before slicing. Custom
+        // controller layers (the generic ValidateCustomLayers only checks layer compatibility) could emit a
+        // different width, which would otherwise make TensorNarrow throw cryptically or mis-split the direct
+        // and interface regions.
+        int expected = _controllerSize + interfaceSize;
+        if (total != expected)
+        {
+            throw new ArgumentException(
+                $"DNC controller output width {total} does not match the expected {expected} " +
+                $"(controllerSize {_controllerSize} + interfaceSize {interfaceSize}). The controller's penultimate " +
+                $"layer must emit controllerSize + CalculateDNCInterfaceSize(memoryWordSize, readHeads) columns.");
+        }
+        int directSize = total - interfaceSize; // == _controllerSize
+
+        // Interface signals occupy the trailing interfaceSize columns; the leading directSize columns are the
+        // controller's direct output consumed by CombineControllerOutputWithReadVectors. TensorNarrow keeps
+        // the slice on the tape so gradients reach controllerOutput.
         Tensor<T> iface = Engine.TensorNarrow(controllerOutput, dim: 1, start: directSize, length: interfaceSize);
         Tensor<T> Field(int off, int len) => Engine.TensorNarrow(iface, dim: 1, start: off, length: len);
+        Tensor<T> OnePlus(Tensor<T> x) => Engine.TensorAddScalar(Engine.Softplus(x), NumOps.One); // β ≥ 1 (DNC §2.1.4)
+        Tensor<T> OneMinus(Tensor<T> x) => Engine.TensorAddScalar(Engine.TensorMultiplyScalar(x, NumOps.FromDouble(-1.0)), NumOps.One);
 
+        // ---- parse the interface vector (layout mirrors CalculateDNCInterfaceSize) ----
         int o = 0;
-        Tensor<T> writeVec = Field(o, w); o += w;                                     // [1, W]
-        Tensor<T> erase = Engine.Sigmoid(Field(o, w)); o += w;                        // [1, W] in (0,1)
-        Tensor<T> writeKey = Field(o, w); o += w;                                     // [1, W]
-        // β ≥ 1 content-addressing strength (DNC §2.1.4 oneplus = 1 + softplus).
-        Tensor<T> writeStrength = Engine.TensorAddScalar(Engine.Softplus(Field(o, 1)), NumOps.One); o += 1; // [1,1]
-        o += 1;                                                                       // allocation gate (degenerate under per-call reset)
-        Tensor<T> writeGate = Engine.Sigmoid(Field(o, 1)); o += 1;                    // [1,1]
-
-        // Empty memory leaf for this step (ResetMemoryState zeros persistent state).
-        Tensor<T> memory = new Tensor<T>([n, w]);
-
-        // Write weighting = writeGate · contentAddressing(M, writeKey). Allocation is degenerate on empty
-        // memory, so the content+gate term carries the write distribution. [N,1].
-        Tensor<T> writeWeight = Engine.TensorBroadcastMultiply(
-            ContentAddressingTensor(memory, writeKey, writeStrength), writeGate);
-
-        // M' = M ∘ (1 − w ⊗ erase) + w ⊗ writeVec   (erase term vanishes on empty M). [N,W].
-        Tensor<T> wErase = Engine.TensorMatMul(writeWeight, erase);                   // [N,1]·[1,W] = [N,W]
-        Tensor<T> keep = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(wErase, NumOps.FromDouble(-1.0)), NumOps.One);
-        Tensor<T> written = Engine.TensorMatMul(writeWeight, writeVec);               // [N,W]
-        Tensor<T> memoryAfter = Engine.TensorAdd(Engine.TensorMultiply(memory, keep), written); // [N,W]
-
+        Tensor<T> writeVec = Field(o, w); o += w;                                     // v_t   [1,W]
+        Tensor<T> erase = Engine.Sigmoid(Field(o, w)); o += w;                        // e_t   [1,W] in (0,1)
+        Tensor<T> writeKey = Field(o, w); o += w;                                     // k^w_t [1,W]
+        Tensor<T> writeStrength = OnePlus(Field(o, 1)); o += 1;                       // β^w_t [1,1]
+        var freeGateVals = new T[r];                                                  // f^i_t (R), detached for usage bookkeeping
+        for (int i = 0; i < r; i++) { freeGateVals[i] = Engine.Sigmoid(Field(o, 1)).ToArray()[0]; o += 1; }
+        Tensor<T> allocGate = Engine.Sigmoid(Field(o, 1)); o += 1;                    // g^a_t [1,1]
+        Tensor<T> writeGate = Engine.Sigmoid(Field(o, 1)); o += 1;                    // g^w_t [1,1]
         int readOff = o;
         int modesBase = readOff + r * (w + 1);
-        var readVecs = new List<Tensor<T>>(r);
-        for (int i = 0; i < r; i++)
+
+        // Carried memory state M_{t-1} as a tape leaf (detached values from the previous step / reset).
+        Tensor<T> memory = MemoryToLeaf();                                            // [N,W]
+
+        // ---- write addressing: usage → allocation (detached bookkeeping, Graves §2.1.1–2.1.2) ----
+        // Retention ψ_t = ∏_i (1 − f^i_t w^{r,i}_{t-1});  u_t = (u_{t-1} + w^w_{t-1} − u_{t-1}∘w^w_{t-1}) ∘ ψ_t.
+        var usage = new T[n];
+        for (int k = 0; k < n; k++)
         {
-            Tensor<T> readKey = Field(readOff + i * (w + 1), w);                                              // [1,W]
-            Tensor<T> readStrength = Engine.TensorAddScalar(Engine.Softplus(Field(readOff + i * (w + 1) + w, 1)), NumOps.One); // [1,1]
-            // Read modes (backward, content, forward) → softmax; temporal links are zero under reset, so the
-            // read weighting collapses to content_mode · contentAddressing(M', readKey). [N,1].
-            Tensor<T> contentMode = Engine.TensorNarrow(Engine.Softmax(Field(modesBase + i * 3, 3), axis: 1), dim: 1, start: 1, length: 1); // [1,1]
-            Tensor<T> readWeight = Engine.TensorBroadcastMultiply(
-                ContentAddressingTensor(memoryAfter, readKey, readStrength), contentMode); // [N,1]
-            // read vector = w_rᵀ · M'  → [1,N]·[N,W] = [1,W].
-            Tensor<T> readVec = Engine.TensorMatMul(Engine.Reshape(readWeight, [1, n]), memoryAfter);
-            readVecs.Add(readVec);
+            T retention = NumOps.One;
+            for (int i = 0; i < r; i++)
+            {
+                T wr = i < _readWeightings.Count ? _readWeightings[i][k] : NumOps.Zero;
+                retention = NumOps.Multiply(retention, NumOps.Subtract(NumOps.One, NumOps.Multiply(freeGateVals[i], wr)));
+            }
+            T uPrev = NumOps.Subtract(NumOps.One, _usageFree[k]);                     // u_{t-1} = 1 − free
+            T ww = _writeWeighting[k];                                                // w^w_{t-1}
+            T u = NumOps.Add(uPrev, NumOps.Subtract(ww, NumOps.Multiply(uPrev, ww)));
+            usage[k] = NumOps.Multiply(u, retention);
+        }
+        Tensor<T> allocation = ColumnToLeaf(ComputeAllocation(usage));                // a_t [N,1] detached
+
+        // Content write weighting c^w_t (tape), then w^w_t = g^w_t (g^a_t a_t + (1−g^a_t) c^w_t)  [N,1] tape.
+        Tensor<T> contentWrite = ContentAddressingTensor(memory, writeKey, writeStrength);
+        Tensor<T> writeWeight = Engine.TensorBroadcastMultiply(
+            Engine.TensorAdd(
+                Engine.TensorBroadcastMultiply(allocation, allocGate),
+                Engine.TensorBroadcastMultiply(contentWrite, OneMinus(allocGate))),
+            writeGate);
+
+        // Memory update M_t = M_{t-1} ∘ (1 − w^w_t ⊗ e_t) + w^w_t ⊗ v_t  [N,W] tape.
+        Tensor<T> wErase = Engine.TensorMatMul(writeWeight, erase);                   // [N,1]·[1,W] = [N,W]
+        Tensor<T> keep = OneMinus(wErase);
+        Tensor<T> written = Engine.TensorMatMul(writeWeight, writeVec);               // [N,W]
+        Tensor<T> memoryAfter = Engine.TensorAdd(Engine.TensorMultiply(memory, keep), written);
+
+        // ---- precedence + temporal links (detached bookkeeping, Graves §2.2) ----
+        var wwNew = writeWeight.ToArray();                                            // w^w_t values [N]
+        var precPrev = _precedenceWeighting;
+        T wwSum = NumOps.Zero;
+        for (int k = 0; k < n; k++) wwSum = NumOps.Add(wwSum, wwNew[k]);
+        T precScale = NumOps.Subtract(NumOps.One, wwSum);
+        var precNew = new Vector<T>(n);
+        for (int k = 0; k < n; k++) precNew[k] = NumOps.Add(NumOps.Multiply(precScale, precPrev[k]), wwNew[k]);
+        var linkNew = new Matrix<T>(n, n);
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                if (i == j) { linkNew[i, j] = NumOps.Zero; continue; }
+                T scale = NumOps.Subtract(NumOps.One, NumOps.Add(wwNew[i], wwNew[j]));
+                linkNew[i, j] = NumOps.Add(
+                    NumOps.Multiply(scale, _temporalLinkMatrix[i, j]),
+                    NumOps.Multiply(wwNew[i], precPrev[j]));
+            }
         }
 
-        // Keep the detached read-vector state in sync for the next step's controller-input context.
+        // ---- read addressing: content + forward/backward temporal modes (Graves §2.2.1) ----
+        var readVecs = new List<Tensor<T>>(r);
+        var readWeightVals = new List<Vector<T>>(r);
+        for (int i = 0; i < r; i++)
+        {
+            Tensor<T> readKey = Field(readOff + i * (w + 1), w);                      // k^{r,i}_t [1,W]
+            Tensor<T> readStrength = OnePlus(Field(readOff + i * (w + 1) + w, 1));    // β^{r,i}_t [1,1]
+            Tensor<T> modes = Engine.Softmax(Field(modesBase + i * 3, 3), axis: 1);   // π^i_t [1,3] (backward, content, forward)
+            Tensor<T> piBackward = Engine.TensorNarrow(modes, dim: 1, start: 0, length: 1);
+            Tensor<T> piContent = Engine.TensorNarrow(modes, dim: 1, start: 1, length: 1);
+            Tensor<T> piForward = Engine.TensorNarrow(modes, dim: 1, start: 2, length: 1);
+
+            Tensor<T> contentRead = ContentAddressingTensor(memoryAfter, readKey, readStrength); // c^{r,i}_t [N,1] tape
+            // Forward f = L_t w^{r,i}_{t-1}, backward b = L_tᵀ w^{r,i}_{t-1} (detached; zero under reset). [N,1].
+            Vector<T> wrPrev = i < _readWeightings.Count ? _readWeightings[i] : new Vector<T>(n);
+            Tensor<T> forward = ColumnToLeaf(LinkMatVec(linkNew, wrPrev, transpose: false));
+            Tensor<T> backward = ColumnToLeaf(LinkMatVec(linkNew, wrPrev, transpose: true));
+
+            // w^{r,i}_t = π_b b + π_c c + π_f f  [N,1] tape (gradient flows via read modes π and content c).
+            Tensor<T> readWeight = Engine.TensorAdd(
+                Engine.TensorAdd(
+                    Engine.TensorBroadcastMultiply(backward, piBackward),
+                    Engine.TensorBroadcastMultiply(contentRead, piContent)),
+                Engine.TensorBroadcastMultiply(forward, piForward));
+            // read vector r^i_t = (w^{r,i}_t)ᵀ M_t  → [1,N]·[N,W] = [1,W].
+            Tensor<T> readVec = Engine.TensorMatMul(Engine.Reshape(readWeight, [1, n]), memoryAfter);
+            readVecs.Add(readVec);
+
+            var wrVals = readWeight.ToArray();
+            var wrVec = new Vector<T>(n);
+            for (int k = 0; k < n; k++) wrVec[k] = wrVals[k];
+            readWeightVals.Add(wrVec);
+        }
+
+        // ---- mirror the evolving state back into the carried detached fields ----
+        MirrorMemoryState(memoryAfter, usage, wwNew, precNew, linkNew, readWeightVals);
         UpdateReadVectorState(readVecs);
 
         return r == 1 ? readVecs[0] : Engine.TensorConcatenate(readVecs.ToArray(), axis: 1); // [1, R*W]
+    }
+
+    /// <summary>
+    /// Computes the dynamic memory allocation weighting from the usage vector (Graves et al. 2016 §2.1.2):
+    /// sort locations by ascending usage (most-free first), then a[φ_j] = (1 − u[φ_j]) ∏_{k&lt;j} u[φ_k].
+    /// Returns an [N] array. The sort is non-differentiable, so this is carried detached state.
+    /// </summary>
+    private T[] ComputeAllocation(T[] usage)
+    {
+        int n = usage.Length;
+        var order = Enumerable.Range(0, n).OrderBy(i => Convert.ToDouble(usage[i])).ToArray();
+        var allocation = new T[n];
+        T product = NumOps.One;
+        for (int j = 0; j < n; j++)
+        {
+            int idx = order[j];
+            allocation[idx] = NumOps.Multiply(NumOps.Subtract(NumOps.One, usage[idx]), product);
+            product = NumOps.Multiply(product, usage[idx]);
+        }
+        return allocation;
+    }
+
+    /// <summary>Builds a detached [N, W] tape leaf from the carried memory matrix <c>_memory</c>.</summary>
+    private Tensor<T> MemoryToLeaf()
+    {
+        int n = _memorySize, w = _memoryWordSize;
+        var data = new T[n * w];
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < w; j++)
+                data[i * w + j] = _memory[i, j];
+        return new Tensor<T>(data, [n, w]);
+    }
+
+    /// <summary>Builds a detached [N, 1] column tape leaf from an [N] array.</summary>
+    private Tensor<T> ColumnToLeaf(T[] column) => new Tensor<T>(column, [column.Length, 1]);
+
+    /// <summary>
+    /// Computes L·v (forward) or Lᵀ·v (backward) for the temporal link matrix, returning an [N] array.
+    /// </summary>
+    private T[] LinkMatVec(Matrix<T> link, Vector<T> v, bool transpose)
+    {
+        int n = link.Rows;
+        var result = new T[n];
+        for (int i = 0; i < n; i++)
+        {
+            T sum = NumOps.Zero;
+            for (int j = 0; j < n; j++)
+            {
+                T lij = transpose ? link[j, i] : link[i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(lij, v[j]));
+            }
+            result[i] = sum;
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Mirrors the step's evolving DNC state (memory, usage, write/read weightings, precedence, temporal
+    /// links) back into the carried detached fields, so sequence processing, serialization, and diagnostics
+    /// observe the real state. These are bookkeeping values and play no role on the autodiff tape.
+    /// </summary>
+    private void MirrorMemoryState(Tensor<T> memoryAfter, T[] usage, T[] writeWeighting, Vector<T> precedence, Matrix<T> link, List<Vector<T>> readWeightings)
+    {
+        int n = _memorySize, w = _memoryWordSize;
+        var md = memoryAfter.ToArray();
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < w; j++)
+                _memory[i, j] = md[i * w + j];
+        for (int k = 0; k < n; k++)
+        {
+            _usageFree[k] = NumOps.Subtract(NumOps.One, usage[k]); // store free = 1 − usage
+            _writeWeighting[k] = writeWeighting[k];
+        }
+        _precedenceWeighting = precedence;
+        _temporalLinkMatrix = link;
+        _readWeightings = readWeightings;
     }
 
     /// <summary>
@@ -1674,10 +1863,22 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
 
         List<Tensor<T>> outputs = new List<Tensor<T>>();
 
-        foreach (var input in inputs)
+        // Carry the evolving memory/usage/link state across the sequence's timesteps: suppress the per-call
+        // reset inside ProcessInput so each step reads the state mirrored by the previous step. This is what
+        // makes allocation (usage) and the temporal links non-degenerate over a sequence. Restored afterward.
+        bool previousSuppress = _suppressMemoryReset;
+        _suppressMemoryReset = true;
+        try
         {
-            var output = Predict(input);
-            outputs.Add(output);
+            foreach (var input in inputs)
+            {
+                var output = Predict(input);
+                outputs.Add(output);
+            }
+        }
+        finally
+        {
+            _suppressMemoryReset = previousSuppress;
         }
 
         return outputs;
