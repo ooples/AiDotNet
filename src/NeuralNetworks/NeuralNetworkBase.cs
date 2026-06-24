@@ -7597,6 +7597,39 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected bool _fusedTrainingDisabled;
 
     /// <summary>
+    /// Whether this model is eligible for the compile-once/replay-many fused
+    /// compiled training path (<see cref="Training.CompiledTapeTrainingStep{T}.TryStepWithFusedOptimizer"/>).
+    /// Default <c>true</c>. Override to <c>false</c> for models whose forward
+    /// is <b>dynamic and stateful</b> — external memory mutated across an
+    /// internal recurrence with data-dependent addressing (Neural Turing
+    /// Machine, Differentiable Neural Computer).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Unlike <see cref="_fusedTrainingDisabled"/> (a per-instance RUNTIME latch
+    /// that the structure-change reset clears so a re-traced plan can retry the
+    /// fast path), this is a permanent ARCHITECTURAL property: a model that
+    /// returns <c>false</c> here never traces a compiled plan, so nothing about
+    /// its eligibility can be reset away mid-run.
+    /// </para>
+    /// <para>
+    /// <b>Why dynamic/stateful models opt out (root cause, not a workaround):</b>
+    /// the fused path traces the forward into a static op graph on the first
+    /// step and <i>replays</i> that graph on every subsequent step. A model with
+    /// external-memory recurrence + content/location addressing is not a static
+    /// graph — this is precisely the case PyTorch's <c>torch.compile</c> handles
+    /// with a graph break that falls back to eager. The eager autograd tape
+    /// (<see cref="Training.TapeTrainingStep{T}"/>) re-runs the true dynamic
+    /// forward every step, so gradients are correct AND the model never touches
+    /// the per-thread compiled-plan cache — eliminating the cross-test
+    /// zero-gradient freeze that surfaced on shared xUnit worker threads when a
+    /// sibling model's same-shape plan lingered in the <c>[ThreadStatic]</c>
+    /// cache (the NTM M-N CI-shard failure, #1643).
+    /// </para>
+    /// </remarks>
+    protected virtual bool SupportsFusedCompiledTraining => true;
+
+    /// <summary>
     /// Tracks whether the fused compiled training path has EVER successfully
     /// run on this model. Once true, Adam/AdamW/SGD moment buffers live
     /// exclusively inside the compiled plan — falling back to eager would
@@ -7770,6 +7803,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // (added as a #1328 workaround) was removed in #1331 once the
         // fused-compiled training path was fixed; the EnableCompilation
         // gate is now the single supported way to bypass fused training.
+        if (!SupportsFusedCompiledTraining)
+            return EmitFusedMissAndFallback("model opts out of fused compiled training (dynamic/stateful forward)");
         if (_fusedTrainingDisabled)
             return EmitFusedMissAndFallback("fused path sticky-disabled from prior fallback");
         if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
