@@ -53,6 +53,18 @@ public class TCDModel<T> : LatentDiffusionModelBase<T>
     private const int LATENT_CHANNELS = 4;
     private const double DEFAULT_GUIDANCE = 0.0;
 
+    /// <summary>
+    /// Paper-optimal sampling step count. TCD is a trajectory-consistency
+    /// distillation model designed for high-quality few-step generation; the
+    /// authors report 4 steps as the sweet spot (8 max recommended). The base
+    /// <see cref="DiffusionModelOptions{T}.DefaultInferenceSteps"/> is the
+    /// generic 10-step DDIM default, which both wastes ~2.5× the compute TCD
+    /// needs and is not how the distilled model is meant to be sampled — so the
+    /// ctor pins this value, matching every other few-step model in this folder
+    /// (e.g. ConsistencyModel = 2, FluxSchnell = 4).
+    /// </summary>
+    private const int OPTIMAL_INFERENCE_STEPS = 4;
+
     private UNetNoisePredictor<T> _predictor;
     private StandardVAE<T> _vae;
     private readonly IConditioningModule<T>? _conditioner;
@@ -83,7 +95,8 @@ public class TCDModel<T> : LatentDiffusionModelBase<T>
             options ?? new DiffusionModelOptions<T>
             {
                 TrainTimesteps = 1000, BetaStart = 0.00085,
-                BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear
+                BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear,
+                DefaultInferenceSteps = OPTIMAL_INFERENCE_STEPS
             },
             scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
             architecture)
@@ -159,7 +172,7 @@ public class TCDModel<T> : LatentDiffusionModelBase<T>
         m.SetProperty("text_encoder", "CLIP ViT-L/14");
         m.SetProperty("context_dim", 768);
         m.SetProperty("distillation_method", "trajectory-consistency");
-        m.SetProperty("optimal_steps", 4);
+        m.SetProperty("optimal_steps", OPTIMAL_INFERENCE_STEPS);
         m.SetProperty("max_recommended_steps", 8);
         m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
         m.SetProperty("latent_channels", LATENT_CHANNELS);

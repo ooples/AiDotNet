@@ -338,9 +338,9 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
         int decoderHiddenDim = _decoderHiddenDim;
         int forecastHorizon = _forecastHorizon;
         if (seed.Rank == 2)
-            seed = seed.Reshape(new[] { seed.Shape[0], forecastHorizon, decoderHiddenDim });
+            seed = Engine.Reshape(seed, new[] { seed.Shape[0], forecastHorizon, decoderHiddenDim });
         else if (seed.Rank == 1 && seed.Length == forecastHorizon * decoderHiddenDim)
-            seed = seed.Reshape(new[] { forecastHorizon, decoderHiddenDim });
+            seed = Engine.Reshape(seed, new[] { forecastHorizon, decoderHiddenDim });
         current = seed;
 
         for (int i = firstDecoderIdx; i < Layers.Count; i++)
@@ -629,7 +629,7 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
             // back to sequential.
             foreach (var layer in Layers) current = layer.Forward(current);
             if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
-                current = current.Reshape(new[] { current.Shape[1] });
+                current = Engine.Reshape(current, new[] { current.Shape[1] });
             return current;
         }
 
@@ -668,9 +668,9 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
         int decoderHiddenDim = _decoderHiddenDim;
         int forecastHorizon = _forecastHorizon;
         if (seed.Rank == 2)
-            seed = seed.Reshape(new[] { seed.Shape[0], forecastHorizon, decoderHiddenDim });
+            seed = Engine.Reshape(seed, new[] { seed.Shape[0], forecastHorizon, decoderHiddenDim });
         else if (seed.Rank == 1 && seed.Length == forecastHorizon * decoderHiddenDim)
-            seed = seed.Reshape(new[] { forecastHorizon, decoderHiddenDim });
+            seed = Engine.Reshape(seed, new[] { forecastHorizon, decoderHiddenDim });
 
         current = seed;
 
@@ -687,7 +687,7 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
         }
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
-            current = current.Reshape(new[] { current.Shape[1] });
+            current = Engine.Reshape(current, new[] { current.Shape[1] });
         return current;
     }
 

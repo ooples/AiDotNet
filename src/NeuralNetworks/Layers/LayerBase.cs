@@ -459,6 +459,40 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         // Layers with lazy initialization override this to allocate weights.
     }
 
+    /// <summary>
+    /// Forces lazy weight allocation now (the same materialization the first <c>Forward</c> performs),
+    /// so a caller can then read or write the layer's weights by reference through
+    /// <see cref="GetTrainableParameters"/> / <see cref="CopyTrainableParametersFrom"/> instead of
+    /// through a <see cref="GetParameters"/> copy.
+    /// </summary>
+    /// <remarks>
+    /// The allocation-free entry point for foundation-scale parameter streaming (#1624). A flat
+    /// <c>GetParameters()</c> concatenates every weight into one transient, multi-gigabyte
+    /// <see cref="LinearAlgebra.Vector{T}"/>; at &gt;2.1B-parameter scale (FLUX/MMDiT) that both overflows
+    /// the int-bounded array length AND GC-thrashes the heap into an <see cref="OutOfMemoryException"/>.
+    /// Materializing once and streaming the resident tensors by reference avoids the transient copy.
+    /// No-op for already-initialized layers and for lazy layers whose shape is not yet resolved (they
+    /// have nothing to allocate until their first real forward).
+    /// </remarks>
+    internal void MaterializeParameters() => EnsureParametersMaterialized();
+
+    /// <summary>
+    /// Forces lazy parameter allocation now (the hook <see cref="MaterializeParameters"/> drives).
+    /// </summary>
+    /// <remarks>
+    /// Default: routes through <see cref="EnsureInitialized"/> when the shape is resolved and the layer is
+    /// not yet initialized. A layer whose deferred-weight mechanism is distinct from shape-lazy init — e.g.
+    /// one whose <see cref="EnsureInitialized"/> is owned by the <c>[TrainableParameter]</c> source generator
+    /// and therefore cannot be overridden — overrides this hook to allocate its weights directly.
+    /// </remarks>
+    protected virtual void EnsureParametersMaterialized()
+    {
+        if (!IsInitialized && IsShapeResolved)
+        {
+            EnsureInitialized();
+        }
+    }
+
     /// <inheritdoc />
     /// <remarks>
     /// <para>
@@ -3510,6 +3544,32 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
 
         for (int i = 0; i < parameters.Count; i++)
             _registeredTensors[i] = parameters[i];
+    }
+
+    /// <summary>
+    /// Copies the values of <paramref name="sources"/> INTO this layer's existing trainable tensors,
+    /// element for element, without rebinding or allocating — the allocation-free, aliasing-free
+    /// counterpart to <see cref="SetTrainableParameters"/>. Foundation-scale chunked parameter
+    /// streaming (#1624) uses this: rebinding (<see cref="SetTrainableParameters"/>) would alias a
+    /// clone's weights onto the source's, whereas a span copy preserves each tensor's identity and
+    /// storage so a clone stays independent. Each destination's persistent-tensor cache is invalidated
+    /// so a GPU engine re-uploads the new values. Requires the layer to be materialized first
+    /// (see <see cref="MaterializeParameters"/>); a length mismatch throws.
+    /// </summary>
+    internal virtual void CopyTrainableParametersFrom(IReadOnlyList<Tensor<T>> sources)
+    {
+        var dst = GetTrainableParameters();
+        if (sources.Count != dst.Count)
+            throw new ArgumentException(
+                $"{GetType().Name} has {dst.Count} trainable tensors but received {sources.Count}.");
+        for (int i = 0; i < dst.Count; i++)
+        {
+            if (sources[i].Length != dst[i].Length)
+                throw new ArgumentException(
+                    $"{GetType().Name} trainable tensor {i} has length {dst[i].Length} but received {sources[i].Length}.");
+            sources[i].Data.Span.CopyTo(dst[i].Data.Span);
+            Engine.InvalidatePersistentTensor(dst[i]);
+        }
     }
 
     /// <summary>
