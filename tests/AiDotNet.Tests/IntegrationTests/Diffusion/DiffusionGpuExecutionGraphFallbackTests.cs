@@ -467,6 +467,158 @@ public class DiffusionGpuExecutionGraphFallbackTests
         }
     }
 
+    // #1650/#638 #3 FAST localizer: a TINY UNet (baseChannels=16, 1 resolution, no attention/resample) generated
+    // with FP16 activations ON — iterates in seconds (vs minutes for the full UNet), exercising the FP16 ResBlock
+    // core (conv FP16-out + groupnorm-swish + residual/time-embed add) + decoder concat through the resident
+    // capture path. Asserts the output has NO NaN/Inf (the full-UNet FP16-act forward NaN'd; this pins the core).
+    // MEASURED: FP16-act is correct (relL2 ~0.13% here) but NEUTRAL on speed at batch=1 — it's an opt-in
+    // (AIDOTNET_FP16_ACT, default OFF) reserved for batch>1 / training; this test guards its correctness.
+    [Fact(Timeout = 180000)]
+    public async Task Fp16Act_TinyUNet_NoNaN_OnCuda()
+    {
+        await Task.CompletedTask;
+        var prevEngine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var prevAct = AiDotNet.Tensors.Engines.DirectGpuTensorEngine.Fp16ActOverride;
+        var prevConv = AiDotNet.Tensors.Engines.DirectGpuTensorEngine.Fp16ConvOverride;
+        try
+        {
+            bool isCuda = false;
+            try { var ge = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine(); if (ge.SupportsGpu) { AiDotNet.Tensors.Engines.AiDotNetEngine.Current = ge; isCuda = true; } }
+            catch { }
+            if (!isCuda) return;
+            if (System.Environment.GetEnvironmentVariable("AIDOTNET_DIFFUSION_CUDA_GRAPH") != "1") return;
+
+            void Log(string s) { try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet_fp16precision.txt"), s + System.Environment.NewLine); } catch { } }
+            var shp = new[] { 1, 3, 16, 16 };
+            // FP32 reference (also materializes the lazy weights so the Clone copies real weights).
+            // 2 resolutions + attention at the downsampled level → exercises downsample/upsample/concat/attention
+            // (the FP32-island convert-at-gap paths) on top of the ResBlock FP16 core, still tiny (fast).
+            var tiny = new AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<float>(
+                inputChannels: 3, outputChannels: 3, baseChannels: 16, channelMultipliers: new[] { 1, 2 },
+                numResBlocks: 1, attentionResolutions: new[] { 8 }, contextDim: 32, numHeads: 4, inputHeight: 16, seed: 42);
+            var model = new DDPMModel<float>(unet: tiny, channels: 3, imageSize: 16, seed: 42);
+            AiDotNet.Tensors.Engines.DirectGpuTensorEngine.Fp16ConvOverride = false;
+            AiDotNet.Tensors.Engines.DirectGpuTensorEngine.Fp16ActOverride = false;
+            var fp32 = model.Generate(shp, numInferenceSteps: 3, seed: 42);
+            // FP16-activation run on a clone (identical weights, own capture).
+            var clone = (DDPMModel<float>)model.Clone();
+            AiDotNet.Tensors.Engines.DirectGpuTensorEngine.Fp16ConvOverride = true;
+            AiDotNet.Tensors.Engines.DirectGpuTensorEngine.Fp16ActOverride = true;
+            var fp16 = clone.Generate(shp, numInferenceSteps: 3, seed: 42);
+            int bad = 0; for (int i = 0; i < fp16.Length; i++) if (float.IsNaN(fp16[i]) || float.IsInfinity(fp16[i])) bad++;
+            double sd = 0, sr = 0; for (int i = 0; i < fp32.Length; i++) { double d = (double)fp32[i] - fp16[i]; sd += d * d; sr += (double)fp32[i] * fp32[i]; }
+            double rel = System.Math.Sqrt(sd / System.Math.Max(sr, 1e-12));
+            Log($"TINY-UNET FP16-act vs FP32: bad={bad}/{fp16.Length} relL2={rel:P3} fp32[0]={fp32[0]:F4} fp16[0]={fp16[0]:F4}");
+            Assert.True(bad == 0, $"FP16-act tiny UNet produced {bad}/{fp16.Length} NaN/Inf.");
+            Assert.True(rel < 0.03, $"FP16-act tiny UNet diverged from FP32: relL2={rel:P3}.");
+        }
+        finally
+        {
+            AiDotNet.Tensors.Engines.DirectGpuTensorEngine.Fp16ConvOverride = prevConv;
+            AiDotNet.Tensors.Engines.DirectGpuTensorEngine.Fp16ActOverride = prevAct;
+            AiDotNet.Tensors.Engines.AiDotNetEngine.Current = prevEngine;
+        }
+    }
+
+    // #1650/#638 #3 kernel primitives: the 3 new FP16 kernels vs their FP32 reference (relL2 < 1%). Skips off CUDA.
+    [Fact(Timeout = 120000)]
+    public async Task Fp16ActKernels_MatchFp32_OnCuda()
+    {
+        await Task.CompletedTask;
+        AiDotNet.Tensors.Engines.DirectGpu.CUDA.CudaBackend be;
+        try { be = new AiDotNet.Tensors.Engines.DirectGpu.CUDA.CudaBackend(); if (!be.IsAvailable) return; }
+        catch { return; }
+        if (!be.Fp16GroupNormSwishAvailable || !be.Fp16BroadcastAddChannelAvailable || !be.Fp16Im2colFromFp16Available || !be.Fp16HwIm2colAvailable) return;
+        void Log(string s) { try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet_fp16precision.txt"), s + System.Environment.NewLine); } catch { } }
+        static double RelL2(float[] r, float[] g) { double sd = 0, sr = 0; for (int i = 0; i < r.Length; i++) { double d = (double)r[i] - g[i]; sd += d * d; sr += (double)r[i] * r[i]; } return System.Math.Sqrt(sd / System.Math.Max(sr, 1e-12)); }
+        var rnd = new System.Random(7);
+
+        // groupnorm-swish
+        { int n = 2, c = 16, sp = 64, g = 4, len = n * c * sp;
+          var inA = new float[len]; for (int i = 0; i < len; i++) inA[i] = (float)(rnd.NextDouble() - 0.5);
+          var ga = new float[c]; var ba = new float[c]; for (int i = 0; i < c; i++) { ga[i] = (float)(rnd.NextDouble() + 0.5); ba[i] = (float)(rnd.NextDouble() - 0.5); }
+          var inB = be.AllocateBuffer(inA); var gB = be.AllocateBuffer(ga); var bB = be.AllocateBuffer(ba);
+          var normF = be.AllocateBuffer(len); var meanF = be.AllocateBuffer(n * g); var varF = be.AllocateBuffer(n * g); var outF = be.AllocateBuffer(len);
+          be.GroupNorm(inB, normF, gB, bB, meanF, varF, n, g, c, sp, 1e-5f); be.Swish(normF, outF, len);
+          var inH = be.AllocateBuffer(len); be.ConvertToFp16(inB, inH, len); var outH = be.AllocateBuffer(len);
+          be.Fp16GroupNormSwish(inH, gB, bB, outH, n, g, c, sp, 1e-5f); var outHf = be.AllocateBuffer(len); be.ConvertToFp32(outH, outHf, len); be.Synchronize();
+          var r = new float[len]; var gg = new float[len]; be.DownloadBuffer(outF, r); be.DownloadBuffer(outHf, gg);
+          double rel = RelL2(r, gg); Log($"KERNEL fp16_groupnorm_swish relL2={rel:P3}"); Assert.True(rel < 0.01, $"fp16_groupnorm_swish relL2={rel:P3}"); }
+
+        // broadcast-add
+        { int n = 2, c = 8, sp = 16, len = n * c * sp;
+          var ioA = new float[len]; for (int i = 0; i < len; i++) ioA[i] = (float)(rnd.NextDouble() - 0.5);
+          var biA = new float[n * c]; for (int i = 0; i < biA.Length; i++) biA[i] = (float)(rnd.NextDouble() - 0.5);
+          var refr = new float[len]; for (int b2 = 0; b2 < n; b2++) for (int cc = 0; cc < c; cc++) for (int s = 0; s < sp; s++) refr[(b2 * c + cc) * sp + s] = ioA[(b2 * c + cc) * sp + s] + biA[b2 * c + cc];
+          var ioB = be.AllocateBuffer(ioA); var biB = be.AllocateBuffer(biA);
+          var ioH = be.AllocateBuffer(len); be.ConvertToFp16(ioB, ioH, len); var biH = be.AllocateBuffer(n * c); be.ConvertToFp16(biB, biH, n * c);
+          be.Fp16BroadcastAddChannel(ioH, biH, n, c, sp); var ioHf = be.AllocateBuffer(len); be.ConvertToFp32(ioH, ioHf, len); be.Synchronize();
+          var gg = new float[len]; be.DownloadBuffer(ioHf, gg); double rel = RelL2(refr, gg); Log($"KERNEL fp16_broadcast_add_channel relL2={rel:P3}"); Assert.True(rel < 0.01, $"fp16_broadcast_add relL2={rel:P3}"); }
+
+        // im2col-from-fp16 vs im2col-from-fp32 (both → FP16 col)
+        { int c = 8, hw = 8, K = c * 9, N = hw * hw;
+          var inA = new float[c * hw * hw]; for (int i = 0; i < inA.Length; i++) inA[i] = (float)(rnd.NextDouble() - 0.5);
+          var inB = be.AllocateBuffer(inA); var inH = be.AllocateBuffer(c * hw * hw); be.ConvertToFp16(inB, inH, c * hw * hw);
+          var col32 = be.AllocateBuffer(K * N); be.UnfoldKNFp16Hw(inB, col32, 1, c, hw, hw, 3, 3, 1, 1, 1, 1, 1, 1);
+          var col16 = be.AllocateBuffer(K * N); be.UnfoldKNFp16FromFp16(inH, col16, 1, c, hw, hw, 3, 3, 1, 1, 1, 1, 1, 1);
+          var a32 = be.AllocateBuffer(K * N); be.ConvertToFp32(col32, a32, K * N); var b32 = be.AllocateBuffer(K * N); be.ConvertToFp32(col16, b32, K * N); be.Synchronize();
+          var r = new float[K * N]; var gg = new float[K * N]; be.DownloadBuffer(a32, r); be.DownloadBuffer(b32, gg);
+          double rel = RelL2(r, gg); Log($"KERNEL im2col_kn_fp16_from_fp16 relL2={rel:P3}"); Assert.True(rel < 0.005, $"im2col_from_fp16 relL2={rel:P3}"); }
+    }
+
+    // #1650/#638 #3 FP16-ACTIVATIONS end-to-end on the FULL default UNet: a FULL FP32 Generate() vs a FULL
+    // FP16-activation one (Clone, same weights/seed, one captured forward, steps=3 — see Fp16Conv_Trajectory for
+    // why steps=3 isolates one forward without untrained-trajectory chaos). The whole ResBlock chain runs FP16
+    // (conv + GroupNorm+Swish + residual/time-embed add) with attention/resample as FP32 islands (convert-at-gap).
+    // relL2 < 3% ⇒ FP16-act is faithful. Needs AIDOTNET_CUDA_INCLUDE + AIDOTNET_DIFFUSION_CUDA_GRAPH=1; skips off CUDA.
+    [Fact(Timeout = 300000)]
+    public async Task Fp16Act_TrajectoryMatchesFp32_OnCuda()
+    {
+        await Task.CompletedTask;
+        void Log(string s) { try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet_fp16precision.txt"), s + System.Environment.NewLine); } catch { } }
+        var prevEngine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var prevConv = AiDotNet.Tensors.Engines.DirectGpuTensorEngine.Fp16ConvOverride;
+        var prevAct = AiDotNet.Tensors.Engines.DirectGpuTensorEngine.Fp16ActOverride;
+        try
+        {
+            bool isCuda = false;
+            try { var ge = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine(); if (ge.SupportsGpu) { AiDotNet.Tensors.Engines.AiDotNetEngine.Current = ge; isCuda = true; } }
+            catch { }
+            if (!isCuda) return;
+            if (System.Environment.GetEnvironmentVariable("AIDOTNET_DIFFUSION_CUDA_GRAPH") != "1") return;
+
+            const int seed = 42, steps = 3;
+            var shape = new[] { 1, 3, 32, 32 };
+            AiDotNet.Tensors.Engines.DirectGpuTensorEngine.Fp16ConvOverride = false;
+            AiDotNet.Tensors.Engines.DirectGpuTensorEngine.Fp16ActOverride = false;
+            var model = new DDPMModel<float>(architecture: null, options: Options(useGpuExecutionGraph: false), seed: seed);
+            var fp32 = model.Generate(shape, numInferenceSteps: steps, seed: seed);
+
+            var clone = (DDPMModel<float>)model.Clone();
+            AiDotNet.Tensors.Engines.DirectGpuTensorEngine.Fp16ConvOverride = true;
+            AiDotNet.Tensors.Engines.DirectGpuTensorEngine.Fp16ActOverride = true;
+            var fp16 = clone.Generate(shape, numInferenceSteps: steps, seed: seed);
+
+            Assert.Equal(fp32.Length, fp16.Length);
+            int bad = 0; double sd = 0, sr = 0, mx = 0;
+            for (int i = 0; i < fp32.Length; i++)
+            {
+                if (float.IsNaN(fp16[i]) || float.IsInfinity(fp16[i])) bad++;
+                double d = (double)fp32[i] - fp16[i]; sd += d * d; sr += (double)fp32[i] * fp32[i]; mx = System.Math.Max(mx, System.Math.Abs(d));
+            }
+            double rel = System.Math.Sqrt(sd / System.Math.Max(sr, 1e-12));
+            Log($"FULL-UNET FP16-act vs FP32 ({steps} steps [1,3,32,32]): bad={bad} maxAbs={mx:E3} relL2={rel:P3}");
+            Assert.True(bad == 0, $"FP16-act full UNet produced {bad}/{fp16.Length} NaN/Inf.");
+            Assert.True(rel < 0.03, $"FP16-act full UNet diverged from FP32: relL2={rel:P3} (expected < 3%).");
+        }
+        finally
+        {
+            AiDotNet.Tensors.Engines.DirectGpuTensorEngine.Fp16ConvOverride = prevConv;
+            AiDotNet.Tensors.Engines.DirectGpuTensorEngine.Fp16ActOverride = prevAct;
+            AiDotNet.Tensors.Engines.AiDotNetEngine.Current = prevEngine;
+        }
+    }
+
     // #1650/#638 TENSOR-CORE thesis: the industry FP16 conv (oneDNN/cuDNN/PyTorch) is a GEMM on Tensor Cores,
     // NOT scalar __half2. Microbench the 256ch 3x3 32x32 conv as a GEMM [M=outC, K=inC*9, N=outH*outW]:
     // FP32 cuBLAS (cublasSgemm/TF32) vs FP16 cuBLAS (cublasGemmEx, Tensor Cores) vs the FP32 Winograd kernel.
