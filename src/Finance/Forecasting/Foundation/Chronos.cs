@@ -860,7 +860,7 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
         // Remove batch dimension if we added it
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
         {
-            current = current.Reshape(new[] { current.Shape[1] });
+            current = Engine.Reshape(current, new[] { current.Shape[1] });
         }
 
         return current;
