@@ -16,8 +16,10 @@ internal static class NtmDeterminismProbe
 {
     public static void Run()
     {
+        var prevSeed = NeuralNetworkArchitecture<float>.DefaultRandomSeedOverride;
         NeuralNetworkArchitecture<float>.DefaultRandomSeedOverride = 1234;
-
+        try
+        {
         string cold = Fingerprint(BuildAndProbe());
 
         // Perturb process-global state the way earlier NTM tests would: build + train.
@@ -75,6 +77,13 @@ internal static class NtmDeterminismProbe
         Console.WriteLine(trainedCold == trainedAfter
             ? "=> TRAINING is order-INDEPENDENT too. Variance must be elsewhere."
             : "=> TRAINING is order-DEPENDENT: a fresh NTM trained on identical seeded data lands on DIFFERENT weights depending on prior process activity => non-isolated Tensors process-global training scratch (package-level).");
+        }
+        finally
+        {
+            // Restore the process-global seed override so this diagnostic can't contaminate the seeding
+            // of anything else run later in the same process and skew its conclusions.
+            NeuralNetworkArchitecture<float>.DefaultRandomSeedOverride = prevSeed;
+        }
     }
 
     // Build a fresh NTM, force lazy init via a probe forward, return its parameter vector.
@@ -120,8 +129,12 @@ internal static class NtmDeterminismProbe
         var net = new NeuralTuringMachine<float>();
         var x = Rand(new[] { 128 });
         net.Predict(x);
-        try { net.GetNamedLayerActivations(x); } catch { }
-        try { var bytes = net.Serialize(); var n2 = new NeuralTuringMachine<float>(); n2.Deserialize(bytes); n2.Predict(x); } catch { }
+        // Surface (and abort on) any failure: a swallowed perturbation step would silently invalidate the
+        // probe while it still prints a determinism verdict — exactly the false-confidence to avoid.
+        try { net.GetNamedLayerActivations(x); }
+        catch (Exception ex) { Console.WriteLine($"[perturb] GetNamedLayerActivations failed: {ex.GetType().Name}: {ex.Message}"); throw; }
+        try { var bytes = net.Serialize(); var n2 = new NeuralTuringMachine<float>(); n2.Deserialize(bytes); n2.Predict(x); }
+        catch (Exception ex) { Console.WriteLine($"[perturb] serialize/deserialize round-trip failed: {ex.GetType().Name}: {ex.Message}"); throw; }
         net.SetTrainingMode(true);
         var y = Rand(net.Predict(x).Shape.ToArray());
         for (int i = 0; i < 10; i++) net.Train(x, y);
@@ -152,14 +165,29 @@ internal static class NtmDeterminismProbe
 
     private static string Fingerprint(Vector<float> p)
     {
+        // FNV-1a over EVERY element's exact bit pattern. The previous fingerprint (sum/sumSq/first-3 at
+        // F8) folded the whole vector into a few rounded aggregates, so two distinct parameter vectors
+        // could collide and produce a false "deterministic" verdict. Hashing each element's raw bits makes
+        // the equality checks reflect true vector identity. (Stats kept for human-readable context.)
+        ulong h = 1469598103934665603UL; // FNV-1a 64-bit offset basis
         double sum = 0, sumSq = 0;
-        for (int i = 0; i < p.Length; i++) { double v = p[i]; sum += v; sumSq += v * v; }
-        return $"len={p.Length} sum={sum:F8} sumSq={sumSq:F8} first3=[{(p.Length > 0 ? p[0] : 0):F8},{(p.Length > 1 ? p[1] : 0):F8},{(p.Length > 2 ? p[2] : 0):F8}]";
+        for (int i = 0; i < p.Length; i++)
+        {
+            double v = p[i];
+            sum += v; sumSq += v * v;
+            var fb = BitConverter.GetBytes(p[i]); // exact 4-byte bit pattern (net471-compatible)
+            for (int b = 0; b < fb.Length; b++)
+            {
+                h ^= fb[b];
+                h *= 1099511628211UL; // FNV-1a 64-bit prime
+            }
+        }
+        return $"len={p.Length} hash={h:x16} sum={sum:F8} sumSq={sumSq:F8}";
     }
 
     private static Tensor<float> Rand(int[] shape)
     {
-        var rng = new Random(7);
+        var rng = RandomHelper.CreateSeededRandom(7);
         var t = new Tensor<float>(shape);
         for (int i = 0; i < t.Length; i++) t[i] = (float)(rng.NextDouble() - 0.5);
         return t;

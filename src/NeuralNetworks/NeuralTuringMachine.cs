@@ -1,6 +1,7 @@
 ﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -378,7 +379,11 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
         // flake. Falls back to a time-seeded RNG in production (no architecture
         // seed), preserving the original per-instance randomness there — the
         // same seed/fallback contract the layer-weight initializers use.
-        var rng = Architecture.RandomSeed is int memSeed ? new Random(memSeed) : new Random();
+        // Route through RandomHelper (the NeuralNetworks golden pattern / centralized seeding policy):
+        // a deterministic seeded RNG under the test harness's seed, else a cryptographically secure one.
+        var rng = Architecture.RandomSeed is int memSeed
+            ? RandomHelper.CreateSeededRandom(memSeed)
+            : RandomHelper.CreateSecureRandom();
         for (int m = 0; m < _memories.Count; m++)
         {
             for (int i = 0; i < _memorySize; i++)
