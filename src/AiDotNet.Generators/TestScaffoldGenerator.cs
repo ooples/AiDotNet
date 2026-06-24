@@ -210,12 +210,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "FluxSchnellModel", "PointEModel", "SenseFlowModel", "TransfusionModel",
         // VisionLanguage family
         "SmolVLM",
-        // NOTE: EmotiVoice (TTS), TinyBERTNER (NER), UNet3D (Segmentation) are also in
-        // the #1624 inventory but their family bases (TTSModelTestBase / NERModelTestBase /
-        // SegmentationTestBase) are currently double-only (no generic <T> form) and do
-        // arithmetic directly on the element type, so floating them needs a base-class
-        // generic-ization first — tracked as a focused follow-up to avoid risky shared-base
-        // edits in this PR.
+        // TTS / NER / Segmentation families — their bases (TTSModelTestBase /
+        // NERModelTestBase / SegmentationTestBase) were generic-ized to <T> (with a
+        // <double> default) so these can run in float.
+        "EmotiVoice", "TinyBERTNER", "UNet3D",
         // --- Whisper / ASR family (large-v3-scale defaults; same double-timeout) ---
         "DistilWhisper", "FasterWhisper", "KotobaWhisper", "WhisperLargeV3",
         "WhisperLargeV3Turbo", "WhisperLive", "WhisperX", "Moonshine", "WhisperCPP",

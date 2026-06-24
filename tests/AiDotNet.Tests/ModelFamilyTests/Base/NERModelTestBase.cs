@@ -12,7 +12,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// output sequence length, valid label indices, empty input handling,
 /// and different inputs produce different labels.
 /// </summary>
-public abstract class NERModelTestBase : NeuralNetworkModelTestBase
+public abstract class NERModelTestBase<T> : NeuralNetworkModelTestBase<T>
 {
     /// <summary>
     /// NER labels are categorical class indices (O, B-PER, I-PER, ...) per the
@@ -26,7 +26,7 @@ public abstract class NERModelTestBase : NeuralNetworkModelTestBase
     /// from the predicted shape's last axis when the warmup succeeds; falls
     /// back to a small default range otherwise).
     /// </summary>
-    protected override Tensor<double> CreateRandomTargetTensor(int[] shape, Random rng)
+    protected override Tensor<T> CreateRandomTargetTensor(int[] shape, Random rng)
     {
         // For NER the prediction is rank-2 [seq, numLabels]; target should be
         // rank-1 [seq] of integer class indices. If the requested shape's last
@@ -38,9 +38,9 @@ public abstract class NERModelTestBase : NeuralNetworkModelTestBase
         int numLabels = shape.Length >= 2 ? shape[shape.Length - 1] : 9;
         if (numLabels < 2) numLabels = 9;  // sanity fallback
 
-        var tensor = new Tensor<double>([seqLen]);
+        var tensor = new Tensor<T>([seqLen]);
         for (int i = 0; i < seqLen; i++)
-            tensor[i] = rng.Next(numLabels);
+            tensor[i] = NumOps.FromDouble(rng.Next(numLabels));
         return tensor;
     }
 
@@ -85,10 +85,10 @@ public abstract class NERModelTestBase : NeuralNetworkModelTestBase
         var output = network.Predict(input);
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.False(double.IsNaN(output[i]),
+            Assert.False(double.IsNaN(ConvertToDouble(output[i])),
                 $"NER label[{i}] is NaN — broken classification head.");
-            Assert.True(output[i] >= -1e-10,
-                $"NER label[{i}] = {output[i]:F4} is negative — invalid entity label index.");
+            Assert.True(ConvertToDouble(output[i]) >= -1e-10,
+                $"NER label[{i}] = {ConvertToDouble(output[i]):F4} is negative — invalid entity label index.");
         }
     }
 
@@ -109,7 +109,7 @@ public abstract class NERModelTestBase : NeuralNetworkModelTestBase
         Assert.True(output.Length > 0, "NER model produced empty output for zero input.");
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.False(double.IsNaN(output[i]),
+            Assert.False(double.IsNaN(ConvertToDouble(output[i])),
                 $"NER label[{i}] is NaN for empty input.");
         }
     }
@@ -202,3 +202,6 @@ public abstract class NERModelTestBase : NeuralNetworkModelTestBase
         AssertModelCanLearnToDifferentiateInputs();
     }
 }
+
+/// <summary>Double-precision default for <see cref="NERModelTestBase{T}"/>.</summary>
+public abstract class NERModelTestBase : NERModelTestBase<double> { }
