@@ -267,11 +267,77 @@ public class DiffusionGpuExecutionGraphFallbackTests
         AiDotNet.Tensors.Engines.DirectGpu.CUDA.CudaBackend backend;
         try { backend = new AiDotNet.Tensors.Engines.DirectGpu.CUDA.CudaBackend(); if (!backend.IsAvailable) return; }
         catch { return; }
+        AssertFp16ConvPrimitiveMatchesFp32(backend, "CUDA");
+    }
+
+    // #1650/#638: the SAME conv-primitive correctness gate for every OTHER GPU backend (HIP/OpenCL/Metal/Vulkan/
+    // WebGpu) — each ships its own im2col_kn_fp16hw kernel in its own shader language. They CANNOT run on this
+    // CUDA box (each skips when its device/kernel is absent), but they execute on machines with that hardware,
+    // proving every backend's FP16 conv path is layout/index/dtype-correct. Construct → skip-if-unavailable →
+    // shared assert. Each backend discovered + matched its own FP16 storage (HIP native __half, OpenCL vstore_half,
+    // Metal native half, Vulkan packed-uint packHalf2x16, WebGpu truncated-f32) so the col feeds its GemmFp16In32fOut.
+    [Fact(Timeout = 120000)]
+    public async Task Fp16Conv_PrimitiveMatchesFp32Conv_OnHip()
+    {
+        await Task.CompletedTask;
+        AiDotNet.Tensors.Engines.DirectGpu.HIP.HipBackend backend;
+        try { backend = new AiDotNet.Tensors.Engines.DirectGpu.HIP.HipBackend(); if (!backend.IsAvailable) return; }
+        catch { return; }
+        AssertFp16ConvPrimitiveMatchesFp32(backend, "HIP");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Fp16Conv_PrimitiveMatchesFp32Conv_OnOpenCl()
+    {
+        await Task.CompletedTask;
+        AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend backend;
+        try { backend = new AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend(); if (!backend.IsAvailable) return; }
+        catch { return; }
+        AssertFp16ConvPrimitiveMatchesFp32(backend, "OpenCL");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Fp16Conv_PrimitiveMatchesFp32Conv_OnMetal()
+    {
+        await Task.CompletedTask;
+        AiDotNet.Tensors.Engines.DirectGpu.Metal.MetalBackend backend;
+        try { backend = new AiDotNet.Tensors.Engines.DirectGpu.Metal.MetalBackend(); if (!backend.IsAvailable) return; }
+        catch { return; }
+        AssertFp16ConvPrimitiveMatchesFp32(backend, "Metal");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Fp16Conv_PrimitiveMatchesFp32Conv_OnVulkan()
+    {
+        await Task.CompletedTask;
+        AiDotNet.Tensors.Engines.DirectGpu.Vulkan.VulkanBackend backend;
+        try { backend = AiDotNet.Tensors.Engines.DirectGpu.Vulkan.VulkanBackend.Instance; if (backend is null || !backend.IsAvailable) return; }
+        catch { return; }
+        AssertFp16ConvPrimitiveMatchesFp32(backend, "Vulkan");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Fp16Conv_PrimitiveMatchesFp32Conv_OnWebGpu()
+    {
+        await Task.CompletedTask;
+        AiDotNet.Tensors.Engines.DirectGpu.WebGpu.WebGpuBackend backend;
+        try { backend = new AiDotNet.Tensors.Engines.DirectGpu.WebGpu.WebGpuBackend(); if (!backend.IsAvailable) return; }
+        catch { return; }
+        AssertFp16ConvPrimitiveMatchesFp32(backend, "WebGpu");
+    }
+
+    // Shared conv-primitive correctness check: one conv computed FP32 (Conv2D) vs the FP16 path (Im2colKNFp16 →
+    // [K,N] half col → GemmFp16In32fOut) on the SAME input+weights, element-wise, at the UNet's real shapes.
+    // FP32 accumulation ⇒ the only error is the FP16 multiply mantissa ⇒ relative-L2 ~3e-4; a layout/index/dtype
+    // bug gives O(1). Skips (no-op pass) when the backend lacks the half GEMM or the im2col kernel.
+    private static void AssertFp16ConvPrimitiveMatchesFp32(
+        AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend backend, string backendName)
+    {
         var hb = backend as AiDotNet.Tensors.Engines.Gpu.IGpuHalfPrecisionBackend;
-        if (hb is null || !hb.SupportsHgemm || !hb.Fp16Im2colAvailable) return; // no toolkit / no FP16 conv kernel
+        if (hb is null || !hb.SupportsHgemm || !hb.Fp16Im2colAvailable) return; // no FP16 GEMM / no im2col kernel here
         void Log(string s) { try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet_fp16precision.txt"), s + System.Environment.NewLine); } catch { } }
 
-        double WorstRelL2 = 0;
+        double worstRelL2 = 0;
         void Check(int inC, int outC, int hw)
         {
             int kh = 3, kw = 3, stride = 1, pad = 1, dil = 1;
@@ -294,18 +360,18 @@ public class DiffusionGpuExecutionGraphFallbackTests
             double sqd = 0, sqr = 0, maxAbs = 0;
             for (int i = 0; i < o32.Length; i++) { double d = (double)o32[i] - o16[i]; sqd += d * d; sqr += (double)o32[i] * o32[i]; maxAbs = System.Math.Max(maxAbs, System.Math.Abs(d)); }
             double rel = System.Math.Sqrt(sqd / System.Math.Max(sqr, 1e-12));
-            WorstRelL2 = System.Math.Max(WorstRelL2, rel);
-            Log($"PRIMITIVE conv [inC={inC} outC={outC} {hw}x{hw} N={N} K={K}]  relL2={rel:P3} maxAbs={maxAbs:E3} sample o32[0]={o32[0]:F4} o16[0]={o16[0]:F4}");
+            worstRelL2 = System.Math.Max(worstRelL2, rel);
+            Log($"PRIMITIVE [{backendName}] conv [inC={inC} outC={outC} {hw}x{hw} N={N} K={K}]  relL2={rel:P3} maxAbs={maxAbs:E3} sample o32[0]={o32[0]:F4} o16[0]={o16[0]:F4}");
         }
         Check(128, 128, 32); // N=1024
         Check(256, 256, 16); // N=256
         Check(512, 256, 16); // N=256, K=4608
         Check(64, 64, 32);   // N=1024, smaller K
 
-        // FP16 multiply / FP32 accumulate ⇒ ~1e-3 relative; 1% is a generous correctness bar (a layout/index bug
-        // gives O(1) relative error). This is the gate that proves the kernel is RIGHT before the trajectory test.
-        Assert.True(WorstRelL2 < 0.01,
-            $"FP16 conv primitive diverged from FP32 Conv2D: worst relL2={WorstRelL2:P3} (expected < 1%) — the im2col/GEMM path is numerically WRONG (layout/index/dtype bug).");
+        // FP16 multiply / FP32 accumulate ⇒ ~3e-4 relative; 1% is a generous correctness bar (a layout/index bug
+        // gives O(1) relative error). This is the gate that proves the kernel is RIGHT on this backend.
+        Assert.True(worstRelL2 < 0.01,
+            $"[{backendName}] FP16 conv primitive diverged from FP32 Conv2D: worst relL2={worstRelL2:P3} (expected < 1%) — the im2col/GEMM path is numerically WRONG (layout/index/dtype bug).");
     }
 
     // #1650/#638 #2 PRECISION VALIDATION (gates flipping AIDOTNET_FP16_CONV default-on): the FP16 conv path runs
