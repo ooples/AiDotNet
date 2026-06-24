@@ -1,5 +1,8 @@
 using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Models.Options;
 using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
 
 Console.WriteLine("=== AiDotNet Basic Regression ===");
 Console.WriteLine("Predicting house prices using Gradient Boosting\n");
@@ -19,18 +22,22 @@ Console.WriteLine("  - Learning rate: 0.1\n");
 
 try
 {
-    var builder = new AiModelBuilder<double, double[], double>()
-        .ConfigureModel(new GradientBoostingRegression<double, double[], double>(
-            nEstimators: 100,
-            maxDepth: 5,
-            learningRate: 0.1))
-        .ConfigurePreprocessing();  // Auto-applies StandardScaler + Imputer
+    var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        .ConfigureModel(new GradientBoostingRegression<double>(
+            new GradientBoostingRegressionOptions
+            {
+                NumberOfTrees = 100,
+                MaxDepth = 5,
+                LearningRate = 0.1
+            }))
+        .ConfigureDataLoader(DataLoaders.FromArrays(trainFeatures, trainPrices));
 
     Console.WriteLine("Training...\n");
 
-    var result = await builder.BuildAsync(trainFeatures, trainPrices);
+    var result = await builder.BuildAsync();
 
-    // Calculate metrics on test set
+    // Calculate metrics on test set (batch-predict the whole test matrix, then read rows)
+    var predVector = result.Predict(ToMatrix(testFeatures));
     var predictions = new double[testFeatures.Length];
     double sumSquaredError = 0;
     double sumAbsoluteError = 0;
@@ -39,8 +46,7 @@ try
 
     for (int i = 0; i < testFeatures.Length; i++)
     {
-        // Use result.Predict() directly - this is the facade pattern
-        predictions[i] = result.Predict(testFeatures[i]);
+        predictions[i] = predVector[i];
         double error = predictions[i] - testPrices[i];
         sumSquaredError += error * error;
         sumAbsoluteError += Math.Abs(error);
@@ -130,4 +136,15 @@ static (double[][] trainFeatures, double[] trainPrices, double[][] testFeatures,
         shuffledFeatures.Skip(500).ToArray(),
         shuffledPrices.Skip(500).ToArray()
     );
+}
+
+// Pack a jagged feature array into the dense Matrix the model's Predict expects.
+static Matrix<double> ToMatrix(double[][] rows)
+{
+    int r = rows.Length, c = rows[0].Length;
+    var m = new Matrix<double>(r, c);
+    for (int i = 0; i < r; i++)
+        for (int j = 0; j < c; j++)
+            m[i, j] = rows[i][j];
+    return m;
 }
