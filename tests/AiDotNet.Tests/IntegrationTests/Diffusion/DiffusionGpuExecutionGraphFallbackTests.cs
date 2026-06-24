@@ -248,4 +248,88 @@ public class DiffusionGpuExecutionGraphFallbackTests
             AiDotNet.Tensors.Engines.AiDotNetEngine.Current = prevEngine;
         }
     }
+
+    // #1650/#638 TENSOR-CORE thesis: the industry FP16 conv (oneDNN/cuDNN/PyTorch) is a GEMM on Tensor Cores,
+    // NOT scalar __half2. Microbench the 256ch 3x3 32x32 conv as a GEMM [M=outC, K=inC*9, N=outH*outW]:
+    // FP32 cuBLAS (cublasSgemm/TF32) vs FP16 cuBLAS (cublasGemmEx, Tensor Cores) vs the FP32 Winograd kernel.
+    // If FP16-GEMM << FP32-Winograd, the Tensor-Core conv-as-GEMM is the real lever. Needs AIDOTNET_CUDA_INCLUDE.
+    [Fact(Timeout = 300000)]
+    public async Task TensorCoreGemmThesis_OnCuda()
+    {
+        await Task.CompletedTask;
+        AiDotNet.Tensors.Engines.DirectGpu.CUDA.CudaBackend backend;
+        try { backend = new AiDotNet.Tensors.Engines.DirectGpu.CUDA.CudaBackend(); if (!backend.IsAvailable) return; }
+        catch { return; }
+        void Log(string s) { try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet_tensorcore.txt"), s + System.Environment.NewLine); } catch { } }
+        Log($"SupportsHgemm={(backend as AiDotNet.Tensors.Engines.Gpu.IGpuHalfPrecisionBackend)?.SupportsHgemm}");
+
+        const int iters = 100;
+        void BenchGemm(int M, int N, int K)
+        {
+            var rnd = new System.Random(3);
+            var aF = new float[M * K]; var bF = new float[K * N];
+            for (int i = 0; i < aF.Length; i++) aF[i] = (float)(rnd.NextDouble() - 0.5);
+            for (int i = 0; i < bF.Length; i++) bF[i] = (float)(rnd.NextDouble() - 0.5);
+            var a = backend.AllocateBuffer(aF); var b = backend.AllocateBuffer(bF); var c = backend.AllocateBuffer(M * N);
+            var aH = backend.AllocateBuffer(M * K); backend.ConvertToFp16(a, aH, M * K);
+            var bH = backend.AllocateBuffer(K * N); backend.ConvertToFp16(b, bH, K * N);
+            for (int i = 0; i < 5; i++) backend.Gemm(a, b, c, M, N, K); backend.Synchronize();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            for (int i = 0; i < iters; i++) backend.Gemm(a, b, c, M, N, K); backend.Synchronize(); sw.Stop();
+            double f32 = sw.Elapsed.TotalMilliseconds * 1000.0 / iters;
+            var hb = backend as AiDotNet.Tensors.Engines.Gpu.IGpuHalfPrecisionBackend;
+            double f16 = -1;
+            try {
+                for (int i = 0; i < 5; i++) hb.GemmFp16In32fOut(aH, bH, c, M, N, K); backend.Synchronize();
+                sw.Restart(); for (int i = 0; i < iters; i++) hb.GemmFp16In32fOut(aH, bH, c, M, N, K); backend.Synchronize(); sw.Stop();
+                f16 = sw.Elapsed.TotalMilliseconds * 1000.0 / iters;
+            } catch (System.Exception e) { Log("GemmFp16 threw: " + e.GetType().Name + " " + e.Message); }
+            Log($"GEMM [M={M} K={K} N={N}]  FP32-cuBLAS={f32:F1}us  FP16-cuBLAS(TensorCore)={f16:F1}us  speedup={(f16>0?f32/f16:0):F2}x");
+        }
+        void BenchWino(int inC, int outC, int hw)
+        {
+            var rnd = new System.Random(3);
+            var inA = new float[1 * inC * hw * hw]; var wA = new float[outC * inC * 9];
+            for (int i = 0; i < inA.Length; i++) inA[i] = (float)(rnd.NextDouble() - 0.5);
+            for (int i = 0; i < wA.Length; i++) wA[i] = (float)(rnd.NextDouble() - 0.5) * 0.1f;
+            var inB = backend.AllocateBuffer(inA); var wB = backend.AllocateBuffer(wA); var outB = backend.AllocateBuffer(outC * hw * hw);
+            for (int i = 0; i < 5; i++) backend.Conv2D(inB, wB, outB, 1, inC, hw, hw, outC, hw, hw, 3, 3, 1, 1, 1, 1, 1, 1); backend.Synchronize();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            for (int i = 0; i < iters; i++) backend.Conv2D(inB, wB, outB, 1, inC, hw, hw, outC, hw, hw, 3, 3, 1, 1, 1, 1, 1, 1); backend.Synchronize(); sw.Stop();
+            Log($"FP32-Winograd conv [inC={inC} outC={outC} {hw}x{hw}] = {sw.Elapsed.TotalMilliseconds * 1000.0 / iters:F1}us");
+        }
+        // conv-as-GEMM: M=outC, K=inC*9, N=outH*outW
+        BenchWino(256, 256, 32); BenchGemm(256, 32 * 32, 256 * 9);
+        BenchWino(128, 128, 32); BenchGemm(128, 32 * 32, 128 * 9);
+        BenchWino(64, 64, 32);   BenchGemm(64, 32 * 32, 64 * 9);
+
+        // FULL FP16 conv (im2col_kn_fp16hw + GemmFp16, incl. im2col overhead) vs FP32 Conv2D at the UNet's
+        // ACTUAL shapes (mostly N=256 after downsampling). hw=spatial, so N=hw*hw.
+        var hbb = backend as AiDotNet.Tensors.Engines.Gpu.IGpuHalfPrecisionBackend;
+        void BenchFullFp16(int inC, int outC, int hw)
+        {
+            int N = hw * hw, K = inC * 9, M = outC;
+            var rnd = new System.Random(5);
+            var inA = new float[inC * hw * hw]; var wA = new float[outC * inC * 9];
+            for (int i = 0; i < inA.Length; i++) inA[i] = (float)(rnd.NextDouble() - 0.5);
+            for (int i = 0; i < wA.Length; i++) wA[i] = (float)(rnd.NextDouble() - 0.5) * 0.1f;
+            var inB = backend.AllocateBuffer(inA); var wB = backend.AllocateBuffer(wA);
+            var outF32 = backend.AllocateBuffer(outC * hw * hw); var outF16 = backend.AllocateBuffer(outC * hw * hw);
+            var colH = backend.AllocateBuffer(K * N); var wH = backend.AllocateBuffer(M * K); backend.ConvertToFp16(wB, wH, M * K);
+            for (int i = 0; i < 5; i++) backend.Conv2D(inB, wB, outF32, 1, inC, hw, hw, outC, hw, hw, 3, 3, 1, 1, 1, 1, 1, 1); backend.Synchronize();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            for (int i = 0; i < iters; i++) backend.Conv2D(inB, wB, outF32, 1, inC, hw, hw, outC, hw, hw, 3, 3, 1, 1, 1, 1, 1, 1); backend.Synchronize(); sw.Stop();
+            double f32 = sw.Elapsed.TotalMilliseconds * 1000.0 / iters;
+            for (int i = 0; i < 5; i++) { backend.UnfoldKNFp16Hw(inB, colH, 1, inC, hw, hw, 3, 3, 1, 1, 1, 1, 1, 1); hbb.GemmFp16In32fOut(wH, colH, outF16, M, N, K); } backend.Synchronize();
+            sw.Restart();
+            for (int i = 0; i < iters; i++) { backend.UnfoldKNFp16Hw(inB, colH, 1, inC, hw, hw, 3, 3, 1, 1, 1, 1, 1, 1); hbb.GemmFp16In32fOut(wH, colH, outF16, M, N, K); }
+            backend.Synchronize(); sw.Stop();
+            double f16 = sw.Elapsed.TotalMilliseconds * 1000.0 / iters;
+            Log($"FULL conv [inC={inC} outC={outC} {hw}x{hw} N={N}]  FP32-Winograd={f32:F1}us  FP16(im2col+TC-GEMM)={f16:F1}us  speedup={f32 / f16:F2}x");
+        }
+        BenchFullFp16(128, 128, 32);  // N=1024
+        BenchFullFp16(256, 256, 16);  // N=256
+        BenchFullFp16(512, 256, 16);  // N=256, K=4608
+        BenchFullFp16(256, 256, 8);   // N=64
+    }
 }
