@@ -85,6 +85,64 @@ public abstract class NERModelTestBase<T> : NeuralNetworkModelTestBase<T>
         }
     }
 
+    /// <summary>
+    /// NER override of <see cref="NeuralNetworkModelTestBase{T}.MoreData_ShouldNotDegrade"/>,
+    /// for the SAME reason as <see cref="Training_ShouldReduceLoss"/>: the base compares
+    /// <c>MeasureLoss(net, net.Predict(input), target)</c> for net1 (short train) vs net2
+    /// (long train), but NER <c>Predict</c> ARGMAX-DECODES to discrete label IDs, so the base
+    /// compares CrossEntropyWithLogits computed over already-decoded integer labels — a
+    /// meaningless number that wanders with the (non-reproducible) dropout masks and makes the
+    /// invariant flaky (passes in isolation, fails in the full suite). We compare each network's
+    /// ACTUAL training objective via <see cref="INeuralNetworkModel{T}.GetLastLoss"/>; the longer-
+    /// trained clone must not have a worse real loss than the short-trained original. Keeps the
+    /// clone-from-the-same-weights structure (net2 = net1.Clone()) and the same iteration counts.
+    /// (TinyBERTNER/BiLSTMCRF/TransformerNER #1679.)
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public override async Task MoreData_ShouldNotDegrade()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng1 = ModelTestHelpers.CreateSeededRandom(42);
+        var rng2 = ModelTestHelpers.CreateSeededRandom(42);
+        var input = CreateRandomTensor(InputShape, rng1);
+        var target = CreateRandomTargetTensor(EffectiveOutputShape, rng1);
+        var input2 = CreateRandomTensor(InputShape, rng2);
+        var target2 = CreateRandomTargetTensor(EffectiveOutputShape, rng2);
+
+        using var network1 = CreateNetwork();
+        if (TrainingInvariantsNotApplicable(network1)) return;
+
+        // Warm up lazy layers from the real InputShape before cloning (mirrors the base).
+        try { network1.Predict(input); }
+        catch (System.InvalidOperationException) { /* layer needs training mode for first forward */ }
+
+        var network2 = network1 is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn1
+            ? (INeuralNetworkModel<T>)nn1.Clone()
+            : (INeuralNetworkModel<T>)network1.Clone();
+        try
+        {
+            int shortIters = MoreDataShortIterations;
+            int longIters = MoreDataLongIterations;
+            Assert.True(shortIters > 0 && longIters >= shortIters,
+                $"Invalid iteration contract: short={shortIters}, long={longIters}.");
+
+            for (int i = 0; i < shortIters; i++) network1.Train(input, target);
+            double lossShort = ConvertToDouble(network1.GetLastLoss());
+
+            for (int i = 0; i < longIters; i++) network2.Train(input2, target2);
+            double lossLong = ConvertToDouble(network2.GetLastLoss());
+
+            Assert.False(double.IsNaN(lossShort) || double.IsNaN(lossLong),
+                $"Loss became NaN during training: short={lossShort}, long={lossLong}.");
+            Assert.True(lossLong <= lossShort + MoreDataTolerance,
+                $"{longIters}-iteration clone loss ({lossLong:F6}) > {shortIters}-iteration loss " +
+                $"({lossShort:F6}) — measured via GetLastLoss (the model's own CE over logits). " +
+                "Optimizer may be diverging with more training.");
+        }
+        finally { (network2 as System.IDisposable)?.Dispose(); }
+    }
+
     // =====================================================
     // NER INVARIANT: Output Length Related to Input
     // NER models produce one label per token. Output length
@@ -238,6 +296,27 @@ public abstract class NERModelTestBase<T> : NeuralNetworkModelTestBase<T>
     /// base discrete-label L2 dispersion check is a false positive on sequence labelers.
     /// </summary>
     public override async Task DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs()
+    {
+        await Task.Yield();
+        AssertModelCanLearnToDifferentiateInputs();
+    }
+
+    /// <summary>
+    /// CRF-aware override of the PRE-training
+    /// <see cref="NeuralNetworkModelTestBase{T}.DifferentInputs_ShouldProduceDifferentOutputs"/>.
+    /// The base feeds two uniform constant inputs ([0.1...] vs [0.9...]) to an UNTRAINED model and
+    /// asserts the decoded outputs differ. But an untrained sequence labeler's Viterbi/argmax is
+    /// scale-insensitive (exactly the false positive documented on
+    /// <see cref="AssertModelCanLearnToDifferentiateInputs"/>): the discrete decoded labels collapse
+    /// to the same sequence for both uniform inputs even when the underlying emissions are perfectly
+    /// input-sensitive — and with non-deterministic weight init this collapses intermittently, so
+    /// the base test is flaky for CRF NER models (passes in isolation, fails in the full suite).
+    /// The sibling <c>DifferentInputs_DifferentLabels</c> / <c>DifferentInputs_AfterTraining_*</c>
+    /// already route through the learn-to-differentiate probe; this missed override completes the
+    /// family treatment, preserving the real invariant (#1208/#1221 input-side gradient flow).
+    /// (BiLSTMCRF/CNNBiLSTMCRF #1679.)
+    /// </summary>
+    public override async Task DifferentInputs_ShouldProduceDifferentOutputs()
     {
         await Task.Yield();
         AssertModelCanLearnToDifferentiateInputs();
