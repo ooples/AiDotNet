@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Inherits NER invariants and adds transformer-specific: contextual sensitivity
 /// and attention-based output variation.
 /// </summary>
-public abstract class TransformerNERTestBase : NERModelTestBase
+public abstract class TransformerNERTestBase<T> : NERModelTestBase<T>
 {
     [Fact(Timeout = 120000)]
     public virtual async Task ContextualSensitivity_DifferentContext_DifferentLabels()
@@ -29,7 +29,7 @@ public abstract class TransformerNERTestBase : NERModelTestBase
         int minLen = Math.Min(labels1.Length, labels2.Length);
         for (int i = 0; i < minLen; i++)
         {
-            if (Math.Abs(labels1[i] - labels2[i]) > 1e-12)
+            if (Math.Abs(ConvertToDouble(labels1[i]) - ConvertToDouble(labels2[i])) > 1e-12)
             {
                 anyDifferent = true;
                 break;
@@ -51,8 +51,12 @@ public abstract class TransformerNERTestBase : NERModelTestBase
 
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.False(double.IsNaN(output[i]), $"Transformer NER output[{i}] is NaN.");
-            Assert.False(double.IsInfinity(output[i]), $"Transformer NER output[{i}] is Infinity.");
+            double v = ConvertToDouble(output[i]);
+            Assert.False(double.IsNaN(v), $"Transformer NER output[{i}] is NaN.");
+            Assert.False(double.IsInfinity(v), $"Transformer NER output[{i}] is Infinity.");
         }
     }
 }
+
+/// <summary>Double-precision default for <see cref="TransformerNERTestBase{T}"/>.</summary>
+public abstract class TransformerNERTestBase : TransformerNERTestBase<double> { }

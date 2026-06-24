@@ -181,6 +181,80 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // ModelFamilyTests/CodeModel runs the same architecture shape at smoke
         // scale (2 layers, 64 dim, 32 seq, 128 vocab, UseDataFlow=true).
         "GraphCodeBERT",
+
+        // WhisperTimestamped (Louradour 2023): production defaults mirror Whisper
+        // large-v3 (EncoderDim/DecoderDim=1280, 32+32 layers, NumHeads=20, vocab
+        // 51866 — ~631M params). Profiled (#1670, dotnet-trace + testconsole
+        // whispertimestamped-profile, AIDOTNET_DISABLE_GPU=1 to match CI): a single
+        // forward is ~2.4s in FLOAT but ~153s in DOUBLE (the fp64 CPU GEMM path is
+        // ~60-80x slower than fp32), and the generated scaffold runs `<double>`, so
+        // the 30-250-step training invariants blow the 120s CI budget. The native
+        // ctor sizes its stack from WhisperTimestampedOptions (not the architecture),
+        // so the auto-generator can't shrink it. The manual WhisperTimestampedTests
+        // scaffold in ModelFamilyTests/NeuralNetworks runs the same encoder/decoder +
+        // cross-attention architecture at reduced <float> scale (Janus/Donut precedent),
+        // exercising every code path in seconds.
+        "WhisperTimestamped",
+    };
+
+    // Models whose generated test class runs in <float> instead of the default
+    // <double> (#1679 / training-perf tracker #1624). These models' single FORWARD
+    // is fast, but their training/clone tests OOM or time out on the 16 GB CI runner
+    // because double precision DOUBLES the training footprint (gradients + optimizer
+    // state + activations). Running them in float halves that footprint and roughly
+    // halves per-op cost — eliminating the OOM/timeout — while keeping every code path
+    // and the self-relative training invariants intact. The generated scaffold emits
+    // `<float>` for the test base, factory return type, and constructor (see the
+    // floatify step in EmitGeneratedTestClass). The model family base must have a
+    // generic `<T>` form (NeuralNetwork/Embedding/Diffusion/VisionLanguage/AudioNN/
+    // TTS/NER/Segmentation all do).
+    //
+    // ⚠ MUST BE KEPT IN SYNC with the training-perf-bound model roster (#1624 inventory). There is
+    // no compiler-enforced contract here: a NEW large model that OOMs/times out in <double> training
+    // will NOT be floated until its class name is added below (or it is annotated with
+    // [GenerateFloatTestScaffold] — the going-forward, self-declaring source of truth read by the
+    // model-discovery transform). When in doubt prefer the attribute on the model class over editing
+    // this list. The FloatScaffoldNoOp diagnostic below warns if an entry here floats nothing.
+    //
+    // Diagnostic raised when a model is selected for a <float> scaffold but the rewrite changed
+    // nothing (no generic <double> found) — see EmitGeneratedTestClass.
+    private static readonly DiagnosticDescriptor FloatScaffoldNoOpDescriptor = new DiagnosticDescriptor(
+        id: "ADNTEST001",
+        title: "Float test scaffold rewrite was a no-op",
+        messageFormat: "Model '{0}' is selected for a <float> test scaffold, but no generic <double> " +
+                       "argument was found to rewrite to <float>; the generated scaffold may run in " +
+                       "<double> (the OOM/timeout this is meant to prevent). Check the scaffold " +
+                       "template and the float-selection (Fp32TestClassNames / [GenerateFloatTestScaffold]).",
+        category: "AiDotNet.TestScaffold",
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
+    private static readonly System.Collections.Generic.HashSet<string> Fp32TestClassNames =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+    {
+        // --- #1624 training/perf-bound inventory (OOM / TIMEOUT in training/clone) ---
+        // Embedding family
+        "BGE", "ColBERT", "InstructorEmbedding", "MatryoshkaEmbedding", "SGPT",
+        "SPLADE", "SimCSE", "TransformerEmbeddingNetwork", "FastText",
+        // NeuralNetwork family (vision backbones + memory nets)
+        "CapsuleNetwork", "EfficientNetNetwork", "MobileNetV3Network", "ResNetNetwork",
+        "VGGNetwork", "VisionTransformer",
+        // Diffusion family (Flux / ControlNet / video / point-cloud)
+        "CogVideoModel", "ControlNetFluxModel", "ControlNetPlusPlusFluxModel",
+        "FlowEditModel", "Flux2Model", "Flux2SchnellModel", "FluxInpaintingModel",
+        "FluxSchnellModel", "PointEModel", "SenseFlowModel", "TransfusionModel",
+        // VisionLanguage family
+        "SmolVLM",
+        // NOTE: EmotiVoice, TinyBERTNER, UNet3D from the #1624 inventory have MANUAL
+        // scaffolds (ModelFamilyTests/NeuralNetworks/*Tests.cs), so they are not
+        // auto-generated and the float-list does not apply — UNet3DTests is already
+        // <float>; EmotiVoiceTests / TinyBERTNERTests are floated directly in their
+        // manual scaffolds instead (their bases TTSModelTestBase / TransformerNERTestBase
+        // were generic-ized to <T> for that).
+        // --- Whisper / ASR family (large-v3-scale defaults; same double-timeout) ---
+        "DistilWhisper", "FasterWhisper", "KotobaWhisper", "WhisperLargeV3",
+        "WhisperLargeV3Turbo", "WhisperLive", "WhisperX", "Moonshine", "WhisperCPP",
+        "CanaryFlash", "NeMoMultitask",
     };
 
     // Attribute metadata names
@@ -1169,6 +1243,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             HasParameterlessConstructor = hasParameterlessCtor,
             HasArchitectureOnlyConstructor = hasArchitectureOnlyCtor,
             InheritsFromExcludedBase = InheritsFromAnyExcludedBase(modelClass),
+            RequestsFloatScaffold = HasFloatScaffoldAttribute(modelClass),
             ArchitectureParamTypeName = architectureParamTypeName,
             ExtendsAudioNeuralNetworkBase = extendsAudioNN,
             ExtendsDocumentNeuralNetworkBase = extendsDocumentNN,
@@ -2079,6 +2154,37 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         var baseClassName = GetBaseClassName(family);
         var factoryMethodName = GetFactoryMethodName(family);
         var returnTypeCode = GetReturnTypeCode(family);
+
+        // #1679: emit this model's scaffold in <float> rather than the default <double>
+        // (training-perf OOM/timeout mitigation — see Fp32TestClassNames). Switch the
+        // generic family base, the factory return type, and the constructor's type args
+        // to float. Only the generic-type-argument occurrences of `double` are rewritten;
+        // the `double`-keyword tolerance/return-type overrides emitted below are untouched.
+        // Float-scaffold selection: the legacy hard-coded roster OR the self-declaring
+        // [GenerateFloatTestScaffold] attribute on the model class (the going-forward source of truth).
+        bool useFloat = Fp32TestClassNames.Contains(model.ClassName) || model.RequestsFloatScaffold;
+        if (useFloat)
+        {
+            baseClassName += "<float>";
+            var floatedReturn = FloatifyGenericArgs(returnTypeCode);
+            var floatedCtor = FloatifyGenericArgs(constructorExpr);
+            var floatedFactory = FloatifyGenericArgs(factoryBody);
+            // Diagnostic (#1679 review): if a model is flagged for a <float> scaffold but NONE of the
+            // model-typed fragments contained a generic <double> to rewrite, the float intent silently
+            // did not reach the factory/constructor/return type — the scaffold can compile as <double>,
+            // exactly the OOM/timeout this targets. Warn so a template change can't regress it unnoticed.
+            bool anyChanged = floatedReturn != returnTypeCode
+                           || floatedCtor != constructorExpr
+                           || floatedFactory != factoryBody;
+            if (!anyChanged)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    FloatScaffoldNoOpDescriptor, Location.None, model.ClassName));
+            }
+            returnTypeCode = floatedReturn;
+            constructorExpr = floatedCtor;
+            factoryBody = floatedFactory;
+        }
 
         var sb = new StringBuilder();
         // Multi-type-parameter models may need Tensor<> and/or Matrix<>/Vector<> usings
@@ -3193,7 +3299,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("}");
 
         var hintName = GeneratorHelpers.StripGenericSuffix(model.FullyQualifiedName).Replace(".", "_") + "Tests.g.cs";
-        context.AddSource(hintName, sb.ToString());
+        var generated = sb.ToString();
+        if (useFloat)
+        {
+            // #1680 review: the model-typed fragments (base class, factory, constructor, return type) are
+            // floated above, but the scaffold BODY still emits hard-coded Tensor<double>/<double> overrides for
+            // some families. Emitting those alongside a <float> base produces a partial (mixed-precision)
+            // scaffold that compiles but runs the double cost the opt-in is meant to avoid. Float the WHOLE
+            // scaffold with the type-arg-safe rewriter (GeneratedTestFloatify touches generic <double> type-args
+            // ONLY — never the `double` keyword or tolerance literals), so a float opt-in is always emitted as a
+            // fully-<float> class. A construct it genuinely cannot float (e.g. a non-generic double-only base
+            // alias) then surfaces as a loud compile error in the test build rather than a silent mixed scaffold.
+            generated = FloatifyGenericArgs(generated);
+        }
+        context.AddSource(hintName, generated);
     }
 
     /// <summary>
@@ -4915,6 +5034,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public bool HasTests { get; set; }
         public Location? Location { get; set; }
 
+        /// <summary>
+        /// True when the model class is annotated [GenerateFloatTestScaffold] — its generated
+        /// scaffold runs in &lt;float&gt;. This is the going-forward, self-declaring float source of
+        /// truth, unioned with the legacy hard-coded Fp32TestClassNames list. See EmitGeneratedTestClass.
+        /// </summary>
+        public bool RequestsFloatScaffold { get; set; }
+
         // Interface detection
         public bool ImplementsNeuralNetworkModel { get; set; }
         public bool ImplementsVocoder { get; set; }
@@ -5597,6 +5723,38 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
             _ => ctx,
         };
+    }
+
+    /// <summary>
+    /// Rewrites the generic TYPE-ARGUMENT occurrences of <c>double</c> to <c>float</c>
+    /// in an emitted code fragment (e.g. <c>Foo&lt;double&gt;</c>,
+    /// <c>new Bar&lt;double, Tensor&lt;double&gt;&gt;(...)</c>,
+    /// <c>IDiffusionModel&lt;double&gt;</c>). Used by the #1679 float-by-default path.
+    /// Only touches <c>double</c> immediately inside angle brackets, so it never
+    /// rewrites a <c>double</c> keyword used as a method return type or a literal.
+    /// </summary>
+    // Delegates to the robust, unit-tested, regex-based rewriter (GeneratedTestFloatify), which
+    // only touches `double` as a generic type ARGUMENT and handles <double[]>, <double?>, nested
+    // and multi-arg generics — replacing the old brittle string.Replace chain that missed those
+    // and could not be tested. Kept as a thin wrapper so the call sites read naturally.
+    private static string FloatifyGenericArgs(string code) => GeneratedTestFloatify.Floatify(code);
+
+    // Source-of-truth check for the [GenerateFloatTestScaffold] opt-in (#1679): the going-forward way
+    // a model self-declares that its generated scaffold should run in <float>, unioned with the legacy
+    // Fp32TestClassNames list. Matched by FULL metadata name (namespace + type) — not the simple name,
+    // which would also match an unrelated same-named attribute from another namespace/assembly and float a
+    // model by accident (#1680 review). Reading metadata works whether or not the attribute symbol is
+    // referenced by the current compilation.
+    private static bool HasFloatScaffoldAttribute(INamedTypeSymbol modelClass)
+    {
+        foreach (var attr in modelClass.GetAttributes())
+        {
+            var ac = attr.AttributeClass;
+            if (ac?.Name == "GenerateFloatTestScaffoldAttribute"
+                && ac.ContainingNamespace?.ToDisplayString() == "AiDotNet.Attributes")
+                return true;
+        }
+        return false;
     }
 
     private static string GetBaseClassName(TestFamily family)

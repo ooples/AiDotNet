@@ -110,6 +110,12 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     private readonly int _numLayers;
 
     /// <summary>
+    /// Parameter-count floor (≈ 1B params ≈ 4 GB fp32 → 2 GB fp16) above which eval keeps the tower's
+    /// weights fp16-resident. Below this the model fits comfortably resident at fp32, so it pays nothing.
+    /// </summary>
+    private const long LowPrecisionResidentThresholdParams = 1_000_000_000L;
+
+    /// <summary>
     /// Number of attention heads.
     /// </summary>
     private readonly int _numHeads;
@@ -369,7 +375,12 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         List<DiTBlock>? customBlocks)
     {
         var patchDim = _inputChannels * _patchSize * _patchSize;
-        var timeEmbedDim = _hiddenSize * 4;
+        // Faithful DiT (Peebles & Xie 2023): the timestep MLP outputs hidden_size and the AdaLN
+        // modulation is Linear(hidden_size, 6*hidden_size). The conditioning vector fed to every block's
+        // AdaLN therefore has width = hidden_size. An earlier 4*hidden_size here inflated the dominant
+        // AdaLN weight 4x (e.g. [12288,18432] instead of [3072,18432]) — over half a foundation DiT's
+        // parameters — and was the primary driver of the foundation-scale OOM (issue #1672).
+        var timeEmbedDim = _hiddenSize;
 
         // Always create patch embedding, time embedding, and final layers. Use
         // LazyDense so weight tensors stay unallocated until the first Forward()
@@ -484,10 +495,23 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     /// <inheritdoc />
+    /// <summary>
+    /// True when this forward runs the foundation-scale fp16-resident eval path (no active tape,
+    /// params over the resident threshold). In that mode the disk-backed streaming scope is bypassed
+    /// (its release sweep re-inflates evicted weights → OOM) and the compiled replay is bypassed (it
+    /// captures the per-forward-mutated weight tensors → stale references); the eager Forward upcasts
+    /// each layer's fp16 weights to fp32 transiently and drops them, keeping only fp16 resident.
+    /// </summary>
+    private bool UseLowPrecisionResidentEval()
+    {
+        bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+        return !tapeActive && ParameterCount > LowPrecisionResidentThresholdParams;
+    }
+
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
         EnsureLayersInitialized();
-        using var streaming = BeginWeightStreamingForward();
         _lastInput = noisySample;
 
         // Get timestep embedding (cheap MLP; computed eagerly each step so the per-step
@@ -495,6 +519,15 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         var timeEmbed = GetTimestepEmbedding(timestep);
         timeEmbed = ProjectTimeEmbedding(timeEmbed);
 
+        // Foundation-scale eval: eager fp16-resident forward — NOT the disk-streaming scope (its
+        // release sweep re-inflates evicted weights → OOM) and NOT the compiled replay (captures the
+        // per-forward-mutated weights). See UseLowPrecisionResidentEval.
+        if (UseLowPrecisionResidentEval())
+        {
+            return Forward(noisySample, timeEmbed, conditioning);
+        }
+
+        using var streaming = BeginWeightStreamingForward();
         // Compile the (expensive) DiT forward ONCE and replay it across the denoising loop,
         // re-binding every per-step leaf — noisy sample, timestep embedding, optional
         // conditioning — so a changing timestep is never baked (#1620 / AiDotNet.Tensors#616).
@@ -511,8 +544,16 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     public override Tensor<T> PredictNoiseWithEmbedding(Tensor<T> noisySample, Tensor<T> timeEmbedding, Tensor<T>? conditioning = null)
     {
         EnsureLayersInitialized();
-        using var streaming = BeginWeightStreamingForward();
         _lastInput = noisySample;
+
+        // See PredictNoise: foundation-scale eval uses the eager fp16-resident forward, bypassing the
+        // disk-streaming scope and compiled replay.
+        if (UseLowPrecisionResidentEval())
+        {
+            return Forward(noisySample, timeEmbedding, conditioning);
+        }
+
+        using var streaming = BeginWeightStreamingForward();
         // Multi-input compiled replay: every per-step leaf — noisy sample, timestep embedding,
         // optional conditioning — is re-bound each step, so a changing timestep embedding is
         // never baked as a constant. The single-input PredictCompiled marks only the noisy
@@ -599,6 +640,18 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         // G4 (#1624): checkpoint each block (recompute activations in backward) — gradient-equivalent.
         // Each closure is a pure function of the residual stream; the AdaLN/cross-attn conditioning is
         // captured as a constant and its gradient is propagated correctly by the checkpoint recompute.
+        // Foundation-scale eval: keep each block's large weight matrices fp16-resident (DenseLayer
+        // upcasts to fp32 transiently per matmul). Halves the tower's resident weight memory so a
+        // multi-GB DiT fits a 16 GB host without disk paging or slow Half arithmetic. Flagged here,
+        // before the blocks' first forward, so DenseLayer downcasts its fp32 weights on first use.
+        // Gated OFF while a tape is active (training needs the fp32 master for backward).
+        bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+        if (!tapeActive && ParameterCount > LowPrecisionResidentThresholdParams)
+        {
+            foreach (var b in _blocks) b.EnableLowPrecisionResident();
+        }
+
         var blockForwards = new System.Func<Tensor<T>, Tensor<T>>[_blocks.Count];
         for (int i = 0; i < _blocks.Count; i++)
         {
@@ -1527,5 +1580,23 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         public DenseLayer<T>? CrossAttnV { get; set; }
         public DenseLayer<T>? CrossAttnOut { get; set; }
         public LayerNormalizationLayer<T>? CrossAttnNorm { get; set; }
+
+        /// <summary>
+        /// Flags this block's large weight matrices (MLP + AdaLN + cross-attention projections) for
+        /// fp16-resident inference: each is stored at half precision and upcast to fp32 transiently
+        /// per forward (see <see cref="DenseLayer{T}"/>), halving resident weight memory. Norm layers
+        /// are tiny and left full precision. Must be called before the block's first forward.
+        /// </summary>
+        internal void EnableLowPrecisionResident()
+        {
+            if (MLP1 is not null) MLP1.LowPrecisionResident = true;
+            if (MLP2 is not null) MLP2.LowPrecisionResident = true;
+            if (AdaLNModulation is not null) AdaLNModulation.LowPrecisionResident = true;
+            if (CrossAttnQ is not null) CrossAttnQ.LowPrecisionResident = true;
+            if (CrossAttnK is not null) CrossAttnK.LowPrecisionResident = true;
+            if (CrossAttnV is not null) CrossAttnV.LowPrecisionResident = true;
+            if (CrossAttnOut is not null) CrossAttnOut.LowPrecisionResident = true;
+            if (Attention is not null) Attention.LowPrecisionResident = true;
+        }
     }
 }

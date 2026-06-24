@@ -142,6 +142,17 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     private Tensor<T> _outputBias;
 
     /// <summary>
+    /// fp16-resident copies of the Q/K/V weight matrices, used only when
+    /// <see cref="LayerBase{T}.LowPrecisionResident"/> is set (foundation-scale inference). Each is the
+    /// resident master once populated; the full-precision <see cref="_queryWeights"/> etc. are freed after
+    /// the first forward downcasts them. Upcast transiently per forward via
+    /// <see cref="LayerBase{T}.UpcastResidentWeight"/> (shared SIMD scratch). Null on the normal fp32 path.
+    /// </summary>
+    private Tensor<Half>? _queryWeightsHalf;
+    private Tensor<Half>? _keyWeightsHalf;
+    private Tensor<Half>? _valueWeightsHalf;
+
+    /// <summary>
     /// True once <see cref="EnsureInitialized"/> has allocated and populated the
     /// Q/K/V weight tensors and the output bias. The lazy-init path leaves these at
     /// [0,0] until the first Forward / GetParameters / SetParameters call demands
@@ -616,10 +627,16 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         var input2D = Engine.Reshape(input3D, new[] { batchSize * sequenceLength, _embeddingDimension });
 
         // Compute Projections: [B*S, E] @ [E, E] -> [B*S, E]
-        // Using Engine.TensorMatMul for GPU acceleration
-        var Q_flat = Engine.TensorMatMul(input2D, _queryWeights);
-        var K_flat = Engine.TensorMatMul(input2D, _keyWeights);
-        var V_flat = Engine.TensorMatMul(input2D, _valueWeights);
+        // Using Engine.TensorMatMul for GPU acceleration.
+        // fp16-resident (foundation inference): upcast each weight from its fp16 master into a shared
+        // reused scratch immediately before its matmul. Each matmul fully consumes the upcast weight
+        // before the next call overwrites the (same-shape) scratch, so one buffer serves Q, K and V.
+        Tensor<T> qWeights = LowPrecisionResident ? UpcastResidentWeight(ref _queryWeights, ref _queryWeightsHalf) : _queryWeights;
+        var Q_flat = Engine.TensorMatMul(input2D, qWeights);
+        Tensor<T> kWeights = LowPrecisionResident ? UpcastResidentWeight(ref _keyWeights, ref _keyWeightsHalf) : _keyWeights;
+        var K_flat = Engine.TensorMatMul(input2D, kWeights);
+        Tensor<T> vWeights = LowPrecisionResident ? UpcastResidentWeight(ref _valueWeights, ref _valueWeightsHalf) : _valueWeights;
+        var V_flat = Engine.TensorMatMul(input2D, vWeights);
 
         // Reshape to [Batch, Seq, HeadCount, HeadDim]
         var queries = Engine.Reshape(Q_flat, new[] { batchSize, sequenceLength, _headCount, _headDimension });

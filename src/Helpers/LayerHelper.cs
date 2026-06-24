@@ -31185,27 +31185,35 @@ public static class LayerHelper<T>
         int numEncoderLayers = 6,
         int numAttentionHeads = 8)
     {
-        // Per Arandjelovic & Zisserman 2017: VGG-style encoder producing 512-D embedding.
-        // In sequential/1D mode, we use Dense+BN+ReLU blocks matching the paper's
-        // [Conv-BN-ReLU, Conv-BN-ReLU, Pool] x 4 pattern with progressive channel expansion.
-        // Tanh activation: bounded [-1,1], prevents both neuron death and gradient explosion.
-        // Better than LeakyReLU for 1D Dense encoder without BatchNorm.
+        // Per Arandjelovic & Zisserman 2017 (L3-Net): VGG-style encoder producing a 512-D
+        // embedding via [Conv-BN-ReLU] blocks with progressive channel expansion. In sequential/1D
+        // mode the convolutions become Dense blocks. The paper's BatchNorm conditions each block so
+        // the activations stay well-scaled; BatchNorm degenerates at batch_size == 1 (its per-batch
+        // statistics make the gradient exactly zero on a single sample, per Ioffe & Szegedy 2015),
+        // so we substitute LayerNormalization — batch-independent and identical at inference. Each
+        // block is therefore Dense -> LayerNorm -> Tanh.
+        //
+        // The normalization is NOT optional polish: without it a deep stack of saturating Tanh
+        // layers vanishes the gradient and the network plateaus after a handful of steps — it cannot
+        // even memorize a single example, its loss flatlines (the #1670/#1675 LossStrictlyDecreases
+        // symptom: loss identical at step 100 and step 600). Pre-activation LayerNorm keeps each Tanh
+        // in its responsive region so the gradient flows through the full depth.
         var tanhActivation = (IActivationFunction<T>)new TanhActivation<T>();
         IActivationFunction<T>? nullActivation = null;
 
-        // Audio encoder: VGG-style blocks (Dense replaces Conv for 1D input)
-        // VGG-style blocks without BN (BN requires batch_size > 1; in 1D sequential
-        // mode with single samples, BN gradient is exactly zero per Ioffe & Szegedy 2015)
-        // VGG-style encoder: 4 blocks with progressive channel expansion
-        // Per Arandjelovic & Zisserman 2017: 64/128/256/512 filters
-        // 1 Dense per block in 1D mode (prevents dynamic range explosion)
-        yield return new DenseLayer<T>(128, tanhActivation);
-        yield return new DenseLayer<T>(256, tanhActivation);
-        yield return new DenseLayer<T>(512, tanhActivation);
-        yield return new DenseLayer<T>(512, tanhActivation);
+        // VGG-style encoder: 4 blocks with progressive channel expansion (64/128/256/512 in the
+        // paper; 128/256/512/512 here), each Dense -> LayerNorm -> Tanh.
+        foreach (int width in new[] { 128, 256, 512, 512 })
+        {
+            yield return new DenseLayer<T>(width, nullActivation);
+            yield return new LayerNormalizationLayer<T>(width);
+            yield return new ActivationLayer<T>(tanhActivation);
+        }
 
-        // Fusion FC per paper: 512 -> 128 -> 2
-        yield return new DenseLayer<T>(128, tanhActivation);
+        // Fusion FC per paper: 512 -> 128 (normed Tanh) -> 2 (linear correspondence logits).
+        yield return new DenseLayer<T>(128, nullActivation);
+        yield return new LayerNormalizationLayer<T>(128);
+        yield return new ActivationLayer<T>(tanhActivation);
         yield return new DenseLayer<T>(2, nullActivation);
     }
 

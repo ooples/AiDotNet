@@ -842,7 +842,14 @@ public class TimeMachine<T> : ForecastingModelBase<T>
         bool addedBatchDim = current.Rank == 1;
         if (addedBatchDim)
         {
-            current = current.Reshape(new[] { 1, current.Length });
+            // Issue #1670: use Engine.Reshape, NOT tensor.Reshape. The raw
+            // Tensor<T>.Reshape allocates a fresh tensor with no autodiff-tape
+            // link, severing the gradient path. During training this Forward is
+            // driven under a tape (ForwardNativeForTraining), so a raw reshape
+            // here — and especially the output reshape below — disconnects every
+            // layer parameter from the loss, making all gradients zero and
+            // training a no-op. Engine.Reshape records the op on the tape.
+            current = Engine.Reshape(current, new[] { 1, current.Length });
         }
 
         foreach (var layer in Layers)
@@ -858,7 +865,10 @@ public class TimeMachine<T> : ForecastingModelBase<T>
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
         {
-            current = current.Reshape(new[] { current.Shape[1] });
+            // Tape-safe reshape (see note above) — this runs on the final output
+            // after all layers, so a raw reshape here is the primary tape-sever
+            // that zeroed gradients for #1670.
+            current = Engine.Reshape(current, new[] { current.Shape[1] });
         }
 
         return current;

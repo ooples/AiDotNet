@@ -68,18 +68,17 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
     // teardowns race on the process-global GCSettings. Shared with the NeuralNetworks base.
 
     /// <summary>
-    /// Caps concurrent foundation-scale diffusion tests to avoid BLAS thread-
-    /// pool oversubscription when many SD-UNet-scale Predicts run in parallel
-    /// on the same machine. xUnit's parallelizeTestCollections=true puts one
-    /// test class per core; if 16 of them are simultaneously inside an FP64
-    /// SD-UNet forward (each wanting all 16 cores via OpenBLAS), every test
-    /// gets ~1 core and the per-step latency multiplies by 4-8×, blowing the
-    /// 120 s <c>[Fact(Timeout)]</c> envelope even though each test fits the
-    /// budget in isolation. See <c>tools/ConsistencyModelPerfDiag</c> for the
-    /// measurement that motivated this (issue #1305 ConsistencyModel:
-    /// 76 s isolated vs 120 s under-contention timeout).
+    /// Serializes foundation-scale diffusion tests to ONE at a time so each heavy forward gets the WHOLE
+    /// machine (all cores) instead of fighting a sibling for them. xUnit's parallelizeTestCollections=true
+    /// puts one test class per core; without this gate, N foundation-scale forwards run concurrently and
+    /// each managed-BLAS GEMM oversubscribes the same cores, multiplying per-step latency 4-8× and blowing
+    /// the 120 s <c>[Fact(Timeout)]</c> envelope even though each test fits in isolation (issue #1305).
+    /// The previous design capped BLAS to ProcessorCount/2 AND allowed 2 concurrent heavies — which halved
+    /// the cores available to a single foundation forward and roughly doubled its latency (catastrophic on
+    /// a 2-core CI runner, where ProcessorCount/2 rounds to 1). Serializing (cap = 1) + full-core BLAS gives
+    /// the fastest possible single forward with no oversubscription.
     /// </summary>
-    private const int HeavyConcurrencyCap = 2;
+    private const int HeavyConcurrencyCap = 1;
 
     /// <summary>
     /// Element-count threshold above which a test counts as "heavy" and gates
@@ -96,18 +95,16 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         new(HeavyConcurrencyCap, HeavyConcurrencyCap);
 
     /// <summary>
-    /// BLAS-thread cap (issue #1305). xUnit runs diffusion test classes in parallel; uncapped, every
-    /// concurrent foundation-scale forward grabs ALL cores via the managed BLAS, so N tests fight for
-    /// the same cores and per-step latency multiplies 4-8× — blowing the 120s timeout even though each
-    /// test fits in isolation. Cap the managed-BLAS parallelism per test so the at-most
-    /// <see cref="HeavyConcurrencyCap"/> concurrent heavy forwards share the machine
-    /// (cap × HeavyConcurrencyCap ≈ core count) instead of each demanding the whole machine. Set once,
-    /// process-wide, in the static initializer so parallel test classes don't race the global knob.
+    /// No BLAS-thread cap: a foundation-scale forward must use ALL cores to have any chance of fitting the
+    /// 120 s timeout. Oversubscription is prevented by serializing heavy tests (HeavyConcurrencyCap = 1)
+    /// rather than by starving each forward of cores. Set explicitly to the full ProcessorCount (the
+    /// CpuParallelSettings default) so a prior test that lowered this process-wide knob can't leave our
+    /// foundation forwards under-parallelized. The previous ProcessorCount/HeavyConcurrencyCap cap — which
+    /// halved a single forward's cores and rounded to 1 on a 2-core CI runner — is gone.
     /// </summary>
     static DiffusionModelTestBase()
     {
-        AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism =
-            System.Math.Max(1, System.Environment.ProcessorCount / HeavyConcurrencyCap);
+        AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism = System.Environment.ProcessorCount;
     }
 
     /// <summary>
