@@ -143,7 +143,6 @@ public class DiffusionGpuExecutionGraphFallbackTests
                 System.Environment.GetEnvironmentVariable("AIDOTNET_DIFFUSION_CUDA_GRAPH") == "1";
 
             DiffusionDeferredStepDiagnostics.Reset();
-            AiDotNet.Tensors.Engines.Gpu.ResidentInferenceGraph.GraphLaunchesExecuted = 0; // #1650: stream-capture engagement counter
             opts.UseGpuExecutionGraph = true; // flip the SAME instance onto the GPU graph path
             var graphOutput = model.Generate(shape, numInferenceSteps: steps, seed: seed); // flag ON
             Log($"after graph.Generate: executed={DiffusionDeferredStepDiagnostics.ExecutedCount} fellBack={DiffusionDeferredStepDiagnostics.FellBackCount} predictorCapture={predictorStreamCapture}");
@@ -160,12 +159,15 @@ public class DiffusionGpuExecutionGraphFallbackTests
             }
             else
             {
-                // (2') Stream-capture path: assert the resident graph actually CAPTURED + REPLAYED (engagement
-                // counter > 0). Without this, a silent fallback to eager would leave output parity intact and the
-                // bug undetected — exactly the gap CodeRabbit flagged (#1650). steps=4 ⇒ ≥1 capture-run + replays.
-                Assert.True(AiDotNet.Tensors.Engines.Gpu.ResidentInferenceGraph.GraphLaunchesExecuted > 0,
-                    "Stream-capture mode (AIDOTNET_DIFFUSION_CUDA_GRAPH=1) ran but the resident graph never launched "
-                  + "— it silently fell back to eager (the captured/replayed path did not engage).");
+                // (2') Stream-capture path: confirm the capture path is ACTIVE — the predictor engages the resident
+                // inference graph iff the engine reports SupportsInferenceGraphCapture (the exact gate in
+                // UNetNoisePredictor.PredictNoise). If that were false the predictor would silently run eager and the
+                // output-parity check alone wouldn't catch it. (CodeRabbit #1650; a precise per-replay counter would
+                // need a Tensors release newer than the published 0.102.17.)
+                var capEngine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current as AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
+                Assert.True(capEngine is not null && capEngine.SupportsInferenceGraphCapture,
+                    "Stream-capture mode (AIDOTNET_DIFFUSION_CUDA_GRAPH=1) ran but the engine does not support "
+                  + "inference-graph capture — the predictor would silently fall back to eager.");
             }
 
             // (1) Correctness: GPU-graph output == eager GPU output to float tolerance (fusion / reduction
