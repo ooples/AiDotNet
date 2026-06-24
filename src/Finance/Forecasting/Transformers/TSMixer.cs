@@ -885,10 +885,14 @@ public class TSMixer<T> : ForecastingModelBase<T>
 
             if (isTimeMixingLayer && layer is not LayerNormalizationLayer<T> && layer is not DropoutLayer<T>)
             {
-                // Time-mixing Dense layers: transpose to [batch, features, seq], apply, transpose back
-                current = current.Transpose([0, 2, 1]);  // [batch, seq, features] -> [batch, features, seq]
+                // Time-mixing Dense layers: transpose to [batch, features, seq], apply, transpose back.
+                // Issue #1678: Engine.TensorPermute (tape-safe), NOT tensor.Transpose. The raw
+                // Tensor<T>.Transpose returns a stride-only view with no autodiff-tape link, severing the
+                // gradient around layer.Forward so the time-mixing layers (and everything upstream) never
+                // train. Engine.TensorPermute records the permutation on the tape (PermuteBackward).
+                current = Engine.TensorPermute(current, [0, 2, 1]);  // [batch, seq, features] -> [batch, features, seq]
                 current = layer.Forward(current);
-                current = current.Transpose([0, 2, 1]);  // [batch, features, seq] -> [batch, seq, features]
+                current = Engine.TensorPermute(current, [0, 2, 1]);  // [batch, features, seq] -> [batch, seq, features]
             }
             else
             {
