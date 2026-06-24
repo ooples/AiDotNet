@@ -55,12 +55,23 @@ jobs:
             name=$(basename "$proj" .csproj)
             dir=$(dirname "$proj")
             echo "::group::$name"
-            if timeout 300s dotnet run --project "$proj" -c Release; then
-              echo "PASS: $name"
+            if grep -q 'Microsoft.NET.Sdk.Web' "$proj"; then
+              # ASP.NET samples are long-running servers (they never exit), so they
+              # are compile-verified only — `dotnet run` would hang until timeout.
+              if dotnet build "$proj" -c Release; then
+                echo "PASS (build-only, web app): $name"
+              else
+                echo "::error::FAIL (build): $name"
+                fail=1
+              fi
             else
-              code=$?
-              echo "::error::FAIL ($code): $name"
-              fail=1
+              if timeout 300s dotnet run --project "$proj" -c Release; then
+                echo "PASS: $name"
+              else
+                code=$?
+                echo "::error::FAIL ($code): $name"
+                fail=1
+              fi
             fi
             # Reclaim the ~1.4 GB output copy before moving to the next sample.
             rm -rf "$dir/bin" "$dir/obj"
