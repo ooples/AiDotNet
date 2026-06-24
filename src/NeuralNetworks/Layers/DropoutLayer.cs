@@ -227,6 +227,29 @@ public class DropoutLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Returns layer-specific metadata required for cloning/serialization.
+    /// </summary>
+    /// <remarks>
+    /// The dropout rate is a constructor argument with no trainable-parameter backing,
+    /// so it MUST be persisted here or it is lost on a serialize/deserialize-based clone.
+    /// Without it, <see cref="Helpers.DeserializationHelper"/> reconstructs the layer via
+    /// the <c>DropoutLayer(double dropoutRate = 0.5)</c> constructor and falls back to the
+    /// 0.5 DEFAULT — silently turning a configured (e.g. 0.2) dropout model into a
+    /// 0.5-dropout one whenever it is cloned through the eager DeepCopy path. The clone
+    /// then trains with far more aggressive dropout than the original and diverges
+    /// (issue #1679: EmotiVoice <c>MoreData_ShouldNotDegrade</c> — the cloned net2 trained
+    /// with 0.5 dropout while net1 trained with the configured 0.2). The deserializer reads
+    /// this key back at its DropoutLayer branch (<c>TryGetDouble(additionalParams, "DropoutRate")</c>).
+    /// </remarks>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["DropoutRate"] = NumOps.ToDouble(_dropoutRate)
+            .ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+        return metadata;
+    }
+
+    /// <summary>
     /// Performs the forward pass of the dropout layer.
     /// </summary>
     /// <param name="input">The input tensor from the previous layer.</param>
