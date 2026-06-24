@@ -1142,6 +1142,14 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
+        // #1675 review: enumerate the Layers chain ONCE — the same order PredictCore runs — rather than the
+        // projection-field partition. The audio and visual encoders share the SAME Layers (the L3-Net shared
+        // encoder), and the four task heads all alias Layers[^1], so the field-based enumeration double-counted
+        // every shared/aliased layer; it also assumed a fixed 6-layer split (Layers.Count - 2) that the new
+        // Dense -> LayerNorm -> Tanh blocks broke. Iterating Layers is robust to the block count and lists each
+        // parameter exactly once. ResolveLazyLayerShapes first so lazy DenseLayers report their real params.
+        ResolveLazyLayerShapes();
+
         var allParams = new List<T>();
 
         void AddLayerParams(ILayer<T> layer)
@@ -1153,19 +1161,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
             }
         }
 
-        AddLayerParams(AudioInputProjection);
-        foreach (var layer in AudioEncoderLayers) AddLayerParams(layer);
-        AddLayerParams(AudioOutputProjection);
-
-        AddLayerParams(VisualInputProjection);
-        foreach (var layer in VisualEncoderLayers) AddLayerParams(layer);
-        AddLayerParams(VisualOutputProjection);
-
-        foreach (var layer in CrossModalAttentionLayers) AddLayerParams(layer);
-        AddLayerParams(LocalizationHead);
-        AddLayerParams(SyncHead);
-        AddLayerParams(SceneClassificationHead);
-        AddLayerParams(SeparationMaskPredictor);
+        foreach (var layer in Layers) AddLayerParams(layer);
 
         var result = new Vector<T>(allParams.Count);
         for (int i = 0; i < allParams.Count; i++)
@@ -1206,19 +1202,10 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
             offset += count;
         }
 
-        SetLayerParams(AudioInputProjection);
-        foreach (var layer in AudioEncoderLayers) SetLayerParams(layer);
-        SetLayerParams(AudioOutputProjection);
-
-        SetLayerParams(VisualInputProjection);
-        foreach (var layer in VisualEncoderLayers) SetLayerParams(layer);
-        SetLayerParams(VisualOutputProjection);
-
-        foreach (var layer in CrossModalAttentionLayers) SetLayerParams(layer);
-        SetLayerParams(LocalizationHead);
-        SetLayerParams(SyncHead);
-        SetLayerParams(SceneClassificationHead);
-        SetLayerParams(SeparationMaskPredictor);
+        // #1675 review: mirror GetParameters — iterate the Layers chain once (the shared encoder + aliased
+        // heads made the field-based enumeration double-write shared layers, and the Layers.Count - 2 split
+        // mis-partitioned the new Dense -> LayerNorm -> Tanh blocks). Each layer is assigned exactly once.
+        foreach (var layer in Layers) SetLayerParams(layer);
     }
 
     /// <inheritdoc/>
@@ -1236,22 +1223,11 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
             // ParameterCount queries.
             ResolveLazyLayerShapes();
 
+            // #1675 review: sum the Layers chain once (consistent with GetParameters/SetParameters) — the
+            // field-based sum double-counted the shared encoder + aliased heads and depended on the now-broken
+            // Layers.Count - 2 partition.
             var count = 0;
-
-            count += (int)AudioInputProjection.ParameterCount;
-            foreach (var layer in AudioEncoderLayers) count += (int)layer.ParameterCount;
-            count += (int)AudioOutputProjection.ParameterCount;
-
-            count += (int)VisualInputProjection.ParameterCount;
-            foreach (var layer in VisualEncoderLayers) count += (int)layer.ParameterCount;
-            count += (int)VisualOutputProjection.ParameterCount;
-
-            foreach (var layer in CrossModalAttentionLayers) count += (int)layer.ParameterCount;
-            count += (int)LocalizationHead.ParameterCount;
-            count += (int)SyncHead.ParameterCount;
-            count += (int)SceneClassificationHead.ParameterCount;
-            count += (int)SeparationMaskPredictor.ParameterCount;
-
+            foreach (var layer in Layers) count += (int)layer.ParameterCount;
             return count;
         }
     }
