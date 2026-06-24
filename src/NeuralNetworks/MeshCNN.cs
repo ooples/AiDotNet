@@ -348,7 +348,9 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
             // and caches the input for backward pass gradient computation.
             if (layer is GlobalPoolingLayer<T> && output.Rank == 2)
             {
-                output = output.Reshape([1, output.Shape[0], output.Shape[1]]);
+                // Issue #1678: Engine.Reshape (tape-safe). A raw tensor.Reshape here severs the autodiff
+                // tape between the prior layer and GlobalPooling, so the upstream layers receive no gradient.
+                output = Engine.Reshape(output, [1, output.Shape[0], output.Shape[1]]);
             }
 
             output = layer.Forward(output);
