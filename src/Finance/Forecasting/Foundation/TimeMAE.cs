@@ -574,7 +574,7 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
             current = Layers[i].Forward(current);
 
         if (addedBatch && current.Rank == 2 && current.Shape[0] == 1)
-            current = current.Reshape(new[] { current.Shape[1] });
+            current = Engine.Reshape(current, new[] { current.Shape[1] });
         if (addedBatch)
             patchMask = patchMask.Reshape(new[] { numPatches });
 
@@ -605,7 +605,7 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
             current = layer.Forward(current);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
-            current = current.Reshape(new[] { current.Shape[1] });
+            current = Engine.Reshape(current, new[] { current.Shape[1] });
 
         return current;
     }

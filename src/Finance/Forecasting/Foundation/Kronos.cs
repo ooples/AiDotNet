@@ -510,7 +510,7 @@ public class Kronos<T> : TimeSeriesFoundationModelBase<T>
         current = DenormalizeForecast(current);
 
         if (flattened && current.Rank == 2 && current.Shape[0] == 1)
-            current = current.Reshape(new[] { current.Shape[1] });
+            current = Engine.Reshape(current, new[] { current.Shape[1] });
 
         return current;
     }
