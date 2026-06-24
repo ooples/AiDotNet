@@ -1,10 +1,9 @@
 using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Enums;
+using AiDotNet.Models.Results;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.NeuralNetworks.Architectures;
-using AiDotNet.ComputerVision;
-using AiDotNet.LinearAlgebra;
-using AiDotNet.Optimizers;
-using AiDotNet.LossFunctions;
+using AiDotNet.Tensors.LinearAlgebra;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
 
@@ -19,7 +18,6 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorPages();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
 
 // Register classification service as singleton
 builder.Services.AddSingleton<ImageClassificationService>();
@@ -29,13 +27,6 @@ var app = builder.Build();
 // Initialize the classification model
 var classificationService = app.Services.GetRequiredService<ImageClassificationService>();
 await classificationService.InitializeAsync();
-
-// Configure pipeline
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
 
 app.UseStaticFiles();
 app.UseRouting();
@@ -117,7 +108,7 @@ app.Run("http://localhost:5200");
 // =============================================
 public class ImageClassificationService
 {
-    private NeuralNetwork<float>? _model;
+    private AiModelResult<float, Tensor<float>, Tensor<float>>? _result;
     private bool _isInitialized;
     private readonly object _lock = new();
 
@@ -131,40 +122,27 @@ public class ImageClassificationService
     {
         Console.WriteLine("Initializing image classification model...");
 
-        // Create a CNN model (ResNet-18 style)
-        var config = new ResNetConfig<float>
-        {
-            InputChannels = 3,
-            InputHeight = 32,
-            InputWidth = 32,
-            NumBlocks = [2, 2, 2, 2],
-            NumFilters = [64, 128, 256, 512],
-            NumClasses = 10
-        };
-
-        _model = new NeuralNetwork<float>(
+        // Build + train the classifier through the facade.
+        var (trainFeatures, trainLabels) = GenerateSyntheticData();
+        var model = new NeuralNetwork<float>(
             new NeuralNetworkArchitecture<float>(
                 inputFeatures: 3 * 32 * 32,
                 numClasses: 10,
                 complexity: NetworkComplexity.Medium));
-
-        // Train on synthetic data for demo purposes
-        await TrainOnSyntheticDataAsync();
+        _result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+            .ConfigureModel(model)
+            .ConfigureDataLoader(DataLoaders.FromTensors(trainFeatures, trainLabels))
+            .BuildAsync();
 
         _isInitialized = true;
         Console.WriteLine("Model initialized successfully!");
     }
 
-    private async Task TrainOnSyntheticDataAsync()
+    private static (Tensor<float> features, Tensor<float> labels) GenerateSyntheticData()
     {
-        Console.WriteLine("Training model on synthetic data...");
-
         var random = new Random(42);
         const int numSamples = 500;
-        const int batchSize = 32;
-        const int epochs = 10;
 
-        // Generate synthetic training data
         var trainFeatures = new Tensor<float>([numSamples, 3, 32, 32]);
         var trainLabels = new Tensor<float>([numSamples, 10]);
 
@@ -203,30 +181,19 @@ public class ImageClassificationService
             trainLabels[[i, label]] = 1.0f;
         }
 
-        // Train
-        for (int epoch = 0; epoch < epochs; epoch++)
-        {
-            _model!.Train(trainFeatures, trainLabels);
-
-            if ((epoch + 1) % 2 == 0)
-            {
-                Console.WriteLine($"  Epoch {epoch + 1}/{epochs} completed");
-            }
-        }
-
-        await Task.CompletedTask;
+        return (trainFeatures, trainLabels);
     }
 
     public async Task<ClassificationResult> ClassifyAsync(byte[] imageData)
     {
-        if (!_isInitialized || _model == null)
+        if (!_isInitialized || _result == null)
             throw new InvalidOperationException("Model not initialized");
 
         // Preprocess image
         var tensor = PreprocessImage(imageData);
 
-        // Run inference
-        var predictions = _model.Predict(tensor);
+        // Run inference through the result object (the facade pattern)
+        var predictions = _result.Predict(tensor);
 
         // Get results
         var probabilities = new Dictionary<string, float>();
@@ -292,7 +259,7 @@ public class ImageClassificationService
             Architecture = "ResNet-18 style CNN",
             InputShape = "3x32x32 (RGB)",
             NumClasses = 10,
-            Parameters = _model?.GetParameterCount() ?? 0,
+            Parameters = (int)(_result?.TotalTrainableParameters ?? 0),
             IsInitialized = _isInitialized
         };
     }
