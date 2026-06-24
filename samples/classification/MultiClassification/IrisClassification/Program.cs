@@ -1,12 +1,12 @@
 using AiDotNet;
 using AiDotNet.Classification.Ensemble;
 using AiDotNet.Classification.SVM;
-using AiDotNet.CrossValidation;
-using AiDotNet.Enums;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.Preprocessing.Scalers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 Console.WriteLine("=== AiDotNet Iris Classification ===");
 Console.WriteLine("Multi-class classification comparing multiple classifiers using AiModelBuilder\n");
@@ -46,27 +46,20 @@ Console.WriteLine($"Training set: {trainFeatures.Length} samples");
 Console.WriteLine($"Test set: {testFeatures.Length} samples\n");
 
 // Define classifiers to compare - each will be used with AiModelBuilder
-var classifierConfigs = new Dictionary<string, IFullModel<double, double[], double>>
+var classifierConfigs = new Dictionary<string, IFullModel<double, Matrix<double>, Vector<double>>>
 {
-    ["Random Forest"] = new RandomForestClassifier<double, double[], double>(
-        nEstimators: 100,
-        maxDepth: 10,
-        minSamplesSplit: 2),
-    ["Gradient Boosting"] = new GradientBoostingClassifier<double, double[], double>(
-        nEstimators: 100,
-        learningRate: 0.1,
-        maxDepth: 3),
-    ["SVM (RBF)"] = new SupportVectorClassifier<double, double[], double>(
-        c: 1.0,
-        kernel: KernelType.RBF,
-        gamma: 0.1)
+    ["Random Forest"] = new RandomForestClassifier<double>(
+        new RandomForestClassifierOptions<double> { NEstimators = 100, MinSamplesSplit = 2 }),
+    ["Gradient Boosting"] = new GradientBoostingClassifier<double>(),
+    ["SVM"] = new SupportVectorClassifier<double>()
 };
 
 Console.WriteLine("╔════════════════════════════════════════════════════════════════╗");
 Console.WriteLine("║     CLASSIFIER COMPARISON USING PREDICTIONMODELBUILDER         ║");
 Console.WriteLine("╚════════════════════════════════════════════════════════════════╝\n");
 
-var results = new Dictionary<string, (AiModelResult<double, double[], double>? result, double testAcc)>();
+var testMatrix = ToMatrix(testFeatures);
+var results = new Dictionary<string, (AiModelResult<double, Matrix<double>, Vector<double>>? result, double testAcc)>();
 
 foreach (var (name, classifier) in classifierConfigs)
 {
@@ -75,28 +68,20 @@ foreach (var (name, classifier) in classifierConfigs)
     try
     {
         // Use the AiModelBuilder facade to train each classifier
-        var builder = new AiModelBuilder<double, double[], double>()
+        var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureModel(classifier)
             .ConfigurePreprocessing(pipeline => pipeline
                 .Add(new StandardScaler<double>()))
-            .ConfigureCrossValidation(new KFoldCrossValidator<double, double[], double>(k: 5));
+            .ConfigureDataLoader(DataLoaders.FromArrays(trainFeatures, trainLabels));
 
-        var result = await builder.BuildAsync(trainFeatures, trainLabels);
-
-        // Display cross-validation results from the result object
-        if (result.CrossValidationResult != null)
-        {
-            var cv = result.CrossValidationResult;
-            Console.WriteLine($"  CV Accuracy: {cv.MeanScore:P2} (+/- {cv.StandardDeviation:P2})");
-        }
+        var result = await builder.BuildAsync();
 
         // Evaluate on test set using result.Predict() - the facade pattern
+        var predVector = result.Predict(testMatrix);
         int correct = 0;
         for (int i = 0; i < testFeatures.Length; i++)
         {
-            // Use result.Predict() directly - NOT result.Model.Predict()
-            var prediction = result.Predict(testFeatures[i]);
-            if (Math.Abs(Math.Round(prediction) - testLabels[i]) < 0.5)
+            if (Math.Abs(Math.Round(predVector[i]) - testLabels[i]) < 0.5)
                 correct++;
         }
         double testAccuracy = (double)correct / testFeatures.Length;
@@ -117,19 +102,18 @@ Console.WriteLine("║                     RESULTS SUMMARY                      
 Console.WriteLine("╚════════════════════════════════════════════════════════════════╝\n");
 
 Console.WriteLine("Summary Statistics:");
-Console.WriteLine(new string('-', 55));
-Console.WriteLine($"{"Classifier",-20} {"Mean CV Acc",-15} {"Std Dev",-12} {"Test Acc",-12}");
-Console.WriteLine(new string('-', 55));
+Console.WriteLine(new string('-', 40));
+Console.WriteLine($"{"Classifier",-22} {"Test Acc",-12}");
+Console.WriteLine(new string('-', 40));
 
 foreach (var (name, (result, testAcc)) in results.Where(r => r.Value.result != null).OrderByDescending(r => r.Value.testAcc))
 {
-    var cv = result!.CrossValidationResult;
-    Console.WriteLine($"{name,-20} {cv?.MeanScore ?? 0:P2,-15} {cv?.StandardDeviation ?? 0:P2,-12} {testAcc:P2,-12}");
+    Console.WriteLine($"{name,-22} {testAcc:P2,-12}");
 }
 
 // Best model selection
 var bestEntry = results.Where(r => r.Value.result != null).OrderByDescending(r => r.Value.testAcc).FirstOrDefault();
-if (bestEntry.Value.result != null)
+if (bestEntry.Value.result is { } bestResult)
 {
     Console.WriteLine($"\nBest performing model: {bestEntry.Key} (Test Accuracy: {bestEntry.Value.testAcc:P2})");
 
@@ -141,12 +125,10 @@ if (bestEntry.Value.result != null)
     Console.WriteLine("Sample Predictions:");
     Console.WriteLine(new string('-', 60));
 
-    var bestResult = bestEntry.Value.result;
+    var bestPred = bestResult.Predict(testMatrix);
     for (int i = 0; i < Math.Min(10, testFeatures.Length); i++)
     {
-        // Use result.Predict() - the facade pattern
-        var prediction = bestResult.Predict(testFeatures[i]);
-        int predicted = (int)Math.Round(Math.Clamp(prediction, 0, 2));
+        int predicted = (int)Math.Round(Math.Clamp(bestPred[i], 0, 2));
         int actual = (int)testLabels[i];
         string status = predicted == actual ? "[correct]" : "[WRONG]";
 
@@ -242,4 +224,15 @@ static (double[][] features, double[] labels) LoadIrisDataset()
     var combined = features.Zip(labels, (f, l) => (f, l)).OrderBy(_ => random.Next()).ToList();
 
     return (combined.Select(x => x.f).ToArray(), combined.Select(x => x.l).ToArray());
+}
+
+// Pack a jagged feature array into the dense Matrix the models' Predict expects.
+static Matrix<double> ToMatrix(double[][] rows)
+{
+    int r = rows.Length, c = rows[0].Length;
+    var m = new Matrix<double>(r, c);
+    for (int i = 0; i < r; i++)
+        for (int j = 0; j < c; j++)
+            m[i, j] = rows[i][j];
+    return m;
 }

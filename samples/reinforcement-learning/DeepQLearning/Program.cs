@@ -70,7 +70,7 @@ try
         while (episodeSteps < maxStepsPerEpisode)
         {
             // Convert state to Vector for DQN
-            var stateVector = new AiDotNet.LinearAlgebra.Vector<double>(state);
+            var stateVector = new AiDotNet.Tensors.LinearAlgebra.Vector<double>(state);
 
             // Select action using epsilon-greedy policy
             var actionVector = agent.SelectAction(stateVector, training: true);
@@ -84,7 +84,7 @@ try
             var (nextState, reward, done) = env.Step(action);
 
             // Store experience
-            var nextStateVector = new AiDotNet.LinearAlgebra.Vector<double>(nextState);
+            var nextStateVector = new AiDotNet.Tensors.LinearAlgebra.Vector<double>(nextState);
             agent.StoreExperience(stateVector, actionVector, reward, nextStateVector, done);
 
             // Train agent (experience replay)
@@ -153,7 +153,7 @@ try
 
         while (testSteps < maxStepsPerEpisode)
         {
-            var stateVector = new AiDotNet.LinearAlgebra.Vector<double>(state);
+            var stateVector = new AiDotNet.Tensors.LinearAlgebra.Vector<double>(state);
             var actionVector = agent.SelectAction(stateVector, training: false); // Deterministic
             int action = GetActionIndex(actionVector);
 
@@ -194,7 +194,7 @@ catch (Exception ex)
 Console.WriteLine("\n=== Sample Complete ===");
 
 // Helper functions
-static int GetActionIndex(AiDotNet.LinearAlgebra.Vector<double> actionVector)
+static int GetActionIndex(AiDotNet.Tensors.LinearAlgebra.Vector<double> actionVector)
 {
     int maxIndex = 0;
     double maxValue = actionVector[0];
@@ -209,7 +209,7 @@ static int GetActionIndex(AiDotNet.LinearAlgebra.Vector<double> actionVector)
     return maxIndex;
 }
 
-static double[] GetQValues(DQNAgent<double> agent, AiDotNet.LinearAlgebra.Vector<double> state)
+static double[] GetQValues(DQNAgent<double> agent, AiDotNet.Tensors.LinearAlgebra.Vector<double> state)
 {
     // Simplified Q-value estimation (actual implementation uses neural network forward pass)
     var qValues = new double[4];
@@ -294,7 +294,7 @@ static void VisualizePolicyGridWorld(DQNAgent<double> agent, GridWorldEnvironmen
             {
                 // Get best action at this position
                 var state = env.GetStateVector(x, y);
-                var stateVector = new AiDotNet.LinearAlgebra.Vector<double>(state);
+                var stateVector = new AiDotNet.Tensors.LinearAlgebra.Vector<double>(state);
                 var actionVector = agent.SelectAction(stateVector, training: false);
                 int bestAction = GetActionIndex(actionVector);
                 Console.Write($" {arrows[bestAction]} ");
@@ -461,9 +461,9 @@ public class DQNAgent<T>
         return weights;
     }
 
-    public AiDotNet.LinearAlgebra.Vector<double> SelectAction(AiDotNet.LinearAlgebra.Vector<double> state, bool training = true)
+    public AiDotNet.Tensors.LinearAlgebra.Vector<double> SelectAction(AiDotNet.Tensors.LinearAlgebra.Vector<double> state, bool training = true)
     {
-        var action = new AiDotNet.LinearAlgebra.Vector<double>(_options.ActionSize);
+        var action = new AiDotNet.Tensors.LinearAlgebra.Vector<double>(_options.ActionSize);
 
         // Epsilon-greedy exploration
         if (training && _random.NextDouble() < _epsilon)
@@ -483,8 +483,8 @@ public class DQNAgent<T>
         return action;
     }
 
-    public void StoreExperience(AiDotNet.LinearAlgebra.Vector<double> state, AiDotNet.LinearAlgebra.Vector<double> action, double reward,
-        AiDotNet.LinearAlgebra.Vector<double> nextState, bool done)
+    public void StoreExperience(AiDotNet.Tensors.LinearAlgebra.Vector<double> state, AiDotNet.Tensors.LinearAlgebra.Vector<double> action, double reward,
+        AiDotNet.Tensors.LinearAlgebra.Vector<double> nextState, bool done)
     {
         int actionIndex = 0;
         for (int i = 0; i < action.Length; i++)
