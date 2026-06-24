@@ -601,6 +601,76 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     internal bool UseStreamingAllocator { get; set; }
 
     /// <summary>
+    /// Inference-only: keep this layer's large weight matrices RESIDENT at half precision (fp16) and
+    /// upcast to the compute type transiently per forward. Halves resident weight memory for a
+    /// foundation-scale tower (a 5.75B-param DiT: 23 GB fp32 → ~11.5 GB fp16) so it fits a memory-
+    /// bounded host — the industry-standard "store low / compute high" lever — WITHOUT the disk-backed
+    /// streaming pool (pages, ~1,670× slower) and WITHOUT Half arithmetic (scalar-slow on CPU). Set by
+    /// a foundation-scale predictor before the first forward; a no-op when the compute type is not
+    /// float. Must NOT be set while a gradient tape is active — training needs the fp32 master.
+    /// </summary>
+    internal bool LowPrecisionResident { get; set; }
+
+    /// <summary>
+    /// Thread-static, shape-keyed reuse pool for the transient full-precision upcast of an fp16-resident
+    /// weight (see <see cref="UpcastResidentWeight"/>). SHARED across every fp16-resident layer on this
+    /// thread: a foundation tower has only a handful of distinct weight shapes, so this holds ~that many
+    /// buffers, reused every layer and every forward step. Without reuse a fresh upcast tensor per layer
+    /// accumulates to the whole model (the GC can't reclaim ~hundreds of large tensors fast enough inside
+    /// one forward) → OOM. It must NOT be per-instance (one buffer per layer would equal the full fp32
+    /// model resident). Sequential forward makes in-place reuse safe — each matmul consumes its buffer
+    /// before the next same-shape weight overwrites it.
+    /// </summary>
+    [ThreadStatic]
+    private static Dictionary<string, Tensor<T>>? s_residentUpcastScratch;
+
+    /// <summary>
+    /// Returns the full-precision (T) form of an fp16-resident weight for use in one matmul, without
+    /// keeping a full-precision copy resident. On the first call it SIMD-downcasts <paramref name="full"/>
+    /// into the resident fp16 master <paramref name="half"/> (via <see cref="IVectorizedOperations{T}.ToHalfSpan"/>)
+    /// and frees the full-precision tensor; every call then SIMD-upcasts the half master into a reused,
+    /// shape-keyed scratch tensor (via <see cref="IVectorizedOperations{T}.FromHalfSpan"/>) — no per-call
+    /// allocation and no per-element loop. Generic over T through <see cref="NumOps"/> (the vectorized-ops
+    /// contract), so it is correct for any T; for float it routes to TensorPrimitives. The caller must
+    /// consume the returned tensor in its matmul before invoking this again for a same-shape weight, which
+    /// the sequential Q/K/V (and MLP) forward order guarantees.
+    /// </summary>
+    protected Tensor<T> UpcastResidentWeight(ref Tensor<T> full, ref Tensor<Half>? half)
+    {
+        if (half is null)
+        {
+            int frank = full.Rank;
+            int[] hdims = new int[frank];
+            for (int i = 0; i < frank; i++) hdims[i] = full.Shape[i];
+            var master = new Tensor<Half>(hdims);
+            NumOps.ToHalfSpan(full.AsSpan(), master.AsWritableSpan());
+            half = master;
+            // Drop the trainable-parameter registry's reference to the fp32 tensor BEFORE replacing it:
+            // _registeredTensors (and the engine's persistent-tensor list) pin the original array, so
+            // without this the full-precision weights are never GC'd and accumulate to the whole model
+            // (the OOM this fp16-resident path exists to prevent). Inference-only — the tape is inactive.
+            UnregisterTrainableParameter(full);
+            full = new Tensor<T>([0, 0]); // free the full-precision copy; only the fp16 master stays resident
+        }
+
+        Tensor<Half> resident = half;
+        int rank = resident.Rank;
+        int[] dims = new int[rank];
+        for (int i = 0; i < rank; i++) dims[i] = resident.Shape[i];
+
+        s_residentUpcastScratch ??= new Dictionary<string, Tensor<T>>();
+        string dimsKey = string.Join(",", dims);
+        if (!s_residentUpcastScratch.TryGetValue(dimsKey, out var scratch) || scratch is null)
+        {
+            scratch = new Tensor<T>(dims);
+            s_residentUpcastScratch[dimsKey] = scratch;
+        }
+
+        NumOps.FromHalfSpan(resident.AsSpan(), scratch.AsWritableSpan());
+        return scratch;
+    }
+
+    /// <summary>
     /// Allocates a lazy-init weight tensor of the given shape, routing
     /// through <see cref="WeightRegistry.AllocateStreaming{T}"/> when
     /// <see cref="UseStreamingAllocator"/> is true (so the pool can
