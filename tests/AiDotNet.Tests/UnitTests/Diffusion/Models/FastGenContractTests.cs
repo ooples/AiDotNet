@@ -15,7 +15,7 @@ namespace AiDotNet.Tests.UnitTests.Diffusion.Models;
 // sequentially (tests within a collection never run in parallel). The foundation-scale FLUX/MMDiT
 // round-trip + clone tests materialize multi-GB FP32 models; serializing keeps at most one resident
 // at a time so the 16 GB CI runner does not OOM under parallel execution.
-[Collection("DiffusionFoundationScaleSerial")]
+[Collection("FoundationScaleSerial")]
 public class FastGenContractTests : DiffusionUnitTestBase
 {
     #region Phase 4 — New T2I Models
@@ -576,6 +576,7 @@ public class FastGenContractTests : DiffusionUnitTestBase
     [Fact(Timeout = 600000)]
     public async Task FluxSchnellModel_Clone_CreatesIndependentCopy()
     {
+        await Task.Yield(); // async suspension point so [Fact(Timeout)] can actually enforce the ceiling
         var model = new FluxSchnellModel<float>();
         var clone = model.Clone();
 

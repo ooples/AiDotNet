@@ -474,7 +474,18 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// No-op for already-initialized layers and for lazy layers whose shape is not yet resolved (they
     /// have nothing to allocate until their first real forward).
     /// </remarks>
-    public void MaterializeParameters()
+    internal void MaterializeParameters() => EnsureParametersMaterialized();
+
+    /// <summary>
+    /// Forces lazy parameter allocation now (the hook <see cref="MaterializeParameters"/> drives).
+    /// </summary>
+    /// <remarks>
+    /// Default: routes through <see cref="EnsureInitialized"/> when the shape is resolved and the layer is
+    /// not yet initialized. A layer whose deferred-weight mechanism is distinct from shape-lazy init — e.g.
+    /// one whose <see cref="EnsureInitialized"/> is owned by the <c>[TrainableParameter]</c> source generator
+    /// and therefore cannot be overridden — overrides this hook to allocate its weights directly.
+    /// </remarks>
+    protected virtual void EnsureParametersMaterialized()
     {
         if (!IsInitialized && IsShapeResolved)
         {
@@ -3545,7 +3556,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// so a GPU engine re-uploads the new values. Requires the layer to be materialized first
     /// (see <see cref="MaterializeParameters"/>); a length mismatch throws.
     /// </summary>
-    public virtual void CopyTrainableParametersFrom(IReadOnlyList<Tensor<T>> sources)
+    internal virtual void CopyTrainableParametersFrom(IReadOnlyList<Tensor<T>> sources)
     {
         var dst = GetTrainableParameters();
         if (sources.Count != dst.Count)

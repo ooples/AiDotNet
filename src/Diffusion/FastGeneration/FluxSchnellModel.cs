@@ -58,6 +58,10 @@ public class FluxSchnellModel<T> : LatentDiffusionModelBase<T>
     private FluxDoubleStreamPredictor<T> _predictor;
     private StandardVAE<T> _vae;
     private readonly IConditioningModule<T>? _conditioner;
+    // Resolved (never-null) construction seed for the default predictor/VAE. Clone() reuses it so a
+    // never-forwarded — still lazy — predictor materializes IDENTICAL weights in the clone instead of
+    // diverging on a fresh seed. Resolved once, so two separately-constructed unseeded models still differ.
+    private readonly int _layerSeed;
 
     /// <inheritdoc />
     public override INoisePredictor<T> NoisePredictor => _predictor;
@@ -88,12 +92,14 @@ public class FluxSchnellModel<T> : LatentDiffusionModelBase<T>
             architecture)
     {
         _conditioner = conditioner;
-        InitializeLayers(predictor, vae, seed);
+        // Resolve null → a concrete seed so Clone() can reconstruct identical lazy weights from it.
+        _layerSeed = seed ?? RandomGenerator.Next();
+        InitializeLayers(predictor, vae, _layerSeed);
         SetGuidanceScale(DEFAULT_GUIDANCE);
     }
 
     [MemberNotNull(nameof(_predictor), nameof(_vae))]
-    private void InitializeLayers(FluxDoubleStreamPredictor<T>? predictor, StandardVAE<T>? vae, int? seed)
+    private void InitializeLayers(FluxDoubleStreamPredictor<T>? predictor, StandardVAE<T>? vae, int seed)
     {
         _predictor = predictor ?? new FluxDoubleStreamPredictor<T>(
             variant: FluxPredictorVariant.Schnell,
@@ -139,14 +145,17 @@ public class FluxSchnellModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new FluxSchnellModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
+        // Reuse THIS model's resolved construction seed (not a fresh one): a never-forwarded predictor is
+        // still lazy, so the clone must materialize from the SAME seed to stay equivalent — a fresh seed
+        // would later materialize different weights and break Clone() equivalence.
+        var clone = new FluxSchnellModel<T>(conditioner: _conditioner, seed: _layerSeed);
         // Scale-safe + lazy-preserving: only copy the foundation-scale (~12B-param FLUX) predictor's
-        // weights if it was actually forwarded. A never-forwarded model's weights are still lazy
-        // (unmaterialized), so there is nothing to copy and the clone stays lazy too — copying would
+        // weights if they were actually materialized. A never-forwarded model's weights are still lazy, so
+        // the clone reconstructs them from the shared seed above (nothing to copy) — copying would
         // pointlessly materialize the predictor twice (source + clone) and OOM. When a copy IS needed it
         // streams per-tensor chunks (#1624), never the int-bounded flat Vector<T> that
         // SetParameters(GetParameters()) builds (which threw "Array dimensions exceeded supported range").
-        if (_predictor.WasForwarded)
+        if (_predictor.WeightsMaterialized)
             clone._predictor.SetParameterChunks(_predictor.GetParameterChunks());
         clone._vae.SetParameters(_vae.GetParameters());
         return clone;

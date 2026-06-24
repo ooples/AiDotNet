@@ -1196,11 +1196,12 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     /// <summary>
-    /// True once this predictor has run at least one forward pass (its lazy weights are materialized).
-    /// A never-forwarded foundation-scale model has nothing materialized to copy, so callers (e.g. a
-    /// wrapping model's <c>Clone</c>) can skip the multi-GB parameter copy entirely and stay lazy.
+    /// True once this predictor's lazy weights have been materialized (its patch-embed is initialized,
+    /// which the first forward triggers). A never-materialized foundation-scale model has nothing to copy,
+    /// so internal callers (e.g. a wrapping model's <c>Clone</c>) can skip the multi-GB parameter copy and
+    /// stay lazy. Internal: this is clone/streaming materialization plumbing, not public model behavior.
     /// </summary>
-    public bool WasForwarded => _patchEmbed.IsInitialized;
+    internal bool WeightsMaterialized => _patchEmbed.IsInitialized;
 
     /// <inheritdoc />
     public override IEnumerable<Tensor<T>> GetParameterChunks()

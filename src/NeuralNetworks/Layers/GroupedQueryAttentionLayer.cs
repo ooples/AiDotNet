@@ -261,6 +261,20 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// A deferred-allocation layer reports NOT initialized until its weights are materialized. Eager layers
+    /// are always initialized. (The <c>[TrainableParameter]</c> source generator owns this layer's
+    /// <c>EnsureInitialized</c> — it has sub-layer fields — so the deferred-weight allocation is driven
+    /// through <see cref="EnsureParametersMaterialized"/> instead, which <c>MaterializeParameters()</c> calls.)
+    /// </summary>
+    public override bool IsInitialized => !_weightsDeferred;
+
+    /// <inheritdoc/>
+    /// <remarks>Forces the deferred projection weights to materialize — the hook
+    /// <see cref="LayerBase{T}.MaterializeParameters"/> invokes, so the foundation-scale chunk-streaming
+    /// path (#1624) reads real weights rather than zero-length placeholders.</remarks>
+    protected override void EnsureParametersMaterialized() => EnsureWeightsMaterialized();
+
+    /// <summary>
     /// Configures positional encoding for this GQA layer.
     /// </summary>
     public void ConfigurePositionalEncoding(
@@ -643,21 +657,21 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the query projection weights for external use (e.g., quantization).
     /// </summary>
-    public Tensor<T> GetQueryWeights() => _queryWeights;
+    public Tensor<T> GetQueryWeights() { EnsureWeightsMaterialized(); return _queryWeights; }
 
     /// <summary>
     /// Gets the key projection weights for external use.
     /// </summary>
-    public Tensor<T> GetKeyWeights() => _keyWeights;
+    public Tensor<T> GetKeyWeights() { EnsureWeightsMaterialized(); return _keyWeights; }
 
     /// <summary>
     /// Gets the value projection weights for external use.
     /// </summary>
-    public Tensor<T> GetValueWeights() => _valueWeights;
+    public Tensor<T> GetValueWeights() { EnsureWeightsMaterialized(); return _valueWeights; }
 
     /// <summary>
     /// Gets the output projection weights for external use.
     /// </summary>
-    public Tensor<T> GetOutputWeights() => _outputWeights;
+    public Tensor<T> GetOutputWeights() { EnsureWeightsMaterialized(); return _outputWeights; }
 
 }

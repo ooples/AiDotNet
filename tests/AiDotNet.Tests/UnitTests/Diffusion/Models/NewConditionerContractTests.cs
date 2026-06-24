@@ -15,7 +15,7 @@ namespace AiDotNet.Tests.UnitTests.Diffusion.Models;
 /// </summary>
 // Shares one xUnit collection with FastGenContractTests so the two classes' foundation-scale FP32
 // round-trip tests run sequentially (one multi-GB model resident at a time → no 16 GB CI OOM).
-[Collection("DiffusionFoundationScaleSerial")]
+[Collection("FoundationScaleSerial")]
 public class NewConditionerContractTests : DiffusionUnitTestBase
 {
     #region Text Conditioner Constructor Tests
