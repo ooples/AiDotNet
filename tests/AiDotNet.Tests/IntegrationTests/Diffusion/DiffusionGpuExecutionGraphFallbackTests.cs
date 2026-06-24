@@ -328,6 +328,10 @@ public class DiffusionGpuExecutionGraphFallbackTests
         AssertFp16ConvPrimitiveMatchesFp32(backend, "Vulkan");
     }
 
+#if !NETFRAMEWORK
+    // WebGpuBackend ships only in the modern-.NET (net8.0/net10.0) Tensors assemblies; the net471 build omits it,
+    // so this backend leg is compiled out on .NET Framework (CS0234 otherwise). The other backend legs above
+    // cover the FP16-conv correctness contract; WebGpu is exercised wherever the modern TFM runs.
     [Fact(Timeout = 120000)]
     public async Task Fp16Conv_PrimitiveMatchesFp32Conv_OnWebGpu()
     {
@@ -337,6 +341,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
         catch { return; }
         AssertFp16ConvPrimitiveMatchesFp32(backend, "WebGpu");
     }
+#endif
 
     // Shared conv-primitive correctness check: one conv computed FP32 (Conv2D) vs the FP16 path (Im2colKNFp16 →
     // [K,N] half col → GemmFp16In32fOut) on the SAME input+weights, element-wise, at the UNet's real shapes.
