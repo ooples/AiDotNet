@@ -192,7 +192,11 @@
          AIDOTNET_GEMM_SINGLE_REGION=0; ~1.3-2x on transformer/training GEMM shapes) + the net471
          PackAOnly non-4x4 scalar-tail bugfix. 0.102.3 is a linear superset of 0.102.2, so the #632 /
          Phase C deps above are retained. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.102.12" />
+    <!-- 0.102.14 is the published AiDotNet.Tensors release that ships the net8.0 target
+         (AiDotNet.Tensors #680, merged + released). net8.0 in src/AiDotNet.csproj requires a
+         Tensors build with a net8.0 asset; the published 0.102.14 nupkg contains lib/net8.0/
+         (alongside net10.0 + net471), so this is no longer blocked. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.102.14" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.102.9" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.102.9" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.102.9" />
