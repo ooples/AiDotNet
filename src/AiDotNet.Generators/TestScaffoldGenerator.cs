@@ -181,6 +181,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // ModelFamilyTests/CodeModel runs the same architecture shape at smoke
         // scale (2 layers, 64 dim, 32 seq, 128 vocab, UseDataFlow=true).
         "GraphCodeBERT",
+
+        // WhisperTimestamped (Louradour 2023): production defaults mirror Whisper
+        // large-v3 (EncoderDim/DecoderDim=1280, 32+32 layers, NumHeads=20, vocab
+        // 51866 — ~631M params). Profiled (#1670, dotnet-trace + testconsole
+        // whispertimestamped-profile, AIDOTNET_DISABLE_GPU=1 to match CI): a single
+        // forward is ~2.4s in FLOAT but ~153s in DOUBLE (the fp64 CPU GEMM path is
+        // ~60-80x slower than fp32), and the generated scaffold runs `<double>`, so
+        // the 30-250-step training invariants blow the 120s CI budget. The native
+        // ctor sizes its stack from WhisperTimestampedOptions (not the architecture),
+        // so the auto-generator can't shrink it. The manual WhisperTimestampedTests
+        // scaffold in ModelFamilyTests/NeuralNetworks runs the same encoder/decoder +
+        // cross-attention architecture at reduced <float> scale (Janus/Donut precedent),
+        // exercising every code path in seconds.
+        "WhisperTimestamped",
     };
 
     // Models whose generated test class runs in <float> instead of the default

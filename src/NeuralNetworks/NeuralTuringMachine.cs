@@ -1,6 +1,7 @@
 ﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -366,14 +367,31 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     /// </summary>
     private void InitializeMemory()
     {
+        // Issue #1670: seed the initial-memory draw so NTM construction is
+        // REPRODUCIBLE under the test harness's seed (Architecture.RandomSeed,
+        // populated from DefaultRandomSeedOverride). The previous
+        // MathHelper.GetNormalRandom call drew from an unseeded global RNG, so
+        // the initial memory differed on every construction. That was harmless
+        // while training was a no-op, but once ForwardForTraining was routed
+        // onto the tape (training actually updates parameters now), the
+        // run-to-run memory variance made the training-trajectory invariants
+        // (MoreData_ShouldNotDegrade, TrainingError_ShouldNotExceedTestError)
+        // flake. Falls back to a time-seeded RNG in production (no architecture
+        // seed), preserving the original per-instance randomness there — the
+        // same seed/fallback contract the layer-weight initializers use.
+        // Route through RandomHelper (the NeuralNetworks golden pattern / centralized seeding policy):
+        // a deterministic seeded RNG under the test harness's seed, else a cryptographically secure one.
+        var rng = Architecture.RandomSeed is int memSeed
+            ? RandomHelper.CreateSeededRandom(memSeed)
+            : RandomHelper.CreateSecureRandom();
         for (int m = 0; m < _memories.Count; m++)
         {
             for (int i = 0; i < _memorySize; i++)
             {
                 for (int j = 0; j < _memoryVectorSize; j++)
                 {
-                    // Initialize with values from normal distribution for better training stability
-                    _memories[m][i, j] = MathHelper.GetNormalRandom(NumOps.Zero, NumOps.FromDouble(0.1));
+                    // Normal(0, 0.1) via Box-Muller for better training stability.
+                    _memories[m][i, j] = NumOps.FromDouble(NextGaussian(rng, 0.0, 0.1));
                 }
             }
         }
@@ -390,6 +408,20 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
                 _initialMemoryTemplate[i, j] = v;
                 _initialMemoryTensor[i, j] = v;
             }
+    }
+
+    /// <summary>
+    /// Draws a sample from Normal(mean, stdDev) using the Box-Muller transform on a
+    /// caller-supplied (seedable) <see cref="Random"/>, so the initial-memory draw in
+    /// <see cref="InitializeMemory"/> is reproducible under a fixed seed (#1670).
+    /// </summary>
+    private static double NextGaussian(Random rng, double mean, double stdDev)
+    {
+        // 1 - NextDouble() keeps u1 in (0, 1] so Log(u1) is finite.
+        double u1 = 1.0 - rng.NextDouble();
+        double u2 = 1.0 - rng.NextDouble();
+        double standardNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+        return mean + stdDev * standardNormal;
     }
 
     /// <summary>
@@ -587,6 +619,18 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
             // Use default layer configuration if no layers are provided
             Layers.AddRange(LayerHelper<T>.CreateDefaultNTMLayers(Architecture, _memorySize, _memoryVectorSize, _controllerSize));
         }
+
+        // Issue #1670: wire the architecture seed into every layer NOW, at
+        // construction — not lazily on the first training forward. NTM's
+        // DenseLayers initialize their weights LAZILY (on first Forward) via the
+        // RandomSeed-honoring InitializeParameters path. The training-trajectory
+        // invariants (MoreData_ShouldNotDegrade) probe the network with an EVAL
+        // Predict() BEFORE the first Train(), and the eval path doesn't wire
+        // seeds — so without this the weights initialized unseeded (then got
+        // cloned), making the borderline cross-task comparison flip run-to-run.
+        // Wiring here makes lazy init deterministic regardless of whether eval or
+        // training runs first. No-op in production (no architecture seed).
+        EnsureLayerRandomSeedsWired();
     }
 
     /// <summary>
@@ -642,20 +686,35 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     }
 
     /// <summary>
-    /// Forward path used by the training tape. Routes through the same
-    /// NTM-specific memory pipeline as <see cref="Predict"/> so the tape
-    /// captures the controller → memory → output operations the test
-    /// suite then evaluates. The default
+    /// Forward path used by the training tape — routes directly through the
+    /// NTM-specific tape-aware <see cref="ForwardTape"/> memory pipeline
+    /// (controller → read/write addressing → output), the SAME function
+    /// <see cref="Predict"/> evaluates. The default
     /// <see cref="NeuralNetworkBase{T}.ForwardForTraining"/> iterates
-    /// <c>Layers</c> sequentially as a generic feed-forward stack, which
-    /// is wrong for NTM: it produces a different output than Predict
-    /// (no read/write addressing), so the gradient step is computed
-    /// against one network and the loss is measured against another.
-    /// Training_ShouldReduceLoss then sees loss moving in arbitrary
-    /// directions because the path the optimizer is improving isn't the
-    /// path the test checks. Issue #1332 cluster 1.1.
+    /// <c>Layers</c> as a generic feed-forward stack — wrong for NTM (no
+    /// read/write addressing), so the optimizer would improve a different
+    /// network than the test checks (issue #1332 cluster 1.1).
+    /// <para>
+    /// Issue #1670: this must NOT delegate to <see cref="Predict"/>. With the
+    /// inference arena enabled by default (<see cref="InferenceArenaSettings"/>),
+    /// <c>Predict</c> copies its result out via <c>DetachFromArena</c>
+    /// (<c>new Tensor(output.ToArray())</c>), which SEVERS the gradient tape —
+    /// the loss then has no path back to any parameter and every gradient is
+    /// zero (Train is a silent no-op: GradientFlow / Training_ShouldChangeParameters
+    /// fail). Calling <see cref="ForwardTape"/> directly keeps the tape intact;
+    /// eval still gets the same forward via <c>PredictCore</c>.
+    /// </para>
     /// </summary>
-    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Predict(input);
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        // Match the base ForwardForTraining's reproducibility contract: propagate the
+        // architecture seed to every layer before the first training forward so any
+        // seed-derived/lazy layer init is deterministic under a fixed seed. The base
+        // does this in its ForwardForTraining, which this override otherwise bypasses;
+        // without it, NTM's training-trajectory invariants flake run-to-run (#1670).
+        EnsureLayerRandomSeedsWired();
+        return ForwardTape(input);
+    }
 
     /// <summary>
     /// Performs a forward pass through the Neural Turing Machine. Routes
@@ -1314,24 +1373,28 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     /// <returns>A combined tensor of all outputs.</returns>
     private Tensor<T> CombineSequenceOutputs(List<Tensor<T>> outputs)
     {
+        if (outputs.Count == 0)
+            throw new ArgumentException("At least one output tensor is required.", nameof(outputs));
+
+        // Single-step: return the per-timestep [batch, outputSize] tensor as-is —
+        // it is already on the tape from ForwardTape.
+        if (outputs.Count == 1)
+            return outputs[0];
+
+        // Issue #1670: assemble the [batch, seq, outputSize] sequence with tape-aware
+        // ops. The earlier version allocated a fresh Tensor and copied values via scalar
+        // indexing, which SEVERS the autodiff tape — so multi-step (rank-3) sequence
+        // training became a silent no-op even after ForwardForTraining was routed to
+        // ForwardTape. Engine.Reshape (adds the seq axis) + Engine.TensorConcatenate
+        // (along that axis) keep every timestep's output connected to its parameters.
         int batchSize = outputs[0].Shape[0];
-        int sequenceLength = outputs.Count;
         int outputSize = outputs[0].Shape[1];
 
-        var combined = new Tensor<T>(new int[] { batchSize, sequenceLength, outputSize });
+        var expanded = new Tensor<T>[outputs.Count];
+        for (int t = 0; t < outputs.Count; t++)
+            expanded[t] = Engine.Reshape(outputs[t], [batchSize, 1, outputSize]);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int t = 0; t < sequenceLength; t++)
-            {
-                for (int o = 0; o < outputSize; o++)
-                {
-                    combined[b, t, o] = outputs[t][b, o];
-                }
-            }
-        }
-
-        return combined;
+        return Engine.TensorConcatenate(expanded, axis: 1);
     }
 
     /// <summary>
@@ -2020,6 +2083,17 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     /// <param name="expectedOutput">The expected output tensor.</param>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Issue #1670: force full parameter materialization before the first training
+        // step. NTM's DenseLayers initialize LAZILY (on first Forward); when training
+        // is driven from an already-warmed-but-not-fully-materialized state (e.g. an
+        // eval Predict probe materialized only part of the graph), the optimizer's
+        // parameter collection on the first step can race the remaining lazy init,
+        // making the trained trajectory non-deterministic run-to-run (~10% flake on
+        // MoreData_ShouldNotDegrade). Reading GetParameters() here forces every layer
+        // to resolve deterministically (seeds are wired at construction) BEFORE the
+        // tape trainer collects them, eliminating the timing-dependent variance.
+        _ = GetParameters();
+
         // Handle 1D input/output: reshape to [1, features]
         if (input.Rank == 1) input = input.Reshape([1, input.Length]);
         if (expectedOutput.Rank == 1) expectedOutput = expectedOutput.Reshape([1, expectedOutput.Length]);
