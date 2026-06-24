@@ -1,5 +1,6 @@
 using AiDotNet;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 
 Console.WriteLine("=== AiDotNet Image Classification ===");
 Console.WriteLine("CNN-based image classification with ResNet/EfficientNet\n");
@@ -209,8 +210,6 @@ static List<(Tensor<float> Image, string Description)> GenerateSyntheticImages()
     return images;
 }
 
-enum ImageType { Animal, Vehicle, Nature, Object }
-
 static Tensor<float> CreateSyntheticImage(int height, int width, Random random, ImageType type)
 {
     var tensor = new Tensor<float>(new[] { 1, 3, height, width });
@@ -364,6 +363,8 @@ var trainResult = await builder
 }
 
 // Supporting classes for demonstration
+enum ImageType { Animal, Vehicle, Nature, Object }
+
 public class ImageClassificationConfig
 {
     public ClassificationArchitecture Architecture { get; set; } = ClassificationArchitecture.ResNet50;

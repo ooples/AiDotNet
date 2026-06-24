@@ -1,6 +1,7 @@
 using AiDotNet;
 using AiDotNet.ComputerVision.OCR;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 
 Console.WriteLine("=== AiDotNet Optical Character Recognition (OCR) ===");
 Console.WriteLine("Extract text from images with localization and multi-language support\n");
@@ -239,26 +240,6 @@ static List<(Tensor<float> Image, string Description, string ExpectedText)> Gene
     return images;
 }
 
-class TextRegion
-{
-    public int X { get; }
-    public int Y { get; }
-    public int Width { get; }
-    public int Height { get; }
-    public string Text { get; }
-    public float Angle { get; }
-
-    public TextRegion(int x, int y, int width, int height, string text, float angle = 0)
-    {
-        X = x;
-        Y = y;
-        Width = width;
-        Height = height;
-        Text = text;
-        Angle = angle;
-    }
-}
-
 static Tensor<float> CreateTextImage(int width, int height, Random random, TextRegion[] textRegions)
 {
     var tensor = new Tensor<float>(new[] { 1, 3, height, width });
@@ -413,6 +394,26 @@ var docResult = docPipeline.RecognizeText(documentImage);
 }
 
 // Supporting enums and classes
+class TextRegion
+{
+    public int X { get; }
+    public int Y { get; }
+    public int Width { get; }
+    public int Height { get; }
+    public string Text { get; }
+    public float Angle { get; }
+
+    public TextRegion(int x, int y, int width, int height, string text, float angle = 0)
+    {
+        X = x;
+        Y = y;
+        Width = width;
+        Height = height;
+        Text = text;
+        Angle = angle;
+    }
+}
+
 public enum OCRMode
 {
     SceneText,
