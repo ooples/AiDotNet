@@ -25,9 +25,10 @@ Console.WriteLine();
 // Create base model layers
 Console.WriteLine("Creating base model layers...");
 
-var baseLayer1 = new DenseLayer<double>(inputSize, hiddenSize, (IActivationFunction<double>)new ReLUActivation<double>());
-var baseLayer2 = new DenseLayer<double>(hiddenSize, hiddenSize, (IActivationFunction<double>)new ReLUActivation<double>());
-var baseLayer3 = new DenseLayer<double>(hiddenSize, outputSize, (IVectorActivationFunction<double>)new SoftmaxActivation<double>());
+// DenseLayer infers its input size lazily, so only the output size is passed.
+var baseLayer1 = new DenseLayer<double>(hiddenSize, (IActivationFunction<double>)new ReLUActivation<double>());
+var baseLayer2 = new DenseLayer<double>(hiddenSize, (IActivationFunction<double>)new ReLUActivation<double>());
+var baseLayer3 = new DenseLayer<double>(outputSize, (IVectorActivationFunction<double>)new SoftmaxActivation<double>());
 
 // Calculate memory usage for different configurations
 Console.WriteLine("\n" + new string('=', 70));
