@@ -384,41 +384,6 @@ catch (Exception ex)
 
 Console.WriteLine("\n=== Sample Complete ===");
 
-// Progress bar helper
-class ProgressBar
-{
-    private readonly int _total;
-    private int _current;
-
-    public ProgressBar(int total)
-    {
-        _total = total;
-        _current = 0;
-        Console.Write("  [");
-        Console.Write(new string(' ', 50));
-        Console.Write("] 0%");
-    }
-
-    public void Update(int current)
-    {
-        _current = current;
-        var percent = (int)((float)current / _total * 100);
-        var filled = (int)((float)current / _total * 50);
-
-        Console.SetCursorPosition(3, Console.CursorTop);
-        Console.Write(new string('=', filled));
-        Console.Write(new string(' ', 50 - filled));
-        Console.Write($"] {percent}%  Step {current}/{_total}");
-    }
-
-    public void Complete()
-    {
-        Console.SetCursorPosition(3, Console.CursorTop);
-        Console.Write(new string('=', 50));
-        Console.WriteLine("] 100% Complete");
-    }
-}
-
 // Visualize frame timeline
 static void VisualizeFrameTimeline(VideoResult result)
 {
@@ -500,8 +465,6 @@ static float[,,] CreateSyntheticImage(int width, int height, ImagePattern patter
     return image;
 }
 
-enum ImagePattern { Gradient, Landscape, Noise }
-
 // Demo API usage
 static void DemoApiUsage()
 {
@@ -542,6 +505,42 @@ generator.ExportGif(result, ""output.gif"");
 }
 
 // Supporting classes for demonstration
+
+class ProgressBar
+{
+    private readonly int _total;
+    private int _current;
+
+    public ProgressBar(int total)
+    {
+        _total = total;
+        _current = 0;
+        Console.Write("  [");
+        Console.Write(new string(' ', 50));
+        Console.Write("] 0%");
+    }
+
+    public void Update(int current)
+    {
+        _current = current;
+        var percent = (int)((float)current / _total * 100);
+        var filled = (int)((float)current / _total * 50);
+
+        Console.SetCursorPosition(3, Console.CursorTop);
+        Console.Write(new string('=', filled));
+        Console.Write(new string(' ', 50 - filled));
+        Console.Write($"] {percent}%  Step {current}/{_total}");
+    }
+
+    public void Complete()
+    {
+        Console.SetCursorPosition(3, Console.CursorTop);
+        Console.Write(new string('=', 50));
+        Console.WriteLine("] 100% Complete");
+    }
+}
+
+enum ImagePattern { Gradient, Landscape, Noise }
 
 public enum VideoModel
 {
