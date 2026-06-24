@@ -1,14 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
 	  <!--
-	    net10.0 is the latest .NET; net471 covers legacy Framework consumers.
-	    net8.0 LTS is intentionally NOT yet in the target list — the
-	    AiDotNet.Tensors transitive dependency does not currently ship an
-	    explicit net8.0 build, so adding the target produces NU1701 warnings.
-	    Tracked as a follow-up: bump AiDotNet.Tensors to a release with
-	    explicit net8.0 support, then add net8.0 here.
+	    net10.0 is the latest .NET; net471 covers legacy Framework consumers;
+	    net8.0 LTS serves net8/net9 consumers. Without net8.0, a net8/net9 app
+	    had no compatible modern asset and NuGet's AssetTargetFallback silently
+	    selected the net471 .NET Framework build (NU1701) — which misresolves
+	    types at the consumer. net8.0 was previously blocked on AiDotNet.Tensors
+	    not shipping a net8.0 build; that dependency now does (AiDotNet.Tensors
+	    PR #680), so net8.0 is enabled here against that release.
+	    Extending to net462 / netstandard2.0 is tracked in AiDotNet.Tensors #679.
 	  -->
-	  <TargetFrameworks>net10.0;net471</TargetFrameworks>
+	  <TargetFrameworks>net10.0;net8.0;net471</TargetFrameworks>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
