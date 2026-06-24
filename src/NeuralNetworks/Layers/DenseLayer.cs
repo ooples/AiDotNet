@@ -174,6 +174,18 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T> _biases;
 
     /// <summary>
+    /// fp16-resident copy of the weight matrix, used only when <see cref="LayerBase{T}.LowPrecisionResident"/>
+    /// is set (foundation-scale inference). When present it is the SOURCE OF TRUTH for the weights and
+    /// <see cref="_weights"/> is a freed placeholder; each forward upcasts this to fp32 transiently for the
+    /// matmul. Halves resident weight memory. Null in the normal full-precision path.
+    /// </summary>
+    private Tensor<Half>? _weightsHalf;
+
+    // The fp16-resident upcast machinery (downcast-once + reused SIMD upcast buffer) lives in
+    // LayerBase.UpcastResidentWeight so DenseLayer and SelfAttentionLayer share one thread-static
+    // shape-keyed scratch pool (same weight shapes → fewer resident buffers).
+
+    /// <summary>
     /// Temporary storage for weight gradients during backpropagation.
     /// </summary>
     /// <remarks>
@@ -276,6 +288,9 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             {
                 return (InputShape[0] * OutputShape[0]) + OutputShape[0];
             }
+            // Half-resident: _weights is a freed placeholder, _weightsHalf holds the real shape.
+            if (_weightsHalf is not null)
+                return (_weightsHalf.Shape[0] * _weightsHalf.Shape[1]) + _biases.Shape[0];
             return (_weights.Shape[0] * _weights.Shape[1]) + _biases.Shape[0];
         }
     }
@@ -465,7 +480,19 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // degrades to a plain heap Tensor<T> when no arena is active.
             int[] wShape = [inputSize, outputSize];
             int[] bShape = [outputSize];
-            _weights = AllocateLazyWeight(wShape, () => TensorAllocator.RentPinned<T>(wShape));
+            // fp16-resident eval: allocate the fp32 weights on the plain GC heap (not the arena PINNED
+            // tier) so that, immediately after this forward downcasts them to _weightsHalf, dropping the
+            // fp32 reference actually lets the GC reclaim it. Arena-pinned buffers survive Reset and
+            // would never free, so the fp32 masters would accumulate to the full model → OOM (the bug
+            // the per-block attempt hit). Biases stay tiny so their allocation tier doesn't matter.
+            if (LowPrecisionResident)
+            {
+                _weights = new Tensor<T>(wShape);
+            }
+            else
+            {
+                _weights = AllocateLazyWeight(wShape, () => TensorAllocator.RentPinned<T>(wShape));
+            }
             _biases = AllocateLazyWeight(bShape, () => TensorAllocator.RentPinned<T>(bShape));
 
             // Initialize using strategy or default. Skip strategies that only
@@ -817,6 +844,8 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         // Ensure weights are initialized (supports lazy initialization)
         EnsureInitialized();
+        // Half-resident: upcast the fp16 master back to fp32 on demand.
+        if (_weightsHalf is not null) return _weightsHalf.Cast<T>();
         return _weights;
     }
 
@@ -897,6 +926,22 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // EnsureInitializedFromInput is the correct lazy entry per
         // LayerBase docs.
         EnsureInitializedFromInput(input);
+
+        // Low-precision-resident inference (foundation-scale, eval): the fp16 copy is the SOURCE OF
+        // TRUTH; upcast it back to the compute type T just for this forward's matmul, then drop the
+        // upcast (below) so only the fp16 copy stays resident. Halves resident weight memory while
+        // compute stays at full T precision. Done before the _weights.Shape reads below so the shape
+        // checks see the real dims. Generic over T — Cast routes through INumericOperations, so it is
+        // correct for any T (and a no-op saving when T is already <= 16-bit).
+        bool lowPrecResident = false;
+        if (LowPrecisionResident && _isInitialized)
+        {
+            // Downcast-once to the fp16 master (freeing the fp32 copy) + SIMD-upcast into a shared reused
+            // scratch for this forward's matmul. _weights now points at the transient scratch; it is reset
+            // to a freed placeholder after the matmul below so only the fp16 master stays resident.
+            _weights = UpcastResidentWeight(ref _weights, ref _weightsHalf);
+            lowPrecResident = true;
+        }
 
         // _lastInput / _lastOutput are layer-side activation retention for
         // a backward path that's never reached when training goes through
@@ -986,6 +1031,14 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 _lastOutput = null;
             }
             result = ApplyActivation(preActivation);
+        }
+
+        if (lowPrecResident)
+        {
+            // Drop the transient fp32 upcast now the matmul has consumed it; only the fp16 master
+            // (_weightsHalf) stays resident. Without this the fp32 copy would persist per layer and
+            // defeat the half-memory goal.
+            _weights = new Tensor<T>([0, 0]);
         }
 
         // Reshape back to original shape with outputSize as last dimension
