@@ -95,7 +95,10 @@ bool Compiles(string code)
 
 // Categories whose concrete model types get a runnable, compile-checked example.
 var exampleSlugs = new HashSet<string>(StringComparer.Ordinal)
-{ "optimizers", "lossfunctions", "regression", "clustering", "timeseries", "lora" };
+{
+    "optimizers", "lossfunctions", "regression", "clustering", "timeseries", "lora",
+    "activationfunctions", "windowfunctions", "waveletfunctions", "kernels", "radialbasisfunctions"
+};
 
 // ── Build a page for every public type ──
 Directory.CreateDirectory(outDir);
@@ -158,13 +161,14 @@ foreach (var grp in grouped)
         string forBeginners = md is not null ? ExtractForBeginners(md.Element("remarks")) : "";
         string remarks = md is not null ? ExtractRemarksExcludingForBeginners(md.Element("remarks")) : "";
 
-        // Example only for concrete model types in supported domains (kept only if it compiles).
+        // Example only for concrete model types in supported domains. Each domain offers one or
+        // more candidate snippets; keep the first that compiles against the real assembly.
         bool exampleOk = false;
         string example = "";
         if (kind == "Models & Types" && exampleSlugs.Contains(slug))
         {
-            example = BuildExample(slug, StripArity(t.Name), t.Namespace!);
-            exampleOk = example.Length > 0 && Compiles(example);
+            foreach (var candidate in BuildExamples(slug, StripArity(t.Name), t.Namespace!))
+                if (candidate.Length > 0 && Compiles(candidate)) { example = candidate; exampleOk = true; break; }
         }
 
         string display = FriendlyName(t);
@@ -591,9 +595,9 @@ static string FirstSentence(string s)
 
 // ── example templates (concrete model types in supported domains) ─────────────
 
-static string BuildExample(string slug, string type, string ns) => slug switch
+static string[] BuildExamples(string slug, string type, string ns) => slug switch
 {
-    "optimizers" => $$"""
+    "optimizers" => new[] { $$"""
         using AiDotNet;
         using AiDotNet.Data.Loaders;
         using AiDotNet.Enums;
@@ -620,9 +624,9 @@ static string BuildExample(string slug, string type, string ns) => slug switch
             .BuildAsync();
 
         Console.WriteLine("Trained with {{type}}.");
-        """,
+        """ },
 
-    "lossfunctions" => $$"""
+    "lossfunctions" => new[] { $$"""
         using {{ns}};
         using AiDotNet.Tensors.LinearAlgebra;
 
@@ -632,9 +636,9 @@ static string BuildExample(string slug, string type, string ns) => slug switch
 
         float value = loss.CalculateLoss(predicted, actual);
         Console.WriteLine($"{{type}} = {value:F4}");
-        """,
+        """ },
 
-    "regression" => $$"""
+    "regression" => new[] { $$"""
         using AiDotNet;
         using AiDotNet.Data.Loaders;
         using {{ns}};
@@ -653,9 +657,9 @@ static string BuildExample(string slug, string type, string ns) => slug switch
             .BuildAsync();
 
         Console.WriteLine("Trained {{type}}.");
-        """,
+        """ },
 
-    "clustering" => $$"""
+    "clustering" => new[] { $$"""
         using AiDotNet;
         using AiDotNet.Data.Loaders;
         using {{ns}};
@@ -673,9 +677,9 @@ static string BuildExample(string slug, string type, string ns) => slug switch
 
         var labels = result.Predict(data);
         Console.WriteLine($"{{type}}: clustered {labels.Length} points.");
-        """,
+        """ },
 
-    "timeseries" => $$"""
+    "timeseries" => new[] { $$"""
         using AiDotNet;
         using AiDotNet.Data.Loaders;
         using {{ns}};
@@ -696,16 +700,71 @@ static string BuildExample(string slug, string type, string ns) => slug switch
 
         var forecast = result.Predict(new Matrix<double>(6, 1));
         Console.WriteLine($"{{type}}: forecast {forecast.Length} steps.");
-        """,
+        """ },
 
-    "lora" => $$"""
+    "lora" => new[] { $$"""
         using AiDotNet.LoRA;
         using {{ns}};
 
         var adapter = new {{type}}<double>(null, rank: 8, alpha: 8, freezeBaseLayer: true);
         var config = new DefaultLoRAConfiguration<double>(rank: 8, alpha: 8, loraAdapter: adapter);
         Console.WriteLine($"Configured {{type}} (rank {config.Rank}).");
-        """,
+        """ },
 
-    _ => ""
+    "activationfunctions" => new[] { $$"""
+        using AiDotNet.ActivationFunctions;
+
+        var activation = new {{type}}<double>();
+        double y = activation.Activate(0.5);
+        Console.WriteLine($"{{type}}: f(0.5) = {y:F4}");
+        """ },
+
+    "windowfunctions" => new[] { $$"""
+        using AiDotNet.WindowFunctions;
+        using AiDotNet.Tensors.LinearAlgebra;
+
+        var window = new {{type}}<double>();
+        Vector<double> w = window.Create(16);
+        Console.WriteLine($"{{type}}: {w.Length}-point window, center = {w[w.Length / 2]:F4}");
+        """ },
+
+    "waveletfunctions" => new[] { $$"""
+        using AiDotNet.WaveletFunctions;
+
+        var wavelet = new {{type}}<double>();
+        double value = wavelet.Calculate(0.5);
+        Console.WriteLine($"{{type}}: psi(0.5) = {value:F4}");
+        """ },
+
+    "kernels" => new[] { $$"""
+        using AiDotNet.Kernels;
+        using AiDotNet.Tensors.LinearAlgebra;
+
+        var kernel = new {{type}}<double>();
+        var a = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
+        var b = new Vector<double>(new[] { 1.5, 1.0, 2.5 });
+        double similarity = kernel.Calculate(a, b);
+        Console.WriteLine($"{{type}}: K(a, b) = {similarity:F4}");
+        """ },
+
+    // RBFs take a width parameter; fall back to a parameterless ctor where one exists.
+    "radialbasisfunctions" => new[]
+    {
+        $$"""
+        using AiDotNet.RadialBasisFunctions;
+
+        var rbf = new {{type}}<double>(1.0);
+        double value = rbf.Compute(0.5);
+        Console.WriteLine($"{{type}}: f(0.5) = {value:F4}");
+        """,
+        $$"""
+        using AiDotNet.RadialBasisFunctions;
+
+        var rbf = new {{type}}<double>();
+        double value = rbf.Compute(0.5);
+        Console.WriteLine($"{{type}}: f(0.5) = {value:F4}");
+        """
+    },
+
+    _ => System.Array.Empty<string>()
 };
