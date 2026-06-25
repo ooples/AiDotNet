@@ -25111,16 +25111,23 @@ public static class LayerHelper<T>
             h = (h + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
             w = (w + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
 
-            // DCNv3 blocks (approximated as standard convolutions)
+            // DCNv3 blocks (Wang et al. 2023): a grouped deformable 3×3 conv (the DCNv3 core
+            // operator) + a 1×1-expand→1×1-project feed-forward. The grouping is what gives DCNv3 its
+            // parameter efficiency — InternImage uses group width 16 (groups = channels/16, matching the
+            // paper's per-stage groups [4,8,16,32]…[20,40,80,160]); the 3×3 weight is therefore
+            // [channels, channels/groups=16, 3, 3] rather than the full [channels, channels, 3, 3].
+            // (Modulation/mask is omitted here so the path is trainable via the wired DCNv1 autograd; the
+            // fused grouped-deformable kernel + modulation is the production follow-up, #1691.)
+            int dcnGroups = System.Math.Max(1, channels / 16);
             for (int block = 0; block < depths[stage]; block++)
             {
-                // Deformable convolution approximation
-                yield return new ConvolutionalLayer<T>(
-                    channels,
-                    3, 1, 1,
-                    relu);
+                // DCNv3 grouped deformable spatial mixing (channels -> channels)
+                yield return new DeformableConvolutionalLayer<T>(
+                    outputChannels: channels,
+                    kernelSize: 3, stride: 1, padding: 1,
+                    groups: dcnGroups, deformGroups: dcnGroups, useModulation: false);
 
-                // Feed-forward network
+                // Feed-forward network (1×1 expand 4× -> 1×1 project back)
                 int ffnDim = channels * 4;
                 yield return new ConvolutionalLayer<T>(
                     ffnDim,
