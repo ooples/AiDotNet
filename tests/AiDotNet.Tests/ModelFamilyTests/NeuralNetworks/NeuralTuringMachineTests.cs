@@ -12,13 +12,14 @@ public class NeuralTuringMachineTests : NeuralNetworkModelTestBase<float>
     protected override INeuralNetworkModel<float> CreateNetwork()
         => new NeuralTuringMachine<float>();
 
-    // #1643: NTM training has a small, bounded run-to-run non-determinism that originates in
-    // AiDotNet's layer/eager-training path (proven NOT to be the Tensors autodiff engine — a
-    // faithful full-NTM backward graph replays bit-deterministically at the Tensors level). A
-    // memory-augmented recurrent net amplifies it into noise-floor wander on the trajectory
-    // invariants. These two per-architecture tolerances (the framework's designed knobs, also used
-    // by the LSTM/MoE/Spiking recurrent siblings) absorb that bounded wander while still catching
-    // genuine divergence/NaN. Tracked for a root-cause fix in the AiDotNet training path.
-    protected override double MoreDataTolerance => 0.05;
-    protected override double TrainingErrorMultiplier => 10.0;
+    // NTM training is now fully deterministic (the lazy-Dense resize re-randomization bug is fixed
+    // in DenseLayer.EnsureWeightShapeForInput). On this single-sample memorization task NTM
+    // converges to a shallow ~1.3e-4 floor by 50 iterations, then Adam takes a few more bounded
+    // steps to ~3.2e-4 by 200 — a fixed ~1.8e-4 drift that just exceeds the default 1e-4 tolerance
+    // because the model converges BELOW that tolerance. 1e-3 covers the (now deterministic, measured)
+    // drift with margin while still catching genuine divergence/NaN — 50x tighter than a noise-floor
+    // calibration would need, because the training is reproducible. The strict
+    // Training_ShouldReduceLoss / LossStrictlyDecreasesOnMemorizationTask / TrainingError invariants
+    // all pass at default strictness.
+    protected override double MoreDataTolerance => 1e-3;
 }
