@@ -1,166 +1,96 @@
+// AiDotNet — Text Classification (News Categorization)
+//
+// Multi-class text classification entirely through the AiModelBuilder facade. A TF-IDF
+// vectorizer turns raw article text into features (ConfigureTextVectorizer +
+// DataLoaders.FromTextDocuments), a Multinomial Naive Bayes model is trained, and new
+// articles are categorized straight from text via result.PredictText — no manual
+// tokenizing or feature engineering. Metrics come off result.GetDataSetStats.
+
 using AiDotNet;
 using AiDotNet.Classification.NaiveBayes;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Models.Options;
+using AiDotNet.Preprocessing.TextVectorizers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 Console.WriteLine("=== AiDotNet Text Classification ===");
 Console.WriteLine("News Article Categorization with Multi-Class Classification\n");
 
-// Sample news articles with categories
 // Categories: 0=Technology, 1=Sports, 2=Politics, 3=Business
 var (articles, labels, categoryNames) = LoadNewsDataset();
 
 Console.WriteLine($"Loaded {articles.Length} news articles across {categoryNames.Length} categories\n");
 Console.WriteLine("Categories:");
 foreach (var (name, index) in categoryNames.Select((n, i) => (n, i)))
-{
-    var count = labels.Count(l => (int)l == index);
-    Console.WriteLine($"  {index}. {name}: {count} articles");
-}
+    Console.WriteLine($"  {index}. {name}: {labels.Count(l => (int)l == index)} articles");
 Console.WriteLine();
 
-// Split into train/test sets (80/20)
+// Split into train/test sets (80/20).
 var random = new Random(42);
 var indices = Enumerable.Range(0, articles.Length).OrderBy(_ => random.Next()).ToArray();
 var splitIndex = (int)(articles.Length * 0.8);
 
-var trainIndices = indices.Take(splitIndex).ToArray();
-var testIndices = indices.Skip(splitIndex).ToArray();
-
-var trainArticles = trainIndices.Select(i => articles[i]).ToArray();
-var trainLabels = trainIndices.Select(i => labels[i]).ToArray();
-var testArticles = testIndices.Select(i => articles[i]).ToArray();
-var testLabels = testIndices.Select(i => labels[i]).ToArray();
+var trainArticles = indices.Take(splitIndex).Select(i => articles[i]).ToArray();
+var trainLabels = indices.Take(splitIndex).Select(i => labels[i]).ToArray();
+var testArticles = indices.Skip(splitIndex).Select(i => articles[i]).ToArray();
+var testLabels = indices.Skip(splitIndex).Select(i => labels[i]).ToArray();
 
 Console.WriteLine($"Training set: {trainArticles.Length} articles");
 Console.WriteLine($"Test set: {testArticles.Length} articles\n");
 
-// Convert text to bag-of-words features
-Console.WriteLine("Preprocessing: Converting text to TF-IDF features...");
-var (trainFeatures, testFeatures, vocabulary) = TextToFeatures(trainArticles, testArticles);
-Console.WriteLine($"  Vocabulary size: {vocabulary.Count} terms");
-Console.WriteLine($"  Feature vector size: {trainFeatures[0].Length}\n");
+// Build and train through the facade. The TF-IDF vectorizer converts raw article text
+// into numeric features; FromTextDocuments fits it on the training articles, and
+// ConfigureTextVectorizer hands the fitted vectorizer to the result for PredictText.
+Console.WriteLine("Building Multinomial Naive Bayes classifier through AiModelBuilder...\n");
 
-// Build and train the classifier using Multinomial Naive Bayes
-Console.WriteLine("Building Multinomial Naive Bayes classifier...");
-Console.WriteLine("  - Smoothing: Laplace (alpha=1.0)");
-Console.WriteLine("  - Suitable for: Multi-class text classification\n");
+var vectorizer = new TfidfVectorizer<double>();
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new MultinomialNaiveBayes<double>(new NaiveBayesOptions<double> { Alpha = 1.0 }))
+    .ConfigureTextVectorizer(vectorizer)
+    .ConfigureDataLoader(DataLoaders.FromTextDocuments(trainArticles, trainLabels, vectorizer))
+    .BuildAsync();
 
-try
+Console.WriteLine("Training complete.\n");
+
+// Evaluate on the held-out test set — vectorize the test text, then read rich metrics
+// off the facade (ErrorStats auto-selects the classification measures).
+var testFeatures = vectorizer.Transform(testArticles);
+var testStats = result.GetDataSetStats(testFeatures, new Vector<double>(testLabels));
+
+Console.WriteLine("Evaluation Results (held-out test set):");
+Console.WriteLine(new string('-', 60));
+Console.WriteLine($"  Accuracy:  {testStats.ErrorStats.Accuracy:P2}");
+Console.WriteLine($"  Precision: {testStats.ErrorStats.Precision:P2}");
+Console.WriteLine($"  Recall:    {testStats.ErrorStats.Recall:P2}");
+Console.WriteLine($"  F1 Score:  {testStats.ErrorStats.F1Score:P2}");
+
+// Categorize new articles straight from raw text — result.PredictText applies the same
+// fitted vectorizer for you. No manual feature engineering anywhere in this sample.
+Console.WriteLine("\nSample Predictions (result.PredictText):");
+Console.WriteLine(new string('-', 60));
+for (int i = 0; i < Math.Min(5, testArticles.Length); i++)
 {
-    // Create classifier with options
-    var options = new NaiveBayesOptions<double>
-    {
-        Alpha = 1.0  // Laplace smoothing
-    };
-    var classifier = new MultinomialNaiveBayes<double>(options);
+    var prediction = result.PredictText(new[] { testArticles[i] });
+    int predicted = (int)Math.Round(prediction[0]);
+    int actual = (int)testLabels[i];
+    string status = predicted == actual ? "[Correct]" : "[Wrong]";
+    string predName = predicted >= 0 && predicted < categoryNames.Length ? categoryNames[predicted] : "Unknown";
+    string actualName = actual >= 0 && actual < categoryNames.Length ? categoryNames[actual] : "Unknown";
 
-    Console.WriteLine("Training classifier...\n");
-
-    // Convert to matrix format for training
-    var trainMatrix = ArrayToMatrix(trainFeatures);
-    var trainLabelVector = ArrayToVector(trainLabels);
-
-    // Train the model
-    classifier.Train(trainMatrix, trainLabelVector);
-
-    // Evaluate on test set
-    Console.WriteLine("Evaluation Results:");
-    Console.WriteLine(new string('-', 60));
-
-    // Per-category metrics
-    var predictions = new double[testLabels.Length];
-    var categoryCorrect = new int[categoryNames.Length];
-    var categoryTotal = new int[categoryNames.Length];
-    var categoryPredicted = new int[categoryNames.Length];
-
-    for (int i = 0; i < testFeatures.Length; i++)
-    {
-        var testMatrix = ArrayToMatrix(new[] { testFeatures[i] });
-        var prediction = classifier.Predict(testMatrix);
-        predictions[i] = prediction[0];
-        int actual = (int)testLabels[i];
-        int predicted = (int)Math.Round(predictions[i]);
-
-        categoryTotal[actual]++;
-        if (predicted >= 0 && predicted < categoryNames.Length)
-            categoryPredicted[predicted]++;
-
-        if (predicted == actual)
-        {
-            categoryCorrect[actual]++;
-        }
-    }
-
-    // Display per-category precision, recall, and F1
-    Console.WriteLine("\nPer-Category Metrics:");
-    Console.WriteLine($"{"Category",-15} {"Precision",10} {"Recall",10} {"F1-Score",10} {"Support",10}");
-    Console.WriteLine(new string('-', 60));
-
-    double totalPrecision = 0, totalRecall = 0, totalF1 = 0;
-    int totalSupport = 0;
-
-    for (int i = 0; i < categoryNames.Length; i++)
-    {
-        double precision = categoryPredicted[i] > 0
-            ? (double)categoryCorrect[i] / categoryPredicted[i]
-            : 0;
-        double recall = categoryTotal[i] > 0
-            ? (double)categoryCorrect[i] / categoryTotal[i]
-            : 0;
-        double f1 = (precision + recall) > 0
-            ? 2 * precision * recall / (precision + recall)
-            : 0;
-
-        Console.WriteLine($"{categoryNames[i],-15} {precision,10:P1} {recall,10:P1} {f1,10:P1} {categoryTotal[i],10}");
-
-        totalPrecision += precision * categoryTotal[i];
-        totalRecall += recall * categoryTotal[i];
-        totalF1 += f1 * categoryTotal[i];
-        totalSupport += categoryTotal[i];
-    }
-
-    Console.WriteLine(new string('-', 60));
-    Console.WriteLine($"{"Weighted Avg",-15} {totalPrecision / totalSupport,10:P1} {totalRecall / totalSupport,10:P1} {totalF1 / totalSupport,10:P1} {totalSupport,10}");
-
-    // Overall accuracy
-    int totalCorrect = categoryCorrect.Sum();
-    double accuracy = (double)totalCorrect / testLabels.Length;
-    Console.WriteLine($"\nOverall Accuracy: {accuracy:P2}");
-
-    // Sample predictions
-    Console.WriteLine("\nSample Predictions:");
-    Console.WriteLine(new string('-', 60));
-
-    for (int i = 0; i < Math.Min(5, testArticles.Length); i++)
-    {
-        int predicted = (int)Math.Round(predictions[i]);
-        int actual = (int)testLabels[i];
-        string status = predicted == actual ? "[Correct]" : "[Wrong]";
-        string predName = predicted >= 0 && predicted < categoryNames.Length ? categoryNames[predicted] : "Unknown";
-        string actualName = actual >= 0 && actual < categoryNames.Length ? categoryNames[actual] : "Unknown";
-
-        Console.WriteLine($"\nArticle {i + 1}: \"{testArticles[i][..Math.Min(50, testArticles[i].Length)]}...\"");
-        Console.WriteLine($"  Predicted: {predName}");
-        Console.WriteLine($"  Actual:    {actualName} {status}");
-    }
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"Note: Full training requires complete model implementation.");
-    Console.WriteLine($"This sample demonstrates the API pattern for text classification.");
-    Console.WriteLine($"\nError details: {ex.Message}");
+    Console.WriteLine($"\nArticle: \"{testArticles[i][..Math.Min(50, testArticles[i].Length)]}...\"");
+    Console.WriteLine($"  Predicted: {predName}");
+    Console.WriteLine($"  Actual:    {actualName} {status}");
 }
 
 Console.WriteLine("\n=== Sample Complete ===");
 
-// Helper function to create sample news dataset
+// Sample news dataset: 15 articles per category.
 static (string[] articles, double[] labels, string[] categories) LoadNewsDataset()
 {
     var articles = new List<string>();
     var labels = new List<double>();
     var categories = new[] { "Technology", "Sports", "Politics", "Business" };
 
-    // Technology articles (label 0)
     var techArticles = new[]
     {
         "Apple announces new iPhone with revolutionary AI features and enhanced camera system",
@@ -179,13 +109,8 @@ static (string[] articles, double[] labels, string[] categories) LoadNewsDataset
         "Tech giants invest billions in artificial intelligence research",
         "New programming language gains popularity among developers"
     };
-    foreach (var article in techArticles)
-    {
-        articles.Add(article);
-        labels.Add(0);
-    }
+    foreach (var article in techArticles) { articles.Add(article); labels.Add(0); }
 
-    // Sports articles (label 1)
     var sportsArticles = new[]
     {
         "Lakers defeat Celtics in thrilling NBA finals game seven overtime",
@@ -204,13 +129,8 @@ static (string[] articles, double[] labels, string[] categories) LoadNewsDataset
         "Tennis tournament introduces new electronic line calling system",
         "Marathon runner completes race in record breaking time"
     };
-    foreach (var article in sportsArticles)
-    {
-        articles.Add(article);
-        labels.Add(1);
-    }
+    foreach (var article in sportsArticles) { articles.Add(article); labels.Add(1); }
 
-    // Politics articles (label 2)
     var politicsArticles = new[]
     {
         "President signs landmark climate change legislation into law",
@@ -229,13 +149,8 @@ static (string[] articles, double[] labels, string[] categories) LoadNewsDataset
         "Policy makers debate healthcare reform proposals extensively",
         "Constitutional amendment proposed for campaign finance reform"
     };
-    foreach (var article in politicsArticles)
-    {
-        articles.Add(article);
-        labels.Add(2);
-    }
+    foreach (var article in politicsArticles) { articles.Add(article); labels.Add(2); }
 
-    // Business articles (label 3)
     var businessArticles = new[]
     {
         "Stock market reaches record highs amid strong corporate earnings",
@@ -254,137 +169,7 @@ static (string[] articles, double[] labels, string[] categories) LoadNewsDataset
         "Hedge fund manager predicts market correction coming soon",
         "Supply chain disruptions affect global shipping operations"
     };
-    foreach (var article in businessArticles)
-    {
-        articles.Add(article);
-        labels.Add(3);
-    }
+    foreach (var article in businessArticles) { articles.Add(article); labels.Add(3); }
 
     return (articles.ToArray(), labels.ToArray(), categories);
-}
-
-// Convert text to TF-IDF features
-static (double[][] trainFeatures, double[][] testFeatures, Dictionary<string, int> vocabulary)
-    TextToFeatures(string[] trainTexts, string[] testTexts)
-{
-    // Build vocabulary from training data
-    var vocabulary = new Dictionary<string, int>();
-    var stopWords = new HashSet<string>
-    {
-        "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
-        "of", "with", "by", "from", "as", "is", "was", "are", "were", "been",
-        "be", "have", "has", "had", "do", "does", "did", "will", "would", "could",
-        "should", "may", "might", "must", "shall", "this", "that", "these", "those",
-        "it", "its", "their", "they", "them", "he", "she", "his", "her", "we", "our"
-    };
-
-    // Tokenize and build vocabulary
-    foreach (var text in trainTexts)
-    {
-        var tokens = Tokenize(text, stopWords);
-        foreach (var token in tokens)
-        {
-            if (!vocabulary.ContainsKey(token))
-            {
-                vocabulary[token] = vocabulary.Count;
-            }
-        }
-    }
-
-    // Compute document frequencies for IDF
-    var documentFrequencies = new int[vocabulary.Count];
-    foreach (var text in trainTexts)
-    {
-        var tokens = Tokenize(text, stopWords).Distinct();
-        foreach (var token in tokens)
-        {
-            if (vocabulary.TryGetValue(token, out int index))
-            {
-                documentFrequencies[index]++;
-            }
-        }
-    }
-
-    // Compute IDF values
-    var idf = new double[vocabulary.Count];
-    for (int i = 0; i < vocabulary.Count; i++)
-    {
-        idf[i] = Math.Log((double)trainTexts.Length / (1 + documentFrequencies[i]));
-    }
-
-    // Convert to TF-IDF features
-    double[][] trainFeatures = TextsToTfIdf(trainTexts, vocabulary, idf, stopWords);
-    double[][] testFeatures = TextsToTfIdf(testTexts, vocabulary, idf, stopWords);
-
-    return (trainFeatures, testFeatures, vocabulary);
-}
-
-static double[][] TextsToTfIdf(string[] texts, Dictionary<string, int> vocabulary,
-    double[] idf, HashSet<string> stopWords)
-{
-    var features = new double[texts.Length][];
-
-    for (int i = 0; i < texts.Length; i++)
-    {
-        var tokens = Tokenize(texts[i], stopWords);
-        var termFrequencies = new Dictionary<string, int>();
-
-        foreach (var token in tokens)
-        {
-            if (vocabulary.ContainsKey(token))
-            {
-                termFrequencies[token] = termFrequencies.GetValueOrDefault(token, 0) + 1;
-            }
-        }
-
-        features[i] = new double[vocabulary.Count];
-        foreach (var (term, tf) in termFrequencies)
-        {
-            int index = vocabulary[term];
-            features[i][index] = tf * idf[index];
-        }
-
-        // L2 normalize the feature vector
-        double norm = Math.Sqrt(features[i].Sum(x => x * x));
-        if (norm > 0)
-        {
-            for (int j = 0; j < features[i].Length; j++)
-            {
-                features[i][j] /= norm;
-            }
-        }
-    }
-
-    return features;
-}
-
-static List<string> Tokenize(string text, HashSet<string> stopWords)
-{
-    return text.ToLowerInvariant()
-        .Split(new[] { ' ', ',', '.', '!', '?', ';', ':', '"', '\'', '-', '(', ')' },
-            StringSplitOptions.RemoveEmptyEntries)
-        .Where(t => t.Length > 2 && !stopWords.Contains(t))
-        .ToList();
-}
-
-// Convert 2D array to Matrix format
-static AiDotNet.Tensors.LinearAlgebra.Matrix<double> ArrayToMatrix(double[][] array)
-{
-    int rows = array.Length;
-    int cols = array[0].Length;
-    var matrix = new AiDotNet.Tensors.LinearAlgebra.Matrix<double>(rows, cols);
-    for (int i = 0; i < rows; i++)
-    {
-        for (int j = 0; j < cols; j++)
-        {
-            matrix[i, j] = array[i][j];
-        }
-    }
-    return matrix;
-}
-
-// Convert 1D array to Vector format
-static AiDotNet.Tensors.LinearAlgebra.Vector<double> ArrayToVector(double[] array)
-{
-    return new AiDotNet.Tensors.LinearAlgebra.Vector<double>(array);
 }
