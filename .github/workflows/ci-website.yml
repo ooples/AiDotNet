@@ -38,6 +38,9 @@ jobs:
         run: npx astro build
         env:
           VERCEL: '1'
+          # The API reference wiki adds ~10.7K content pages; raise the V8 heap so the
+          # static build doesn't OOM on the runner.
+          NODE_OPTIONS: '--max-old-space-size=6144'
 
       - name: Verify build output
         run: |

@@ -88,6 +88,9 @@ jobs:
         run: npx astro build
         env:
           VERCEL: '1'
+          # The API reference wiki adds ~10.7K content pages; raise the V8 heap so the
+          # static build doesn't OOM on the runner.
+          NODE_OPTIONS: '--max-old-space-size=6144'
           # Astro bakes import.meta.env.PUBLIC_* values at build time. Without these
           # the client-side Supabase client throws "Missing Supabase environment
           # variables" at page load, which in turn means every script that imports

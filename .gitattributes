@@ -66,5 +66,4 @@
 # Auto-generated API wiki (tools/WikiGenerator). Pin to LF so the CI
 # regenerate-and-diff drift check is stable across Windows and Linux.
 ###############################################################################
-docs/reference/wiki/** text eol=lf
 website/src/content/docs/reference/wiki/** text eol=lf
