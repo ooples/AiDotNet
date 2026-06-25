@@ -5825,6 +5825,105 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// rather than calling Train one example at a time — see TrainBatched().
     /// </para>
     /// </remarks>
+    // LSUV (Layer-Sequential Unit-Variance) data-dependent init state. Opt-in: enable per
+    // process with AIDOTNET_LSUV_INIT=1. Default-off so it can't change the init trajectory of
+    // the many models whose He/Xavier init is already well-conditioned; turn it on to harden
+    // training of init-sensitive models (it normalizes each layer's output variance to ~1 on the
+    // first batch, removing poorly-conditioned random draws).
+    private bool _lsuvInitDone;
+
+    /// <summary>
+    /// Enables LSUV data-dependent init (see <see cref="ApplyLsuvInitOnce"/>). Opt-in: default-off,
+    /// seeded from the <c>AIDOTNET_LSUV_INIT=1</c> environment variable. Settable so init-sensitive
+    /// training can turn it on programmatically (and so tests can exercise it deterministically).
+    /// </summary>
+    internal static bool LsuvInitEnabled { get; set; } =
+        System.Environment.GetEnvironmentVariable("AIDOTNET_LSUV_INIT") == "1";
+
+    /// <summary>
+    /// Layer-Sequential Unit-Variance init (Mishkin &amp; Matas 2015, "All you need is a good init").
+    /// On the first training step, walks the layer chain in forward order and rescales each
+    /// trainable layer's weights so its output variance over this batch is ~1. Standard
+    /// activation-matched init (He/Xavier) fixes the EXPECTED variance but not its draw-to-draw
+    /// VARIANCE: for small / low-fan-in nets a poorly-conditioned random draw leaves the net
+    /// nearly input-insensitive (collapsed output spread), so a fraction of random inits fail to
+    /// converge in a bounded step budget (the order-dependent-init flakiness). Calibrating to unit
+    /// per-layer output variance removes that tail. Self-limiting: a healthy layer already sits at
+    /// ~unit variance so its scale factor is ~1 and it is left untouched (the &lt;5% guard below),
+    /// so well-conditioned models are unaffected. Opt out via <c>AIDOTNET_LSUV_INIT=0</c>.
+    /// </summary>
+    private void ApplyLsuvInitOnce(Tensor<T> input)
+    {
+        if (_lsuvInitDone || !LsuvInitEnabled) return;
+        _lsuvInitDone = true;
+        if (Layers is null || Layers.Count == 0) return;
+
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(false); // calibration forward must not consume dropout/noise RNG
+        try
+        {
+            var current = input;
+            const int maxIters = 4;
+            foreach (var layer in Layers)
+            {
+                if (layer is null) continue;
+                // First forward also materializes lazy weights so GetParameters is non-empty.
+                Tensor<T> outp = layer.Forward(current);
+                if (layer is LayerBase<T> lb)
+                {
+                    var ps = lb.GetParameters();
+                    if (ps is not null && ps.Length > 0)
+                    {
+                        for (int it = 0; it < maxIters; it++)
+                        {
+                            double v = TensorVariance(outp);
+                            if (v <= 1e-12 || double.IsNaN(v) || double.IsInfinity(v)) break;
+                            double scale = Math.Sqrt(1.0 / v);
+                            if (Math.Abs(scale - 1.0) < 0.05) break;        // already ~unit → leave healthy inits untouched
+                            if (scale > 5.0) scale = 5.0; else if (scale < 0.2) scale = 0.2; // bound per-iter correction
+                            var scaleT = NumOps.FromDouble(scale);
+                            var arr = new T[ps.Length];
+                            for (int i = 0; i < ps.Length; i++) arr[i] = NumOps.Multiply(ps[i], scaleT);
+                            ps = new Vector<T>(arr);
+                            lb.SetParameters(ps);
+                            outp = layer.Forward(current);
+                        }
+                    }
+                }
+                current = outp;
+            }
+        }
+        catch
+        {
+            // Best-effort: a layer that can't be forwarded/rescaled here (exotic topology,
+            // non-finite probe) keeps its standard init and training proceeds normally.
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
+    }
+
+    /// <summary>
+    /// Test seam: runs the one-shot LSUV calibration directly (no surrounding training step) so the
+    /// rescaling can be asserted in isolation. Honors <see cref="LsuvInitEnabled"/> exactly as the
+    /// training path does, so a test must enable the flag for this to do anything.
+    /// </summary>
+    internal void ApplyLsuvInitForTest(Tensor<T> calibrationInput) => ApplyLsuvInitOnce(calibrationInput);
+
+    private static double TensorVariance(Tensor<T> t)
+    {
+        var sp = t.Data.Span;
+        int n = sp.Length;
+        if (n == 0) return 0.0;
+        double s = 0.0;
+        for (int i = 0; i < n; i++) s += Convert.ToDouble(sp[i]);
+        double mean = s / n;
+        double s2 = 0.0;
+        for (int i = 0; i < n; i++) { double d = Convert.ToDouble(sp[i]) - mean; s2 += d * d; }
+        return s2 / n;
+    }
+
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // Fresh step: no parameter has been mutated yet, so an OOM during the forward/backward
@@ -5876,6 +5975,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // <c>[C,H,W]</c> / <c>[seq,F]</c> / <c>[F]</c> or batched
         // <c>[B,C,H,W]</c> / <c>[B,seq,F]</c> / <c>[B,F]</c> — both work.
         (input, expectedOutput) = NormalizeBatchDim(input, expectedOutput);
+
+        // Data-dependent LSUV init (Mishkin & Matas 2015): on the FIRST training step, rescale
+        // each trainable layer's weights so its output has ~unit variance across this batch. This
+        // hardens against the order-dependent-init flakiness where a poorly-conditioned random
+        // draw leaves the net nearly input-insensitive (low output spread) so ~1-in-4 random
+        // inits fail to converge in a bounded step budget. Self-limiting: a well-conditioned
+        // layer already has ~unit variance, so its scale factor is ~1 (≈ no-op) — only the
+        // poorly-scaled draws are corrected, bounding the behavioural change for healthy models.
+        // Opt out with AIDOTNET_LSUV_INIT=0.
+        ApplyLsuvInitOnce(input);
 
         // G8 (#1624) — gradient micro-batch accumulation. For a large model with a batch big enough to
         // make activations a memory problem, process the batch in small chunks (forward+backward per
@@ -7626,6 +7735,39 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected bool _fusedTrainingDisabled;
 
     /// <summary>
+    /// Whether this model is eligible for the compile-once/replay-many fused
+    /// compiled training path (<see cref="Training.CompiledTapeTrainingStep{T}.TryStepWithFusedOptimizer"/>).
+    /// Default <c>true</c>. Override to <c>false</c> for models whose forward
+    /// is <b>dynamic and stateful</b> — external memory mutated across an
+    /// internal recurrence with data-dependent addressing (Neural Turing
+    /// Machine, Differentiable Neural Computer).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Unlike <see cref="_fusedTrainingDisabled"/> (a per-instance RUNTIME latch
+    /// that the structure-change reset clears so a re-traced plan can retry the
+    /// fast path), this is a permanent ARCHITECTURAL property: a model that
+    /// returns <c>false</c> here never traces a compiled plan, so nothing about
+    /// its eligibility can be reset away mid-run.
+    /// </para>
+    /// <para>
+    /// <b>Why dynamic/stateful models opt out (root cause, not a workaround):</b>
+    /// the fused path traces the forward into a static op graph on the first
+    /// step and <i>replays</i> that graph on every subsequent step. A model with
+    /// external-memory recurrence + content/location addressing is not a static
+    /// graph — this is precisely the case PyTorch's <c>torch.compile</c> handles
+    /// with a graph break that falls back to eager. The eager autograd tape
+    /// (<see cref="Training.TapeTrainingStep{T}"/>) re-runs the true dynamic
+    /// forward every step, so gradients are correct AND the model never touches
+    /// the per-thread compiled-plan cache — eliminating the cross-test
+    /// zero-gradient freeze that surfaced on shared xUnit worker threads when a
+    /// sibling model's same-shape plan lingered in the <c>[ThreadStatic]</c>
+    /// cache (the NTM M-N CI-shard failure, #1643).
+    /// </para>
+    /// </remarks>
+    protected virtual bool SupportsFusedCompiledTraining => true;
+
+    /// <summary>
     /// Tracks whether the fused compiled training path has EVER successfully
     /// run on this model. Once true, Adam/AdamW/SGD moment buffers live
     /// exclusively inside the compiled plan — falling back to eager would
@@ -7799,6 +7941,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // (added as a #1328 workaround) was removed in #1331 once the
         // fused-compiled training path was fixed; the EnableCompilation
         // gate is now the single supported way to bypass fused training.
+        if (!SupportsFusedCompiledTraining)
+            return EmitFusedMissAndFallback("model opts out of fused compiled training (dynamic/stateful forward)");
         if (_fusedTrainingDisabled)
             return EmitFusedMissAndFallback("fused path sticky-disabled from prior fallback");
         if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
