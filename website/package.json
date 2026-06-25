@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
+    "postbuild": "pagefind --site dist",
     "preview": "astro preview",
     "check": "astro check",
     "test:e2e": "npx playwright test",
@@ -26,6 +27,7 @@
     "@playwright/test": "^1.58.2",
     "@tailwindcss/typography": "^0.5.19",
     "autoprefixer": "^10.4.27",
+    "pagefind": "^1.5.2",
     "postcss": "^8.5.12",
     "tailwindcss": "^3.4.19"
   }

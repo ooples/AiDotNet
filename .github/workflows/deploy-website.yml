@@ -97,7 +97,7 @@ jobs:
           dotnet run --project tools/WikiGenerator -c Debug -- src/bin/Debug/net8.0/AiDotNet.xml website/src/content/docs/reference/wiki
 
       - name: Build website
-        run: npx astro build
+        run: npm run build   # astro build + pagefind index (postbuild)
         env:
           VERCEL: '1'
           # The API reference wiki adds ~10.7K content pages; raise the V8 heap so the
