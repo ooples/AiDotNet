@@ -10,13 +10,26 @@ Implements the Informer model for efficient long-sequence time series forecastin
 
 ## For Beginners
 
-Informer makes transformers practical for long time series forecasting. Regular transformers get very slow with long sequences because every time step looks at every other time step. Informer speeds this up by only looking at the most important connections (ProbSparse attention), compressing the sequence as it goes through layers, and predicting all future values at once instead of one at a time.
+Informer makes transformers practical for long time series
+forecasting. Regular transformers get very slow with long sequences because every time
+step looks at every other time step. Informer speeds this up by only looking at the most
+important connections (ProbSparse attention), compressing the sequence as it goes through
+layers, and predicting all future values at once instead of one at a time.
 
 ## How It Works
 
-**The Long-Sequence Forecasting Problem:** Traditional Transformer models achieve state-of-the-art results in many sequence modeling tasks, but they struggle with long time series because self-attention has O(L^2) time and memory complexity. For a sequence of 1000 time steps, vanilla attention requires 1 million operations per layer. This makes long-horizon forecasting computationally prohibitive. 
+**The Long-Sequence Forecasting Problem:**
+Traditional Transformer models achieve state-of-the-art results in many sequence modeling tasks,
+but they struggle with long time series because self-attention has O(L^2) time and memory complexity.
+For a sequence of 1000 time steps, vanilla attention requires 1 million operations per layer.
+This makes long-horizon forecasting computationally prohibitive.
 
-**The Informer Solution:** Informer (Zhou et al., AAAI 2021) introduces three key innovations: 1. ProbSparse Self-Attention (O(L log L) complexity) 2. Self-Attention Distilling for sequence compression 3. Generative-Style Decoder for parallel multi-step forecasting
+**The Informer Solution:**
+Informer (Zhou et al., AAAI 2021) introduces three key innovations:
+
+1. ProbSparse Self-Attention (O(L log L) complexity)
+2. Self-Attention Distilling for sequence compression
+3. Generative-Style Decoder for parallel multi-step forecasting
 
 ## Example
 

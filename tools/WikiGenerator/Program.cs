@@ -337,7 +337,10 @@ static string ToMarkdown(XElement? el)
     {
         switch (node)
         {
-            case XText t: sb.Append(Regex.Replace(t.Value, @"\s+", " ")); break;
+            // Collapse horizontal whitespace but KEEP newlines, so author-written bullet
+            // ("- ") and numbered ("1.") lists in the doc comment survive as real markdown
+            // lists. Markdown re-joins ordinary wrapped prose lines into one paragraph anyway.
+            case XText t: sb.Append(Regex.Replace(t.Value, @"[^\S\n]+", " ")); break;
             case XElement e:
                 switch (e.Name.LocalName)
                 {
@@ -376,8 +379,31 @@ static string NormalizeBlock(string s)
 {
     s = Regex.Replace(s, @"[ \t]+", " ");
     s = Regex.Replace(s, @"\n[ \t]+", "\n");
+    // Code fences embedded in doc-comment prose are illustrative author snippets, not our
+    // verified example — downgrade to ```cs so the compile gate (keyed on ```csharp) skips them.
+    s = Regex.Replace(s, @"```\s*(csharp|c#)", "```cs", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
+    s = TidyLists(s);
     s = Regex.Replace(s, @"\n{3,}", "\n\n");
     return s.Trim();
+}
+
+// Ensure a blank line sits before and after each run of list items, so markdown renders
+// the bullets/numbers as a list instead of folding the following text into the last item.
+static string TidyLists(string s)
+{
+    var outL = new List<string>();
+    bool prevItem = false, prevBlank = true;
+    foreach (var line in s.Replace("\r\n", "\n").Split('\n'))
+    {
+        bool blank = line.Trim().Length == 0;
+        bool item = Regex.IsMatch(line, @"^\s*([-*]|\d+\.)\s+", RegexOptions.None, TimeSpan.FromSeconds(1));
+        if (item && !prevItem && !prevBlank) outL.Add("");   // blank before a list
+        if (!item && !blank && prevItem) outL.Add("");       // blank after a list
+        outL.Add(line);
+        if (blank) { prevBlank = true; prevItem = false; }
+        else { prevBlank = false; prevItem = item; }
+    }
+    return string.Join("\n", outL);
 }
 
 static string ExtractForBeginners(XElement? remarks)

@@ -10,11 +10,28 @@ Implements the Root Mean Square Propagation (RMSProp) optimization algorithm, an
 
 ## For Beginners
 
-RMSProp is like a hiker who adjusts their step size differently for each direction. Imagine a hiker exploring mountains with different terrains: - On steep slopes (large gradients), the hiker takes small, careful steps - On gentle slopes (small gradients), the hiker takes larger, confident steps - The hiker remembers how steep each direction has been recently (using a moving average) - This memory helps the hiker adjust their steps even as the terrain changes This adaptive approach helps the algorithm find good solutions more quickly by: - Preventing wild overshooting on steep slopes - Making faster progress on gentle terrain - Adjusting automatically to different parts of the solution space
+RMSProp is like a hiker who adjusts their step size differently for each direction.
+
+Imagine a hiker exploring mountains with different terrains:
+
+- On steep slopes (large gradients), the hiker takes small, careful steps
+- On gentle slopes (small gradients), the hiker takes larger, confident steps
+- The hiker remembers how steep each direction has been recently (using a moving average)
+- This memory helps the hiker adjust their steps even as the terrain changes
+
+This adaptive approach helps the algorithm find good solutions more quickly by:
+
+- Preventing wild overshooting on steep slopes
+- Making faster progress on gentle terrain
+- Adjusting automatically to different parts of the solution space
 
 ## How It Works
 
-RMSProp is an adaptive learning rate optimization algorithm designed to handle non-stationary objectives and accelerate convergence. It maintains a moving average of the squared gradients for each parameter and divides the learning rate by the square root of this average. This approach allows the algorithm to use a larger learning rate for parameters with small gradients and a smaller learning rate for parameters with large gradients, leading to more efficient optimization.
+RMSProp is an adaptive learning rate optimization algorithm designed to handle non-stationary
+objectives and accelerate convergence. It maintains a moving average of the squared gradients
+for each parameter and divides the learning rate by the square root of this average. This
+approach allows the algorithm to use a larger learning rate for parameters with small gradients
+and a smaller learning rate for parameters with large gradients, leading to more efficient optimization.
 
 ## Example
 

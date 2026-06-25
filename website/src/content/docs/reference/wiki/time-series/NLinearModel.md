@@ -6,7 +6,10 @@ section: "Reference"
 
 _Time-Series Models_
 
-NLinear — normalization-linear forecaster (Zeng et al., AAAI 2023). Subtracts the last value of the input window (a simple per-window normalization that absorbs level/distribution shift), applies one linear map, then adds the last value back. With DLinear it forms the pair of strong, current linear baselines that frequently rival transformers on long-horizon forecasting.
+NLinear — normalization-linear forecaster (Zeng et al., AAAI 2023). Subtracts the last value of the input
+window (a simple per-window normalization that absorbs level/distribution shift), applies one linear map,
+then adds the last value back. With DLinear it forms the pair of strong, current linear baselines that
+frequently rival transformers on long-horizon forecasting.
 
 ## Example
 

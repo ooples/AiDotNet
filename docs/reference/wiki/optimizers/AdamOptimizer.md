@@ -10,11 +10,13 @@ Implements the Adam (Adaptive Moment Estimation) optimization algorithm for grad
 
 ## For Beginners
 
-Adam is like a smart personal trainer for your machine learning model. It helps your model learn efficiently by adjusting how it learns based on past experiences.
+Adam is like a smart personal trainer for your machine learning model.
+It helps your model learn efficiently by adjusting how it learns based on past experiences.
 
 ## How It Works
 
-Adam is an advanced optimization algorithm that combines ideas from RMSprop and Momentum optimization methods. It adapts the learning rates for each parameter individually and is well-suited for problems with noisy or sparse gradients.
+Adam is an advanced optimization algorithm that combines ideas from RMSprop and Momentum optimization methods.
+It adapts the learning rates for each parameter individually and is well-suited for problems with noisy or sparse gradients.
 
 ## Example
 

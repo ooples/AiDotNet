@@ -6,17 +6,41 @@ section: "Reference"
 
 _Regression Models_
 
-Implements the AdaBoost.R2 algorithm for regression problems, an ensemble learning method that combines multiple decision tree regressors to improve prediction accuracy.
+Implements the AdaBoost.R2 algorithm for regression problems, an ensemble learning method that combines
+multiple decision tree regressors to improve prediction accuracy.
 
 ## For Beginners
 
-AdaBoost.R2 is a powerful machine learning technique for predicting numeric values (like prices, temperatures, or ages) rather than categories. Think of AdaBoost.R2 as a team of experts (decision trees) working together to make predictions: 1. The first "expert" makes predictions on all the training data 2. The algorithm identifies which samples were predicted poorly 3. The next expert pays special attention to those difficult samples 4. This process repeats, creating a team of experts that each specialize in different aspects of the problem 5. When making predictions, all experts "vote" on the final answer, but experts who performed better get more voting power This approach is particularly effective because: - It can turn a collection of "weak" learners (simple decision trees) into a "strong" learner - It automatically focuses on the hardest parts of the problem - It's less prone to overfitting than a single, complex model AdaBoost.R2 is ideal for problems where you need high prediction accuracy and have enough training data to build multiple models.
+AdaBoost.R2 is a powerful machine learning technique for predicting numeric values
+(like prices, temperatures, or ages) rather than categories.
+
+Think of AdaBoost.R2 as a team of experts (decision trees) working together to make predictions:
+
+1. The first "expert" makes predictions on all the training data
+2. The algorithm identifies which samples were predicted poorly
+3. The next expert pays special attention to those difficult samples
+4. This process repeats, creating a team of experts that each specialize in different aspects of the problem
+5. When making predictions, all experts "vote" on the final answer, but experts who performed better get more voting power
+
+This approach is particularly effective because:
+
+- It can turn a collection of "weak" learners (simple decision trees) into a "strong" learner
+- It automatically focuses on the hardest parts of the problem
+- It's less prone to overfitting than a single, complex model
+
+AdaBoost.R2 is ideal for problems where you need high prediction accuracy and have enough training data
+to build multiple models.
 
 ## How It Works
 
-AdaBoost.R2 (Adaptive Boosting for Regression) is an extension of the AdaBoost algorithm for regression tasks. It works by training a sequence of weak regressors (decision trees) on repeatedly modified versions of the data. The predictions from all regressors are then combined through a weighted majority vote to produce the final prediction. 
+AdaBoost.R2 (Adaptive Boosting for Regression) is an extension of the AdaBoost algorithm for regression tasks.
+It works by training a sequence of weak regressors (decision trees) on repeatedly modified versions of the data.
+The predictions from all regressors are then combined through a weighted majority vote to produce the final prediction.
 
-In AdaBoost.R2, each training sample is assigned a weight that determines its importance during training. Initially, all weights are equal. For each iteration, the weights of incorrectly predicted samples are increased so that subsequent weak regressors focus more on difficult cases. The algorithm stops when the specified number of estimators is reached or when the error rate exceeds 0.5.
+In AdaBoost.R2, each training sample is assigned a weight that determines its importance during training.
+Initially, all weights are equal. For each iteration, the weights of incorrectly predicted samples are increased
+so that subsequent weak regressors focus more on difficult cases. The algorithm stops when the specified number
+of estimators is reached or when the error rate exceeds 0.5.
 
 ## Example
 

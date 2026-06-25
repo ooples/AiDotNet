@@ -6,17 +6,33 @@ section: "Reference"
 
 _Regression Models_
 
-Implements Inverse Gaussian regression, a generalized linear model for positive continuous data with variance proportional to the cube of the mean.
+Implements Inverse Gaussian regression, a generalized linear model for positive continuous data
+with variance proportional to the cube of the mean.
 
 ## How It Works
 
-The Inverse Gaussian distribution (also known as Wald distribution) is appropriate for modeling positive continuous response variables with heavy right tails. It's commonly used for modeling response times, waiting times, and first passage times. 
+The Inverse Gaussian distribution (also known as Wald distribution) is appropriate for modeling
+positive continuous response variables with heavy right tails. It's commonly used for modeling
+response times, waiting times, and first passage times.
 
-The Inverse Gaussian distribution has two parameters: μ (mean) and λ (shape), with: - Mean: μ - Variance: μ³/λ = φ × μ³, where φ = 1/λ is the dispersion parameter 
+The Inverse Gaussian distribution has two parameters: μ (mean) and λ (shape), with:
 
-The model is fitted using iteratively reweighted least squares (IRLS), a form of maximum likelihood estimation. 
+- Mean: μ
+- Variance: μ³/λ = φ × μ³, where φ = 1/λ is the dispersion parameter
 
-For Beginners: Inverse Gaussian regression is used when you're trying to predict positive continuous values that have heavy right tails (meaning extreme large values are possible and have high variability). Common examples include: - Response times in cognitive experiments - Time until failure for mechanical systems - First passage times in physics - Waiting times in queuing systems Compared to Gamma regression which has variance proportional to μ², Inverse Gaussian has variance proportional to μ³, meaning it handles even heavier tails where large values are much more variable.
+The model is fitted using iteratively reweighted least squares (IRLS), a form of maximum likelihood estimation.
+
+For Beginners:
+Inverse Gaussian regression is used when you're trying to predict positive continuous values that have
+heavy right tails (meaning extreme large values are possible and have high variability). Common examples include:
+
+- Response times in cognitive experiments
+- Time until failure for mechanical systems
+- First passage times in physics
+- Waiting times in queuing systems
+
+Compared to Gamma regression which has variance proportional to μ², Inverse Gaussian has variance
+proportional to μ³, meaning it handles even heavier tails where large values are much more variable.
 
 ## Example
 

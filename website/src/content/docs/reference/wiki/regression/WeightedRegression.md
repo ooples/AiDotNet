@@ -1,20 +1,38 @@
 ---
 title: "WeightedRegression"
-description: "Implements weighted regression, a variation of linear regression where each data point has a different level of importance (weight) in determining the model parameters."
+description: "Implements weighted regression, a variation of linear regression where each data point has a different  level of importance (weight) in determining the model parameters."
 section: "Reference"
 ---
 
 _Regression Models_
 
-Implements weighted regression, a variation of linear regression where each data point has a different level of importance (weight) in determining the model parameters.
+Implements weighted regression, a variation of linear regression where each data point has a different 
+level of importance (weight) in determining the model parameters.
 
 ## For Beginners
 
-Weighted regression is like giving different voting power to different data points. Think of it like this: - Regular regression treats all data points equally - each point gets one "vote" on where the line should go - Weighted regression lets some points have more "votes" than others - Points with higher weights have more influence on the final model - Points with lower weights have less influence For example, if you're predicting house prices: - Recent sales might get higher weights because they reflect current market conditions better - Unusual properties might get lower weights to prevent them from skewing the model - More reliable measurements might get higher weights than less reliable ones This helps you build models that focus more on the data points you trust or care about most.
+Weighted regression is like giving different voting power to different data points.
+
+Think of it like this:
+
+- Regular regression treats all data points equally - each point gets one "vote" on where the line should go
+- Weighted regression lets some points have more "votes" than others
+- Points with higher weights have more influence on the final model
+- Points with lower weights have less influence
+
+For example, if you're predicting house prices:
+
+- Recent sales might get higher weights because they reflect current market conditions better
+- Unusual properties might get lower weights to prevent them from skewing the model
+- More reliable measurements might get higher weights than less reliable ones
+
+This helps you build models that focus more on the data points you trust or care about most.
 
 ## How It Works
 
-Weighted regression extends standard regression by allowing each data point to have a different level of influence on the model. This is particularly useful in scenarios where data points have varying reliability, importance, or error variance.
+Weighted regression extends standard regression by allowing each data point to have a different level
+of influence on the model. This is particularly useful in scenarios where data points have varying
+reliability, importance, or error variance.
 
 ## Example
 

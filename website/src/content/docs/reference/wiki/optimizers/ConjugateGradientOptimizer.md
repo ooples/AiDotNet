@@ -10,11 +10,15 @@ Implements the Conjugate Gradient optimization algorithm for numerical optimizat
 
 ## For Beginners
 
-This optimizer is like a smart hiker trying to find the lowest point in a hilly landscape. It uses information about the slope (gradient) and its previous steps to decide on the best direction to move next, allowing it to find the lowest point (optimal solution) more efficiently than simpler methods.
+This optimizer is like a smart hiker trying to find the lowest point in a hilly landscape. 
+It uses information about the slope (gradient) and its previous steps to decide on the best direction to move next, 
+allowing it to find the lowest point (optimal solution) more efficiently than simpler methods.
 
 ## How It Works
 
-The Conjugate Gradient method is an algorithm for the numerical solution of particular systems of linear equations, namely those whose matrix is symmetric and positive-definite. It is often used to solve unconstrained optimization problems such as energy minimization.
+The Conjugate Gradient method is an algorithm for the numerical solution of particular systems of linear equations, 
+namely those whose matrix is symmetric and positive-definite. It is often used to solve unconstrained optimization problems 
+such as energy minimization.
 
 ## Example
 

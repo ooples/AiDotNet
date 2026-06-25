@@ -6,17 +6,23 @@ section: "Reference"
 
 _Regression Models_
 
-Implements Random Forest Regression, an ensemble learning method that operates by constructing multiple decision trees during training and outputting the average prediction of the individual trees.
+Implements Random Forest Regression, an ensemble learning method that operates by constructing multiple
+decision trees during training and outputting the average prediction of the individual trees.
 
 ## For Beginners
 
-Think of Random Forest as a committee of decision trees, where each tree votes on the prediction. By combining many trees, each trained slightly differently, the model becomes more robust and accurate than any single tree. It's like asking multiple experts for their opinion and taking the average.
+Think of Random Forest as a committee of decision trees, where each tree votes on the prediction.
+By combining many trees, each trained slightly differently, the model becomes more robust and accurate
+than any single tree. It's like asking multiple experts for their opinion and taking the average.
 
 ## How It Works
 
-Random Forest Regression combines multiple decision trees to improve prediction accuracy and control overfitting. Each tree is trained on a bootstrap sample of the training data, and at each node, only a random subset of features is considered for splitting. The final prediction is the average of predictions from all trees. 
+Random Forest Regression combines multiple decision trees to improve prediction accuracy and control overfitting.
+Each tree is trained on a bootstrap sample of the training data, and at each node, only a random subset of
+features is considered for splitting. The final prediction is the average of predictions from all trees.
 
-The algorithm's key strengths include robustness to outliers, good performance on high-dimensional data, and the ability to capture non-linear relationships without requiring extensive hyperparameter tuning.
+The algorithm's key strengths include robustness to outliers, good performance on high-dimensional data,
+and the ability to capture non-linear relationships without requiring extensive hyperparameter tuning.
 
 ## Example
 

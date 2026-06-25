@@ -6,17 +6,24 @@ section: "Reference"
 
 _Regression Models_
 
-Implements Radial Basis Function (RBF) Regression, a technique that uses radial basis functions as the basis for approximating complex nonlinear relationships between inputs and outputs.
+Implements Radial Basis Function (RBF) Regression, a technique that uses radial basis functions
+as the basis for approximating complex nonlinear relationships between inputs and outputs.
 
 ## For Beginners
 
-Think of RBF regression as placing a set of "bell curves" at strategic locations in your input space. Each curve gives a strong response when an input is close to its center and a weak response when it's far away. The model predicts by combining these responses with learned weights. This approach is particularly good at modeling complex, non-linear relationships in data.
+Think of RBF regression as placing a set of "bell curves" at strategic locations in your input space.
+Each curve gives a strong response when an input is close to its center and a weak response when it's far away.
+The model predicts by combining these responses with learned weights. This approach is particularly good at
+modeling complex, non-linear relationships in data.
 
 ## How It Works
 
-Radial Basis Function Regression works by transforming the input space using a set of radial basis functions, each centered at a different point. These functions produce a response that depends on the distance from the input to the center point. The model then combines these responses linearly to make predictions. 
+Radial Basis Function Regression works by transforming the input space using a set of radial basis functions,
+each centered at a different point. These functions produce a response that depends on the distance from the
+input to the center point. The model then combines these responses linearly to make predictions.
 
-The algorithm first selects a set of centers (typically using k-means clustering), computes the RBF features for each input point, and then solves a linear regression problem to find the optimal weights.
+The algorithm first selects a set of centers (typically using k-means clustering), computes the RBF features
+for each input point, and then solves a linear regression problem to find the optimal weights.
 
 ## Example
 

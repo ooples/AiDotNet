@@ -10,11 +10,15 @@ Scale-invariant depth loss function for depth estimation training.
 
 ## For Beginners
 
-This loss function is specifically designed for training depth estimation models. It handles the inherent scale ambiguity in monocular depth estimation by focusing on the relative depth relationships between pixels rather than absolute depth values.
+This loss function is specifically designed for training depth estimation models.
+It handles the inherent scale ambiguity in monocular depth estimation by focusing on the
+relative depth relationships between pixels rather than absolute depth values.
 
 ## How It Works
 
-**Technical Details:** The loss is computed as: (1/n) * Σ(d²) - (λ/n²) * (Σd)² where d = log(pred) - log(actual), and λ controls the scale-invariance penalty. 
+**Technical Details:**
+The loss is computed as: (1/n) * Σ(d²) - (λ/n²) * (Σd)²
+where d = log(pred) - log(actual), and λ controls the scale-invariance penalty.
 
 **Reference:** Eigen et al., "Depth Map Prediction from a Single Image using a Multi-Scale Deep Network"
 

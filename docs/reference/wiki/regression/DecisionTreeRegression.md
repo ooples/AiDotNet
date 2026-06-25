@@ -10,11 +10,27 @@ Represents a decision tree regression model that predicts continuous values base
 
 ## For Beginners
 
-A decision tree regression is like a flowchart that helps predict numerical values. Think of it like answering a series of yes/no questions to reach a prediction: - "Is the temperature above 75—F?" - "Is the humidity below 50%?" - "Is it a weekend?" Each question splits the data into two groups, and the tree learns which questions to ask to make the most accurate predictions. For example, a decision tree might predict house prices based on features like square footage, number of bedrooms, and neighborhood. The model is called a "tree" because it resembles an upside-down tree, with a single starting point (root) that branches out into multiple endpoints (leaves) where the final predictions are made.
+A decision tree regression is like a flowchart that helps predict numerical values.
+
+Think of it like answering a series of yes/no questions to reach a prediction:
+
+- "Is the temperature above 75—F?"
+- "Is the humidity below 50%?"
+- "Is it a weekend?"
+
+Each question splits the data into two groups, and the tree learns which questions to ask 
+to make the most accurate predictions. For example, a decision tree might predict house prices 
+based on features like square footage, number of bedrooms, and neighborhood.
+
+The model is called a "tree" because it resembles an upside-down tree, with a single starting point (root) 
+that branches out into multiple endpoints (leaves) where the final predictions are made.
 
 ## How It Works
 
-Decision tree regression builds a model in the form of a tree structure where each internal node represents a decision based on a feature, each branch represents an outcome of that decision, and each leaf node represents a predicted value. The model is trained by recursively splitting the data based on the optimal feature and threshold that minimizes the prediction error.
+Decision tree regression builds a model in the form of a tree structure where each internal node represents a 
+decision based on a feature, each branch represents an outcome of that decision, and each leaf node 
+represents a predicted value. The model is trained by recursively splitting the data based on the optimal 
+feature and threshold that minimizes the prediction error.
 
 ## Example
 

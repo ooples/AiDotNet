@@ -10,11 +10,26 @@ Implements a State Space Model for time series analysis and forecasting.
 
 ## For Beginners
 
-A State Space Model is like tracking the position of a moving object when you can only see its shadow. The actual position (state) is hidden, but you can observe its effects (the shadow). For example, if you're tracking the economy, you might not directly observe the "true state" of the economy, but you can see indicators like GDP, unemployment rates, etc. The State Space Model helps infer the hidden state from these observations and predict future values. The model has two main components: 1. A transition equation that describes how the hidden state evolves over time 2. An observation equation that relates the hidden state to what we actually observe This implementation uses the Kalman filter and smoother algorithms to estimate the hidden states and learn the model parameters from data.
+A State Space Model is like tracking the position of a moving object when you can only see its shadow.
+The actual position (state) is hidden, but you can observe its effects (the shadow).
+
+For example, if you're tracking the economy, you might not directly observe the "true state" of the economy,
+but you can see indicators like GDP, unemployment rates, etc. The State Space Model helps infer the hidden
+state from these observations and predict future values.
+
+The model has two main components:
+
+1. A transition equation that describes how the hidden state evolves over time
+2. An observation equation that relates the hidden state to what we actually observe
+
+This implementation uses the Kalman filter and smoother algorithms to estimate the hidden states
+and learn the model parameters from data.
 
 ## How It Works
 
-State Space Models represent time series data as a system with hidden states that evolve over time according to probabilistic rules. They are powerful tools for modeling complex dynamic systems and can handle missing data, multiple variables, and non-stationary patterns.
+State Space Models represent time series data as a system with hidden states that evolve over time
+according to probabilistic rules. They are powerful tools for modeling complex dynamic systems
+and can handle missing data, multiple variables, and non-stationary patterns.
 
 ## Example
 

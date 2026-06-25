@@ -10,11 +10,15 @@ Implements the Limited-memory Broyden-Fletcher-Goldfarb-Shanno (L-BFGS) optimiza
 
 ## For Beginners
 
-L-BFGS is an advanced optimization algorithm that efficiently finds the minimum of a function, especially useful for problems with many variables. It uses information from previous iterations to make intelligent decisions about where to search next, while keeping memory usage low.
+L-BFGS is an advanced optimization algorithm that efficiently finds the minimum of a function, especially useful 
+for problems with many variables. It uses information from previous iterations to make intelligent decisions 
+about where to search next, while keeping memory usage low.
 
 ## How It Works
 
-L-BFGS is a quasi-Newton method for solving unconstrained nonlinear optimization problems. It approximates the Broyden-Fletcher-Goldfarb-Shanno (BFGS) algorithm using a limited amount of computer memory, making it suitable for optimization problems with many variables.
+L-BFGS is a quasi-Newton method for solving unconstrained nonlinear optimization problems. It approximates the
+Broyden-Fletcher-Goldfarb-Shanno (BFGS) algorithm using a limited amount of computer memory, making it suitable 
+for optimization problems with many variables.
 
 ## Example
 

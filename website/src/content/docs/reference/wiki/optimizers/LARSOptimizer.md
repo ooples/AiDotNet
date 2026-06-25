@@ -10,15 +10,23 @@ Implements the LARS (Layer-wise Adaptive Rate Scaling) optimization algorithm.
 
 ## For Beginners
 
-When training with very large batches (common in self-supervised learning like SimCLR), regular optimizers can become unstable because gradients get averaged over more samples, making them smaller. LARS solves this by looking at each layer and asking "how big are the weights compared to the gradients?" and scaling the learning rate accordingly. This allows stable training with batch sizes of 4096 or even larger.
+When training with very large batches (common in self-supervised
+learning like SimCLR), regular optimizers can become unstable because gradients get averaged
+over more samples, making them smaller. LARS solves this by looking at each layer and asking
+"how big are the weights compared to the gradients?" and scaling the learning rate accordingly.
+This allows stable training with batch sizes of 4096 or even larger.
 
 ## How It Works
 
-LARS is specifically designed for training with very large batch sizes (4096-32768). It automatically adapts the learning rate for each layer based on the ratio of parameter norm to gradient norm, which helps maintain stable training at scale. 
+LARS is specifically designed for training with very large batch sizes (4096-32768).
+It automatically adapts the learning rate for each layer based on the ratio of
+parameter norm to gradient norm, which helps maintain stable training at scale.
 
 **Key Formula:**
 
-local_lr = trust_coeff * ||w|| / (||g|| + weight_decay * ||w|| + epsilon) update = local_lr * (g + weight_decay * w) w = w - lr * update (with momentum)
+local_lr = trust_coeff * ||w|| / (||g|| + weight_decay * ||w|| + epsilon)
+update = local_lr * (g + weight_decay * w)
+w = w - lr * update (with momentum)
 
 ## Example
 

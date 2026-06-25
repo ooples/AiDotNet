@@ -10,11 +10,20 @@ Represents a Stochastic Gradient Descent (SGD) optimizer for machine learning mo
 
 ## For Beginners
 
-Think of this optimizer as a hiker trying to find the lowest point in a hilly landscape: - The hiker (optimizer) takes steps downhill to find the lowest point (best model parameters) - Instead of looking at the entire landscape at once, the hiker looks at small patches (subsets of data) - The hiker adjusts their step size (learning rate) as they go - This approach helps the hiker find a good low point quickly, even in a complex landscape This method is efficient for large datasets and can often find good solutions quickly.
+Think of this optimizer as a hiker trying to find the lowest point in a hilly landscape:
+
+- The hiker (optimizer) takes steps downhill to find the lowest point (best model parameters)
+- Instead of looking at the entire landscape at once, the hiker looks at small patches (subsets of data)
+- The hiker adjusts their step size (learning rate) as they go
+- This approach helps the hiker find a good low point quickly, even in a complex landscape
+
+This method is efficient for large datasets and can often find good solutions quickly.
 
 ## How It Works
 
-The StochasticGradientDescentOptimizer is a gradient-based optimization algorithm that iteratively adjusts model parameters to minimize the loss function. It uses a stochastic approach, updating parameters based on a subset of the training data in each iteration.
+The StochasticGradientDescentOptimizer is a gradient-based optimization algorithm that iteratively
+adjusts model parameters to minimize the loss function. It uses a stochastic approach, updating
+parameters based on a subset of the training data in each iteration.
 
 ## Example
 

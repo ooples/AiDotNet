@@ -10,11 +10,28 @@ Represents a conditional inference tree regression model that builds decision tr
 
 ## For Beginners
 
-This class creates a special type of decision tree for predicting numerical values. Think of a decision tree like a flowchart of yes/no questions that helps you make predictions: - The tree starts with a question (like "Is temperature > 70°F?") - Based on the answer, it follows different branches - It continues asking questions until it reaches a final prediction What makes this tree special is how it chooses the questions: - It uses statistical tests to find the most meaningful questions to ask - It avoids favoring certain types of data unfairly - It provides a measurement of confidence (p-value) for each split This approach tends to create more reliable and fair prediction models.
+This class creates a special type of decision tree for predicting numerical values.
+
+Think of a decision tree like a flowchart of yes/no questions that helps you make predictions:
+
+- The tree starts with a question (like "Is temperature > 70°F?")
+- Based on the answer, it follows different branches
+- It continues asking questions until it reaches a final prediction
+
+What makes this tree special is how it chooses the questions:
+
+- It uses statistical tests to find the most meaningful questions to ask
+- It avoids favoring certain types of data unfairly
+- It provides a measurement of confidence (p-value) for each split
+
+This approach tends to create more reliable and fair prediction models.
 
 ## How It Works
 
-A conditional inference tree is a type of decision tree that uses statistical tests to determine optimal splits in the data. Unlike traditional decision trees that use measures like Gini impurity or information gain, conditional inference trees use statistical significance testing to create unbiased trees that don't favor features with many possible split points.
+A conditional inference tree is a type of decision tree that uses statistical tests to determine optimal
+splits in the data. Unlike traditional decision trees that use measures like Gini impurity or information gain,
+conditional inference trees use statistical significance testing to create unbiased trees that don't favor
+features with many possible split points.
 
 ## Example
 

@@ -10,11 +10,13 @@ Implements the AMSGrad optimization algorithm, an improved version of Adam optim
 
 ## For Beginners
 
-AMSGrad is like a smart assistant that helps adjust the learning process. It remembers past information to make better decisions about how quickly to learn in different parts of the problem.
+AMSGrad is like a smart assistant that helps adjust the learning process.
+It remembers past information to make better decisions about how quickly to learn in different parts of the problem.
 
 ## How It Works
 
-AMSGrad is an adaptive learning rate optimization algorithm that addresses some of the convergence issues in Adam. It maintains the maximum of past squared gradients to ensure non-decreasing step sizes.
+AMSGrad is an adaptive learning rate optimization algorithm that addresses some of the convergence issues in Adam.
+It maintains the maximum of past squared gradients to ensure non-decreasing step sizes.
 
 ## Example
 

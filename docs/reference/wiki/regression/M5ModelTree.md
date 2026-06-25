@@ -10,11 +10,25 @@ Represents an M5 model tree for regression problems, combining decision tree str
 
 ## For Beginners
 
-An M5 model tree is like a smart decision-making system for predicting numbers. Think of it like a flowchart for home price prediction: - The tree asks questions about the home (Is it bigger than 2000 sq ft? Is it in neighborhood A?) - Based on the answers, you follow different paths down the tree - When you reach the end (a leaf), instead of getting a single price value, you get a mini-calculator (linear model) - This mini-calculator uses the home's features to make a more precise prediction for that specific group of homes For example, for small homes in urban areas, the price might depend more on location, while for large homes in suburbs, the number of bathrooms might be more important. The M5 model tree captures these different patterns for different groups of data.
+An M5 model tree is like a smart decision-making system for predicting numbers.
+
+Think of it like a flowchart for home price prediction:
+
+- The tree asks questions about the home (Is it bigger than 2000 sq ft? Is it in neighborhood A?)
+- Based on the answers, you follow different paths down the tree
+- When you reach the end (a leaf), instead of getting a single price value, you get a mini-calculator (linear model)
+- This mini-calculator uses the home's features to make a more precise prediction for that specific group of homes
+
+For example, for small homes in urban areas, the price might depend more on location,
+while for large homes in suburbs, the number of bathrooms might be more important.
+The M5 model tree captures these different patterns for different groups of data.
 
 ## How It Works
 
-The M5 model tree is an advanced regression technique that combines the benefits of decision trees and linear regression. Instead of using a single value at each leaf node (as in standard regression trees), M5 model trees fit linear regression models at each leaf. This allows the tree to capture both global patterns through its structure and local patterns through the linear models, often resulting in more accurate predictions compared to standard regression trees.
+The M5 model tree is an advanced regression technique that combines the benefits of decision trees and linear regression.
+Instead of using a single value at each leaf node (as in standard regression trees), M5 model trees fit linear regression
+models at each leaf. This allows the tree to capture both global patterns through its structure and local patterns through
+the linear models, often resulting in more accurate predictions compared to standard regression trees.
 
 ## Example
 

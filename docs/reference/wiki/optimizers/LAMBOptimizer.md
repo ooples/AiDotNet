@@ -10,19 +10,30 @@ Implements the LAMB (Layer-wise Adaptive Moments for Batch training) optimizatio
 
 ## For Beginners
 
-LAMB is the optimizer of choice for training large language models like BERT with massive batch sizes. It works by: 
+LAMB is the optimizer of choice for training large language models
+like BERT with massive batch sizes. It works by:
+
 - Computing Adam-style updates (momentum + adaptive learning rates)
 - Adding weight decay to prevent overfitting
 - Scaling the update per-layer based on weight/update magnitude ratios
-This combination allows training to scale linearly with batch size while maintaining the same final accuracy as small-batch training.
+
+This combination allows training to scale linearly with batch size while maintaining
+the same final accuracy as small-batch training.
 
 ## How It Works
 
-LAMB combines Adam's adaptive learning rates with LARS's layer-wise scaling, enabling training with extremely large batch sizes (up to 32K) while maintaining accuracy. 
+LAMB combines Adam's adaptive learning rates with LARS's layer-wise scaling, enabling
+training with extremely large batch sizes (up to 32K) while maintaining accuracy.
 
 **Key Formula:**
 
-m = beta1 * m + (1 - beta1) * g v = beta2 * v + (1 - beta2) * g^2 m_hat = m / (1 - beta1^t) v_hat = v / (1 - beta2^t) r = m_hat / (sqrt(v_hat) + epsilon) + weight_decay * w trust_ratio = ||w|| / ||r|| w = w - lr * trust_ratio * r
+m = beta1 * m + (1 - beta1) * g
+v = beta2 * v + (1 - beta2) * g^2
+m_hat = m / (1 - beta1^t)
+v_hat = v / (1 - beta2^t)
+r = m_hat / (sqrt(v_hat) + epsilon) + weight_decay * w
+trust_ratio = ||w|| / ||r||
+w = w - lr * trust_ratio * r
 
 ## Example
 

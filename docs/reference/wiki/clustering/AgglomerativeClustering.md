@@ -10,13 +10,30 @@ Agglomerative Hierarchical Clustering implementation.
 
 ## For Beginners
 
-Hierarchical clustering builds a "family tree" of your data. Imagine sorting photos of animals: 1. Start with each photo as its own group 2. Find the two most similar photos and group them 3. Keep grouping until you have the number of groups you want The result can be shown as a dendrogram (tree diagram) where: - Bottom: Each individual item - Top: All items merged into one group - Height: Shows how different merged groups are Use Ward linkage for most cases - it creates nice, balanced clusters.
+Hierarchical clustering builds a "family tree" of your data.
+
+Imagine sorting photos of animals:
+
+1. Start with each photo as its own group
+2. Find the two most similar photos and group them
+3. Keep grouping until you have the number of groups you want
+
+The result can be shown as a dendrogram (tree diagram) where:
+
+- Bottom: Each individual item
+- Top: All items merged into one group
+- Height: Shows how different merged groups are
+
+Use Ward linkage for most cases - it creates nice, balanced clusters.
 
 ## How It Works
 
-Agglomerative clustering builds a hierarchy of clusters bottom-up. Starting with each sample as its own cluster, it iteratively merges the closest pair of clusters until the desired number of clusters is reached. 
+Agglomerative clustering builds a hierarchy of clusters bottom-up. Starting with
+each sample as its own cluster, it iteratively merges the closest pair of clusters
+until the desired number of clusters is reached.
 
-Time complexity: O(n³) for naive implementation, O(n² log n) with efficient data structures. Space complexity: O(n²) for distance matrix.
+Time complexity: O(n³) for naive implementation, O(n² log n) with efficient data structures.
+Space complexity: O(n²) for distance matrix.
 
 ## Example
 

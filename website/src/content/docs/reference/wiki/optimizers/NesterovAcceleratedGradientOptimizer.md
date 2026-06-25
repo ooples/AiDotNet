@@ -10,11 +10,15 @@ Implements the Nesterov Accelerated Gradient optimization algorithm.
 
 ## For Beginners
 
-Imagine you're skiing down a hill. Regular gradient descent is like looking at your current position to decide where to go next. NAG is like looking ahead to where you'll be after your next move, and then deciding how to adjust your path. This "look-ahead" helps you navigate the slope more efficiently, especially around tricky turns.
+Imagine you're skiing down a hill. Regular gradient descent is like looking at your current position to decide where to go next.
+NAG is like looking ahead to where you'll be after your next move, and then deciding how to adjust your path.
+This "look-ahead" helps you navigate the slope more efficiently, especially around tricky turns.
 
 ## How It Works
 
-The Nesterov Accelerated Gradient (NAG) is an optimization algorithm that improves upon standard gradient descent. It introduces a smart prediction of the next position of the parameters, which helps to dampen oscillations and improve convergence, especially in scenarios with high curvature or small but consistent gradients.
+The Nesterov Accelerated Gradient (NAG) is an optimization algorithm that improves upon standard gradient descent.
+It introduces a smart prediction of the next position of the parameters, which helps to dampen oscillations and
+improve convergence, especially in scenarios with high curvature or small but consistent gradients.
 
 ## Example
 

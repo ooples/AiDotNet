@@ -10,7 +10,30 @@ Implements the Huber loss function, which combines properties of both MSE and MA
 
 ## For Beginners
 
-Huber loss combines the best properties of Mean Squared Error and Mean Absolute Error. The formula is: - For errors smaller than delta: 0.5 * error² - For errors larger than delta: delta * (|error| - 0.5 * delta) Where "error" is the difference between predicted and actual values. Key properties: - For small errors, it behaves like MSE (quadratic/squared behavior) - For large errors, it behaves like MAE (linear behavior) - Less sensitive to outliers than MSE, but still provides smooth gradients - The delta parameter controls the transition point between quadratic and linear regions Huber loss is ideal for regression problems where: - You want to balance between MSE and MAE - Your data might contain outliers - You need stable gradients for learning The delta parameter lets you control the definition of an "outlier" - errors larger than delta are treated as outliers and handled using the more robust linear function.
+Huber loss combines the best properties of Mean Squared Error and Mean Absolute Error.
+
+The formula is:
+
+- For errors smaller than delta: 0.5 * error²
+- For errors larger than delta: delta * (|error| - 0.5 * delta)
+
+Where "error" is the difference between predicted and actual values.
+
+Key properties:
+
+- For small errors, it behaves like MSE (quadratic/squared behavior)
+- For large errors, it behaves like MAE (linear behavior)
+- Less sensitive to outliers than MSE, but still provides smooth gradients
+- The delta parameter controls the transition point between quadratic and linear regions
+
+Huber loss is ideal for regression problems where:
+
+- You want to balance between MSE and MAE
+- Your data might contain outliers
+- You need stable gradients for learning
+
+The delta parameter lets you control the definition of an "outlier" - errors larger than delta
+are treated as outliers and handled using the more robust linear function.
 
 ## Example
 

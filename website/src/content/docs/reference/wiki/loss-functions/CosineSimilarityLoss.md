@@ -10,7 +10,30 @@ Implements the Cosine Similarity Loss between two vectors.
 
 ## For Beginners
 
-Cosine Similarity measures how similar two vectors are in terms of their orientation, regardless of their magnitude (size). The formula for cosine similarity is: cos(θ) = (A·B)/(||A||×||B||) Where: - A·B is the dot product of vectors A and B - ||A|| and ||B|| are the magnitudes (lengths) of vectors A and B - θ is the angle between vectors A and B The loss is calculated as 1 - cosine similarity, so: - A value of 0 means the vectors are perfectly aligned (very similar) - A value of 1 means they are perpendicular (no similarity) - A value of 2 means they point in exactly opposite directions Cosine similarity loss is particularly useful for: - Text similarity tasks (comparing document vectors) - Recommendation systems - Image retrieval - Any task where the direction of vectors matters more than their magnitude It's often preferred over Euclidean distance when working with high-dimensional sparse vectors.
+Cosine Similarity measures how similar two vectors are in terms of their orientation,
+regardless of their magnitude (size).
+
+The formula for cosine similarity is: cos(θ) = (A·B)/(||A||×||B||)
+Where:
+
+- A·B is the dot product of vectors A and B
+- ||A|| and ||B|| are the magnitudes (lengths) of vectors A and B
+- θ is the angle between vectors A and B
+
+The loss is calculated as 1 - cosine similarity, so:
+
+- A value of 0 means the vectors are perfectly aligned (very similar)
+- A value of 1 means they are perpendicular (no similarity)
+- A value of 2 means they point in exactly opposite directions
+
+Cosine similarity loss is particularly useful for:
+
+- Text similarity tasks (comparing document vectors)
+- Recommendation systems
+- Image retrieval
+- Any task where the direction of vectors matters more than their magnitude
+
+It's often preferred over Euclidean distance when working with high-dimensional sparse vectors.
 
 ## Example
 

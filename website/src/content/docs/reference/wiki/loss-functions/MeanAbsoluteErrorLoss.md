@@ -10,7 +10,24 @@ Implements the Mean Absolute Error (MAE) loss function.
 
 ## For Beginners
 
-Mean Absolute Error measures the average absolute difference between predicted and actual values. The formula is: MAE = (1/n) * ?|predicted - actual| MAE has these key properties: - It treats all errors linearly (unlike MSE which squares errors) - It's less sensitive to outliers than MSE - It's simple to understand as the average magnitude of errors - It's always positive, with perfect predictions giving a value of zero MAE is ideal for problems where: - You're predicting continuous values - You want all errors to be treated equally (not emphasizing large errors) - The prediction errors follow a Laplace distribution - Outliers should not have a disproportionate influence on the model
+Mean Absolute Error measures the average absolute difference between 
+predicted and actual values.
+
+The formula is: MAE = (1/n) * ?|predicted - actual|
+
+MAE has these key properties:
+
+- It treats all errors linearly (unlike MSE which squares errors)
+- It's less sensitive to outliers than MSE
+- It's simple to understand as the average magnitude of errors
+- It's always positive, with perfect predictions giving a value of zero
+
+MAE is ideal for problems where:
+
+- You're predicting continuous values
+- You want all errors to be treated equally (not emphasizing large errors)
+- The prediction errors follow a Laplace distribution
+- Outliers should not have a disproportionate influence on the model
 
 ## Example
 

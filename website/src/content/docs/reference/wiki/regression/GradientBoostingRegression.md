@@ -6,15 +6,37 @@ section: "Reference"
 
 _Regression Models_
 
-Implements a Gradient Boosting Regression model, which combines multiple decision trees sequentially to create a powerful ensemble that learns from the errors of previous trees.
+Implements a Gradient Boosting Regression model, which combines multiple decision trees
+sequentially to create a powerful ensemble that learns from the errors of previous trees.
 
 ## For Beginners
 
-Gradient Boosting is like having a team of experts who learn from each other's mistakes. Imagine you're trying to predict house prices: - You start with a simple guess (the average price of all houses) - You build a decision tree to predict where your guess was wrong - You adjust your prediction a little bit based on this tree - You build another tree to predict where you're still making mistakes - You keep adding trees, each one focusing on fixing the remaining errors The "gradient" part refers to how it identifies mistakes, and "boosting" means it builds trees sequentially, with each tree boosting the performance of the ensemble. This approach is very powerful because: - It learns complex patterns gradually - It focuses its effort on the hard-to-predict cases - It combines many simple models (trees) into a strong predictive model
+Gradient Boosting is like having a team of experts who learn from each other's mistakes.
+
+Imagine you're trying to predict house prices:
+
+- You start with a simple guess (the average price of all houses)
+- You build a decision tree to predict where your guess was wrong
+- You adjust your prediction a little bit based on this tree
+- You build another tree to predict where you're still making mistakes
+- You keep adding trees, each one focusing on fixing the remaining errors
+
+The "gradient" part refers to how it identifies mistakes, and "boosting" means it builds trees 
+sequentially, with each tree boosting the performance of the ensemble.
+
+This approach is very powerful because:
+
+- It learns complex patterns gradually
+- It focuses its effort on the hard-to-predict cases
+- It combines many simple models (trees) into a strong predictive model
 
 ## How It Works
 
-Gradient Boosting is an ensemble technique that builds decision trees sequentially, with each tree correcting the errors made by the previous trees. The model starts with a simple prediction (typically the mean of the target values) and iteratively adds trees that predict the residuals (errors) of the current ensemble. These predictions are added to the ensemble with a learning rate that controls the contribution of each tree, helping to prevent overfitting.
+Gradient Boosting is an ensemble technique that builds decision trees sequentially, with each tree
+correcting the errors made by the previous trees. The model starts with a simple prediction (typically
+the mean of the target values) and iteratively adds trees that predict the residuals (errors) of the
+current ensemble. These predictions are added to the ensemble with a learning rate that controls the
+contribution of each tree, helping to prevent overfitting.
 
 ## Example
 

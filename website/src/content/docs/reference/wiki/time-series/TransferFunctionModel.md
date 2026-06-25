@@ -6,15 +6,32 @@ section: "Reference"
 
 _Time-Series Models_
 
-Implements a Transfer Function Model for time series analysis, which combines ARIMA modeling with external input variables to capture dynamic relationships between multiple time series.
+Implements a Transfer Function Model for time series analysis, which combines ARIMA modeling with
+external input variables to capture dynamic relationships between multiple time series.
 
 ## For Beginners
 
-A Transfer Function Model helps you understand how one time series affects another over time. For example, you might want to know: - How advertising spending affects sales (with delays of days or weeks) - How temperature changes affect energy consumption - How interest rate changes impact housing prices This model captures both: - The internal patterns of your target variable (like sales following their own seasonal patterns) - The external influence of input variables (like how advertising boosts sales) It's particularly useful when you know there are external factors influencing your target variable and you want to quantify their effects, including any time delays in those effects.
+A Transfer Function Model helps you understand how one time series affects another over time.
+
+For example, you might want to know:
+
+- How advertising spending affects sales (with delays of days or weeks)
+- How temperature changes affect energy consumption
+- How interest rate changes impact housing prices
+
+This model captures both:
+
+- The internal patterns of your target variable (like sales following their own seasonal patterns)
+- The external influence of input variables (like how advertising boosts sales)
+
+It's particularly useful when you know there are external factors influencing your target variable
+and you want to quantify their effects, including any time delays in those effects.
 
 ## How It Works
 
-The Transfer Function Model extends traditional ARIMA models by incorporating the effects of external input variables. It models the relationship between an output time series and one or more input time series, accounting for both immediate and lagged effects.
+The Transfer Function Model extends traditional ARIMA models by incorporating the effects of
+external input variables. It models the relationship between an output time series and one or more
+input time series, accounting for both immediate and lagged effects.
 
 ## Example
 

@@ -10,7 +10,27 @@ Implements the Triplet Loss function for learning similarity embeddings.
 
 ## For Beginners
 
-Triplet Loss helps create embeddings (numerical representations) where similar items are close together and different items are far apart in a vector space. It works with triplets of data: - Anchor: A reference point (e.g., a person's face) - Positive: An example similar to the anchor (e.g., another image of the same person) - Negative: An example different from the anchor (e.g., an image of a different person) The loss encourages the model to make the distance between the anchor and positive smaller than the distance between the anchor and negative by at least a specified margin. This loss function is commonly used in: - Face recognition systems - Image retrieval applications - Recommendation systems - Any task where you need to learn meaningful similarity metrics By minimizing triplet loss, the model learns to create an embedding space where semantically similar items cluster together and dissimilar items are pushed apart.
+Triplet Loss helps create embeddings (numerical representations) where similar items 
+are close together and different items are far apart in a vector space.
+
+It works with triplets of data:
+
+- Anchor: A reference point (e.g., a person's face)
+- Positive: An example similar to the anchor (e.g., another image of the same person)
+- Negative: An example different from the anchor (e.g., an image of a different person)
+
+The loss encourages the model to make the distance between the anchor and positive smaller than
+the distance between the anchor and negative by at least a specified margin.
+
+This loss function is commonly used in:
+
+- Face recognition systems
+- Image retrieval applications
+- Recommendation systems
+- Any task where you need to learn meaningful similarity metrics
+
+By minimizing triplet loss, the model learns to create an embedding space where semantically 
+similar items cluster together and dissimilar items are pushed apart.
 
 ## Example
 

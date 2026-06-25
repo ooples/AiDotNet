@@ -10,11 +10,15 @@ Implements the Davidon-Fletcher-Powell (DFP) optimization algorithm for numerica
 
 ## For Beginners
 
-This optimizer is like a smart navigator that learns from its past steps to make better decisions about which direction to move in the future. It's particularly good at handling complex optimization problems where the landscape of possible solutions is intricate.
+This optimizer is like a smart navigator that learns from its past steps
+to make better decisions about which direction to move in the future. It's particularly good at
+handling complex optimization problems where the landscape of possible solutions is intricate.
 
 ## How It Works
 
-The DFP algorithm is a quasi-Newton method for solving unconstrained nonlinear optimization problems. It approximates the inverse Hessian matrix to determine the search direction, combining the efficiency of Newton's method with the stability of gradient descent.
+The DFP algorithm is a quasi-Newton method for solving unconstrained nonlinear optimization problems.
+It approximates the inverse Hessian matrix to determine the search direction, combining the efficiency
+of Newton's method with the stability of gradient descent.
 
 ## Example
 

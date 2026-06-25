@@ -10,9 +10,32 @@ Implements an ARIMAX (AutoRegressive Integrated Moving Average with eXogenous va
 
 ## How It Works
 
-ARIMAX extends the ARIMA model by including external (exogenous) variables that might influence the time series. The model combines: - AR (AutoRegressive): Uses the dependent relationship between an observation and lagged observations - I (Integrated): Uses differencing to make the time series stationary - MA (Moving Average): Uses the dependency between an observation and residual errors - X (eXogenous): Incorporates external variables that may influence the time series 
+ARIMAX extends the ARIMA model by including external (exogenous) variables that might influence the time series.
+The model combines:
 
-For Beginners: ARIMAX is an advanced technique for forecasting time series data (data collected over time like daily temperatures, stock prices, or monthly sales) that takes into account both the history of the series itself AND external factors that might influence it. Think of it like this: - Basic forecasting might just look at past sales to predict future sales - ARIMAX also considers things like holidays, promotions, or economic indicators that might affect sales The model has four components: 1. AutoRegressive (AR): Uses past values of the series itself (like yesterday's temperature to predict today's) 2. Integrated (I): Transforms the data by looking at differences between values to remove trends 3. Moving Average (MA): Looks at past prediction errors to improve future predictions 4. eXogenous (X): Includes external factors that might affect the series (like whether it's a holiday) The "X" is what makes ARIMAX different from ARIMA - it can include information from outside the time series itself.
+- AR (AutoRegressive): Uses the dependent relationship between an observation and lagged observations
+- I (Integrated): Uses differencing to make the time series stationary
+- MA (Moving Average): Uses the dependency between an observation and residual errors
+- X (eXogenous): Incorporates external variables that may influence the time series
+
+For Beginners:
+ARIMAX is an advanced technique for forecasting time series data (data collected over time like
+daily temperatures, stock prices, or monthly sales) that takes into account both the history of
+the series itself AND external factors that might influence it.
+
+Think of it like this:
+
+- Basic forecasting might just look at past sales to predict future sales
+- ARIMAX also considers things like holidays, promotions, or economic indicators that might affect sales
+
+The model has four components:
+
+1. AutoRegressive (AR): Uses past values of the series itself (like yesterday's temperature to predict today's)
+2. Integrated (I): Transforms the data by looking at differences between values to remove trends
+3. Moving Average (MA): Looks at past prediction errors to improve future predictions
+4. eXogenous (X): Includes external factors that might affect the series (like whether it's a holiday)
+
+The "X" is what makes ARIMAX different from ARIMA - it can include information from outside the time series itself.
 
 ## Example
 

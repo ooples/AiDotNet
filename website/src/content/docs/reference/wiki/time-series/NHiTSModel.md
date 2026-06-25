@@ -10,17 +10,26 @@ Implements N-HiTS (Neural Hierarchical Interpolation for Time Series) for effici
 
 ## For Beginners
 
-N-HiTS improves upon N-BEATS by using a "zoom lens" approach to time series. It looks at your data at three different zoom levels: - Zoomed out (low resolution): Captures long-term trends like yearly seasonality - Medium zoom: Captures medium-term patterns like monthly cycles - Zoomed in (high resolution): Captures short-term fluctuations like daily variations By combining insights from all three levels, it produces more accurate forecasts, especially for predicting far into the future.
+N-HiTS improves upon N-BEATS by using a "zoom lens" approach to time series.
+It looks at your data at three different zoom levels:
+
+- Zoomed out (low resolution): Captures long-term trends like yearly seasonality
+- Medium zoom: Captures medium-term patterns like monthly cycles
+- Zoomed in (high resolution): Captures short-term fluctuations like daily variations
+
+By combining insights from all three levels, it produces more accurate forecasts,
+especially for predicting far into the future.
 
 ## How It Works
 
-N-HiTS is an evolution of N-BEATS that addresses limitations in long-horizon forecasting through: 
+N-HiTS is an evolution of N-BEATS that addresses limitations in long-horizon forecasting through:
 
 Multi-rate data sampling via hierarchical interpolationStack-specific input pooling to capture patterns at different frequenciesMore efficient parameterization compared to N-BEATSInterpolation-based basis functions for smoother predictions
 
-Original paper: Challu et al., "N-HiTS: Neural Hierarchical Interpolation for Time Series Forecasting" (AAAI 2023). 
+Original paper: Challu et al., "N-HiTS: Neural Hierarchical Interpolation for Time Series Forecasting" (AAAI 2023).
 
 **Production-Ready Features:**
+
 - Uses Tensor<T> for GPU-accelerated operations via IEngine
 - Proper backpropagation via automatic differentiation
 - Vectorized operations - no scalar loops in hot paths

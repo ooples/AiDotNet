@@ -10,13 +10,20 @@ Implements the AdamW (Adam with decoupled Weight decay) optimization algorithm.
 
 ## For Beginners
 
-AdamW is like Adam but handles regularization (preventing overfitting) in a smarter way. The difference might seem technical, but AdamW consistently achieves better results on tasks like training transformers and large neural networks. If you're choosing between Adam and AdamW, AdamW is generally the better choice.
+AdamW is like Adam but handles regularization (preventing overfitting) in a smarter way.
+The difference might seem technical, but AdamW consistently achieves better results on tasks like training transformers
+and large neural networks. If you're choosing between Adam and AdamW, AdamW is generally the better choice.
 
 ## How It Works
 
-AdamW is a variant of Adam that fixes the weight decay implementation. In standard Adam with L2 regularization, weight decay is coupled with the adaptive learning rate, which can lead to suboptimal regularization effects. AdamW decouples weight decay from the gradient-based update, applying it directly to the weights. 
+AdamW is a variant of Adam that fixes the weight decay implementation. In standard Adam with L2 regularization,
+weight decay is coupled with the adaptive learning rate, which can lead to suboptimal regularization effects.
+AdamW decouples weight decay from the gradient-based update, applying it directly to the weights.
 
-The key difference: - Adam with L2: gradient = gradient + lambda * weights (then apply Adam update) - AdamW: weights = weights - lr * adam_update - lr * lambda * weights (decoupled)
+The key difference:
+
+- Adam with L2: gradient = gradient + lambda * weights (then apply Adam update)
+- AdamW: weights = weights - lr * adam_update - lr * lambda * weights (decoupled)
 
 ## Example
 

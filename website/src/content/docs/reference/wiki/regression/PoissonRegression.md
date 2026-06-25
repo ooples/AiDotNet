@@ -10,11 +10,16 @@ Implements Poisson regression, a generalized linear model used for modeling coun
 
 ## How It Works
 
-Poisson regression is appropriate when the dependent variable represents counts, such as the number of occurrences of an event in a fixed period of time or space. It assumes that the response variable follows a Poisson distribution and uses a log link function to relate the expected value of the response to the linear predictor. 
+Poisson regression is appropriate when the dependent variable represents counts, such as the number of occurrences
+of an event in a fixed period of time or space. It assumes that the response variable follows a Poisson distribution
+and uses a log link function to relate the expected value of the response to the linear predictor.
 
-The model is fitted using iteratively reweighted least squares (IRLS), a form of maximum likelihood estimation. 
+The model is fitted using iteratively reweighted least squares (IRLS), a form of maximum likelihood estimation.
 
-For Beginners: Poisson regression is used when you're trying to predict counts (like number of customer visits, number of accidents, etc.). Unlike linear regression, it ensures predictions are always non-negative and can handle cases where the variance increases with the mean, which is common in count data.
+For Beginners:
+Poisson regression is used when you're trying to predict counts (like number of customer visits, number of accidents,
+etc.). Unlike linear regression, it ensures predictions are always non-negative and can handle cases where the
+variance increases with the mean, which is common in count data.
 
 ## Example
 

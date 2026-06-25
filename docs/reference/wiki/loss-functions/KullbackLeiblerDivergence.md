@@ -10,7 +10,29 @@ Implements the Kullback-Leibler Divergence, a measure of how one probability dis
 
 ## For Beginners
 
-Kullback-Leibler (KL) Divergence measures how one probability distribution differs from another. It's often interpreted as the "information loss" when using one distribution to approximate another. The formula is: KL(P||Q) = sum(P(i) * log(P(i)/Q(i)) Where: - P is the true distribution - Q is the approximating distribution Key properties: - It's always non-negative (zero only when the distributions are identical) - It's not symmetric: KL(P||Q) ? KL(Q||P) - It's not a true distance metric due to this asymmetry KL divergence is commonly used in: - Variational Autoencoders (VAEs) - Reinforcement learning algorithms - Information theory applications - Distribution approximation tasks When training models, KL divergence helps push the predicted distribution (Q) to match the target distribution (P).
+Kullback-Leibler (KL) Divergence measures how one probability distribution differs from another.
+It's often interpreted as the "information loss" when using one distribution to approximate another.
+
+The formula is: KL(P||Q) = sum(P(i) * log(P(i)/Q(i))
+Where:
+
+- P is the true distribution
+- Q is the approximating distribution
+
+Key properties:
+
+- It's always non-negative (zero only when the distributions are identical)
+- It's not symmetric: KL(P||Q) ? KL(Q||P)
+- It's not a true distance metric due to this asymmetry
+
+KL divergence is commonly used in:
+
+- Variational Autoencoders (VAEs)
+- Reinforcement learning algorithms
+- Information theory applications
+- Distribution approximation tasks
+
+When training models, KL divergence helps push the predicted distribution (Q) to match the target distribution (P).
 
 ## Example
 

@@ -10,11 +10,24 @@ Implements a Proximal Gradient Descent optimization algorithm which combines gra
 
 ## For Beginners
 
-Proximal Gradient Descent is like walking downhill while staying within certain boundaries. Imagine you're hiking down a mountain to find the lowest point: - Standard gradient descent is like always walking directly downhill - Proximal gradient descent adds boundaries or "guardrails" to your path - These guardrails keep you from wandering into areas that might look good but are actually not helpful - For example, the guardrails might prevent solutions that are too complex and would overfit the data This approach helps find solutions that not only fit the data well but also have desirable properties like simplicity or stability.
+Proximal Gradient Descent is like walking downhill while staying within certain boundaries.
+
+Imagine you're hiking down a mountain to find the lowest point:
+
+- Standard gradient descent is like always walking directly downhill
+- Proximal gradient descent adds boundaries or "guardrails" to your path
+- These guardrails keep you from wandering into areas that might look good but are actually not helpful
+- For example, the guardrails might prevent solutions that are too complex and would overfit the data
+
+This approach helps find solutions that not only fit the data well but also have desirable properties
+like simplicity or stability.
 
 ## How It Works
 
-Proximal Gradient Descent (PGD) is an extension of standard gradient descent that handles regularization more efficiently. The algorithm alternates between performing a gradient descent step to minimize the loss function and applying a proximal operator to enforce regularization. This approach is particularly effective for problems where regularization is important to prevent overfitting or to enforce specific properties in the solution.
+Proximal Gradient Descent (PGD) is an extension of standard gradient descent that handles regularization more
+efficiently. The algorithm alternates between performing a gradient descent step to minimize the loss function
+and applying a proximal operator to enforce regularization. This approach is particularly effective for
+problems where regularization is important to prevent overfitting or to enforce specific properties in the solution.
 
 ## Example
 

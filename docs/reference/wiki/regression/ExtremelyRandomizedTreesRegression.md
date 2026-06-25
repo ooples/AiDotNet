@@ -6,15 +6,31 @@ section: "Reference"
 
 _Regression Models_
 
-Implements an Extremely Randomized Trees regression model, which is an ensemble method that uses multiple decision trees with additional randomization for improved prediction accuracy and reduced overfitting.
+Implements an Extremely Randomized Trees regression model, which is an ensemble method that uses multiple decision trees
+with additional randomization for improved prediction accuracy and reduced overfitting.
 
 ## For Beginners
 
-This model works like a committee of decision trees that vote on predictions. While a single decision tree might make mistakes due to its specific structure, a group of different trees can work together to make more reliable predictions: - Each tree sees a random subset of the training data - Each tree uses random thresholds for making decisions - The final prediction is the average of all individual tree predictions The key advantage is that by adding extra randomness in how the trees are built, the model avoids "memorizing" the training data and becomes better at generalizing to new data. This is similar to how asking many different people for their opinion often leads to better decisions than relying on just one person.
+This model works like a committee of decision trees that vote on predictions.
+
+While a single decision tree might make mistakes due to its specific structure, 
+a group of different trees can work together to make more reliable predictions:
+
+- Each tree sees a random subset of the training data
+- Each tree uses random thresholds for making decisions
+- The final prediction is the average of all individual tree predictions
+
+The key advantage is that by adding extra randomness in how the trees are built,
+the model avoids "memorizing" the training data and becomes better at generalizing
+to new data. This is similar to how asking many different people for their opinion
+often leads to better decisions than relying on just one person.
 
 ## How It Works
 
-Extremely Randomized Trees (also known as Extra Trees) is an ensemble method that builds multiple decision trees and averages their predictions to improve accuracy and reduce overfitting. Unlike Random Forests, which use the best split for each feature, Extra Trees selects random thresholds for each feature and chooses the best among these random thresholds, adding an additional layer of randomization that can further reduce variance.
+Extremely Randomized Trees (also known as Extra Trees) is an ensemble method that builds multiple decision trees
+and averages their predictions to improve accuracy and reduce overfitting. Unlike Random Forests, which use the best
+split for each feature, Extra Trees selects random thresholds for each feature and chooses the best among these
+random thresholds, adding an additional layer of randomization that can further reduce variance.
 
 ## Example
 

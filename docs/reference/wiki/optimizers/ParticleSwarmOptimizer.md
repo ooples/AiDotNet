@@ -10,11 +10,25 @@ Implements a Particle Swarm Optimization algorithm for finding optimal solutions
 
 ## For Beginners
 
-Particle Swarm Optimization is like a group of birds searching for food. Imagine a flock of birds looking for the best food source in a field: - Each bird is a "particle" in the swarm - Each bird remembers where it personally found the most food - The flock shares information about where the most food has been found overall - Birds adjust their flight based on their own experience and what they learn from others - Over time, the whole flock converges on the best food source This approach is very effective for finding good solutions to complex problems where traditional methods might get stuck in suboptimal areas.
+Particle Swarm Optimization is like a group of birds searching for food.
+
+Imagine a flock of birds looking for the best food source in a field:
+
+- Each bird is a "particle" in the swarm
+- Each bird remembers where it personally found the most food
+- The flock shares information about where the most food has been found overall
+- Birds adjust their flight based on their own experience and what they learn from others
+- Over time, the whole flock converges on the best food source
+
+This approach is very effective for finding good solutions to complex problems where
+traditional methods might get stuck in suboptimal areas.
 
 ## How It Works
 
-Particle Swarm Optimization (PSO) is a population-based stochastic optimization technique inspired by the social behavior of birds flocking or fish schooling. The algorithm maintains a population (swarm) of candidate solutions (particles) that move around in the search space according to simple mathematical formulas that consider the particle's position and velocity.
+Particle Swarm Optimization (PSO) is a population-based stochastic optimization technique inspired by the social
+behavior of birds flocking or fish schooling. The algorithm maintains a population (swarm) of candidate solutions
+(particles) that move around in the search space according to simple mathematical formulas that consider the
+particle's position and velocity.
 
 ## Example
 

@@ -10,13 +10,22 @@ Implements the Lion (Evolved Sign Momentum) optimization algorithm for gradient-
 
 ## For Beginners
 
-Lion is like a simplified but more powerful version of Adam. Instead of carefully measuring how big each step should be (like Adam does), Lion only looks at which direction to go and takes consistent-sized steps in that direction. This is like following a compass that only shows direction - it's simpler, uses less memory, and often gets you to your destination faster. Lion is particularly good for training large neural networks.
+Lion is like a simplified but more powerful version of Adam. Instead of
+carefully measuring how big each step should be (like Adam does), Lion only looks at which direction
+to go and takes consistent-sized steps in that direction. This is like following a compass that only
+shows direction - it's simpler, uses less memory, and often gets you to your destination faster.
+Lion is particularly good for training large neural networks.
 
 ## How It Works
 
-Lion is a modern optimization algorithm discovered through symbolic program search that offers significant advantages over traditional optimizers like Adam. It achieves 50% memory reduction by maintaining only a single momentum state (compared to Adam's two states) while often achieving superior performance on large transformer models and other deep learning architectures. 
+Lion is a modern optimization algorithm discovered through symbolic program search that offers significant
+advantages over traditional optimizers like Adam. It achieves 50% memory reduction by maintaining only a
+single momentum state (compared to Adam's two states) while often achieving superior performance on large
+transformer models and other deep learning architectures.
 
-The algorithm uses sign-based gradient updates, which provides implicit regularization and better generalization. Unlike Adam's magnitude-based updates, Lion focuses purely on the direction of gradients, making it more robust to gradient scale variations and leading to more consistent training dynamics.
+The algorithm uses sign-based gradient updates, which provides implicit regularization and better
+generalization. Unlike Adam's magnitude-based updates, Lion focuses purely on the direction of gradients,
+making it more robust to gradient scale variations and leading to more consistent training dynamics.
 
 ## Example
 

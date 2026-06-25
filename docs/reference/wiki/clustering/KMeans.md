@@ -10,13 +10,30 @@ K-Means clustering algorithm implementation.
 
 ## For Beginners
 
-K-Means finds k groups in your data by: - Starting with k "center" points - Grouping data points by their closest center - Moving each center to the middle of its group - Repeating until centers stop moving It works best when: - You know how many clusters to look for - Clusters are roughly spherical and similar in size - Data doesn't have many outliers
+K-Means finds k groups in your data by:
+
+- Starting with k "center" points
+- Grouping data points by their closest center
+- Moving each center to the middle of its group
+- Repeating until centers stop moving
+
+It works best when:
+
+- You know how many clusters to look for
+- Clusters are roughly spherical and similar in size
+- Data doesn't have many outliers
 
 ## How It Works
 
-K-Means is one of the most widely used clustering algorithms. It partitions n observations into k clusters by minimizing within-cluster variance (inertia). 
+K-Means is one of the most widely used clustering algorithms. It partitions
+n observations into k clusters by minimizing within-cluster variance (inertia).
 
-Algorithm steps: 1. Initialize k cluster centers (randomly or using k-means++) 2. Assign each point to the nearest center 3. Update each center as the mean of its assigned points 4. Repeat steps 2-3 until convergence or max iterations
+Algorithm steps:
+
+1. Initialize k cluster centers (randomly or using k-means++)
+2. Assign each point to the nearest center
+3. Update each center as the mean of its assigned points
+4. Repeat steps 2-3 until convergence or max iterations
 
 ## Example
 

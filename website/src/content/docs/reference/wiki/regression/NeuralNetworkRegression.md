@@ -10,11 +10,18 @@ A neural network regression model that can learn complex non-linear relationship
 
 ## How It Works
 
-This class implements a fully connected feedforward neural network for regression tasks. It supports multiple hidden layers with customizable activation functions and uses gradient-based optimization to learn from data. 
+This class implements a fully connected feedforward neural network for regression tasks.
+It supports multiple hidden layers with customizable activation functions and uses
+gradient-based optimization to learn from data.
 
-The neural network architecture is defined by specifying the number of neurons in each layer, with the first layer corresponding to the input features and the last layer to the output. 
+The neural network architecture is defined by specifying the number of neurons in each layer,
+with the first layer corresponding to the input features and the last layer to the output.
 
-For Beginners: A neural network is a machine learning model inspired by the human brain. It consists of layers of interconnected "neurons" that process input data to make predictions. Each connection has a "weight" that determines its importance, and these weights are adjusted during training to improve the model's accuracy. This process is similar to how we learn from experience.
+For Beginners:
+A neural network is a machine learning model inspired by the human brain. It consists of layers
+of interconnected "neurons" that process input data to make predictions. Each connection has a
+"weight" that determines its importance, and these weights are adjusted during training to improve
+the model's accuracy. This process is similar to how we learn from experience.
 
 ## Example
 

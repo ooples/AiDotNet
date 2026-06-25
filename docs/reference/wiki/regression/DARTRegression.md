@@ -10,13 +10,30 @@ DART (Dropouts meet Multiple Additive Regression Trees) regression.
 
 ## For Beginners
 
-DART is like gradient boosting with a twist - it randomly "forgets" some of its trees when learning new ones. This prevents the model from becoming too specialized and helps it work better on new data. Key concepts: - Dropout: Randomly removing trees during training (like dropout in neural networks) - Normalization: Adjusting predictions after dropout to maintain correct scale - Ensemble: The final prediction uses all trees (no dropout at prediction time) When to use DART over regular gradient boosting: - Your model overfits (training error low, validation error high) - You want more robust predictions - You have enough time (DART is slower than regular boosting)
+DART is like gradient boosting with a twist - it randomly "forgets"
+some of its trees when learning new ones. This prevents the model from becoming too
+specialized and helps it work better on new data.
+
+Key concepts:
+
+- Dropout: Randomly removing trees during training (like dropout in neural networks)
+- Normalization: Adjusting predictions after dropout to maintain correct scale
+- Ensemble: The final prediction uses all trees (no dropout at prediction time)
+
+When to use DART over regular gradient boosting:
+
+- Your model overfits (training error low, validation error high)
+- You want more robust predictions
+- You have enough time (DART is slower than regular boosting)
 
 ## How It Works
 
-DART applies dropout regularization to gradient boosting. During each iteration, a random subset of existing trees is dropped, and the new tree is fitted to residuals computed only from the non-dropped trees. This prevents overfitting and improves generalization. 
+DART applies dropout regularization to gradient boosting. During each iteration, a random
+subset of existing trees is dropped, and the new tree is fitted to residuals computed
+only from the non-dropped trees. This prevents overfitting and improves generalization.
 
-Reference: Rashmi, K.V. & Gilad-Bachrach, R. (2015). "DART: Dropouts meet Multiple Additive Regression Trees". AISTATS 2015.
+Reference: Rashmi, K.V. & Gilad-Bachrach, R. (2015). "DART: Dropouts meet Multiple
+Additive Regression Trees". AISTATS 2015.
 
 ## Example
 

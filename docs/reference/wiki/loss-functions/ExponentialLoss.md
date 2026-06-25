@@ -10,7 +10,30 @@ Implements the Exponential Loss function, commonly used in boosting algorithms.
 
 ## For Beginners
 
-Exponential Loss is a loss function that heavily penalizes incorrect predictions, especially those that are far off from the true values. The formula is: exp(-y * f(x)) Where: - y is the true label (usually -1 or 1 for binary classification) - f(x) is the model's prediction Key properties: - It grows exponentially as the error increases - Correct predictions with high confidence result in values close to zero - Incorrect predictions result in very large values - It's especially sensitive to outliers and misclassifications Exponential Loss is primarily used in: - AdaBoost and other boosting algorithms - Ensemble methods that need to focus on hard examples - Learning problems where avoiding mistakes is critical The exponential nature makes the model pay more attention to difficult examples and outliers compared to other loss functions like hinge loss or log loss.
+Exponential Loss is a loss function that heavily penalizes incorrect predictions,
+especially those that are far off from the true values.
+
+The formula is: exp(-y * f(x))
+Where:
+
+- y is the true label (usually -1 or 1 for binary classification)
+- f(x) is the model's prediction
+
+Key properties:
+
+- It grows exponentially as the error increases
+- Correct predictions with high confidence result in values close to zero
+- Incorrect predictions result in very large values
+- It's especially sensitive to outliers and misclassifications
+
+Exponential Loss is primarily used in:
+
+- AdaBoost and other boosting algorithms
+- Ensemble methods that need to focus on hard examples
+- Learning problems where avoiding mistakes is critical
+
+The exponential nature makes the model pay more attention to difficult examples
+and outliers compared to other loss functions like hinge loss or log loss.
 
 ## Example
 

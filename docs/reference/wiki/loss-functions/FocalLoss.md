@@ -10,7 +10,31 @@ Implements the Focal Loss function, which gives more weight to hard-to-classify 
 
 ## For Beginners
 
-Focal Loss was designed to handle class imbalance in classification problems, especially for object detection tasks where background examples vastly outnumber foreground objects. It modifies the standard cross-entropy loss by adding a factor that reduces the loss contribution from easy-to-classify examples and increases the importance of hard-to-classify examples. The formula is: -a(1-p)^? * log(p) for positive class -(1-a)p^? * log(1-p) for negative class Where: - p is the model's estimated probability for the correct class - a is a weighting factor that balances positive vs negative examples - ? (gamma) is the focusing parameter that adjusts how much to focus on hard examples Key properties: - When ?=0, Focal Loss equals Cross-Entropy Loss - Higher ? values increase focus on hard-to-classify examples - a helps handle class imbalance by giving more weight to the minority class This loss function is ideal for: - Highly imbalanced datasets - One-stage object detectors - Any classification task where easy negatives dominate training
+Focal Loss was designed to handle class imbalance in classification problems,
+especially for object detection tasks where background examples vastly outnumber foreground objects.
+
+It modifies the standard cross-entropy loss by adding a factor that reduces the loss contribution
+from easy-to-classify examples and increases the importance of hard-to-classify examples.
+
+The formula is: -a(1-p)^? * log(p) for positive class
+-(1-a)p^? * log(1-p) for negative class
+Where:
+
+- p is the model's estimated probability for the correct class
+- a is a weighting factor that balances positive vs negative examples
+- ? (gamma) is the focusing parameter that adjusts how much to focus on hard examples
+
+Key properties:
+
+- When ?=0, Focal Loss equals Cross-Entropy Loss
+- Higher ? values increase focus on hard-to-classify examples
+- a helps handle class imbalance by giving more weight to the minority class
+
+This loss function is ideal for:
+
+- Highly imbalanced datasets
+- One-stage object detectors
+- Any classification task where easy negatives dominate training
 
 ## Example
 

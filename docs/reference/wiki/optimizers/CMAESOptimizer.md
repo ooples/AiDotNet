@@ -10,11 +10,15 @@ Implements the Covariance Matrix Adaptation Evolution Strategy (CMA-ES) optimiza
 
 ## For Beginners
 
-CMA-ES is like an advanced search algorithm that tries to find the best solution by learning from previous attempts. It's especially good at solving complex problems where the relationship between inputs and outputs isn't straightforward.
+CMA-ES is like an advanced search algorithm that tries to find the best solution
+by learning from previous attempts. It's especially good at solving complex problems where the relationship
+between inputs and outputs isn't straightforward.
 
 ## How It Works
 
-CMA-ES is a powerful optimization algorithm for non-linear, non-convex optimization problems. It is particularly effective for problems with up to about 100 dimensions and is known for its robustness and ability to handle complex fitness landscapes.
+CMA-ES is a powerful optimization algorithm for non-linear, non-convex optimization problems.
+It is particularly effective for problems with up to about 100 dimensions and is known for its
+robustness and ability to handle complex fitness landscapes.
 
 ## Example
 

@@ -10,13 +10,37 @@ CURE (Clustering Using REpresentatives) hierarchical clustering algorithm.
 
 ## For Beginners
 
-CURE finds clusters that aren't round: Traditional clustering (like K-Means) assumes round clusters. But real data often has: - Banana-shaped clusters - Spiral clusters - Elongated clusters CURE solves this by: 1. Using multiple "marker" points per cluster, not just one center 2. Placing these markers throughout the cluster 3. Measuring cluster similarity by comparing markers This way, two banana-shaped clusters can be recognized as separate, even if their centers are close together!
+CURE finds clusters that aren't round:
+
+Traditional clustering (like K-Means) assumes round clusters.
+But real data often has:
+
+- Banana-shaped clusters
+- Spiral clusters
+- Elongated clusters
+
+CURE solves this by:
+
+1. Using multiple "marker" points per cluster, not just one center
+2. Placing these markers throughout the cluster
+3. Measuring cluster similarity by comparing markers
+
+This way, two banana-shaped clusters can be recognized as separate,
+even if their centers are close together!
 
 ## How It Works
 
-CURE is an agglomerative hierarchical clustering algorithm that uses multiple representative points per cluster to better capture non-spherical cluster shapes. Representatives are shrunk toward the cluster center to reduce sensitivity to outliers. 
+CURE is an agglomerative hierarchical clustering algorithm that uses multiple
+representative points per cluster to better capture non-spherical cluster shapes.
+Representatives are shrunk toward the cluster center to reduce sensitivity to outliers.
 
-Algorithm steps: 1. Start with each point as its own cluster 2. Select representative points for each cluster (well-scattered) 3. Shrink representatives toward cluster center 4. Find and merge the two clusters with closest representatives 5. Repeat until desired number of clusters is reached
+Algorithm steps:
+
+1. Start with each point as its own cluster
+2. Select representative points for each cluster (well-scattered)
+3. Shrink representatives toward cluster center
+4. Find and merge the two clusters with closest representatives
+5. Repeat until desired number of clusters is reached
 
 ## Example
 

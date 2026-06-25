@@ -10,11 +10,28 @@ Represents a Follow The Regularized Leader (FTRL) optimizer for machine learning
 
 ## For Beginners
 
-FTRL is an advanced optimization technique that's good at handling large-scale, sparse data. It's often used in online advertising and recommendation systems. Think of FTRL like a smart learning system that: - Adjusts its learning speed for each feature independently - Can handle situations where most features are zero (sparse data) - Is good at balancing between finding a good solution and not overfitting For example, in an online advertising system, FTRL might: - Quickly learn which ad categories are important for a user - Ignore or learn slowly from features that rarely appear - Automatically adjust how much it learns from each new piece of data This makes FTRL particularly good for systems that need to learn and predict in real-time with lots of data.
+FTRL is an advanced optimization technique that's good at handling large-scale,
+sparse data. It's often used in online advertising and recommendation systems.
+
+Think of FTRL like a smart learning system that:
+
+- Adjusts its learning speed for each feature independently
+- Can handle situations where most features are zero (sparse data)
+- Is good at balancing between finding a good solution and not overfitting
+
+For example, in an online advertising system, FTRL might:
+
+- Quickly learn which ad categories are important for a user
+- Ignore or learn slowly from features that rarely appear
+- Automatically adjust how much it learns from each new piece of data
+
+This makes FTRL particularly good for systems that need to learn and predict in real-time with lots of data.
 
 ## How It Works
 
-The FTRL optimizer is an online learning algorithm that adapts regularization in a per-coordinate fashion. It's particularly effective for sparse datasets and is widely used in click-through rate (CTR) prediction and other online learning scenarios.
+The FTRL optimizer is an online learning algorithm that adapts regularization in a per-coordinate fashion.
+It's particularly effective for sparse datasets and is widely used in click-through rate (CTR) prediction
+and other online learning scenarios.
 
 ## Example
 

@@ -10,11 +10,13 @@ Implements the Nesterov-accelerated Adaptive Moment Estimation (Nadam) optimizat
 
 ## For Beginners
 
-Imagine you're rolling a smart ball down a hill. This ball can adjust its speed for different parts of the hill (adaptive learning rates), and it can look ahead to anticipate slopes (Nesterov's method). This combination helps it find the lowest point more efficiently.
+Imagine you're rolling a smart ball down a hill. This ball can adjust its speed for different parts of the hill (adaptive learning rates),
+and it can look ahead to anticipate slopes (Nesterov's method). This combination helps it find the lowest point more efficiently.
 
 ## How It Works
 
-Nadam combines the ideas of Adam (adaptive learning rates) and Nesterov accelerated gradient (NAG). It adapts the learning rates of each parameter and incorporates momentum using Nesterov's method.
+Nadam combines the ideas of Adam (adaptive learning rates) and Nesterov accelerated gradient (NAG).
+It adapts the learning rates of each parameter and incorporates momentum using Nesterov's method.
 
 ## Example
 

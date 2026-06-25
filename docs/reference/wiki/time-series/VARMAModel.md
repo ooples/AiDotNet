@@ -10,11 +10,29 @@ Implements a Vector Autoregressive Moving Average (VARMA) model for multivariate
 
 ## For Beginners
 
-A VARMA model helps you forecast multiple related time series at once, accounting for: - How each variable depends on its own past values - How each variable depends on other variables' past values - How past prediction errors affect current values For example, if you're analyzing economic data, a VARMA model could simultaneously forecast: - GDP growth - Unemployment rate - Inflation rate While accounting for how these variables affect each other and incorporating information from past prediction errors to improve accuracy. Think of it as a sophisticated forecasting system that recognizes both the interconnections between different variables and learns from its own mistakes.
+A VARMA model helps you forecast multiple related time series at once, accounting for:
+
+- How each variable depends on its own past values
+- How each variable depends on other variables' past values
+- How past prediction errors affect current values
+
+For example, if you're analyzing economic data, a VARMA model could simultaneously forecast:
+
+- GDP growth
+- Unemployment rate
+- Inflation rate
+
+While accounting for how these variables affect each other and incorporating information
+from past prediction errors to improve accuracy.
+
+Think of it as a sophisticated forecasting system that recognizes both the interconnections
+between different variables and learns from its own mistakes.
 
 ## How It Works
 
-The VARMA model extends the Vector Autoregressive (VAR) model by incorporating Moving Average (MA) terms, allowing it to capture more complex dynamics in multivariate time series data. It models the relationships between multiple time series variables and their past values, as well as past error terms.
+The VARMA model extends the Vector Autoregressive (VAR) model by incorporating Moving Average (MA) terms,
+allowing it to capture more complex dynamics in multivariate time series data. It models the relationships
+between multiple time series variables and their past values, as well as past error terms.
 
 ## Example
 

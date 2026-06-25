@@ -6,7 +6,11 @@ section: "Reference"
 
 _Time-Series Models_
 
-TiDE — Time-series Dense Encoder (Das et al., TMLR 2023). A pure-MLP forecaster: a ReLU encoder maps the input window to a latent, a decoder projects it to the forecast, and a linear residual skips the window straight to the output. Despite using no attention it matches or beats transformers on long-horizon benchmarks at far lower cost — a strong, current member of the SOTA panel. Implemented with explicit forward + manual backprop (a 1-hidden-layer ReLU MLP + linear skip), so every gradient is exact.
+TiDE — Time-series Dense Encoder (Das et al., TMLR 2023). A pure-MLP forecaster: a ReLU encoder maps the
+input window to a latent, a decoder projects it to the forecast, and a linear residual skips the window
+straight to the output. Despite using no attention it matches or beats transformers on long-horizon
+benchmarks at far lower cost — a strong, current member of the SOTA panel. Implemented with explicit
+forward + manual backprop (a 1-hidden-layer ReLU MLP + linear skip), so every gradient is exact.
 
 ## Example
 

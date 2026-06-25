@@ -10,13 +10,28 @@ NGBoost (Natural Gradient Boosting) for probabilistic regression.
 
 ## For Beginners
 
-Traditional regression gives you a point prediction like "the house price is $300,000." But NGBoost tells you "the house price follows a normal distribution with mean $300,000 and standard deviation $50,000." This uncertainty information is valuable because it tells you how confident the model is. A prediction with small uncertainty means the model is confident. A prediction with large uncertainty means you should be more cautious. Key benefits: - Quantifies prediction uncertainty - Can use different distributions for different types of data - Uses natural gradients for stable, efficient learning
+Traditional regression gives you a point prediction like
+"the house price is $300,000." But NGBoost tells you "the house price follows a
+normal distribution with mean $300,000 and standard deviation $50,000."
+
+This uncertainty information is valuable because it tells you how confident the
+model is. A prediction with small uncertainty means the model is confident.
+A prediction with large uncertainty means you should be more cautious.
+
+Key benefits:
+
+- Quantifies prediction uncertainty
+- Can use different distributions for different types of data
+- Uses natural gradients for stable, efficient learning
 
 ## How It Works
 
-NGBoost is an algorithm for probabilistic prediction that uses natural gradients to efficiently and directly optimize a proper scoring rule. Instead of predicting a single value, NGBoost predicts a full probability distribution. 
+NGBoost is an algorithm for probabilistic prediction that uses natural gradients
+to efficiently and directly optimize a proper scoring rule. Instead of predicting
+a single value, NGBoost predicts a full probability distribution.
 
-Reference: Duan, T., et al. "NGBoost: Natural Gradient Boosting for Probabilistic Prediction" (2019). https://arxiv.org/abs/1910.03225
+Reference: Duan, T., et al. "NGBoost: Natural Gradient Boosting for Probabilistic
+Prediction" (2019). https://arxiv.org/abs/1910.03225
 
 ## Example
 

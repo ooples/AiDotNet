@@ -10,11 +10,25 @@ Represents a multiple linear regression model that predicts a target value based
 
 ## For Beginners
 
-Multiple regression is like a formula that predicts one value based on several inputs. Think of it like a house price calculator: - You provide information like square footage, number of bedrooms, neighborhood rating, etc. - Each feature has a certain importance (called a coefficient) - The model combines all these factors with their importances to make a prediction For example, the formula might be: House Price = $50,000 + ($100 × Square Footage) + ($15,000 × Number of Bedrooms) + ($25,000 × Neighborhood Rating) The model learns the best values for these coefficients from your training data to make accurate predictions.
+Multiple regression is like a formula that predicts one value based on several inputs.
+
+Think of it like a house price calculator:
+
+- You provide information like square footage, number of bedrooms, neighborhood rating, etc.
+- Each feature has a certain importance (called a coefficient)
+- The model combines all these factors with their importances to make a prediction
+
+For example, the formula might be:
+House Price = $50,000 + ($100 × Square Footage) + ($15,000 × Number of Bedrooms) + ($25,000 × Neighborhood Rating)
+
+The model learns the best values for these coefficients from your training data to make accurate predictions.
 
 ## How It Works
 
-Multiple linear regression extends simple linear regression to incorporate multiple input features. It models the relationship between several independent variables and one dependent variable by fitting a linear equation to the observed data. The model assumes that the relationship between inputs and the output is linear, meaning that the output can be calculated as a weighted sum of the input features plus a constant term (intercept).
+Multiple linear regression extends simple linear regression to incorporate multiple input features. It models the
+relationship between several independent variables and one dependent variable by fitting a linear equation to the
+observed data. The model assumes that the relationship between inputs and the output is linear, meaning that the output
+can be calculated as a weighted sum of the input features plus a constant term (intercept).
 
 ## Example
 

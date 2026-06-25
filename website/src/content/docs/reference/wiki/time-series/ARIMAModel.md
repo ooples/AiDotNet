@@ -10,15 +10,24 @@ Implements an ARIMA (AutoRegressive Integrated Moving Average) model for time se
 
 ## For Beginners
 
-ARIMA is a popular technique for analyzing and forecasting time series data (data collected over time, like stock prices, temperature readings, or monthly sales figures).
+ARIMA is a popular technique for analyzing and forecasting time series data (data collected over time,
+like stock prices, temperature readings, or monthly sales figures).
 
 ## How It Works
 
-ARIMA models are widely used for time series forecasting. The model combines three components: - AR (AutoRegressive): Uses the dependent relationship between an observation and a number of lagged observations - I (Integrated): Uses differencing of observations to make the time series stationary - MA (Moving Average): Uses the dependency between an observation and residual errors from a moving average model 
+ARIMA models are widely used for time series forecasting. The model combines three components:
+
+- AR (AutoRegressive): Uses the dependent relationship between an observation and a number of lagged observations
+- I (Integrated): Uses differencing of observations to make the time series stationary
+- MA (Moving Average): Uses the dependency between an observation and residual errors from a moving average model
 
 Think of ARIMA as combining three different approaches:
 
-AutoRegressive (AR): Looks at past values to predict future values. For example, today's temperature might be related to yesterday's temperature.Integrated (I): Transforms the data to make it easier to analyze by removing trends. For example, instead of looking at temperatures directly, we might look at how they change from day to day.Moving Average (MA): Looks at past prediction errors to improve future predictions. For example, if we consistently underestimate temperature, we can adjust for that.
+AutoRegressive (AR): Looks at past values to predict future values. For example, today's
+temperature might be related to yesterday's temperature.Integrated (I): Transforms the data to make it easier to analyze by removing trends.
+For example, instead of looking at temperatures directly, we might look at how they
+change from day to day.Moving Average (MA): Looks at past prediction errors to improve future predictions.
+For example, if we consistently underestimate temperature, we can adjust for that.
 
 The model has three key parameters (p, d, q):
 

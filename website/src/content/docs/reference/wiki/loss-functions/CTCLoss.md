@@ -10,7 +10,27 @@ Implements the Connectionist Temporal Classification (CTC) loss function for seq
 
 ## For Beginners
 
-Connectionist Temporal Classification (CTC) is a loss function designed for sequence-to-sequence learning problems where the alignment between input and output sequences is unknown. For example, in speech recognition, we have: - Input: An audio waveform (long sequence of sound samples) - Output: Text transcript (shorter sequence of characters) The key challenge is that we don't know exactly which parts of the audio correspond to each character. CTC solves this by considering all possible alignments between the input and output sequences. CTC introduces a special "blank" token to handle: - Repetitions of characters (e.g., "hello" vs "hheellloo") - Silence or transitions between sounds This loss function is commonly used in: - Speech recognition - Handwriting recognition - Any task where input and output sequences have different lengths and unknown alignment
+Connectionist Temporal Classification (CTC) is a loss function designed for 
+sequence-to-sequence learning problems where the alignment between input and output sequences is unknown.
+
+For example, in speech recognition, we have:
+
+- Input: An audio waveform (long sequence of sound samples)
+- Output: Text transcript (shorter sequence of characters)
+
+The key challenge is that we don't know exactly which parts of the audio correspond to each character.
+CTC solves this by considering all possible alignments between the input and output sequences.
+
+CTC introduces a special "blank" token to handle:
+
+- Repetitions of characters (e.g., "hello" vs "hheellloo")
+- Silence or transitions between sounds
+
+This loss function is commonly used in:
+
+- Speech recognition
+- Handwriting recognition
+- Any task where input and output sequences have different lengths and unknown alignment
 
 ## Example
 

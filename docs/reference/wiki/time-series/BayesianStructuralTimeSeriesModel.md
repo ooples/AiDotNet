@@ -10,9 +10,34 @@ Implements a Bayesian Structural Time Series model for flexible time series fore
 
 ## How It Works
 
-The Bayesian Structural Time Series (BSTS) model is a powerful and flexible approach for analyzing and forecasting time series data. It decomposes a time series into interpretable components including level, trend, seasonality, and regression effects, using Bayesian methods to handle uncertainty and combine information from different sources. 
+The Bayesian Structural Time Series (BSTS) model is a powerful and flexible approach for analyzing
+and forecasting time series data. It decomposes a time series into interpretable components
+including level, trend, seasonality, and regression effects, using Bayesian methods to handle
+uncertainty and combine information from different sources.
 
-For Beginners: A Bayesian Structural Time Series model is like having a flexible toolkit for forecasting time series data. Unlike simpler models like AR or ARIMA that use fixed patterns, BSTS breaks down your data into meaningful components: 1. Level: The current "baseline" value of your series 2. Trend: Whether your data is generally increasing or decreasing over time 3. Seasonal patterns: Regular cycles in your data (daily, weekly, yearly, etc.) 4. Effects of external factors: How other variables influence your data The "Bayesian" part means the model handles uncertainty well. Instead of making single point predictions, it gives you a range of possible outcomes with probabilities attached. It uses something called a "Kalman filter" to continually update its understanding as new data arrives. BSTS models are especially powerful because they: - Can handle missing data - Allow you to incorporate external information - Provide predictions with uncertainty ranges - Let you see which components are driving your forecast This makes them ideal for analyzing complex time series where you want to understand what's driving changes in addition to making predictions.
+For Beginners:
+A Bayesian Structural Time Series model is like having a flexible toolkit for forecasting time series data.
+Unlike simpler models like AR or ARIMA that use fixed patterns, BSTS breaks down your data into
+meaningful components:
+
+1. Level: The current "baseline" value of your series
+2. Trend: Whether your data is generally increasing or decreasing over time
+3. Seasonal patterns: Regular cycles in your data (daily, weekly, yearly, etc.)
+4. Effects of external factors: How other variables influence your data
+
+The "Bayesian" part means the model handles uncertainty well. Instead of making single point predictions,
+it gives you a range of possible outcomes with probabilities attached. It uses something called a
+"Kalman filter" to continually update its understanding as new data arrives.
+
+BSTS models are especially powerful because they:
+
+- Can handle missing data
+- Allow you to incorporate external information
+- Provide predictions with uncertainty ranges
+- Let you see which components are driving your forecast
+
+This makes them ideal for analyzing complex time series where you want to understand
+what's driving changes in addition to making predictions.
 
 ## Example
 

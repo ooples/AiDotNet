@@ -10,7 +10,28 @@ Implements the Modified Huber Loss function, a smoother version of the hinge los
 
 ## For Beginners
 
-Modified Huber Loss is a smoother version of the hinge loss that's less sensitive to outliers. It combines quadratic behavior near zero with linear behavior for large negative values. The formula is: - For z = -1: max(0, 1 - z)² - For z < -1: -4 * z Where z = y * f(x), with y being the true label and f(x) the prediction. Key properties: - It's smoother than hinge loss, making optimization easier - It's more robust to outliers than squared hinge loss - It combines the benefits of both quadratic and linear losses - It has a continuous first derivative Modified Huber Loss is particularly useful for: - Binary classification problems - Datasets with noisy labels - Problems where you want to balance between being sensitive to errors but not overly influenced by extreme mistakes
+Modified Huber Loss is a smoother version of the hinge loss that's less sensitive to outliers.
+It combines quadratic behavior near zero with linear behavior for large negative values.
+
+The formula is:
+
+- For z = -1: max(0, 1 - z)²
+- For z < -1: -4 * z
+
+Where z = y * f(x), with y being the true label and f(x) the prediction.
+
+Key properties:
+
+- It's smoother than hinge loss, making optimization easier
+- It's more robust to outliers than squared hinge loss
+- It combines the benefits of both quadratic and linear losses
+- It has a continuous first derivative
+
+Modified Huber Loss is particularly useful for:
+
+- Binary classification problems
+- Datasets with noisy labels
+- Problems where you want to balance between being sensitive to errors but not overly influenced by extreme mistakes
 
 ## Example
 

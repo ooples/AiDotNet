@@ -10,11 +10,14 @@ Implements the Broyden-Fletcher-Goldfarb-Shanno (BFGS) optimization algorithm.
 
 ## For Beginners
 
-BFGS is an advanced optimization algorithm that tries to find the best solution by making smart steps based on the function's behavior. It's particularly good at handling complex problems where the function being optimized is smooth but potentially has many variables.
+BFGS is an advanced optimization algorithm that tries to find the best solution
+by making smart steps based on the function's behavior. It's particularly good at handling complex problems
+where the function being optimized is smooth but potentially has many variables.
 
 ## How It Works
 
-BFGS is a quasi-Newton method for solving unconstrained nonlinear optimization problems. It approximates the Hessian matrix of second derivatives of the function to be minimized.
+BFGS is a quasi-Newton method for solving unconstrained nonlinear optimization problems.
+It approximates the Hessian matrix of second derivatives of the function to be minimized.
 
 ## Example
 

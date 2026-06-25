@@ -10,13 +10,31 @@ DeepHit: A deep learning approach to survival analysis with competing risks.
 
 ## For Beginners
 
-Unlike DeepSurv (which assumes factors affect risk proportionally at all times), DeepHit learns the actual probability of an event at each specific time point. This is useful when: - Risk factors affect survival differently at different times - You want to predict exact probabilities at specific time horizons - You have competing risks (multiple ways an event can happen) Example: "What's the probability a patient experiences disease recurrence (risk 1) vs side effects (risk 2) within 1 year, 2 years, or 5 years?" Key concepts: - Time bins: The time axis is divided into discrete bins (e.g., months 0-12, 12-24, 24-36...) - PMF: Probability Mass Function - probability of event at each time bin - CIF: Cumulative Incidence Function - probability of event by time t - Survival: Probability of no event by time t
+Unlike DeepSurv (which assumes factors affect risk proportionally at all times),
+DeepHit learns the actual probability of an event at each specific time point. This is useful when:
+
+- Risk factors affect survival differently at different times
+- You want to predict exact probabilities at specific time horizons
+- You have competing risks (multiple ways an event can happen)
+
+Example: "What's the probability a patient experiences disease recurrence (risk 1) vs side effects (risk 2)
+within 1 year, 2 years, or 5 years?"
+
+Key concepts:
+
+- Time bins: The time axis is divided into discrete bins (e.g., months 0-12, 12-24, 24-36...)
+- PMF: Probability Mass Function - probability of event at each time bin
+- CIF: Cumulative Incidence Function - probability of event by time t
+- Survival: Probability of no event by time t
 
 ## How It Works
 
-DeepHit directly learns the distribution of survival times without making the proportional hazards assumption. It outputs the probability mass function (PMF) of event times across discrete time bins and can handle multiple competing risks. 
+DeepHit directly learns the distribution of survival times without making the proportional
+hazards assumption. It outputs the probability mass function (PMF) of event times across
+discrete time bins and can handle multiple competing risks.
 
-Reference: Lee, C. et al. (2018). "DeepHit: A Deep Learning Approach to Survival Analysis with Competing Risks". AAAI Conference on Artificial Intelligence.
+Reference: Lee, C. et al. (2018). "DeepHit: A Deep Learning Approach to Survival Analysis
+with Competing Risks". AAAI Conference on Artificial Intelligence.
 
 ## Example
 

@@ -10,11 +10,15 @@ Implements the Momentum optimization algorithm for gradient-based optimization.
 
 ## For Beginners
 
-Imagine you're rolling a ball down a hill to find the lowest point. The Momentum optimizer is like giving that ball some "memory" of its previous movements. This helps it move faster in consistent directions and resist getting stuck in small bumps or divots along the way.
+Imagine you're rolling a ball down a hill to find the lowest point. The Momentum optimizer is like giving
+that ball some "memory" of its previous movements. This helps it move faster in consistent directions and
+resist getting stuck in small bumps or divots along the way.
 
 ## How It Works
 
-The Momentum optimizer is an extension of gradient descent that helps accelerate the optimization process in relevant directions and dampens oscillations. It does this by adding a fraction of the update vector of the past time step to the current update vector.
+The Momentum optimizer is an extension of gradient descent that helps accelerate the optimization process
+in relevant directions and dampens oscillations. It does this by adding a fraction of the update vector
+of the past time step to the current update vector.
 
 ## Example
 

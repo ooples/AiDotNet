@@ -10,11 +10,25 @@ Represents a multivariate linear regression model that predicts a target value b
 
 ## For Beginners
 
-Multivariate regression is like a recipe that combines several ingredients to predict an outcome. Think of it like a car's fuel efficiency calculator: - You provide information like car weight, engine size, aerodynamics, etc. - Each factor has a certain importance (coefficient) in determining fuel efficiency - The model combines all these factors to make a prediction For example, the formula might be: Miles per gallon = 35 - (0.005 × Car Weight) - (2 × Engine Size) + (3 × Aerodynamic Rating) The model learns the best values for these coefficients from your training data to make accurate predictions.
+Multivariate regression is like a recipe that combines several ingredients to predict an outcome.
+
+Think of it like a car's fuel efficiency calculator:
+
+- You provide information like car weight, engine size, aerodynamics, etc.
+- Each factor has a certain importance (coefficient) in determining fuel efficiency
+- The model combines all these factors to make a prediction
+
+For example, the formula might be:
+Miles per gallon = 35 - (0.005 × Car Weight) - (2 × Engine Size) + (3 × Aerodynamic Rating)
+
+The model learns the best values for these coefficients from your training data to make accurate predictions.
 
 ## How It Works
 
-Multivariate linear regression is a statistical method that models the relationship between multiple independent variables and a dependent variable by fitting a linear equation to the observed data. The model assumes that the relationship between inputs and the output is linear, meaning that the output can be calculated as a weighted sum of the input features plus a constant term (intercept) if included.
+Multivariate linear regression is a statistical method that models the relationship between multiple independent
+variables and a dependent variable by fitting a linear equation to the observed data. The model assumes that the
+relationship between inputs and the output is linear, meaning that the output can be calculated as a weighted sum
+of the input features plus a constant term (intercept) if included.
 
 ## Example
 

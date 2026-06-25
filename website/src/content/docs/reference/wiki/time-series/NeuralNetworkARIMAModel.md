@@ -10,11 +10,20 @@ Represents a Neural Network ARIMA (Autoregressive Integrated Moving Average) mod
 
 ## For Beginners
 
-This model is like a super-powered crystal ball for predicting future values in a sequence of data. Imagine you're trying to predict tomorrow's temperature: - The ARIMA part looks at recent temperatures and how they've been changing. - The Neural Network part can spot complex patterns, like how weekends or holidays might affect temperature. By combining these two approaches, this model can make more accurate predictions than either method alone. It's especially useful for data that changes over time, like stock prices, weather patterns, or sales figures.
+This model is like a super-powered crystal ball for predicting future values in a sequence of data.
+
+Imagine you're trying to predict tomorrow's temperature:
+
+- The ARIMA part looks at recent temperatures and how they've been changing.
+- The Neural Network part can spot complex patterns, like how weekends or holidays might affect temperature.
+
+By combining these two approaches, this model can make more accurate predictions than either method alone.
+It's especially useful for data that changes over time, like stock prices, weather patterns, or sales figures.
 
 ## How It Works
 
-This class combines traditional ARIMA modeling with neural networks to create a hybrid model for time series forecasting. It incorporates both linear (ARIMA) and non-linear (neural network) components to capture complex patterns in the data.
+This class combines traditional ARIMA modeling with neural networks to create a hybrid model for time series forecasting.
+It incorporates both linear (ARIMA) and non-linear (neural network) components to capture complex patterns in the data.
 
 ## Example
 

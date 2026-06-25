@@ -10,13 +10,33 @@ GAMLSS (Generalized Additive Models for Location, Scale, and Shape) regression.
 
 ## For Beginners
 
-Traditional regression models predict a single value (the mean). GAMLSS predicts an entire probability distribution by modeling multiple parameters: - Location (μ): Controls where the distribution is centered (like the mean) - Scale (σ): Controls how spread out the distribution is (like standard deviation) - Shape (ν, τ): Controls the shape (skewness, tail behavior) This is powerful because: 1. You get uncertainty estimates that vary with your inputs 2. You can model phenomena where variance depends on the predictors 3. You get proper prediction intervals instead of assuming constant variance Example use cases: - Financial forecasting where volatility depends on market conditions - Medical studies where patient variability depends on treatment - Any scenario where "it depends" applies to uncertainty, not just the average
+Traditional regression models predict a single value (the mean).
+GAMLSS predicts an entire probability distribution by modeling multiple parameters:
+
+- Location (μ): Controls where the distribution is centered (like the mean)
+- Scale (σ): Controls how spread out the distribution is (like standard deviation)
+- Shape (ν, τ): Controls the shape (skewness, tail behavior)
+
+This is powerful because:
+
+1. You get uncertainty estimates that vary with your inputs
+2. You can model phenomena where variance depends on the predictors
+3. You get proper prediction intervals instead of assuming constant variance
+
+Example use cases:
+
+- Financial forecasting where volatility depends on market conditions
+- Medical studies where patient variability depends on treatment
+- Any scenario where "it depends" applies to uncertainty, not just the average
 
 ## How It Works
 
-GAMLSS extends generalized linear models by allowing any or all distribution parameters to be modeled as functions of the explanatory variables. This enables heteroskedastic modeling and full distributional regression. 
+GAMLSS extends generalized linear models by allowing any or all distribution parameters
+to be modeled as functions of the explanatory variables. This enables heteroskedastic
+modeling and full distributional regression.
 
-Reference: Rigby, R.A., Stasinopoulos, D.M. (2005). "Generalized additive models for location, scale and shape". Applied Statistics, 54, 507-554.
+Reference: Rigby, R.A., Stasinopoulos, D.M. (2005). "Generalized additive models
+for location, scale and shape". Applied Statistics, 54, 507-554.
 
 ## Example
 

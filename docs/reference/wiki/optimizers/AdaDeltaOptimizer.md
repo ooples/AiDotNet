@@ -10,11 +10,21 @@ Implements the AdaDelta optimization algorithm for training neural networks and 
 
 ## For Beginners
 
-AdaDelta is like a smart assistant that helps your model learn more efficiently. Imagine you're learning a new skill: - Sometimes you need to practice more on difficult parts (bigger learning steps) - Other times you need to be more careful with easier parts (smaller learning steps) AdaDelta does this automatically for each part of your model, helping it learn better and faster. It remembers recent changes and uses this information to decide how big the next learning step should be.
+AdaDelta is like a smart assistant that helps your model learn more efficiently.
+
+Imagine you're learning a new skill:
+
+- Sometimes you need to practice more on difficult parts (bigger learning steps)
+- Other times you need to be more careful with easier parts (smaller learning steps)
+
+AdaDelta does this automatically for each part of your model, helping it learn better and faster.
+It remembers recent changes and uses this information to decide how big the next learning step should be.
 
 ## How It Works
 
-AdaDelta is an adaptive learning rate method that dynamically adjusts the learning rate for each parameter based on a moving window of gradient updates. This optimizer addresses some of the drawbacks of AdaGrad, particularly its aggressive, monotonically decreasing learning rate.
+AdaDelta is an adaptive learning rate method that dynamically adjusts the learning rate for each parameter
+based on a moving window of gradient updates. This optimizer addresses some of the drawbacks of AdaGrad,
+particularly its aggressive, monotonically decreasing learning rate.
 
 ## Example
 

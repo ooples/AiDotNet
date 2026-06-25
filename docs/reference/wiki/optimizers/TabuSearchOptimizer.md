@@ -10,11 +10,19 @@ Represents a Tabu Search optimizer for machine learning models.
 
 ## For Beginners
 
-Think of Tabu Search as a smart explorer: - The explorer (optimizer) looks for the best solution in a complex landscape - It remembers recently visited places (tabu list) to avoid going in circles - It adapts its search strategy over time to balance between exploring new areas and refining good solutions This method is particularly effective for problems with many local optima.
+Think of Tabu Search as a smart explorer:
+
+- The explorer (optimizer) looks for the best solution in a complex landscape
+- It remembers recently visited places (tabu list) to avoid going in circles
+- It adapts its search strategy over time to balance between exploring new areas and refining good solutions
+
+This method is particularly effective for problems with many local optima.
 
 ## How It Works
 
-The TabuSearchOptimizer implements the Tabu Search algorithm, a metaheuristic search method used in optimization. It explores the solution space by iteratively moving from one solution to the best solution in its neighborhood, while keeping a list of recently visited solutions (the tabu list) to avoid cycling and encourage exploration of new areas.
+The TabuSearchOptimizer implements the Tabu Search algorithm, a metaheuristic search method used in optimization.
+It explores the solution space by iteratively moving from one solution to the best solution in its neighborhood,
+while keeping a list of recently visited solutions (the tabu list) to avoid cycling and encourage exploration of new areas.
 
 ## Example
 

@@ -1,20 +1,27 @@
 ---
 title: "OrthogonalRegression"
-description: "Implements orthogonal regression (also known as total least squares), which minimizes the perpendicular distance from data points to the fitted line or hyperplane."
+description: "Implements orthogonal regression (also known as total least squares), which minimizes the perpendicular  distance from data points to the fitted line or hyperplane."
 section: "Reference"
 ---
 
 _Regression Models_
 
-Implements orthogonal regression (also known as total least squares), which minimizes the perpendicular distance from data points to the fitted line or hyperplane.
+Implements orthogonal regression (also known as total least squares), which minimizes the perpendicular 
+distance from data points to the fitted line or hyperplane.
 
 ## How It Works
 
-Unlike ordinary least squares regression which minimizes vertical distances, orthogonal regression minimizes the perpendicular (orthogonal) distance from each data point to the regression line or hyperplane. This approach is more appropriate when both dependent and independent variables contain measurement errors. 
+Unlike ordinary least squares regression which minimizes vertical distances, orthogonal regression 
+minimizes the perpendicular (orthogonal) distance from each data point to the regression line or hyperplane.
+This approach is more appropriate when both dependent and independent variables contain measurement errors.
 
-The algorithm works by centering the data, optionally scaling the variables, and then finding the solution using matrix decomposition methods such as SVD (Singular Value Decomposition). 
+The algorithm works by centering the data, optionally scaling the variables, and then finding the 
+solution using matrix decomposition methods such as SVD (Singular Value Decomposition).
 
-For Beginners: Orthogonal regression is useful when you're not sure which variable is dependent and which is independent, or when both variables have measurement errors. Think of it as finding the line that's as close as possible to all points when measuring distance perpendicular to the line, rather than just vertically.
+For Beginners:
+Orthogonal regression is useful when you're not sure which variable is dependent and which is independent,
+or when both variables have measurement errors. Think of it as finding the line that's as close as possible
+to all points when measuring distance perpendicular to the line, rather than just vertically.
 
 ## Example
 

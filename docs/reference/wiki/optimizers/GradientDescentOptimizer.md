@@ -10,11 +10,19 @@ Represents a Gradient Descent optimizer for machine learning models.
 
 ## For Beginners
 
-Imagine you're trying to find the lowest point in a valley: - You start at a random point (initial model parameters) - You look around to see which way is steepest downhill (calculate the gradient) - You take a step in that direction (update the parameters) - You repeat this process until you reach the bottom of the valley (optimize the model) This optimizer helps the model learn by gradually adjusting its parameters to minimize errors.
+Imagine you're trying to find the lowest point in a valley:
+
+- You start at a random point (initial model parameters)
+- You look around to see which way is steepest downhill (calculate the gradient)
+- You take a step in that direction (update the parameters)
+- You repeat this process until you reach the bottom of the valley (optimize the model)
+
+This optimizer helps the model learn by gradually adjusting its parameters to minimize errors.
 
 ## How It Works
 
-Gradient Descent is a first-order iterative optimization algorithm for finding a local minimum of a differentiable function. It takes steps proportional to the negative of the gradient of the function at the current point.
+Gradient Descent is a first-order iterative optimization algorithm for finding a local minimum of a differentiable function.
+It takes steps proportional to the negative of the gradient of the function at the current point.
 
 ## Example
 

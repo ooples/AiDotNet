@@ -10,11 +10,14 @@ Represents a Bayesian Optimizer for optimization problems.
 
 ## For Beginners
 
-Think of this optimizer as a smart guessing game. It tries to find the best solution by making educated guesses based on what it has learned from previous attempts. It's particularly useful when each guess is time-consuming or expensive to evaluate.
+Think of this optimizer as a smart guessing game. It tries to find the best solution
+by making educated guesses based on what it has learned from previous attempts. It's particularly useful when
+each guess is time-consuming or expensive to evaluate.
 
 ## How It Works
 
-Bayesian Optimization is a powerful technique for optimizing black-box functions that are expensive to evaluate. It uses a probabilistic model to make predictions about the function's behavior and decides where to sample next.
+Bayesian Optimization is a powerful technique for optimizing black-box functions that are expensive to evaluate.
+It uses a probabilistic model to make predictions about the function's behavior and decides where to sample next.
 
 ## Example
 

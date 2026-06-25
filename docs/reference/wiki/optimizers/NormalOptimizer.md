@@ -10,11 +10,14 @@ Implements a normal optimization algorithm with adaptive parameters.
 
 ## For Beginners
 
-Imagine you're trying to find the highest peak in a mountain range, but you can't see very far. This optimizer is like a hiker who starts at random spots, climbs to the nearest peak, and then jumps to another random spot. The hiker learns from each climb and adjusts their strategy (like how far to jump or how carefully to look around) based on whether they're finding higher peaks or not.
+Imagine you're trying to find the highest peak in a mountain range, but you can't see very far.
+This optimizer is like a hiker who starts at random spots, climbs to the nearest peak, and then jumps to another random spot.
+The hiker learns from each climb and adjusts their strategy (like how far to jump or how carefully to look around) based on whether they're finding higher peaks or not.
 
 ## How It Works
 
-The NormalOptimizer uses a combination of random search and adaptive parameter tuning to find optimal solutions. It incorporates elements from genetic algorithms but operates on a single solution at a time.
+The NormalOptimizer uses a combination of random search and adaptive parameter tuning to find optimal solutions.
+It incorporates elements from genetic algorithms but operates on a single solution at a time.
 
 ## Example
 

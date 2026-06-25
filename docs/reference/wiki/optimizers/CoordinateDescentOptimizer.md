@@ -10,11 +10,15 @@ Implements the Coordinate Descent optimization algorithm for numerical optimizat
 
 ## For Beginners
 
-This optimizer is like adjusting the knobs on a complex machine one at a time. It focuses on improving one aspect of the solution at a time, which can be more manageable and sometimes more effective than trying to adjust everything at once.
+This optimizer is like adjusting the knobs on a complex machine one at a time. 
+It focuses on improving one aspect of the solution at a time, which can be more manageable and sometimes 
+more effective than trying to adjust everything at once.
 
 ## How It Works
 
-Coordinate Descent is an optimization algorithm that minimizes a multivariable function by solving a series of single-variable optimization problems. It cycles through each variable (coordinate) and optimizes it while holding the others constant.
+Coordinate Descent is an optimization algorithm that minimizes a multivariable function by solving a series of 
+single-variable optimization problems. It cycles through each variable (coordinate) and optimizes it while holding 
+the others constant.
 
 ## Example
 

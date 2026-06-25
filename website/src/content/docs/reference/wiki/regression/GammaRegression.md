@@ -10,13 +10,29 @@ Implements Gamma regression, a generalized linear model for positive continuous 
 
 ## How It Works
 
-Gamma regression is appropriate when the response variable is positive continuous and often right-skewed, with variance that increases with the mean. It's commonly used for modeling durations, costs, and other positive quantities where the coefficient of variation is approximately constant. 
+Gamma regression is appropriate when the response variable is positive continuous and often right-skewed,
+with variance that increases with the mean. It's commonly used for modeling durations, costs, and other
+positive quantities where the coefficient of variation is approximately constant.
 
-The Gamma distribution has two parameters: shape (k) and scale (θ), with: - Mean: μ = k × θ - Variance: μ²/k = φ × μ², where φ = 1/k is the dispersion parameter 
+The Gamma distribution has two parameters: shape (k) and scale (θ), with:
 
-The model is fitted using iteratively reweighted least squares (IRLS), a form of maximum likelihood estimation. 
+- Mean: μ = k × θ
+- Variance: μ²/k = φ × μ², where φ = 1/k is the dispersion parameter
 
-For Beginners: Gamma regression is used when you're trying to predict positive continuous values that are often right-skewed (meaning most values are small but some are very large). Common examples include: - Insurance claim amounts - Hospital length of stay - Income levels - Time until an event occurs - Costs and prices Unlike linear regression which can predict negative values, Gamma regression ensures predictions are always positive. It also handles the common pattern where larger values tend to be more variable.
+The model is fitted using iteratively reweighted least squares (IRLS), a form of maximum likelihood estimation.
+
+For Beginners:
+Gamma regression is used when you're trying to predict positive continuous values that are often right-skewed
+(meaning most values are small but some are very large). Common examples include:
+
+- Insurance claim amounts
+- Hospital length of stay
+- Income levels
+- Time until an event occurs
+- Costs and prices
+
+Unlike linear regression which can predict negative values, Gamma regression ensures predictions are always
+positive. It also handles the common pattern where larger values tend to be more variable.
 
 ## Example
 

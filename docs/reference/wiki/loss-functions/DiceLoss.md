@@ -10,7 +10,26 @@ Implements the Dice loss function, commonly used for image segmentation tasks.
 
 ## For Beginners
 
-Dice loss measures the overlap between predicted and actual segments in an image. It's based on the Dice coefficient (also known as F1 score), which is a statistical measure of similarity. The formula is: DiceLoss = 1 - (2 * intersection) / (sum of predicted + sum of actual) Where: - intersection is the sum of element-wise multiplication of predicted and actual values - A value of 0 means perfect overlap (ideal predictions) - A value of 1 means no overlap at all (worst predictions) Key properties: - It's ideal for problems where the positive class (what you're trying to detect) is rare - Handles imbalanced data better than cross-entropy in many cases - Focuses on maximizing the overlap between predictions and ground truth - Commonly used in medical image segmentation, satellite imagery, and other segmentation tasks Unlike cross-entropy, which treats each pixel independently, Dice loss considers the global relationship between predicted and actual masks, which often leads to better segmentation results.
+Dice loss measures the overlap between predicted and actual segments in an image.
+It's based on the Dice coefficient (also known as F1 score), which is a statistical measure of similarity.
+
+The formula is: DiceLoss = 1 - (2 * intersection) / (sum of predicted + sum of actual)
+
+Where:
+
+- intersection is the sum of element-wise multiplication of predicted and actual values
+- A value of 0 means perfect overlap (ideal predictions)
+- A value of 1 means no overlap at all (worst predictions)
+
+Key properties:
+
+- It's ideal for problems where the positive class (what you're trying to detect) is rare
+- Handles imbalanced data better than cross-entropy in many cases
+- Focuses on maximizing the overlap between predictions and ground truth
+- Commonly used in medical image segmentation, satellite imagery, and other segmentation tasks
+
+Unlike cross-entropy, which treats each pixel independently, Dice loss considers the global
+relationship between predicted and actual masks, which often leads to better segmentation results.
 
 ## Example
 

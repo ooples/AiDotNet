@@ -1,20 +1,28 @@
 ---
 title: "PartialLeastSquaresRegression"
-description: "Implements Partial Least Squares Regression (PLS), a technique that combines features from principal component analysis and multiple linear regression to handle situations with many correlated predictors."
+description: "Implements Partial Least Squares Regression (PLS), a technique that combines features from principal  component analysis and multiple linear regression to handle situations with many correlated predictors."
 section: "Reference"
 ---
 
 _Regression Models_
 
-Implements Partial Least Squares Regression (PLS), a technique that combines features from principal component analysis and multiple linear regression to handle situations with many correlated predictors.
+Implements Partial Least Squares Regression (PLS), a technique that combines features from principal 
+component analysis and multiple linear regression to handle situations with many correlated predictors.
 
 ## How It Works
 
-Partial Least Squares Regression is particularly useful when dealing with many predictor variables that may be highly correlated. It works by finding a linear combination of the predictors (components) that maximizes the covariance between the predictors and the response variable. 
+Partial Least Squares Regression is particularly useful when dealing with many predictor variables 
+that may be highly correlated. It works by finding a linear combination of the predictors (components) 
+that maximizes the covariance between the predictors and the response variable.
 
-Unlike Principal Component Regression which only considers the variance in the predictor variables, PLS regression considers both the variance in the predictors and their relationship with the response variable. This often leads to models with better predictive power, especially when the predictors are highly correlated. 
+Unlike Principal Component Regression which only considers the variance in the predictor variables, 
+PLS regression considers both the variance in the predictors and their relationship with the response variable.
+This often leads to models with better predictive power, especially when the predictors are highly correlated.
 
-For Beginners: Think of PLS regression as a way to find the most important patterns in your input data that are also strongly related to what you're trying to predict. It's like finding the key ingredients in a recipe that most influence the taste, rather than just the most abundant ingredients.
+For Beginners:
+Think of PLS regression as a way to find the most important patterns in your input data that are also 
+strongly related to what you're trying to predict. It's like finding the key ingredients in a recipe 
+that most influence the taste, rather than just the most abundant ingredients.
 
 ## Example
 

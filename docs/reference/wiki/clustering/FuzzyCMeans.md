@@ -10,13 +10,31 @@ Fuzzy C-Means (FCM) soft clustering implementation.
 
 ## For Beginners
 
-FCM creates "soft" or "fuzzy" clusters. Instead of saying "Point X belongs to Cluster 1", FCM says: "Point X is 60% Cluster 1, 30% Cluster 2, 10% Cluster 3" This captures uncertainty and allows for overlapping clusters. The fuzziness parameter controls how much overlap is allowed. Use FCM when: - Clusters have unclear boundaries - Points naturally fit multiple categories - You need confidence/probability information
+FCM creates "soft" or "fuzzy" clusters.
+
+Instead of saying "Point X belongs to Cluster 1", FCM says:
+"Point X is 60% Cluster 1, 30% Cluster 2, 10% Cluster 3"
+
+This captures uncertainty and allows for overlapping clusters.
+The fuzziness parameter controls how much overlap is allowed.
+
+Use FCM when:
+
+- Clusters have unclear boundaries
+- Points naturally fit multiple categories
+- You need confidence/probability information
 
 ## How It Works
 
-Fuzzy C-Means assigns each point a membership degree to each cluster, rather than a hard assignment. The memberships sum to 1 for each point. 
+Fuzzy C-Means assigns each point a membership degree to each cluster,
+rather than a hard assignment. The memberships sum to 1 for each point.
 
-Algorithm: 1. Initialize membership matrix randomly 2. Compute cluster centers from weighted memberships 3. Update memberships based on distances to centers 4. Repeat until convergence
+Algorithm:
+
+1. Initialize membership matrix randomly
+2. Compute cluster centers from weighted memberships
+3. Update memberships based on distances to centers
+4. Repeat until convergence
 
 ## Example
 

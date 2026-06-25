@@ -10,11 +10,23 @@ Implements Seasonal-Trend decomposition using LOESS (STL) for time series analys
 
 ## For Beginners
 
-STL decomposition is like breaking down a song into its basic elements - the melody (trend), the repeating chorus (seasonal pattern), and the unique variations (residuals). For example, if you analyze monthly sales data: - The trend component shows the long-term increase or decrease in sales - The seasonal component shows regular patterns that repeat (like higher sales during holidays) - The residual component shows what's left after removing trend and seasonality (like unexpected events) This decomposition helps you understand what's driving your time series and can improve forecasting. The model offers different algorithms (standard, robust, and fast) to handle various types of data.
+STL decomposition is like breaking down a song into its basic elements - the melody (trend),
+the repeating chorus (seasonal pattern), and the unique variations (residuals).
+
+For example, if you analyze monthly sales data:
+
+- The trend component shows the long-term increase or decrease in sales
+- The seasonal component shows regular patterns that repeat (like higher sales during holidays)
+- The residual component shows what's left after removing trend and seasonality (like unexpected events)
+
+This decomposition helps you understand what's driving your time series and can improve forecasting.
+The model offers different algorithms (standard, robust, and fast) to handle various types of data.
 
 ## How It Works
 
-STL decomposition breaks down a time series into three components: trend, seasonal, and residual. It uses locally weighted regression (LOESS) to extract these components, making it robust to outliers and applicable to a wide range of time series data.
+STL decomposition breaks down a time series into three components: trend, seasonal, and residual.
+It uses locally weighted regression (LOESS) to extract these components, making it robust to
+outliers and applicable to a wide range of time series data.
 
 ## Example
 

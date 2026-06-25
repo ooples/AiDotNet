@@ -10,11 +10,14 @@ Implements the Differential Evolution optimization algorithm for numerical optim
 
 ## For Beginners
 
-This optimizer works by evolving a population of candidate solutions over time. It's inspired by biological evolution and is good at finding global optima in complex problem spaces.
+This optimizer works by evolving a population of candidate solutions over time.
+It's inspired by biological evolution and is good at finding global optima in complex problem spaces.
 
 ## How It Works
 
-Differential Evolution is a population-based optimization algorithm that is particularly well-suited for solving non-linear, non-differentiable continuous space functions. It's known for its simplicity, robustness, and effectiveness in various optimization scenarios.
+Differential Evolution is a population-based optimization algorithm that is particularly well-suited
+for solving non-linear, non-differentiable continuous space functions. It's known for its simplicity,
+robustness, and effectiveness in various optimization scenarios.
 
 ## Example
 

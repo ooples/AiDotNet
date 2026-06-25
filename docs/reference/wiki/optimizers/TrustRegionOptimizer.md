@@ -10,7 +10,15 @@ Implements the Trust Region optimization algorithm for machine learning models.
 
 ## For Beginners
 
-Think of this optimizer as an explorer with a map: - The "trust region" is like the area on the map the explorer trusts to be accurate. - In each step, the explorer looks at this trusted area to decide where to go next. - If the predictions (map) match reality well, the explorer might expand the trusted area. - If the predictions are off, the explorer shrinks the trusted area and becomes more cautious. This approach helps the optimizer make good decisions even in complex landscapes, balancing between making progress and staying reliable.
+Think of this optimizer as an explorer with a map:
+
+- The "trust region" is like the area on the map the explorer trusts to be accurate.
+- In each step, the explorer looks at this trusted area to decide where to go next.
+- If the predictions (map) match reality well, the explorer might expand the trusted area.
+- If the predictions are off, the explorer shrinks the trusted area and becomes more cautious.
+
+This approach helps the optimizer make good decisions even in complex landscapes, balancing between
+making progress and staying reliable.
 
 ## How It Works
 

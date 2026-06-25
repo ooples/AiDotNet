@@ -6,17 +6,36 @@ section: "Reference"
 
 _Regression Models_
 
-Implements Tweedie regression, a flexible generalized linear model that encompasses several distributions (Poisson, Gamma, Inverse Gaussian) as special cases based on the power parameter.
+Implements Tweedie regression, a flexible generalized linear model that encompasses several distributions
+(Poisson, Gamma, Inverse Gaussian) as special cases based on the power parameter.
 
 ## How It Works
 
-Tweedie regression is a powerful family of distributions where variance is proportional to a power of the mean: Var(Y) = φ × μ^p. The power parameter p determines which distribution family is used: - p = 0: Normal/Gaussian (variance independent of mean) - p = 1: Poisson (variance = mean) - 1 < p < 2: Compound Poisson-Gamma (handles both zeros and positive continuous values) - p = 2: Gamma (variance = mean²) - p = 3: Inverse Gaussian (variance = mean³) 
+Tweedie regression is a powerful family of distributions where variance is proportional to a power
+of the mean: Var(Y) = φ × μ^p. The power parameter p determines which distribution family is used:
 
-The compound Poisson-Gamma case (1 < p < 2) is particularly important for insurance modeling, where data often has many exact zeros (no claim) mixed with positive continuous values (claim amounts). 
+- p = 0: Normal/Gaussian (variance independent of mean)
+- p = 1: Poisson (variance = mean)
+- 1 < p < 2: Compound Poisson-Gamma (handles both zeros and positive continuous values)
+- p = 2: Gamma (variance = mean²)
+- p = 3: Inverse Gaussian (variance = mean³)
 
-The model is fitted using iteratively reweighted least squares (IRLS), a form of maximum likelihood estimation. 
+The compound Poisson-Gamma case (1 < p < 2) is particularly important for insurance modeling,
+where data often has many exact zeros (no claim) mixed with positive continuous values (claim amounts).
 
-For Beginners: Tweedie regression is like having a "dial" that lets you choose how the variability in your data relates to the average. It's especially powerful because: - Insurance claims: Many policies have zero claims, others have positive amounts - Rainfall data: Many dry days (zero) plus positive rainfall amounts - Healthcare costs: Some patients have zero costs, others have positive costs - Sales data: Some products have zero sales, others have positive sales With p between 1 and 2, Tweedie can naturally handle data that has both exact zeros and positive continuous values - something that neither Poisson (counts only) nor Gamma (positive only) can do alone.
+The model is fitted using iteratively reweighted least squares (IRLS), a form of maximum likelihood estimation.
+
+For Beginners:
+Tweedie regression is like having a "dial" that lets you choose how the variability in your data
+relates to the average. It's especially powerful because:
+
+- Insurance claims: Many policies have zero claims, others have positive amounts
+- Rainfall data: Many dry days (zero) plus positive rainfall amounts
+- Healthcare costs: Some patients have zero costs, others have positive costs
+- Sales data: Some products have zero sales, others have positive sales
+
+With p between 1 and 2, Tweedie can naturally handle data that has both exact zeros and positive
+continuous values - something that neither Poisson (counts only) nor Gamma (positive only) can do alone.
 
 ## Example
 

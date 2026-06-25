@@ -10,11 +10,29 @@ Implements a Vector Autoregression (VAR) model for multivariate time series fore
 
 ## For Beginners
 
-A VAR model helps you forecast multiple related time series at once, accounting for how they influence each other. For example, if you're analyzing economic data, a VAR model could simultaneously forecast: - GDP growth - Unemployment rate - Inflation rate While accounting for relationships like: - How unemployment affects future GDP - How GDP affects future inflation - How each variable's past values affect its own future Think of it as a system that recognizes the interconnected nature of multiple time series and uses these connections to make better forecasts for all variables simultaneously.
+A VAR model helps you forecast multiple related time series at once, accounting for how they
+influence each other.
+
+For example, if you're analyzing economic data, a VAR model could simultaneously forecast:
+
+- GDP growth
+- Unemployment rate
+- Inflation rate
+
+While accounting for relationships like:
+
+- How unemployment affects future GDP
+- How GDP affects future inflation
+- How each variable's past values affect its own future
+
+Think of it as a system that recognizes the interconnected nature of multiple time series
+and uses these connections to make better forecasts for all variables simultaneously.
 
 ## How It Works
 
-The Vector Autoregression (VAR) model is a multivariate extension of the univariate autoregressive model. It captures linear dependencies among multiple time series variables, where each variable is modeled as a function of past values of itself and past values of other variables in the system.
+The Vector Autoregression (VAR) model is a multivariate extension of the univariate autoregressive model.
+It captures linear dependencies among multiple time series variables, where each variable is modeled as
+a function of past values of itself and past values of other variables in the system.
 
 ## Example
 

@@ -10,11 +10,20 @@ Represents an AdaMax optimizer, an extension of Adam that uses the infinity norm
 
 ## For Beginners
 
-AdaMax is like a smart learning assistant that adjusts its learning speed for each piece of information it's trying to learn. It's particularly good at handling different scales of information without getting confused. Key features: - Adapts the learning rate for each parameter - Uses the maximum (infinity norm) of past gradients, which can be more stable - Good for problems where the gradients can be sparse or have different scales
+AdaMax is like a smart learning assistant that adjusts its learning speed
+for each piece of information it's trying to learn. It's particularly good at handling different
+scales of information without getting confused.
+
+Key features:
+
+- Adapts the learning rate for each parameter
+- Uses the maximum (infinity norm) of past gradients, which can be more stable
+- Good for problems where the gradients can be sparse or have different scales
 
 ## How It Works
 
-AdaMax is an adaptive learning rate optimization algorithm that extends the Adam optimizer. It uses the infinity norm to update parameters, which can make it more robust in certain scenarios.
+AdaMax is an adaptive learning rate optimization algorithm that extends the Adam optimizer.
+It uses the infinity norm to update parameters, which can make it more robust in certain scenarios.
 
 ## Example
 

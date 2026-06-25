@@ -10,7 +10,23 @@ Implements the Mean Squared Error (MSE) loss function.
 
 ## For Beginners
 
-Mean Squared Error is one of the most common loss functions used in regression problems. It measures the average squared difference between predicted and actual values. The formula is: MSE = (1/n) * ?(predicted - actual)² MSE has these key properties: - It heavily penalizes large errors due to the squaring operation - It treats all data points equally - It's differentiable everywhere, making it suitable for gradient-based optimization - It's always positive, with perfect predictions giving a value of zero MSE is ideal for problems where: - You're predicting continuous values (like prices, temperatures, etc.) - Outliers should be given extra attention (due to the squaring) - The prediction errors follow a normal distribution
+Mean Squared Error is one of the most common loss functions used in regression problems.
+It measures the average squared difference between predicted and actual values.
+
+The formula is: MSE = (1/n) * ?(predicted - actual)²
+
+MSE has these key properties:
+
+- It heavily penalizes large errors due to the squaring operation
+- It treats all data points equally
+- It's differentiable everywhere, making it suitable for gradient-based optimization
+- It's always positive, with perfect predictions giving a value of zero
+
+MSE is ideal for problems where:
+
+- You're predicting continuous values (like prices, temperatures, etc.)
+- Outliers should be given extra attention (due to the squaring)
+- The prediction errors follow a normal distribution
 
 ## Example
 

@@ -10,11 +10,14 @@ Implements the Newton's Method optimization algorithm.
 
 ## For Beginners
 
-Imagine you're trying to find the lowest point in a valley. Gradient descent is like rolling a ball and letting it follow the slope. Newton's Method is like using a telescope to look at the whole valley, predicting where the lowest point is, and jumping directly there. It's often faster but requires more complex calculations at each step.
+Imagine you're trying to find the lowest point in a valley. Gradient descent is like rolling a ball and letting it follow the slope.
+Newton's Method is like using a telescope to look at the whole valley, predicting where the lowest point is, and jumping directly there.
+It's often faster but requires more complex calculations at each step.
 
 ## How It Works
 
-Newton's Method is a powerful optimization algorithm that uses both first and second derivatives of the objective function. It often converges faster than first-order methods, especially near the optimum, but can be computationally expensive due to the need to compute and invert the Hessian matrix.
+Newton's Method is a powerful optimization algorithm that uses both first and second derivatives of the objective function.
+It often converges faster than first-order methods, especially near the optimum, but can be computationally expensive due to the need to compute and invert the Hessian matrix.
 
 ## Example
 

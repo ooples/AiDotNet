@@ -10,13 +10,36 @@ DeepSurv: A deep learning approach to survival analysis using Cox proportional h
 
 ## For Beginners
 
-Survival analysis predicts "time until an event occurs." DeepSurv is a neural network that learns to predict risk scores from your features: - Higher risk score = event is likely to happen sooner - Lower risk score = event is likely to happen later What makes survival analysis unique is "censoring": some subjects haven't experienced the event yet when the study ends. DeepSurv properly handles this by using the Cox partial likelihood, which only compares subjects who are "at risk" at each event time. Example applications: - Medical: Predict patient survival time based on clinical features - Business: Predict customer churn time based on usage patterns - Engineering: Predict equipment failure time based on sensor data Key outputs: - Risk scores: Relative risk for each subject - Survival curves: Probability of surviving past time t - Hazard ratios: How much each feature affects risk
+Survival analysis predicts "time until an event occurs." DeepSurv
+is a neural network that learns to predict risk scores from your features:
+
+- Higher risk score = event is likely to happen sooner
+- Lower risk score = event is likely to happen later
+
+What makes survival analysis unique is "censoring": some subjects haven't experienced
+the event yet when the study ends. DeepSurv properly handles this by using the Cox
+partial likelihood, which only compares subjects who are "at risk" at each event time.
+
+Example applications:
+
+- Medical: Predict patient survival time based on clinical features
+- Business: Predict customer churn time based on usage patterns
+- Engineering: Predict equipment failure time based on sensor data
+
+Key outputs:
+
+- Risk scores: Relative risk for each subject
+- Survival curves: Probability of surviving past time t
+- Hazard ratios: How much each feature affects risk
 
 ## How It Works
 
-DeepSurv extends the classical Cox Proportional Hazards model by using a deep neural network to model the log-risk function. It optimizes the negative partial log-likelihood of the Cox model while learning complex non-linear relationships. 
+DeepSurv extends the classical Cox Proportional Hazards model by using a deep neural
+network to model the log-risk function. It optimizes the negative partial log-likelihood
+of the Cox model while learning complex non-linear relationships.
 
-Reference: Katzman, J.L. et al. (2018). "DeepSurv: Personalized Treatment Recommender System Using A Cox Proportional Hazards Deep Neural Network". BMC Medical Research Methodology.
+Reference: Katzman, J.L. et al. (2018). "DeepSurv: Personalized Treatment Recommender
+System Using A Cox Proportional Hazards Deep Neural Network". BMC Medical Research Methodology.
 
 ## Example
 

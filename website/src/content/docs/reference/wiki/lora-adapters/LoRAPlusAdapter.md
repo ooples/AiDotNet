@@ -10,11 +10,44 @@ LoRA+ adapter that uses optimized learning rates for faster convergence and bett
 
 ## For Beginners
 
-LoRA+ is an enhanced version of LoRA that trains faster and better. In standard LoRA: - Both matrix A and B are updated with the same learning rate - Matrix B starts at zero, so it needs time to "catch up" - Matrix A starts random, so it's already contributing from the start LoRA+ recognizes this asymmetry: - Matrix A is updated with a base learning rate (e.g., 0.0001) - Matrix B is updated with a higher learning rate (e.g., 0.0016 = 16x higher) - This accelerates learning without instability Key parameters: - BaseLearningRate: Learning rate for matrix A (the "slow" matrix) - LearningRateRatio: Multiplier for matrix B (typically 16.0) - ScaledLearningRate: Computed as BaseLearningRate * LearningRateRatio Research shows LoRA+ typically achieves: - 2x faster convergence - Better final performance - No additional parameters compared to standard LoRA Example: If base learning rate is 0.0001 and ratio is 16.0: - Matrix A updates with learning rate 0.0001 - Matrix B updates with learning rate 0.0016 Reference: LoRA+: Efficient Low Rank Adaptation of Large Models (February 2024)
+LoRA+ is an enhanced version of LoRA that trains faster and better.
+
+In standard LoRA:
+
+- Both matrix A and B are updated with the same learning rate
+- Matrix B starts at zero, so it needs time to "catch up"
+- Matrix A starts random, so it's already contributing from the start
+
+LoRA+ recognizes this asymmetry:
+
+- Matrix A is updated with a base learning rate (e.g., 0.0001)
+- Matrix B is updated with a higher learning rate (e.g., 0.0016 = 16x higher)
+- This accelerates learning without instability
+
+Key parameters:
+
+- BaseLearningRate: Learning rate for matrix A (the "slow" matrix)
+- LearningRateRatio: Multiplier for matrix B (typically 16.0)
+- ScaledLearningRate: Computed as BaseLearningRate * LearningRateRatio
+
+Research shows LoRA+ typically achieves:
+
+- 2x faster convergence
+- Better final performance
+- No additional parameters compared to standard LoRA
+
+Example: If base learning rate is 0.0001 and ratio is 16.0:
+
+- Matrix A updates with learning rate 0.0001
+- Matrix B updates with learning rate 0.0016
+
+Reference: LoRA+: Efficient Low Rank Adaptation of Large Models (February 2024)
 
 ## How It Works
 
-LoRA+ (February 2024) improves upon standard LoRA by using different learning rates for the A and B matrices. The key insight is that matrix B (which starts at zero) needs faster updates than matrix A (which starts random). This simple modification leads to significantly faster convergence and improved final performance.
+LoRA+ (February 2024) improves upon standard LoRA by using different learning rates for the A and B matrices.
+The key insight is that matrix B (which starts at zero) needs faster updates than matrix A (which starts random).
+This simple modification leads to significantly faster convergence and improved final performance.
 
 ## Example
 

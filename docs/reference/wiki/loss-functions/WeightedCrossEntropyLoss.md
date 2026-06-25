@@ -10,7 +10,23 @@ Implements the Weighted Cross Entropy loss function for classification problems 
 
 ## For Beginners
 
-Weighted Cross Entropy is a variation of the standard cross-entropy loss that applies different weights to different samples or classes. The regular cross-entropy penalizes all misclassifications equally, but in some cases: - Some classes might be more important to classify correctly - Some classes might be rare in the training data but important in practice - Some samples might be more reliable or representative than others Weighted Cross Entropy lets you control the importance of different samples by applying weights to them. Higher weights mean the model will focus more on getting those specific samples right. This loss function is particularly useful for: - Imbalanced datasets where some classes are underrepresented - Problems where misclassifying certain classes is more costly than others - Situations where you have varying confidence in your training data
+Weighted Cross Entropy is a variation of the standard cross-entropy loss that applies
+different weights to different samples or classes.
+
+The regular cross-entropy penalizes all misclassifications equally, but in some cases:
+
+- Some classes might be more important to classify correctly
+- Some classes might be rare in the training data but important in practice
+- Some samples might be more reliable or representative than others
+
+Weighted Cross Entropy lets you control the importance of different samples by applying weights
+to them. Higher weights mean the model will focus more on getting those specific samples right.
+
+This loss function is particularly useful for:
+
+- Imbalanced datasets where some classes are underrepresented
+- Problems where misclassifying certain classes is more costly than others
+- Situations where you have varying confidence in your training data
 
 ## Example
 

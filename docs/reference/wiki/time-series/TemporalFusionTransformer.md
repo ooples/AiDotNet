@@ -6,7 +6,9 @@ section: "Reference"
 
 _Time-Series Models_
 
-Implements the Temporal Fusion Transformer (TFT) per Lim et al. (2021). Architecture: Input embedding → VSN → LSTM encoder-decoder → Static enrichment → Interpretable multi-head attention → Gated skip connections → Quantile output.
+Implements the Temporal Fusion Transformer (TFT) per Lim et al. (2021).
+Architecture: Input embedding → VSN → LSTM encoder-decoder → Static enrichment →
+Interpretable multi-head attention → Gated skip connections → Quantile output.
 
 ## Example
 

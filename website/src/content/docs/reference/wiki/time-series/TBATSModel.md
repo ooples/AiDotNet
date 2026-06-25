@@ -6,15 +6,30 @@ section: "Reference"
 
 _Time-Series Models_
 
-Implements the TBATS (Trigonometric, Box-Cox transform, ARMA errors, Trend, and Seasonal components) model for complex time series forecasting with multiple seasonal patterns.
+Implements the TBATS (Trigonometric, Box-Cox transform, ARMA errors, Trend, and Seasonal components) model
+for complex time series forecasting with multiple seasonal patterns.
 
 ## For Beginners
 
-TBATS is like a Swiss Army knife for time series forecasting. It can handle complex data with: - Multiple seasonal patterns (e.g., daily, weekly, and yearly patterns all at once) - Non-linear growth (using Box-Cox transformations) - Autocorrelated errors (using ARMA models) For example, if you're analyzing hourly electricity demand, TBATS can simultaneously model: - Daily patterns (people use more electricity during the day than at night) - Weekly patterns (usage differs on weekdays versus weekends) - Yearly patterns (more electricity is used for heating in winter or cooling in summer) This makes TBATS particularly useful for complex forecasting problems where simpler methods fail.
+TBATS is like a Swiss Army knife for time series forecasting. It can handle complex data with:
+
+- Multiple seasonal patterns (e.g., daily, weekly, and yearly patterns all at once)
+- Non-linear growth (using Box-Cox transformations)
+- Autocorrelated errors (using ARMA models)
+
+For example, if you're analyzing hourly electricity demand, TBATS can simultaneously model:
+
+- Daily patterns (people use more electricity during the day than at night)
+- Weekly patterns (usage differs on weekdays versus weekends)
+- Yearly patterns (more electricity is used for heating in winter or cooling in summer)
+
+This makes TBATS particularly useful for complex forecasting problems where simpler methods fail.
 
 ## How It Works
 
-The TBATS model is an advanced exponential smoothing method that can handle multiple seasonal patterns of different lengths. It uses trigonometric functions to model seasonality, Box-Cox transformations to handle non-linearity, and ARMA processes to model residual correlations.
+The TBATS model is an advanced exponential smoothing method that can handle multiple seasonal patterns
+of different lengths. It uses trigonometric functions to model seasonality, Box-Cox transformations
+to handle non-linearity, and ARMA processes to model residual correlations.
 
 ## Example
 

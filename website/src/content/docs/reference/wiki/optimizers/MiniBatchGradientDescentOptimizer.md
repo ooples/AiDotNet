@@ -10,11 +10,15 @@ Implements the Mini-Batch Gradient Descent optimization algorithm.
 
 ## For Beginners
 
-Imagine you're trying to find the bottom of a valley while blindfolded. Mini-Batch Gradient Descent is like taking a few steps, checking your position, adjusting your direction, and repeating. It's faster than checking after every single step (Stochastic Gradient Descent) but more precise than taking a lot of steps before checking (Batch Gradient Descent).
+Imagine you're trying to find the bottom of a valley while blindfolded. Mini-Batch Gradient Descent is like taking 
+a few steps, checking your position, adjusting your direction, and repeating. It's faster than checking after every 
+single step (Stochastic Gradient Descent) but more precise than taking a lot of steps before checking (Batch Gradient Descent).
 
 ## How It Works
 
-Mini-Batch Gradient Descent is a variation of gradient descent that splits the training data into small batches to calculate model error and update model coefficients. This approach strikes a balance between the efficiency of stochastic gradient descent and the stability of batch gradient descent.
+Mini-Batch Gradient Descent is a variation of gradient descent that splits the training data into small batches
+to calculate model error and update model coefficients. This approach strikes a balance between the efficiency
+of stochastic gradient descent and the stability of batch gradient descent.
 
 ## Example
 

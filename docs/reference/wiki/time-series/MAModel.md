@@ -10,11 +10,25 @@ Implements a Moving Average (MA) model for time series forecasting.
 
 ## For Beginners
 
-A Moving Average (MA) model predicts future values based on past prediction errors. Think of it like this: If you've been consistently underestimating or overestimating values in the past, the MA model learns from these mistakes and adjusts future predictions. For example, if a weather forecast has been consistently underestimating temperatures by 2 degrees for several days, an MA model would learn this pattern and adjust its future predictions upward. The key parameter of an MA model is 'q', which determines how many past prediction errors to consider. For instance, with q=3, the model looks at errors from the last three periods when making a new prediction.
+A Moving Average (MA) model predicts future values based on past prediction errors.
+
+Think of it like this: If you've been consistently underestimating or overestimating 
+values in the past, the MA model learns from these mistakes and adjusts future predictions.
+
+For example, if a weather forecast has been consistently underestimating temperatures 
+by 2 degrees for several days, an MA model would learn this pattern and adjust its 
+future predictions upward.
+
+The key parameter of an MA model is 'q', which determines how many past prediction 
+errors to consider. For instance, with q=3, the model looks at errors from the last 
+three periods when making a new prediction.
 
 ## How It Works
 
-MA models predict future values based on past prediction errors (residuals). The model is defined as: Yt = μ + et + ?1et-1 + ?2et-2 + ... + ?qet-q where Yt is the value at time t, μ is the mean, et is the error term at time t, and ?i are the MA coefficients.
+MA models predict future values based on past prediction errors (residuals). 
+The model is defined as: Yt = μ + et + ?1et-1 + ?2et-2 + ... + ?qet-q
+where Yt is the value at time t, μ is the mean, et is the error term at time t,
+and ?i are the MA coefficients.
 
 ## Example
 

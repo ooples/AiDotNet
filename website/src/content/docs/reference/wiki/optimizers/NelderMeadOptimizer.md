@@ -10,11 +10,15 @@ Implements the Nelder-Mead optimization algorithm, also known as the downhill si
 
 ## For Beginners
 
-Imagine you're trying to find the lowest point in a hilly landscape. The Nelder-Mead method is like having a group of explorers who work together, moving and reshaping their search pattern to find the lowest point. They don't need to know which way is downhill; they just compare their positions and adjust accordingly.
+Imagine you're trying to find the lowest point in a hilly landscape. The Nelder-Mead method is like
+having a group of explorers who work together, moving and reshaping their search pattern to find the lowest point.
+They don't need to know which way is downhill; they just compare their positions and adjust accordingly.
 
 ## How It Works
 
-The Nelder-Mead method is a heuristic search method that can optimize a problem with N variables. It attempts to minimize a scalar-valued nonlinear function of n real variables using only function values, without any derivative information.
+The Nelder-Mead method is a heuristic search method that can optimize a problem with N variables.
+It attempts to minimize a scalar-valued nonlinear function of n real variables using only function values,
+without any derivative information.
 
 ## Example
 

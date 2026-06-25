@@ -10,11 +10,22 @@ Implements spectral analysis for time series data, which transforms time domain 
 
 ## For Beginners
 
-Spectral analysis is like breaking down a song into its individual notes. Just as a song is made up of different notes played at different times, time series data can contain different patterns that repeat at different frequencies. For example, if you analyze temperature data over several years, spectral analysis might reveal: - A strong yearly cycle (frequency = 1/365 days) due to seasonal changes - A daily cycle (frequency = 1/24 hours) due to day/night temperature differences - Other cycles you might not notice just by looking at the raw data This model uses the Fast Fourier Transform (FFT) algorithm to convert time data into frequency information, showing you how strong each frequency component is in your data.
+Spectral analysis is like breaking down a song into its individual notes. Just as a song is made up of different
+notes played at different times, time series data can contain different patterns that repeat at different frequencies.
+
+For example, if you analyze temperature data over several years, spectral analysis might reveal:
+
+- A strong yearly cycle (frequency = 1/365 days) due to seasonal changes
+- A daily cycle (frequency = 1/24 hours) due to day/night temperature differences
+- Other cycles you might not notice just by looking at the raw data
+
+This model uses the Fast Fourier Transform (FFT) algorithm to convert time data into frequency information,
+showing you how strong each frequency component is in your data.
 
 ## How It Works
 
-Spectral analysis is a technique used to analyze the frequency content of time series data. It helps identify periodic patterns and dominant frequencies in the data by transforming it from the time domain to the frequency domain.
+Spectral analysis is a technique used to analyze the frequency content of time series data. It helps identify
+periodic patterns and dominant frequencies in the data by transforming it from the time domain to the frequency domain.
 
 ## Example
 

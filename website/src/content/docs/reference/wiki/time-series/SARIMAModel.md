@@ -10,11 +10,23 @@ Implements a Seasonal Autoregressive Integrated Moving Average (SARIMA) model fo
 
 ## For Beginners
 
-SARIMA is used to predict future values in a time series (data collected over time) that has seasonal patterns. Think of it like predicting ice cream sales throughout the year - there's a general trend (maybe increasing over years) and a seasonal pattern (higher in summer, lower in winter). SARIMA can capture both these patterns. The model has several parameters: - p: How many previous values influence the current value - d: How many times we need to subtract consecutive values to make the data stable - q: How many previous prediction errors influence the current prediction - P, D, Q: The same as above, but for seasonal patterns - m: The length of the seasonal cycle (e.g., 12 for monthly data with yearly patterns)
+SARIMA is used to predict future values in a time series (data collected over time) that has seasonal patterns.
+Think of it like predicting ice cream sales throughout the year - there's a general trend (maybe increasing over years)
+and a seasonal pattern (higher in summer, lower in winter). SARIMA can capture both these patterns.
+
+The model has several parameters:
+
+- p: How many previous values influence the current value
+- d: How many times we need to subtract consecutive values to make the data stable
+- q: How many previous prediction errors influence the current prediction
+- P, D, Q: The same as above, but for seasonal patterns
+- m: The length of the seasonal cycle (e.g., 12 for monthly data with yearly patterns)
 
 ## How It Works
 
-The SARIMA model extends the ARIMA model by incorporating seasonal components, making it suitable for data with seasonal patterns. It combines autoregressive (AR), integrated (I), and moving average (MA) components for both seasonal and non-seasonal parts of the time series.
+The SARIMA model extends the ARIMA model by incorporating seasonal components, making it suitable for 
+data with seasonal patterns. It combines autoregressive (AR), integrated (I), and moving average (MA) 
+components for both seasonal and non-seasonal parts of the time series.
 
 ## Example
 

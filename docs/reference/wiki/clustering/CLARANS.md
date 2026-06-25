@@ -10,13 +10,37 @@ CLARANS (Clustering Large Applications based on Randomized Search) implementatio
 
 ## For Beginners
 
-CLARANS is like K-Means but uses actual data points. Key differences from K-Means: - Cluster centers (medoids) are real data points - More robust: outliers don't pull centers as much - Any distance metric works (not just Euclidean) The "randomized" part: - Instead of checking ALL possible swaps (slow!) - Randomly sample potential swaps - Still finds good solutions, just faster Think of finding the best meeting spot for friends: - Must be at someone's house (medoid = actual point) - Try swapping whose house, keep improvements
+CLARANS is like K-Means but uses actual data points.
+
+Key differences from K-Means:
+
+- Cluster centers (medoids) are real data points
+- More robust: outliers don't pull centers as much
+- Any distance metric works (not just Euclidean)
+
+The "randomized" part:
+
+- Instead of checking ALL possible swaps (slow!)
+- Randomly sample potential swaps
+- Still finds good solutions, just faster
+
+Think of finding the best meeting spot for friends:
+
+- Must be at someone's house (medoid = actual point)
+- Try swapping whose house, keep improvements
 
 ## How It Works
 
-CLARANS is a partitioning algorithm that uses medoids (actual data points) as cluster centers. It improves on PAM by using randomized search to explore the solution space more efficiently. 
+CLARANS is a partitioning algorithm that uses medoids (actual data points)
+as cluster centers. It improves on PAM by using randomized search to
+explore the solution space more efficiently.
 
-The algorithm: 1. Start with random medoids 2. For each iteration, consider swapping a medoid with a non-medoid 3. Accept swaps that reduce total cost 4. Repeat from different starting points, keep best result
+The algorithm:
+
+1. Start with random medoids
+2. For each iteration, consider swapping a medoid with a non-medoid
+3. Accept swaps that reduce total cost
+4. Repeat from different starting points, keep best result
 
 ## Example
 

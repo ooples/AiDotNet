@@ -10,13 +10,33 @@ Zero-Inflated regression for count data with excess zeros.
 
 ## For Beginners
 
-Imagine counting how many times customers visit a store each month: - Some people NEVER visit (structural zeros) - they live far away or shop elsewhere - Some people visit sometimes but happened to visit 0 times this month (sampling zeros) Standard Poisson regression treats all zeros the same, but Zero-Inflated models recognize these two types of zeros: 1. The "zero model" predicts WHO are structural zeros (π) 2. The "count model" predicts HOW MANY for non-structural-zero people (λ) Example interpretation: - "30% of potential customers are 'never visitors' (π = 0.3)" - "Among potential visitors, the average visit rate is 2.5 times/month (λ = 2.5)" This gives better predictions and allows you to understand both processes.
+Imagine counting how many times customers visit a store each month:
+
+- Some people NEVER visit (structural zeros) - they live far away or shop elsewhere
+- Some people visit sometimes but happened to visit 0 times this month (sampling zeros)
+
+Standard Poisson regression treats all zeros the same, but Zero-Inflated models
+recognize these two types of zeros:
+
+1. The "zero model" predicts WHO are structural zeros (π)
+2. The "count model" predicts HOW MANY for non-structural-zero people (λ)
+
+Example interpretation:
+
+- "30% of potential customers are 'never visitors' (π = 0.3)"
+- "Among potential visitors, the average visit rate is 2.5 times/month (λ = 2.5)"
+
+This gives better predictions and allows you to understand both processes.
 
 ## How It Works
 
-Zero-Inflated models handle count data where there are more zeros than a standard count distribution would predict. They model the data as a mixture: with probability π, the observation is a "structural zero," and with probability (1-π), it follows a count distribution (Poisson or Negative Binomial). 
+Zero-Inflated models handle count data where there are more zeros than a standard
+count distribution would predict. They model the data as a mixture: with probability π,
+the observation is a "structural zero," and with probability (1-π), it follows a count
+distribution (Poisson or Negative Binomial).
 
-Reference: Lambert, D. (1992). "Zero-Inflated Poisson Regression, with an Application to Defects in Manufacturing". Technometrics, 34(1), 1-14.
+Reference: Lambert, D. (1992). "Zero-Inflated Poisson Regression, with an Application
+to Defects in Manufacturing". Technometrics, 34(1), 1-14.
 
 ## Example
 

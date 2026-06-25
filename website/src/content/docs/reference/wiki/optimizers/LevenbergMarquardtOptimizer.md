@@ -10,11 +10,15 @@ Implements the Levenberg-Marquardt optimization algorithm for non-linear least s
 
 ## For Beginners
 
-This optimizer is like a smart problem-solver that's really good at fitting curves to data points. It's especially useful when the relationship between your inputs and outputs isn't a straight line. It works by making small adjustments to its guess, getting closer to the best solution with each step.
+This optimizer is like a smart problem-solver that's really good at fitting curves to data points. It's especially 
+useful when the relationship between your inputs and outputs isn't a straight line. It works by making small 
+adjustments to its guess, getting closer to the best solution with each step.
 
 ## How It Works
 
-The Levenberg-Marquardt algorithm is a popular method for solving non-linear least squares problems. It combines the Gauss-Newton algorithm and the method of gradient descent, providing a robust solution that works well in many situations.
+The Levenberg-Marquardt algorithm is a popular method for solving non-linear least squares problems. It combines 
+the Gauss-Newton algorithm and the method of gradient descent, providing a robust solution that works well in 
+many situations.
 
 ## Example
 

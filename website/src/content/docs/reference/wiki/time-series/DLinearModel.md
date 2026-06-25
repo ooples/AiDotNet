@@ -6,7 +6,11 @@ section: "Reference"
 
 _Time-Series Models_
 
-DLinear — decomposition-linear forecaster (Zeng et al., AAAI 2023, "Are Transformers Effective for Time Series Forecasting?"). The input window is split into a trend (moving average) and a seasonal remainder; a separate linear map projects each to the forecast, and the two are summed. It is deliberately simple yet a strong, current baseline that often matches or beats heavier transformers on long-horizon benchmarks — the right "do we even need attention?" control in any SOTA panel.
+DLinear — decomposition-linear forecaster (Zeng et al., AAAI 2023, "Are Transformers Effective for Time
+Series Forecasting?"). The input window is split into a trend (moving average) and a seasonal remainder;
+a separate linear map projects each to the forecast, and the two are summed. It is deliberately simple
+yet a strong, current baseline that often matches or beats heavier transformers on long-horizon
+benchmarks — the right "do we even need attention?" control in any SOTA panel.
 
 ## Example
 

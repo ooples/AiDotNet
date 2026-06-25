@@ -10,11 +10,13 @@ Implements the Alternating Direction Method of Multipliers (ADMM) optimization a
 
 ## For Beginners
 
-ADMM is like solving a complex puzzle by breaking it into smaller, manageable pieces. It's particularly good at handling problems with constraints or when you want to distribute the computation across multiple processors.
+ADMM is like solving a complex puzzle by breaking it into smaller, manageable pieces.
+It's particularly good at handling problems with constraints or when you want to distribute the computation across multiple processors.
 
 ## How It Works
 
-ADMM is an algorithm for solving convex optimization problems, particularly useful for large-scale and distributed optimization. It combines the benefits of dual decomposition and augmented Lagrangian methods.
+ADMM is an algorithm for solving convex optimization problems, particularly useful for large-scale and distributed optimization.
+It combines the benefits of dual decomposition and augmented Lagrangian methods.
 
 ## Example
 

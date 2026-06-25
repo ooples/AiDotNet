@@ -10,11 +10,28 @@ Represents a model that implements exponential smoothing for time series forecas
 
 ## For Beginners
 
-Exponential smoothing helps predict future values based on past data. Think of it like predicting tomorrow's weather: - Recent weather (yesterday, today) is more important than weather from weeks ago - You can identify trends (getting warmer over time) - You can account for seasons (summer is usually warmer than winter) For example, if you're forecasting daily sales: - Simple smoothing: Uses a weighted average of past values, giving more weight to recent sales - Double smoothing: Also captures if sales are trending up or down - Triple smoothing: Adds seasonal patterns (e.g., higher sales on weekends) Exponential smoothing is called "exponential" because the weight given to older data decreases exponentially as the data gets older.
+Exponential smoothing helps predict future values based on past data.
+
+Think of it like predicting tomorrow's weather:
+
+- Recent weather (yesterday, today) is more important than weather from weeks ago
+- You can identify trends (getting warmer over time)
+- You can account for seasons (summer is usually warmer than winter)
+
+For example, if you're forecasting daily sales:
+
+- Simple smoothing: Uses a weighted average of past values, giving more weight to recent sales
+- Double smoothing: Also captures if sales are trending up or down
+- Triple smoothing: Adds seasonal patterns (e.g., higher sales on weekends)
+
+Exponential smoothing is called "exponential" because the weight given to older data
+decreases exponentially as the data gets older.
 
 ## How It Works
 
-Exponential smoothing is a time series forecasting method that assigns exponentially decreasing weights to past observations, giving more importance to recent data while still considering older observations. This model supports simple, double (with trend), and triple (with trend and seasonality) exponential smoothing.
+Exponential smoothing is a time series forecasting method that assigns exponentially decreasing weights
+to past observations, giving more importance to recent data while still considering older observations.
+This model supports simple, double (with trend), and triple (with trend and seasonality) exponential smoothing.
 
 ## Example
 

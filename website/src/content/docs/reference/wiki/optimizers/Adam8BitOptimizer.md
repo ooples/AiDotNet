@@ -10,19 +10,26 @@ Implements an 8-bit quantized Adam optimizer that reduces memory usage by storin
 
 ## For Beginners
 
-When training a neural network, the optimizer needs to remember information about past gradients. Standard Adam stores two numbers per parameter (momentum and variance), which can use a lot of memory for large models. 8-bit Adam compresses these numbers, similar to how images are compressed, reducing memory usage while maintaining training quality.
+When training a neural network, the optimizer needs to remember information about
+past gradients. Standard Adam stores two numbers per parameter (momentum and variance), which can use a lot of
+memory for large models. 8-bit Adam compresses these numbers, similar to how images are compressed, reducing
+memory usage while maintaining training quality.
 
 ## How It Works
 
-8-bit Adam provides the same optimization algorithm as standard Adam but uses quantized 8-bit representations for storing the first moment (m) and second moment (v) estimates. This reduces memory usage by approximately 4x for optimizer states, which is particularly beneficial when training large models. 
+8-bit Adam provides the same optimization algorithm as standard Adam but uses quantized 8-bit representations
+for storing the first moment (m) and second moment (v) estimates. This reduces memory usage by approximately
+4x for optimizer states, which is particularly beneficial when training large models.
 
 **How It Works:**
+
 - Optimizer states are divided into blocks (default 2048 elements each)
 - Each block has its own scaling factor for accurate quantization
 - States are dequantized before computing updates, then requantized after
 - The actual parameter updates use full precision for accuracy
 
 **When to Use:**
+
 - Training large models where optimizer memory is a bottleneck
 - GPU training with limited VRAM
 - Distributed training where memory per GPU is constrained

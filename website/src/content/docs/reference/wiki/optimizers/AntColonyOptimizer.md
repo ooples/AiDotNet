@@ -10,11 +10,14 @@ Implements the Ant Colony Optimization algorithm for solving optimization proble
 
 ## For Beginners
 
-Think of this algorithm as a group of ants searching for the best path to food. Each ant leaves a trail (pheromone) that other ants can follow. Over time, the best paths get stronger trails, leading to better solutions.
+Think of this algorithm as a group of ants searching for the best path to food.
+Each ant leaves a trail (pheromone) that other ants can follow. Over time, the best paths get stronger trails,
+leading to better solutions.
 
 ## How It Works
 
-Ant Colony Optimization is inspired by the behavior of ants in finding paths between their colony and food sources. It uses virtual "ants" to explore the solution space and find optimal solutions.
+Ant Colony Optimization is inspired by the behavior of ants in finding paths between their colony and food sources.
+It uses virtual "ants" to explore the solution space and find optimal solutions.
 
 ## Example
 

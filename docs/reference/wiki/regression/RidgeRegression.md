@@ -6,15 +6,46 @@ section: "Reference"
 
 _Regression Models_
 
-Implements Ridge Regression (L2 regularized linear regression), which extends ordinary least squares by adding a penalty term proportional to the squared magnitude of the coefficients.
+Implements Ridge Regression (L2 regularized linear regression), which extends ordinary least squares
+by adding a penalty term proportional to the squared magnitude of the coefficients.
 
 ## For Beginners
 
-Ridge Regression is a safer version of linear regression. Regular linear regression can become unstable when: - You have many features relative to samples - Some features are highly correlated with each other - The data contains noise Ridge Regression fixes these issues by adding a "penalty" for large coefficients: - It prevents any single feature from dominating the prediction - It makes the model more stable and reliable - It typically improves predictions on new, unseen data Think of it like putting rubber bands on a flexible ruler - the bands (regularization) keep the ruler from bending too wildly (overfitting), while still allowing it to follow the general trend of the data. Example usage: ```csharp var options = new RidgeRegressionOptions<double> { Alpha = 1.0 }; var ridge = new RidgeRegression<double>(options); ridge.Train(features, targets); var predictions = ridge.Predict(newFeatures); ```
+Ridge Regression is a safer version of linear regression.
+
+Regular linear regression can become unstable when:
+
+- You have many features relative to samples
+- Some features are highly correlated with each other
+- The data contains noise
+
+Ridge Regression fixes these issues by adding a "penalty" for large coefficients:
+
+- It prevents any single feature from dominating the prediction
+- It makes the model more stable and reliable
+- It typically improves predictions on new, unseen data
+
+Think of it like putting rubber bands on a flexible ruler - the bands (regularization)
+keep the ruler from bending too wildly (overfitting), while still allowing it to
+follow the general trend of the data.
+
+Example usage:
+```cs
+var options = new RidgeRegressionOptions<double> { Alpha = 1.0 };
+var ridge = new RidgeRegression<double>(options);
+ridge.Train(features, targets);
+var predictions = ridge.Predict(newFeatures);
+```
 
 ## How It Works
 
-Ridge Regression solves the following optimization problem: minimize ||y - Xw||^2 + alpha * ||w||^2 This has a closed-form solution: w = (X^T X + alpha * I)^(-1) X^T y The L2 penalty shrinks coefficients toward zero but never sets them exactly to zero, making Ridge Regression suitable for problems where all features are expected to contribute.
+Ridge Regression solves the following optimization problem:
+minimize ||y - Xw||^2 + alpha * ||w||^2
+
+This has a closed-form solution: w = (X^T X + alpha * I)^(-1) X^T y
+
+The L2 penalty shrinks coefficients toward zero but never sets them exactly to zero,
+making Ridge Regression suitable for problems where all features are expected to contribute.
 
 ## Example
 
