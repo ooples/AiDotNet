@@ -78,7 +78,7 @@ var usingLineRe = new Regex(@"^\s*using\s+[A-Za-z_][\w.]*\s*;\s*$", RegexOptions
 var compOptions = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary,
     allowUnsafe: true, nullableContextOptions: NullableContextOptions.Disable);
 var parse = new CSharpParseOptions(LanguageVersion.Latest);
-bool Compiles(string code)
+List<Diagnostic> Diagnose(string code)
 {
     var usings = new StringBuilder();
     var body = new StringBuilder();
@@ -90,7 +90,36 @@ bool Compiles(string code)
     }
     var src = commonUsings + usings + "static class __S { static async System.Threading.Tasks.Task __R() {\n" + body + "\n} }";
     var comp = CSharpCompilation.Create("ex", new[] { CSharpSyntaxTree.ParseText(src, parse) }, refs, compOptions);
-    return !comp.GetDiagnostics().Any(d => d.Severity == DiagnosticSeverity.Error && d.Id != "CS5001");
+    return comp.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error && d.Id != "CS5001").ToList();
+}
+bool Compiles(string code) => Diagnose(code).Count == 0;
+
+// Simple type name -> namespaces, for injecting `using`s into drifted author examples.
+var nsIndex = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+foreach (var t in allTypes)
+{
+    if (t.Namespace is null) continue;
+    string simple = StripArity(t.Name);
+    if (!nsIndex.TryGetValue(simple, out var set)) nsIndex[simple] = set = new();
+    set.Add(t.Namespace);
+}
+var crefRe = new Regex(@"'([A-Za-z_]\w*)'", RegexOptions.None, TimeSpan.FromSeconds(1));
+
+// Try to make an author's <example> compile by injecting `using`s for unresolved (single-
+// namespace) types. Returns the compiling code, or null if it still won't build.
+string? FixCompile(string code)
+{
+    if (Compiles(code)) return code;
+    var add = new SortedSet<string>(StringComparer.Ordinal);
+    foreach (var d in Diagnose(code).Where(d => d.Id == "CS0246"))
+    {
+        var m = crefRe.Match(d.GetMessage());
+        if (m.Success && nsIndex.TryGetValue(m.Groups[1].Value, out var nss) && nss.Count == 1)
+            add.Add(nss.First());
+    }
+    if (add.Count == 0) return null;
+    string fixedCode = string.Concat(add.Select(n => $"using {n};\n")) + code;
+    return Compiles(fixedCode) ? fixedCode : null;
 }
 
 // Categories whose concrete model types get a runnable, compile-checked example.
@@ -102,7 +131,7 @@ var exampleSlugs = new HashSet<string>(StringComparer.Ordinal)
 
 // ── Build a page for every public type ──
 Directory.CreateDirectory(outDir);
-int totalPages = 0, withExample = 0;
+int totalPages = 0, withExample = 0, illustrativeCount = 0;
 var catSummary = new List<(string Slug, string Title, int Count)>();
 
 var grouped = allTypes
@@ -161,15 +190,20 @@ foreach (var grp in grouped)
         string forBeginners = md is not null ? ExtractForBeginners(md.Element("remarks")) : "";
         string remarks = md is not null ? ExtractRemarksExcludingForBeginners(md.Element("remarks")) : "";
 
-        // Example only for concrete model types in supported domains. Each domain offers one or
-        // more candidate snippets; keep the first that compiles against the real assembly.
-        bool exampleOk = false;
+        // Example selection (any domain):
+        //   1. the author's <example> from the XML docs, auto-fixed to compile (verified);
+        //   2. a per-domain template that compiles (verified);
+        //   3. the author's <example> shown as illustrative if it can't be made to compile.
+        bool exampleOk = false, illustrative = false;
         string example = "";
-        if (kind == "Models & Types" && exampleSlugs.Contains(slug))
-        {
+        var exNode = md?.Element("example");
+        string srcExample = exNode is null ? "" : Dedent(exNode.Element("code")?.Value ?? exNode.Value);
+
+        if (srcExample.Length > 0 && FixCompile(srcExample) is { } fixedSrc) { example = fixedSrc; exampleOk = true; }
+        if (!exampleOk && kind == "Models & Types" && exampleSlugs.Contains(slug))
             foreach (var candidate in BuildExamples(slug, StripArity(t.Name), t.Namespace!))
                 if (candidate.Length > 0 && Compiles(candidate)) { example = candidate; exampleOk = true; break; }
-        }
+        if (!exampleOk && srcExample.Length > 0) { example = srcExample; illustrative = true; }
 
         string display = FriendlyName(t);
         var sb = new StringBuilder();
@@ -188,6 +222,13 @@ foreach (var grp in grouped)
             sb.AppendLine("## Example").AppendLine().AppendLine("```csharp").AppendLine(example).AppendLine("```").AppendLine();
             withExample++;
         }
+        else if (illustrative)
+        {
+            sb.AppendLine("## Example").AppendLine();
+            sb.AppendLine("_From the type's documentation (illustrative — not compile-verified):_").AppendLine();
+            sb.AppendLine("```cs").AppendLine(example).AppendLine("```").AppendLine();
+            illustrativeCount++;
+        }
         sb.Append(RenderMembers(t, xmlName, memberSummary));
 
         WriteFile(Path.Combine(dir, typeSlug[t] + ".md"), sb.ToString());
@@ -203,7 +244,7 @@ foreach (var grp in grouped)
 }
 
 WriteTopIndex(outDir, catSummary, urlBase);
-Console.WriteLine($"----\nTotal: {totalPages} type pages across {catSummary.Count} namespaces ({withExample} with a compiling example) under {outDir}/");
+Console.WriteLine($"----\nTotal: {totalPages} type pages across {catSummary.Count} namespaces; {withExample} compile-verified + {illustrativeCount} illustrative examples under {outDir}/");
 return 0;
 
 // ── reflection: hierarchy, cross-links, members ──────────────────────────────
@@ -377,6 +418,18 @@ static string StripArity(string s)
 
 static string Sanitize(string s) =>
     Regex.Replace(s, @"[^A-Za-z0-9_.-]", "", RegexOptions.None, TimeSpan.FromSeconds(1));
+
+// Strip leading/trailing blank lines and the common left indentation from doc-comment code.
+static string Dedent(string s)
+{
+    var lines = s.Replace("\r\n", "\n").Split('\n').ToList();
+    while (lines.Count > 0 && lines[0].Trim().Length == 0) lines.RemoveAt(0);
+    while (lines.Count > 0 && lines[^1].Trim().Length == 0) lines.RemoveAt(lines.Count - 1);
+    if (lines.Count == 0) return "";
+    int min = lines.Where(l => l.Trim().Length > 0)
+        .Select(l => l.Length - l.TrimStart().Length).DefaultIfEmpty(0).Min();
+    return string.Join("\n", lines.Select(l => l.Length >= min ? l.Substring(min) : l));
+}
 
 static string XmlName(Type t) => (t.FullName ?? (t.Namespace + "." + t.Name)).Replace('+', '.');
 
