@@ -180,11 +180,20 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
         if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride), "Stride must be positive.");
         if (padding < 0) throw new ArgumentOutOfRangeException(nameof(padding), "Padding must be non-negative.");
         if (groups < 1) throw new ArgumentOutOfRangeException(nameof(groups), "Groups must be at least 1.");
+        if (outputChannels % groups != 0)
+            throw new ArgumentException(
+                $"Output channels ({outputChannels}) must be divisible by groups ({groups}); otherwise the per-group " +
+                "weight slicing in Forward truncates channels and leaves weights unused.",
+                nameof(groups));
         // Grouped deformable conv (DCNv3) is supported here by per-group composition over the engine's
-        // groups=1 DeformableConv2D (see Forward) — each per-group call runs the backend's real kernel
-        // and is tape-recorded, so backward composes automatically. A fused grouped kernel is tracked
-        // as the production follow-up (#1691).
+        // groups=1 DeformableConv2D (see Forward). Each per-group call runs the backend's real kernel
+        // and is tape-recorded, so backward composes automatically.
         if (deformGroups < 1) throw new ArgumentOutOfRangeException(nameof(deformGroups), "Deformable groups must be at least 1.");
+        if (groups > 1 && groups % deformGroups != 0)
+            throw new ArgumentException(
+                $"Groups ({groups}) must be divisible by deformable groups ({deformGroups}) for grouped deformable " +
+                "convolution, so each convolution group maps cleanly onto a deformable group.",
+                nameof(deformGroups));
 
         _engine = engine ?? new CpuEngine();
         _inputHeight = -1;
@@ -317,10 +326,9 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
         }
 
         // Perform deformable convolution using IEngine. For grouped (DCNv3) convolution, decompose into
-        // per-group groups=1 deformable convs over channel slices and concatenate — every op (Gather /
+        // per-group groups=1 deformable convs over channel slices and concatenate. Every op (Gather /
         // DeformableConv2D / Concat) is tape-recorded, so backward composes automatically and each
-        // per-group call runs the backend's real groups=1 kernel. A fused grouped kernel is the
-        // production follow-up (#1691).
+        // per-group call runs the backend's real groups=1 kernel.
         var output = _groups == 1
             ? _engine.DeformableConv2D(
                 input4D, _weights, offsets, mask,

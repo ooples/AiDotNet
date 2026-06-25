@@ -355,7 +355,7 @@ public class OneFormer<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         else
         {
             var encoderLayers = LayerHelper<T>.CreateOneFormerEncoderLayers(
-                _channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
+                _height, _width, _channelDims, _depths).ToList();
             _encoderLayerEnd = encoderLayers.Count;
             Layers.AddRange(encoderLayers);
 

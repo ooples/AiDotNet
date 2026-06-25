@@ -25784,12 +25784,10 @@ public static class LayerHelper<T>
     /// <summary>
     /// Creates encoder layers for OneFormer's backbone with text-conditioned features.
     /// </summary>
-    /// <param name="inputChannels">Number of input image channels.</param>
     /// <param name="inputHeight">Input image height.</param>
     /// <param name="inputWidth">Input image width.</param>
     /// <param name="channelDims">Channel dimensions per stage.</param>
     /// <param name="depths">Block depths per stage.</param>
-    /// <param name="dropRate">Dropout rate.</param>
     /// <returns>Encoder layers for OneFormer.</returns>
     /// <remarks>
     /// <para>
@@ -25808,8 +25806,8 @@ public static class LayerHelper<T>
     // [B,C,fH,fW]) so OneFormer's conv-based decoder receives [B,C,H,W] features at the /32 stride.
     // Replaces the earlier hand-rolled full-width-3×3 conv stack (1536→1536 3×3 = 21M-param convs).
     public static IEnumerable<ILayer<T>> CreateOneFormerEncoderLayers(
-        int inputChannels = 3, int inputHeight = 512, int inputWidth = 512,
-        int[]? channelDims = null, int[]? depths = null, double dropRate = 0.1)
+        int inputHeight = 512, int inputWidth = 512,
+        int[]? channelDims = null, int[]? depths = null)
     {
         channelDims ??= [192, 384, 768, 1536]; // Swin-L stage embed dims
         depths ??= [2, 2, 18, 2];
@@ -26816,6 +26814,11 @@ public static class LayerHelper<T>
 
         for (int stage = 0; stage < channelDims.Length; stage++)
         {
+            if (channelDims[stage] % 4 != 0)
+                throw new ArgumentException(
+                    $"channelDims[{stage}] ({channelDims[stage]}) must be divisible by 4: the BottleneckBlock expands its " +
+                    "base width ×4, so a non-divisible stage width would silently truncate and change the block shape.",
+                    nameof(channelDims));
             int baseChannels = channelDims[stage] / 4; // BottleneckBlock expands ×4 back to channelDims[stage]
             int stageStride = stage == 0 ? 1 : 2;       // stem already did /4; stages 2-4 downsample /2
             for (int b = 0; b < depths[stage]; b++)
