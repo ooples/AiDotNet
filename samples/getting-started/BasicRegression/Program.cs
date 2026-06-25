@@ -36,32 +36,26 @@ try
 
     var result = await builder.BuildAsync();
 
-    // Calculate metrics on test set (batch-predict the whole test matrix, then read rows)
-    var predVector = result.Predict(ToMatrix(testFeatures));
+    // Evaluate on the held-out test set through the facade's rich metrics — no hand-rolled math.
+    // GetDataSetStats runs the model and returns a full DataSetStats with error + prediction metrics.
+    var testStats = result.GetDataSetStats(ToMatrix(testFeatures), new Vector<double>(testPrices));
+
+    var predVector = testStats.Predicted;
     var predictions = new double[testFeatures.Length];
-    double sumSquaredError = 0;
-    double sumAbsoluteError = 0;
-    double sumActual = testPrices.Average();
-    double sumSquaredTotal = 0;
-
     for (int i = 0; i < testFeatures.Length; i++)
-    {
         predictions[i] = predVector[i];
-        double error = predictions[i] - testPrices[i];
-        sumSquaredError += error * error;
-        sumAbsoluteError += Math.Abs(error);
-        sumSquaredTotal += Math.Pow(testPrices[i] - sumActual, 2);
-    }
 
-    double rmse = Math.Sqrt(sumSquaredError / testFeatures.Length);
-    double mae = sumAbsoluteError / testFeatures.Length;
-    double r2 = 1 - (sumSquaredError / sumSquaredTotal);
-
-    Console.WriteLine("Model Evaluation:");
+    Console.WriteLine("Model Evaluation (held-out test set):");
     Console.WriteLine("─────────────────────────────────────");
-    Console.WriteLine($"  R² Score: {r2:F4}");
-    Console.WriteLine($"  MAE: ${mae:N0}");
-    Console.WriteLine($"  RMSE: ${rmse:N0}");
+    Console.WriteLine($"  R² Score:    {testStats.PredictionStats.R2:F4}");
+    Console.WriteLine($"  Adjusted R²: {testStats.PredictionStats.AdjustedR2:F4}");
+    Console.WriteLine($"  MAE:         ${testStats.ErrorStats.MAE:N0}");
+    Console.WriteLine($"  RMSE:        ${testStats.ErrorStats.RMSE:N0}");
+    Console.WriteLine($"  MAPE:        {testStats.ErrorStats.MAPE:F2}%");
+
+    // The facade also auto-evaluates its own internal train/validation split and caches it on
+    // result.Evaluation — read it directly, no need to re-pass any data.
+    Console.WriteLine($"  Training R² (result.Evaluation): {result.Evaluation.TrainingSet.PredictionStats.R2:F4}");
 
     // Show sample predictions
     Console.WriteLine("\nSample Predictions:");
