@@ -6,266 +6,151 @@ section: "Reference"
 ---
 
 
+Reference for the optimization algorithms and learning-rate schedulers in AiDotNet.
 
-Complete reference for the 40+ optimization algorithms and learning rate schedulers in AiDotNet.
+Optimizers are generic over `<T, TInput, TOutput>` and take the model they optimize: `new AdamWOptimizer<float, Tensor<float>, Tensor<float>>(model)`. Tuning (learning rate, betas, weight decay) lives in the matching `*Options`. Plug an optimizer in with `ConfigureOptimizer(...)`.
 
 ---
 
 ## First-Order Optimizers
 
-### SGD Family
-
-| Optimizer | Description | Use Case |
-|:----------|:------------|:---------|
-| `StochasticGradientDescentOptimizer<T>` | Stochastic Gradient Descent | General purpose |
-| `MomentumOptimizer<T>` | SGD with momentum | Faster convergence |
-| `NesterovAcceleratedGradientOptimizer<T>` | Nesterov Accelerated Gradient | Look-ahead momentum |
-| `MiniBatchGradientDescentOptimizer<T>` | Mini-batch SGD | Large datasets |
-
-```csharp
-var optimizer = new SGDOptimizer<float>(
-    learningRate: 0.01f,
-    momentum: 0.9f,
-    weightDecay: 1e-4f,
-    nesterov: true);
-```
-
-### Adam Family
-
-| Optimizer | Description | Use Case |
-|:----------|:------------|:---------|
-| `AdamOptimizer<T>` | Adaptive Moment Estimation | General deep learning |
-| `AdamWOptimizer<T>` | Adam with decoupled weight decay | Transformers, large models |
-| `AdaMaxOptimizer<T>` | Adam with infinity norm | Sparse gradients |
-| `NadamOptimizer<T>` | Nesterov Adam | Improved convergence |
-| `AMSGradOptimizer<T>` | AMSGrad variant | Stable training |
-| `PrototypeAdamOptimizer<T>` | Prototype Adam | Experimental |
-
-```csharp
-var optimizer = new AdamWOptimizer<float>(
-    learningRate: 3e-4f,
-    beta1: 0.9f,
-    beta2: 0.999f,
-    epsilon: 1e-8f,
-    weightDecay: 0.01f);
-```
-
-### Adaptive Learning Rate
-
-| Optimizer | Description | Use Case |
-|:----------|:------------|:---------|
-| `AdagradOptimizer<T>` | Adaptive gradient | Sparse features |
-| `AdaDeltaOptimizer<T>` | Adaptive delta | No learning rate tuning |
-| `RootMeanSquarePropagationOptimizer<T>` | Root Mean Square propagation | RNNs |
-| `FTRLOptimizer<T>` | Follow-the-Regularized-Leader | Online learning |
-
-### LAMB/LARS
-
-| Optimizer | Description | Use Case |
-|:----------|:------------|:---------|
-| `LARSOptimizer<T>` | Layer-wise Adaptive Rate Scaling | Large batch training |
-| `LAMBOptimizer<T>` | Layer-wise Adaptive Moments | BERT pre-training |
-
-```csharp
-var optimizer = new LAMBOptimizer<float>(
-    learningRate: 0.001f,
-    beta1: 0.9f,
-    beta2: 0.999f,
-    trustCoeff: 0.001f);
-```
-
-### Modern Optimizers
-
-| Optimizer | Description | Use Case |
-|:----------|:------------|:---------|
-| `LionOptimizer<T>` | Evolved Sign Momentum | Vision, language models |
-| `ADMMOptimizer<T>` | Alternating Direction Method of Multipliers | Constrained optimization |
-| `ConjugateGradientOptimizer<T>` | Conjugate gradient | Large sparse systems |
-| `TrustRegionOptimizer<T>` | Trust region method | Robust convergence |
-
-```csharp
-var optimizer = new LionOptimizer<float>(
-    learningRate: 1e-4f,
-    beta1: 0.9f,
-    beta2: 0.99f,
-    weightDecay: 0.0f);
-```
+| Optimizer | Use Case |
+|:----------|:---------|
+| `StochasticGradientDescentOptimizer<T,TIn,TOut>` | General purpose |
+| `MomentumOptimizer<T,TIn,TOut>` | Faster convergence |
+| `NesterovAcceleratedGradientOptimizer<T,TIn,TOut>` | Look-ahead momentum |
+| `AdamOptimizer<T,TIn,TOut>` | General deep learning |
+| `AdamWOptimizer<T,TIn,TOut>` | Transformers, large models |
+| `AdaMaxOptimizer<T,TIn,TOut>` | Sparse gradients |
+| `NadamOptimizer<T,TIn,TOut>` | Improved convergence |
+| `AMSGradOptimizer<T,TIn,TOut>` | Stable training |
+| `AdagradOptimizer<T,TIn,TOut>` | Sparse features |
+| `AdaDeltaOptimizer<T,TIn,TOut>` | No learning-rate tuning |
+| `RootMeanSquarePropagationOptimizer<T,TIn,TOut>` | RNNs (RMSProp) |
+| `FTRLOptimizer<T,TIn,TOut>` | Online learning |
+| `LARSOptimizer<T,TIn,TOut>` | Large-batch training |
+| `LAMBOptimizer<T,TIn,TOut>` | BERT pre-training |
+| `LionOptimizer<T,TIn,TOut>` | Vision/language models |
 
 ---
 
 ## Second-Order Optimizers
 
-| Optimizer | Description | Use Case |
-|:----------|:------------|:---------|
-| `LBFGSOptimizer<T>` | Limited-memory BFGS | Small models, full batch |
-| `BFGSOptimizer<T>` | Broyden-Fletcher-Goldfarb-Shanno | Convex optimization |
-| `NewtonMethodOptimizer<T>` | Newton's method | Quadratic convergence |
-| `LevenbergMarquardtOptimizer<T>` | Levenberg-Marquardt | Nonlinear least squares |
-| `DFPOptimizer<T>` | Davidon-Fletcher-Powell | Quasi-Newton method |
-
-```csharp
-var optimizer = new LBFGSOptimizer<double>(
-    maxIterations: 20,
-    historySize: 10,
-    lineSearch: LineSearch.StrongWolfe);
-```
-
----
-
-## Gradient Descent Variants
-
-| Optimizer | Description | Use Case |
-|:----------|:------------|:---------|
-| `GradientDescentOptimizer<T>` | Standard gradient descent | Simple problems |
-| `ProximalGradientDescentOptimizer<T>` | Proximal gradient | L1 regularization |
-| `CoordinateDescentOptimizer<T>` | Coordinate descent | Feature selection |
+| Optimizer | Use Case |
+|:----------|:---------|
+| `LBFGSOptimizer<T,TIn,TOut>` | Small models, full batch |
+| `BFGSOptimizer<T,TIn,TOut>` | Convex optimization |
+| `NewtonMethodOptimizer<T,TIn,TOut>` | Quadratic convergence |
+| `LevenbergMarquardtOptimizer<T,TIn,TOut>` | Nonlinear least squares |
+| `ConjugateGradientOptimizer<T,TIn,TOut>` | Large sparse systems |
+| `TrustRegionOptimizer<T,TIn,TOut>` | Robust convergence |
 
 ---
 
 ## Evolutionary Optimizers
 
-| Optimizer | Description | Use Case |
-|:----------|:------------|:---------|
-| `GeneticOptimizer<T>` | Genetic Algorithm | Hyperparameter search |
-| `GeneticAlgorithmOptimizer<T>` | Full GA implementation | Complex search spaces |
-| `CMAESOptimizer<T>` | Covariance Matrix Adaptation | Black-box optimization |
-| `ParticleSwarmOptimizer<T>` | Particle Swarm | Global optimization |
-| `DifferentialEvolutionOptimizer<T>` | Differential evolution | Continuous optimization |
-| `SimulatedAnnealingOptimizer<T>` | Simulated Annealing | Combinatorial optimization |
-| `GreyWolfOptimizer<T>` | Grey Wolf optimization | Metaheuristic search |
-| `AntColonyOptimizer<T>` | Ant Colony optimization | Discrete optimization |
-
-```csharp
-var optimizer = new GeneticOptimizer<double>(
-    populationSize: 100,
-    mutationRate: 0.1,
-    crossoverRate: 0.8,
-    elitismCount: 5);
-```
+| Optimizer | Use Case |
+|:----------|:---------|
+| `GeneticAlgorithmOptimizer<T,TIn,TOut>` | Complex search spaces |
+| `CMAESOptimizer<T,TIn,TOut>` | Black-box optimization |
+| `ParticleSwarmOptimizer<T,TIn,TOut>` | Global optimization |
+| `DifferentialEvolutionOptimizer<T,TIn,TOut>` | Continuous optimization |
+| `SimulatedAnnealingOptimizer<T,TIn,TOut>` | Combinatorial optimization |
 
 ---
 
-## Learning Rate Schedulers
+## Learning-Rate Schedulers
 
-### Step-Based
-
-| Scheduler | Description |
-|:----------|:------------|
-| `StepLR` | Decay by factor at fixed intervals |
-| `MultiStepLR` | Decay at specified milestones |
-| `ExponentialLR` | Exponential decay |
-
-```csharp
-var scheduler = new StepLR(
-    optimizer: optimizer,
-    stepSize: 30,
-    gamma: 0.1f);
-```
-
-### Epoch-Based
+Schedulers implement `ILearningRateScheduler` and attach via `ConfigureLearningRateScheduler(...)`.
 
 | Scheduler | Description |
 |:----------|:------------|
-| `CosineAnnealingLR` | Cosine annealing |
-| `CosineAnnealingWarmRestarts` | Cosine with restarts |
-| `LinearLR` | Linear decay |
-| `PolynomialLR` | Polynomial decay |
-
-```csharp
-var scheduler = new CosineAnnealingLR(
-    optimizer: optimizer,
-    tMax: 100,
-    etaMin: 1e-6f);
-```
-
-### Warmup Schedulers
-
-| Scheduler | Description |
-|:----------|:------------|
-| `WarmupLinearSchedule` | Linear warmup |
-| `WarmupCosineSchedule` | Warmup + cosine decay |
-| `WarmupConstantSchedule` | Warmup + constant |
-
-```csharp
-var scheduler = new WarmupCosineSchedule(
-    optimizer: optimizer,
-    warmupSteps: 1000,
-    totalSteps: 100000);
-```
-
-### Adaptive Schedulers
-
-| Scheduler | Description |
-|:----------|:------------|
-| `ReduceLROnPlateau` | Reduce when metric plateaus |
-| `CyclicLR` | Cyclic learning rate |
-| `OneCycleLR` | One cycle policy |
-
-```csharp
-var scheduler = new ReduceLROnPlateau(
-    optimizer: optimizer,
-    mode: "min",
-    factor: 0.1f,
-    patience: 10);
-```
+| `StepLRScheduler` | Decay by factor at fixed intervals |
+| `MultiStepLRScheduler` | Decay at specified milestones |
+| `ExponentialLRScheduler` | Exponential decay |
+| `CosineAnnealingLRScheduler` | Cosine annealing |
+| `LinearLRScheduler` | Linear decay |
+| `ReduceLROnPlateauScheduler` | Reduce when a metric plateaus |
+| `OneCycleLRScheduler` | One-cycle policy |
 
 ---
 
-## Usage Examples
+## Using an Optimizer
 
-### Basic Training Loop
+Configure the model first, then hand the same model to the optimizer.
 
 ```csharp
-var optimizer = new AdamWOptimizer<float>(learningRate: 3e-4f);
-var scheduler = new CosineAnnealingLR(optimizer, tMax: epochs);
+using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 
-for (int epoch = 0; epoch < epochs; epoch++)
+var rng = new Random(0);
+var trainX = new Tensor<float>(new[] { 64, 16 });
+var trainY = new Tensor<float>(new[] { 64, 3 });
+for (int i = 0; i < 64; i++)
 {
-    foreach (var batch in dataLoader)
-    {
-        optimizer.ZeroGrad();
-        var loss = model.Forward(batch.Input);
-        loss.Backward();
-        optimizer.Step();
-    }
-    scheduler.Step();
+    for (int j = 0; j < 16; j++) trainX[new[] { i, j }] = (float)rng.NextDouble();
+    trainY[new[] { i, i % 3 }] = 1f;
 }
-```
 
-### With AiModelBuilder
+var model = new NeuralNetwork<float>(new NeuralNetworkArchitecture<float>(
+    inputFeatures: 16, numClasses: 3, complexity: NetworkComplexity.Simple));
 
-```csharp
-var result = await new AiModelBuilder<float, Tensor<float>, int>()
+// Swap AdamWOptimizer for any optimizer above — they share the (model, options) shape.
+var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
     .ConfigureModel(model)
-    .ConfigureOptimizer(new AdamWOptimizer<float>(learningRate: 3e-4f))
-    .ConfigureLearningRateScheduler(new CosineAnnealingLR(tMax: 100))
-    .BuildAsync(trainData, trainLabels);
+    .ConfigureOptimizer(new AdamWOptimizer<float, Tensor<float>, Tensor<float>>(model))
+    .ConfigureDataLoader(DataLoaders.FromTensors(trainX, trainY))
+    .BuildAsync();
+
+Console.WriteLine($"Trained; output [{string.Join(", ", result.Predict(trainX).Shape)}]");
 ```
 
-### Gradient Clipping
+### Tuning via Options
 
 ```csharp
-var optimizer = new AdamWOptimizer<float>(
-    learningRate: 3e-4f,
-    maxGradNorm: 1.0f);  // Gradient clipping
+using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Enums;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
+
+var trainX = new Tensor<float>(new[] { 32, 8 });
+var trainY = new Tensor<float>(new[] { 32, 2 });
+for (int i = 0; i < 32; i++) { trainX[new[] { i, 0 }] = i / 32f; trainY[new[] { i, i % 2 }] = 1f; }
+
+var model = new NeuralNetwork<float>(new NeuralNetworkArchitecture<float>(
+    inputFeatures: 8, numClasses: 2, complexity: NetworkComplexity.Simple));
+
+var options = new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>();
+
+var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+    .ConfigureModel(model)
+    .ConfigureOptimizer(new AdamOptimizer<float, Tensor<float>, Tensor<float>>(model, options))
+    .ConfigureDataLoader(DataLoaders.FromTensors(trainX, trainY))
+    .BuildAsync();
+
+Console.WriteLine("Trained with custom optimizer options.");
 ```
 
 ---
 
 ## Optimizer Selection Guide
 
-| Task | Recommended Optimizer |
-|:-----|:---------------------|
-| General deep learning | AdamW |
-| Transformers/LLMs | AdamW + cosine schedule |
-| Large batch training | LAMB |
-| Vision models | SGD + momentum or Lion |
-| RNNs | RMSprop or Adam |
-| Small datasets | L-BFGS |
-| Hyperparameter search | Genetic/PSO |
-| Memory-constrained | AdaFactor |
-
----
+| Task | Recommended |
+|:-----|:------------|
+| General deep learning | `AdamWOptimizer` |
+| Transformers / LLMs | `AdamWOptimizer` + cosine schedule |
+| Large-batch training | `LAMBOptimizer` |
+| Vision models | `StochasticGradientDescentOptimizer` (momentum) or `LionOptimizer` |
+| RNNs | `RootMeanSquarePropagationOptimizer` or `AdamOptimizer` |
+| Small datasets | `LBFGSOptimizer` |
+| Hyperparameter search | `GeneticAlgorithmOptimizer` / `ParticleSwarmOptimizer` |
 
 ## Hyperparameter Guidelines
 
@@ -273,35 +158,6 @@ var optimizer = new AdamWOptimizer<float>(
 |:----------|:--------------|:------|
 | Learning rate | 1e-5 to 1e-2 | Start with 3e-4 for Adam |
 | Weight decay | 0 to 0.1 | 0.01 is common |
-| Beta1 (momentum) | 0.9 to 0.95 | 0.9 is standard |
+| Beta1 | 0.9 to 0.95 | 0.9 is standard |
 | Beta2 | 0.99 to 0.999 | 0.999 for Adam |
 | Epsilon | 1e-8 to 1e-6 | 1e-8 is standard |
-
----
-
-## Error Handling
-
-Validate optimizer parameters before training to catch configuration issues early:
-
-```csharp
-try
-{
-    var result = await new AiModelBuilder<float, Tensor<float>, int>()
-        .ConfigureModel(model)
-        .ConfigureOptimizer(new AdamWOptimizer<float>(learningRate: 3e-4f))
-        .BuildAsync(trainData, trainLabels);
-}
-catch (ArgumentOutOfRangeException ex)
-{
-    Console.WriteLine($"Invalid optimizer parameter: {ex.Message}");
-}
-catch (InvalidOperationException ex)
-{
-    Console.WriteLine($"Training failed: {ex.Message}");
-}
-```
-
-Common issues:
-- **Learning rate too high**: Loss diverges (NaN). Try reducing by 10x.
-- **Learning rate too low**: Loss barely decreases. Try increasing by 10x.
-- **NaN gradients**: Enable gradient clipping via `maxGradNorm`.
