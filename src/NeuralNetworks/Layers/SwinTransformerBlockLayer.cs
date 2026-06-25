@@ -47,7 +47,7 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
     private readonly double _dropPathRate;
     // Forward-call counter so RandomSeed-seeded drop masks are bit-identical across reruns at the
     // same step (mirrors DropoutLayer's determinism contract).
-    private ulong _dropPathForwardCounter;
+    private long _dropPathForwardCounter;
 
     // Pre-norm layer normalizations
     private readonly LayerNormalizationLayer<T> _norm1;
@@ -629,7 +629,8 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
         // Per-call seed derived from RandomSeed + a forward counter so identically-seeded models
         // produce bit-identical drop masks at the same step (matches DropoutLayer's determinism
         // contract). With no seed, fall back to a cryptographically secure RNG (production default).
-        ulong counter = System.Threading.Interlocked.Increment(ref _dropPathForwardCounter);
+        // long (not ulong): .NET Framework 4.7.1 has no Interlocked.Increment(ref ulong) overload.
+        long counter = System.Threading.Interlocked.Increment(ref _dropPathForwardCounter);
         var rng = RandomSeed.HasValue
             ? RandomHelper.CreateSeededRandom(unchecked((int)((uint)RandomSeed.Value * 2654435761u ^ (uint)counter)))
             : RandomHelper.CreateSecureRandom();
