@@ -9,13 +9,49 @@ Learn how to forecast future values from temporal data using AiDotNet.
 
 ## Overview
 
-The most portable way to forecast through the `AiModelBuilder` facade is **lagged-window regression**: turn a series into `(window → next value)` training pairs and fit any regressor. This works with every model AiDotNet ships and predicts through the standard `result.Predict(...)`.
+Dedicated time-series models — `ARIMAModel`, `SARIMAModel`, `ProphetModel`, `ExponentialSmoothing`, `DeepARModel` — forecast straight through the facade's unified `result.Predict(...)`: **the number of rows you ask for is the forecast horizon**, and the forecast extends the series the model was trained on. There's no separate `Forecast` call — one `Predict` front for every model.
 
-AiDotNet also includes dedicated statistical and deep time-series models (`ARIMAModel`, `SARIMAModel`, `ProphetModel`, `ExponentialSmoothing`, `DeepARModel`) for when you need their specific forecasting behavior.
+You can also forecast with **lagged-window regression**: turn a series into `(window → next value)` pairs and fit any regressor — handy when you want a tree/boosting model.
 
 ---
 
-## Quick Start: Lagged-Window Forecasting
+## Quick Start: Forecasting with ARIMA
+
+Train an `ARIMAModel` on your series, then ask `result.Predict` for an N-row matrix to get an N-step-ahead forecast.
+
+```csharp
+using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Models.Options;
+using AiDotNet.TimeSeries;
+using AiDotNet.Tensors.LinearAlgebra;
+
+// Monthly sales history.
+double[] sales =
+{
+    120, 135, 148, 160, 155, 170, 180, 195, 210, 198, 220, 235,
+    140, 155, 165, 178, 172, 190, 200, 215, 230, 218, 245, 260
+};
+
+// ARIMA forecasts from the series itself; X is a placeholder sized to the series.
+var n = sales.Length;
+var seriesX = new Matrix<double>(n, 1);
+for (int i = 0; i < n; i++) seriesX[i, 0] = i;
+
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new ARIMAModel<double>(new ARIMAOptions<double> { P = 2, D = 1, Q = 1 }))
+    .ConfigureDataLoader(DataLoaders.FromMatrixVector(seriesX, new Vector<double>(sales)))
+    .BuildAsync();
+
+// Ask for 6 rows -> a 6-step-ahead forecast through the unified Predict.
+var forecast = result.Predict(new Matrix<double>(6, 1));
+for (int i = 0; i < forecast.Length; i++)
+    Console.WriteLine($"Month +{i + 1}: {forecast[i]:F0}");
+```
+
+---
+
+## Alternative: Lagged-Window Regression
 
 ```csharp
 using AiDotNet;
@@ -81,7 +117,7 @@ static Matrix<double> ToMatrix(double[][] r)
 | `ProphetModel` | Business-style forecasting with holidays/seasonality |
 | `DeepARModel` | Autoregressive RNN for probabilistic forecasting |
 
-These implement `ITimeSeriesModel<T>` (an `IFullModel`), so they configure through `ConfigureModel(new ARIMAModel<double>(new ARIMAOptions<double> { P = 2, D = 1, Q = 1 }))`. They expose their own forecasting APIs for multi-step horizons.
+These implement `ITimeSeriesModel<T>` (an `IFullModel`), so they configure through `ConfigureModel(new ARIMAModel<double>(...))` and forecast through the same `result.Predict(N-row matrix)` shown above — the row count is the horizon.
 
 ---
 
