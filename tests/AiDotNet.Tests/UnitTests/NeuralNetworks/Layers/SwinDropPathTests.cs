@@ -55,17 +55,16 @@ public class SwinDropPathTests
     public void DropPath_RateZero_IsExactNoOp()
     {
         var block = new SwinTransformerBlockLayer<float>(dim: 32, numHeads: 4, windowSize: 7, shiftSize: 0, mlpRatio: 4, dropPathRate: 0.0) { RandomSeed = 123 };
+        // Force the unfused (train/eval-identical) forward so the ONLY thing that could differ between
+        // eval and train is drop-path. Without this, DenseLayer's fused-activation eval optimization
+        // (GELU in the MLP) reorders the rounding by ~1e-8/element — a deliberate inference speedup,
+        // not drop-path. With it, eval and train are bit-identical, so rate-0 drop-path is provably a no-op.
+        block.SetDeterministicForward(true);
         var x = RandInput(7);
         block.SetTrainingMode(false);
         var evalOut = block.Forward(x);
         block.SetTrainingMode(true);
         var trainOut = block.Forward(x);
-        // Rate 0 → drop-path is a no-op (returns the branch unchanged), so training introduces NO
-        // drop-induced perturbation — unlike the rate=0.5 case which moves the output by >1e-3. (Any
-        // residual ~1e-4 difference is pre-existing block float/mode noise, not drop-path: IsTrainingMode
-        // is referenced nowhere else in the block, so existing Swin users at the default rate=0 are
-        // unaffected.)
-        Assert.True(SumAbsDiff(evalOut, trainOut) < 5e-4,
-            "At rate 0 drop-path must not perturb the output (no sample should be dropped).");
+        Assert.Equal(0.0, SumAbsDiff(evalOut, trainOut), 6);
     }
 }

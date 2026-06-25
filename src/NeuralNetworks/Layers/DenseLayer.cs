@@ -1010,9 +1010,11 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         Tensor<T> result;
 
-        if (fusedActivation != FusedActivationType.None && !IsTrainingMode)
+        if (fusedActivation != FusedActivationType.None && !IsTrainingMode && !DeterministicForward)
         {
-            // Inference: use fused activation for maximum performance (no tape needed)
+            // Inference: use fused activation for maximum performance (no tape needed). Skipped when
+            // DeterministicForward is set so the eval forward is bit-identical to the unfused training
+            // forward (fusion reorders the matmul+activation rounding by ~1e-8/element otherwise).
             result = Engine.FusedLinear(flattenedInput, _weights, _biases, fusedActivation);
         }
         else
