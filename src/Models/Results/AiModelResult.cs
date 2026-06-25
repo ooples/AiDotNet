@@ -1891,7 +1891,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         int horizon = (object?)newData is Matrix<T> matrix ? matrix.Rows : 1;
         if (horizon <= 0)
         {
-            horizon = 1;
+            throw new ArgumentException(
+                $"Forecast horizon must be positive (the input matrix has {horizon} rows). " +
+                "Pass an N-row matrix to request an N-step forecast.", nameof(newData));
         }
 
         // History is the series the model was trained on (captured during the build).
@@ -5768,6 +5770,20 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     {
         Tokenizer = tokenizer;
         TokenizationConfig = config;
+    }
+
+    /// <summary>
+    /// Re-attaches a fitted text vectorizer to this result so <see cref="PredictText"/> works after
+    /// a save/load round-trip (the vectorizer is [JsonIgnore] and not serialized with the model).
+    /// </summary>
+    /// <param name="vectorizer">The fitted text vectorizer to attach.</param>
+    /// <remarks>
+    /// This is internal and used by AiModelBuilder during construction and by the model loader to
+    /// restore text inference, mirroring <see cref="AttachTokenizer"/>.
+    /// </remarks>
+    internal void AttachTextVectorizer(ITextVectorizer<T>? vectorizer)
+    {
+        TextVectorizer = vectorizer;
     }
 
     /// <summary>

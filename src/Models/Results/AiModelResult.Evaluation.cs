@@ -129,9 +129,13 @@ public partial class AiModelResult<T, TInput, TOutput>
         {
             evaluation.ClusteringMetrics = new ClusterMetrics<T>().Evaluate(trainingData, labels);
         }
-        catch (InvalidOperationException) { }
-        catch (ArgumentException) { }
-        catch (ArithmeticException) { }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or ArithmeticException)
+        {
+            // Clustering metrics are best-effort; leave ClusteringMetrics null but leave a breadcrumb
+            // so a downstream NRE on result.Evaluation.ClusteringMetrics is traceable.
+            System.Diagnostics.Trace.TraceWarning(
+                $"Clustering metrics could not be computed: {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     /// <summary>

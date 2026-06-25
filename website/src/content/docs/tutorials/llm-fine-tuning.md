@@ -119,7 +119,7 @@ Console.WriteLine("Saved the fine-tuned model.");
 2. **Start with `rank: 8`**: raise it only if the model underfits.
 3. **Scale alpha with rank**: `alpha` ≈ 2 × `rank` is a good default.
 4. **Use QLoRA for large models**: quantize the base with `ConfigureQuantization`.
-5. **Watch overfitting**: compare `result.Evaluation.TrainingSet` vs `result.Evaluation.ValidationSet`.
+5. **Watch overfitting**: configure a validation split, then compare `result.Evaluation.TrainingSet` against `result.Evaluation.ValidationSet` (without a validation loader, `ValidationSet` stays empty).
 
 ## Notes
 

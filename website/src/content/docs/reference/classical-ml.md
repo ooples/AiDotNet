@@ -6,7 +6,7 @@ section: "Reference"
 ---
 
 
-Reference for the classical machine-learning algorithms in AiDotNet. Every algorithm trains through the same facade — `ConfigureModel(...)` + `ConfigureDataLoader(...)` + `BuildAsync()` — and predicts through `result.Predict(...)`.
+Reference for the classical machine-learning algorithms in AiDotNet. They train through the same facade — `ConfigureModel(...)` + `ConfigureDataLoader(...)` + `BuildAsync()`. Supervised models (regression, classification) then predict labels/values through `result.Predict(...)`; clustering returns cluster assignments and dimensionality-reduction returns transformed features, so their output shape differs.
 
 ---
 
@@ -152,7 +152,7 @@ var kmeans = new KMeans<double>(new KMeansOptions<double> { NumClusters = 5 });
 
 ## Usage with AiModelBuilder
 
-Every algorithm above plugs into the facade the same way — change `ConfigureModel(...)` and nothing else.
+Most algorithms above plug into the facade the same way — swap `ConfigureModel(...)`. Supervised models use a labelled loader (`FromArrays`/`FromMatrixVector`) and read predictions from `result.Predict(...)`; unsupervised ones (clustering, dimensionality reduction) use the features-only `DataLoaders.FromMatrix(...)` and return cluster labels / transformed features.
 
 ```csharp
 using AiDotNet;

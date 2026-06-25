@@ -57,9 +57,11 @@ foreach (var (v, j) in new[] { 5.9, 3.0, 5.1, 1.8 }.Select((v, j) => (v, j)))
     newFlower[0, j] = v;
 Console.WriteLine($"Predicted class: {(int)result.Predict(newFlower)[0]}");
 
-// Classification metrics live on the result (ErrorStats auto-selects them).
+// NOTE: these are computed on the SAME data the model was fit on, so they are resubstitution
+// (training-set) metrics — optimistic, not a validation estimate. Use a holdout split to judge
+// generalization.
 var stats = result.GetDataSetStats(X, y);
-Console.WriteLine($"Accuracy: {stats.ErrorStats.Accuracy:P2}, F1: {stats.ErrorStats.F1Score:P2}");
+Console.WriteLine($"Training accuracy: {stats.ErrorStats.Accuracy:P2}, F1: {stats.ErrorStats.F1Score:P2}");
 
 static Matrix<double> ToMatrix(double[][] rows)
 {
