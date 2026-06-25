@@ -1,3 +1,5 @@
+using AiDotNet.Clustering.Evaluation;
+using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -12,6 +14,125 @@ namespace AiDotNet.Models.Results;
 public partial class AiModelResult<T, TInput, TOutput>
 {
     private readonly PredictionStatsOptions _evaluationPredictionOptions = new();
+
+    private ModelEvaluationData<T, TInput, TOutput>? _cachedEvaluation;
+
+    /// <summary>
+    /// Gets the trained model's evaluation metrics, computed once from the data the model was built on and cached.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the single, model-type-aware home for every metric the build captured. It adapts to what you trained:
+    /// supervised models populate <see cref="ModelEvaluationData{T, TInput, TOutput}.TrainingSet"/>,
+    /// <see cref="ModelEvaluationData{T, TInput, TOutput}.ValidationSet"/> and
+    /// <see cref="ModelEvaluationData{T, TInput, TOutput}.TestSet"/>; clustering models populate
+    /// <see cref="ModelEvaluationData{T, TInput, TOutput}.ClusteringMetrics"/>; other model types report their
+    /// specialised scores under <see cref="ModelEvaluationData{T, TInput, TOutput}.AdditionalMetrics"/>.
+    /// </para>
+    /// <para><b>For Beginners:</b> After you call <c>BuildAsync()</c>, this is the one place to read how well your
+    /// model did — you do not need to re-pass your data. For example:
+    /// <list type="bullet">
+    /// <item><description>Regression: <c>result.Evaluation.TestSet.PredictionStats.R2</c>,
+    /// <c>result.Evaluation.TestSet.ErrorStats.RMSE</c></description></item>
+    /// <item><description>Classification: <c>result.Evaluation.TestSet.ErrorStats.Accuracy</c>,
+    /// <c>result.Evaluation.TestSet.ErrorStats.F1Score</c></description></item>
+    /// <item><description>Clustering: <c>result.Evaluation.ClusteringMetrics.Silhouette</c></description></item>
+    /// </list>
+    /// The value is computed lazily on first access from the statistics captured during the build, so reading it is
+    /// cheap and never re-runs the model. To evaluate on a brand-new dataset instead, call
+    /// <see cref="GetDataSetStats"/> or <see cref="EvaluateFull"/> with that data.
+    /// </para>
+    /// </remarks>
+    public ModelEvaluationData<T, TInput, TOutput> Evaluation =>
+        _cachedEvaluation ??= BuildCachedEvaluationInternal();
+
+    private ModelEvaluationData<T, TInput, TOutput> BuildCachedEvaluationInternal()
+    {
+        var evaluation = new ModelEvaluationData<T, TInput, TOutput>();
+
+        var optimizationResult = OptimizationResult;
+        if (optimizationResult is not null)
+        {
+            evaluation.TrainingSet = ToDataSetStatsInternal(optimizationResult.TrainingResult);
+            evaluation.ValidationSet = ToDataSetStatsInternal(optimizationResult.ValidationResult);
+            evaluation.TestSet = ToDataSetStatsInternal(optimizationResult.TestResult);
+        }
+
+        TryPopulateClusteringMetricsInternal(evaluation);
+
+        return evaluation;
+    }
+
+    /// <summary>
+    /// Maps an optimization dataset result (already computed during the build) onto the richer
+    /// <see cref="DataSetStats{T, TInput, TOutput}"/> surface exposed through <see cref="Evaluation"/>.
+    /// </summary>
+    private static DataSetStats<T, TInput, TOutput> ToDataSetStatsInternal(
+        OptimizationResult<T, TInput, TOutput>.DatasetResult datasetResult)
+    {
+        if (datasetResult is null)
+        {
+            return new DataSetStats<T, TInput, TOutput>();
+        }
+
+        bool hasData = (object?)datasetResult.X != null
+            && InputHelper<T, TInput>.GetInputSize(datasetResult.X) > 0;
+
+        return new DataSetStats<T, TInput, TOutput>
+        {
+            ErrorStats = datasetResult.ErrorStats ?? ErrorStats<T>.Empty(),
+            PredictionStats = datasetResult.PredictionStats ?? PredictionStats<T>.Empty(),
+            ActualBasicStats = datasetResult.ActualBasicStats ?? BasicStats<T>.Empty(),
+            PredictedBasicStats = datasetResult.PredictedBasicStats ?? BasicStats<T>.Empty(),
+            Predicted = datasetResult.Predictions,
+            Features = datasetResult.X,
+            Actual = datasetResult.Y,
+            IsDataProvided = hasData
+        };
+    }
+
+    /// <summary>
+    /// Computes internal clustering quality metrics for unsupervised clustering models, so that
+    /// <see cref="Evaluation"/> reports cluster-appropriate scores instead of (meaningless) supervised error stats.
+    /// </summary>
+    private void TryPopulateClusteringMetricsInternal(ModelEvaluationData<T, TInput, TOutput> evaluation)
+    {
+        if (Model is not IClustering<T> clusteringModel)
+        {
+            return;
+        }
+
+        var labels = clusteringModel.Labels;
+        if (labels is null || labels.Length == 0)
+        {
+            return;
+        }
+
+        // Internal clustering metrics compare each point to its assigned cluster, so the data matrix and the label
+        // vector must describe the same points. The training split holds the data the model was fit on.
+        var trainingResult = OptimizationResult?.TrainingResult;
+        if (trainingResult is null)
+        {
+            return;
+        }
+
+        // Box through object first: a type pattern on the unconstrained TInput is not allowed directly.
+        object? trainingFeatures = trainingResult.X;
+        if (trainingFeatures is not Matrix<T> trainingData
+            || trainingData.Rows == 0
+            || labels.Length != trainingData.Rows)
+        {
+            return;
+        }
+
+        try
+        {
+            evaluation.ClusteringMetrics = new ClusterMetrics<T>().Evaluate(trainingData, labels);
+        }
+        catch (InvalidOperationException) { }
+        catch (ArgumentException) { }
+        catch (ArithmeticException) { }
+    }
 
     /// <summary>
     /// Evaluates the model across training, validation, and test datasets.
