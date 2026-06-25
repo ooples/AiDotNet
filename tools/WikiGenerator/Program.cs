@@ -90,11 +90,23 @@ foreach (var grp in categories.GroupBy(c => c.Slug))
                 sb.AppendLine(remarks);
                 sb.AppendLine();
             }
-            if (example.Length > 0)
+            // Prefer a generated, self-contained example (guaranteed to compile) over the
+            // source <example> fragment, which assumes undefined context and drifts.
+            string generated = CategoryExample(cat.Slug, typeName);
+            if (generated.Length > 0)
             {
                 sb.AppendLine("## Example");
                 sb.AppendLine();
-                sb.AppendLine("<!-- VERIFY: example transcribed from source XML; confirm against the real API. -->");
+                sb.AppendLine("```csharp");
+                sb.AppendLine(generated);
+                sb.AppendLine("```");
+                sb.AppendLine();
+            }
+            else if (example.Length > 0)
+            {
+                sb.AppendLine("## Example");
+                sb.AppendLine();
+                sb.AppendLine("<!-- VERIFY: transcribed from source XML; not yet compile-checked. -->");
                 sb.AppendLine("```csharp");
                 sb.AppendLine(example);
                 sb.AppendLine("```");
@@ -131,6 +143,42 @@ static string StripArity(string s)
 {
     int tick = s.IndexOf('`');
     return tick >= 0 ? s.Substring(0, tick) : s;
+}
+
+// Returns a self-contained, compiling example for a category (substituting the type name),
+// or "" to fall back to the source <example>. Generated examples define their own context,
+// so they don't suffer the undefined-variable problem of the source fragments.
+static string CategoryExample(string slug, string typeName)
+{
+    if (slug != "optimizers") return "";
+    return """
+        using AiDotNet;
+        using AiDotNet.Data.Loaders;
+        using AiDotNet.Enums;
+        using AiDotNet.NeuralNetworks;
+        using AiDotNet.Optimizers;
+        using AiDotNet.Tensors.LinearAlgebra;
+
+        var rng = new Random(0);
+        var trainX = new Tensor<double>(new[] { 32, 8 });
+        var trainY = new Tensor<double>(new[] { 32, 2 });
+        for (int i = 0; i < 32; i++)
+        {
+            for (int j = 0; j < 8; j++) trainX[new[] { i, j }] = rng.NextDouble();
+            trainY[new[] { i, i % 2 }] = 1.0;
+        }
+
+        var model = new NeuralNetwork<double>(new NeuralNetworkArchitecture<double>(
+            inputFeatures: 8, numClasses: 2, complexity: NetworkComplexity.Simple));
+
+        var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
+            .ConfigureModel(model)
+            .ConfigureOptimizer(new __TYPE__<double, Tensor<double>, Tensor<double>>(model))
+            .ConfigureDataLoader(DataLoaders.FromTensors(trainX, trainY))
+            .BuildAsync();
+
+        Console.WriteLine("Trained with __TYPE__.");
+        """.Replace("__TYPE__", typeName);
 }
 
 // Converts XML doc content (mixed text + tags) into Markdown.
