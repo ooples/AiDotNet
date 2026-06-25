@@ -1,268 +1,121 @@
 ---
-title: "NLP and RAG"
-description: "Process text and build RAG pipelines with AiDotNet."
+title: "NLP"
+description: "Process text and classify documents with AiDotNet."
 order: 5
 section: "Tutorials"
 ---
 
+Process text through the `AiModelBuilder` facade. A text vectorizer turns raw strings into features, any classifier or regressor trains on them, and `result.PredictText(...)` predicts straight from text.
 
+## The Text Pattern
 
-Build powerful text processing and retrieval-augmented generation systems.
+Two text-specific pieces sit on top of the usual facade:
 
-## Overview
-
-AiDotNet provides 50+ RAG components for building intelligent document systems:
-- **Embeddings**: Sentence Transformers, custom models
-- **Vector Stores**: In-memory, FAISS, distributed
-- **Retrievers**: Dense, sparse, hybrid
-- **Rerankers**: Cross-encoder, ColBERT
-
----
-
-## Text Embeddings
-
-### Generate Embeddings
-
-```csharp
-using AiDotNet.RetrievalAugmentedGeneration;
-
-// Create embedding model
-var embedder = new SentenceTransformerEmbeddings<float>(
-    model: "all-MiniLM-L6-v2");
-
-// Single text
-var embedding = embedder.Encode("Hello, world!");
-Console.WriteLine($"Embedding dimension: {embedding.Length}"); // 384
-
-// Batch encoding
-var texts = new[] { "First document", "Second document" };
-var embeddings = embedder.EncodeBatch(texts);
-```
-
-### Similarity Search
-
-```csharp
-// Compute cosine similarity
-float similarity = embedder.ComputeSimilarity(
-    "machine learning",
-    "deep learning");
-Console.WriteLine($"Similarity: {similarity:F3}"); // ~0.85
-```
-
----
-
-## Vector Stores
-
-### In-Memory Store
-
-```csharp
-var vectorStore = new InMemoryVectorStore<float>(
-    dimension: 384);
-
-// Add documents
-var docs = new[]
-{
-    new Document { Id = "1", Text = "First document about AI" },
-    new Document { Id = "2", Text = "Second document about ML" }
-};
-
-await vectorStore.AddAsync(docs, embedder);
-
-// Search
-var results = await vectorStore.SearchAsync(
-    query: "artificial intelligence",
-    embedder: embedder,
-    topK: 5);
-```
-
-### FAISS Store (For Large Datasets)
-
-```csharp
-var faissStore = new FAISSVectorStore<float>(
-    dimension: 384,
-    indexType: FAISSIndexType.IVFFlat,
-    nlist: 100);
-
-// Index millions of documents
-await faissStore.AddAsync(documents, embedder);
-
-// Fast search
-var results = await faissStore.SearchAsync(query, embedder, topK: 10);
-```
-
----
-
-## Retrieval-Augmented Generation (RAG)
-
-### Basic RAG Pipeline
-
-```csharp
-using AiDotNet.RetrievalAugmentedGeneration;
-
-// Build RAG pipeline
-var rag = new RAGPipeline<float>()
-    .WithEmbeddings(new SentenceTransformerEmbeddings<float>())
-    .WithVectorStore(new InMemoryVectorStore<float>())
-    .WithRetriever(new DenseRetriever<float>(topK: 5))
-    .Build();
-
-// Index documents
-var documents = new[]
-{
-    "AiDotNet is a .NET machine learning framework.",
-    "It supports 100+ neural network architectures.",
-    "GPU acceleration is available via CUDA."
-};
-await rag.IndexDocumentsAsync(documents);
-
-// Query
-var response = await rag.QueryAsync("What is AiDotNet?");
-Console.WriteLine(response.Answer);
-Console.WriteLine($"Sources: {string.Join(", ", response.SourceDocuments)}");
-```
-
-### Advanced RAG with Reranking
-
-```csharp
-var advancedRag = new RAGPipeline<float>()
-    .WithEmbeddings(new SentenceTransformerEmbeddings<float>("all-mpnet-base-v2"))
-    .WithVectorStore(new FAISSVectorStore<float>(768))
-    .WithRetriever(new HybridRetriever<float>(
-        denseWeight: 0.7f,
-        sparseWeight: 0.3f,
-        topK: 20))
-    .WithReranker(new CrossEncoderReranker<float>(
-        model: "cross-encoder/ms-marco-MiniLM-L-6-v2",
-        topK: 5))
-    .WithChunker(new RecursiveChunker(
-        chunkSize: 512,
-        chunkOverlap: 50))
-    .Build();
-```
-
----
-
-## GraphRAG
-
-Enhance RAG with knowledge graphs:
-
-```csharp
-using AiDotNet.RetrievalAugmentedGeneration.Graph;
-
-var graphRag = new GraphRAGPipeline<float>()
-    .WithEmbeddings(new SentenceTransformerEmbeddings<float>())
-    .WithKnowledgeGraph(new InMemoryKnowledgeGraph<float>())
-    .WithEntityExtractor(new NEREntityExtractor<float>())
-    .WithRelationExtractor(new RelationExtractor<float>())
-    .Build();
-
-// Index with entity extraction
-await graphRag.IndexDocumentsAsync(documents);
-
-// Query with graph traversal
-var response = await graphRag.QueryAsync(
-    "How are AI and machine learning related?");
-```
-
----
+- **`ConfigureTextVectorizer(vectorizer)`** hands the result a fitted vectorizer so new text is converted the same way as training text.
+- **`DataLoaders.FromTextDocuments(texts, labels, vectorizer)`** fits the vectorizer on your documents and produces the numeric features the model trains on.
 
 ## Text Classification
 
 ```csharp
-using AiDotNet.Classification;
+using AiDotNet;
+using AiDotNet.Classification.Ensemble;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Models.Options;
+using AiDotNet.Preprocessing.TextVectorizers;
+using AiDotNet.Tensors.LinearAlgebra;
 
-var texts = new[]
+// Categories: 0 = Technology, 1 = Sports, 2 = Business
+string[] documents =
 {
-    "This movie was amazing!",
-    "Terrible waste of time.",
-    "Pretty good overall."
+    "New smartphone launches with a faster AI chip",
+    "The team won the championship final in overtime",
+    "Quarterly earnings beat analyst expectations",
+    "Cloud provider expands its global data centers",
+    "Star striker signs a record transfer deal",
+    "Central bank raises interest rates again",
 };
-var labels = new[] { 1, 0, 1 }; // positive/negative
+double[] labels = { 0, 1, 2, 0, 1, 2 };
 
-var result = await new AiModelBuilder<float, string, int>()
-    .ConfigureModel(new TextClassifier<float>(
-        backbone: "distilbert-base-uncased",
-        numClasses: 2))
-    .ConfigureTokenizer(new BertTokenizer())
-    .BuildAsync(texts, labels);
+var vectorizer = new TfidfVectorizer<double>();
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new RandomForestClassifier<double>(
+        new RandomForestClassifierOptions<double> { NEstimators = 100 }))
+    .ConfigureTextVectorizer(vectorizer)
+    .ConfigureDataLoader(DataLoaders.FromTextDocuments(documents, labels, vectorizer))
+    .BuildAsync();
 
-// Use result.Predict() directly (facade pattern)
-var prediction = result.Predict("Great film!");
+// Classify new text directly.
+var prediction = result.PredictText(new[] { "The league announced a new playoff format" });
+Console.WriteLine($"Predicted category: {(int)prediction[0]}");
 ```
 
----
-
-## Named Entity Recognition
+## Sentiment Analysis
 
 ```csharp
-using AiDotNet.NLP;
+using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Preprocessing.TextVectorizers;
+using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
 
-var ner = new NamedEntityRecognizer<float>("bert-base-NER");
-
-var text = "Apple Inc. was founded by Steve Jobs in California.";
-var entities = ner.Extract(text);
-
-foreach (var entity in entities)
+string[] reviews =
 {
-    Console.WriteLine($"{entity.Text} [{entity.Label}]");
-    // Apple Inc. [ORG]
-    // Steve Jobs [PERSON]
-    // California [LOCATION]
-}
+    "This product is amazing, I love it!",
+    "Terrible quality, a complete waste of money",
+    "Good value for the price",
+    "Not what I expected, very disappointed",
+    "Excellent service and fast shipping",
+    "Broke after one day, would not recommend",
+};
+double[] sentiment = { 1, 0, 1, 0, 1, 0 };
+
+var vectorizer = new TfidfVectorizer<double>();
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new LogisticRegression<double>())
+    .ConfigureTextVectorizer(vectorizer)
+    .ConfigureDataLoader(DataLoaders.FromTextDocuments(reviews, sentiment, vectorizer))
+    .BuildAsync();
+
+var score = result.PredictText(new[] { "I really enjoyed this purchase!" });
+Console.WriteLine($"Sentiment: {(score[0] > 0.5 ? "Positive" : "Negative")}");
+
+// Read classification metrics off the facade.
+var features = vectorizer.Transform(reviews);
+var stats = result.GetDataSetStats(features, new Vector<double>(sentiment));
+Console.WriteLine($"Accuracy: {stats.ErrorStats.Accuracy:P1}, F1: {stats.ErrorStats.F1Score:P1}");
 ```
 
----
+## Vectorizer Options
 
-## Document Chunking
-
-### Strategies
+`CountVectorizer` and `TfidfVectorizer` control how text becomes features — n-grams, vocabulary size, lowercasing, and stop words.
 
 ```csharp
-// Fixed size chunks
-var fixedChunker = new FixedSizeChunker(
-    chunkSize: 512,
-    overlap: 50);
+using AiDotNet.Preprocessing.TextVectorizers;
+using System.Collections.Generic;
 
-// Sentence-based
-var sentenceChunker = new SentenceChunker(
-    maxSentencesPerChunk: 5);
+// Unigrams + bigrams, capped vocabulary, custom stop words.
+var vectorizer = new CountVectorizer<double>(
+    maxFeatures: 1000,
+    nGramRange: (1, 2),
+    lowercase: true,
+    stopWords: new HashSet<string> { "the", "a", "an", "of", "and" });
 
-// Recursive (respects document structure)
-var recursiveChunker = new RecursiveChunker(
-    chunkSize: 512,
-    separators: ["\n\n", "\n", ". ", " "]);
-
-// Semantic (groups similar content)
-var semanticChunker = new SemanticChunker<float>(
-    embedder: embedder,
-    similarityThreshold: 0.7f);
+Console.WriteLine("Configured a TF/count vectorizer.");
 ```
-
----
 
 ## Best Practices
 
-### Embedding Selection
+1. **Start with TF-IDF**: `TfidfVectorizer` is a strong default for document classification.
+2. **Tune the vocabulary**: cap `maxFeatures` and add stop words to cut noise.
+3. **Add n-grams**: `nGramRange: (1, 2)` captures short phrases.
+4. **Predict from text**: keep the fitted vectorizer and use `result.PredictText(...)`.
+5. **Measure**: read accuracy/F1 from `result.GetDataSetStats(...).ErrorStats`.
 
-| Model | Dimension | Speed | Quality |
-|:------|:----------|:------|:--------|
-| all-MiniLM-L6-v2 | 384 | ⚡⚡⚡ | ⭐⭐⭐ |
-| all-mpnet-base-v2 | 768 | ⚡⚡ | ⭐⭐⭐⭐ |
-| e5-large-v2 | 1024 | ⚡ | ⭐⭐⭐⭐⭐ |
+## Notes
 
-### RAG Tips
-
-1. **Chunk size matters**: Too small loses context, too large adds noise
-2. **Use reranking**: Significantly improves retrieval quality
-3. **Hybrid retrieval**: Combine dense + sparse for best results
-4. **Metadata filtering**: Filter by date, source, type before retrieval
-5. **Evaluate systematically**: Use RAGAS or similar frameworks
-
----
+The facade supports text classification, sentiment, and similarity through `ConfigureTextVectorizer`. Higher-level retrieval-augmented generation (embedding models, vector stores, dense/hybrid retrievers, rerankers, and RAG/GraphRAG pipelines) and token-level tasks (NER, extractive QA, generation) are not part of the facade surface today.
 
 ## Next Steps
 
-- [BasicRAG Sample](/samples/nlp/RAG/BasicRAG/)
-- [GraphRAG Sample](/samples/nlp/RAG/GraphRAG/)
-- [Embeddings Sample](/samples/nlp/Embeddings/)
-- [RAG API Reference](/api/AiDotNet.RetrievalAugmentedGeneration/)
+- [Text Classification & NLP Examples](/docs/examples/transformer/)
+- [Classification Tutorial](/docs/tutorials/classification/)
