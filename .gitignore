@@ -467,3 +467,4 @@ temp-*.*
 *.tmp
 
 .ci-failures/
+wiki-generated/
