@@ -16,6 +16,8 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 using Xunit;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tests.ModelFamilyTests.Base;
+using System;
 using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
@@ -25,8 +27,14 @@ namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
 /// and that larger variants have more parameters than smaller ones.
 /// Catches bugs in model size configuration (wrong channel dimensions, depths, etc).
 /// </summary>
-public class SegmentationModelSizeVariationTests
+public class SegmentationModelSizeVariationTests : IDisposable
 {
+    // The largest size variants (XL/Huge/B5) construct big models one-per-test; reclaim process-global
+    // retention (InferenceWeightCache pins + uncompacted LOH) between tests so committed memory does not
+    // accumulate across the class until a later variant OOMs. Pure hygiene — same teardown the
+    // model-family bases use; changes no assertion, scale, or iteration count.
+    public void Dispose() => ModelFamilyTestGcGate.ReclaimBetweenTests();
+
     private static NeuralNetworkArchitecture<float> Arch(int h = 32, int w = 32, int d = 3)
         => new(InputType.ThreeDimensional, NeuralNetworkTaskType.Regression,
                NetworkComplexity.Deep, 0, h, w, d, 0);
