@@ -158,9 +158,9 @@ public class RAGChatbot
             {
                 Title = d.Metadata.GetValueOrDefault("title", "Unknown")?.ToString() ?? "Unknown",
                 Snippet = d.Content.Length > 200 ? d.Content[..200] + "..." : d.Content,
-                Score = 1.0f
+                Score = d.HasRelevanceScore ? d.RelevanceScore : 0f   // real per-doc retrieval score
             }).ToArray(),
-            Confidence = docs.Count > 0 ? 1.0f : 0f
+            Confidence = top is { HasRelevanceScore: true } ? top.RelevanceScore : 0f
         });
     }
 
@@ -198,9 +198,9 @@ public class RAGChatbot
 
     public async Task RemoveDocumentAsync(string id)
     {
-        if (_documents.ContainsKey(id))
+        if (_documents.Remove(id))
         {
-            _documents.Remove(id);
+            _store?.Remove(id);   // mirror the deletion into the BM25-backed store, not just the display map
             _documentCount--;
         }
 
@@ -214,12 +214,13 @@ public class RAGChatbot
 
     public ChatbotStats GetStats()
     {
+        // Stats reflect the actual pipeline: a BM25 lexical retriever over an 8-dim in-memory store.
         return new ChatbotStats
         {
-            TotalDocuments = _documentCount,
+            TotalDocuments = _store?.DocumentCount ?? _documentCount,
             TotalQueries = _queryCount,
-            EmbeddingModel = "all-MiniLM-L6-v2",
-            EmbeddingDimension = 384,
+            EmbeddingModel = "BM25 (lexical retrieval)",
+            EmbeddingDimension = 8,
             ChunkSize = 512,
             TopK = 5
         };
