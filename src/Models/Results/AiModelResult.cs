@@ -115,6 +115,13 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal IFullModel<T, TInput, TOutput>? Model { get; set; }
 
     /// <summary>
+    /// The fitted text vectorizer, when the model was trained on text via <c>ConfigureTextVectorizer(...)</c>.
+    /// Enables <see cref="PredictText"/> to convert raw strings into features the same way training did.
+    /// </summary>
+    [JsonIgnore]
+    internal ITextVectorizer<T>? TextVectorizer { get; private set; }
+
+    /// <summary>
     /// Gets the options used to create this model result.
     /// </summary>
     /// <remarks>
@@ -1248,6 +1255,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             MetaLearner = options.MetaLearner;
             MetaTrainingResult = options.MetaTrainingResult;
         }
+
+        TextVectorizer = options.TextVectorizer;
 
         ModelMetaData = Model?.GetModelMetadata() ?? new();
 
