@@ -1244,7 +1244,18 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (actualInputSize > sharedInputSize)
         {
             T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (actualInputSize + outputSize)));
-            var random = RandomHelper.CreateSecureRandom();
+            // #1643: reproducible weight resize. A lazily-sized DenseLayer that is materialized at
+            // one input width and then forwarded at a larger width (e.g. NTM's controller Dense:
+            // GetParameters() resolves it before ForwardTape feeds it the wider concat) lands here
+            // to append new weight columns. Seeding from the layer's wired RandomSeed makes that
+            // append DETERMINISTIC — the previous unseeded CreateSecureRandom re-randomized the
+            // appended columns on every forward, so two identically-seeded models produced
+            // different forward outputs (and hence different gradients) run-to-run, the root cause
+            // of NTM's M-N shard training-invariant flake. Falls back to a secure RNG in production
+            // (no wired seed), matching the seeded/fallback contract used by every other initializer.
+            var random = RandomSeed.HasValue
+                ? RandomHelper.CreateSeededRandom(RandomSeed.Value)
+                : RandomHelper.CreateSecureRandom();
             for (int i = sharedInputSize; i < actualInputSize; i++)
             {
                 for (int o = 0; o < outputSize; o++)
