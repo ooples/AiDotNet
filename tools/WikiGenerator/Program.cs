@@ -52,7 +52,9 @@ Console.WriteLine($"Reflected {allTypes.Count} public types.");
 // ── XML docs: type summaries/remarks + members grouped by declaring type ──
 var xml = XDocument.Load(xmlPath);
 var typeDoc = new Dictionary<string, XElement>(StringComparer.Ordinal);
-var memberDoc = new Dictionary<string, List<(char Tag, string Display, XElement El)>>(StringComparer.Ordinal);
+// Member summaries keyed by (declaring type, member name, param count) for relaxed matching
+// against reflected members (overloads with same name+arity share a summary — rare).
+var memberSummary = new Dictionary<(string Decl, string Name, int Arity), XElement>();
 foreach (var m in xml.Root?.Element("members")?.Elements("member") ?? Enumerable.Empty<XElement>())
 {
     var name = (string?)m.Attribute("name");
@@ -61,10 +63,9 @@ foreach (var m in xml.Root?.Element("members")?.Elements("member") ?? Enumerable
     if (tag == 'T') { typeDoc[name.Substring(2)] = m; continue; }
     if (tag is 'M' or 'P' or 'F' or 'E')
     {
-        var (decl, disp) = SplitMember(name);
+        var (decl, nm, arity) = DeclNameArity(name);
         if (decl.Length == 0) continue;
-        if (!memberDoc.TryGetValue(decl, out var list)) memberDoc[decl] = list = new();
-        list.Add((tag, disp, m));
+        memberSummary[(decl, nm, arity)] = m;
     }
 }
 
@@ -106,36 +107,52 @@ var grouped = allTypes
         && !t.Name.Contains('<')   // skip compiler-generated nested types (fixed buffers, closures)
         && !t.IsDefined(typeof(System.Runtime.CompilerServices.CompilerGeneratedAttribute), false))
     .GroupBy(t => CategoryKey(t.Namespace!))
-    .OrderBy(g => g.Key, StringComparer.Ordinal);
+    .OrderBy(g => g.Key, StringComparer.Ordinal)
+    .ToList();
 
+// Pass 1: assign every type a category slug + collision-free page slug (global, so cross-links resolve).
+var typeCat = new Dictionary<Type, string>();
+var typeSlug = new Dictionary<Type, string>();
 foreach (var grp in grouped)
 {
-    string title = Spaced(grp.Key);
     string slug = grp.Key.ToLowerInvariant();
-    var dir = Path.Combine(outDir, slug);
-    Directory.CreateDirectory(dir);
-
-    // Stable order + collision-free page slugs within the category.
-    var typesInCat = grp.OrderBy(t => t.FullName ?? t.Name, StringComparer.Ordinal).ToList();
     var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-    var pageSlug = new Dictionary<Type, string>();
-    foreach (var t in typesInCat)
+    foreach (var t in grp.OrderBy(t => t.FullName ?? t.Name, StringComparer.Ordinal))
     {
         string b = Sanitize(StripArity(t.Name));
         if (b.Length == 0) b = "type";
         string cand = b;
         int n = 2;
         while (!used.Add(cand.ToLowerInvariant())) cand = $"{b}-{n++}";
-        pageSlug[t] = cand;
+        typeCat[t] = slug;
+        typeSlug[t] = cand;
     }
+}
 
+// Pass 1b: reverse maps — base class -> derived types, interface -> implementors (documented types only).
+var derivedOf = new Dictionary<Type, List<Type>>();
+var implementorsOf = new Dictionary<Type, List<Type>>();
+foreach (var t in typeCat.Keys)
+{
+    if (t.BaseType is { } bt && typeCat.ContainsKey(Norm(bt))) AddTo(derivedOf, Norm(bt), t);
+    foreach (var itf in DirectInterfaces(t))
+        if (typeCat.ContainsKey(Norm(itf))) AddTo(implementorsOf, Norm(itf), t);
+}
+
+// Pass 2: render a page for every type.
+foreach (var grp in grouped)
+{
+    string title = Spaced(grp.Key);
+    string slug = grp.Key.ToLowerInvariant();
+    var dir = Path.Combine(outDir, slug);
+    Directory.CreateDirectory(dir);
+    var typesInCat = grp.OrderBy(t => t.FullName ?? t.Name, StringComparer.Ordinal).ToList();
     var byKind = new Dictionary<string, List<(Type T, string Slug, string Summary)>>();
 
     foreach (var t in typesInCat)
     {
         string xmlName = XmlName(t);
         typeDoc.TryGetValue(xmlName, out var md);
-        memberDoc.TryGetValue(xmlName, out var mem);
         string kind = KindOf(t);
         string summary = md is not null ? NormalizeBlock(ToMarkdown(md.Element("summary"))) : "";
         string forBeginners = md is not null ? ExtractForBeginners(md.Element("remarks")) : "";
@@ -159,6 +176,7 @@ foreach (var grp in grouped)
         sb.AppendLine("---").AppendLine();
         sb.AppendLine($"`{kind}` · `{t.Namespace}`").AppendLine();
         sb.AppendLine(summary.Length > 0 ? summary : "_No summary documentation available yet._").AppendLine();
+        sb.Append(RenderHierarchy(t, typeCat, typeSlug, derivedOf, implementorsOf, urlBase));
         if (forBeginners.Length > 0) sb.AppendLine("## For Beginners").AppendLine().AppendLine(forBeginners).AppendLine();
         if (remarks.Length > 0) sb.AppendLine("## How It Works").AppendLine().AppendLine(remarks).AppendLine();
         if (exampleOk)
@@ -166,13 +184,13 @@ foreach (var grp in grouped)
             sb.AppendLine("## Example").AppendLine().AppendLine("```csharp").AppendLine(example).AppendLine("```").AppendLine();
             withExample++;
         }
-        if (mem is not null) sb.Append(RenderMembers(mem, StripArity(t.Name)));
+        sb.Append(RenderMembers(t, xmlName, memberSummary));
 
-        WriteFile(Path.Combine(dir, pageSlug[t] + ".md"), sb.ToString());
+        WriteFile(Path.Combine(dir, typeSlug[t] + ".md"), sb.ToString());
         totalPages++;
 
         if (!byKind.TryGetValue(kind, out var bucket)) byKind[kind] = bucket = new();
-        bucket.Add((t, pageSlug[t].ToLowerInvariant(), summary.Length > 0 ? FirstSentence(summary) : ""));
+        bucket.Add((t, typeSlug[t].ToLowerInvariant(), summary.Length > 0 ? FirstSentence(summary) : ""));
     }
 
     WriteCategoryIndex(dir, title, slug, byKind, urlBase);
@@ -183,6 +201,128 @@ foreach (var grp in grouped)
 WriteTopIndex(outDir, catSummary, urlBase);
 Console.WriteLine($"----\nTotal: {totalPages} type pages across {catSummary.Count} namespaces ({withExample} with a compiling example) under {outDir}/");
 return 0;
+
+// ── reflection: hierarchy, cross-links, members ──────────────────────────────
+
+static Type Norm(Type t) => t.IsGenericType && !t.IsGenericTypeDefinition ? t.GetGenericTypeDefinition() : t;
+
+static void AddTo(Dictionary<Type, List<Type>> d, Type k, Type v)
+{
+    if (!d.TryGetValue(k, out var l)) d[k] = l = new();
+    l.Add(v);
+}
+
+static IEnumerable<Type> DirectInterfaces(Type t)
+{
+    var inherited = new HashSet<Type>();
+    if (t.BaseType is { } bt) foreach (var i in bt.GetInterfaces()) inherited.Add(i);
+    foreach (var i in t.GetInterfaces()) foreach (var sub in i.GetInterfaces()) inherited.Add(sub);
+    return t.GetInterfaces().Where(i => !inherited.Contains(i));
+}
+
+static string Pretty(Type t)
+{
+    if (t.IsByRef) return Pretty(t.GetElementType()!);
+    if (t.IsArray) return Pretty(t.GetElementType()!) + "[]";
+    if (t.IsGenericParameter) return t.Name;
+    if (t.IsGenericType)
+    {
+        if (t.GetGenericTypeDefinition() == typeof(Nullable<>)) return Pretty(t.GetGenericArguments()[0]) + "?";
+        return $"{StripArity(t.Name)}<{string.Join(", ", t.GetGenericArguments().Select(Pretty))}>";
+    }
+    return t.FullName switch   // C# keyword aliases for the BCL primitives
+    {
+        "System.Boolean" => "bool", "System.Byte" => "byte", "System.SByte" => "sbyte",
+        "System.Char" => "char", "System.Int16" => "short", "System.UInt16" => "ushort",
+        "System.Int32" => "int", "System.UInt32" => "uint", "System.Int64" => "long",
+        "System.UInt64" => "ulong", "System.Single" => "float", "System.Double" => "double",
+        "System.Decimal" => "decimal", "System.String" => "string", "System.Object" => "object",
+        "System.Void" => "void",
+        _ => t.Name
+    };
+}
+
+static string Link(Type t, Dictionary<Type, string> cat, Dictionary<Type, string> slug, string urlBase)
+{
+    var key = Norm(t.IsByRef || t.IsArray ? (t.GetElementType() ?? t) : t);
+    if (cat.TryGetValue(key, out var c) && slug.TryGetValue(key, out var s))
+        return $"[`{Pretty(t)}`]({urlBase}/{c}/{s.ToLowerInvariant()}/)";
+    return $"`{Pretty(t)}`";
+}
+
+static string RenderHierarchy(Type t, Dictionary<Type, string> cat, Dictionary<Type, string> slug,
+    Dictionary<Type, List<Type>> derivedOf, Dictionary<Type, List<Type>> implementorsOf, string urlBase)
+{
+    var sb = new StringBuilder();
+
+    if (!t.IsInterface && !t.IsEnum && t.BaseType is not null && t.BaseType != typeof(object))
+    {
+        var chain = new List<Type>();
+        for (var b = t.BaseType; b is not null && b != typeof(object); b = b.BaseType) chain.Add(b);
+        chain.Reverse();
+        sb.Append("**Inheritance:** ");
+        foreach (var b in chain) sb.Append(Link(b, cat, slug, urlBase)).Append(" → ");
+        sb.Append($"`{Pretty(t)}`").AppendLine().AppendLine();
+    }
+
+    var ifaces = DirectInterfaces(t).Where(i => i.IsPublic || i.IsNestedPublic).OrderBy(i => i.Name, StringComparer.Ordinal).ToList();
+    if (ifaces.Count > 0)
+        sb.Append("**Implements:** ").Append(string.Join(", ", ifaces.Select(i => Link(i, cat, slug, urlBase)))).AppendLine().AppendLine();
+
+    if (derivedOf.TryGetValue(t, out var derived) && derived.Count > 0)
+    {
+        sb.Append(t.IsInterface ? "**Known implementations:** " : "**Known derived types:** ");
+        sb.Append(string.Join(", ", derived.OrderBy(d => d.Name, StringComparer.Ordinal).Take(60).Select(d => Link(d, cat, slug, urlBase))));
+        if (derived.Count > 60) sb.Append($" _(+{derived.Count - 60} more)_");
+        sb.AppendLine().AppendLine();
+    }
+    if (implementorsOf.TryGetValue(t, out var impl) && impl.Count > 0)
+    {
+        sb.Append("**Known implementations:** ");
+        sb.Append(string.Join(", ", impl.OrderBy(d => d.Name, StringComparer.Ordinal).Take(60).Select(d => Link(d, cat, slug, urlBase))));
+        if (impl.Count > 60) sb.Append($" _(+{impl.Count - 60} more)_");
+        sb.AppendLine().AppendLine();
+    }
+    return sb.ToString();
+}
+
+static string RenderMembers(Type t, string xmlName, Dictionary<(string, string, int), XElement> summaries)
+{
+    const System.Reflection.BindingFlags F = System.Reflection.BindingFlags.Public
+        | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static
+        | System.Reflection.BindingFlags.DeclaredOnly;
+
+    string Sum(string name, int arity) =>
+        summaries.TryGetValue((xmlName, name, arity), out var el) ? EscapeCell(FirstSentence(Inline(el.Element("summary")))) : "";
+
+    var sb = new StringBuilder();
+    void Section(string head, string col, List<(string Sig, string Sum)> rows)
+    {
+        if (rows.Count == 0) return;
+        sb.AppendLine($"## {head}").AppendLine().AppendLine($"| {col} | Summary |").AppendLine("|:-----|:--------|");
+        foreach (var (sig, sum) in rows.OrderBy(r => r.Sig, StringComparer.Ordinal)) sb.AppendLine($"| `{sig}` | {sum} |");
+        sb.AppendLine();
+    }
+
+    try
+    {
+        var ctors = t.GetConstructors(F).Where(c => !c.IsPrivate)
+            .Select(c => ($"{StripArity(t.Name)}({string.Join(", ", c.GetParameters().Select(p => Pretty(p.ParameterType) + " " + p.Name))})", Sum("#ctor", c.GetParameters().Length))).ToList();
+        var props = t.GetProperties(F)
+            .Select(p => ($"{Pretty(p.PropertyType)} {p.Name} {{ {(p.CanRead ? "get; " : "")}{(p.CanWrite ? "set; " : "")}}}", Sum(p.Name, 0))).ToList();
+        var methods = t.GetMethods(F).Where(m => !(m.IsSpecialName && (m.Name.StartsWith("get_") || m.Name.StartsWith("set_") || m.Name.StartsWith("add_") || m.Name.StartsWith("remove_"))))
+            .Select(m => ($"{Pretty(m.ReturnType)} {m.Name}({string.Join(", ", m.GetParameters().Select(p => Pretty(p.ParameterType) + " " + p.Name))})", Sum(m.Name, m.GetParameters().Length))).ToList();
+        var fields = t.GetFields(F).Where(f => !f.IsPrivate)
+            .Select(f => ($"{Pretty(f.FieldType)} {f.Name}", Sum(f.Name, 0))).ToList();
+
+        Section("Constructors", "Constructor", ctors);
+        Section("Properties", "Property", props);
+        Section("Methods", "Method", methods);
+        Section("Fields", "Field", fields);
+    }
+    catch { /* a few types fail to reflect members (load issues); skip their member tables */ }
+    return sb.ToString();
+}
 
 // ── classification + naming ──────────────────────────────────────────────────
 
@@ -244,63 +384,36 @@ static string FriendlyName(Type t)
     return n;
 }
 
-static (string Decl, string Disp) SplitMember(string name)
+// Parse an XML member doc-comment name into (declaring type, member name, param count).
+static (string Decl, string Name, int Arity) DeclNameArity(string raw)
 {
-    string s = name.Substring(2);                       // drop "M:" / "P:" / ...
+    string s = raw.Substring(2);                         // drop "M:" / "P:" / ...
     int paren = s.IndexOf('(');
     string head = paren >= 0 ? s.Substring(0, paren) : s;
-    string sig = paren >= 0 ? s.Substring(paren) : "";
+    string args = "";
+    if (paren >= 0)
+    {
+        int close = s.IndexOf(')', paren);
+        if (close > paren) args = s.Substring(paren + 1, close - paren - 1);
+    }
     int dot = head.LastIndexOf('.');
-    if (dot < 0) return ("", "");
+    if (dot < 0) return ("", "", 0);
     string decl = head.Substring(0, dot);
-    string member = Regex.Replace(head.Substring(dot + 1), @"``\d+", "", RegexOptions.None, TimeSpan.FromSeconds(1));
-    return (decl, member + SimplifySignature(sig));
+    string name = Regex.Replace(head.Substring(dot + 1), @"``\d+", "", RegexOptions.None, TimeSpan.FromSeconds(1));
+    return (decl, name, args.Trim().Length == 0 ? 0 : SplitTopLevel(args));
 }
 
-static string SimplifySignature(string sig)
+// Count top-level comma-separated params (ignoring commas inside {}/[] generic args).
+static int SplitTopLevel(string s)
 {
-    if (sig.Length == 0) return "";
-    string s = sig.Replace('{', '<').Replace('}', '>').Replace("@", "");
-    s = Regex.Replace(s, @"([A-Za-z_]\w*\.)+([A-Za-z_]\w*)", "$2", RegexOptions.None, TimeSpan.FromSeconds(1));
-    s = Regex.Replace(s, @"``?\d+", "", RegexOptions.None, TimeSpan.FromSeconds(1));
-    return s;
-}
-
-// ── page rendering ───────────────────────────────────────────────────────────
-
-static string RenderMembers(List<(char Tag, string Display, XElement El)> mem, string simpleName)
-{
-    var ctors = new List<(string, string)>();
-    var methods = new List<(string, string)>();
-    var props = new List<(string, string)>();
-    var fields = new List<(string, string)>();
-    var events = new List<(string, string)>();
-    foreach (var (tag, disp, el) in mem)
+    int depth = 0, count = 1;
+    foreach (char ch in s)
     {
-        string sum = EscapeCell(FirstSentence(Inline(el.Element("summary"))));
-        if (tag == 'M' && disp.StartsWith("#ctor", StringComparison.Ordinal))
-            ctors.Add((simpleName + disp.Substring("#ctor".Length), sum));
-        else if (tag == 'M') methods.Add((disp, sum));
-        else if (tag == 'P') props.Add((disp, sum));
-        else if (tag == 'F') fields.Add((disp, sum));
-        else if (tag == 'E') events.Add((disp, sum));
+        if (ch is '{' or '[') depth++;
+        else if (ch is '}' or ']') depth--;
+        else if (ch == ',' && depth == 0) count++;
     }
-    var sb = new StringBuilder();
-    void Section(string head, string col, List<(string Name, string Sum)> items)
-    {
-        if (items.Count == 0) return;
-        sb.AppendLine($"## {head}").AppendLine();
-        sb.AppendLine($"| {col} | Summary |").AppendLine("|:-----|:--------|");
-        foreach (var (name, sum) in items.OrderBy(i => i.Name, StringComparer.Ordinal))
-            sb.AppendLine($"| `{name}` | {sum} |");
-        sb.AppendLine();
-    }
-    Section("Constructors", "Constructor", ctors);
-    Section("Properties", "Property", props);
-    Section("Methods", "Method", methods);
-    Section("Fields", "Field", fields);
-    Section("Events", "Event", events);
-    return sb.ToString();
+    return count;
 }
 
 static void WriteCategoryIndex(string dir, string title, string slug,
