@@ -50,7 +50,7 @@ public sealed class WeightStreamingSingletonCollection : ICollectionFixture<Weig
 /// in PaLMEProfilerTest because it needs ~2 TB of disk.
 /// </summary>
 [Collection("WeightStreaming-Singleton")]
-public sealed class WeightStreamingEndToEndTests
+public sealed class WeightStreamingEndToEndTests : IDisposable
 {
     private readonly WeightStreamingResetFixture _fixture;
 
@@ -63,7 +63,22 @@ public sealed class WeightStreamingEndToEndTests
         // constructor runs per test, so resetting here is the right
         // place. The Dispose half handles teardown after the last test.
         NeuralNetworkBase<float>.ResetWeightStreamingForTests();
+
+        // Pin per-layer weight init so the streaming forward/train assertions are
+        // reproducible. These tests assert on a SmallStreamableNetwork's (untrained)
+        // input-sensitivity and (trained) convergence — both depend on the weight init,
+        // which otherwise comes from the process-shared RandomHelper.ThreadSafeRandom whose
+        // per-thread state depends on how many sibling tests ran first. A poorly-conditioned
+        // draw (low input-sensitivity) made Streaming_PredictEager / Streaming_TrainingStep
+        // flake under parallel scheduling (#1675). Reproducible init is standard for
+        // convergence/forward assertions — the same AmbientFallbackSeed mechanism the
+        // ModelFamily harness uses. Cleared in Dispose so it can't leak to other collections
+        // on a reused worker thread.
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = 1675;
     }
+
+    public void Dispose() =>
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = null;
 
     /// <summary>
     /// Minimal subclass so the test can drive ConfigureWeightLifetime
