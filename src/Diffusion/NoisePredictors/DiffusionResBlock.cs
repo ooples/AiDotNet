@@ -174,6 +174,29 @@ public class DiffusionResBlock<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Propagates eval/training mode to the block's nested sublayers.
+    /// </summary>
+    /// <remarks>
+    /// LayerBase.SetTrainingMode only walks RegisterSubLayer-registered children, which
+    /// this block never populates (its sublayers are private fields), so without this
+    /// override <c>model.SetTrainingMode(false)</c> would never reach the convolutions —
+    /// leaving them on the allocating tape/training Forward branch (Conv2D + CPU
+    /// broadcast-add) during inference instead of the zero-alloc, GPU-resident inference
+    /// fast path (Conv2DInto + in-place bias). Mirrors PyTorch <c>nn.Module.train(mode)</c>
+    /// walking <c>self.children()</c> recursively.
+    /// </remarks>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        _norm1.SetTrainingMode(isTraining);
+        _conv1.SetTrainingMode(isTraining);
+        _timeMlp.SetTrainingMode(isTraining);
+        _norm2.SetTrainingMode(isTraining);
+        _conv2.SetTrainingMode(isTraining);
+        _skipConv?.SetTrainingMode(isTraining);
+    }
+
+    /// <summary>
     /// Declares named input ports. When <c>timeEmbedDim &gt; 0</c> this
     /// block accepts a second <c>time_embed</c> input alongside the
     /// feature-map <c>input</c>.
@@ -281,6 +304,22 @@ public class DiffusionResBlock<T> : LayerBase<T>
         bool useInPlace = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
                           || AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
 
+        // Within-resblock GPU profiling (AIDOTNET_PROFILE_SYNC=1 → real GPU time per sub-op). Feeds the same
+        // sink the UNet uses; entries prefixed "rb." so the aggregator splits conv vs groupnorm vs add.
+        var _profSink = AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>.ForwardProfilingSink;
+        var _profSw = _profSink is null ? null : System.Diagnostics.Stopwatch.StartNew();
+        var _profSync = _profSink is not null
+            && System.Environment.GetEnvironmentVariable("AIDOTNET_PROFILE_SYNC") == "1"
+            ? Engine as AiDotNet.Tensors.Engines.DirectGpuTensorEngine : null;
+        void RbTick(string s)
+        {
+            if (_profSw is null || _profSink is null) return;
+            _profSync?.SynchronizeStream();
+            _profSw.Stop();
+            _profSink.Enqueue(("rb." + s, _profSw.Elapsed.TotalMilliseconds));
+            _profSw.Restart();
+        }
+
         Tensor<T> h;
         if (useInPlace && input.Rank == 4)
         {
@@ -303,7 +342,9 @@ public class DiffusionResBlock<T> : LayerBase<T>
                 Convert.ToDouble(_norm1.GetEpsilon(), System.Globalization.CultureInfo.InvariantCulture));
             // _preSiLU1 is only consumed by Backward; eval-mode skips it.
             _preSiLU1 = null;
+            RbTick("gn1swish");
             h = _conv1.Forward(h);
+            RbTick("conv1");
         }
         else
         {
@@ -350,12 +391,14 @@ public class DiffusionResBlock<T> : LayerBase<T>
                 Engine.TensorBroadcastAddInPlace(h, timeProj);
             else
                 h = Engine.TensorBroadcastAdd(h, timeProj);
+            RbTick("time");
         }
 
         // Skip connection. Identity case (no skipConv) is alloc-free; the
         // 1×1 conv case pools its own output via
         // ConvolutionalLayer._preAllocatedOutput so no extra work needed.
         var residual = _skipConv is not null ? _skipConv.Forward(input) : input;
+        RbTick("skip");
 
         // Second block: GroupNorm → SiLU → Conv3x3 — eval-mode uses the
         // same fused-into-pooled-buffer fast path as norm1, sized to the
@@ -374,7 +417,9 @@ public class DiffusionResBlock<T> : LayerBase<T>
                 Convert.ToDouble(_norm2.GetEpsilon(), System.Globalization.CultureInfo.InvariantCulture));
             _preSiLU2 = null;
             h = n2;
+            RbTick("gn2swish");
             h = _conv2.Forward(h);
+            RbTick("conv2");
         }
         else
         {
@@ -394,10 +439,12 @@ public class DiffusionResBlock<T> : LayerBase<T>
             if (sameShape)
             {
                 Engine.TensorAddInPlace(h, residual);
+                RbTick("residual");
                 return h;
             }
         }
         h = Engine.TensorAdd(h, residual);
+        RbTick("residual");
         return h;
     }
 

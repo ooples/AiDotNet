@@ -485,6 +485,14 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
 
     /// <inheritdoc />
+    // #1650/#638 diffusion CUDA-graph capture (opt-in AIDOTNET_DIFFUSION_CUDA_GRAPH=1):
+    // captures the eager ForwardUNet into a CUDA graph once (warmup) and replays it per
+    // denoising step — collapsing the UNet's hundreds of kernel launches into one
+    // cuGraphLaunch. Per-instance; lazily created on first GPU forward.
+    private AiDotNet.Tensors.Engines.Gpu.ResidentInferenceGraph? _residentGraph;
+    private static readonly bool s_diffusionCudaGraph =
+        System.Environment.GetEnvironmentVariable("AIDOTNET_DIFFUSION_CUDA_GRAPH") == "1";
+
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
         EnsureLayersInitialized();
@@ -492,17 +500,73 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         _preserveMaterializedParameters = true;
         _lastInput = noisySample;
 
+        // #638/#1650: genuine inference runs in eval mode so every Conv / Dense layer takes
+        // its zero-allocation, GPU-resident inference fast path (Conv2DInto + in-place bias,
+        // resident FusedLinear) instead of the allocating tape/training Forward branch
+        // (Conv2D + host TensorBroadcastAdd, which de-residents the buffer). That residency
+        // is what lets the resident inference graph capture the whole UNet forward as one
+        // CUDA graph. This UNet contains no Dropout / eval-dependent layers, so eval is
+        // numerically identical to training mode here. Skipped when a gradient tape is
+        // active (training-time sampling) so eager backward state is retained. Restored in
+        // the finally so the model's steady-state (training) is preserved for the next step.
+        bool evalForInference =
+            AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
+            || AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+        if (evalForInference) SetAllLayersTrainingMode(false);
+        try
+        {
+
         // Compute timestep embedding (already cached per-timestep in the base class).
         var timeEmbed = GetTimestepEmbedding(timestep);
         timeEmbed = ProjectTimeEmbedding(timeEmbed);
 
-        // Compiled fast path — only when TensorCodecOptions.EnableCompilation is on.
-        // First call traces the eager ForwardUNet and compiles the plan; subsequent
-        // calls at the same shape replay the compiled plan.
-        var output = PredictCompiledForward(noisySample, timeEmbed, conditioning);
+        Tensor<T> output;
+        // #1650/#638 speedup: when enabled and the active engine is a capture-capable CUDA
+        // DirectGpuTensorEngine, run the forward through the resident inference graph — it runs
+        // ForwardUNet on its own STABLE input copies (capture-address-stable across steps), captures
+        // the kernel stream once, then replays via cuGraphLaunch. Any non-capturable op disables it
+        // and falls back to eager, so correctness is never affected.
+        var captureEngine = s_diffusionCudaGraph
+            ? AiDotNet.Tensors.Engines.AiDotNetEngine.Current as AiDotNet.Tensors.Engines.DirectGpuTensorEngine
+            : null;
+        if (captureEngine is not null && captureEngine.SupportsInferenceGraphCapture)
+        {
+            _residentGraph ??= new AiDotNet.Tensors.Engines.Gpu.ResidentInferenceGraph(captureEngine);
+            var capInputs = conditioning is not null
+                ? new[] { noisySample, timeEmbed, conditioning }
+                : new[] { noisySample, timeEmbed };
+            output = _residentGraph.Forward(capInputs, fwd =>
+                ForwardUNet(fwd[0], fwd[1], conditioning is not null ? fwd[2] : null));
+        }
+        else
+        {
+            // Compiled fast path — only when TensorCodecOptions.EnableCompilation is on.
+            // First call traces the eager ForwardUNet and compiles the plan; subsequent
+            // calls at the same shape replay the compiled plan.
+            output = PredictCompiledForward(noisySample, timeEmbed, conditioning);
+        }
 
         _lastOutput = output;
         return streaming.Complete(output);
+
+        }
+        finally
+        {
+            if (evalForInference) SetAllLayersTrainingMode(true);
+        }
+    }
+
+    /// <summary>
+    /// Sets the training/eval mode on every layer in the UNet (input/output convs, time
+    /// MLPs, and every encoder/middle/decoder block sublayer). NoisePredictorBase is not a
+    /// LayerBase, so there is no inherited recursive SetTrainingMode — this walks the same
+    /// layer set used for parameter collection. Composite blocks (ResBlock / Attention)
+    /// override SetTrainingMode to forward the flag to their own private sublayers.
+    /// </summary>
+    private void SetAllLayersTrainingMode(bool isTraining)
+    {
+        foreach (var layer in EnumerateAllLayers())
+            layer?.SetTrainingMode(isTraining);
     }
 
     /// <summary>
@@ -703,9 +767,15 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
         var sink = ForwardProfilingSink;
         var sw = sink is null ? null : System.Diagnostics.Stopwatch.StartNew();
+        // When profiling GPU compute (not host enqueue), block on the stream before each stamp so the elapsed
+        // captures that section's actual GPU time (AIDOTNET_PROFILE_SYNC=1). Off by default — adds a sync/section.
+        var syncEngine = sink is not null
+            && System.Environment.GetEnvironmentVariable("AIDOTNET_PROFILE_SYNC") == "1"
+            ? Engine as AiDotNet.Tensors.Engines.DirectGpuTensorEngine : null;
         void Tick(string section)
         {
             if (sw is null || sink is null) return;
+            syncEngine?.SynchronizeStream();
             sw.Stop();
             sink.Enqueue((section, sw.Elapsed.TotalMilliseconds));
             sw.Restart();
@@ -922,6 +992,16 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             }
             output = new Tensor<T>(new[] { batch, totalC, h, w });
             _concatPool[key] = output;
+        }
+
+        // #638/#1650: on the resident-capture path do the channel concat device-to-device into the pooled
+        // output's resident buffer (no host span-copy → the decoder skip-concat stays GPU-resident and the
+        // whole UNet forward remains CUDA-graph-capturable). Returns false off the resident step, so plain
+        // eager inference keeps the host span-copy below unchanged.
+        if (Engine is AiDotNet.Tensors.Engines.DirectGpuTensorEngine dgConcat
+            && dgConcat.TryConcatenateChannelsResidentInto(output, a, b))
+        {
+            return output;
         }
 
         // Manual NCHW channel-axis concat. For each batch b, layout is
