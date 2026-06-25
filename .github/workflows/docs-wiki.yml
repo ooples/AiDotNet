@@ -51,18 +51,10 @@ jobs:
       - name: Build AiDotNet (net8.0, with XML docs)
         run: dotnet build src/AiDotNet.csproj -c Debug -f net8.0
 
-      # Regenerate the full API reference (every public type, by namespace + kind).
+      # Regenerate the full API reference (every public type, by namespace + kind). The wiki is
+      # gitignored and generated fresh here (and in the website build), not committed.
       - name: Generate API reference wiki
         run: dotnet run --project tools/WikiGenerator -c Debug -- src/bin/Debug/net8.0/AiDotNet.xml website/src/content/docs/reference/wiki
-
-      # Fail if the committed wiki is out of sync with the source XML docs.
-      - name: Check wiki is up to date (no drift)
-        run: |
-          if ! git diff --exit-code -- website/src/content/docs/reference/wiki; then
-            echo "::error::The committed API wiki is stale. Regenerate it and commit the result:"
-            echo "::error::  dotnet run --project tools/WikiGenerator -c Debug -- src/bin/Debug/net8.0/AiDotNet.xml website/src/content/docs/reference/wiki"
-            exit 1
-          fi
 
       # Compile every ```csharp example in the website docs + generated wiki against the real
       # AiDotNet assemblies. Fails on any drift that would break a published example.

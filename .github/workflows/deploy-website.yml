@@ -3,7 +3,7 @@ name: Deploy Marketing Website
 on:
   push:
     branches: [master]
-    paths: ['website/**', '.github/workflows/deploy-website.yml']
+    paths: ['website/**', 'src/**', 'tools/WikiGenerator/**', '.github/workflows/deploy-website.yml']
   workflow_dispatch:
 
 permissions:
@@ -83,6 +83,18 @@ jobs:
           : "${PUBLIC_STRIPE_PRO_YEARLY_LINK:?Missing PUBLIC_STRIPE_PRO_YEARLY_LINK GitHub secret}"
           : "${PUBLIC_STRIPE_ENTERPRISE_MONTHLY_LINK:?Missing PUBLIC_STRIPE_ENTERPRISE_MONTHLY_LINK GitHub secret}"
           : "${PUBLIC_STRIPE_ENTERPRISE_YEARLY_LINK:?Missing PUBLIC_STRIPE_ENTERPRISE_YEARLY_LINK GitHub secret}"
+
+      # The API reference wiki is generated (not committed) from the library's XML docs.
+      - name: Setup .NET 10.0
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Generate API reference wiki
+        working-directory: ${{ github.workspace }}
+        run: |
+          dotnet build src/AiDotNet.csproj -c Debug -f net8.0
+          dotnet run --project tools/WikiGenerator -c Debug -- src/bin/Debug/net8.0/AiDotNet.xml website/src/content/docs/reference/wiki
 
       - name: Build website
         run: npx astro build

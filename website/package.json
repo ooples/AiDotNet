@@ -9,7 +9,8 @@
     "preview": "astro preview",
     "check": "astro check",
     "test:e2e": "npx playwright test",
-    "astro": "astro"
+    "astro": "astro",
+    "gen:wiki": "dotnet build ../src/AiDotNet.csproj -c Debug -f net8.0 && dotnet run --project ../tools/WikiGenerator -c Debug -- ../src/bin/Debug/net8.0/AiDotNet.xml src/content/docs/reference/wiki"
   },
   "dependencies": {
     "@astrojs/mdx": "^7.0.0",

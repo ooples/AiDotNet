@@ -468,3 +468,8 @@ temp-*.*
 
 .ci-failures/
 wiki-generated/
+
+# Auto-generated API reference wiki (tools/WikiGenerator). Generated at build/CI time from
+# the library's XML doc comments — not committed. Run `npm run gen:wiki` in website/ to build
+# it locally.
+website/src/content/docs/reference/wiki/
