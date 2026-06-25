@@ -325,56 +325,20 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
             _lastMask = mask;
         }
 
-        // Perform deformable convolution using IEngine. For grouped (DCNv3) convolution, decompose into
-        // per-group groups=1 deformable convs over channel slices and concatenate. Every op (Gather /
-        // DeformableConv2D / Concat) is tape-recorded, so backward composes automatically and each
-        // per-group call runs the backend's real groups=1 kernel.
-        var output = _groups == 1
-            ? _engine.DeformableConv2D(
-                input4D, _weights, offsets, mask,
-                new[] { _stride, _stride }, new[] { _padding, _padding }, new[] { 1, 1 })
-            : GroupedDeformableConv2D(input4D, offsets, mask);
+        // Perform deformable convolution using IEngine's fused grouped (DCNv3) kernel — a single
+        // backend launch (one real GPU/CPU kernel pass) instead of per-group composition. It records on
+        // the tape (DCN v1 and, when a modulation mask is present, DCN v2/v3) so backward flows to
+        // input/weights/offsets/mask, and reduces to plain DeformableConv2D when groups=deformGroups=1.
+        var output = _engine.DeformableConv2DGrouped(
+            input4D, _weights, offsets, mask,
+            new[] { _stride, _stride }, new[] { _padding, _padding }, new[] { 1, 1 },
+            _groups, _deformGroups);
 
         // Add bias
         output = AddBias(output);
 
         // Remove batch dimension if input didn't have one
         return input.Rank == 3 ? RemoveBatchDimension(output) : output;
-    }
-
-    // Tape-aware contiguous channel-range selector via Gather (the engine op records for backward,
-    // so gradients flow back to both the sliced activation and the sliced weight parameter).
-    private Tensor<T> SliceChannels(Tensor<T> t, int axis, int start, int count)
-    {
-        var idx = new Tensor<int>([count]);
-        for (int i = 0; i < count; i++) idx.Data.Span[i] = start + i;
-        return _engine.Gather(t, idx, axis);
-    }
-
-    // Grouped (DCNv3) deformable conv by per-group composition over the engine's groups=1 kernel.
-    // Channels split into _groups; each group convolves its inCpg input channels with its outCpg weight
-    // rows ([outC, inC/groups, k, k]) using its deformable-group offset/mask slice. All ops are
-    // tape-recorded (Gather/DeformableConv2D/Concat) so backward composes automatically.
-    private Tensor<T> GroupedDeformableConv2D(Tensor<T> input4D, Tensor<T> offsets, Tensor<T>? mask)
-    {
-        int inC = input4D.Shape[1];
-        int inCpg = inC / _groups;
-        int outCpg = _outputChannels / _groups;
-        int kk = _kernelSize * _kernelSize;
-        var groupOutputs = new Tensor<T>[_groups];
-        for (int g = 0; g < _groups; g++)
-        {
-            var inSlice = SliceChannels(input4D, 1, g * inCpg, inCpg);
-            var wSlice = SliceChannels(_weights, 0, g * outCpg, outCpg);
-            // Map output group -> deformable group (deformGroups divides groups; shared when deformGroups==1).
-            int dg = _deformGroups == 1 ? 0 : g * _deformGroups / _groups;
-            var offSlice = SliceChannels(offsets, 1, dg * 2 * kk, 2 * kk);
-            Tensor<T>? maskSlice = mask is null ? null : SliceChannels(mask, 1, dg * kk, kk);
-            groupOutputs[g] = _engine.DeformableConv2D(
-                inSlice, wSlice, offSlice, maskSlice,
-                new[] { _stride, _stride }, new[] { _padding, _padding }, new[] { 1, 1 });
-        }
-        return _engine.Concat(groupOutputs, axis: 1);
     }
 
     /// <summary>

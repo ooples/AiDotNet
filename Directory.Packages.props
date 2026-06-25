@@ -195,7 +195,7 @@
     <!-- 0.102.17 is the published AiDotNet.Tensors release that ships the diffusion CUDA-graph capture +
          all-backend FP16 conv + FP16-activation work (AiDotNet.Tensors #671, merged + released) on top of the
          net8.0 target (#680). Ships lib/net8.0 + net10.0 + net471. This is what #1650's diffusion path requires. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.102.17" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.103.0" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.102.9" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.102.9" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.102.9" />
