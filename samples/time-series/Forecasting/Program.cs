@@ -7,9 +7,10 @@
 
 using AiDotNet;
 using AiDotNet.Data.Loaders;
-using AiDotNet.Models.Options;          // GradientBoostingRegressionOptions
+using AiDotNet.Models.Options;          // GradientBoostingRegressionOptions, ARIMAOptions
 using AiDotNet.Regression;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.TimeSeries;              // ARIMAModel
 
 Console.WriteLine("=== AiDotNet Time Series Forecasting ===");
 Console.WriteLine("Daily sales forecasting with trend + weekly seasonality\n");
@@ -87,6 +88,32 @@ try
 catch (Exception ex)
 {
     Console.WriteLine($"  Forecasting reported: {ex.Message}");
+}
+
+// ── 5. The same goal, the unified way: an ARIMA model forecasts through Predict ─
+// A time-series model forecasts straight through the facade's result.Predict: ask for N
+// rows and you get an N-step-ahead forecast extending the series it was trained on — no
+// separate Forecast method, one Predict front for every model.
+Console.WriteLine("\nARIMA forecast through the unified result.Predict:");
+try
+{
+    var seriesX = new Matrix<double>(dataPoints, 1);   // placeholder; ARIMA forecasts from the series itself
+    for (int t = 0; t < dataPoints; t++) seriesX[t, 0] = t;
+
+    var arimaResult = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        .ConfigureModel(new ARIMAModel<double>(new ARIMAOptions<double> { P = 2, D = 1, Q = 1 }))
+        .ConfigureDataLoader(DataLoaders.FromMatrixVector(seriesX, new Vector<double>(values)))
+        .BuildAsync();
+
+    // result.Predict(matrix with N rows) -> N-step-ahead forecast.
+    var forecast = arimaResult.Predict(new Matrix<double>(7, 1));
+    Console.Write("  Next 7 days:");
+    for (int i = 0; i < forecast.Length; i++) Console.Write($" {forecast[i]:F0}");
+    Console.WriteLine();
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"  ARIMA forecasting reported: {ex.Message}");
 }
 
 Console.WriteLine("\n=== Sample Complete ===");

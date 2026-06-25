@@ -1878,11 +1878,55 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// this method will return a vector of predicted house prices.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Produces an N-step-ahead forecast for a time-series model through the unified <see cref="Predict"/> front:
+    /// the row count of <paramref name="newData"/> is the horizon, and the forecast extends the series the model was
+    /// trained on.
+    /// </summary>
+    private TOutput ForecastWithTimeSeriesModelInternal(
+        AiDotNet.TimeSeries.TimeSeriesModelBase<T> model, TInput newData)
+    {
+        // The forecast horizon is the row count of the input; its contents are not used — a placeholder Matrix sized
+        // to the horizon is the unified way to ask for N steps.
+        int horizon = (object?)newData is Matrix<T> matrix ? matrix.Rows : 1;
+        if (horizon <= 0)
+        {
+            horizon = 1;
+        }
+
+        // History is the series the model was trained on (captured during the build).
+        Vector<T> history = Vector<T>.Empty();
+        var trainingResult = OptimizationResult?.TrainingResult;
+        if (trainingResult != null && (object?)trainingResult.Y is Vector<T> series)
+        {
+            history = series;
+        }
+
+        Vector<T> forecast = model.Forecast(history, horizon);
+
+        if ((object)forecast is TOutput typedForecast)
+        {
+            return typedForecast;
+        }
+
+        throw new InvalidOperationException(
+            "Time-series forecasting produces a Vector<T>; the model's output type must be Vector<T>.");
+    }
+
     public TOutput Predict(TInput newData)
     {
         if (Model == null)
         {
             throw new InvalidOperationException("Model is not initialized.");
+        }
+
+        // Time-series models forecast through the unified Predict: the number of rows in the
+        // input is the forecast horizon, produced from the series the model was trained on.
+        // (Model.Predict — used internally for in-sample evaluation — keeps its fitted-value
+        // behavior; this only changes the facade-facing result.Predict.)
+        if (Model is AiDotNet.TimeSeries.TimeSeriesModelBase<T> timeSeriesModel)
+        {
+            return ForecastWithTimeSeriesModelInternal(timeSeriesModel, newData);
         }
 
         // Bridge builder-configured JIT compilation flags into this thread's
