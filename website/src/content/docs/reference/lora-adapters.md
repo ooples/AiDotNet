@@ -108,6 +108,41 @@ Console.WriteLine("Fine-tuned with QLoRA (Int8 base + LoRA adapters).");
 
 ---
 
+## PEFT Variants (DoRA, LoKr, VeRA, …)
+
+`DefaultLoRAConfiguration` takes an optional `loraAdapter` — pass a specific adapter (DoRA, LoKr, LoHa, VeRA, AdaLoRA, QLoRA, MoRA, PiSSA, …) and `ConfigureLoRA` applies that variant instead of plain LoRA.
+
+```csharp
+using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Enums;
+using AiDotNet.LoRA;
+using AiDotNet.LoRA.Adapters;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
+
+var model = new NeuralNetwork<double>(new NeuralNetworkArchitecture<double>(
+    inputFeatures: 32, numClasses: 4, complexity: NetworkComplexity.Simple));
+
+// DoRA here — swap for LoKrAdapter, LoHaAdapter, VeRAAdapter, AdaLoRAAdapter, etc.
+var adapter = new DoRAAdapter<double>(null, rank: 8, alpha: 8, freezeBaseLayer: true);
+var loraConfig = new DefaultLoRAConfiguration<double>(rank: 8, alpha: 8, loraAdapter: adapter);
+
+var trainX = new Tensor<double>(new[] { 32, 32 });
+var trainY = new Tensor<double>(new[] { 32, 4 });
+for (int i = 0; i < 32; i++) { trainX[new[] { i, 0 }] = i / 32.0; trainY[new[] { i, i % 4 }] = 1.0; }
+
+var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
+    .ConfigureModel(model)
+    .ConfigureLoRA(loraConfig)
+    .ConfigureDataLoader(DataLoaders.FromTensors(trainX, trainY))
+    .BuildAsync();
+
+Console.WriteLine("Fine-tuned with a DoRA adapter through ConfigureLoRA.");
+```
+
+AiDotNet ships ~25 adapter variants in `AiDotNet.LoRA.Adapters` (DoRA, LoKr, LoHa, VeRA, AdaLoRA, QLoRA, MoRA, PiSSA, DyLoRA, LongLoRA, ReLoRA, GLoRA, and more), plus `ChainLoRAAdapter` / `MultiLoRAAdapter` for composing several.
+
 ## Notes
 
-AiDotNet's facade currently exposes **LoRA** (`ConfigureLoRA`) and **QLoRA** (`ConfigureQuantization` + `ConfigureLoRA`). Other parameter-efficient methods — DoRA, LoKr/LoHa, VeRA, AdaLoRA, prefix tuning, and prompt tuning — along with multi-adapter management (loading, merging, and hot-swapping adapters) are not part of the facade today.
+The facade exposes LoRA and QLoRA directly (`ConfigureLoRA`, `ConfigureQuantization`) and every adapter variant via `DefaultLoRAConfiguration`'s `loraAdapter` parameter. Prefix/prompt tuning and runtime adapter hot-swapping are the remaining methods configured outside the single facade call.
