@@ -1,56 +1,48 @@
 ---
 title: "Classical ML"
-description: "98 classical ML algorithms reference."
+description: "Classical ML algorithms reference."
 order: 2
 section: "Reference"
 ---
 
 
-
-Complete reference for the 98 classical ML algorithms in AiDotNet.
-
----
-
-
+Reference for the classical machine-learning algorithms in AiDotNet. Every algorithm trains through the same facade — `ConfigureModel(...)` + `ConfigureDataLoader(...)` + `BuildAsync()` — and predicts through `result.Predict(...)`.
 
 ---
 
-## Classification (25 Algorithms)
+## Classification
 
 ### Linear Models
 
-| Algorithm | Description | Multi-class |
-|:----------|:------------|:------------|
-| `LogisticRegression<T>` | Binary/multi-class logistic | Yes |
-| `LinearSVC<T>` | Linear Support Vector Classifier | Yes |
-| `RidgeClassifier<T>` | Ridge regression for classification | Yes |
-| `SGDClassifier<T>` | Stochastic Gradient Descent | Yes |
-| `Perceptron<T>` | Linear perceptron | Yes |
+| Algorithm | Namespace |
+|:----------|:----------|
+| `LogisticRegression<T>` | `AiDotNet.Regression` |
+| `RidgeClassifier<T>` | `AiDotNet.Classification` |
+| `SGDClassifier<T>` | `AiDotNet.Classification` |
+| `PassiveAggressiveClassifier<T>` | `AiDotNet.Classification` |
+| `PerceptronClassifier<T>` | `AiDotNet.Classification` |
 
 ```csharp
-var classifier = new LogisticRegression<double>(
-    regularization: 0.01,
-    solver: LogisticSolver.LBFGS,
-    maxIterations: 1000);
+using AiDotNet.Regression;
+
+var classifier = new LogisticRegression<double>();
 ```
 
 ### Support Vector Machines
 
-| Algorithm | Description | Kernel |
-|:----------|:------------|:-------|
-| `SVC<T>` | Support Vector Classifier | Multiple |
-| `NuSVC<T>` | Nu-Support Vector Classifier | Multiple |
-
-Supported kernels: `Linear`, `Polynomial`, `RBF`, `Sigmoid`, `Precomputed`
+| Algorithm | Namespace |
+|:----------|:----------|
+| `SupportVectorClassifier<T>` | `AiDotNet.Classification.SVM` |
+| `NuSupportVectorClassifier<T>` | `AiDotNet.Classification.SVM` |
+| `LinearSupportVectorClassifier<T>` | `AiDotNet.Classification.SVM` |
 
 ```csharp
-var svm = new SVC<double>(
-    kernel: KernelType.RBF,
-    C: 1.0,
-    gamma: "scale");
+using AiDotNet.Classification.SVM;
+
+var svm = new LinearSupportVectorClassifier<double>();
 ```
 
-### Tree-Based
+### Tree-Based & Ensemble
 
 | Algorithm | Description |
 |:----------|:------------|
@@ -58,258 +50,158 @@ var svm = new SVC<double>(
 | `RandomForestClassifier<T>` | Ensemble of trees |
 | `ExtraTreesClassifier<T>` | Extremely randomized trees |
 | `GradientBoostingClassifier<T>` | Gradient boosting |
-| `XGBoostClassifier<T>` | XGBoost implementation |
-| `LightGBMClassifier<T>` | LightGBM implementation |
-| `CatBoostClassifier<T>` | CatBoost implementation |
+| `HistGradientBoostingClassifier<T>` | Histogram-based boosting |
+| `AdaBoostClassifier<T>` | Adaptive boosting |
+| `BaggingClassifier<T>` | Bootstrap aggregating |
+| `VotingClassifier<T>` | Soft/hard voting |
+| `StackingClassifier<T>` | Stacked generalization |
 
 ```csharp
+using AiDotNet.Classification.Ensemble;
+using AiDotNet.Models.Options;
+
 var forest = new RandomForestClassifier<double>(
-    nEstimators: 100,
-    maxDepth: 10,
-    minSamplesSplit: 2);
+    new RandomForestClassifierOptions<double> { NEstimators = 100, MaxDepth = 10 });
 ```
 
 ### Naive Bayes
 
 | Algorithm | Distribution |
 |:----------|:-------------|
-| `GaussianNB<T>` | Gaussian (continuous) |
-| `MultinomialNB<T>` | Multinomial (counts) |
-| `BernoulliNB<T>` | Bernoulli (binary) |
-| `ComplementNB<T>` | Complement (imbalanced) |
+| `GaussianNaiveBayes<T>` | Gaussian (continuous) |
+| `MultinomialNaiveBayes<T>` | Multinomial (counts) |
+| `BernoulliNaiveBayes<T>` | Bernoulli (binary) |
+| `ComplementNaiveBayes<T>` | Complement (imbalanced) |
+| `CategoricalNaiveBayes<T>` | Categorical |
 
-### Neighbors
+### Neighbors & Multiclass
 
 | Algorithm | Description |
 |:----------|:------------|
 | `KNeighborsClassifier<T>` | K-Nearest Neighbors |
-| `RadiusNeighborsClassifier<T>` | Radius-based neighbors |
-
-### Neural Networks
-
-| Algorithm | Description |
-|:----------|:------------|
-| `MLPClassifier<T>` | Multi-layer Perceptron |
-
-### Ensemble
-
-| Algorithm | Description |
-|:----------|:------------|
-| `BaggingClassifier<T>` | Bootstrap aggregating |
-| `AdaBoostClassifier<T>` | Adaptive Boosting |
-| `VotingClassifier<T>` | Soft/hard voting |
-| `StackingClassifier<T>` | Stacked generalization |
+| `OneVsRestClassifier<T>` | One-vs-rest wrapper |
+| `OneVsOneClassifier<T>` | One-vs-one wrapper |
+| `ClassifierChainClassifier<T>` | Multi-label chains |
 
 ---
 
-## Regression (34 Algorithms)
+## Regression
+
+> AiDotNet regressors use the `Regression` suffix (e.g. `RidgeRegression`, not `Ridge`).
 
 ### Linear Models
 
 | Algorithm | Description |
 |:----------|:------------|
-| `LinearRegression<T>` | Ordinary Least Squares |
-| `Ridge<T>` | L2 regularization |
-| `Lasso<T>` | L1 regularization |
-| `ElasticNet<T>` | L1 + L2 regularization |
-| `Lars<T>` | Least Angle Regression |
-| `LassoLars<T>` | LARS with L1 |
-| `OrthogonalMatchingPursuit<T>` | Sparse approximation |
-| `BayesianRidge<T>` | Bayesian regression |
-| `ARDRegression<T>` | Automatic Relevance Determination |
-| `SGDRegressor<T>` | SGD for regression |
-| `HuberRegressor<T>` | Robust to outliers |
-| `RANSACRegressor<T>` | RANSAC robust regression |
-| `TheilSenRegressor<T>` | Theil-Sen estimator |
-| `PassiveAggressiveRegressor<T>` | Online learning |
+| `SimpleRegression<T>` / `MultipleRegression<T>` | Ordinary least squares |
+| `RidgeRegression<T>` | L2 regularization |
+| `LassoRegression<T>` | L1 regularization |
+| `ElasticNetRegression<T>` | L1 + L2 regularization |
+| `PolynomialRegression<T>` | Polynomial features |
+| `BayesianRegression<T>` | Bayesian regression |
+| `RobustRegression<T>` | Robust to outliers |
+| `QuantileRegression<T>` | Quantile regression |
 
 ```csharp
-var model = new ElasticNet<double>(
-    alpha: 1.0,
-    l1Ratio: 0.5,
-    maxIterations: 1000);
+using AiDotNet.Regression;
+
+var model = new ElasticNetRegression<double>();
 ```
 
-### Support Vector Regression
+### Tree-Based, Neighbors & Neural
 
 | Algorithm | Description |
 |:----------|:------------|
-| `SVR<T>` | Support Vector Regression |
-| `NuSVR<T>` | Nu-Support Vector Regression |
-| `LinearSVR<T>` | Linear SVR |
-
-### Tree-Based
-
-| Algorithm | Description |
-|:----------|:------------|
-| `DecisionTreeRegressor<T>` | Single decision tree |
-| `RandomForestRegressor<T>` | Ensemble of trees |
-| `ExtraTreesRegressor<T>` | Extremely randomized trees |
-| `GradientBoostingRegressor<T>` | Gradient boosting |
-| `XGBoostRegressor<T>` | XGBoost implementation |
-| `LightGBMRegressor<T>` | LightGBM implementation |
-| `CatBoostRegressor<T>` | CatBoost implementation |
-
-### Neighbors
-
-| Algorithm | Description |
-|:----------|:------------|
-| `KNeighborsRegressor<T>` | K-Nearest Neighbors |
-| `RadiusNeighborsRegressor<T>` | Radius-based neighbors |
-
-### Gaussian Processes
-
-| Algorithm | Description |
-|:----------|:------------|
-| `GaussianProcessRegressor<T>` | GP regression |
-
-### Neural Networks
-
-| Algorithm | Description |
-|:----------|:------------|
-| `MLPRegressor<T>` | Multi-layer Perceptron |
-
-### Ensemble
-
-| Algorithm | Description |
-|:----------|:------------|
-| `BaggingRegressor<T>` | Bootstrap aggregating |
-| `AdaBoostRegressor<T>` | Adaptive Boosting |
-| `VotingRegressor<T>` | Average predictions |
-| `StackingRegressor<T>` | Stacked generalization |
-
-### Isotonic
-
-| Algorithm | Description |
-|:----------|:------------|
+| `DecisionTreeRegression<T>` | Single decision tree |
+| `RandomForestRegression<T>` | Ensemble of trees |
+| `GradientBoostingRegression<T>` | Gradient boosting |
+| `HistGradientBoostingRegression<T>` | Histogram-based boosting |
+| `KNearestNeighborsRegression<T>` | K-Nearest Neighbors |
+| `GaussianProcessRegression<T>` | Gaussian process |
+| `NeuralNetworkRegression<T>` | Multi-layer perceptron |
 | `IsotonicRegression<T>` | Monotonic regression |
-
-### Quantile
-
-| Algorithm | Description |
-|:----------|:------------|
-| `QuantileRegressor<T>` | Quantile regression |
 
 ---
 
-## Clustering (39 Algorithms)
+## Clustering
 
-### Centroid-Based
-
-| Algorithm | Description |
-|:----------|:------------|
-| `KMeans<T>` | K-Means clustering |
-| `MiniBatchKMeans<T>` | Mini-batch K-Means |
-| `KMedoids<T>` | K-Medoids (PAM) |
-| `BisectingKMeans<T>` | Bisecting K-Means |
+| Family | Algorithms |
+|:-------|:-----------|
+| Centroid-based | `KMeans<T>`, `MiniBatchKMeans<T>`, `KMedoids<T>`, `BisectingKMeans<T>`, `FuzzyCMeans<T>` |
+| Density-based | `DBSCAN<T>`, `HDBSCAN<T>`, `OPTICS<T>`, `MeanShift<T>`, `Denclue<T>` |
+| Hierarchical | `AgglomerativeClustering<T>`, `BIRCH<T>`, `CURE<T>` |
+| Graph / other | `SpectralClustering<T>`, `AffinityPropagation<T>`, `CLARANS<T>` |
 
 ```csharp
-var kmeans = new KMeans<double>(
-    nClusters: 5,
-    maxIterations: 300,
-    init: KMeansInit.KMeansPlusPlus);
+using AiDotNet.Clustering.Options;
+using AiDotNet.Clustering.Partitioning;
+
+var kmeans = new KMeans<double>(new KMeansOptions<double> { NumClusters = 5 });
 ```
-
-### Density-Based
-
-| Algorithm | Description |
-|:----------|:------------|
-| `DBSCAN<T>` | Density-based spatial clustering |
-| `HDBSCAN<T>` | Hierarchical DBSCAN |
-| `OPTICS<T>` | Ordering Points for clustering |
-| `MeanShift<T>` | Mean shift clustering |
-
-### Hierarchical
-
-| Algorithm | Description |
-|:----------|:------------|
-| `AgglomerativeClustering<T>` | Bottom-up hierarchical |
-| `BIRCH<T>` | Balanced Iterative Reducing |
-| `Ward<T>` | Ward's minimum variance |
-
-### Spectral
-
-| Algorithm | Description |
-|:----------|:------------|
-| `SpectralClustering<T>` | Graph-based clustering |
-| `SpectralBiclustering<T>` | Biclustering |
-| `SpectralCoclustering<T>` | Co-clustering |
-
-### Model-Based
-
-| Algorithm | Description |
-|:----------|:------------|
-| `GaussianMixture<T>` | GMM clustering |
-| `BayesianGaussianMixture<T>` | Bayesian GMM |
-
-### Other
-
-| Algorithm | Description |
-|:----------|:------------|
-| `AffinityPropagation<T>` | Message passing |
-| `CLARA<T>` | Clustering Large Applications |
-| `CLARANS<T>` | Randomized CLARA |
 
 ---
 
 ## Dimensionality Reduction
 
-### Linear Methods
-
-| Algorithm | Description |
-|:----------|:------------|
-| `PCA<T>` | Principal Component Analysis |
-| `IncrementalPCA<T>` | Online PCA |
-| `KernelPCA<T>` | Kernel PCA |
-| `SparsePCA<T>` | Sparse PCA |
-| `TruncatedSVD<T>` | Truncated SVD |
-| `FactorAnalysis<T>` | Factor Analysis |
-| `FastICA<T>` | Independent Component Analysis |
-| `NMF<T>` | Non-negative Matrix Factorization |
-| `LatentDirichletAllocation<T>` | Topic modeling |
-
-### Manifold Learning
-
-| Algorithm | Description |
-|:----------|:------------|
-| `TSNE<T>` | t-SNE visualization |
-| `UMAP<T>` | Uniform Manifold Approximation |
-| `Isomap<T>` | Isometric Mapping |
-| `LocallyLinearEmbedding<T>` | LLE |
-| `MDS<T>` | Multidimensional Scaling |
-| `SpectralEmbedding<T>` | Spectral embedding |
-
----
-
-## Anomaly Detection
-
-| Algorithm | Description |
-|:----------|:------------|
-| `IsolationForest<T>` | Isolation-based |
-| `LocalOutlierFactor<T>` | Density-based |
-| `OneClassSVM<T>` | One-class SVM |
-| `EllipticEnvelope<T>` | Gaussian distribution |
-| `ECOD<T>` | Empirical Cumulative Distribution |
+| Family | Algorithms |
+|:-------|:-----------|
+| Linear | `PCA<T>`, `IncrementalPCA<T>`, `KernelPCA<T>`, `FactorAnalysis<T>`, `FastICA<T>`, `LatentDirichletAllocation<T>` |
+| Manifold | `Isomap<T>`, `LocallyLinearEmbedding<T>`, `MDS<T>`, `LaplacianEigenmaps<T>`, `DiffusionMaps<T>` |
 
 ---
 
 ## Usage with AiModelBuilder
 
+Every algorithm above plugs into the facade the same way — change `ConfigureModel(...)` and nothing else.
+
 ```csharp
+using AiDotNet;
+using AiDotNet.Classification.Ensemble;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Models.Options;
+using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
+
+double[][] features =
+{
+    new[] { 5.1, 3.5, 1.4, 0.2 }, new[] { 7.0, 3.2, 4.7, 1.4 },
+    new[] { 6.3, 3.3, 6.0, 2.5 }, new[] { 4.9, 3.0, 1.4, 0.2 }
+};
+double[] labels = { 0, 1, 2, 0 };
+
 // Classification
-var classificationResult = await new AiModelBuilder<double, double[], int>()
-    .ConfigureModel(new RandomForestClassifier<double>(nEstimators: 100))
-    .ConfigurePreprocessing()
-    .BuildAsync(features, labels);
+var classification = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new RandomForestClassifier<double>(
+        new RandomForestClassifierOptions<double> { NEstimators = 100 }))
+    .ConfigureDataLoader(DataLoaders.FromArrays(features, labels))
+    .BuildAsync();
 
-// Regression
-var regressionResult = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new GradientBoostingRegressor<double>())
-    .ConfigurePreprocessing()
-    .BuildAsync(features, targets);
+// Regression — same shape, different model + targets.
+double[] targets = { 1.2, 3.4, 5.6, 1.1 };
+var regression = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new GradientBoostingRegression<double>())
+    .ConfigureDataLoader(DataLoaders.FromArrays(features, targets))
+    .BuildAsync();
 
-// Clustering
-var clusteringResult = await new AiModelBuilder<double, double[], int>()
-    .ConfigureModel(new HDBSCAN<double>(minClusterSize: 5))
-    .BuildAsync(features);
+Console.WriteLine($"Trained classifier + regressor on {features.Length} samples.");
+```
+
+```csharp
+using AiDotNet;
+using AiDotNet.Clustering.Options;
+using AiDotNet.Clustering.Partitioning;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Tensors.LinearAlgebra;
+
+// Clustering uses the features-only loader.
+var data = new Matrix<double>(4, 2);
+double[][] rows = { new[] { 1.0, 1.0 }, new[] { 1.2, 0.9 }, new[] { 8.0, 8.0 }, new[] { 8.1, 7.9 } };
+for (int i = 0; i < 4; i++) { data[i, 0] = rows[i][0]; data[i, 1] = rows[i][1]; }
+
+var clustering = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new KMeans<double>(new KMeansOptions<double> { NumClusters = 2 }))
+    .ConfigureDataLoader(DataLoaders.FromMatrix(data))
+    .BuildAsync();
+
+Console.WriteLine($"Silhouette: {clustering.Evaluation.ClusteringMetrics?.Silhouette:F4}");
 ```
