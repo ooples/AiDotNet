@@ -27,14 +27,14 @@ Console.WriteLine("Configuration:");
 Console.WriteLine($"  - Input Size: {inputSize}");
 Console.WriteLine($"  - Output Size: {outputSize}");
 Console.WriteLine($"  - LoRA Rank: {loraRank}");
-Console.WriteLine($"  - Quantization: INT8 base weights\n");
+Console.WriteLine($"  - Quantization: INT4 base weights (16 levels, ~8x smaller than FP32)\n");
 
 // ── 1. Base model (the architecture builds a small MLP) ────────────────────
 var model = new NeuralNetwork<double>(new NeuralNetworkArchitecture<double>(
     inputFeatures: inputSize, numClasses: outputSize, complexity: NetworkComplexity.Simple));
 
 // ── 2. QLoRA = quantization config + LoRA config ───────────────────────────
-var quantConfig = new QuantizationConfig { Mode = QuantizationMode.Int8 };
+var quantConfig = QuantizationConfig.ForInt4();   // true 4-bit base weights — what makes this QLoRA
 var loraConfig = new DefaultLoRAConfiguration<double>(
     rank: loraRank, alpha: loraAlpha, freezeBaseLayer: true);
 
@@ -87,11 +87,11 @@ Console.WriteLine("\n| Precision | Bits/Weight | Relative Size | Notes          
 Console.WriteLine("|-----------|-------------|---------------|------------------------|");
 Console.WriteLine("| FP32      |          32 |         1.00x | Full precision base    |");
 Console.WriteLine("| FP16      |          16 |         0.50x | Half precision         |");
-Console.WriteLine("| INT8      |           8 |         0.25x | QLoRA (this sample)    |");
-Console.WriteLine("| INT4      |           4 |         0.125x| Aggressive quantization|");
+Console.WriteLine("| INT8      |           8 |         0.25x | 8-bit base             |");
+Console.WriteLine("| INT4      |           4 |         0.125x| QLoRA (this sample)    |");
 
 Console.WriteLine(@"
-QLoRA keeps the large base model frozen in low precision (here INT8) and trains
+QLoRA keeps the large base model frozen in low precision (here INT4) and trains
 only the small LoRA adapters in full precision, so fine-tuning fits in a
 fraction of the memory a full fine-tune would need.
 ");
