@@ -1,10 +1,10 @@
 ---
-title: "MomentumOptimizer"
+title: "MomentumOptimizer<T, TInput, TOutput>"
 description: "Implements the Momentum optimization algorithm for gradient-based optimization."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Optimizers_
+`Models & Types` · `AiDotNet.Optimizers`
 
 Implements the Momentum optimization algorithm for gradient-based optimization.
 
@@ -50,4 +50,45 @@ var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
 
 Console.WriteLine("Trained with MomentumOptimizer.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `MomentumOptimizer(IFullModel<,,>,MomentumOptimizerOptions<,,>)` | Initializes a new instance of the MomentumOptimizer class. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `SupportsGpuUpdate` | Gets whether this optimizer supports GPU-accelerated parameter updates. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `Deserialize(Byte[])` | Deserializes a byte array to restore the optimizer's state. |
+| `DisposeGpuState` | Disposes GPU-allocated optimizer state. |
+| `GenerateGradientCacheKey(IFullModel<,,>,,)` | Generates a unique key for caching gradients based on the model and input data. |
+| `GetOptions` | Gets the current optimization algorithm options. |
+| `InitializeAdaptiveParameters` | Initializes adaptive parameters for the optimization process. |
+| `InitializeGpuState(Int32,IDirectGpuBackend)` | Initializes Momentum optimizer state on the GPU. |
+| `Optimize(OptimizationInputData<,,>)` | Performs the optimization process using the Momentum algorithm. |
+| `ReverseUpdate(Vector<>,Vector<>)` | Reverses a momentum-based gradient update to recover original parameters. |
+| `Serialize` | Serializes the optimizer's state into a byte array. |
+| `Step(TapeStepContext<>)` |  |
+| `UpdateAdaptiveParameters(OptimizationStepData<,,>,OptimizationStepData<,,>)` | Updates the adaptive parameters of the optimizer based on the current and previous optimization steps. |
+| `UpdateOptions(OptimizationAlgorithmOptions<,,>)` | Updates the optimizer's options with new settings. |
+| `UpdateParameters(Vector<>,Vector<>)` | Updates a vector of parameters using the Momentum optimization algorithm. |
+| `UpdateParametersGpu(IGpuBuffer,IGpuBuffer,Int32,IDirectGpuBackend)` | Updates parameters on the GPU using the SGD with momentum kernel. |
+| `UpdateSolution(IFullModel<,,>,Vector<>)` | Updates the current solution based on the calculated velocity. |
+| `UpdateVelocity(Vector<>)` | Updates the velocity vector based on the current gradient and momentum. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_gpuVelocity` | GPU buffer for velocity state. |
+| `_options` | The configuration options specific to the Momentum optimizer. |
+| `_velocity` | Stores the current velocity vector for each parameter in the model. |
 

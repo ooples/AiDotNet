@@ -1,10 +1,10 @@
 ---
-title: "GeneralizedAdditiveModel"
+title: "GeneralizedAdditiveModel<T>"
 description: "Implements a Generalized Additive Model (GAM) for regression, which models the target as a sum of smooth functions of individual features, allowing for flexible nonlinear relationships while maintaining interpretability."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Implements a Generalized Additive Model (GAM) for regression, which models the target as a sum of smooth functions
 of individual features, allowing for flexible nonlinear relationships while maintaining interpretability.
@@ -62,4 +62,44 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained GeneralizedAdditiveModel.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `GeneralizedAdditiveModel(GeneralizedAdditiveModelOptions<>,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the `GeneralizedAdditiveModel` class. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `ParameterCount` | Trains the Generalized Additive Model using the provided input features and target values. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CalculateFeatureImportances` | Gets the model type of the Generalized Additive Model. |
+| `CreateBasisFunctions(Matrix<>,Boolean)` | Creates basis functions for each feature in the input data. |
+| `CreateKnots(Vector<>)` | Creates knot points for spline basis functions based on the feature values. |
+| `CreateNewInstance` | Creates a new instance of the GeneralizedAdditiveModel with the same configuration as the current instance. |
+| `CreateSpline(Vector<>,,Int32)` | Creates a spline basis function for a feature using the specified knot and degree. |
+| `Deserialize(Byte[])` | Loads a previously serialized Generalized Additive Model from a byte array. |
+| `FitModel(Vector<>)` | Fits the model coefficients using the basis functions and target values. |
+| `GetModelMetadata` | Gets metadata about the Generalized Additive Model and its configuration. |
+| `GetOptions` |  |
+| `Predict(Matrix<>)` | Predicts target values for the provided input features using the trained Generalized Additive Model. |
+| `Serialize` | Serializes the Generalized Additive Model to a byte array for storage or transmission. |
+| `SplineFunction(,,Int32)` | Computes the spline function value for a given input, knot, and degree. |
+| `ValidateInputs(Matrix<>,Vector<>)` | Validates that the input data dimensions are compatible. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_basisFunctions` | Matrix of basis functions applied to the input features. |
+| `_coefficients` | Vector of model coefficients for the basis functions. |
+| `_options` | Configuration options for the Generalized Additive Model. |
+| `_trainingKnots` | Knots fitted from the TRAINING feature distribution, one knot vector per feature column. |
+| `_useOLS` | Tracks whether OLS fallback was used. |
 

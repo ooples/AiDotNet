@@ -1,10 +1,10 @@
 ---
-title: "MultivariateRegression"
+title: "MultivariateRegression<T>"
 description: "Represents a multivariate linear regression model that predicts a target value based on multiple input features."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Represents a multivariate linear regression model that predicts a target value based on multiple input features.
 
@@ -52,4 +52,18 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained MultivariateRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `MultivariateRegression(RegressionOptions<>,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the `MultivariateRegression` class with optional custom options and regularization. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CreateNewInstance` | Creates a new instance of the Multivariate Regression model with the same configuration. |
+| `Predict(Matrix<>)` | Makes predictions for new data points using the trained multivariate regression model. |
+| `Train(Matrix<>,Vector<>)` | Trains the multivariate regression model using the provided features and target values. |
 

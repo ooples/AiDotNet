@@ -1,10 +1,10 @@
 ---
-title: "SimpleRegression"
+title: "SimpleRegression<T>"
 description: "Implements simple linear regression, which predicts a single output value based on a single input feature."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Implements simple linear regression, which predicts a single output value based on a single input feature.
 This is the most basic form of regression that finds the best-fitting straight line through a set of points.
@@ -56,4 +56,17 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained SimpleRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `SimpleRegression(RegressionOptions<>,IRegularization<,Matrix<>,Vector<>>)` | Creates a new simple regression model. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CreateNewInstance` | Creates a new instance of the simple regression model with the same options. |
+| `Train(Matrix<>,Vector<>)` | Trains the simple regression model using the provided input feature and target values. |
 

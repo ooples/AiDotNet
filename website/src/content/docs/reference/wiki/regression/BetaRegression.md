@@ -1,10 +1,10 @@
 ---
-title: "BetaRegression"
+title: "BetaRegression<T>"
 description: "Beta Regression for modeling proportions and rates bounded in (0, 1)."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Beta Regression for modeling proportions and rates bounded in (0, 1).
 
@@ -59,4 +59,55 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained BetaRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `BetaRegression(BetaRegressionOptions,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of BetaRegression. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `MeanCoefficients` | Gets the mean model coefficients. |
+| `MeanIntercept` | Gets the mean model intercept. |
+| `NumberOfTrees` |  |
+| `Precision` | Gets the precision (or its intercept if constant). |
+| `PrecisionCoefficients` | Gets the precision model coefficients (if variable precision is enabled). |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CalculateFeatureImportancesAsync(Int32)` |  |
+| `ComputeLogLikelihood(Vector<>,Vector<>,Vector<>)` | Computes the log-likelihood. |
+| `ComputePredictions(Matrix<>)` | Computes mean (μ) and precision (φ) predictions for all samples. |
+| `CreateNewInstance` |  |
+| `Deserialize(Byte[])` |  |
+| `GetModelMetadata` |  |
+| `InitializeParameters(Vector<>)` | Initializes parameters from target values. |
+| `InverseLinkFunction(Double)` | Applies the inverse link function. |
+| `LinkFunction(Double)` | Applies the link function. |
+| `LinkFunctionDerivative(Double)` | Computes the derivative of the link function. |
+| `PredictAsync(Matrix<>)` |  |
+| `PredictDistributionsAsync(Matrix<>)` | Predicts full Beta distributions for each input sample. |
+| `PredictIntervalAsync(Matrix<>,Double)` | Gets prediction intervals for each input sample. |
+| `Serialize` |  |
+| `TrainAsync(Matrix<>,Vector<>)` |  |
+| `UpdateCoefficientsWLS(Matrix<>,Vector<>,Vector<>,Vector<>,)` | Updates coefficients using weighted least squares. |
+| `UpdateMeanModel(Matrix<>,Vector<>,Vector<>,Vector<>)` | Updates the mean model using Fisher scoring. |
+| `UpdatePrecisionModel(Matrix<>,Vector<>,Vector<>,Vector<>)` | Updates the precision model using Fisher scoring. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_meanCoefficients` | Coefficients for the mean (μ) model. |
+| `_meanIntercept` | Intercept for the mean model. |
+| `_numFeatures` | Number of features. |
+| `_options` | Configuration options. |
+| `_precisionCoefficients` | Coefficients for the precision (φ) model (if variable precision). |
+| `_precisionIntercept` | Intercept for the precision model. |
+| `_yMin` | Y min-max scaling for mapping to (0,1). |
 

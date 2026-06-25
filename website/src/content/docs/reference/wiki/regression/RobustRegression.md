@@ -1,10 +1,10 @@
 ---
-title: "RobustRegression"
+title: "RobustRegression<T>"
 description: "Represents a robust regression model that is resistant to outliers in the data."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Represents a robust regression model that is resistant to outliers in the data.
 
@@ -52,4 +52,35 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained RobustRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `RobustRegression(RobustRegressionOptions<>,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the `RobustRegression` class with the specified options and regularization method. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `ParameterCount` | Robust regression uses IRLS internally — random parameter injection is not helpful. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CreateNewInstance` | Creates a new instance of the robust regression model with the same options. |
+| `Deserialize(Byte[])` | Deserializes the robust regression model from a byte array. |
+| `GetOptions` |  |
+| `GetParameters` | Gets the model parameters (coefficients and intercept) as a single vector. |
+| `IsConverged(Vector<>,Vector<>,,)` | Determines whether the model has converged based on changes in coefficients and intercept. |
+| `Serialize` | Gets the type of this regression model. |
+| `Train(Matrix<>,Vector<>)` | Trains the robust regression model using the provided input data and target values. |
+| `WithParameters(Vector<>)` | Creates a new model instance with the specified parameters. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_options` | Gets the configuration options used by this robust regression model. |
 

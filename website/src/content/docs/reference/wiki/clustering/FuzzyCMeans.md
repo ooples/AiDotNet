@@ -1,10 +1,10 @@
 ---
-title: "FuzzyCMeans"
+title: "FuzzyCMeans<T>"
 description: "Fuzzy C-Means (FCM) soft clustering implementation."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Clustering_
+`Models & Types` · `AiDotNet.Clustering.Partitioning`
 
 Fuzzy C-Means (FCM) soft clustering implementation.
 
@@ -57,4 +57,28 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 var labels = result.Predict(data);
 Console.WriteLine($"FuzzyCMeans: clustered {labels.Length} points.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `FuzzyCMeans(FuzzyCMeansOptions<>)` | Initializes a new FuzzyCMeans instance. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `MembershipMatrix` | Gets the membership matrix (n_samples x n_clusters). |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CreateNewInstance` |  |
+| `FitPredict(Matrix<>)` |  |
+| `GetOptions` |  |
+| `Predict(Matrix<>)` |  |
+| `PredictMembership(Matrix<>)` | Predicts soft cluster memberships for new data. |
+| `Train(Matrix<>,Vector<>)` |  |
+| `WithParameters(Vector<>)` |  |
 

@@ -1,10 +1,10 @@
 ---
-title: "AdaMaxOptimizer"
+title: "AdaMaxOptimizer<T, TInput, TOutput>"
 description: "Represents an AdaMax optimizer, an extension of Adam that uses the infinity norm."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Optimizers_
+`Models & Types` · `AiDotNet.Optimizers`
 
 Represents an AdaMax optimizer, an extension of Adam that uses the infinity norm.
 
@@ -55,4 +55,37 @@ var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
 
 Console.WriteLine("Trained with AdaMaxOptimizer.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `AdaMaxOptimizer(IFullModel<,,>,AdaMaxOptimizerOptions<,,>,IEngine)` | Initializes a new instance of the AdaMaxOptimizer class. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `AiDotNet#Optimizers#Fused#IFusedOptimizerSpec#TryGetFusedOptimizerConfig(FusedOptimizerConfig)` | Describes this AdaMax instance for the fused-compiled training kernel (Tensors `OptimizerType.AdaMax`). |
+| `Deserialize(Byte[])` | Restores the optimizer's state from a byte array created by the Serialize method. |
+| `GenerateGradientCacheKey(IFullModel<,,>,,)` | Generates a unique key for caching gradients specific to the AdaMax optimizer. |
+| `GetOptions` | Gets the current options of the AdaMax optimizer. |
+| `InitializeAdaptiveParameters` | Initializes the adaptive parameters for the AdaMax optimizer. |
+| `Optimize(OptimizationInputData<,,>)` | Performs the optimization process using the AdaMax algorithm. |
+| `ReverseUpdate(Vector<>,Vector<>)` | Reverses an AdaMax gradient update to recover original parameters. |
+| `Serialize` | Converts the current state of the optimizer into a byte array for storage or transmission. |
+| `Step(TapeStepContext<>)` |  |
+| `UpdateAdaptiveParameters(OptimizationStepData<,,>,OptimizationStepData<,,>)` | Updates the adaptive parameters of the optimizer based on the current and previous optimization steps. |
+| `UpdateOptions(OptimizationAlgorithmOptions<,,>)` | Updates the optimizer options with new AdaMax-specific options. |
+| `UpdateParameters(Vector<>,Vector<>)` | Updates a vector of parameters using the AdaMax optimization algorithm. |
+| `UpdateSolution(IFullModel<,,>,Vector<>)` | Updates the current solution using the AdaMax update rule. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_m` | The first moment vector that tracks the exponentially weighted moving average of gradients. |
+| `_options` | The configuration options specific to the AdaMax optimizer. |
+| `_t` | The current time step or iteration counter. |
+| `_u` | The exponentially weighted infinity norm of past gradients. |
 

@@ -1,10 +1,10 @@
 ---
-title: "SupportVectorRegression"
+title: "SupportVectorRegression<T>"
 description: "Implements Support Vector Regression (SVR), which creates a regression model by finding a hyperplane that lies within a specified margin (epsilon) of the training data."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Implements Support Vector Regression (SVR), which creates a regression model by finding
 a hyperplane that lies within a specified margin (epsilon) of the training data.
@@ -59,4 +59,38 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained SupportVectorRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `SupportVectorRegression(SupportVectorRegressionOptions,IRegularization<,Matrix<>,Vector<>>)` | Creates a new Support Vector Regression model. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `ParameterCount` | SVR uses SMO algorithm — random parameter injection is not applicable. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `Clone` | Serializes the support vector regression model to a byte array for storage or transmission. |
+| `ComputeBounds(,,,)` | Computes the bounds for alpha coefficient optimization. |
+| `CreateInstance` | Creates a new instance of the Support Vector Regression model with the same configuration. |
+| `Deserialize(Byte[])` | Deserializes the support vector regression model from a byte array. |
+| `GetActiveFeatureIndices` | Optimizes the SVR model using the provided input data and target values. |
+| `GetModelMetadata` | Gets metadata about the SVR model. |
+| `GetOptions` |  |
+| `Predict(Matrix<>)` | Predicts target values for a matrix of input features. |
+| `PredictSingle(Vector<>)` | Predicts a target value for a single input feature vector. |
+| `SequentialMinimalOptimization(Matrix<>,Vector<>)` | Implements the Sequential Minimal Optimization (SMO) algorithm for SVR. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_options` | Configuration options for the Support Vector Regression model. |
+| `_random` | Selects a second alpha coefficient to optimize along with the first one. |
 

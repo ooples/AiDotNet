@@ -1,10 +1,10 @@
 ---
-title: "AMSGradOptimizer"
+title: "AMSGradOptimizer<T, TInput, TOutput>"
 description: "Implements the AMSGrad optimization algorithm, an improved version of Adam optimizer."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Optimizers_
+`Models & Types` · `AiDotNet.Optimizers`
 
 Implements the AMSGrad optimization algorithm, an improved version of Adam optimizer.
 
@@ -48,4 +48,40 @@ var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
 
 Console.WriteLine("Trained with AMSGradOptimizer.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `AMSGradOptimizer(IFullModel<,,>,AMSGradOptimizerOptions<,,>,IEngine)` | Initializes a new instance of the AMSGradOptimizer class. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `AiDotNet#Optimizers#Fused#IFusedOptimizerSpec#TryGetFusedOptimizerConfig(FusedOptimizerConfig)` | Describes this AMSGrad optimizer for the compiled fused-training kernel. |
+| `Deserialize(Byte[])` | Restores the optimizer's state from a byte array previously created by the Serialize method. |
+| `DisposeGpuState` | Disposes GPU-allocated optimizer state. |
+| `GenerateGradientCacheKey(IFullModel<,,>,,)` | Generates a unique key for caching gradients based on the current state of the optimizer and input data. |
+| `GetOptions` | Retrieves the current options of the optimizer. |
+| `InitializeAdaptiveParameters` | Initializes the adaptive parameters used by the AMSGrad optimizer. |
+| `Optimize(OptimizationInputData<,,>)` | Performs the optimization process using the AMSGrad algorithm. |
+| `ReverseUpdate(Vector<>,Vector<>)` | Reverses an AMSGrad gradient update to recover original parameters. |
+| `Serialize` | Converts the current state of the optimizer into a byte array for storage or transmission. |
+| `Step(TapeStepContext<>)` |  |
+| `UpdateAdaptiveParameters(OptimizationStepData<,,>,OptimizationStepData<,,>)` | Updates the adaptive parameters of the optimizer based on the current and previous optimization steps. |
+| `UpdateOptions(OptimizationAlgorithmOptions<,,>)` | Updates the optimizer's options with new settings. |
+| `UpdateParameters(Vector<>,Vector<>)` | Updates a vector of parameters using the AMSGrad optimization algorithm. |
+| `UpdateParametersGpu(IGpuBuffer,IGpuBuffer,Int32,IDirectGpuBackend)` | GPU-accelerated parameter update for AMSGrad optimizer. |
+| `UpdateSolution(IFullModel<,,>,Vector<>)` | Updates the current solution using the AMSGrad update rule. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_m` | The first moment vector (moving average of gradients). |
+| `_options` | The options specific to the AMSGrad optimizer. |
+| `_t` | The current time step. |
+| `_v` | The second moment vector (moving average of squared gradients). |
+| `_vHat` | The maximum of past second moments. |
 

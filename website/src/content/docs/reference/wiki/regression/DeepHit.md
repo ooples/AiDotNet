@@ -1,10 +1,10 @@
 ---
-title: "DeepHit"
+title: "DeepHit<T>"
 description: "DeepHit: A deep learning approach to survival analysis with competing risks."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 DeepHit: A deep learning approach to survival analysis with competing risks.
 
@@ -58,4 +58,62 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained DeepHit.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `DeepHit(DeepHitOptions<>,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of DeepHit. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `NumberOfTrees` |  |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `ApplyLayer(Vector<>[],Matrix<>,Vector<>,Boolean)` | Applies a single layer. |
+| `ApplySoftmaxAcrossAll(Vector<>[][])` | Applies softmax across all causes and time bins. |
+| `CalculateFeatureImportancesAsync(Int32)` |  |
+| `ComputeCIndex(Matrix<>,Vector<>,Vector<>)` | Computes the concordance index (C-index) for model evaluation. |
+| `ComputeLossAndGradients(Vector<>[][],Int32[],Vector<>,Int32[])` | Computes loss and gradients. |
+| `ComputeTimeDependentAUC(Matrix<>,Vector<>,Vector<>,)` | Computes the time-dependent AUC at specific time horizons. |
+| `ConvertTimesToBins(Vector<>)` | Converts times to bin indices. |
+| `CreateNewInstance` |  |
+| `Deserialize(Byte[])` |  |
+| `ForwardPass(Matrix<>,Int32[])` | Forward pass through the network. |
+| `GetModelMetadata` |  |
+| `GetTimeBinCenter(Int32)` | Gets the center time of a bin as double (for evaluation metrics). |
+| `GetTimeBinCenterT(Int32)` | Gets the center time of a bin as T. |
+| `GetTimeBinIndex()` | Gets the bin index for a given time. |
+| `InitializeBiases(Int32)` | Initializes bias vector with zeros. |
+| `InitializeNetwork` | Initializes the neural network architecture. |
+| `InitializeTimeBins(Vector<>)` | Initializes time bin edges based on observed times. |
+| `InitializeWeights(Int32,Int32)` | Initializes weight matrix with He initialization. |
+| `PredictAsync(Matrix<>)` |  |
+| `PredictCIF(Matrix<>,Vector<>,Int32)` | Predicts cumulative incidence function (CIF) for a specific risk. |
+| `PredictExpectedTime(Matrix<>)` | Predicts expected time to event. |
+| `PredictMedianSurvivalTime(Matrix<>)` | Predicts median survival time for each sample. |
+| `PredictPMF(Matrix<>)` | Predicts the probability mass function (PMF) of event time for each sample. |
+| `PredictSurvival(Matrix<>,Vector<>)` | Predicts survival probability S(t) = P(T > t) at specified times. |
+| `Serialize` |  |
+| `TrainAsync(Matrix<>,Vector<>)` |  |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_causeBiases` | Cause-specific network biases (one list per cause). |
+| `_causeWeights` | Cause-specific network weights (one list per cause). |
+| `_numFeatures` | Number of features. |
+| `_options` | Configuration options. |
+| `_outputBiases` | Output layer biases (for each cause). |
+| `_outputWeights` | Output layer weights (for each cause, maps to time bins). |
+| `_random` | Random number generator. |
+| `_sharedBiases` | Shared network biases. |
+| `_sharedWeights` | Shared network weights. |
+| `_timeBinEdges` | Time bin edges (discretization of time axis). |
 

@@ -1,10 +1,10 @@
 ---
-title: "M5ModelTree"
+title: "M5ModelTree<T>"
 description: "Represents an M5 model tree for regression problems, combining decision tree structure with linear models at the leaves."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Represents an M5 model tree for regression problems, combining decision tree structure with linear models at the leaves.
 
@@ -52,4 +52,47 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained M5ModelTree.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `M5ModelTree(M5ModelTreeOptions,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the `M5ModelTree` class with optional custom options and regularization. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `BuildTreeAsync(Matrix<>,Vector<>,Int32)` | Asynchronously builds the decision tree structure recursively. |
+| `CalculateAveragePrediction(DecisionTreeNode<>)` | Calculates the average prediction value for a node. |
+| `CalculateFeatureImportancesAsync(Int32)` | Asynchronously calculates the importance of each feature in the model. |
+| `CalculateFeatureImportancesRecursiveAsync(DecisionTreeNode<>,)` | Recursively calculates feature importances throughout the tree. |
+| `CalculateLeafError(DecisionTreeNode<>)` | Calculates the error if a node were converted to a leaf. |
+| `CalculateSubtreeError(DecisionTreeNode<>)` | Calculates the prediction error for a subtree. |
+| `CalculateTreeDepth(DecisionTreeNode<>)` | Calculates the maximum depth of the tree. |
+| `CollectSamplesFromSubtree(DecisionTreeNode<>,List<Sample<>>)` | Collects all samples from leaf nodes in a subtree. |
+| `CountNodes(DecisionTreeNode<>)` | Counts the total number of nodes in the tree. |
+| `CreateLeafNode(Matrix<>,Vector<>)` | Creates a leaf node for the decision tree. |
+| `CreateNewInstance` | Creates a new instance of the M5ModelTree with the same configuration as the current instance. |
+| `Deserialize(Byte[])` | Deserializes the M5 model tree from a byte array, including linear models at leaf nodes. |
+| `DeserializeM5Node(BinaryReader)` | Deserializes an M5 tree node including its linear model if present. |
+| `FindBestSplitAsync(Matrix<>,Vector<>)` | Asynchronously finds the best feature and threshold to split the data. |
+| `FindBestSplitForFeature(Matrix<>,Vector<>,Int32)` | Finds the best threshold for a specific feature to split the data. |
+| `FitLinearModel(Matrix<>,Vector<>)` | Fits a linear regression model to the data for a leaf node. |
+| `GetModelMetadata` | Gets metadata about the trained model. |
+| `GetOptions` |  |
+| `PredictAsync(Matrix<>)` | Asynchronously generates predictions for new data points using the trained M5 model tree. |
+| `PredictSingle(Vector<>)` | Predicts a value for a single input vector by traversing the tree. |
+| `PruneTreeAsync(DecisionTreeNode<>)` | Asynchronously prunes the tree to reduce complexity and prevent overfitting. |
+| `Serialize` | Serializes the M5 model tree to a byte array, including linear models at leaf nodes. |
+| `SerializeM5Node(BinaryWriter,DecisionTreeNode<>)` | Serializes an M5 tree node including its linear model if present. |
+| `SplitData(Matrix<>,Vector<>,Int32,)` | Splits the data into left and right subsets based on a feature and threshold. |
+| `TrainAsync(Matrix<>,Vector<>)` | Asynchronously trains the M5 model tree using the provided features and target values. |
+| `VarianceFromMoments(,,Int32)` | Computes the sample variance of a group of target values from its running sum and sum-of-squares, used by the standard-deviation-reduction split search. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_options` | The configuration options for the M5 model tree algorithm. |
 

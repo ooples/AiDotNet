@@ -1,10 +1,10 @@
 ---
-title: "MultipleRegression"
+title: "MultipleRegression<T>"
 description: "Represents a multiple linear regression model that predicts a target value based on multiple input features."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Represents a multiple linear regression model that predicts a target value based on multiple input features.
 
@@ -52,4 +52,17 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained MultipleRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `MultipleRegression(RegressionOptions<>,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the `MultipleRegression` class with optional custom options and regularization. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CreateNewInstance` | Creates a new instance of the Multiple Regression model with the same configuration. |
+| `Train(Matrix<>,Vector<>)` | Trains the multiple regression model using the provided features and target values. |
 

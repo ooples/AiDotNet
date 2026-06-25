@@ -1,10 +1,10 @@
 ---
-title: "MiniBatchKMeans"
+title: "MiniBatchKMeans<T>"
 description: "Mini-Batch K-Means clustering algorithm for large-scale clustering."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Clustering_
+`Models & Types` · `AiDotNet.Clustering.Partitioning`
 
 Mini-Batch K-Means clustering algorithm for large-scale clustering.
 
@@ -62,4 +62,29 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 var labels = result.Predict(data);
 Console.WriteLine($"MiniBatchKMeans: clustered {labels.Length} points.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `MiniBatchKMeans(MiniBatchKMeansOptions<>)` | Initializes a new MiniBatchKMeans instance with the specified options. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `NumIterations` | Gets the number of iterations from the last fit. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CreateNewInstance` |  |
+| `FitPredict(Matrix<>)` |  |
+| `GetOptions` |  |
+| `PartialFit(Matrix<>)` | Performs a partial fit on a batch of data (for online/streaming learning). |
+| `Predict(Matrix<>)` |  |
+| `Train(Matrix<>,Vector<>)` |  |
+| `Transform(Matrix<>)` |  |
+| `WithParameters(Vector<>)` |  |
 

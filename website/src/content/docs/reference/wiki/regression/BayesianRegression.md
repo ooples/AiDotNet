@@ -1,10 +1,10 @@
 ---
-title: "BayesianRegression"
+title: "BayesianRegression<T>"
 description: "Implements Bayesian Linear Regression with support for various kernels and uncertainty estimation."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Implements Bayesian Linear Regression with support for various kernels and uncertainty estimation.
 
@@ -74,4 +74,38 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained BayesianRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `BayesianRegression(BayesianRegressionOptions<>,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the `BayesianRegression` class with the specified options and regularization. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `ParameterCount` | Bayesian regression computes posterior analytically — random parameter injection is harmful. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `ApplyKernel(Matrix<>)` | Applies the selected kernel transformation to the input matrix. |
+| `ApplyLaplacianKernel(Matrix<>)` | Applies the Laplacian kernel transformation to the input matrix. |
+| `ApplyPolynomialKernel(Matrix<>)` | Applies the Polynomial kernel transformation to the input matrix. |
+| `ApplyRBFKernel(Matrix<>)` | Applies the Radial Basis Function (RBF) kernel transformation to the input matrix. |
+| `ApplySigmoidKernel(Matrix<>)` | Applies the Sigmoid kernel transformation to the input matrix. |
+| `CalculateManhattanDistance(Vector<>,Vector<>)` | Calculates the Manhattan distance between two vectors. |
+| `CreateNewInstance` | Creates a new instance of the Bayesian regression model with the same configuration. |
+| `Predict(Matrix<>)` | Makes predictions on new data using the trained Bayesian regression model. |
+| `PredictWithUncertainty(Matrix<>)` | Makes predictions with uncertainty estimates on new data using the trained Bayesian regression model. |
+| `Train(Matrix<>,Vector<>)` | Trains the Bayesian regression model on the provided input data and target values. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_bayesOptions` | Options specific to Bayesian regression. |
+| `_posteriorCovariance` | The covariance matrix of the posterior distribution over model parameters. |
 

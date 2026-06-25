@@ -1,10 +1,10 @@
 ---
-title: "DARTRegression"
+title: "DARTRegression<T>"
 description: "DART (Dropouts meet Multiple Additive Regression Trees) regression."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 DART (Dropouts meet Multiple Additive Regression Trees) regression.
 
@@ -57,4 +57,54 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained DARTRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `DARTRegression(DARTOptions,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of DART regression. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `NumberOfTrees` |  |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `AccumulateFeatureImportance(DARTRegression<>.DARTTree,Vector<>)` | Recursively accumulates feature importance from a tree. |
+| `CalculateFeatureImportancesAsync(Int32)` |  |
+| `ComputeNormalizationFactor(Int32[])` | Computes normalization factor for dropout. |
+| `ComputePartialPredictions(Matrix<>,Int32[])` | Computes predictions using only specified trees. |
+| `CreateLeaf(Vector<>,Int32[])` | Creates a leaf node. |
+| `CreateNewInstance` |  |
+| `Deserialize(Byte[])` |  |
+| `FindBestSplit(Matrix<>,Vector<>,Int32[],Int32[])` | Finds the best split for a node. |
+| `FitTree(Matrix<>,Vector<>,Int32[],Int32[],Int32)` | Fits a decision tree to the data. |
+| `GetDropProbability(Int32)` | Gets the drop probability for a tree based on dropout mode. |
+| `GetModelMetadata` |  |
+| `GetTreePredictions(Vector<>)` | Gets the individual tree predictions for a sample. |
+| `GetTreeWeights` | Gets the tree weights. |
+| `Predict(Matrix<>)` | Predicts values for input samples. |
+| `PredictAsync(Matrix<>)` |  |
+| `PredictTree(DARTRegression<>.DARTTree,Matrix<>,Int32)` | Makes a prediction using a single tree for a row of a matrix. |
+| `PredictTree(DARTRegression<>.DARTTree,Vector<>)` | Makes a prediction using a single tree for a vector input. |
+| `SampleData(Int32)` | Samples data points for this tree. |
+| `SampleFeatures` | Samples features for this tree. |
+| `SelectDroppedTrees(Int32)` | Selects trees to drop for this iteration. |
+| `Serialize` |  |
+| `SplitData(Matrix<>,Int32[],Int32,)` | Splits data based on a feature and threshold. |
+| `TrainAsync(Matrix<>,Vector<>)` |  |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_numFeatures` | Number of features. |
+| `_options` | Configuration options. |
+| `_random` | Random number generator. |
+| `_treeWeights` | Tree weights (may differ after normalization). |
+| `_trees` | Individual tree structures. |
 

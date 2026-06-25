@@ -1,10 +1,10 @@
 ---
-title: "TweedieRegression"
+title: "TweedieRegression<T>"
 description: "Implements Tweedie regression, a flexible generalized linear model that encompasses several distributions (Poisson, Gamma, Inverse Gaussian) as special cases based on the power parameter."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Implements Tweedie regression, a flexible generalized linear model that encompasses several distributions
 (Poisson, Gamma, Inverse Gaussian) as special cases based on the power parameter.
@@ -59,4 +59,42 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained TweedieRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `TweedieRegression(TweedieRegressionOptions<>,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the TweedieRegression class with the specified options and regularization. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `Dispersion` | Gets the estimated dispersion parameter. |
+| `PowerParameter` | Gets the power parameter used by this model. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `ApplyInverseLink(Vector<>)` | Applies the inverse link function to convert the linear predictor to the mean. |
+| `ApplyPowerLink(Double)` | Applies the power link function: η = μ^(1-p). |
+| `ClampMu(Vector<>)` | Clamps the mean values to ensure they're positive and numerically stable. |
+| `ComputeWeights(Vector<>)` | Computes the weights matrix for the iteratively reweighted least squares algorithm. |
+| `ComputeWorkingResponse(Vector<>,Vector<>,Vector<>)` | Computes the working response for the iteratively reweighted least squares algorithm. |
+| `CreateNewInstance` | Creates a new instance of the Tweedie Regression model with the same configuration. |
+| `Deserialize(Byte[])` | Deserializes the model from a byte array. |
+| `EstimateDispersion(Matrix<>,Vector<>)` | Estimates the dispersion parameter using Pearson residuals after model fitting. |
+| `HasConverged(Vector<>,Vector<>)` | Checks if the algorithm has converged by comparing the change in coefficients. |
+| `Predict(Matrix<>)` | Makes predictions for the given input data. |
+| `Serialize` | Serializes the model to a byte array. |
+| `Train(Matrix<>,Vector<>)` | Trains the Tweedie regression model on the provided data. |
+| `ValidateTweedieData(Vector<>)` | Validates that target values are appropriate for the specified power parameter. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_dispersion` | The estimated dispersion parameter φ. |
+| `_options` | Configuration options for the Tweedie regression model. |
 

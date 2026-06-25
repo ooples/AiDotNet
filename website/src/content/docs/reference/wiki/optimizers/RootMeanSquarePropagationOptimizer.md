@@ -1,10 +1,10 @@
 ---
-title: "RootMeanSquarePropagationOptimizer"
+title: "RootMeanSquarePropagationOptimizer<T, TInput, TOutput>"
 description: "Implements the Root Mean Square Propagation (RMSProp) optimization algorithm, an adaptive learning rate method."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Optimizers_
+`Models & Types` · `AiDotNet.Optimizers`
 
 Implements the Root Mean Square Propagation (RMSProp) optimization algorithm, an adaptive learning rate method.
 
@@ -63,4 +63,43 @@ var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
 
 Console.WriteLine("Trained with RootMeanSquarePropagationOptimizer.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `RootMeanSquarePropagationOptimizer(IFullModel<,,>,RootMeanSquarePropagationOptimizerOptions<,,>,IEngine)` | Initializes a new instance of the `RootMeanSquarePropagationOptimizer<T>` class with the specified options and components. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `SupportsGpuUpdate` | Gets whether this optimizer supports GPU-accelerated parameter updates. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `AiDotNet#Optimizers#Fused#IFusedOptimizerSpec#TryGetFusedOptimizerConfig(FusedOptimizerConfig)` | Describes this RMSprop instance for the fused kernel (Tensors `OptimizerType.RMSprop` = `RMSpropUpdateSimd(lr, decay, eps)`): Decay → Beta2 slot, Epsilon → eps. |
+| `Deserialize(Byte[])` | Reconstructs the RMSProp optimizer from a serialized byte array. |
+| `DisposeGpuState` | Disposes GPU-allocated optimizer state. |
+| `GenerateGradientCacheKey(IFullModel<,,>,,)` | Generates a unique key for caching gradients based on the model, input data, and optimizer state. |
+| `GetOptions` | Gets the current options for this optimizer. |
+| `InitializeGpuState(Int32,IDirectGpuBackend)` | Initializes RMSprop optimizer state on the GPU. |
+| `Optimize(OptimizationInputData<,,>)` | Performs the RMSProp optimization to find the best solution for the given input data. |
+| `Reset` | Resets the optimizer to its initial state. |
+| `ReverseUpdate(Vector<>,Vector<>)` | Reverses an RMSprop gradient update to recover original parameters. |
+| `Serialize` | Serializes the RMSProp optimizer to a byte array for storage or transmission. |
+| `Step(TapeStepContext<>)` |  |
+| `UpdateParameters(Vector<>,Vector<>)` | Updates a vector of parameters using the RMSProp algorithm. |
+| `UpdateParametersGpu(IGpuBuffer,IGpuBuffer,Int32,IDirectGpuBackend)` | Updates parameters on the GPU using the RMSprop kernel. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_gpuSquaredAvg` | GPU buffer for squared gradient moving average. |
+| `_options` | Configuration options specific to the RMSProp algorithm. |
+| `_squaredGradient` | Moving average of squared gradients for each parameter. |
+| `_t` | The current iteration count of the optimization process. |
 

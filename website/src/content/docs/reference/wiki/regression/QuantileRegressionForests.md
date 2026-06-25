@@ -1,10 +1,10 @@
 ---
-title: "QuantileRegressionForests"
+title: "QuantileRegressionForests<T>"
 description: "Implements Quantile Regression Forests, an extension of Random Forests that can predict conditional quantiles of the target variable, not just the conditional mean."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Implements Quantile Regression Forests, an extension of Random Forests that can predict conditional quantiles
 of the target variable, not just the conditional mean.
@@ -49,4 +49,41 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained QuantileRegressionForests.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `QuantileRegressionForests` | Initializes a new instance with default settings. |
+| `QuantileRegressionForests(QuantileRegressionForestsOptions,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the QuantileRegressionForests class with the specified options and regularization. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `MaxDepth` | Gets the maximum depth of the trees in the forest. |
+| `NumberOfTrees` | Gets the number of trees in the forest. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CalculateFeatureImportancesAsync(Int32)` | Asynchronously calculates the importance of each feature in the model. |
+| `CreateNewInstance` | Creates a new instance of the Quantile Regression Forests model with the same configuration. |
+| `Deserialize(Byte[])` | Deserializes the model from a byte array. |
+| `GetModelMetadata` | Gets metadata about the model. |
+| `GetOptions` |  |
+| `PredictAsync(Matrix<>)` | Asynchronously makes predictions for the given input data. |
+| `PredictQuantileAsync(Matrix<>,Double)` | Asynchronously predicts a specific quantile of the target variable for the given input data. |
+| `SampleWithReplacement(Matrix<>,Vector<>)` | Creates a bootstrap sample of the training data by sampling with replacement. |
+| `Serialize` | Serializes the model to a byte array. |
+| `TrainAsync(Matrix<>,Vector<>)` | Asynchronously trains the Quantile Regression Forests model on the provided data. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_options` | Configuration options for the Quantile Regression Forests model. |
+| `_random` | Random number generator used for bootstrap sampling. |
+| `_trees` | The collection of decision trees that make up the forest. |
 

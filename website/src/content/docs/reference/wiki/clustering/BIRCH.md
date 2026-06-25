@@ -1,10 +1,10 @@
 ---
-title: "BIRCH"
+title: "BIRCH<T>"
 description: "BIRCH (Balanced Iterative Reducing and Clustering using Hierarchies) clustering."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Clustering_
+`Models & Types` · `AiDotNet.Clustering.Hierarchical`
 
 BIRCH (Balanced Iterative Reducing and Clustering using Hierarchies) clustering.
 
@@ -62,4 +62,27 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 var labels = result.Predict(data);
 Console.WriteLine($"BIRCH: clustered {labels.Length} points.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `BIRCH(BIRCHOptions<>)` | Initializes a new BIRCH instance. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `LeafEntries` | Gets the leaf entries from the CF-tree. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CreateNewInstance` |  |
+| `FitPredict(Matrix<>)` |  |
+| `GetOptions` |  |
+| `Predict(Matrix<>)` |  |
+| `Train(Matrix<>,Vector<>)` |  |
+| `WithParameters(Vector<>)` |  |
 

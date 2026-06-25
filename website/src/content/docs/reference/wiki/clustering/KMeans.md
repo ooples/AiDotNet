@@ -1,10 +1,10 @@
 ---
-title: "KMeans"
+title: "KMeans<T>"
 description: "K-Means clustering algorithm implementation."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Clustering_
+`Models & Types` · `AiDotNet.Clustering.Partitioning`
 
 K-Means clustering algorithm implementation.
 
@@ -56,4 +56,28 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 var labels = result.Predict(data);
 Console.WriteLine($"KMeans: clustered {labels.Length} points.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `KMeans(KMeansOptions<>)` | Initializes a new KMeans instance with the specified options. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `NumIterations` | Gets the number of iterations from the last fit. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CreateNewInstance` |  |
+| `FitPredict(Matrix<>)` |  |
+| `GetOptions` |  |
+| `Predict(Matrix<>)` |  |
+| `Train(Matrix<>,Vector<>)` |  |
+| `Transform(Matrix<>)` |  |
+| `WithParameters(Vector<>)` |  |
 

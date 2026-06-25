@@ -1,10 +1,10 @@
 ---
-title: "DifferentialEvolutionOptimizer"
+title: "DifferentialEvolutionOptimizer<T, TInput, TOutput>"
 description: "Implements the Differential Evolution optimization algorithm for numerical optimization problems."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Optimizers_
+`Models & Types` · `AiDotNet.Optimizers`
 
 Implements the Differential Evolution optimization algorithm for numerical optimization problems.
 
@@ -49,4 +49,32 @@ var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
 
 Console.WriteLine("Trained with DifferentialEvolutionOptimizer.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `DifferentialEvolutionOptimizer(IFullModel<,,>,DifferentialEvolutionOptions<,,>,IEngine)` | Initializes a new instance of the DifferentialEvolutionOptimizer class. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `Deserialize(Byte[])` | Deserializes the Differential Evolution optimizer from a byte array. |
+| `GenerateTrialModel(List<IFullModel<,,>>,Int32,Int32)` | Generates a trial model using the Differential Evolution algorithm's mutation and crossover operations. |
+| `GetOptions` | Retrieves the current options of the Differential Evolution optimizer. |
+| `InitializeAdaptiveParameters` | Initializes the adaptive parameters used in the Differential Evolution algorithm. |
+| `InitializePopulation(,Int32)` | Initializes the population for the Differential Evolution algorithm. |
+| `Optimize(OptimizationInputData<,,>)` | Performs the main optimization process using the Differential Evolution algorithm. |
+| `Serialize` | Serializes the Differential Evolution optimizer to a byte array. |
+| `UpdateAdaptiveParameters(OptimizationStepData<,,>,OptimizationStepData<,,>)` | Updates the adaptive parameters based on the optimization progress. |
+| `UpdateOptions(OptimizationAlgorithmOptions<,,>)` | Updates the options for the Differential Evolution optimizer. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_currentCrossoverRate` | The current crossover rate used in the optimization process. |
+| `_currentMutationRate` | The current mutation rate used in the optimization process. |
+| `_deOptions` | Configuration options specific to the Differential Evolution algorithm. |
 

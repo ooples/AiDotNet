@@ -1,10 +1,10 @@
 ---
-title: "AdaDeltaOptimizer"
+title: "AdaDeltaOptimizer<T, TInput, TOutput>"
 description: "Implements the AdaDelta optimization algorithm for training neural networks and other machine learning models."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Optimizers_
+`Models & Types` · `AiDotNet.Optimizers`
 
 Implements the AdaDelta optimization algorithm for training neural networks and other machine learning models.
 
@@ -56,4 +56,39 @@ var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
 
 Console.WriteLine("Trained with AdaDeltaOptimizer.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `AdaDeltaOptimizer(IFullModel<,,>,AdaDeltaOptimizerOptions<,,>,IEngine)` | Initializes a new instance of the `AdaDeltaOptimizer<T>` class. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `AiDotNet#Optimizers#Fused#IFusedOptimizerSpec#TryGetFusedOptimizerConfig(FusedOptimizerConfig)` | Describes this AdaDelta instance for the fused kernel (Tensors `OptimizerType.AdaDelta` = `AdaDeltaUpdateSimd(lr, rho, eps)`): Rho → Beta2 slot, Epsilon → eps; the two accumulators live in the plan. |
+| `Deserialize(Byte[])` | Deserializes the AdaDelta optimizer from a byte array. |
+| `GenerateGradientCacheKey(IFullModel<,,>,,)` | Generates a unique key for caching gradients. |
+| `GetOptions` | Gets the current optimizer options. |
+| `InitializeAdaptiveParameters` | Initializes the adaptive parameters for the AdaDelta optimizer. |
+| `Optimize(OptimizationInputData<,,>)` | Performs the optimization process using the AdaDelta algorithm. |
+| `ReverseUpdate(Vector<>,Vector<>)` | Reverses an AdaDelta gradient update to recover original parameters. |
+| `Serialize` | Serializes the AdaDelta optimizer to a byte array. |
+| `Step(TapeStepContext<>)` |  |
+| `UpdateAdaptiveParameters(OptimizationStepData<,,>,OptimizationStepData<,,>)` | Updates the adaptive parameters of the AdaDelta optimizer. |
+| `UpdateOptions(OptimizationAlgorithmOptions<,,>)` | Updates the optimizer options. |
+| `UpdateParameters(Vector<>,Vector<>)` | Updates a vector of parameters using the AdaDelta optimization algorithm. |
+| `UpdateParametersGpu(IGpuBuffer,IGpuBuffer,Int32,IDirectGpuBackend)` | Updates parameters on GPU using the AdaDelta optimization algorithm. |
+| `UpdateSolution(IFullModel<,,>,Vector<>)` | Updates the current solution using the AdaDelta update rule. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_accumulatedSquaredGradients` | Stores the exponential moving average of squared gradients for each parameter. |
+| `_accumulatedSquaredUpdates` | Stores the exponential moving average of squared parameter updates for each parameter. |
+| `_options` | The configuration options specific to the AdaDelta optimizer. |
+| `_previousAccumulatedSquaredGradients` | Stores the pre-update snapshot of accumulated squared gradients for accurate reverse updates. |
+| `_previousAccumulatedSquaredUpdates` | Stores the pre-update snapshot of accumulated squared updates for accurate reverse updates. |
 

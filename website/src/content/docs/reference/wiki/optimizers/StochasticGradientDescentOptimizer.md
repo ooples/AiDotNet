@@ -1,10 +1,10 @@
 ---
-title: "StochasticGradientDescentOptimizer"
+title: "StochasticGradientDescentOptimizer<T, TInput, TOutput>"
 description: "Represents a Stochastic Gradient Descent (SGD) optimizer for machine learning models."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Optimizers_
+`Models & Types` · `AiDotNet.Optimizers`
 
 Represents a Stochastic Gradient Descent (SGD) optimizer for machine learning models.
 
@@ -55,4 +55,23 @@ var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
 
 Console.WriteLine("Trained with StochasticGradientDescentOptimizer.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `StochasticGradientDescentOptimizer(IFullModel<,,>,StochasticGradientDescentOptimizerOptions<,,>,IEngine)` | Initializes a new instance of the StochasticGradientDescentOptimizer class. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `AiDotNet#Optimizers#Fused#IFusedOptimizerSpec#TryGetFusedOptimizerConfig(FusedOptimizerConfig)` |  |
+| `Deserialize(Byte[])` | Deserializes a byte array to restore the state of the StochasticGradientDescentOptimizer. |
+| `GenerateGradientCacheKey(IFullModel<,,>,,)` | Generates a unique cache key for gradient calculations. |
+| `GetOptions` | Gets the current options for this optimizer. |
+| `Optimize(OptimizationInputData<,,>)` | Performs the optimization process to find the best solution for the given input data. |
+| `Serialize` | Serializes the current state of the StochasticGradientDescentOptimizer to a byte array. |
+| `UpdateOptions(OptimizationAlgorithmOptions<,,>)` | Updates the optimizer's options with the provided options. |
+| `UpdateSolution(IFullModel<,,>,Vector<>)` | Updates the current solution based on the calculated gradient. |
 

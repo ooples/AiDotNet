@@ -1,10 +1,10 @@
 ---
-title: "GradientDescentOptimizer"
+title: "GradientDescentOptimizer<T, TInput, TOutput>"
 description: "Represents a Gradient Descent optimizer for machine learning models."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Optimizers_
+`Models & Types` · `AiDotNet.Optimizers`
 
 Represents a Gradient Descent optimizer for machine learning models.
 
@@ -54,4 +54,32 @@ var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
 
 Console.WriteLine("Trained with GradientDescentOptimizer.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `GradientDescentOptimizer(IFullModel<,,>,GradientDescentOptimizerOptions<,,>,IEngine)` | Initializes a new instance of the GradientDescentOptimizer class. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CalculateLoss(IFullModel<,,>,,)` | Calculates the loss for a given solution and input data. |
+| `Deserialize(Byte[])` | Restores the state of the Gradient Descent optimizer from a byte array. |
+| `GenerateGradientCacheKey(IFullModel<,,>,,)` | Generates a unique key for caching gradients specific to the Gradient Descent optimizer. |
+| `GetOptions` | Retrieves the current options for the Gradient Descent optimizer. |
+| `Optimize(OptimizationInputData<,,>)` | Performs the main optimization process using the Gradient Descent algorithm. |
+| `Serialize` | Converts the current state of the Gradient Descent optimizer into a byte array for storage or transmission. |
+| `Step(TapeStepContext<>)` | Reverses a Gradient Descent update to recover original parameters. |
+| `UpdateOptions(OptimizationAlgorithmOptions<,,>)` | Updates the options for the Gradient Descent optimizer. |
+| `UpdateParametersGpu(IGpuBuffer,IGpuBuffer,Int32,IDirectGpuBackend)` | Updates parameters on the GPU using vanilla SGD. |
+| `UpdateSolution(IFullModel<,,>,Vector<>)` | Updates the current solution based on the calculated gradient. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_gdOptions` | Options specific to the Gradient Descent optimizer. |
+| `_regularization` | The regularization technique used to prevent overfitting. |
 

@@ -1,10 +1,10 @@
 ---
-title: "ElasticNetRegression"
+title: "ElasticNetRegression<T>"
 description: "Implements Elastic Net Regression (combined L1 and L2 regularized linear regression), which extends ordinary least squares by adding both L1 (Lasso) and L2 (Ridge) penalty terms."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Implements Elastic Net Regression (combined L1 and L2 regularized linear regression),
 which extends ordinary least squares by adding both L1 (Lasso) and L2 (Ridge) penalty terms.
@@ -68,4 +68,35 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained ElasticNetRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `ElasticNetRegression(ElasticNetRegressionOptions<>,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the `ElasticNetRegression` class. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `IterationsUsed` | Gets the number of iterations used in the last training. |
+| `NumberOfSelectedFeatures` | Gets the number of non-zero coefficients (selected features). |
+| `Options` | Gets the configuration options specific to Elastic Net Regression. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CreateNewInstance` | Creates a new instance of Elastic Net Regression with the same configuration. |
+| `Deserialize(Byte[])` | Deserializes an Elastic Net Regression model from a byte array. |
+| `ElasticNetSoftThreshold(,,,,)` | Applies the elastic net soft-thresholding operator for combined L1 and L2 regularization. |
+| `GetModelMetadata` | Gets metadata about the Elastic Net Regression model. |
+| `Serialize` | Serializes the Elastic Net Regression model to a byte array. |
+| `Train(Matrix<>,Vector<>)` | Trains the Elastic Net Regression model using coordinate descent optimization. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_iterationsUsed` | Stores the number of iterations used in the last training. |
 

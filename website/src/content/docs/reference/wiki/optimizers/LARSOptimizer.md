@@ -1,10 +1,10 @@
 ---
-title: "LARSOptimizer"
+title: "LARSOptimizer<T, TInput, TOutput>"
 description: "Implements the LARS (Layer-wise Adaptive Rate Scaling) optimization algorithm."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Optimizers_
+`Models & Types` · `AiDotNet.Optimizers`
 
 Implements the LARS (Layer-wise Adaptive Rate Scaling) optimization algorithm.
 
@@ -24,9 +24,7 @@ parameter norm to gradient norm, which helps maintain stable training at scale.
 
 **Key Formula:**
 
-local_lr = trust_coeff * ||w|| / (||g|| + weight_decay * ||w|| + epsilon)
-update = local_lr * (g + weight_decay * w)
-w = w - lr * update (with momentum)
+Based on the paper "Large Batch Training of Convolutional Networks" by You et al. (2017).
 
 ## Example
 
@@ -58,4 +56,58 @@ var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
 
 Console.WriteLine("Trained with LARSOptimizer.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `LARSOptimizer(IFullModel<,,>,LARSOptimizerOptions<,,>)` | Initializes a new instance of the LARSOptimizer class. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `Momentum` | Gets the current momentum coefficient. |
+| `SupportsGpuUpdate` | Gets whether this optimizer supports GPU-accelerated parameter updates. |
+| `TrustCoefficient` | Gets the LARS trust coefficient. |
+| `WeightDecay` | Gets the current weight decay coefficient. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `Deserialize(Byte[])` | Deserializes the optimizer's state from a byte array. |
+| `DisposeGpuState` | Disposes GPU-allocated optimizer state. |
+| `ExtractLayerVector(Vector<>,Int32,Int32)` | Extracts a layer's parameters from the full parameter vector. |
+| `GenerateGradientCacheKey(IFullModel<,,>,,)` | Generates a unique key for caching gradients. |
+| `GetDataSize(OptimizationInputData<,,>)` | Gets the size of the training data. |
+| `GetOptions` | Gets the current optimizer options. |
+| `GetWarmupLearningRate` | Gets the learning rate with warmup applied. |
+| `InitializeAdaptiveParameters` | Initializes the adaptive parameters used by the LARS optimizer. |
+| `InitializeGpuState(Int32,IDirectGpuBackend)` | Initializes LARS optimizer state on the GPU. |
+| `Optimize(OptimizationInputData<,,>)` | Performs the optimization process using the LARS algorithm. |
+| `Reset` | Resets the optimizer's internal state. |
+| `ReverseUpdate(Vector<>,Vector<>)` | Reverses a LARS gradient update to recover original parameters. |
+| `Serialize` | Serializes the optimizer's state into a byte array. |
+| `Step(TapeStepContext<>)` |  |
+| `UpdateLayerVector(Vector<>,Vector<>,Int32,Int32)` | Updates a layer's values in the full parameter vector. |
+| `UpdateOptions(OptimizationAlgorithmOptions<,,>)` | Updates the optimizer's options. |
+| `UpdateParameters(Matrix<>,Matrix<>)` | Updates a matrix of parameters using the LARS optimization algorithm. |
+| `UpdateParameters(Vector<>,Vector<>)` | Updates a vector of parameters using the LARS optimization algorithm. |
+| `UpdateParametersGpu(IGpuBuffer,IGpuBuffer,Int32,IDirectGpuBackend)` | Updates parameters on the GPU using the LARS kernel. |
+| `UpdateParametersLARS(Vector<>,Vector<>,Double)` | Internal LARS parameter update. |
+| `UpdateSolution(IFullModel<,,>,Vector<>)` | Updates the current solution using the LARS update rule. |
+| `UpdateSolutionWithLARS(IFullModel<,,>,Vector<>,Double)` | Updates the solution using the LARS algorithm with layer-wise adaptive rate scaling. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_gpuVelocity` | GPU buffer for velocity state. |
+| `_options` | The options specific to the LARS optimizer. |
+| `_previousT` | Previous step count for reverse updates. |
+| `_previousVelocity` | Previous velocity for reverse updates. |
+| `_t` | The current time step (iteration count). |
+| `_velocity` | The velocity/momentum buffer for each parameter. |
+| `_warmupSteps` | The total number of warmup steps. |
 

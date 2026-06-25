@@ -1,10 +1,10 @@
 ---
-title: "ConditionalInferenceTreeRegression"
+title: "ConditionalInferenceTreeRegression<T>"
 description: "Represents a conditional inference tree regression model that builds decision trees based on statistical tests."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Represents a conditional inference tree regression model that builds decision trees based on statistical tests.
 
@@ -55,4 +55,40 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained ConditionalInferenceTreeRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `ConditionalInferenceTreeRegression` | Initializes a new instance with default settings. |
+| `ConditionalInferenceTreeRegression(ConditionalInferenceTreeOptions,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the `ConditionalInferenceTreeRegression` class. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `BuildTreeAsync(Matrix<>,Vector<>,Int32)` | Recursively builds the decision tree by finding optimal splits. |
+| `CalculateFeatureImportancesAsync(Int32)` | Asynchronously calculates the importance of each feature in the model. |
+| `CalculateFeatureImportancesRecursiveAsync(ConditionalInferenceTreeNode<>,[])` | Recursively calculates feature importances by traversing the tree. |
+| `Clone` | Creates a deep copy via serialization to ensure the private _root tree is preserved. |
+| `CreateNewInstance` | Creates a new instance of the conditional inference tree regression model with the same configuration. |
+| `Deserialize(Byte[])` | Deserializes the model from a byte array. |
+| `DeserializeNode(BinaryReader)` | Deserializes a tree node from a binary reader. |
+| `FindBestSplitAsync(Matrix<>,Vector<>)` | Asynchronously finds the best feature and threshold to split the data. |
+| `FindBestSplitForFeature(Matrix<>,Vector<>,Int32)` | Finds the best threshold to split data for a specific feature. |
+| `GetModelMetadata` | Gets metadata about the regression model. |
+| `GetOptions` |  |
+| `PredictAsync(Matrix<>)` | Asynchronously predicts target values for new input data. |
+| `PredictSingle(Vector<>)` | Predicts a target value for a single input sample. |
+| `Serialize` | Serializes the model to a byte array. |
+| `SerializeNode(BinaryWriter,ConditionalInferenceTreeNode<>)` | Serializes a tree node to a binary writer. |
+| `SplitData(Matrix<>,Vector<>,Int32,)` | Splits the data into left and right subsets based on the feature and threshold. |
+| `TrainAsync(Matrix<>,Vector<>)` | Asynchronously trains the regression model on the provided training data. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_options` | The options that control the behavior of the conditional inference tree. |
+| `_root` | The root node of the decision tree. |
 

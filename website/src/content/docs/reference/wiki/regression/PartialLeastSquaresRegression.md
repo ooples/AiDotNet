@@ -1,10 +1,10 @@
 ---
-title: "PartialLeastSquaresRegression"
+title: "PartialLeastSquaresRegression<T>"
 description: "Implements Partial Least Squares Regression (PLS), a technique that combines features from principal  component analysis and multiple linear regression to handle situations with many correlated predictors."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Implements Partial Least Squares Regression (PLS), a technique that combines features from principal 
 component analysis and multiple linear regression to handle situations with many correlated predictors.
@@ -46,4 +46,43 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained PartialLeastSquaresRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `PartialLeastSquaresRegression(PartialLeastSquaresRegressionOptions<>,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the PartialLeastSquaresRegression class with the specified options and regularization. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `ParameterCount` | Trains the partial least squares regression model on the provided data. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CalculateFeatureImportances` | Gets the type of the model. |
+| `CreateNewInstance` | Creates a new instance of the Partial Least Squares Regression model with the same configuration. |
+| `Deserialize(Byte[])` | Deserializes the model from a byte array. |
+| `GetModelMetadata` | Gets metadata about the model. |
+| `GetOptions` |  |
+| `Predict(Matrix<>)` | Makes predictions for the given input data. |
+| `Serialize` | Serializes the model to a byte array. |
+| `ValidateInputs(Matrix<>,Vector<>)` | Validates the input data before training. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_loadings` | The loadings matrix (P) that represents how the original variables load onto the components. |
+| `_options` | Configuration options for the partial least squares regression model. |
+| `_scores` | The scores matrix (T) that represents the projection of the original data onto the components. |
+| `_weights` | The weights matrix (W) used to transform the original variables into components. |
+| `_xMean` | The means of the predictor variables used for centering. |
+| `_xStd` | The standard deviations of the predictor variables used for scaling. |
+| `_yLoadings` | Y-loadings (c) from the NIPALS algorithm: c_k = t_k'*y / (t_k'*t_k). |
+| `_yMean` | The mean of the target variable used for centering. |
+| `_yStd` | The standard deviation of the target variable used for scaling. |
 

@@ -1,10 +1,10 @@
 ---
-title: "ADMMOptimizer"
+title: "ADMMOptimizer<T, TInput, TOutput>"
 description: "Implements the Alternating Direction Method of Multipliers (ADMM) optimization algorithm."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Optimizers_
+`Models & Types` · `AiDotNet.Optimizers`
 
 Implements the Alternating Direction Method of Multipliers (ADMM) optimization algorithm.
 
@@ -48,4 +48,39 @@ var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
 
 Console.WriteLine("Trained with ADMMOptimizer.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `ADMMOptimizer(IFullModel<,,>,ADMMOptimizerOptions<,,>,IEngine)` | Initializes a new instance of the ADMMOptimizer class. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CheckConvergence(Vector<>)` | Checks if the optimization has converged based on primal and dual residuals. |
+| `Deserialize(Byte[])` | Restores the optimizer's state from a byte array previously created by the Serialize method. |
+| `GenerateGradientCacheKey(IFullModel<,,>,,)` | Generates a unique key for caching gradients based on the current state of the optimizer and input data. |
+| `GetOptions` | Retrieves the current options of the optimizer. |
+| `InitializeAdaptiveParameters` | Initializes the adaptive parameters used by the ADMM optimizer. |
+| `Optimize(OptimizationInputData<,,>)` | Performs the optimization process using the ADMM algorithm. |
+| `Serialize` | Converts the current state of the optimizer into a byte array for storage or transmission. |
+| `Step(TapeStepContext<>)` |  |
+| `UpdateAdaptiveParameters(OptimizationStepData<,,>,OptimizationStepData<,,>)` | Updates the adaptive parameters of the optimizer based on the current and previous optimization steps. |
+| `UpdateOptions(OptimizationAlgorithmOptions<,,>)` | Updates the optimizer's options with new settings. |
+| `UpdateParametersGpu(IGpuBuffer,IGpuBuffer,Int32,IDirectGpuBackend)` | Updates parameters using GPU-accelerated ADMM. |
+| `UpdateU(Vector<>)` | Updates the dual variable u in the ADMM algorithm. |
+| `UpdateX(IFullModel<,,>,,)` | Updates the primal variable x in the ADMM algorithm. |
+| `UpdateZ(Vector<>)` | Updates the auxiliary variable z in the ADMM algorithm. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_iteration` | The current iteration count. |
+| `_options` | The options specific to the ADMM optimizer. |
+| `_regularization` | The regularization method used in the optimization. |
+| `_u` | The dual variable in ADMM algorithm. |
+| `_z` | The auxiliary variable in ADMM algorithm. |
 

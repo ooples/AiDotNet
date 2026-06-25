@@ -1,10 +1,10 @@
 ---
-title: "GaussianProcessRegression"
+title: "GaussianProcessRegression<T>"
 description: "Implements a Gaussian Process Regression model, which is a non-parametric, probabilistic approach  to regression that provides uncertainty estimates along with predictions."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Implements a Gaussian Process Regression model, which is a non-parametric, probabilistic approach 
 to regression that provides uncertainty estimates along with predictions.
@@ -58,4 +58,41 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained GaussianProcessRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `GaussianProcessRegression(GaussianProcessRegressionOptions,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the `GaussianProcessRegression` class. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `Options` | Gets the configuration options specific to Gaussian Process Regression. |
+| `ParameterCount` | GP solves analytically via kernel matrix inversion — no optimizer parameter injection. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `ComputeGradients(Matrix<>,Vector<>,Matrix<>,Double,Double)` | Computes the gradients of the log marginal likelihood with respect to the hyperparameters. |
+| `ComputeKernelMatrix(Matrix<>,Double,Double)` | Computes the kernel matrix for a given set of samples using the specified hyperparameters. |
+| `ComputeKernelMatrixDerivative(Matrix<>,Double,Double,Boolean)` | Computes the derivative of the kernel matrix with respect to the specified hyperparameter. |
+| `ComputeLogLikelihood(Matrix<>,Vector<>)` | Computes the log marginal likelihood of the Gaussian Process model. |
+| `CreateInstance` | Creates a new instance of the Gaussian Process Regression model with the same configuration. |
+| `GetModelMetadata` | Gets metadata about the Gaussian Process Regression model and its configuration. |
+| `OptimizeHyperparameters(Matrix<>,Vector<>)` | Optimizes the hyperparameters of the Gaussian Process model using gradient ascent on the marginal log-likelihood. |
+| `OptimizeModel(Matrix<>,Vector<>)` | Optimizes the Gaussian Process model based on the provided training data. |
+| `PredictSingle(Vector<>)` | Predicts using the GP-specific RBF kernel with LengthScale (not base class Gamma). |
+| `RBFKernel(Vector<>,Vector<>,Double,Double)` | Computes the RBF (Radial Basis Function) kernel value between two feature vectors. |
+| `RBFKernelDerivative(Vector<>,Vector<>,Double,Double,Boolean)` | Computes the derivative of the RBF kernel with respect to the specified hyperparameter. |
+| `SolveWithJitterRetry(Matrix<>,Vector<>,MatrixDecompositionType)` | Solves (K + σ²I) α = y with progressive jitter escalation (×10 per retry) on Cholesky failure per Rasmussen & Williams 2006 §2.2 numerical-stability note. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_alpha` | The vector of coefficients used for making predictions. |
+| `_kernelMatrix` | The kernel matrix (also known as the covariance matrix) that represents the similarity between all training points. |
 

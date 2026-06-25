@@ -1,10 +1,10 @@
 ---
-title: "PoissonRegression"
+title: "PoissonRegression<T>"
 description: "Implements Poisson regression, a generalized linear model used for modeling count data and contingency tables."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Implements Poisson regression, a generalized linear model used for modeling count data and contingency tables.
 
@@ -43,4 +43,32 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained PoissonRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `PoissonRegression(PoissonRegressionOptions<>,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the PoissonRegression class with the specified options and regularization. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `ComputeWeights(Vector<>)` | Computes the weights matrix for the iteratively reweighted least squares algorithm. |
+| `ComputeWorkingResponse(Matrix<>,Vector<>,Vector<>,Vector<>)` | Computes the working response for the iteratively reweighted least squares algorithm. |
+| `CreateNewInstance` | Creates a new instance of the Poisson Regression model with the same configuration. |
+| `Deserialize(Byte[])` | Deserializes the model from a byte array. |
+| `HasConverged(Vector<>,Vector<>)` | Checks if the algorithm has converged by comparing the change in coefficients. |
+| `Predict(Matrix<>)` | Makes predictions for the given input data. |
+| `PredictMean(Matrix<>,Vector<>)` | Predicts the mean (expected value) for the given input data using the current model parameters. |
+| `Serialize` | Serializes the model to a byte array. |
+| `Train(Matrix<>,Vector<>)` | Trains the Poisson regression model on the provided data. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `MinSafeValue` | Minimum value for numerical stability guards to prevent division by zero. |
+| `_options` | Configuration options for the Poisson regression model. |
+| `_yShift` | Shift applied to y to make it positive (0 if y was already positive). |
 

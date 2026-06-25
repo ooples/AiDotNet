@@ -1,10 +1,10 @@
 ---
-title: "DFPOptimizer"
+title: "DFPOptimizer<T, TInput, TOutput>"
 description: "Implements the Davidon-Fletcher-Powell (DFP) optimization algorithm for numerical optimization problems."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Optimizers_
+`Models & Types` · `AiDotNet.Optimizers`
 
 Implements the Davidon-Fletcher-Powell (DFP) optimization algorithm for numerical optimization problems.
 
@@ -50,4 +50,38 @@ var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
 
 Console.WriteLine("Trained with DFPOptimizer.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `DFPOptimizer(IFullModel<,,>,DFPOptimizerOptions<,,>,IEngine)` | Initializes a new instance of the DFPOptimizer class. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CalculateDirection(Vector<>)` | Calculates the search direction using the inverse Hessian approximation and the current gradient. |
+| `Deserialize(Byte[])` | Deserializes the DFP optimizer from a byte array. |
+| `GetOptions` | Retrieves the current options of the DFP optimizer. |
+| `InitializeAdaptiveParameters` | Initializes the adaptive parameters used in the DFP algorithm. |
+| `Optimize(OptimizationInputData<,,>)` | Performs the main optimization process using the DFP algorithm. |
+| `Serialize` | Serializes the DFP optimizer to a byte array. |
+| `Step(TapeStepContext<>)` |  |
+| `UpdateAdaptiveParameters(OptimizationStepData<,,>,OptimizationStepData<,,>)` | Updates the adaptive parameters based on the optimization progress. |
+| `UpdateInverseHessian(IFullModel<,,>,IFullModel<,,>,Vector<>)` | Updates the inverse Hessian approximation using the DFP update formula. |
+| `UpdateOptions(OptimizationAlgorithmOptions<,,>)` | Updates the options for the DFP optimizer. |
+| `UpdateParameters(Vector<>,Vector<>)` | Updates parameters using the DFP algorithm with inverse Hessian approximation. |
+| `UpdateParametersGpu(IGpuBuffer,IGpuBuffer,Int32,IDirectGpuBackend)` | Updates parameters using GPU-accelerated DFP. |
+| `UpdateSolution(IFullModel<,,>,Vector<>,Vector<>,OptimizationInputData<,,>)` | Updates the current solution by moving in the calculated direction. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_adaptiveLearningRate` | The current adaptive learning rate. |
+| `_inverseHessian` | The inverse Hessian matrix approximation used in the DFP algorithm. |
+| `_options` | The options specific to the DFP optimization algorithm. |
+| `_previousGradient` | The gradient from the previous iteration. |
+| `_previousParameters` | The parameters from the previous iteration for UpdateParameters method. |
 

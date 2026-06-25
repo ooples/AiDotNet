@@ -1,10 +1,10 @@
 ---
-title: "FTRLOptimizer"
+title: "FTRLOptimizer<T, TInput, TOutput>"
 description: "Represents a Follow The Regularized Leader (FTRL) optimizer for machine learning models."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Optimizers_
+`Models & Types` · `AiDotNet.Optimizers`
 
 Represents a Follow The Regularized Leader (FTRL) optimizer for machine learning models.
 
@@ -63,4 +63,42 @@ var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
 
 Console.WriteLine("Trained with FTRLOptimizer.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `FTRLOptimizer(IFullModel<,,>,FTRLOptimizerOptions<,,>,IEngine)` | Initializes a new instance of the FTRLOptimizer class. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `Deserialize(Byte[])` | Deserializes the FTRL optimizer from a byte array. |
+| `DisposeGpuState` | Disposes GPU-allocated optimizer state. |
+| `GenerateGradientCacheKey(IFullModel<,,>,,)` | Generates a unique key for caching gradients. |
+| `GetOptions` | Retrieves the current options of the FTRL optimizer. |
+| `InitializeAdaptiveParameters` | Initializes the adaptive parameters used in the FTRL algorithm. |
+| `InitializeGpuState(Int32,IDirectGpuBackend)` | Initializes FTRL optimizer state on the GPU. |
+| `Optimize(OptimizationInputData<,,>)` | Performs the main optimization process using the FTRL algorithm. |
+| `ReverseUpdate(Vector<>,Vector<>)` | Reverses an FTRL gradient update to recover original parameters. |
+| `Serialize` | Serializes the FTRL optimizer to a byte array. |
+| `Step(TapeStepContext<>)` |  |
+| `UpdateAdaptiveParameters(OptimizationStepData<,,>,OptimizationStepData<,,>)` | Updates the adaptive parameters based on the optimization progress. |
+| `UpdateOptions(OptimizationAlgorithmOptions<,,>)` | Updates the options for the FTRL optimizer. |
+| `UpdateParameters(Vector<>,Vector<>)` | Updates parameters using the FTRL (Follow The Regularized Leader) algorithm with L1/L2 regularization. |
+| `UpdateParametersGpu(IGpuBuffer,IGpuBuffer,Int32,IDirectGpuBackend)` | Updates parameters on GPU using FTRL optimization. |
+| `UpdateSolution(IFullModel<,,>,Vector<>)` | Updates the current solution using the FTRL update rule. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_gpuN` | GPU buffer for n state (accumulated squared gradient state). |
+| `_gpuZ` | GPU buffer for z state (accumulated sum state). |
+| `_n` | Vector of accumulated squared gradients. |
+| `_options` | The options specific to the FTRL algorithm. |
+| `_previousParameters` | Stores the pre-update parameters for approximate reverse updates. |
+| `_t` | The current time step or iteration count. |
+| `_z` | Auxiliary vector used in the FTRL update rule. |
 

@@ -1,10 +1,10 @@
 ---
-title: "GeneticAlgorithmRegression"
+title: "GeneticAlgorithmRegression<T>"
 description: "Implements a regression model that uses genetic algorithms to optimize model parameters, mimicking the process of natural selection to find the best solution."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Implements a regression model that uses genetic algorithms to optimize model parameters,
 mimicking the process of natural selection to find the best solution.
@@ -55,4 +55,37 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained GeneticAlgorithmRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `GeneticAlgorithmRegression(RegressionOptions<>,GeneticAlgorithmOptimizerOptions<,Matrix<>,Vector<>>,IRegularization<,Matrix<>,Vector<>>,IOutlierRemoval<,Matrix<>,Vector<>>,PreprocessingPipeline<,Matrix<>,Matrix<>>)` | Initializes a new instance of the `GeneticAlgorithmRegression` class. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `ParameterCount` | Trains the Genetic Algorithm Regression model using the provided input features and target values. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CreateNewInstance` | Creates a new instance of the GeneticAlgorithmRegression with the same configuration as the current instance. |
+| `Deserialize(Byte[])` | Loads a previously serialized Genetic Algorithm Regression model from a byte array. |
+| `Predict(Matrix<>)` | Predicts target values for the provided input features using the trained Genetic Algorithm Regression model. |
+| `PrependInterceptColumn(Matrix<>)` | Prepends a column of 1s to the matrix for the intercept term. |
+| `Serialize` | Serializes the Genetic Algorithm Regression model to a byte array for storage or transmission. |
+| `UpdateCoefficientsAndIntercept` | Gets the model type of the Genetic Algorithm Regression model. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_bestModel` | The best model found by the genetic algorithm. |
+| `_gaOptions` | Configuration options for the genetic algorithm optimizer. |
+| `_optimizer` | The genetic algorithm optimizer that finds optimal model parameters. |
+| `_outlierRemoval` | Component that identifies and removes outliers from the training data. |
+| `_preprocessingPipeline` | Component that handles all data preprocessing steps before training. |
 

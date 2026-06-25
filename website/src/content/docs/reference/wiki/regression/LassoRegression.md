@@ -1,10 +1,10 @@
 ---
-title: "LassoRegression"
+title: "LassoRegression<T>"
 description: "Implements Lasso Regression (L1 regularized linear regression), which extends ordinary least squares by adding a penalty term proportional to the absolute magnitude of the coefficients."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Implements Lasso Regression (L1 regularized linear regression), which extends ordinary least squares
 by adding a penalty term proportional to the absolute magnitude of the coefficients.
@@ -65,4 +65,35 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained LassoRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `LassoRegression(LassoRegressionOptions<>,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the `LassoRegression` class. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `IterationsUsed` | Gets the number of iterations used in the last training. |
+| `NumberOfSelectedFeatures` | Gets the number of non-zero coefficients (selected features). |
+| `Options` | Gets the configuration options specific to Lasso Regression. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CreateNewInstance` | Creates a new instance of Lasso Regression with the same configuration. |
+| `Deserialize(Byte[])` | Deserializes a Lasso Regression model from a byte array. |
+| `GetModelMetadata` | Gets metadata about the Lasso Regression model. |
+| `Serialize` | Serializes the Lasso Regression model to a byte array. |
+| `SoftThreshold(,,)` | Applies the soft-thresholding operator for L1 regularization. |
+| `Train(Matrix<>,Vector<>)` | Trains the Lasso Regression model using coordinate descent optimization. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_iterationsUsed` | Stores the number of iterations used in the last training. |
 

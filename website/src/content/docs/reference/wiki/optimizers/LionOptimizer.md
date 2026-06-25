@@ -1,10 +1,10 @@
 ---
-title: "LionOptimizer"
+title: "LionOptimizer<T, TInput, TOutput>"
 description: "Implements the Lion (Evolved Sign Momentum) optimization algorithm for gradient-based optimization."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Optimizers_
+`Models & Types` · `AiDotNet.Optimizers`
 
 Implements the Lion (Evolved Sign Momentum) optimization algorithm for gradient-based optimization.
 
@@ -57,4 +57,44 @@ var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
 
 Console.WriteLine("Trained with LionOptimizer.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `LionOptimizer(IFullModel<,,>,LionOptimizerOptions<,,>,IEngine)` | Initializes a new instance of the LionOptimizer class. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `AiDotNet#Optimizers#Fused#IFusedOptimizerSpec#TryGetFusedOptimizerConfig(FusedOptimizerConfig)` | Describes this Lion instance for the fused kernel (Tensors `OptimizerType.Lion` = `LionUpdateSimd(lr, b1, b2, wd)`): Beta1/Beta2 → β1/β2, WeightDecay → wd. |
+| `Deserialize(Byte[])` | Deserializes the optimizer's state from a byte array. |
+| `DisposeGpuState` | Disposes GPU-allocated optimizer state. |
+| `GenerateGradientCacheKey(IFullModel<,,>,,)` | Generates a unique key for caching gradients. |
+| `GetOptions` | Gets the current optimizer options. |
+| `InitializeAdaptiveParameters` | Initializes the adaptive parameters used by the Lion optimizer. |
+| `InitializeGpuState(Int32,IDirectGpuBackend)` | Initializes Lion optimizer state on the GPU. |
+| `Optimize(OptimizationInputData<,,>)` | Performs the optimization process using the Lion algorithm. |
+| `Reset` | Resets the optimizer's internal state. |
+| `ReverseUpdate(Vector<>,Vector<>)` | Reverses a Lion gradient update to recover original parameters. |
+| `Serialize` | Serializes the optimizer's state into a byte array. |
+| `Step(TapeStepContext<>)` |  |
+| `UpdateAdaptiveParameters(OptimizationStepData<,,>,OptimizationStepData<,,>)` | Updates the adaptive parameters of the optimizer based on the current and previous optimization steps. |
+| `UpdateOptions(OptimizationAlgorithmOptions<,,>)` | Updates the optimizer's options. |
+| `UpdateParameters(Matrix<>,Matrix<>)` | Updates a matrix of parameters using the Lion optimization algorithm. |
+| `UpdateParameters(Vector<>,Vector<>)` | Updates a vector of parameters using the Lion optimization algorithm. |
+| `UpdateParametersGpu(IGpuBuffer,IGpuBuffer,Int32,IDirectGpuBackend)` | Updates parameters on GPU using Lion optimization. |
+| `UpdateSolution(IFullModel<,,>,Vector<>)` | Updates the current solution using the Lion update rule. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_currentBeta1` | The current value of beta1 (interpolation momentum). |
+| `_currentBeta2` | The current value of beta2 (update momentum). |
+| `_gpuM` | GPU buffer for momentum estimates. |
+| `_m` | The momentum vector (exponentially moving average of gradients). |
+| `_options` | The options specific to the Lion optimizer. |
+| `_t` | The current time step (iteration count). |
 

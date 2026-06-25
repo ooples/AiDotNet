@@ -1,10 +1,10 @@
 ---
-title: "ExplainableBoostingMachineRegression"
+title: "ExplainableBoostingMachineRegression<T>"
 description: "Explainable Boosting Machine (EBM) for interpretable regression."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Explainable Boosting Machine (EBM) for interpretable regression.
 
@@ -68,4 +68,52 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained ExplainableBoostingMachineRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `ExplainableBoostingMachineRegression(ExplainableBoostingMachineOptions,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of ExplainableBoostingMachineRegression. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `BinEdges` | Gets the bin edges for each feature. |
+| `InteractionTerms` | Gets the interaction terms. |
+| `Intercept` | Gets the intercept (baseline prediction). |
+| `NumberOfTrees` |  |
+| `ShapeFunctions` | Gets the shape functions for each feature. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CalculateFeatureImportancesAsync(Int32)` |  |
+| `CreateBins(Matrix<>)` | Creates bins for each feature using quantile binning. |
+| `CreateNewInstance` |  |
+| `Deserialize(Byte[])` |  |
+| `DetectAndAddInteractions(Vector<>,Matrix<Int32>)` | Detects and adds important pairwise interactions. |
+| `GetBinIndex(,Int32)` | Gets the bin index for a feature value. |
+| `GetFeatureContributions(Vector<>)` | Predicts the contribution of each feature for a single sample. |
+| `GetModelMetadata` |  |
+| `GetSampleIndices(Int32)` | Gets sample indices for subsampling. |
+| `GetShapeFunctionForPlot(Int32)` | Gets the learned shape function for a specific feature. |
+| `PredictAsync(Matrix<>)` |  |
+| `PredictSingleInternal(Vector<>)` | Predicts the value for a single sample. |
+| `Serialize` |  |
+| `ShuffleArray(Int32[])` | Shuffles an array in place. |
+| `SmoothShapeFunctions` | Applies smoothing to shape functions for better interpretability. |
+| `TrainAsync(Matrix<>,Vector<>)` |  |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_binEdges` | Bin edges for each feature. |
+| `_interactionTerms` | Interaction terms: pairs of features and their joint effect. |
+| `_intercept` | The intercept (baseline prediction). |
+| `_numFeatures` | Number of features. |
+| `_options` | Configuration options. |
+| `_shapeFunctions` | Shape functions for each feature (additive terms). |
 

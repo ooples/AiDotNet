@@ -1,10 +1,10 @@
 ---
-title: "SplineRegression"
+title: "SplineRegression<T>"
 description: "Implements spline regression, which models nonlinear relationships by fitting piecewise polynomial functions."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Implements spline regression, which models nonlinear relationships by fitting piecewise polynomial functions.
 This advanced regression technique offers more flexibility than simple linear regression by allowing the model
@@ -61,4 +61,38 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained SplineRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `SplineRegression(SplineRegressionOptions,IRegularization<,Matrix<>,Vector<>>)` | Creates a new spline regression model. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `ParameterCount` | Spline regression solves analytically — no optimizer parameter injection needed. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CreateInstance` | Creates a new instance of the Spline Regression model with the same configuration. |
+| `Deserialize(Byte[])` | Deserializes the spline regression model from a byte array. |
+| `GenerateBasisFunctions(Matrix<>)` | Generates the basis functions matrix for the input data. |
+| `GenerateKnots(Vector<>)` | Generates knots for a single feature vector. |
+| `GetActiveFeatureIndices` | Returns original feature indices (not expanded spline basis indices). |
+| `OptimizeModel(Matrix<>,Vector<>)` | Optimizes the spline regression model using the provided input data and target values. |
+| `Predict(Matrix<>)` | Predicts target values for a matrix of input features. |
+| `PredictSingle(Vector<>)` | Predicts a target value for a single input feature vector. |
+| `Serialize` | Returns the type identifier for this regression model. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_coefficients` | The coefficients for the spline model. |
+| `_knots` | The collection of knot points for each feature. |
+| `_options` | Configuration options for the spline regression model. |
 

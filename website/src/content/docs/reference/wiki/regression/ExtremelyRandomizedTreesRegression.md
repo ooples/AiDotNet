@@ -1,10 +1,10 @@
 ---
-title: "ExtremelyRandomizedTreesRegression"
+title: "ExtremelyRandomizedTreesRegression<T>"
 description: "Implements an Extremely Randomized Trees regression model, which is an ensemble method that uses multiple decision trees with additional randomization for improved prediction accuracy and reduced overfitting."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Implements an Extremely Randomized Trees regression model, which is an ensemble method that uses multiple decision trees
 with additional randomization for improved prediction accuracy and reduced overfitting.
@@ -54,4 +54,41 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained ExtremelyRandomizedTreesRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `ExtremelyRandomizedTreesRegression` | Initializes a new instance with default settings. |
+| `ExtremelyRandomizedTreesRegression(ExtremelyRandomizedTreesRegressionOptions,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the `ExtremelyRandomizedTreesRegression` class. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `MaxDepth` | Gets the maximum depth of the decision trees in the ensemble. |
+| `NumberOfTrees` | Gets the number of trees in the ensemble model. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CalculateFeatureImportancesAsync(Int32)` | Calculates the average feature importances across all trees in the ensemble. |
+| `CreateNewInstance` | Creates a new instance of the extremely randomized trees regression model with the same configuration. |
+| `Deserialize(Byte[])` | Loads a previously serialized Extremely Randomized Trees model from a byte array. |
+| `GetActiveFeatureIndices` | Returns all features up to the number of features used during training. |
+| `GetModelMetadata` | Gets metadata about the Extremely Randomized Trees model and its configuration. |
+| `GetOptions` |  |
+| `PredictAsync(Matrix<>)` | Asynchronously predicts target values for the provided input features using the trained ensemble model. |
+| `SampleWithReplacement(Matrix<>,Vector<>)` | Creates a random sample of the training data with replacement (bootstrap sampling). |
+| `Serialize` | Serializes the Extremely Randomized Trees model to a byte array for storage or transmission. |
+| `TrainAsync(Matrix<>,Vector<>)` | Asynchronously trains the Extremely Randomized Trees model using the provided input features and target values. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_options` | The configuration options for the Extremely Randomized Trees algorithm. |
+| `_random` | Random number generator used for bootstrapping and feature selection. |
+| `_trees` | Collection of individual decision trees that make up the ensemble. |
 

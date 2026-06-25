@@ -1,10 +1,10 @@
 ---
-title: "QuantileRegression"
+title: "QuantileRegression<T>"
 description: "Implements Quantile Regression, a technique that estimates the conditional quantiles of a response variable distribution in the linear model, providing a more complete view of the relationship between variables."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Implements Quantile Regression, a technique that estimates the conditional quantiles of a response variable
 distribution in the linear model, providing a more complete view of the relationship between variables.
@@ -48,4 +48,29 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained QuantileRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `QuantileRegression(QuantileRegressionOptions<>,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the QuantileRegression class with the specified options and regularization. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CreateNewInstance` | Creates a new instance of the quantile regression model with the same options. |
+| `Deserialize(Byte[])` | Deserializes the model from a byte array. |
+| `GetModelMetadata` | Gets metadata about the model. |
+| `GetOptions` |  |
+| `Predict(Matrix<>)` | Makes predictions for the given input data. |
+| `Predict(Vector<>)` | Predicts the value for a single input vector. |
+| `Serialize` | Serializes the model to a byte array. |
+| `Train(Matrix<>,Vector<>)` | Trains the quantile regression model on the provided data. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_options` | Configuration options for the quantile regression model. |
 

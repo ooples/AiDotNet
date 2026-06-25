@@ -1,10 +1,10 @@
 ---
-title: "ParticleSwarmOptimizer"
+title: "ParticleSwarmOptimizer<T, TInput, TOutput>"
 description: "Implements a Particle Swarm Optimization algorithm for finding optimal solutions."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Optimizers_
+`Models & Types` · `AiDotNet.Optimizers`
 
 Implements a Particle Swarm Optimization algorithm for finding optimal solutions.
 
@@ -60,4 +60,33 @@ var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
 
 Console.WriteLine("Trained with ParticleSwarmOptimizer.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `ParticleSwarmOptimizer(IFullModel<,,>,ParticleSwarmOptimizationOptions<,,>)` | Initializes a new instance of the ParticleSwarmOptimizer class with the specified options. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `Deserialize(Byte[])` | Reconstructs the particle swarm optimizer from a serialized byte array. |
+| `GetOptions` | Gets the current options for this optimizer. |
+| `InitializeAdaptiveParameters` | Initializes the adaptive parameters used by the PSO algorithm. |
+| `Optimize(OptimizationInputData<,,>)` | Performs the particle swarm optimization to find the best solution for the given input data. |
+| `Serialize` | Serializes the particle swarm optimizer to a byte array for storage or transmission. |
+| `UpdateAdaptiveParameters(OptimizationStepData<,,>,OptimizationStepData<,,>)` | Updates adaptive parameters based on optimization progress. |
+| `UpdateOptions(OptimizationAlgorithmOptions<,,>)` | Updates the optimizer's options with the provided options. |
+| `UpdateVelocity(Vector<>,Vector<>,Vector<>,Vector<>)` | Updates the velocity of a particle based on inertia, cognitive, and social components. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_currentCognitiveWeight` | The current cognitive weight that controls a particle's attraction to its personal best position. |
+| `_currentInertia` | The current inertia weight that controls a particle's tendency to continue its current trajectory. |
+| `_currentSocialWeight` | The current social weight that controls a particle's attraction to the global best position. |
+| `_psoOptions` | Configuration options specific to Particle Swarm Optimization. |
+| `_random` | Random number generator for stochastic components of the algorithm. |
 

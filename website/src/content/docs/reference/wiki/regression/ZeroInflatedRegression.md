@@ -1,10 +1,10 @@
 ---
-title: "ZeroInflatedRegression"
+title: "ZeroInflatedRegression<T>"
 description: "Zero-Inflated regression for count data with excess zeros."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Zero-Inflated regression for count data with excess zeros.
 
@@ -60,4 +60,54 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained ZeroInflatedRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `ZeroInflatedRegression(ZeroInflatedRegressionOptions,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of ZeroInflatedRegression. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `CountCoefficients` | Gets the count model coefficients. |
+| `NumberOfTrees` |  |
+| `ZeroCoefficients` | Gets the zero-inflation model coefficients. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CalculateFeatureImportancesAsync(Int32)` |  |
+| `ComputeCountProbability(Int32,Double)` | Computes probability from the count distribution. |
+| `ComputeLogLikelihood(Vector<>,Vector<>,Vector<>)` | Computes the log-likelihood. |
+| `ComputePosteriorZero(Vector<>,Vector<>,Vector<>)` | Computes posterior probability of being a structural zero. |
+| `ComputePredictions(Matrix<>)` | Computes predictions for all samples. |
+| `CreateNewInstance` |  |
+| `Deserialize(Byte[])` |  |
+| `GetModelMetadata` |  |
+| `InitializeParameters(Vector<>)` | Initializes parameters from target values. |
+| `PredictAsync(Matrix<>)` |  |
+| `PredictConditionalCountAsync(Matrix<>)` | Predicts the expected count conditional on not being a structural zero. |
+| `PredictPMFAsync(Matrix<>,Int32)` | Predicts the probability mass function for each sample. |
+| `PredictZeroProbabilityAsync(Matrix<>)` | Predicts the probability of being a structural zero for each sample. |
+| `Serialize` |  |
+| `TrainAsync(Matrix<>,Vector<>)` |  |
+| `UpdateCoefficientsWLS(Matrix<>,Vector<>,Vector<>,Vector<>,)` | Updates coefficients using weighted least squares. |
+| `UpdateCountModel(Matrix<>,Vector<>,Vector<>)` | Updates the count model parameters. |
+| `UpdateDispersion(Vector<>,Vector<>,Vector<>)` | Updates dispersion parameter for Negative Binomial. |
+| `UpdateZeroModel(Matrix<>,Vector<>)` | Updates the zero-inflation model parameters. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_countCoefficients` | Coefficients for the count model (λ). |
+| `_countIntercept` | Intercept for the count model. |
+| `_dispersion` | Dispersion parameter for Negative Binomial (if applicable). |
+| `_numFeatures` | Number of features. |
+| `_options` | Configuration options. |
+| `_zeroCoefficients` | Coefficients for the zero-inflation model (π). |
+| `_zeroIntercept` | Intercept for the zero-inflation model. |
 

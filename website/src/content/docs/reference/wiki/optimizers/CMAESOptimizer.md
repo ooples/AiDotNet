@@ -1,10 +1,10 @@
 ---
-title: "CMAESOptimizer"
+title: "CMAESOptimizer<T, TInput, TOutput>"
 description: "Implements the Covariance Matrix Adaptation Evolution Strategy (CMA-ES) optimization algorithm."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Optimizers_
+`Models & Types` · `AiDotNet.Optimizers`
 
 Implements the Covariance Matrix Adaptation Evolution Strategy (CMA-ES) optimization algorithm.
 
@@ -50,4 +50,38 @@ var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
 
 Console.WriteLine("Trained with CMAESOptimizer.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `CMAESOptimizer(IFullModel<,,>,CMAESOptimizerOptions<,,>,IEngine)` | Initializes a new instance of the CMAESOptimizer class. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `Deserialize(Byte[])` | Deserializes a byte array to restore the state of the CMA-ES optimizer. |
+| `EvaluatePopulationWithModels(Matrix<>,OptimizationInputData<,,>,IFullModel<,,>)` | Evaluates the fitness of each individual in the population and returns the best model. |
+| `GenerateMultivariateNormalSample(Int32)` | Generates a sample from a multivariate normal distribution. |
+| `GeneratePopulation` | Generates a new population of candidate solutions. |
+| `GenerateStandardNormal` | Generates a standard normal random number. |
+| `GetOptions` | Gets the current options of the CMA-ES optimizer. |
+| `InitializeAdaptiveParameters` | Initializes the adaptive parameters used in the CMA-ES algorithm. |
+| `Optimize(OptimizationInputData<,,>)` | Performs the main optimization process using the CMA-ES algorithm. |
+| `Serialize` | Serializes the current state of the CMA-ES optimizer into a byte array. |
+| `UpdateDistribution(Matrix<>,Vector<>)` | Updates the distribution parameters of the CMA-ES algorithm based on the current population and their fitness values. |
+| `UpdateOptions(OptimizationAlgorithmOptions<,,>)` | Updates the options for the CMA-ES optimizer. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_C` | The covariance matrix of the distribution. |
+| `_mean` | The mean of the current distribution. |
+| `_options` | The options specific to the CMA-ES optimization algorithm. |
+| `_pc` | Evolution path for covariance matrix adaptation. |
+| `_population` | The current population of candidate solutions. |
+| `_ps` | Evolution path for step-size adaptation. |
+| `_sigma` | The current step size. |
 

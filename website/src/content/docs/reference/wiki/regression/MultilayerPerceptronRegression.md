@@ -1,10 +1,10 @@
 ---
-title: "MultilayerPerceptronRegression"
+title: "MultilayerPerceptronRegression<T>"
 description: "Represents a multilayer perceptron (neural network) for regression problems."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Represents a multilayer perceptron (neural network) for regression problems.
 
@@ -54,4 +54,43 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained MultilayerPerceptronRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `MultilayerPerceptronRegression(MultilayerPerceptronOptions<,Matrix<>,Vector<>>,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the `MultilayerPerceptronRegression` class with optional custom options and regularization. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `ParameterCount` | Trains the neural network using the provided features and target values. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `ApplyActivation(Vector<>,Boolean)` | Applies the activation function to an input vector. |
+| `ApplyActivationDerivative(Vector<>,Boolean)` | Applies the derivative of the activation function to an input vector. |
+| `ComputeGradients(Matrix<>,Vector<>)` | Computes the gradients of the loss with respect to the weights and biases. |
+| `ComputeLoss(Vector<>,Vector<>)` | Computes the mean squared error loss between predictions and targets. |
+| `ComputeOutputLayerDelta(Vector<>,Vector<>,Vector<>)` | Computes the error delta for the output layer during backpropagation. |
+| `CreateInstance` | Creates a new instance of the `MultilayerPerceptronRegression` class with the same options and regularization as this instance. |
+| `Deserialize(Byte[])` | Deserializes the neural network model from a byte array. |
+| `ForwardPass(Vector<>)` | Performs a forward pass through the neural network for a single input vector. |
+| `InitializeNetwork` | Initializes the neural network structure with random weights. |
+| `OptimizeModel(Matrix<>,Vector<>)` | Gets the type of regression model. |
+| `Predict(Matrix<>)` | Generates predictions for new data points using the trained neural network. |
+| `Serialize` | Serializes the neural network model to a byte array for storage or transmission. |
+| `UpdateParameters(List<Matrix<>>,List<Vector<>>,Int32)` | Updates the weights and biases based on the computed gradients. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_biases` | The bias values for each layer of the neural network. |
+| `_optimizer` | The optimization algorithm used to update the weights and biases during training. |
+| `_options` | The configuration options for the multilayer perceptron. |
+| `_weights` | The weights connecting the layers of the neural network. |
 

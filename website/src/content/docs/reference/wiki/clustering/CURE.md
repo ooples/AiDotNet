@@ -1,10 +1,10 @@
 ---
-title: "CURE"
+title: "CURE<T>"
 description: "CURE (Clustering Using REpresentatives) hierarchical clustering algorithm."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Clustering_
+`Models & Types` · `AiDotNet.Clustering.Hierarchical`
 
 CURE (Clustering Using REpresentatives) hierarchical clustering algorithm.
 
@@ -63,4 +63,29 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 var labels = result.Predict(data);
 Console.WriteLine($"CURE: clustered {labels.Length} points.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `CURE(CUREOptions<>)` | Initializes a new CURE instance. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `SupportsParameterInitialization` |  |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `Clone` |  |
+| `CreateNewInstance` |  |
+| `DeepCopy` |  |
+| `GetOptions` |  |
+| `Predict(Matrix<>)` |  |
+| `RebuildClustersFromLabels(Matrix<>)` | Rebuilds the internal _clusters list from the current Labels after degenerate merge. |
+| `Train(Matrix<>,Vector<>)` |  |
+| `WithParameters(Vector<>)` |  |
 

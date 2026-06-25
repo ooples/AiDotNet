@@ -1,10 +1,10 @@
 ---
-title: "PrincipalComponentRegression"
+title: "PrincipalComponentRegression<T>"
 description: "Implements Principal Component Regression (PCR), a technique that combines principal component analysis (PCA)  with linear regression to handle multicollinearity in the predictor variables."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Implements Principal Component Regression (PCR), a technique that combines principal component analysis (PCA) 
 with linear regression to handle multicollinearity in the predictor variables.
@@ -49,4 +49,42 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained PrincipalComponentRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `PrincipalComponentRegression(PrincipalComponentRegressionOptions<>,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the PrincipalComponentRegression class with the specified options and regularization. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `ParameterCount` | Trains the principal component regression model on the provided data. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CalculateFeatureImportances` | Gets the type of the model. |
+| `Clone` | Makes predictions for the given input data. |
+| `CreateNewInstance` | Creates a new instance of the Principal Component Regression model with the same configuration. |
+| `Deserialize(Byte[])` | Deserializes the model from a byte array. |
+| `GetModelMetadata` | Gets metadata about the model. |
+| `GetOptions` |  |
+| `PerformPCA(Matrix<>)` | Performs Principal Component Analysis (PCA) on the input data. |
+| `SelectNumberOfComponents(Vector<>)` | Selects the appropriate number of principal components to use in the regression model. |
+| `Serialize` | Serializes the model to a byte array. |
+| `ValidateInputs(Matrix<>,Vector<>)` | Validates the input data before training. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_components` | The principal components extracted from the training data. |
+| `_options` | Configuration options for the principal component regression model. |
+| `_xMean` | The mean of each predictor variable used for centering. |
+| `_xStd` | The standard deviation of each predictor variable used for scaling. |
+| `_yMean` | The mean of the target variable used for centering. |
+| `_yStd` | The standard deviation of the target variable used for scaling. |
 

@@ -1,10 +1,10 @@
 ---
-title: "NegativeBinomialRegression"
+title: "NegativeBinomialRegression<T>"
 description: "Represents a negative binomial regression model for count data that may exhibit overdispersion."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Represents a negative binomial regression model for count data that may exhibit overdispersion.
 
@@ -50,4 +50,26 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained NegativeBinomialRegression.");
 ```
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CalculateWeights(Vector<>)` | Calculates the weights for the iteratively reweighted least squares algorithm. |
+| `CalculateWorkingResponse(Vector<>,Vector<>,Vector<>)` | Calculates the working response for the iteratively reweighted least squares algorithm. |
+| `CreateNewInstance` | Creates a new instance of the Negative Binomial Regression model with the same configuration. |
+| `Deserialize(Byte[])` | Deserializes the negative binomial regression model from a byte array. |
+| `InitializeCoefficients(Int32)` | Initializes the model coefficients to zeros. |
+| `Predict(Matrix<>)` | Makes predictions for new data points using the trained negative binomial regression model. |
+| `Serialize` | Serializes the negative binomial regression model to a byte array for storage or transmission. |
+| `Train(Matrix<>,Vector<>)` | Trains the negative binomial regression model using the provided features and target values. |
+| `UpdateDispersion(Matrix<>,Vector<>)` | Updates the dispersion parameter based on the Pearson residuals. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_dispersion` | The dispersion parameter that accounts for overdispersion in the data. |
+| `_options` | The configuration options for the negative binomial regression model. |
+| `_yShift` | Initializes a new instance of the `NegativeBinomialRegression` class with optional custom options and regularization. |
 

@@ -1,10 +1,10 @@
 ---
-title: "KernelRidgeRegression"
+title: "KernelRidgeRegression<T>"
 description: "Implements Kernel Ridge Regression, a powerful nonlinear regression technique that combines ridge regression with the kernel trick to capture complex nonlinear relationships."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Implements Kernel Ridge Regression, a powerful nonlinear regression technique that combines
 ridge regression with the kernel trick to capture complex nonlinear relationships.
@@ -61,4 +61,37 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained KernelRidgeRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `KernelRidgeRegression` | Initializes a new instance with default settings. |
+| `KernelRidgeRegression(KernelRidgeRegressionOptions,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the `KernelRidgeRegression` class. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `Options` | Gets the configuration options specific to Kernel Ridge Regression. |
+| `ParameterCount` | KRR doesn't benefit from optimizer parameter injection. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `Clone` | Creates a new instance of the KernelRidgeRegression with the same configuration as the current instance. |
+| `Deserialize(Byte[])` | Loads a previously serialized Kernel Ridge Regression model from a byte array. |
+| `ExtractModelParameters` | KRR uses all training points — skip SVR-style sparsification. |
+| `GetModelMetadata` | Gets metadata about the Kernel Ridge Regression model and its configuration. |
+| `OptimizeModel(Matrix<>,Vector<>)` | Optimizes the Kernel Ridge Regression model based on the provided training data. |
+| `PredictSingle(Vector<>)` | Predicts the target value for a single input feature vector. |
+| `Serialize` | Serializes the Kernel Ridge Regression model to a byte array for storage or transmission. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_dualCoefficients` | The dual coefficients used for making predictions. |
+| `_gramMatrix` | The Gram matrix (kernel matrix) that represents pairwise similarities between all training points. |
 

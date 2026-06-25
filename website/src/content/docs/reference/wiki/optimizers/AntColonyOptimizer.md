@@ -1,10 +1,10 @@
 ---
-title: "AntColonyOptimizer"
+title: "AntColonyOptimizer<T, TInput, TOutput>"
 description: "Implements the Ant Colony Optimization algorithm for solving optimization problems."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Optimizers_
+`Models & Types` · `AiDotNet.Optimizers`
 
 Implements the Ant Colony Optimization algorithm for solving optimization problems.
 
@@ -49,4 +49,36 @@ var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
 
 Console.WriteLine("Trained with AntColonyOptimizer.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `AntColonyOptimizer(IFullModel<,,>,AntColonyOptimizationOptions<,,>,IEngine)` | Initializes a new instance of the AntColonyOptimizer class. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `ConstructSolution(Matrix<>,)` | Constructs a solution (model) based on the current pheromone levels and input data. |
+| `Deserialize(Byte[])` | Restores the state of the optimizer from a byte array. |
+| `GetOptions` | Gets the current options for the Ant Colony Optimization algorithm. |
+| `InitializeAdaptiveParameters` | Initializes the adaptive parameters used in the Ant Colony Optimization algorithm. |
+| `InitializePheromones(Int32)` | Initializes the pheromone matrix for the Ant Colony Optimization algorithm. |
+| `Optimize(OptimizationInputData<,,>)` | Performs the main optimization process using the Ant Colony Optimization algorithm. |
+| `SelectNextFeature(Int32,Matrix<>,,Boolean[])` | Selects the next feature to be included in the solution based on pheromone levels and heuristics. |
+| `Serialize` | Converts the current state of the optimizer into a byte array for storage or transmission. |
+| `UpdateAdaptiveParameters(OptimizationStepData<,,>,OptimizationStepData<,,>)` | Updates the adaptive parameters based on the current and previous optimization steps. |
+| `UpdateOptions(OptimizationAlgorithmOptions<,,>)` | Updates the options for the Ant Colony Optimization algorithm. |
+| `UpdatePheromoneEvaporationRate(OptimizationStepData<,,>,OptimizationStepData<,,>)` | Updates the pheromone evaporation rate based on the current and previous optimization steps. |
+| `UpdatePheromoneIntensity(OptimizationStepData<,,>,OptimizationStepData<,,>)` | Updates the pheromone intensity based on the current and previous optimization steps. |
+| `UpdatePheromones(Matrix<>,List<IFullModel<,,>>)` | Updates the pheromone levels based on the quality of solutions found in the current iteration. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_antColonyOptions` | Options specific to the Ant Colony Optimization algorithm. |
+| `_currentPheromoneEvaporationRate` | The current rate at which pheromone evaporates from the trails. |
+| `_currentPheromoneIntensity` | The current intensity of pheromone deposited by ants. |
 

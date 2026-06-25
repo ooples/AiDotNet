@@ -1,10 +1,10 @@
 ---
-title: "AdaBoostR2Regression"
+title: "AdaBoostR2Regression<T>"
 description: "Implements the AdaBoost.R2 algorithm for regression problems, an ensemble learning method that combines multiple decision tree regressors to improve prediction accuracy."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Implements the AdaBoost.R2 algorithm for regression problems, an ensemble learning method that combines
 multiple decision tree regressors to improve prediction accuracy.
@@ -64,4 +64,39 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained AdaBoostR2Regression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `AdaBoostR2Regression` | Initializes a new instance with default settings. |
+| `AdaBoostR2Regression(AdaBoostR2RegressionOptions,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the `AdaBoostR2Regression` class with specified options and regularization. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `MaxDepth` | Gets the maximum depth of each decision tree in the ensemble. |
+| `NumberOfTrees` | Gets the number of decision trees in the ensemble. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CalculateAverageError(Vector<>,Vector<>,,Vector<>)` | Calculates the absolute error between the target values and predictions. |
+| `CalculateFeatureImportancesAsync(Int32)` | Updates the sample weights for the next iteration of AdaBoost.R2. |
+| `CreateNewInstance` | Creates a new instance of the AdaBoostR2Regression with the same configuration as the current instance. |
+| `Deserialize(Byte[])` | Deserializes the model from a byte array. |
+| `GetModelMetadata` | Gets metadata about the trained model. |
+| `PredictAsync(Matrix<>)` | Makes predictions on new data using the trained ensemble of decision trees asynchronously. |
+| `Serialize` | Serializes the model to a byte array for storage or transmission. |
+| `TrainAsync(Matrix<>,Vector<>)` | Trains the AdaBoost.R2 regression model on the provided input data and target values asynchronously. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_ensemble` | The ensemble of decision trees and their corresponding weights. |
+| `_options` | Options for configuring the AdaBoost.R2 regression algorithm. |
+| `_random` | Random number generator for creating diverse decision trees. |
 

@@ -1,10 +1,10 @@
 ---
-title: "LevenbergMarquardtOptimizer"
+title: "LevenbergMarquardtOptimizer<T, TInput, TOutput>"
 description: "Implements the Levenberg-Marquardt optimization algorithm for non-linear least squares problems."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Optimizers_
+`Models & Types` · `AiDotNet.Optimizers`
 
 Implements the Levenberg-Marquardt optimization algorithm for non-linear least squares problems.
 
@@ -50,4 +50,37 @@ var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
 
 Console.WriteLine("Trained with LevenbergMarquardtOptimizer.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `LevenbergMarquardtOptimizer(IFullModel<,,>,LevenbergMarquardtOptimizerOptions<,,>,IEngine)` | Initializes a new instance of the LevenbergMarquardtOptimizer class. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CalculateJacobian(IFullModel<,,>,)` | Calculates the Jacobian matrix for the current model and input data. |
+| `CalculatePartialDerivative(IFullModel<,,>,,Int32)` | Calculates the partial derivative of the model output with respect to a specific parameter. |
+| `CalculateResiduals(IFullModel<,,>,,)` | Calculates the residuals (differences between predicted and actual values) for the current model. |
+| `Deserialize(Byte[])` | Deserializes a byte array to restore the optimizer's state. |
+| `GetOptions` | Retrieves the current options of the optimizer. |
+| `InitializeAdaptiveParameters` | Initializes the adaptive parameters used by the optimizer. |
+| `Optimize(OptimizationInputData<,,>)` | Performs the optimization process using the Levenberg-Marquardt algorithm. |
+| `Serialize` | Serializes the optimizer's state into a byte array. |
+| `SolveLinearSystem(Matrix<>,Vector<>)` | Solves the linear system of equations in the Levenberg-Marquardt algorithm. |
+| `Step(TapeStepContext<>)` |  |
+| `UpdateAdaptiveParameters(OptimizationStepData<,,>,OptimizationStepData<,,>)` | Updates the adaptive parameters of the optimizer based on the current and previous optimization steps. |
+| `UpdateOptions(OptimizationAlgorithmOptions<,,>)` | Updates the optimizer's options with new settings. |
+| `UpdateParametersGpu(IGpuBuffer,IGpuBuffer,Int32,IDirectGpuBackend)` | Updates parameters using GPU-accelerated Levenberg-Marquardt. |
+| `UpdateSolution(IFullModel<,,>,Matrix<>,Vector<>)` | Updates the current solution based on the Levenberg-Marquardt algorithm. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_dampingFactor` | The damping factor used in the Levenberg-Marquardt algorithm to balance between gradient descent and Gauss-Newton steps. |
+| `_iteration` | The current iteration count of the optimization process. |
+| `_options` | The options specific to the Levenberg-Marquardt algorithm. |
 

@@ -1,10 +1,10 @@
 ---
-title: "MiniBatchGradientDescentOptimizer"
+title: "MiniBatchGradientDescentOptimizer<T, TInput, TOutput>"
 description: "Implements the Mini-Batch Gradient Descent optimization algorithm."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Optimizers_
+`Models & Types` · `AiDotNet.Optimizers`
 
 Implements the Mini-Batch Gradient Descent optimization algorithm.
 
@@ -50,4 +50,33 @@ var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
 
 Console.WriteLine("Trained with MiniBatchGradientDescentOptimizer.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `MiniBatchGradientDescentOptimizer(IFullModel<,,>,MiniBatchGradientDescentOptions<,,>,IEngine)` | Initializes a new instance of the MiniBatchGradientDescentOptimizer class. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `Deserialize(Byte[])` | Deserializes a byte array to restore the optimizer's state. |
+| `GenerateGradientCacheKey(IFullModel<,,>,,)` | Generates a unique key for caching gradients based on the model and input data. |
+| `GetOptions` | Gets the current optimization algorithm options. |
+| `InitializeAdaptiveParameters` | Initializes adaptive parameters for the optimization process. |
+| `Optimize(OptimizationInputData<,,>)` | Performs the optimization process using Mini-Batch Gradient Descent. |
+| `ReverseUpdate(Vector<>,Vector<>)` | Reverses a Mini-Batch Gradient Descent update to recover original parameters. |
+| `Serialize` | Serializes the optimizer's state into a byte array. |
+| `Step(TapeStepContext<>)` |  |
+| `UpdateAdaptiveParameters(OptimizationStepData<,,>,OptimizationStepData<,,>)` | Updates the adaptive parameters of the optimizer based on the current and previous optimization steps. |
+| `UpdateOptions(OptimizationAlgorithmOptions<,,>)` | Updates the optimizer's options with new settings. |
+| `UpdateParametersGpu(IGpuBuffer,IGpuBuffer,Int32,IDirectGpuBackend)` | Updates parameters on the GPU using vanilla SGD (same as SGD for parameter updates). |
+| `UpdateSolution(IFullModel<,,>,Vector<>)` | Updates the current solution based on the calculated gradient. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_options` | The options specific to the Mini-Batch Gradient Descent algorithm. |
 

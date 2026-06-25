@@ -1,10 +1,10 @@
 ---
-title: "CLARANS"
+title: "CLARANS<T>"
 description: "CLARANS (Clustering Large Applications based on Randomized Search) implementation."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Clustering_
+`Models & Types` · `AiDotNet.Clustering.Partitioning`
 
 CLARANS (Clustering Large Applications based on Randomized Search) implementation.
 
@@ -63,4 +63,30 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 var labels = result.Predict(data);
 Console.WriteLine($"CLARANS: clustered {labels.Length} points.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `CLARANS(CLARANSOptions<>)` | Initializes a new CLARANS instance. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `BestCost` | Gets the best cost found. |
+| `MedoidIndices` | Gets the indices of medoid points. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CreateNewInstance` |  |
+| `FitPredict(Matrix<>)` |  |
+| `GetMedoids(Matrix<>)` | Gets the medoid points as a matrix. |
+| `GetOptions` |  |
+| `Predict(Matrix<>)` |  |
+| `Train(Matrix<>)` | Trains the CLARANS clustering model on the given data. |
+| `Train(Matrix<>,Vector<>)` |  |
+| `WithParameters(Vector<>)` |  |
 

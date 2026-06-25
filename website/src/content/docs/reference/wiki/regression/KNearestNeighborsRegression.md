@@ -1,10 +1,10 @@
 ---
-title: "KNearestNeighborsRegression"
+title: "KNearestNeighborsRegression<T>"
 description: "Implements K-Nearest Neighbors algorithm for regression, which predicts target values by averaging the values of the K closest training examples."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Implements K-Nearest Neighbors algorithm for regression, which predicts target values
 by averaging the values of the K closest training examples.
@@ -58,4 +58,42 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained KNearestNeighborsRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `KNearestNeighborsRegression(KNearestNeighborsOptions,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the `KNearestNeighborsRegression` class. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `ParameterCount` | KNN is a lazy learner — no optimizer parameter injection. |
+| `SoftKNNTemperature` | Gets or sets the temperature parameter for soft KNN mode. |
+| `UseSoftKNN` | Gets or sets whether to use soft (differentiable) KNN mode for JIT compilation. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CalculateDistance(Vector<>,Vector<>)` | Calculates the Euclidean distance between two feature vectors. |
+| `Clone` | Creates a shallow copy of this KNN model including its training data. |
+| `CreateInstance` | Creates a new instance of the KNearestNeighborsRegression with the same configuration as the current instance. |
+| `DeepCopy` | Creates a deep copy of this KNN model including its training data. |
+| `Deserialize(Byte[])` | Loads a previously serialized K-Nearest Neighbors Regression model from a byte array. |
+| `GetActiveFeatureIndices` | KNN uses all features (distance-based, no coefficient pruning). |
+| `GetOptions` |  |
+| `OptimizeModel(Matrix<>,Vector<>)` | Optimizes the KNN model by storing the training data for later use in predictions. |
+| `Predict(Matrix<>)` | Predicts target values for the provided input features using the trained KNN model. |
+| `PredictSingle(Vector<>)` | Predicts the target value for a single input feature vector. |
+| `Serialize` | Gets the model type of the K-Nearest Neighbors Regression model. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_options` | Configuration options for the K-Nearest Neighbors algorithm. |
+| `_xTrain` | Matrix containing the feature vectors of the training samples. |
+| `_yTrain` | Vector containing the target values of the training samples. |
 

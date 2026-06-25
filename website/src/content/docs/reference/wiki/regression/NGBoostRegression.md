@@ -1,10 +1,10 @@
 ---
-title: "NGBoostRegression"
+title: "NGBoostRegression<T>"
 description: "NGBoost (Natural Gradient Boosting) for probabilistic regression."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 NGBoost (Natural Gradient Boosting) for probabilistic regression.
 
@@ -55,4 +55,52 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained NGBoostRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `NGBoostRegression(NGBoostRegressionOptions,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of NGBoostRegression. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `DistributionType` | Gets the distribution type used by this model. |
+| `NumberOfTrees` |  |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CalculateFeatureImportancesAsync(Int32)` |  |
+| `ComputeMeanScore(Vector<>[],Vector<>)` | Computes the mean score for the current parameter values. |
+| `ComputeNaturalGradients(Vector<>[],Matrix<>,Int32)` | Computes natural gradients by preconditioning with Fisher Information. |
+| `CreateDistribution(Vector<>)` | Creates a distribution initialized from the target values. |
+| `CreateDistributionFromParams(Vector<>[],Int32)` | Creates a distribution from the current parameter values for a specific sample. |
+| `CreateDistributionWithParams(Vector<>)` | Creates a distribution with the specified parameters. |
+| `CreateNewInstance` |  |
+| `Deserialize(Byte[])` |  |
+| `EnsurePositive()` | Ensures a parameter value is positive. |
+| `GaussianElimination(Matrix<>,Int32)` | Matrix inversion using Gaussian elimination. |
+| `GetModelMetadata` |  |
+| `GetSampleIndices(Int32)` | Gets sample indices for subsampling. |
+| `InvertMatrix(Matrix<>)` | Inverts a small matrix with regularization. |
+| `PredictAsync(Matrix<>)` | Predicts the mean of the distribution for each input sample. |
+| `PredictDistributionsAsync(Matrix<>)` | Predicts full probability distributions for each input sample. |
+| `PredictIntervalAsync(Matrix<>,Double)` | Gets prediction intervals for each input sample. |
+| `PredictQuantilesAsync(Matrix<>,Vector<Double>)` | Predicts quantiles for each input sample. |
+| `Serialize` |  |
+| `TrainAsync(Matrix<>,Vector<>)` | Trains the NGBoost model using natural gradient boosting. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_initialParameters` | Initial parameter values (e.g., mean of y for location, initial scale). |
+| `_numParams` | Number of parameters in the distribution. |
+| `_options` | Configuration options. |
+| `_scoringRule` | The scoring rule used for optimization. |
+| `_trees` | Base learners for each distribution parameter. |
+| `_yMean` | Y standardization parameters for scale-invariant training. |
 

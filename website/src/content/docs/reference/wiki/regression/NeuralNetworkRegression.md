@@ -1,10 +1,10 @@
 ---
-title: "NeuralNetworkRegression"
+title: "NeuralNetworkRegression<T>"
 description: "A neural network regression model that can learn complex non-linear relationships in data."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 A neural network regression model that can learn complex non-linear relationships in data.
 
@@ -45,4 +45,46 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained NeuralNetworkRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `NeuralNetworkRegression(NeuralNetworkRegressionOptions<,Matrix<>,Vector<>>,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the NeuralNetworkRegression class with the specified options and regularization. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `ParameterCount` | Makes predictions for the given input data. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `AccumulateGradients(List<Vector<>>,List<Vector<>>,List<Matrix<>>,List<Vector<>>)` | Accumulates gradients for the weights and biases based on the activations and deltas. |
+| `ApplyActivation(Vector<>,Boolean)` | Applies the appropriate activation function to the input vector. |
+| `ApplyActivationDerivative(Vector<>,Boolean)` | Applies the derivative of the appropriate activation function to the input vector. |
+| `BackwardPass(List<Vector<>>,Vector<>)` | Performs a backward pass through the neural network to compute the gradients. |
+| `CreateInstance` | Creates a new instance of the Neural Network Regression model with the same configuration. |
+| `Deserialize(Byte[])` | Deserializes the model from a byte array. |
+| `ForwardPass(Vector<>)` | Performs a forward pass through the neural network. |
+| `GetBatchElements(Vector<>,Int32[],Int32,Int32)` | Extracts a batch of elements from a vector based on the provided indices. |
+| `GetBatchRows(Matrix<>,Int32[],Int32,Int32)` | Extracts a batch of rows from a matrix based on the provided indices. |
+| `GetOptions` |  |
+| `InitializeNetwork` | Initializes the neural network by creating weight matrices and bias vectors for each layer. |
+| `OptimizeModel(Matrix<>,Vector<>)` | Gets the type of the model. |
+| `Serialize` | Serializes the model to a byte array. |
+| `ShuffleArray(Int32[])` | Randomly shuffles an array using the Fisher-Yates algorithm. |
+| `Train(Matrix<>,Vector<>)` | Trains the neural network on the provided data. |
+| `UpdateParameters(List<Matrix<>>,List<Vector<>>,Int32)` | Updates the network parameters (weights and biases) using the accumulated gradients. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_biases` | The bias vectors for each layer of the neural network. |
+| `_optimizer` | The optimization algorithm used to update the model parameters during training. |
+| `_options` | Configuration options for the neural network regression model. |
+| `_weights` | The weight matrices for each layer of the neural network. |
 

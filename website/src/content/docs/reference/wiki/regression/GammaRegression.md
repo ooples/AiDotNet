@@ -1,10 +1,10 @@
 ---
-title: "GammaRegression"
+title: "GammaRegression<T>"
 description: "Implements Gamma regression, a generalized linear model for positive continuous data with right-skewed distributions."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Implements Gamma regression, a generalized linear model for positive continuous data with right-skewed distributions.
 
@@ -56,4 +56,41 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained GammaRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `GammaRegression(GammaRegressionOptions<>,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the GammaRegression class with the specified options and regularization. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `Dispersion` | Gets the estimated dispersion parameter. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `ApplyInverseLink(Vector<>)` | Applies the inverse link function to convert the linear predictor to the mean. |
+| `ApplyLink(Vector<>)` | Applies the link function to convert the mean to the linear predictor scale. |
+| `ClampMu(Vector<>)` | Clamps the mean values to ensure they're positive and numerically stable. |
+| `ComputeWeights(Vector<>)` | Computes the weights matrix for the iteratively reweighted least squares algorithm. |
+| `ComputeWorkingResponse(Vector<>,Vector<>,Vector<>)` | Computes the working response for the iteratively reweighted least squares algorithm. |
+| `CreateNewInstance` | Creates a new instance of the Gamma Regression model with the same configuration. |
+| `Deserialize(Byte[])` | Deserializes the model from a byte array. |
+| `EstimateDispersion(Matrix<>,Vector<>)` | Estimates the dispersion parameter using Pearson residuals after model fitting. |
+| `HasConverged(Vector<>,Vector<>)` | Checks if the algorithm has converged by comparing the change in coefficients. |
+| `Predict(Matrix<>)` | Makes predictions for the given input data. |
+| `Serialize` | Serializes the model to a byte array. |
+| `Train(Matrix<>,Vector<>)` | Trains the Gamma regression model on the provided data. |
+| `ValidateGammaData(Vector<>)` | Validates that all target values are positive, as required for Gamma regression. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_dispersion` | The estimated dispersion parameter (φ = 1/shape). |
+| `_options` | Configuration options for the Gamma regression model. |
 

@@ -1,10 +1,10 @@
 ---
-title: "TimeSeriesRegression"
+title: "TimeSeriesRegression<T>"
 description: "Represents a time series regression model that incorporates temporal dependencies, trends, and seasonality."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Represents a time series regression model that incorporates temporal dependencies, trends, and seasonality.
 
@@ -50,4 +50,42 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained TimeSeriesRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `TimeSeriesRegression` | Initializes a new instance of the TimeSeriesRegression class with specified options and optional regularization. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `ParameterCount` | Trains the time series regression model on the provided data. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `ApplyAutocorrelationCorrection(Matrix<>,Vector<>)` | Applies autocorrelation correction to improve the model's handling of time-dependent error patterns. |
+| `ApplyRegularization` | Applies regularization to the model coefficients. |
+| `CalculateAutocorrelation(Vector<>)` | Calculates the first-order autocorrelation coefficient for the given residuals. |
+| `CreateNewInstance` | Creates a new instance of the time series regression model with the same configuration. |
+| `Deserialize(Byte[])` | Restores the model state from a byte array previously created by the Serialize method. |
+| `ExtractCoefficients` | Extracts the relevant coefficients from the model. |
+| `ExtractSeasonalCoefficients` | Extracts the seasonal coefficients from the model if seasonality was included in the options. |
+| `ExtractTrendCoefficients` | Extracts the trend coefficients from the model if trend was included in the options. |
+| `GetOptions` |  |
+| `Predict(Matrix<>)` | Predicts target values for the given input features. |
+| `PrepareInputData(Matrix<>,Vector<>)` | Prepares the input data by adding lagged features, trend, and seasonal components. |
+| `PrepareTargetData(Vector<>)` | Prepares the target data by adjusting for the lag order. |
+| `Serialize` | Returns the type of this regression model. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_options` | The options that configure this time series regression model. |
+| `_regularization` | The regularization strategy used to prevent overfitting. |
+| `_timeSeriesModel` | The underlying time series model that handles the core prediction logic. |
 

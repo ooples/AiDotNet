@@ -1,10 +1,10 @@
 ---
-title: "LogisticRegression"
+title: "LogisticRegression<T>"
 description: "Represents a logistic regression model for binary classification problems."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Represents a logistic regression model for binary classification problems.
 
@@ -52,4 +52,36 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained LogisticRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `LogisticRegression(LogisticRegressionOptions<>,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the `LogisticRegression` class with optional custom options and regularization. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `ParameterCount` | Trains the logistic regression model using the provided features and target values. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `ApplyRegularizationGradient(Vector<>)` | Applies regularization to the gradient during training. |
+| `CreateNewInstance` | Creates a new instance of the logistic regression model. |
+| `Deserialize(Byte[])` | Deserializes the logistic regression model from a byte array. |
+| `GetOptions` |  |
+| `HasConverged(Vector<>)` | Determines if the training process has converged based on the magnitude of the gradient. |
+| `HasConvergedScaled(Vector<>,Int32)` | Checks convergence using scaled gradient (accounts for sample size). |
+| `Predict(Matrix<>)` | Makes predictions for new data points using the trained logistic regression model. |
+| `Serialize` | Serializes the logistic regression model to a byte array for storage or transmission. |
+| `Sigmoid()` | Applies the sigmoid (logistic) function to transform a raw score into a probability. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_options` | The configuration options for the logistic regression model. |
 

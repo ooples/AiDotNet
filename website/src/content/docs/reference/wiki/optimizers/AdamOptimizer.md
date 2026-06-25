@@ -1,10 +1,10 @@
 ---
-title: "AdamOptimizer"
+title: "AdamOptimizer<T, TInput, TOutput>"
 description: "Implements the Adam (Adaptive Moment Estimation) optimization algorithm for gradient-based optimization."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Optimizers_
+`Models & Types` · `AiDotNet.Optimizers`
 
 Implements the Adam (Adaptive Moment Estimation) optimization algorithm for gradient-based optimization.
 
@@ -48,4 +48,58 @@ var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
 
 Console.WriteLine("Trained with AdamOptimizer.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `AdamOptimizer(IFullModel<,,>,AdamOptimizerOptions<,,>)` | Initializes a new instance of the AdamOptimizer class. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `SupportsGpuUpdate` | Gets whether this optimizer supports GPU-accelerated parameter updates. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `AiDotNet#Optimizers#Fused#IFusedOptimizerSpec#TryGetFusedOptimizerConfig(FusedOptimizerConfig)` |  |
+| `AnyGradientIsAnomalous(TapeStepContext<>)` | Scans every gradient tensor for NaN/Inf entries and returns true on the first sighting. |
+| `AnyGradientIsAnomalous(Vector<>)` | Flat-vector overload of `TapeStepContext{` for the Optimize / UpdateSolution path (#1380 part 2). |
+| `Deserialize(Byte[])` | Deserializes the optimizer's state from a byte array. |
+| `DisposeGpuState` | Disposes GPU-allocated optimizer state. |
+| `GenerateGradientCacheKey(IFullModel<,,>,,)` | Generates a unique key for caching gradients. |
+| `GetOptions` | Gets the current optimizer options. |
+| `InitializeAdaptiveParameters` | Initializes the adaptive parameters used by the Adam optimizer. |
+| `InitializeGpuState(Int32,IDirectGpuBackend)` | Initializes Adam optimizer state on the GPU. |
+| `Optimize(OptimizationInputData<,,>)` | Performs the optimization process using the Adam algorithm. |
+| `Reset` | Resets the optimizer's internal state. |
+| `Serialize` | Serializes the optimizer's state into a byte array. |
+| `ShouldRunAnomalyGuard` | Applies PyTorch-style global-norm gradient clipping across every gradient in the tape step's `Gradients` dictionary. |
+| `Step(TapeStepContext<>)` |  |
+| `UpdateAdaptiveParameters(OptimizationStepData<,,>,OptimizationStepData<,,>)` | Updates the adaptive parameters of the optimizer based on the current and previous optimization steps. |
+| `UpdateOptions(OptimizationAlgorithmOptions<,,>)` | Updates the optimizer's options. |
+| `UpdateParameters(Matrix<>,Matrix<>)` | Updates a matrix of parameters using the Adam optimization algorithm. |
+| `UpdateParameters(Vector<>,Vector<>)` | Updates a vector of parameters using the Adam optimization algorithm. |
+| `UpdateParametersGpu(IGpuBuffer,IGpuBuffer,Int32,IDirectGpuBackend)` | Updates parameters on the GPU using the Adam kernel. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_currentBeta1` | The current value of beta1 (exponential decay rate for first moment estimates). |
+| `_currentBeta2` | The current value of beta2 (exponential decay rate for second moment estimates). |
+| `_gpuM` | GPU buffer for first moment estimates (m). |
+| `_gpuV` | GPU buffer for second moment estimates (v). |
+| `_m` | The first moment vector (moving average of gradients). |
+| `_options` | The options specific to the Adam optimizer. |
+| `_previousM` | Stores the pre-update snapshot of first moment vector for accurate reverse updates. |
+| `_previousT` | Stores the pre-update timestep for accurate reverse updates. |
+| `_previousV` | Stores the pre-update snapshot of second moment vector for accurate reverse updates. |
+| `_t` | The current time step (iteration count). |
+| `_tapeVMax` | Per-parameter running maximum of v̂_t when AMSGrad is enabled (Reddi, Kale, Kumar 2018). |
+| `_v` | The second moment vector (moving average of squared gradients). |
+| `_vMaxVector` | Running maximum of v̂ when AMSGrad is enabled, for the Vector-based UpdateParameters / UpdateSolution paths (the tape-based Step path tracks vMax per-tensor in `_tapeVMax`). |
 

@@ -1,10 +1,10 @@
 ---
-title: "BayesianOptimizer"
+title: "BayesianOptimizer<T, TInput, TOutput>"
 description: "Represents a Bayesian Optimizer for optimization problems."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Optimizers_
+`Models & Types` · `AiDotNet.Optimizers`
 
 Represents a Bayesian Optimizer for optimization problems.
 
@@ -49,4 +49,33 @@ var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
 
 Console.WriteLine("Trained with BayesianOptimizer.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `BayesianOptimizer(IFullModel<,,>,BayesianOptimizerOptions<,,>,IGaussianProcess<>,IEngine)` | Initializes a new instance of the BayesianOptimizer class. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CalculateAcquisitionFunction(Vector<>)` | Calculates the value of the acquisition function for a given point. |
+| `Deserialize(Byte[])` | Restores the state of the optimizer from a byte array. |
+| `GenerateRandomPoint(Int32)` | Generates a random point within the specified bounds of the optimization space. |
+| `GetOptions` | Gets the current options for the Bayesian Optimization algorithm. |
+| `InitializeAdaptiveParameters` | Initializes the adaptive parameters used in the Bayesian Optimization algorithm. |
+| `Optimize(OptimizationInputData<,,>)` | Performs the main optimization process using the Bayesian Optimization algorithm. |
+| `OptimizeAcquisitionFunction(Int32)` | Optimizes the acquisition function to determine the next point to sample. |
+| `Serialize` | Converts the current state of the optimizer into a byte array for storage or transmission. |
+| `UpdateOptions(OptimizationAlgorithmOptions<,,>)` | Updates the options for the Bayesian Optimization algorithm. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_gaussianProcess` | The Gaussian Process model used to approximate the objective function. |
+| `_options` | The options for configuring the Bayesian Optimization algorithm. |
+| `_sampledPoints` | A matrix storing the points that have been sampled during the optimization process. |
+| `_sampledValues` | A vector storing the corresponding function values for the sampled points. |
 

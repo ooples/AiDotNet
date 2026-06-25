@@ -1,10 +1,10 @@
 ---
-title: "GradientBoostingRegression"
+title: "GradientBoostingRegression<T>"
 description: "Implements a Gradient Boosting Regression model, which combines multiple decision trees sequentially to create a powerful ensemble that learns from the errors of previous trees."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Implements a Gradient Boosting Regression model, which combines multiple decision trees
 sequentially to create a powerful ensemble that learns from the errors of previous trees.
@@ -60,4 +60,39 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained GradientBoostingRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `GradientBoostingRegression(GradientBoostingRegressionOptions,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the `GradientBoostingRegression` class. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `NumberOfTrees` | Gets the number of trees in the ensemble model. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CalculateFeatureImportancesAsync(Int32)` | Calculates the importance scores for all features used in the model. |
+| `Clone` |  |
+| `CreateNewInstance` | Creates a new instance of the gradient boosting regression model with the same configuration. |
+| `Deserialize(Byte[])` | Loads a previously serialized Gradient Boosting Regression model from a byte array. |
+| `GetActiveFeatureIndices` |  |
+| `GetModelMetadata` | Gets metadata about the Gradient Boosting Regression model and its configuration. |
+| `GetOptions` |  |
+| `PredictAsync(Matrix<>)` | Asynchronously predicts target values for the provided input features using the trained Gradient Boosting model. |
+| `Serialize` | Serializes the Gradient Boosting Regression model to a byte array for storage or transmission. |
+| `TrainAsync(Matrix<>,Vector<>)` | Asynchronously trains the Gradient Boosting Regression model using the provided input features and target values. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_initialPrediction` | The initial prediction value, typically the mean of the target values. |
+| `_options` | Configuration options for the Gradient Boosting algorithm. |
+| `_trees` | Collection of decision trees that make up the ensemble. |
 

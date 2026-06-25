@@ -1,10 +1,10 @@
 ---
-title: "BFGSOptimizer"
+title: "BFGSOptimizer<T, TInput, TOutput>"
 description: "Implements the Broyden-Fletcher-Goldfarb-Shanno (BFGS) optimization algorithm."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Optimizers_
+`Models & Types` · `AiDotNet.Optimizers`
 
 Implements the Broyden-Fletcher-Goldfarb-Shanno (BFGS) optimization algorithm.
 
@@ -49,4 +49,38 @@ var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
 
 Console.WriteLine("Trained with BFGSOptimizer.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `BFGSOptimizer(IFullModel<,,>,BFGSOptimizerOptions<,,>,IEngine)` | Initializes a new instance of the BFGSOptimizer class. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `Deserialize(Byte[])` | Restores the state of the BFGS optimizer from a byte array. |
+| `GenerateGradientCacheKey(IFullModel<,,>,,)` | Generates a unique key for caching gradients in the BFGS optimization process. |
+| `GetOptions` | Gets the current options for the BFGS optimizer. |
+| `InitializeAdaptiveParameters` | Initializes the adaptive parameters used in the BFGS algorithm. |
+| `Optimize(OptimizationInputData<,,>)` | Performs the main optimization process using the BFGS algorithm. |
+| `Serialize` | Converts the current state of the BFGS optimizer into a byte array for storage or transmission. |
+| `Step(TapeStepContext<>)` |  |
+| `UpdateAdaptiveParameters(OptimizationStepData<,,>,OptimizationStepData<,,>)` | Updates the adaptive parameters of the optimizer. |
+| `UpdateInverseHessian(Vector<>,Vector<>)` | Updates the approximation of the inverse Hessian matrix. |
+| `UpdateOptions(OptimizationAlgorithmOptions<,,>)` | Updates the options for the BFGS optimizer. |
+| `UpdateParameters(Vector<>,Vector<>)` | Updates parameters using the BFGS algorithm with inverse Hessian approximation. |
+| `UpdateParametersGpu(IGpuBuffer,IGpuBuffer,Int32,IDirectGpuBackend)` | Updates parameters using GPU-accelerated BFGS. |
+| `UpdateSolution(IFullModel<,,>,Vector<>,OptimizationInputData<,,>)` | Updates the current solution using the BFGS update formula. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_inverseHessian` | The approximation of the inverse Hessian matrix. |
+| `_iteration` | The current iteration count. |
+| `_options` | The options specific to the BFGS optimization algorithm. |
+| `_previousGradient` | The gradient from the previous iteration. |
+| `_previousParameters` | The parameters from the previous iteration. |
 

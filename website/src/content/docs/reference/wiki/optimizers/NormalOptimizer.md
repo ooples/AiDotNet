@@ -1,10 +1,10 @@
 ---
-title: "NormalOptimizer"
+title: "NormalOptimizer<T, TInput, TOutput>"
 description: "Implements a normal optimization algorithm with adaptive parameters."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Optimizers_
+`Models & Types` · `AiDotNet.Optimizers`
 
 Implements a normal optimization algorithm with adaptive parameters.
 
@@ -49,4 +49,33 @@ var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
 
 Console.WriteLine("Trained with NormalOptimizer.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `NormalOptimizer(IFullModel<,,>,GeneticAlgorithmOptimizerOptions<,,>)` | Initializes a new instance of the NormalOptimizer class. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `Deserialize(Byte[])` | Deserializes a byte array to restore the optimizer's state. |
+| `GetOptions` | Gets the current optimization algorithm options. |
+| `Optimize(OptimizationInputData<,,>)` | Performs the optimization process. |
+| `RandomlySelectFeatures(Int32)` | Randomly selects a subset of features to use in the model. |
+| `Serialize` | Serializes the current state of the optimizer into a byte array. |
+| `UpdateAdaptiveParameters(OptimizationStepData<,,>,OptimizationStepData<,,>)` | Updates the adaptive parameters of the optimizer based on the current and previous optimization steps. |
+| `UpdateCrossoverRate(OptimizationStepData<,,>,OptimizationStepData<,,>)` | Updates the crossover rate based on the current and previous optimization steps. |
+| `UpdateExplorationExploitationBalance(OptimizationStepData<,,>,OptimizationStepData<,,>)` | Updates the exploration vs exploitation balance based on the current and previous optimization steps. |
+| `UpdateFeatureSelectionParameters(OptimizationStepData<,,>,OptimizationStepData<,,>)` | Updates the feature selection parameters based on the current and previous optimization steps. |
+| `UpdateMutationRate(OptimizationStepData<,,>,OptimizationStepData<,,>)` | Updates the mutation rate based on the current and previous optimization steps. |
+| `UpdateOptions(OptimizationAlgorithmOptions<,,>)` | Updates the optimization algorithm options. |
+| `UpdatePopulationSize(OptimizationStepData<,,>,OptimizationStepData<,,>)` | Updates the population size based on the current and previous optimization steps. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_normalOptions` | Options specific to the normal optimizer, including parameters inherited from genetic algorithms. |
 

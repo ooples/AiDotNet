@@ -1,10 +1,10 @@
 ---
-title: "NelderMeadOptimizer"
+title: "NelderMeadOptimizer<T, TInput, TOutput>"
 description: "Implements the Nelder-Mead optimization algorithm, also known as the downhill simplex method."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Optimizers_
+`Models & Types` · `AiDotNet.Optimizers`
 
 Implements the Nelder-Mead optimization algorithm, also known as the downhill simplex method.
 
@@ -50,4 +50,40 @@ var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
 
 Console.WriteLine("Trained with NelderMeadOptimizer.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `NelderMeadOptimizer(IFullModel<,,>,NelderMeadOptimizerOptions<,,>)` | Initializes a new instance of the NelderMeadOptimizer class. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CalculateCentroid(List<IFullModel<,,>>,Int32)` | Calculates the centroid of the simplex, excluding the worst point. |
+| `Contract(IFullModel<,,>,IFullModel<,,>)` | Performs the contraction operation in the Nelder-Mead algorithm. |
+| `Deserialize(Byte[])` | Deserializes the Nelder-Mead optimizer from a byte array. |
+| `Expand(IFullModel<,,>,IFullModel<,,>)` | Performs the expansion operation in the Nelder-Mead algorithm. |
+| `GetOptions` | Gets the current options of the Nelder-Mead optimizer. |
+| `InitializeAdaptiveParameters` | Initializes the adaptive parameters for the Nelder-Mead optimizer. |
+| `InitializeSimplex(,Int32)` | Initializes the simplex for the Nelder-Mead algorithm. |
+| `Optimize(OptimizationInputData<,,>)` | Performs the optimization process using the Nelder-Mead algorithm. |
+| `PerformVectorOperation(IFullModel<,,>,IFullModel<,,>,,Func<,,,>)` | Performs a vector operation on two symbolic models. |
+| `Reflect(IFullModel<,,>,IFullModel<,,>)` | Performs the reflection operation in the Nelder-Mead algorithm. |
+| `Serialize` | Serializes the Nelder-Mead optimizer to a byte array. |
+| `Shrink(List<IFullModel<,,>>)` | Performs the shrink operation in the Nelder-Mead algorithm. |
+| `UpdateAdaptiveParameters(OptimizationStepData<,,>,OptimizationStepData<,,>)` | Updates the adaptive parameters of the Nelder-Mead algorithm. |
+| `UpdateOptions(OptimizationAlgorithmOptions<,,>)` | Updates the optimizer's options with new settings. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_alpha` | The reflection coefficient. |
+| `_beta` | The contraction coefficient. |
+| `_delta` | The shrinkage coefficient. |
+| `_gamma` | The expansion coefficient. |
+| `_iteration` | The current iteration count. |
+| `_options` | The options specific to the Nelder-Mead optimizer. |
 

@@ -1,10 +1,10 @@
 ---
-title: "LBFGSOptimizer"
+title: "LBFGSOptimizer<T, TInput, TOutput>"
 description: "Implements the Limited-memory Broyden-Fletcher-Goldfarb-Shanno (L-BFGS) optimization algorithm."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Optimizers_
+`Models & Types` · `AiDotNet.Optimizers`
 
 Implements the Limited-memory Broyden-Fletcher-Goldfarb-Shanno (L-BFGS) optimization algorithm.
 
@@ -50,4 +50,39 @@ var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
 
 Console.WriteLine("Trained with LBFGSOptimizer.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `LBFGSOptimizer(IFullModel<,,>,LBFGSOptimizerOptions<,,>,IEngine)` | Initializes a new instance of the LBFGSOptimizer class. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CalculateDirection(Vector<>)` | Calculates the search direction using the L-BFGS algorithm. |
+| `Deserialize(Byte[])` | Deserializes a byte array to restore the optimizer's state. |
+| `GetOptions` | Retrieves the current options of the optimizer. |
+| `InitializeAdaptiveParameters` | Initializes or resets the adaptive parameters used in the optimization process. |
+| `Optimize(OptimizationInputData<,,>)` | Performs the main optimization process using the L-BFGS algorithm. |
+| `Serialize` | Serializes the optimizer's state into a byte array. |
+| `Step(TapeStepContext<>)` |  |
+| `UpdateAdaptiveParameters(OptimizationStepData<,,>,OptimizationStepData<,,>)` | Updates the adaptive parameters of the optimizer based on the current and previous optimization steps. |
+| `UpdateLBFGSMemory(Vector<>,Vector<>,Vector<>,Vector<>)` | Updates the L-BFGS memory with the latest step information. |
+| `UpdateOptions(OptimizationAlgorithmOptions<,,>)` | Updates the optimizer's options with new settings. |
+| `UpdateParameters(Vector<>,Vector<>)` | Updates parameters using the L-BFGS algorithm. |
+| `UpdateParametersGpu(IGpuBuffer,IGpuBuffer,Int32,IDirectGpuBackend)` | Updates parameters using GPU-accelerated L-BFGS. |
+| `UpdateSolution(IFullModel<,,>,Vector<>,Vector<>,OptimizationInputData<,,>)` | Updates the current solution based on the calculated direction. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_iteration` | The current iteration count of the optimization process. |
+| `_lbfgsPreviousGradient` | Stores the previous gradient for computing gradient differences in UpdateParameters. |
+| `_lbfgsPreviousParameters` | Stores the previous parameters for computing position differences in UpdateParameters. |
+| `_options` | Options specific to the L-BFGS optimizer. |
+| `_s` | List of position (solution) differences used in the L-BFGS update. |
+| `_y` | List of gradient differences used in the L-BFGS update. |
 

@@ -1,10 +1,10 @@
 ---
-title: "GAMLSSRegression"
+title: "GAMLSSRegression<T>"
 description: "GAMLSS (Generalized Additive Models for Location, Scale, and Shape) regression."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 GAMLSS (Generalized Additive Models for Location, Scale, and Shape) regression.
 
@@ -60,4 +60,57 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained GAMLSSRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `GAMLSSRegression(GAMLSSOptions,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of GAMLSSRegression. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `LocationCoefficients` | Gets the location (mean) model coefficients. |
+| `NumberOfTrees` |  |
+| `ScaleCoefficients` | Gets the scale model coefficients. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CalculateFeatureImportancesAsync(Int32)` |  |
+| `ClampLogScale()` | Clamps a log-link (scale/shape) linear-predictor value to the numerically safe range [`MinLogScale`, `MaxLogScale`]. |
+| `Clone` | Creates a deep copy via serialization to preserve private coefficient state. |
+| `ComputeDeviance(Vector<>,Vector<>,Vector<>,Vector<>)` | Computes the deviance (negative log-likelihood). |
+| `CreateDistribution(,,)` | Creates a distribution with the specified parameters. |
+| `CreateNewInstance` |  |
+| `Deserialize(Byte[])` |  |
+| `FitLocationParameter(Matrix<>,Vector<>,Vector<>,Vector<>,Vector<>)` | Fits the location parameter using IRLS (Iteratively Reweighted Least Squares). |
+| `FitScaleParameter(Matrix<>,Vector<>,Vector<>,Vector<>,Vector<>)` | Fits the scale parameter using IRLS. |
+| `FitShapeParameter(Matrix<>,Vector<>,Vector<>,Vector<>,Vector<>)` | Fits the shape parameter using IRLS. |
+| `GetModelMetadata` |  |
+| `InitializeParameters(Vector<>)` | Initializes distribution parameters from the target values. |
+| `PredictAsync(Matrix<>)` |  |
+| `PredictDistributionsAsync(Matrix<>)` | Predicts full probability distributions for each input sample. |
+| `PredictIntervalAsync(Matrix<>,Double)` | Gets prediction intervals for each input sample. |
+| `PredictParameter(Vector<>,Vector<>,,Boolean)` | Predicts a single parameter value for one sample. |
+| `Serialize` |  |
+| `SolveLinearSystem(Matrix<>,Vector<>,Int32)` | Solves a linear system using Gaussian elimination. |
+| `UpdateCoefficients(Matrix<>,Vector<>,Vector<>,Vector<>,)` | Updates coefficients using weighted least squares. |
+| `UpdateLinearPredictor(Matrix<>,Vector<>,Vector<>,,Boolean)` | Updates the linear predictor for all samples. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_locationCoefficients` | Coefficients for the location parameter model. |
+| `_locationIntercept` | Intercept for the location parameter. |
+| `_numFeatures` | Number of features. |
+| `_options` | Configuration options. |
+| `_scaleCoefficients` | Coefficients for the scale parameter model. |
+| `_scaleIntercept` | Intercept for the scale parameter. |
+| `_shapeCoefficients` | Coefficients for the shape parameter model (if applicable). |
+| `_shapeIntercept` | Intercept for the shape parameter. |
+| `_yMean` | Y standardization for scale-invariant training. |
 

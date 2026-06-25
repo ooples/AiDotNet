@@ -1,10 +1,10 @@
 ---
-title: "LocallyWeightedRegression"
+title: "LocallyWeightedRegression<T>"
 description: "Implements Locally Weighted Regression, a non-parametric approach that creates a different model for each prediction point based on the weighted influence of nearby training examples."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Implements Locally Weighted Regression, a non-parametric approach that creates a different model
 for each prediction point based on the weighted influence of nearby training examples.
@@ -58,4 +58,42 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained LocallyWeightedRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `LocallyWeightedRegression(LocallyWeightedRegressionOptions,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the `LocallyWeightedRegression` class. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `ParameterCount` | Stores the training data for later use in making predictions. |
+| `UseSoftMode` | Gets or sets whether to use soft (differentiable) mode for JIT compilation support. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `Clone` | Deep copy via serialization. |
+| `ComputeWeights(Vector<>)` | Computes weights for each training example based on their distance to the input point. |
+| `CreateInstance` | Creates a new instance of the LocallyWeightedRegression with the same configuration as the current instance. |
+| `Deserialize(Byte[])` | Loads a previously serialized Locally Weighted Regression model from a byte array. |
+| `GetActiveFeatureIndices` | Returns all features used during training. |
+| `KernelFunction()` | Applies a kernel function to transform distances into weights. |
+| `Predict(Matrix<>)` | Predicts target values for the provided input features using the trained Locally Weighted Regression model. |
+| `PredictSingle(Vector<>)` | Predicts the target value for a single input feature vector. |
+| `Serialize` | Gets the model type of the Locally Weighted Regression model. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `MinimumStabilityStrength` | Absolute floor for the ridge penalty when diagonal magnitude is near zero. |
+| `StabilityStrengthScale` | Relative scale factor for the adaptive ridge penalty (fraction of mean diagonal magnitude). |
+| `ZeroWeightTolerance` | Tolerance below which total kernel weight is treated as zero (no neighbors in bandwidth). |
+| `_options` | Configuration options for the Locally Weighted Regression algorithm. |
+| `_xTrain` | Matrix containing the feature vectors of the training samples. |
+| `_yTrain` | Vector containing the target values of the training samples. |
 

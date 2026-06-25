@@ -1,0 +1,26 @@
+---
+title: "IRegression<T>"
+description: "Defines the common interface for all regression algorithms in the AiDotNet library."
+section: "API Reference"
+---
+
+`Interfaces` · `AiDotNet.Interfaces`
+
+Defines the common interface for all regression algorithms in the AiDotNet library.
+
+## How It Works
+
+**For Beginners:** Regression is a type of machine learning algorithm used to predict continuous values.
+
+For example, regression can be used to:
+
+- Predict house prices based on features like size, location, and age
+- Forecast sales numbers based on historical data
+- Estimate a person's income based on education, experience, and other factors
+
+This interface inherits from ILinearModel, which means all regression models share common
+functionality for training on data and making predictions.
+
+Unlike classification algorithms (which predict categories), regression algorithms predict
+numeric values on a continuous scale.
+

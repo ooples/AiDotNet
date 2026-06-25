@@ -1,10 +1,10 @@
 ---
-title: "HDBSCAN"
+title: "HDBSCAN<T>"
 description: "HDBSCAN (Hierarchical Density-Based Spatial Clustering of Applications with Noise)."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Clustering_
+`Models & Types` · `AiDotNet.Clustering.Density`
 
 HDBSCAN (Hierarchical Density-Based Spatial Clustering of Applications with Noise).
 
@@ -64,4 +64,32 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 var labels = result.Predict(data);
 Console.WriteLine($"HDBSCAN: clustered {labels.Length} points.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `HDBSCAN(HDBSCANOptions<>)` | Initializes a new HDBSCAN instance. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `OutlierScores` | Gets the outlier scores for each point. |
+| `Probabilities` | Gets the cluster membership probabilities. |
+| `SupportsParameterInitialization` |  |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `Clone` |  |
+| `CreateNewInstance` |  |
+| `DeepCopy` |  |
+| `FitPredict(Matrix<>)` |  |
+| `GetOptions` |  |
+| `MarkDescendantsNotCluster(Int32,Dictionary<Int32,List<Int32>>,HashSet<Int32>,Dictionary<Int32,Boolean>)` | BFS deselect all descendants of a cluster per scikit-learn reference. |
+| `Predict(Matrix<>)` |  |
+| `Train(Matrix<>,Vector<>)` |  |
+| `WithParameters(Vector<>)` |  |
 

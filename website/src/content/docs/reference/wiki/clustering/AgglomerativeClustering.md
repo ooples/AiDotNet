@@ -1,10 +1,10 @@
 ---
-title: "AgglomerativeClustering"
+title: "AgglomerativeClustering<T>"
 description: "Agglomerative Hierarchical Clustering implementation."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Clustering_
+`Models & Types` · `AiDotNet.Clustering.Hierarchical`
 
 Agglomerative Hierarchical Clustering implementation.
 
@@ -56,4 +56,29 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 var labels = result.Predict(data);
 Console.WriteLine($"AgglomerativeClustering: clustered {labels.Length} points.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `AgglomerativeClustering(HierarchicalOptions<>)` | Initializes a new AgglomerativeClustering instance. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `Dendrogram` | Gets the dendrogram (merge history). |
+| `Linkage` | Gets the linkage method used. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CreateNewInstance` |  |
+| `FitPredict(Matrix<>)` |  |
+| `GetLabelsForNClusters(Int32)` | Gets labels for a given number of clusters from the dendrogram. |
+| `GetOptions` |  |
+| `Predict(Matrix<>)` |  |
+| `Train(Matrix<>,Vector<>)` |  |
+| `WithParameters(Vector<>)` |  |
 

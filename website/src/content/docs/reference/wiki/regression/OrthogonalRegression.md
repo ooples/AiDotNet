@@ -1,10 +1,10 @@
 ---
-title: "OrthogonalRegression"
+title: "OrthogonalRegression<T>"
 description: "Implements orthogonal regression (also known as total least squares), which minimizes the perpendicular  distance from data points to the fitted line or hyperplane."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Implements orthogonal regression (also known as total least squares), which minimizes the perpendicular 
 distance from data points to the fitted line or hyperplane.
@@ -45,4 +45,26 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained OrthogonalRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `OrthogonalRegression(OrthogonalRegressionOptions<>,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the OrthogonalRegression class with the specified options and regularization. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CreateNewInstance` | Creates a new instance of the Orthogonal Regression model with the same configuration. |
+| `Deserialize(Byte[])` | Deserializes the model from a byte array. |
+| `GetOptions` |  |
+| `Serialize` | Gets the type of the model. |
+| `Train(Matrix<>,Vector<>)` | Trains the orthogonal regression model on the provided data. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_options` | Configuration options for the orthogonal regression model. |
 

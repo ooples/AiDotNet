@@ -1,10 +1,10 @@
 ---
-title: "MixedEffectsModel"
+title: "MixedEffectsModel<T>"
 description: "Mixed-Effects (Hierarchical/Multilevel) Linear Model for clustered and hierarchical data."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Mixed-Effects (Hierarchical/Multilevel) Linear Model for clustered and hierarchical data.
 
@@ -62,4 +62,68 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained MixedEffectsModel.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `MixedEffectsModel(MixedEffectsModelOptions,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of Mixed-Effects Model. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `ParameterCount` | MixedEffects doesn't support optimizer parameter injection. |
+| `ResidualVariance` | Gets the residual variance. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `BuildRandomEffectDesignMatrix(Matrix<>,Int32[])` | Builds the random effect design matrix for a group. |
+| `CenterFeatures(Matrix<>)` | Centers features and stores means. |
+| `CenterFeaturesForPrediction(Matrix<>)` | Centers features using stored means. |
+| `ComputeBLUPs(Matrix<>,Vector<>,Int32[],Int32[],Vector<>,,Matrix<>)` | Computes Best Linear Unbiased Predictors (BLUPs) for random effects. |
+| `ComputeFixedPrediction(Matrix<>,Int32,Vector<>)` | Computes the fixed effects prediction for a row of the data matrix. |
+| `ComputeGroupBLUP(Matrix<>,Vector<>,Matrix<>,)` | Computes BLUP for a single group. |
+| `ComputeICC` | Computes the intraclass correlation coefficient (ICC). |
+| `ComputeStandardErrors(Matrix<>,Vector<>,Int32[],Int32[],Vector<>,,Matrix<>)` | Computes standard errors of fixed effects. |
+| `CreateInstance` |  |
+| `Deserialize(Byte[])` |  |
+| `GetActiveFeatureIndices` | Returns all features used by the model. |
+| `GetFixedEffectStandardErrors` | Gets the standard errors of fixed effects. |
+| `GetFixedEffects` | Gets the fixed effect coefficients. |
+| `GetGroupObservations(Int32[],Int32)` | Gets observation indices for a group. |
+| `GetLogLikelihood(Matrix<>,Vector<>,Int32[])` | Gets the log-likelihood of the model. |
+| `GetModelMetadata` |  |
+| `GetRandomEffectContribution(Matrix<>,Int32,Vector<>)` | Gets the random effect contribution for an observation. |
+| `GetRandomEffectVariance` | Gets the random effect variance-covariance matrix. |
+| `GetRandomEffects` | Gets the random effects (BLUPs) for each group. |
+| `InitializeRandomEffectVariance(Int32)` | Initializes the random effect variance matrix. |
+| `InvertMatrix(Matrix<>)` | Simple matrix inversion using Gaussian elimination. |
+| `OptimizeModel(Matrix<>,Vector<>)` |  |
+| `Predict(Matrix<>)` |  |
+| `Predict(Matrix<>,Int32[])` | Predicts values for input samples with known group memberships. |
+| `PredictSingle(Vector<>)` |  |
+| `Serialize` |  |
+| `Train(Matrix<>,Vector<>)` |  |
+| `Train(Matrix<>,Vector<>,Int32[])` | Trains the mixed-effects model with explicit group indicators. |
+| `UpdateFixedEffects(Matrix<>,Vector<>,Int32[],Dictionary<Int32,Vector<>>,,Matrix<>)` | Updates fixed effects using weighted least squares. |
+| `UpdateVarianceComponents(Matrix<>,Vector<>,Int32[],Int32[],Vector<>,Dictionary<Int32,Vector<>>)` | Updates variance components. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_featureMeans` | Feature means for centering. |
+| `_fixedEffectStdErrors` | Standard errors of fixed effects. |
+| `_fixedEffects` | Fixed effect coefficients. |
+| `_groupIndices` | Group indices for training data. |
+| `_numFeatures` | Number of features. |
+| `_numRandomEffects` | Number of random effect dimensions. |
+| `_options` | Configuration options. |
+| `_random` | Random number generator. |
+| `_randomEffectVariance` | Variance of random effects. |
+| `_randomEffects` | Random effect predictions (BLUPs) for each group. |
+| `_residualVariance` | Residual variance. |
 

@@ -1,10 +1,10 @@
 ---
-title: "DeepSurv"
+title: "DeepSurv<T>"
 description: "DeepSurv: A deep learning approach to survival analysis using Cox proportional hazards."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 DeepSurv: A deep learning approach to survival analysis using Cox proportional hazards.
 
@@ -63,4 +63,50 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained DeepSurv.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `DeepSurv(DeepSurvOptions<>,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of DeepSurv. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `NumberOfTrees` |  |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CalculateFeatureImportancesAsync(Int32)` |  |
+| `ComputeBaselineHazard(Matrix<>,Vector<>,Vector<>,Int32[])` | Computes baseline cumulative hazard using Breslow estimator. |
+| `ComputeCIndex(Matrix<>,Vector<>,Vector<>)` | Computes the concordance index (C-index) for model evaluation. |
+| `ComputeCoxLossAndGradients(Vector<>,Vector<>,Vector<>,Int32[],Int32[])` | Computes Cox partial log-likelihood loss and gradients. |
+| `CreateNewInstance` |  |
+| `Deserialize(Byte[])` |  |
+| `FindTimeForHazard()` | Finds time for a given cumulative hazard value. |
+| `ForwardPass(Matrix<>,Int32[])` | Forward pass through the network. |
+| `GetModelMetadata` |  |
+| `InitializeNetwork` | Initializes the neural network weights. |
+| `InterpolateBaselineHazard()` | Interpolates baseline hazard at a given time. |
+| `PredictAsync(Matrix<>)` |  |
+| `PredictMedianSurvivalTime(Matrix<>)` | Predicts median survival time for each sample. |
+| `PredictRiskScores(Matrix<>)` | Predicts risk scores for input samples. |
+| `PredictSurvival(Matrix<>,Vector<>)` | Predicts survival probability at specified times. |
+| `Serialize` |  |
+| `TrainAsync(Matrix<>,Vector<>)` |  |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_baselineHazardTimes` | Baseline cumulative hazard function times. |
+| `_baselineHazardValues` | Baseline cumulative hazard function values. |
+| `_biases` | Network biases for each layer. |
+| `_numFeatures` | Number of features. |
+| `_options` | Configuration options. |
+| `_random` | Random number generator. |
+| `_weights` | Network weights for each layer. |
 

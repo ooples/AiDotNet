@@ -1,10 +1,10 @@
 ---
-title: "RidgeRegression"
+title: "RidgeRegression<T>"
 description: "Implements Ridge Regression (L2 regularized linear regression), which extends ordinary least squares by adding a penalty term proportional to the squared magnitude of the coefficients."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Implements Ridge Regression (L2 regularized linear regression), which extends ordinary least squares
 by adding a penalty term proportional to the squared magnitude of the coefficients.
@@ -69,4 +69,27 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained RidgeRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `RidgeRegression(RidgeRegressionOptions<>,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the `RidgeRegression` class. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `Options` | Gets the configuration options specific to Ridge Regression. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CreateNewInstance` | Creates a new instance of Ridge Regression with the same configuration. |
+| `Deserialize(Byte[])` | Deserializes a Ridge Regression model from a byte array. |
+| `GetModelMetadata` | Gets metadata about the Ridge Regression model. |
+| `Serialize` | Serializes the Ridge Regression model to a byte array. |
+| `SolveSystemWithDecomposition(Matrix<>,Vector<>)` | Solves a linear system using the configured decomposition method. |
+| `Train(Matrix<>,Vector<>)` | Trains the Ridge Regression model using the provided training data. |
 

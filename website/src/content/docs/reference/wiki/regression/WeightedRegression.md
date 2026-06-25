@@ -1,10 +1,10 @@
 ---
-title: "WeightedRegression"
+title: "WeightedRegression<T>"
 description: "Implements weighted regression, a variation of linear regression where each data point has a different  level of importance (weight) in determining the model parameters."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Implements weighted regression, a variation of linear regression where each data point has a different 
 level of importance (weight) in determining the model parameters.
@@ -56,4 +56,28 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained WeightedRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `WeightedRegression(WeightedRegressionOptions<>,IRegularization<,Matrix<>,Vector<>>)` | Creates a new instance of the weighted regression model. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CreateNewInstance` | Creates a new instance of the weighted regression model with the same configuration. |
+| `ExpandFeatures(Matrix<>)` | Expands the input features to include polynomial terms up to the specified order. |
+| `Predict(Matrix<>)` | Makes predictions using the trained weighted regression model. |
+| `Train(Matrix<>,Vector<>)` | Trains the weighted regression model using the provided input features and target values. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `MinimumStabilityRidge` | Absolute floor for the stability ridge when diagonal magnitude is near zero. |
+| `StabilityRidgeScale` | Relative scale factor for the adaptive stability ridge (fraction of mean diagonal magnitude). |
+| `_order` | The polynomial order for feature expansion. |
+| `_weights` | The weights assigned to each data point, determining their influence on the model. |
 

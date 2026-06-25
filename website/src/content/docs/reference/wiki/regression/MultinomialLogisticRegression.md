@@ -1,10 +1,10 @@
 ---
-title: "MultinomialLogisticRegression"
+title: "MultinomialLogisticRegression<T>"
 description: "Represents a multinomial logistic regression model for multi-class classification problems."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Represents a multinomial logistic regression model for multi-class classification problems.
 
@@ -52,4 +52,41 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained MultinomialLogisticRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `MultinomialLogisticRegression(MultinomialLogisticRegressionOptions<>,IRegularization<,Matrix<>,Vector<>>)` | Initializes a new instance of the `MultinomialLogisticRegression` class with optional custom options and regularization. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `ParameterCount` | Multinomial logistic is a classification model — no optimizer parameter injection. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `ComputeGradient(Matrix<>,Vector<>,Matrix<>)` | Computes the gradient of the log-likelihood with respect to the coefficients. |
+| `ComputeHessian(Matrix<>,Matrix<>)` | Computes the Hessian matrix of the log-likelihood with respect to the coefficients. |
+| `ComputeProbabilities(Matrix<>)` | Computes the probabilities of each class for each sample using the softmax function. |
+| `CreateNewInstance` | Creates a new instance of the Multinomial Logistic Regression model with the same configuration. |
+| `CreateOneHotEncoding(Vector<>)` | Creates a one-hot encoding of the class labels. |
+| `Deserialize(Byte[])` | Deserializes the multinomial logistic regression model from a byte array. |
+| `GetOptions` |  |
+| `HasConverged(Matrix<>)` | Determines if the training has converged based on the magnitude of the coefficient updates. |
+| `Predict(Matrix<>)` | Predicts the class labels for new data points using the trained multinomial logistic regression model. |
+| `PredictProbabilities(Matrix<>)` | Predicts the probabilities of each class for new data points. |
+| `Serialize` | Serializes the multinomial logistic regression model to a byte array for storage or transmission. |
+| `Train(Matrix<>,Vector<>)` | Trains the multinomial logistic regression model using the provided features and target values. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_coefficients` | The coefficients matrix, where each row corresponds to a class and each column to a feature (plus intercept). |
+| `_numClasses` | The number of distinct classes in the training data. |
+| `_options` | The configuration options for the multinomial logistic regression model. |
 

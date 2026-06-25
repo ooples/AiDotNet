@@ -1,0 +1,48 @@
+---
+title: "IAnomalyDetector<T>"
+description: "Defines methods for algorithmic anomaly/outlier detection using a fit-predict pattern."
+section: "API Reference"
+---
+
+`Interfaces` · `AiDotNet.Interfaces`
+
+Defines methods for algorithmic anomaly/outlier detection using a fit-predict pattern.
+
+## For Beginners
+
+This interface provides a machine learning-style approach to anomaly detection.
+Unlike simple statistical methods (like Z-score or IQR), algorithmic detectors learn patterns
+from your data and can detect more complex types of anomalies.
+
+## How It Works
+
+The typical workflow is:
+
+1. Create a detector with your desired parameters (contamination defaults to 0.1 / 10%)
+2. Call `Matrix{` to train the detector on your data
+3. Call `Matrix{` to identify anomalies in new data
+4. Optionally use `Matrix{` to get anomaly scores for ranking
+
+**Anomaly Detection vs Outlier Removal:**
+
+- **Anomaly Detection**: The primary task - identifying unusual patterns in data
+- **Outlier Removal**: A preprocessing step that uses anomaly detection to clean data
+
+This interface focuses on anomaly detection. For preprocessing use cases, wrap detectors
+with `DetectorBasedFilter` to integrate them into `PreprocessingPipeline`.
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `IsFitted` | Gets a value indicating whether the detector has been fitted to data. |
+| `Threshold` | Gets the threshold used to classify samples as inliers or outliers. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `Fit(Matrix<>)` | Trains the anomaly detector on the provided data. |
+| `Predict(Matrix<>)` | Predicts whether each sample is an inlier (normal) or outlier (anomaly). |
+| `ScoreAnomalies(Matrix<>)` | Computes the anomaly score for each sample. |
+

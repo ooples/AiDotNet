@@ -1,10 +1,10 @@
 ---
-title: "AdagradOptimizer"
+title: "AdagradOptimizer<T, TInput, TOutput>"
 description: "Represents an Adagrad (Adaptive Gradient) optimizer for gradient-based optimization."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Optimizers_
+`Models & Types` · `AiDotNet.Optimizers`
 
 Represents an Adagrad (Adaptive Gradient) optimizer for gradient-based optimization.
 
@@ -54,4 +54,46 @@ var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
 
 Console.WriteLine("Trained with AdagradOptimizer.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `AdagradOptimizer(IFullModel<,,>,AdagradOptimizerOptions<,,>)` | Initializes a new instance of the AdagradOptimizer class. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `SupportsGpuUpdate` | Gets whether this optimizer supports GPU-accelerated parameter updates. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `AiDotNet#Optimizers#Fused#IFusedOptimizerSpec#TryGetFusedOptimizerConfig(FusedOptimizerConfig)` | Describes this Adagrad instance for the fused kernel (Tensors `OptimizerType.Adagrad` = `AdagradUpdateSimd(lr, eps)`): Epsilon → eps; the running squared-gradient accumulator lives in the plan. |
+| `Deserialize(Byte[])` | Deserializes the Adagrad optimizer from a byte array. |
+| `DisposeGpuState` | Disposes GPU-allocated optimizer state. |
+| `GenerateGradientCacheKey(IFullModel<,,>,,)` | Generates a unique key for caching gradients based on the model, input data, and Adagrad-specific parameters. |
+| `GetOptions` | Retrieves the current options of the Adagrad optimizer. |
+| `InitializeAdaptiveParameters` | Initializes the adaptive parameters for the Adagrad optimizer. |
+| `InitializeGpuState(Int32,IDirectGpuBackend)` | Initializes Adagrad optimizer state on the GPU. |
+| `Optimize(OptimizationInputData<,,>)` | Performs the optimization process using the Adagrad algorithm. |
+| `ReverseUpdate(Vector<>,Vector<>)` | Reverses an Adagrad gradient update to recover original parameters. |
+| `Serialize` | Serializes the Adagrad optimizer to a byte array. |
+| `Step(TapeStepContext<>)` |  |
+| `UpdateAccumulatedSquaredGradients(Vector<>)` | Updates the accumulated squared gradients used in the Adagrad algorithm. |
+| `UpdateAdaptiveParameters(OptimizationStepData<,,>,OptimizationStepData<,,>)` | Updates the adaptive parameters of the Adagrad optimizer. |
+| `UpdateOptions(OptimizationAlgorithmOptions<,,>)` | Updates the options for the Adagrad optimizer. |
+| `UpdateParameters(Vector<>,Vector<>)` | Updates a vector of parameters using the Adagrad optimization algorithm. |
+| `UpdateParametersGpu(IGpuBuffer,IGpuBuffer,Int32,IDirectGpuBackend)` | Updates parameters on the GPU using the Adagrad kernel. |
+| `UpdateSolution(IFullModel<,,>,Vector<>)` | Updates the current solution using the Adagrad update rule. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_accumulatedSquaredGradients` | Stores the sum of squared gradients for each parameter during optimization. |
+| `_gpuAccumulatedGrad` | GPU buffer for accumulated squared gradients. |
+| `_options` | The configuration options specific to the Adagrad optimizer. |
 

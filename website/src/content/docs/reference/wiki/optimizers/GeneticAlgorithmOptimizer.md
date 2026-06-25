@@ -1,10 +1,10 @@
 ---
-title: "GeneticAlgorithmOptimizer"
+title: "GeneticAlgorithmOptimizer<T, TInput, TOutput>"
 description: "Represents a Genetic Algorithm optimizer for machine learning models."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Optimizers_
+`Models & Types` · `AiDotNet.Optimizers`
 
 Represents a Genetic Algorithm optimizer for machine learning models.
 
@@ -56,4 +56,31 @@ var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
 
 Console.WriteLine("Trained with GeneticAlgorithmOptimizer.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `GeneticAlgorithmOptimizer(IFullModel<,,>,GeneticAlgorithmOptimizerOptions<,,>,GeneticBase<,,>,IFitnessCalculator<,,>)` | Initializes a new instance of the GeneticAlgorithmOptimizer class. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `Deserialize(Byte[])` | Deserializes the genetic algorithm optimizer from a byte array. |
+| `GetOptions` | Gets the current options for the genetic algorithm optimizer. |
+| `InitializeAdaptiveParameters` | Initializes the adaptive parameters used in the genetic algorithm. |
+| `Optimize(OptimizationInputData<,,>)` | Performs the main optimization process using the genetic algorithm. |
+| `Serialize` | Serializes the genetic algorithm optimizer to a byte array. |
+| `UpdateAdaptiveParameters(OptimizationStepData<,,>,OptimizationStepData<,,>)` | Updates the adaptive parameters used in the genetic algorithm. |
+| `UpdateOptions(OptimizationAlgorithmOptions<,,>)` | Updates the options for the genetic algorithm optimizer. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_currentCrossoverRate` | The current crossover rate, which determines how often solutions are combined. |
+| `_currentMutationRate` | The current mutation rate, which determines how often random changes are made to solutions. |
+| `_geneticAlgorithm` | The genetic algorithm instance used for optimization. |
+| `_geneticOptions` | The options specific to the Genetic Algorithm. |
 

@@ -1,10 +1,10 @@
 ---
-title: "SymbolicRegression"
+title: "SymbolicRegression<T>"
 description: "Implements symbolic regression, which discovers mathematical expressions that best describe the relationship between input features and target values."
-section: "Reference"
+section: "API Reference"
 ---
 
-_Regression Models_
+`Models & Types` · `AiDotNet.Regression`
 
 Implements symbolic regression, which discovers mathematical expressions that best describe the relationship
 between input features and target values. Unlike traditional regression methods, symbolic regression
@@ -61,4 +61,40 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 
 Console.WriteLine("Trained SymbolicRegression.");
 ```
+
+## Constructors
+
+| Constructor | Summary |
+|:-----|:--------|
+| `SymbolicRegression(SymbolicRegressionOptions,IRegularization<,Matrix<>,Vector<>>,IFitnessCalculator<,Matrix<>,Vector<>>,IFitDetector<,Matrix<>,Vector<>>,IOutlierRemoval<,Matrix<>,Vector<>>,PreprocessingPipeline<,Matrix<>,Matrix<>>)` | Creates a new symbolic regression model. |
+
+## Properties
+
+| Property | Summary |
+|:-----|:--------|
+| `BestFitness` | Gets the fitness score of the best model discovered during optimization. |
+| `BestModel` | Gets the best symbolic model discovered during optimization. |
+| `ParameterCount` | Optimizes the symbolic regression model using the provided input data and target values. |
+
+## Methods
+
+| Method | Summary |
+|:-----|:--------|
+| `CreateInstance` | Returns the type identifier for this regression model. |
+| `GetOptions` |  |
+| `Predict(Matrix<>)` | Predicts target values for a matrix of input features. |
+| `PredictSingle(Vector<>)` | Predicts a target value for a single input feature vector. |
+
+## Fields
+
+| Field | Summary |
+|:-----|:--------|
+| `_bestFitness` | The fitness score of the best model found. |
+| `_bestModel` | The best symbolic model found during the optimization process. |
+| `_fitDetector` | The component that detects when a satisfactory model has been found. |
+| `_fitnessCalculator` | The calculator used to evaluate the fitness or quality of symbolic models. |
+| `_optimizer` | The optimizer used to evolve and improve symbolic models. |
+| `_options` | Configuration options for the symbolic regression model. |
+| `_outlierRemoval` | The component responsible for identifying and removing outliers from the data. |
+| `_preprocessingPipeline` | The preprocessing pipeline that handles data transformation before training. |
 
