@@ -8,4 +8,11 @@
     <RootNamespace>AiDotNet.Tools.WikiGenerator</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Pulls AiDotNet + deps into output so generated examples can be compile-checked
+         in-process (only compiling examples are emitted), and so types resolve. -->
+    <ProjectReference Include="..\..\src\AiDotNet.csproj" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+  </ItemGroup>
+
 </Project>
