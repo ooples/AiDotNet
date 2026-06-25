@@ -2927,11 +2927,26 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
             if (!TryAdvanceLayerShape(layer, ref currentShape, ref lastGoodShape))
             {
-                // Couldn't resolve this layer from the running shape OR the last
-                // good shape. Leave it lazy (it resolves on first Forward), reset
-                // the running shape to the last good one, and KEEP WALKING so the
-                // remaining layers can still resolve — never abort the chain.
-                currentShape = lastGoodShape;
+                // This layer resolved from NEITHER the running shape NOR the last
+                // good shape (the backtrack above already tried both). Its true
+                // output shape is therefore unknown, so the running shape is no
+                // longer a reliable predecessor for anything downstream. STOP the
+                // walk here: every subsequent layer is left lazy and resolves
+                // correctly from its real input on the first Forward — exactly as
+                // the pre-#1688 walk did. Continuing to ResolveShapesOnly a
+                // downstream layer from a GUESSED shape (the old "reset to
+                // lastGoodShape and keep walking") would mis-size shape-polymorphic
+                // layers — e.g. a Dense after an Embedding->Attention chain the walk
+                // can't follow gets pinned to the wrong input width, corrupting
+                // inference (this regressed incremental serving decode + transformer
+                // ModelFamily forwards). The #1688 ParameterCount fix is fully
+                // preserved for the common case where the chain stays intact: every
+                // layer resolves (rank-1-declaring BatchNorm / LayerNorm / activation
+                // layers resolve via the lastGoodShape backtrack inside
+                // TryAdvanceLayerShape), so this break is never reached for those
+                // models (verified: SegFormer / MaskDINO / OneFormer / Mask2Former
+                // walks hit zero unresolved layers).
+                break;
             }
         }
 
