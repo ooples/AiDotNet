@@ -84,9 +84,9 @@ try
 }
 catch (Exception ex)
 {
-    // LoRA adapters are wrapped BEFORE the training loop, so the facade wiring is
-    // exercised even if a training step reports an issue on this synthetic data.
-    Console.WriteLine($"  LoRA adapters configured; training reported: {ex.Message}");
+    // Surface failures so the samples CI catches broken LoRA/facade wiring instead of passing.
+    Console.Error.WriteLine($"  LoRA sample failed: {ex.Message}");
+    throw;
 }
 
 // ── Reference: LoRA adapter variants in AiDotNet ───────────────────────────

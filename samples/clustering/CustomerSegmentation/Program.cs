@@ -48,7 +48,7 @@ for (int k = 2; k <= 8; k++)
     var labels = kmeans.Labels;
     if (labels is null)
     {
-        continue;
+        throw new InvalidOperationException($"K-Means produced no labels for k={k}; clustering failed.");
     }
 
     var silhouetteCalculator = new SilhouetteScore<double>();
@@ -98,9 +98,9 @@ Console.WriteLine("\n=== Clustering Quality Metrics (result.Evaluation) ===\n");
 var clusteringMetrics = result.Evaluation.ClusteringMetrics;
 if (clusteringMetrics is not null)
 {
-    Console.WriteLine($"  Silhouette:         {clusteringMetrics.Silhouette,8:F4}  {InterpretMetric("Silhouette Score", clusteringMetrics.Silhouette)}");
-    Console.WriteLine($"  Davies-Bouldin:     {clusteringMetrics.DaviesBouldin,8:F4}  {InterpretMetric("Davies-Bouldin Index", clusteringMetrics.DaviesBouldin)}");
-    Console.WriteLine($"  Calinski-Harabasz:  {clusteringMetrics.CalinskiHarabasz,8:F4}  {InterpretMetric("Calinski-Harabasz Index", clusteringMetrics.CalinskiHarabasz)}");
+    Console.WriteLine($"  Silhouette:         {clusteringMetrics.SilhouetteScore,8:F4}  {InterpretMetric("Silhouette Score", clusteringMetrics.SilhouetteScore)}");
+    Console.WriteLine($"  Davies-Bouldin:     {clusteringMetrics.DaviesBouldinIndex,8:F4}  {InterpretMetric("Davies-Bouldin Index", clusteringMetrics.DaviesBouldinIndex)}");
+    Console.WriteLine($"  Calinski-Harabasz:  {clusteringMetrics.CalinskiHarabaszIndex,8:F4}  {InterpretMetric("Calinski-Harabasz Index", clusteringMetrics.CalinskiHarabaszIndex)}");
 }
 
 // For a deeper per-cluster breakdown, the standalone ClusteringEvaluator is still available.

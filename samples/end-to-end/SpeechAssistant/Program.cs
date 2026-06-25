@@ -115,6 +115,7 @@ public class SpeechAssistantService
     private int _transcriptionCount;
     private int _synthesisCount;
     private double _totalAudioProcessed;
+    private readonly object _statsLock = new();   // this singleton serves concurrent requests
 
     public async Task InitializeAsync()
     {
@@ -132,13 +133,12 @@ public class SpeechAssistantService
 
     public async Task<TranscriptionResult> TranscribeAsync(byte[] audioData, string filename)
     {
-        _transcriptionCount++;
         var startTime = DateTime.UtcNow;
 
         // Decode audio
         var audioSamples = DecodeAudio(audioData, filename);
         var duration = audioSamples.Length / 16000.0; // 16kHz sample rate
-        _totalAudioProcessed += duration;
+        lock (_statsLock) { _transcriptionCount++; _totalAudioProcessed += duration; }
 
         if (_whisper == null)
         {
@@ -186,7 +186,7 @@ public class SpeechAssistantService
 
     public async Task<byte[]> SynthesizeAsync(string text, string? voice = null, float speed = 1.0f)
     {
-        _synthesisCount++;
+        lock (_statsLock) { _synthesisCount++; }
 
         if (_tts == null)
         {
@@ -216,11 +216,14 @@ public class SpeechAssistantService
 
     public SpeechStats GetStats()
     {
+        int transcriptions, syntheses;
+        double totalAudio;
+        lock (_statsLock) { transcriptions = _transcriptionCount; syntheses = _synthesisCount; totalAudio = _totalAudioProcessed; }
         return new SpeechStats
         {
-            TranscriptionCount = _transcriptionCount,
-            SynthesisCount = _synthesisCount,
-            TotalAudioProcessed = _totalAudioProcessed,
+            TranscriptionCount = transcriptions,
+            SynthesisCount = syntheses,
+            TotalAudioProcessed = totalAudio,
             WhisperModel = "whisper-base",
             TTSModel = "tts-1"
         };

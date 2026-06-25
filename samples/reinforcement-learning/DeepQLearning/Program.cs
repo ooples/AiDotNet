@@ -76,7 +76,9 @@ try
 }
 catch (Exception ex)
 {
-    Console.WriteLine($"  RL training reported: {ex.Message}");
+    // Surface failures so the samples CI catches broken DQN/facade wiring instead of passing.
+    Console.Error.WriteLine($"  DQN sample failed: {ex.Message}");
+    throw;
 }
 
 Console.WriteLine("\n=== Sample Complete ===");

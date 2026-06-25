@@ -108,7 +108,7 @@ Console.WriteLine(new string('-', 40));
 
 foreach (var (name, (result, testAcc)) in results.Where(r => r.Value.result != null).OrderByDescending(r => r.Value.testAcc))
 {
-    Console.WriteLine($"{name,-22} {testAcc:P2,-12}");
+    Console.WriteLine($"{name,-22} {testAcc,-12:P2}");
 }
 
 // Best model selection

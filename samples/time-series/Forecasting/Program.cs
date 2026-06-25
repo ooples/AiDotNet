@@ -87,7 +87,9 @@ try
 }
 catch (Exception ex)
 {
-    Console.WriteLine($"  Forecasting reported: {ex.Message}");
+    // Surface failures so the samples CI catches broken forecasting/facade wiring.
+    Console.Error.WriteLine($"  Forecasting sample failed: {ex.Message}");
+    throw;
 }
 
 // ── 5. The same goal, the unified way: an ARIMA model forecasts through Predict ─

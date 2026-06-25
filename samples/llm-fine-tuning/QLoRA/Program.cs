@@ -74,7 +74,9 @@ try
 }
 catch (Exception ex)
 {
-    Console.WriteLine($"  QLoRA configured; training reported: {ex.Message}");
+    // Surface failures so the samples CI catches broken quantization/LoRA wiring.
+    Console.Error.WriteLine($"  QLoRA sample failed: {ex.Message}");
+    throw;
 }
 
 // ── Why QLoRA: memory footprint of the base weights by precision ───────────

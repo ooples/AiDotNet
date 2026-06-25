@@ -68,7 +68,9 @@ try
 }
 catch (Exception ex)
 {
-    Console.WriteLine($"  RL training reported: {ex.Message}");
+    // Surface failures so the samples CI catches broken RL/facade wiring instead of passing.
+    Console.Error.WriteLine($"  RL sample failed: {ex.Message}");
+    throw;
 }
 
 Console.WriteLine("\n=== Sample Complete ===");
