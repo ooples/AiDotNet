@@ -37,6 +37,7 @@ public static class ForwardScratchGate
 
     private static readonly bool s_envSdpa = s_envEnabled && Sub("AIDOTNET_FWD_SCRATCH_SDPA");
     private static readonly bool s_envAdaLn = s_envEnabled && Sub("AIDOTNET_FWD_SCRATCH_ADALN");
+    private static readonly bool s_envFusedLinear = s_envEnabled && Sub("AIDOTNET_FWD_SCRATCH_FUSEDLINEAR");
 
     /// <summary>
     /// Optional in-process override for the gate, used by the correctness A/B probe to flip the
@@ -54,4 +55,13 @@ public static class ForwardScratchGate
 
     /// <summary>AdaLN/gate broadcast *Into sub-gate. ON when <see cref="Enabled"/> unless AIDOTNET_FWD_SCRATCH_ADALN=0 (diagnostic).</summary>
     public static bool AdaLn => Override.HasValue ? Override.Value : s_envAdaLn;
+
+    /// <summary>
+    /// FusedLinear *Into sub-gate. ON when <see cref="Enabled"/> unless AIDOTNET_FWD_SCRATCH_FUSEDLINEAR=0
+    /// (diagnostic). Routes Dense/FeedForward inference matmuls through
+    /// <c>Engine.FusedLinearInto</c> writing into a per-layer resident scratch buffer instead of
+    /// allocating the <c>[batch, outputSize]</c> output each call — the dominant residual allocator
+    /// on the DiT/SiT forward (#1672).
+    /// </summary>
+    public static bool FusedLinear => Override.HasValue ? Override.Value : s_envFusedLinear;
 }

@@ -35,6 +35,7 @@ internal static class Program
         int trainIters = ArgInt(args, "--train-iters", 5);
         bool doPredict = ArgInt(args, "--predict", 1) != 0;
         bool correctness = args.Contains("--correctness");
+        bool allocIsolate = args.Contains("--alloc-isolate");
 
         // Pin the CPU engine + disable GPU so the profile reflects the CPU path the
         // CI shard runs (AIDOTNET_DISABLE_GPU=1 is also set by the test harness).
@@ -99,6 +100,34 @@ internal static class Program
                 Console.WriteLine(
                     $"[CORRECTNESS] len={n} maxAbs={maxAbs:R} maxRel={maxRel:R} refMax={refMax:R} " +
                     $"identical={(maxAbs == 0.0)}");
+                Console.WriteLine("=== done ===");
+                return 0;
+            }
+
+            // Steady-state per-forward GC-allocation isolation. Unlike --correctness (which
+            // uses ForwardScratchGate.Override + GC.GetTotalAllocatedBytes(true), where the
+            // forced GC reclaim makes the ON number swing wildly / negative on this box), this
+            // mode honors the ENV gate settings (no Override) and measures the steady-state GC
+            // allocation per forward WITHOUT a forced GC, averaged over many forwards so the
+            // transient pool churn settles. Run it twice across two processes — once with
+            // AIDOTNET_FWD_SCRATCH_FUSEDLINEAR=1 and once =0 (both with SDPA+ADALN on) — to
+            // isolate the FusedLinear sub-gate's allocation contribution.
+            if (allocIsolate)
+            {
+                int tt = Math.Max(1, diff.Scheduler.TrainTimesteps / 2);
+                var ai = RandomTensor(new[] { 1, 4, 64, 64 }, new Random(1234));
+                // Warm thoroughly so lazy init + JIT + scratch sizing are paid before measuring.
+                for (int w = 0; w < 5; w++) { var _ = diff.PredictNoise(ai, tt); }
+                const int reps = 20;
+                long a0 = GC.GetTotalAllocatedBytes(false);
+                for (int r = 0; r < reps; r++) { var _ = diff.PredictNoise(ai, tt); }
+                long aN = GC.GetTotalAllocatedBytes(false);
+                double mbI = 1024.0 * 1024.0;
+                Console.WriteLine(
+                    $"[ALLOC-ISOLATE] FWD_SCRATCH={AiDotNet.Helpers.ForwardScratchGate.Enabled} " +
+                    $"FUSEDLINEAR={AiDotNet.Helpers.ForwardScratchGate.FusedLinear} " +
+                    $"SDPA={AiDotNet.Helpers.ForwardScratchGate.Sdpa} ADALN={AiDotNet.Helpers.ForwardScratchGate.AdaLn} " +
+                    $"perForward={(aN - a0) / mbI / reps:F1} MB  (reps={reps})");
                 Console.WriteLine("=== done ===");
                 return 0;
             }

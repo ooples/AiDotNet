@@ -249,6 +249,21 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _lastInput;
     private Tensor<T>? _lastOutput; // Pre-activation output for proper gradient computation
 
+    /// <summary>
+    /// Reusable per-layer scratch for the fused-linear OUTPUT ([batchDim, outputSize]),
+    /// used only on the #1672 <see cref="ForwardScratchGate"/> inference path
+    /// (<c>ForwardScratchGate.FusedLinear</c>). The fused matmul output is the dominant
+    /// residual per-call allocation in a DiT block; reusing this buffer across denoising
+    /// steps of the same token count removes it from the per-step allocation churn.
+    /// Reallocated whenever the required shape changes. Never aliased by any other live
+    /// tensor: <c>Engine.FusedLinearInto</c> fully overwrites every element each call, and
+    /// this layer instance is called once per forward with its result fully consumed
+    /// before the next call (sequential denoise steps), so per-INSTANCE reuse is safe.
+    /// NOT used while a gradient tape is active or in training (those need the recorded
+    /// allocating op).
+    /// </summary>
+    private Tensor<T>? _fusedLinearScratch;
+
     // GPU-resident cached tensors for GPU training pipeline
     private Tensor<T>? _lastInputGpu;
     private Tensor<T>? _lastPreActivationGpu; // Pre-activation for GPU backward pass
@@ -1012,8 +1027,30 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         if (fusedActivation != FusedActivationType.None && !IsTrainingMode)
         {
-            // Inference: use fused activation for maximum performance (no tape needed)
-            result = Engine.FusedLinear(flattenedInput, _weights, _biases, fusedActivation);
+            // #1672 destination-buffer fast path: when the scratch gate is ON and we are
+            // NOT recording a gradient tape (inference), compute the fused linear straight
+            // into a reused per-layer buffer instead of allocating [batchDim, outputSize]
+            // each call. Bit-identical math (same GEMM + bias/activation epilogue); the
+            // scratch is per-INSTANCE, fully overwritten, and consumed before the next call
+            // to this same layer, so reuse is safe across the denoise loop.
+            if (ForwardScratchGate.FusedLinear && !tapeActive)
+            {
+                int outputSize = _weights.Shape[1];
+                if (_fusedLinearScratch == null
+                    || _fusedLinearScratch.Shape.Length != 2
+                    || _fusedLinearScratch.Shape[0] != batchDim
+                    || _fusedLinearScratch.Shape[1] != outputSize)
+                {
+                    _fusedLinearScratch = new Tensor<T>([batchDim, outputSize]);
+                }
+                Engine.FusedLinearInto(_fusedLinearScratch, flattenedInput, _weights, _biases, fusedActivation);
+                result = _fusedLinearScratch;
+            }
+            else
+            {
+                // Inference: use fused activation for maximum performance (no tape needed)
+                result = Engine.FusedLinear(flattenedInput, _weights, _biases, fusedActivation);
+            }
         }
         else
         {
