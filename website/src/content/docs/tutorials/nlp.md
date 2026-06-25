@@ -111,9 +111,57 @@ Console.WriteLine("Configured a TF/count vectorizer.");
 4. **Predict from text**: keep the fitted vectorizer and use `result.PredictText(...)`.
 5. **Measure**: read accuracy/F1 from `result.GetDataSetStats(...).ErrorStats`.
 
+## Retrieval-Augmented Generation (RAG)
+
+AiDotNet has a full RAG stack — document stores (`InMemoryDocumentStore`, `FAISSDocumentStore`, `Chroma`/`Pinecone`/`Milvus`), retrievers (`BM25Retriever`, `DenseRetriever`, `HybridRetriever`, `ColBERTRetriever`, …), rerankers, and generators — wired onto a build with `ConfigureRetrievalAugmentedGeneration(retriever, reranker, generator)`.
+
+```csharp
+using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Regression;
+using AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
+using AiDotNet.RetrievalAugmentedGeneration.Generators;
+using AiDotNet.RetrievalAugmentedGeneration.Models;
+using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
+using AiDotNet.Tensors.LinearAlgebra;
+
+const int embeddingDim = 64;
+
+// 1. A document store holds your corpus.
+var store = new InMemoryDocumentStore<float>(vectorDimension: embeddingDim);
+(string Id, string Content)[] corpus =
+{
+    ("doc1", "Deep learning uses multi-layer neural networks."),
+    ("doc2", "Reinforcement learning trains agents through rewards."),
+    ("doc3", "Supervised learning maps inputs to labeled outputs."),
+};
+foreach (var (id, content) in corpus)
+    store.Add(new VectorDocument<float>(
+        new Document<float> { Id = id, Content = content }, new Vector<float>(embeddingDim)));
+
+// 2. A retriever + generator form the pipeline (swap BM25 for DenseRetriever to use embeddings).
+var retriever = new BM25Retriever<float>(store, defaultTopK: 2);
+var generator = new StubGenerator<float>();
+
+// 3. RAG is configured onto a build via ConfigureRetrievalAugmentedGeneration.
+var baseX = new Matrix<float>(8, 1);
+var baseY = new Vector<float>(8);
+for (int i = 0; i < 8; i++) { baseX[i, 0] = i; baseY[i] = i; }
+
+var result = await new AiModelBuilder<float, Matrix<float>, Vector<float>>()
+    .ConfigureModel(new RidgeRegression<float>())
+    .ConfigureDataLoader(DataLoaders.FromMatrixVector(baseX, baseY))
+    .ConfigureRetrievalAugmentedGeneration(retriever: retriever, generator: generator)
+    .BuildAsync();
+
+Console.WriteLine("RAG pipeline configured through the facade.");
+```
+
+For embedding-based retrieval, use `DenseRetriever<T>(store, embeddingModel, topK)` with `ConfigureEmbeddingModel(...)`. `GraphRetriever` / a knowledge graph power GraphRAG.
+
 ## Notes
 
-The facade supports text classification, sentiment, and similarity through `ConfigureTextVectorizer`. Higher-level retrieval-augmented generation (embedding models, vector stores, dense/hybrid retrievers, rerankers, and RAG/GraphRAG pipelines) and token-level tasks (NER, extractive QA, generation) are not part of the facade surface today.
+The facade covers text classification, sentiment, and similarity (`ConfigureTextVectorizer`) and full RAG (`ConfigureRetrievalAugmentedGeneration`). Token-level tasks — NER, extractive QA, and free-form generation — use the lower-level sequence models directly.
 
 ## Next Steps
 
