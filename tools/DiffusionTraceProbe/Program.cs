@@ -34,6 +34,7 @@ internal static class Program
         string modelName = args[0];
         int trainIters = ArgInt(args, "--train-iters", 5);
         bool doPredict = ArgInt(args, "--predict", 1) != 0;
+        bool correctness = args.Contains("--correctness");
 
         // Pin the CPU engine + disable GPU so the profile reflects the CPU path the
         // CI shard runs (AIDOTNET_DISABLE_GPU=1 is also set by the test harness).
@@ -53,13 +54,74 @@ internal static class Program
             Console.WriteLine($"=== DiffusionTraceProbe: {modelName} ===");
             Console.WriteLine($".NET {Environment.Version}  ParameterCount={SafeParamCount(full)}");
 
+            // In-process correctness A/B: same model instance + same input, gate forced OFF then ON.
+            // The DiT weights are randomly initialized per process (seed: null), so only a same-process
+            // comparison can prove the *Into path is bit-identical to the allocating path.
+            if (correctness)
+            {
+                int t = Math.Max(1, diff.Scheduler.TrainTimesteps / 2);
+                var probeInput = RandomTensor(new[] { 1, 4, 64, 64 }, new Random(1234));
+                // Force lazy init + warm so the first measured forward isn't paying init cost,
+                // then measure a fresh forward each side for the per-forward allocation delta.
+                // Allocation is deterministic (immune to this box's 2x timing swings), so it is
+                // the primary proof the *Into / resident-scratch path removed the churn (#1672).
+                AiDotNet.Helpers.ForwardScratchGate.Override = false;
+                var warmOff = diff.PredictNoise(probeInput, t);
+                long offA0 = GC.GetTotalAllocatedBytes(true);
+                var offOut = diff.PredictNoise(probeInput, t);
+                long offAlloc = GC.GetTotalAllocatedBytes(true) - offA0;
+
+                AiDotNet.Helpers.ForwardScratchGate.Override = true;
+                var warmOn = diff.PredictNoise(probeInput, t);
+                long onA0 = GC.GetTotalAllocatedBytes(true);
+                var onOut = diff.PredictNoise(probeInput, t);
+                long onAlloc = GC.GetTotalAllocatedBytes(true) - onA0;
+                AiDotNet.Helpers.ForwardScratchGate.Override = null;
+
+                double mb = 1024.0 * 1024.0;
+                double reductionPct = offAlloc > 0 ? (offAlloc - onAlloc) * 100.0 / offAlloc : 0.0;
+                Console.WriteLine(
+                    $"[ALLOC/forward] OFF={offAlloc / mb:F1} MB  ON={onAlloc / mb:F1} MB  " +
+                    $"reduction={reductionPct:F1}%  saved={(offAlloc - onAlloc) / mb:F1} MB");
+
+                double maxAbs = 0.0, maxRel = 0.0, refMax = 0.0;
+                int n = Math.Min(offOut.Length, onOut.Length);
+                for (int i = 0; i < n; i++)
+                {
+                    double a = Convert.ToDouble(offOut[i]);
+                    double b = Convert.ToDouble(onOut[i]);
+                    double diffAbs = Math.Abs(a - b);
+                    if (diffAbs > maxAbs) maxAbs = diffAbs;
+                    double denom = Math.Abs(a);
+                    if (denom > 1e-8 && diffAbs / denom > maxRel) maxRel = diffAbs / denom;
+                    if (Math.Abs(a) > refMax) refMax = Math.Abs(a);
+                }
+                Console.WriteLine(
+                    $"[CORRECTNESS] len={n} maxAbs={maxAbs:R} maxRel={maxRel:R} refMax={refMax:R} " +
+                    $"identical={(maxAbs == 0.0)}");
+                Console.WriteLine("=== done ===");
+                return 0;
+            }
+
             // Phase 1: warm-up noise-prediction probe (the test's errBefore measurement).
             int probeT = Math.Max(1, diff.Scheduler.TrainTimesteps / 2);
             var noisy = RandomTensor(new[] { 1, 4, 64, 64 }, rng);
             var sw = Stopwatch.StartNew();
-            _ = diff.PredictNoise(noisy, probeT);
+            var noisePred = diff.PredictNoise(noisy, probeT);
             sw.Stop();
             Console.WriteLine($"[PredictNoise warm-up]      {sw.Elapsed.TotalSeconds,8:F2} s");
+            {
+                double psum = 0.0, psumSq = 0.0;
+                for (int i = 0; i < noisePred.Length; i++)
+                {
+                    double vv = Convert.ToDouble(noisePred[i]);
+                    psum += vv; psumSq += vv * vv;
+                }
+                float pf = noisePred.Length > 0 ? Convert.ToSingle(noisePred[0]) : 0f;
+                float pl = noisePred.Length > 0 ? Convert.ToSingle(noisePred[noisePred.Length - 1]) : 0f;
+                Console.WriteLine(
+                    $"[NOISE_CHECKSUM] len={noisePred.Length} sum={psum:R} sumSq={psumSq:R} first={pf:R} last={pl:R}");
+            }
 
             // Phase 2: training loop (forward + backward) — the timeout test runs 5-10 iters.
             sw.Restart();
@@ -78,6 +140,19 @@ internal static class Program
                 var output = full.Predict(input);
                 sw.Stop();
                 Console.WriteLine($"[Predict (sampling loop)]   {sw.Elapsed.TotalSeconds,8:F2} s  (out len {output.Length})");
+
+                // Output fingerprint for the flag-OFF vs flag-ON bit-identicality A/B (#1672).
+                double sum = 0.0, sumSq = 0.0;
+                float first = output.Length > 0 ? Convert.ToSingle(output[0]) : 0f;
+                float last = output.Length > 0 ? Convert.ToSingle(output[output.Length - 1]) : 0f;
+                for (int i = 0; i < output.Length; i++)
+                {
+                    double vv = Convert.ToDouble(output[i]);
+                    sum += vv;
+                    sumSq += vv * vv;
+                }
+                Console.WriteLine(
+                    $"[CHECKSUM] sum={sum:R} sumSq={sumSq:R} first={first:R} last={last:R}");
             }
 
             Console.WriteLine("=== done ===");

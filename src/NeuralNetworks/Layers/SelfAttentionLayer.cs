@@ -176,6 +176,20 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     private int[]? _originalInputShape;
 
     /// <summary>
+    /// Reusable per-layer scratch for the scaled-dot-product-attention OUTPUT
+    /// ([batch, heads, seqQ, headDim]), used only on the #1672
+    /// <see cref="ForwardScratchGate"/> inference path. SDPA's output tensor is the
+    /// single largest per-call allocation in a DiT block; reusing this buffer across
+    /// denoising steps of the same shape removes it from the per-step allocation churn.
+    /// Reallocated whenever the required shape changes. Never aliased by any other live
+    /// tensor: the SDPA <c>*Into</c> kernel fully overwrites every element each call, and
+    /// the result is immediately consumed (permuted + copied) before the next SDPA call,
+    /// so reuse is safe across the multi-step denoise loop. NOT used while a gradient
+    /// tape is active (training needs the recorded allocating op).
+    /// </summary>
+    private Tensor<T>? _sdpaOutScratch;
+
+    /// <summary>
     /// Stores the output tensor from the most recent forward pass for use in backpropagation.
     /// </summary>
     /// <remarks>
@@ -653,14 +667,38 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         // ScaledDotProductAttention computes: softmax(Q @ K^T / scale) @ V
         // Input shapes: [batch, heads, seq, head_dim]
         // Output shape: [batch, heads, seq, head_dim]
-        var output4D = Engine.ScaledDotProductAttention(
-            Q, K, V,
-            mask: null,
-            scale: 1.0 / Math.Sqrt(_headDimension),
-            out var attentionWeights4D);
+        Tensor<T> output4D;
+        // #1672 destination-buffer fast path: when the scratch gate is ON and we are NOT
+        // recording a gradient tape (inference), compute SDPA straight into a reused
+        // per-layer buffer instead of allocating the scores/weights/output tensors. The
+        // attention-weight matrix is only needed by this layer's custom backward, which
+        // never runs without a tape — so discarding it here is safe. Bit-identical math.
+        bool sdpaTapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+        if (ForwardScratchGate.Sdpa && !sdpaTapeActive)
+        {
+            int sq = Q.Shape[2];
+            var needShape = new[] { batchSize, _headCount, sq, _headDimension };
+            if (_sdpaOutScratch == null || !ShapeMatches(_sdpaOutScratch._shape, needShape))
+                _sdpaOutScratch = new Tensor<T>(needShape);
+            Engine.ScaledDotProductAttentionInto(
+                _sdpaOutScratch, Q, K, V,
+                scale: 1.0 / Math.Sqrt(_headDimension));
+            output4D = _sdpaOutScratch;
+            // No attention-weight cache: inference-only path, no backward.
+            _lastAttentionScores = null;
+        }
+        else
+        {
+            output4D = Engine.ScaledDotProductAttention(
+                Q, K, V,
+                mask: null,
+                scale: 1.0 / Math.Sqrt(_headDimension),
+                out var attentionWeights4D);
 
-        // Cache attention weights for backward pass
-        _lastAttentionScores = attentionWeights4D;
+            // Cache attention weights for backward pass
+            _lastAttentionScores = attentionWeights4D;
+        }
 
         // 3. Reshape and Project Output
         var outputTransposed = Engine.TensorPermute(output4D, new[] { 0, 2, 1, 3 });
@@ -1178,6 +1216,22 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         _gpuK = null;
         _gpuV = null;
         _gpuAttentionWeights = null;
+
+        // #1672: drop the reusable SDPA-output scratch so a fresh forward reallocates it.
+        _sdpaOutScratch = null;
+    }
+
+    /// <summary>
+    /// Returns true when two shape arrays are element-wise equal. Used by the #1672
+    /// scratch-reuse fast path to decide whether the cached SDPA-output buffer still
+    /// matches the current call's shape.
+    /// </summary>
+    private static bool ShapeMatches(int[] a, int[] b)
+    {
+        if (a.Length != b.Length) return false;
+        for (int i = 0; i < a.Length; i++)
+            if (a[i] != b[i]) return false;
+        return true;
     }
 
     /// <summary>
