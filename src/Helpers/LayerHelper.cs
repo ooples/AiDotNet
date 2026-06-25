@@ -25788,6 +25788,9 @@ public static class LayerHelper<T>
     /// <param name="inputWidth">Input image width.</param>
     /// <param name="channelDims">Channel dimensions per stage.</param>
     /// <param name="depths">Block depths per stage.</param>
+    /// <param name="dropPathRate">Maximum stochastic-depth (drop-path) rate. Applied with the
+    /// paper's linear schedule across all transformer blocks — 0 at the first block, rising to this
+    /// value at the last (Swin-L for OneFormer uses 0.3).</param>
     /// <returns>Encoder layers for OneFormer.</returns>
     /// <remarks>
     /// <para>
@@ -25807,7 +25810,7 @@ public static class LayerHelper<T>
     // Replaces the earlier hand-rolled full-width-3×3 conv stack (1536→1536 3×3 = 21M-param convs).
     public static IEnumerable<ILayer<T>> CreateOneFormerEncoderLayers(
         int inputHeight = 512, int inputWidth = 512,
-        int[]? channelDims = null, int[]? depths = null)
+        int[]? channelDims = null, int[]? depths = null, double dropPathRate = 0.3)
     {
         channelDims ??= [192, 384, 768, 1536]; // Swin-L stage embed dims
         depths ??= [2, 2, 18, 2];
@@ -25815,14 +25818,23 @@ public static class LayerHelper<T>
         int[] numHeads = [6, 12, 24, 48];       // Swin-L heads per stage (embedDim/32)
         const int windowSize = 7, patchSize = 4, mlpRatio = 4;
 
+        // Stochastic depth: linearly increasing drop-path rate from 0 (first block) to dropPathRate
+        // (last block) across the whole backbone, exactly as the Swin reference does
+        // (torch.linspace(0, drop_path_rate, sum(depths))).
+        int totalBlocks = 0;
+        for (int i = 0; i < depths.Length; i++) totalBlocks += depths[i];
+
         yield return new SwinPatchEmbeddingLayer<T>(patchSize, embedDim);
         int currentDim = embedDim;
+        int blockIndex = 0;
         for (int stage = 0; stage < 4; stage++)
         {
             for (int block = 0; block < depths[stage]; block++)
             {
                 int shiftSize = (block % 2 == 1) ? windowSize / 2 : 0; // alternate W-MSA / SW-MSA
-                yield return new SwinTransformerBlockLayer<T>(currentDim, numHeads[stage], windowSize, shiftSize, mlpRatio);
+                double blockDropPath = totalBlocks > 1 ? dropPathRate * blockIndex / (totalBlocks - 1) : 0.0;
+                yield return new SwinTransformerBlockLayer<T>(currentDim, numHeads[stage], windowSize, shiftSize, mlpRatio, blockDropPath);
+                blockIndex++;
             }
             if (stage < 3) { yield return new SwinPatchMergingLayer<T>(currentDim); currentDim *= 2; }
         }
