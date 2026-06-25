@@ -1,0 +1,80 @@
+name: Docs Wiki (generate + gate)
+
+# Keeps the auto-generated API wiki real and in-sync, and compile-checks every example
+# snippet in the docs against the actual AiDotNet assemblies. Three guarantees:
+#   1. Regenerate the per-item wiki from the freshly built XML doc comments.
+#   2. Fail if the committed wiki drifted from the source (a doc-comment change must ship
+#      with its regenerated wiki).
+#   3. Fail if any ```csharp example — in the website docs or the generated wiki — stops
+#      compiling against the real library (the API drift that broke the examples before).
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - 'src/**'
+      - 'docs/reference/wiki/**'
+      - 'website/src/content/docs/**'
+      - 'tools/WikiGenerator/**'
+      - 'tools/DocSnippetVerify/**'
+      - '.github/workflows/docs-wiki.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'docs/reference/wiki/**'
+      - 'website/src/content/docs/**'
+      - 'tools/WikiGenerator/**'
+      - 'tools/DocSnippetVerify/**'
+      - '.github/workflows/docs-wiki.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-wiki-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  generate-and-gate:
+    name: Generate wiki + compile-check snippets
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      AIDOTNET_DISABLE_GPU: '1'
+      DOTNET_NOLOGO: '1'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10.0
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      # Build the library (net8.0) so its XML doc file exists for the generator to read.
+      - name: Build AiDotNet (net8.0, with XML docs)
+        run: dotnet build src/AiDotNet.csproj -c Debug -f net8.0
+
+      # Regenerate both doc trees from the freshly built XML. Astro (website) uses
+      # root-absolute links; Jekyll (docs) uses relative .md links.
+      - name: Generate API wiki (Astro website tree)
+        run: dotnet run --project tools/WikiGenerator -c Debug -- src/bin/Debug/net8.0/AiDotNet.xml website/src/content/docs/reference/wiki /docs/reference/wiki
+
+      - name: Generate API wiki (Jekyll docs tree)
+        run: dotnet run --project tools/WikiGenerator -c Debug -- src/bin/Debug/net8.0/AiDotNet.xml docs/reference/wiki /docs/reference/wiki relative
+
+      # Fail if the committed wiki is out of sync with the source XML docs.
+      - name: Check wiki is up to date (no drift)
+        run: |
+          if ! git diff --exit-code -- website/src/content/docs/reference/wiki docs/reference/wiki; then
+            echo "::error::The committed API wiki is stale. Regenerate it for both trees and commit the result:"
+            echo "::error::  dotnet run --project tools/WikiGenerator -c Debug -- src/bin/Debug/net8.0/AiDotNet.xml website/src/content/docs/reference/wiki /docs/reference/wiki"
+            echo "::error::  dotnet run --project tools/WikiGenerator -c Debug -- src/bin/Debug/net8.0/AiDotNet.xml docs/reference/wiki /docs/reference/wiki relative"
+            exit 1
+          fi
+
+      # Compile every ```csharp example in the website docs + the generated wiki against the
+      # real AiDotNet assemblies. Fails on any drift that would break a published example.
+      - name: Compile-check doc + wiki snippets
+        run: dotnet run --project tools/DocSnippetVerify -c Debug -- website docs/reference/wiki
