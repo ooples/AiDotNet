@@ -686,6 +686,29 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     }
 
     /// <summary>
+    /// NTM has a <b>dynamic, stateful</b> forward: an external memory matrix
+    /// mutated across an internal recurrence with content/location-based
+    /// addressing (<see cref="ForwardTape"/>). That is not a static op graph,
+    /// so it opts out of the compile-once/replay-many fused compiled training
+    /// path and trains on the eager autograd tape, which re-runs the true
+    /// dynamic forward every step.
+    /// </summary>
+    /// <remarks>
+    /// Tracing the forward once and replaying it (the fused path) is unsound for
+    /// external-memory recurrence — the same case PyTorch's <c>torch.compile</c>
+    /// handles with a graph break. Beyond correctness, opting out keeps NTM off
+    /// the per-thread compiled-plan cache: under shared xUnit worker threads
+    /// (the ModelFamily test base awaits <c>Task.Yield()</c>, so each model's
+    /// <c>Train</c> resumes on a pooled thread), a sibling model's same-shape
+    /// <c>[ThreadStatic]</c> plan could linger and replay against the wrong
+    /// tensors, freezing NTM's loss with exactly-zero gradients — the
+    /// intermittent M-N CI-shard failure (#1643: GradientFlow /
+    /// Training_ShouldChangeParameters / LossStrictlyDecreasesOnMemorizationTask /
+    /// TrainingError_ShouldNotExceedTestError). The eager tape is immune.
+    /// </remarks>
+    protected override bool SupportsFusedCompiledTraining => false;
+
+    /// <summary>
     /// Forward path used by the training tape — routes directly through the
     /// NTM-specific tape-aware <see cref="ForwardTape"/> memory pipeline
     /// (controller → read/write addressing → output), the SAME function
