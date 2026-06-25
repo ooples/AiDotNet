@@ -1,10 +1,11 @@
-// WikiGenerator — generates a rich, per-item documentation wiki from the AiDotNet XML doc
-// comments. The prose (summary, "For Beginners", "How It Works") is pulled from the source
-// XML; the example is GENERATED from a per-category template and compiled in-process, so
-// only examples that actually compile against the real assembly are emitted (the source
-// examples are drifted fragments, so they are not used).
+// WikiGenerator — generates a complete, namespace-organized API reference wiki from the
+// AiDotNet assemblies and their XML doc comments. EVERY public type gets a page, grouped by
+// its top-level namespace (one category per namespace) and, within a category, by kind
+// (Models, Layers, Interfaces, Enums, Options, Helpers, ...). Each page carries the summary,
+// beginner notes, how-it-works, its documented members, and — for concrete model types in
+// supported domains — a compile-checked example.
 //
-// Usage: dotnet run --project tools/WikiGenerator [pathToAiDotNet.xml] [outputDir]
+// Usage: dotnet run --project tools/WikiGenerator [xmlPath] [outputDir]
 
 using System.Reflection;
 using System.Text;
@@ -14,11 +15,8 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
 string xmlPath = args.Length > 0 ? args[0] : "src/bin/Debug/net8.0/AiDotNet.xml";
-string outDir = args.Length > 1 ? args[1] : "wiki";
-// URL prefix used for intra-wiki links (root-absolute, matching the Astro site's link style).
-string urlBase = args.Length > 2 ? args[2].TrimEnd('/') : "/docs/reference/wiki";
-// Link style: "relative" emits Jekyll-native ./Type.md links; otherwise root-absolute Astro links.
-bool relLinks = args.Length > 3 && string.Equals(args[3], "relative", StringComparison.OrdinalIgnoreCase);
+string outDir = args.Length > 1 ? args[1] : "website/src/content/docs/reference/wiki";
+const string urlBase = "/docs/reference/wiki";
 
 if (!File.Exists(xmlPath))
 {
@@ -26,7 +24,7 @@ if (!File.Exists(xmlPath))
     return 1;
 }
 
-// ── Roslyn reference set for compile-checking examples ──
+// ── Roslyn reference set (this tool's own output bin: AiDotNet + transitive deps) ──
 var refs = new List<MetadataReference>();
 var seenRef = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 void AddRef(string p)
@@ -39,168 +37,446 @@ foreach (var dll in Directory.GetFiles(AppContext.BaseDirectory, "*.dll")) AddRe
 if (AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") is string tpa)
     foreach (var p in tpa.Split(Path.PathSeparator)) AddRef(p);
 
-var compOptions = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary,
-    allowUnsafe: true, nullableContextOptions: NullableContextOptions.Disable);
-var parse = new CSharpParseOptions(LanguageVersion.Latest);
-var usingLineRe = new Regex(@"^\s*using\s+[A-Za-z_][\w.]*\s*;\s*$", RegexOptions.None, TimeSpan.FromSeconds(1));
-// Same implicit using set DocSnippetVerify prepends, so "compiles here" == "passes the gate".
+// ── Reflect the full public type universe from the AiDotNet assemblies ──
+var allTypes = new List<Type>();
+foreach (var asmName in new[] { "AiDotNet.dll", "AiDotNet.Tensors.dll" })
+{
+    var path = Path.Combine(AppContext.BaseDirectory, asmName);
+    if (!File.Exists(path)) continue;
+    try { allTypes.AddRange(Assembly.LoadFrom(path).GetExportedTypes()); }
+    catch (ReflectionTypeLoadException ex) { allTypes.AddRange(ex.Types.Where(t => t is not null).Select(t => t!)); }
+    catch (Exception ex) { Console.Error.WriteLine($"reflect {asmName}: {ex.Message}"); }
+}
+Console.WriteLine($"Reflected {allTypes.Count} public types.");
+
+// ── XML docs: type summaries/remarks + members grouped by declaring type ──
+var xml = XDocument.Load(xmlPath);
+var typeDoc = new Dictionary<string, XElement>(StringComparer.Ordinal);
+var memberDoc = new Dictionary<string, List<(char Tag, string Display, XElement El)>>(StringComparer.Ordinal);
+foreach (var m in xml.Root?.Element("members")?.Elements("member") ?? Enumerable.Empty<XElement>())
+{
+    var name = (string?)m.Attribute("name");
+    if (name is null || name.Length < 2 || name[1] != ':') continue;
+    char tag = name[0];
+    if (tag == 'T') { typeDoc[name.Substring(2)] = m; continue; }
+    if (tag is 'M' or 'P' or 'F' or 'E')
+    {
+        var (decl, disp) = SplitMember(name);
+        if (decl.Length == 0) continue;
+        if (!memberDoc.TryGetValue(decl, out var list)) memberDoc[decl] = list = new();
+        list.Add((tag, disp, m));
+    }
+}
+
+// ── In-process compile gate (mirrors DocSnippetVerify) ──
 const string commonUsings =
     "using System;using System.Collections.Generic;using System.Linq;" +
     "using System.Threading;using System.Threading.Tasks;" +
     "using AiDotNet;using AiDotNet.Tensors;using AiDotNet.Tensors.LinearAlgebra;\n";
-int _dbg = 0;
-
+var usingLineRe = new Regex(@"^\s*using\s+[A-Za-z_][\w.]*\s*;\s*$", RegexOptions.None, TimeSpan.FromSeconds(1));
+var compOptions = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary,
+    allowUnsafe: true, nullableContextOptions: NullableContextOptions.Disable);
+var parse = new CSharpParseOptions(LanguageVersion.Latest);
 bool Compiles(string code)
 {
-    // Hoist leading `using` directives above the synthetic wrapper class — directives are
-    // illegal inside a method body. Mirrors DocSnippetVerify's gate so the in-process check
-    // accepts exactly what the external markdown gate accepts.
     var usings = new StringBuilder();
     var body = new StringBuilder();
-    bool bodyStarted = false;
+    bool started = false;
     foreach (var line in code.Replace("\r\n", "\n").Split('\n'))
     {
-        if (!bodyStarted && usingLineRe.IsMatch(line)) usings.Append(line.Trim()).Append('\n');
-        else { bodyStarted = bodyStarted || line.Trim().Length > 0; body.Append(line).Append('\n'); }
+        if (!started && usingLineRe.IsMatch(line)) usings.Append(line.Trim()).Append('\n');
+        else { started = started || line.Trim().Length > 0; body.Append(line).Append('\n'); }
     }
     var src = commonUsings + usings + "static class __S { static async System.Threading.Tasks.Task __R() {\n" + body + "\n} }";
     var comp = CSharpCompilation.Create("ex", new[] { CSharpSyntaxTree.ParseText(src, parse) }, refs, compOptions);
-    var errs = comp.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error && d.Id != "CS5001").ToList();
-    if (errs.Count > 0 && Environment.GetEnvironmentVariable("WIKI_DEBUG") == "1" && _dbg++ < 5)
-        foreach (var e in errs.Take(3)) Console.Error.WriteLine($"  [dbg] {e.Id}: {e.GetMessage()}");
-    return errs.Count == 0;
+    return !comp.GetDiagnostics().Any(d => d.Severity == DiagnosticSeverity.Error && d.Id != "CS5001");
 }
 
-var categories = new (string Ns, string Slug, string Title)[]
-{
-    ("AiDotNet.Optimizers.", "optimizers", "Optimizers"),
-    ("AiDotNet.LossFunctions.", "loss-functions", "Loss Functions"),
-    ("AiDotNet.Regression.", "regression", "Regression Models"),
-    ("AiDotNet.Clustering.Partitioning.", "clustering", "Clustering"),
-    ("AiDotNet.Clustering.Density.", "clustering", "Clustering"),
-    ("AiDotNet.Clustering.Hierarchical.", "clustering", "Clustering"),
-    ("AiDotNet.TimeSeries.", "time-series", "Time-Series Models"),
-    ("AiDotNet.LoRA.Adapters.", "lora-adapters", "LoRA / PEFT Adapters"),
-};
+// Categories whose concrete model types get a runnable, compile-checked example.
+var exampleSlugs = new HashSet<string>(StringComparer.Ordinal)
+{ "optimizers", "lossfunctions", "regression", "clustering", "timeseries", "lora" };
 
-var doc = XDocument.Load(xmlPath);
-var members = doc.Root?.Element("members")?.Elements("member").ToList() ?? new();
-
-int totalPages = 0, withExample = 0;
+// ── Build a page for every public type ──
 Directory.CreateDirectory(outDir);
+int totalPages = 0, withExample = 0;
 var catSummary = new List<(string Slug, string Title, int Count)>();
 
-foreach (var grp in categories.GroupBy(c => c.Slug))
+var grouped = allTypes
+    .Where(t => t.Namespace is not null && t.Namespace.StartsWith("AiDotNet", StringComparison.Ordinal)
+        && !t.Name.Contains('<')   // skip compiler-generated nested types (fixed buffers, closures)
+        && !t.IsDefined(typeof(System.Runtime.CompilerServices.CompilerGeneratedAttribute), false))
+    .GroupBy(t => CategoryKey(t.Namespace!))
+    .OrderBy(g => g.Key, StringComparer.Ordinal);
+
+foreach (var grp in grouped)
 {
-    var dir = Path.Combine(outDir, grp.Key);
+    string title = Spaced(grp.Key);
+    string slug = grp.Key.ToLowerInvariant();
+    var dir = Path.Combine(outDir, slug);
     Directory.CreateDirectory(dir);
-    var index = new List<(string Type, string Summary)>();
-    string title = grp.First().Title;
 
-    foreach (var cat in grp)
+    // Stable order + collision-free page slugs within the category.
+    var typesInCat = grp.OrderBy(t => t.FullName ?? t.Name, StringComparer.Ordinal).ToList();
+    var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    var pageSlug = new Dictionary<Type, string>();
+    foreach (var t in typesInCat)
     {
-        foreach (var m in members)
-        {
-            var name = (string?)m.Attribute("name");
-            if (name is null || !name.StartsWith("T:" + cat.Ns)) continue;
-            var rel = name.Substring(("T:" + cat.Ns).Length);
-            if (rel.Contains('.')) continue;
-
-            string typeName = StripArity(rel);
-            string summary = NormalizeBlock(ToMarkdown(m.Element("summary")));
-            if (summary.Length == 0) continue;
-
-            string forBeginners = ExtractForBeginners(m.Element("remarks"));
-            string remarks = ExtractRemarksExcludingForBeginners(m.Element("remarks"));
-
-            // Generate + compile-check the example; only keep it if it compiles.
-            string example = BuildExample(cat.Slug, typeName, cat.Ns.TrimEnd('.'));
-            bool exampleOk = example.Length > 0 && Compiles(example);
-
-            var sb = new StringBuilder();
-            sb.AppendLine("---");
-            sb.AppendLine($"title: {Yaml(typeName)}");
-            sb.AppendLine($"description: {Yaml(FirstSentence(summary))}");
-            sb.AppendLine("section: \"Reference\"");
-            sb.AppendLine("---").AppendLine();
-            sb.AppendLine($"_{title}_").AppendLine();
-            sb.AppendLine(summary).AppendLine();
-            if (forBeginners.Length > 0)
-                sb.AppendLine("## For Beginners").AppendLine().AppendLine(forBeginners).AppendLine();
-            if (remarks.Length > 0)
-                sb.AppendLine("## How It Works").AppendLine().AppendLine(remarks).AppendLine();
-            if (exampleOk)
-            {
-                sb.AppendLine("## Example").AppendLine();
-                sb.AppendLine("```csharp").AppendLine(example).AppendLine("```").AppendLine();
-                withExample++;
-            }
-
-            WriteFile(Path.Combine(dir, typeName + ".md"), sb.ToString());
-            index.Add((typeName, FirstSentence(summary)));
-            totalPages++;
-        }
+        string b = Sanitize(StripArity(t.Name));
+        if (b.Length == 0) b = "type";
+        string cand = b;
+        int n = 2;
+        while (!used.Add(cand.ToLowerInvariant())) cand = $"{b}-{n++}";
+        pageSlug[t] = cand;
     }
 
-    if (index.Count > 0)
+    var byKind = new Dictionary<string, List<(Type T, string Slug, string Summary)>>();
+
+    foreach (var t in typesInCat)
     {
-        var rows = index.OrderBy(r => r.Type).DistinctBy(r => r.Type).ToList();
-        var idx = new StringBuilder();
-        idx.AppendLine("---");
-        idx.AppendLine($"title: {Yaml(title)}");
-        idx.AppendLine($"description: {Yaml("Every " + title + " type in AiDotNet, auto-generated with compile-checked examples.")}");
-        idx.AppendLine("section: \"Reference\"");
-        idx.AppendLine("---").AppendLine();
-        idx.AppendLine($"Every {title} type in AiDotNet — each with a beginner-friendly explanation and, where the snippet compiles against the live library, a runnable example.").AppendLine();
-        idx.AppendLine("| Type | Summary |").AppendLine("|:-----|:--------|");
-        foreach (var (type, sum) in rows)
+        string xmlName = XmlName(t);
+        typeDoc.TryGetValue(xmlName, out var md);
+        memberDoc.TryGetValue(xmlName, out var mem);
+        string kind = KindOf(t);
+        string summary = md is not null ? NormalizeBlock(ToMarkdown(md.Element("summary"))) : "";
+        string forBeginners = md is not null ? ExtractForBeginners(md.Element("remarks")) : "";
+        string remarks = md is not null ? ExtractRemarksExcludingForBeginners(md.Element("remarks")) : "";
+
+        // Example only for concrete model types in supported domains (kept only if it compiles).
+        bool exampleOk = false;
+        string example = "";
+        if (kind == "Models & Types" && exampleSlugs.Contains(slug))
         {
-            // Astro lowercases route slugs; relative Jekyll links resolve to the real .md filename.
-            string href = relLinks ? $"./{type}.md" : $"{urlBase}/{grp.Key}/{type.ToLowerInvariant()}/";
-            idx.AppendLine($"| [`{type}`]({href}) | {EscapeCell(sum)} |");
+            example = BuildExample(slug, StripArity(t.Name), t.Namespace!);
+            exampleOk = example.Length > 0 && Compiles(example);
         }
-        WriteFile(Path.Combine(dir, "index.md"), idx.ToString());
-        catSummary.Add((grp.Key, title, rows.Count));
-        Console.WriteLine($"{grp.Key,-16} {index.Count,4} pages");
+
+        string display = FriendlyName(t);
+        var sb = new StringBuilder();
+        sb.AppendLine("---");
+        sb.AppendLine($"title: {Yaml(display)}");
+        sb.AppendLine($"description: {Yaml(summary.Length > 0 ? FirstSentence(summary) : $"{display} — {kind} in {t.Namespace}.")}");
+        sb.AppendLine("section: \"API Reference\"");
+        sb.AppendLine("---").AppendLine();
+        sb.AppendLine($"`{kind}` · `{t.Namespace}`").AppendLine();
+        sb.AppendLine(summary.Length > 0 ? summary : "_No summary documentation available yet._").AppendLine();
+        if (forBeginners.Length > 0) sb.AppendLine("## For Beginners").AppendLine().AppendLine(forBeginners).AppendLine();
+        if (remarks.Length > 0) sb.AppendLine("## How It Works").AppendLine().AppendLine(remarks).AppendLine();
+        if (exampleOk)
+        {
+            sb.AppendLine("## Example").AppendLine().AppendLine("```csharp").AppendLine(example).AppendLine("```").AppendLine();
+            withExample++;
+        }
+        if (mem is not null) sb.Append(RenderMembers(mem, StripArity(t.Name)));
+
+        WriteFile(Path.Combine(dir, pageSlug[t] + ".md"), sb.ToString());
+        totalPages++;
+
+        if (!byKind.TryGetValue(kind, out var bucket)) byKind[kind] = bucket = new();
+        bucket.Add((t, pageSlug[t].ToLowerInvariant(), summary.Length > 0 ? FirstSentence(summary) : ""));
     }
+
+    WriteCategoryIndex(dir, title, slug, byKind, urlBase);
+    catSummary.Add((slug, title, typesInCat.Count));
+    Console.WriteLine($"{slug,-26} {typesInCat.Count,5} types");
 }
 
-// Top-level wiki landing page (links to each category index).
-if (catSummary.Count > 0)
-{
-    var top = new StringBuilder();
-    top.AppendLine("---");
-    top.AppendLine("title: \"API Wiki\"");
-    top.AppendLine($"description: {Yaml("One compile-checked reference page per optimizer, loss function, model, and adapter in AiDotNet.")}");
-    top.AppendLine("section: \"Reference\"");
-    top.AppendLine("---").AppendLine();
-    top.AppendLine("A page for every type in the library's core families, generated from the source XML documentation. Each page carries the summary, a beginner-friendly explanation, how it works, and — where the snippet compiles against the live library — a runnable example built through the `AiModelBuilder` facade.").AppendLine();
-    top.AppendLine("| Category | Types |").AppendLine("|:---------|------:|");
-    foreach (var (slug, t, count) in catSummary.OrderBy(c => c.Title).DistinctBy(c => c.Slug))
-    {
-        string href = relLinks ? $"./{slug}/index.md" : $"{urlBase}/{slug}/";
-        top.AppendLine($"| [{t}]({href}) | {count} |");
-    }
-    WriteFile(Path.Combine(outDir, "index.md"), top.ToString());
-}
-
-Console.WriteLine($"----\nTotal: {totalPages} pages ({withExample} with a compiling example) under {outDir}/");
+WriteTopIndex(outDir, catSummary, urlBase);
+Console.WriteLine($"----\nTotal: {totalPages} type pages across {catSummary.Count} namespaces ({withExample} with a compiling example) under {outDir}/");
 return 0;
 
+// ── classification + naming ──────────────────────────────────────────────────
+
+static string CategoryKey(string ns)
+{
+    var parts = ns.Split('.');
+    return parts.Length >= 2 ? parts[1] : parts[0];   // AiDotNet.X.* -> X
+}
+
+static string Spaced(string s) => s switch
+{
+    "LoRA" => "LoRA",
+    "NER" => "NER",
+    "Onnx" => "ONNX",
+    "AutoML" => "AutoML",
+    _ => Regex.Replace(s, @"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", " ", RegexOptions.None, TimeSpan.FromSeconds(1))
+};
+
+static string KindOf(Type t)
+{
+    if (t.IsEnum) return "Enums";
+    if (t.IsInterface) return "Interfaces";
+    if (typeof(Delegate).IsAssignableFrom(t)) return "Delegates";
+    if (t.IsValueType) return "Structs";
+    string n = StripArity(t.Name);
+    string ns = t.Namespace ?? "";
+    if (n.EndsWith("Exception", StringComparison.Ordinal)) return "Exceptions";
+    if (n.EndsWith("Attribute", StringComparison.Ordinal)) return "Attributes";
+    if (n.EndsWith("Options", StringComparison.Ordinal) || n.EndsWith("Configuration", StringComparison.Ordinal)
+        || n.EndsWith("Config", StringComparison.Ordinal) || n.EndsWith("Settings", StringComparison.Ordinal))
+        return "Options & Configuration";
+    if (ns.Contains(".Layers", StringComparison.Ordinal) || n.EndsWith("Layer", StringComparison.Ordinal)) return "Layers";
+    if (t.IsAbstract && t.IsSealed) return "Helpers & Utilities";   // static class
+    if (n.EndsWith("Extensions", StringComparison.Ordinal) || n.EndsWith("Helper", StringComparison.Ordinal)
+        || n.EndsWith("Helpers", StringComparison.Ordinal) || n.EndsWith("Factory", StringComparison.Ordinal)
+        || n.EndsWith("Builder", StringComparison.Ordinal) || n.EndsWith("Node", StringComparison.Ordinal)
+        || n.EndsWith("Util", StringComparison.Ordinal) || n.EndsWith("Utils", StringComparison.Ordinal))
+        return "Helpers & Utilities";
+    if (t.IsAbstract) return "Base Classes";
+    return "Models & Types";
+}
+
+static string StripArity(string s)
+{
+    int tick = s.IndexOf('`');
+    return tick >= 0 ? s.Substring(0, tick) : s;
+}
+
+static string Sanitize(string s) =>
+    Regex.Replace(s, @"[^A-Za-z0-9_.-]", "", RegexOptions.None, TimeSpan.FromSeconds(1));
+
+static string XmlName(Type t) => (t.FullName ?? (t.Namespace + "." + t.Name)).Replace('+', '.');
+
+static string FriendlyName(Type t)
+{
+    string n = StripArity(t.Name);
+    if (t.IsGenericTypeDefinition)
+        return $"{n}<{string.Join(", ", t.GetGenericArguments().Select(a => a.Name))}>";
+    return n;
+}
+
+static (string Decl, string Disp) SplitMember(string name)
+{
+    string s = name.Substring(2);                       // drop "M:" / "P:" / ...
+    int paren = s.IndexOf('(');
+    string head = paren >= 0 ? s.Substring(0, paren) : s;
+    string sig = paren >= 0 ? s.Substring(paren) : "";
+    int dot = head.LastIndexOf('.');
+    if (dot < 0) return ("", "");
+    string decl = head.Substring(0, dot);
+    string member = Regex.Replace(head.Substring(dot + 1), @"``\d+", "", RegexOptions.None, TimeSpan.FromSeconds(1));
+    return (decl, member + SimplifySignature(sig));
+}
+
+static string SimplifySignature(string sig)
+{
+    if (sig.Length == 0) return "";
+    string s = sig.Replace('{', '<').Replace('}', '>').Replace("@", "");
+    s = Regex.Replace(s, @"([A-Za-z_]\w*\.)+([A-Za-z_]\w*)", "$2", RegexOptions.None, TimeSpan.FromSeconds(1));
+    s = Regex.Replace(s, @"``?\d+", "", RegexOptions.None, TimeSpan.FromSeconds(1));
+    return s;
+}
+
+// ── page rendering ───────────────────────────────────────────────────────────
+
+static string RenderMembers(List<(char Tag, string Display, XElement El)> mem, string simpleName)
+{
+    var ctors = new List<(string, string)>();
+    var methods = new List<(string, string)>();
+    var props = new List<(string, string)>();
+    var fields = new List<(string, string)>();
+    var events = new List<(string, string)>();
+    foreach (var (tag, disp, el) in mem)
+    {
+        string sum = EscapeCell(FirstSentence(Inline(el.Element("summary"))));
+        if (tag == 'M' && disp.StartsWith("#ctor", StringComparison.Ordinal))
+            ctors.Add((simpleName + disp.Substring("#ctor".Length), sum));
+        else if (tag == 'M') methods.Add((disp, sum));
+        else if (tag == 'P') props.Add((disp, sum));
+        else if (tag == 'F') fields.Add((disp, sum));
+        else if (tag == 'E') events.Add((disp, sum));
+    }
+    var sb = new StringBuilder();
+    void Section(string head, string col, List<(string Name, string Sum)> items)
+    {
+        if (items.Count == 0) return;
+        sb.AppendLine($"## {head}").AppendLine();
+        sb.AppendLine($"| {col} | Summary |").AppendLine("|:-----|:--------|");
+        foreach (var (name, sum) in items.OrderBy(i => i.Name, StringComparer.Ordinal))
+            sb.AppendLine($"| `{name}` | {sum} |");
+        sb.AppendLine();
+    }
+    Section("Constructors", "Constructor", ctors);
+    Section("Properties", "Property", props);
+    Section("Methods", "Method", methods);
+    Section("Fields", "Field", fields);
+    Section("Events", "Event", events);
+    return sb.ToString();
+}
+
+static void WriteCategoryIndex(string dir, string title, string slug,
+    Dictionary<string, List<(Type T, string Slug, string Summary)>> byKind, string urlBase)
+{
+    string[] order =
+    {
+        "Models & Types", "Layers", "Base Classes", "Interfaces", "Enums", "Structs",
+        "Delegates", "Options & Configuration", "Helpers & Utilities", "Attributes", "Exceptions"
+    };
+    int total = byKind.Sum(k => k.Value.Count);
+    var sb = new StringBuilder();
+    sb.AppendLine("---");
+    sb.AppendLine($"title: {Yaml(title)}");
+    sb.AppendLine($"description: {Yaml($"All {total} public types in the AiDotNet.{slug} namespace, organized by kind.")}");
+    sb.AppendLine("section: \"API Reference\"");
+    sb.AppendLine("---").AppendLine();
+    sb.AppendLine($"**{total}** public types in this namespace, organized by kind.").AppendLine();
+    foreach (var kind in order.Concat(byKind.Keys.Where(k => !order.Contains(k))))
+    {
+        if (!byKind.TryGetValue(kind, out var items) || items.Count == 0) continue;
+        sb.AppendLine($"## {kind} ({items.Count})").AppendLine();
+        sb.AppendLine("| Type | Summary |").AppendLine("|:-----|:--------|");
+        foreach (var (t, s, sum) in items.OrderBy(i => i.T.Name, StringComparer.Ordinal))
+            sb.AppendLine($"| [`{FriendlyName(t)}`]({urlBase}/{slug}/{s}/) | {EscapeCell(sum)} |");
+        sb.AppendLine();
+    }
+    WriteFile(Path.Combine(dir, "index.md"), sb.ToString());
+}
+
+static void WriteTopIndex(string outDir, List<(string Slug, string Title, int Count)> cats, string urlBase)
+{
+    int total = cats.Sum(c => c.Count);
+    var sb = new StringBuilder();
+    sb.AppendLine("---");
+    sb.AppendLine("title: \"API Reference\"");
+    sb.AppendLine($"description: {Yaml($"Complete namespace-organized API reference for AiDotNet — {total} public types across {cats.Count} namespaces.")}");
+    sb.AppendLine("section: \"API Reference\"");
+    sb.AppendLine("---").AppendLine();
+    sb.AppendLine($"Every public type in AiDotNet, organized by namespace. **{total} types** across **{cats.Count} namespaces** — each page carries the summary, a beginner-friendly explanation, how it works, its documented members, and a compiling example where one applies.").AppendLine();
+    sb.AppendLine("| Namespace | Types |").AppendLine("|:----------|------:|");
+    foreach (var (slug, t, count) in cats.OrderBy(c => c.Title, StringComparer.OrdinalIgnoreCase))
+        sb.AppendLine($"| [{t}]({urlBase}/{slug}/) | {count} |");
+    WriteFile(Path.Combine(outDir, "index.md"), sb.ToString());
+}
+
 // ── frontmatter / table helpers ──────────────────────────────────────────────
-// Always write LF so output is byte-identical on Windows and Linux — a CI drift check
-// (regenerate + `git diff --exit-code`) would otherwise fail on CRLF/LF differences alone.
-static void WriteFile(string path, string content) =>
-    File.WriteAllText(path, content.Replace("\r\n", "\n"));
+
+// Always write LF so output is byte-identical on Windows and Linux (stable CI drift check).
+static void WriteFile(string path, string content) => File.WriteAllText(path, content.Replace("\r\n", "\n"));
 
 static string Yaml(string s) =>
-    "\"" + (s ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"")
-        .Replace("\r", " ").Replace("\n", " ").Trim() + "\"";
+    "\"" + (s ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", " ").Replace("\n", " ").Trim() + "\"";
 
 static string EscapeCell(string s) =>
     (s ?? "").Replace("|", "\\|").Replace("\r", " ").Replace("\n", " ").Trim();
 
-// ── example templates (one per category) ────────────────────────────────────
+// ── XML → Markdown ───────────────────────────────────────────────────────────
+
+static string ToMarkdown(XElement? el)
+{
+    if (el is null) return "";
+    var sb = new StringBuilder();
+    foreach (var node in el.Nodes())
+    {
+        switch (node)
+        {
+            // Collapse horizontal whitespace but KEEP newlines so author-written lists survive.
+            case XText t: sb.Append(Regex.Replace(t.Value, @"[^\S\n]+", " ")); break;
+            case XElement e:
+                switch (e.Name.LocalName)
+                {
+                    case "para": sb.Append("\n\n").Append(ToMarkdown(e)).Append("\n\n"); break;
+                    case "b": case "strong": sb.Append("**").Append(ToMarkdown(e).Trim()).Append("**"); break;
+                    case "i": case "em": sb.Append('*').Append(ToMarkdown(e).Trim()).Append('*'); break;
+                    case "c": sb.Append('`').Append(Regex.Replace(e.Value, @"\s+", " ").Trim()).Append('`'); break;
+                    case "see": case "seealso":
+                        sb.Append('`').Append((string?)e.Attribute("langword") ?? StripCref((string?)e.Attribute("cref")) ?? "").Append('`');
+                        break;
+                    case "paramref": case "typeparamref":
+                        sb.Append('`').Append((string?)e.Attribute("name") ?? "").Append('`'); break;
+                    case "code": break;
+                    case "list":
+                        foreach (var item in e.Elements("item")) sb.Append("\n- ").Append(ToMarkdown(item).Trim());
+                        sb.Append('\n'); break;
+                    default: sb.Append(ToMarkdown(e)); break;
+                }
+                break;
+        }
+    }
+    return sb.ToString();
+}
+
+// Single-line conversion for table cells.
+static string Inline(XElement? el) => Regex.Replace(ToMarkdown(el), @"\s+", " ").Trim();
+
+static string? StripCref(string? cref)
+{
+    if (string.IsNullOrEmpty(cref)) return null;
+    int colon = cref.IndexOf(':');
+    var s = colon >= 0 ? cref.Substring(colon + 1) : cref;
+    int dot = s.LastIndexOf('.');
+    if (dot >= 0) s = s.Substring(dot + 1);
+    return StripArity(s);
+}
+
+static string NormalizeBlock(string s)
+{
+    s = Regex.Replace(s, @"[ \t]+", " ");
+    s = Regex.Replace(s, @"\n[ \t]+", "\n");
+    // Code fences embedded in doc-comment prose are illustrative, not our verified example —
+    // downgrade to ```cs so the compile gate (keyed on ```csharp) skips them.
+    s = Regex.Replace(s, @"```\s*(csharp|c#)", "```cs", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
+    s = TidyLists(s);
+    s = Regex.Replace(s, @"\n{3,}", "\n\n");
+    return s.Trim();
+}
+
+// Ensure a blank line sits before and after each run of list items so markdown renders them.
+static string TidyLists(string s)
+{
+    var outL = new List<string>();
+    bool prevItem = false, prevBlank = true;
+    foreach (var line in s.Replace("\r\n", "\n").Split('\n'))
+    {
+        bool blank = line.Trim().Length == 0;
+        bool item = Regex.IsMatch(line, @"^\s*([-*]|\d+\.)\s+", RegexOptions.None, TimeSpan.FromSeconds(1));
+        if (item && !prevItem && !prevBlank) outL.Add("");
+        if (!item && !blank && prevItem) outL.Add("");
+        outL.Add(line);
+        if (blank) { prevBlank = true; prevItem = false; }
+        else { prevBlank = false; prevItem = item; }
+    }
+    return string.Join("\n", outL);
+}
+
+static string ExtractForBeginners(XElement? remarks)
+{
+    if (remarks is null) return "";
+    foreach (var para in remarks.Elements("para"))
+    {
+        var bold = para.Element("b");
+        if (bold != null && bold.Value.Trim().StartsWith("For Beginners", StringComparison.OrdinalIgnoreCase))
+        {
+            var md = ToMarkdown(para);
+            md = Regex.Replace(md, @"^\s*\*\*For Beginners:?\*\*\s*", "", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
+            return NormalizeBlock(md);
+        }
+    }
+    return "";
+}
+
+static string ExtractRemarksExcludingForBeginners(XElement? remarks)
+{
+    if (remarks is null) return "";
+    var paras = remarks.Elements("para").ToList();
+    if (paras.Count == 0) return NormalizeBlock(ToMarkdown(remarks));
+    var sb = new StringBuilder();
+    foreach (var para in paras)
+    {
+        var bold = para.Element("b");
+        if (bold != null && bold.Value.Trim().StartsWith("For Beginners", StringComparison.OrdinalIgnoreCase)) continue;
+        sb.Append(ToMarkdown(para)).Append("\n\n");
+    }
+    return NormalizeBlock(sb.ToString());
+}
+
+static string FirstSentence(string s)
+{
+    s = s.Replace("\n", " ").Trim();
+    int dot = s.IndexOf(". ", StringComparison.Ordinal);
+    if (dot > 0 && dot < 240) return s.Substring(0, dot + 1);
+    return s.Length > 240 ? s.Substring(0, 240).TrimEnd() + "…" : s;
+}
+
+// ── example templates (concrete model types in supported domains) ─────────────
 
 static string BuildExample(string slug, string type, string ns) => slug switch
 {
@@ -233,7 +509,7 @@ static string BuildExample(string slug, string type, string ns) => slug switch
         Console.WriteLine("Trained with {{type}}.");
         """,
 
-    "loss-functions" => $$"""
+    "lossfunctions" => $$"""
         using {{ns}};
         using AiDotNet.Tensors.LinearAlgebra;
 
@@ -286,7 +562,7 @@ static string BuildExample(string slug, string type, string ns) => slug switch
         Console.WriteLine($"{{type}}: clustered {labels.Length} points.");
         """,
 
-    "time-series" => $$"""
+    "timeseries" => $$"""
         using AiDotNet;
         using AiDotNet.Data.Loaders;
         using {{ns}};
@@ -309,7 +585,7 @@ static string BuildExample(string slug, string type, string ns) => slug switch
         Console.WriteLine($"{{type}}: forecast {forecast.Length} steps.");
         """,
 
-    "lora-adapters" => $$"""
+    "lora" => $$"""
         using AiDotNet.LoRA;
         using {{ns}};
 
@@ -320,131 +596,3 @@ static string BuildExample(string slug, string type, string ns) => slug switch
 
     _ => ""
 };
-
-// ── XML → Markdown helpers ──────────────────────────────────────────────────
-
-static string StripArity(string s)
-{
-    int tick = s.IndexOf('`');
-    return tick >= 0 ? s.Substring(0, tick) : s;
-}
-
-static string ToMarkdown(XElement? el)
-{
-    if (el is null) return "";
-    var sb = new StringBuilder();
-    foreach (var node in el.Nodes())
-    {
-        switch (node)
-        {
-            // Collapse horizontal whitespace but KEEP newlines, so author-written bullet
-            // ("- ") and numbered ("1.") lists in the doc comment survive as real markdown
-            // lists. Markdown re-joins ordinary wrapped prose lines into one paragraph anyway.
-            case XText t: sb.Append(Regex.Replace(t.Value, @"[^\S\n]+", " ")); break;
-            case XElement e:
-                switch (e.Name.LocalName)
-                {
-                    case "para": sb.Append("\n\n").Append(ToMarkdown(e)).Append("\n\n"); break;
-                    case "b": case "strong": sb.Append("**").Append(ToMarkdown(e).Trim()).Append("**"); break;
-                    case "i": case "em": sb.Append('*').Append(ToMarkdown(e).Trim()).Append('*'); break;
-                    case "c": sb.Append('`').Append(Regex.Replace(e.Value, @"\s+", " ").Trim()).Append('`'); break;
-                    case "see": case "seealso":
-                        sb.Append('`').Append((string?)e.Attribute("langword") ?? StripCref((string?)e.Attribute("cref")) ?? "").Append('`');
-                        break;
-                    case "paramref": case "typeparamref":
-                        sb.Append('`').Append((string?)e.Attribute("name") ?? "").Append('`'); break;
-                    case "code": break;
-                    case "list":
-                        foreach (var item in e.Elements("item")) sb.Append("\n- ").Append(ToMarkdown(item).Trim());
-                        sb.Append('\n'); break;
-                    default: sb.Append(ToMarkdown(e)); break;
-                }
-                break;
-        }
-    }
-    return sb.ToString();
-}
-
-static string? StripCref(string? cref)
-{
-    if (string.IsNullOrEmpty(cref)) return null;
-    int colon = cref.IndexOf(':');
-    var s = colon >= 0 ? cref.Substring(colon + 1) : cref;
-    int dot = s.LastIndexOf('.');
-    if (dot >= 0) s = s.Substring(dot + 1);
-    return StripArity(s);
-}
-
-static string NormalizeBlock(string s)
-{
-    s = Regex.Replace(s, @"[ \t]+", " ");
-    s = Regex.Replace(s, @"\n[ \t]+", "\n");
-    // Code fences embedded in doc-comment prose are illustrative author snippets, not our
-    // verified example — downgrade to ```cs so the compile gate (keyed on ```csharp) skips them.
-    s = Regex.Replace(s, @"```\s*(csharp|c#)", "```cs", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
-    s = TidyLists(s);
-    s = Regex.Replace(s, @"\n{3,}", "\n\n");
-    return s.Trim();
-}
-
-// Ensure a blank line sits before and after each run of list items, so markdown renders
-// the bullets/numbers as a list instead of folding the following text into the last item.
-static string TidyLists(string s)
-{
-    var outL = new List<string>();
-    bool prevItem = false, prevBlank = true;
-    foreach (var line in s.Replace("\r\n", "\n").Split('\n'))
-    {
-        bool blank = line.Trim().Length == 0;
-        bool item = Regex.IsMatch(line, @"^\s*([-*]|\d+\.)\s+", RegexOptions.None, TimeSpan.FromSeconds(1));
-        if (item && !prevItem && !prevBlank) outL.Add("");   // blank before a list
-        if (!item && !blank && prevItem) outL.Add("");       // blank after a list
-        outL.Add(line);
-        if (blank) { prevBlank = true; prevItem = false; }
-        else { prevBlank = false; prevItem = item; }
-    }
-    return string.Join("\n", outL);
-}
-
-static string ExtractForBeginners(XElement? remarks)
-{
-    if (remarks is null) return "";
-    foreach (var para in remarks.Elements("para"))
-    {
-        var bold = para.Element("b");
-        if (bold != null && bold.Value.Trim().StartsWith("For Beginners", StringComparison.OrdinalIgnoreCase))
-        {
-            var md = ToMarkdown(para);
-            md = Regex.Replace(md, @"^\s*\*\*For Beginners:?\*\*\s*", "", RegexOptions.IgnoreCase);
-            return NormalizeBlock(md);
-        }
-    }
-    return "";
-}
-
-static string ExtractRemarksExcludingForBeginners(XElement? remarks)
-{
-    if (remarks is null) return "";
-    var sb = new StringBuilder();
-    foreach (var node in remarks.Nodes())
-    {
-        if (node is XElement e && e.Name.LocalName == "para")
-        {
-            var bold = e.Element("b");
-            if (bold != null && bold.Value.Trim().StartsWith("For Beginners", StringComparison.OrdinalIgnoreCase)) continue;
-            var text = ToMarkdown(e);
-            if (Regex.IsMatch(text.Trim(), @"^Based on the paper", RegexOptions.IgnoreCase)) continue;
-            sb.Append("\n\n").Append(text).Append("\n\n");
-        }
-        else if (node is XElement other) sb.Append(ToMarkdown(other));
-        else if (node is XText t) sb.Append(Regex.Replace(t.Value, @"\s+", " "));
-    }
-    return NormalizeBlock(sb.ToString());
-}
-
-static string FirstSentence(string s)
-{
-    s = s.Replace("\n", " ").Trim();
-    int dot = s.IndexOf(". ");
-    return dot > 0 ? s.Substring(0, dot + 1) : s;
-}
