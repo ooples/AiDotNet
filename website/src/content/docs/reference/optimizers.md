@@ -127,7 +127,13 @@ for (int i = 0; i < 32; i++) { trainX[new[] { i, 0 }] = i / 32f; trainY[new[] { 
 var model = new NeuralNetwork<float>(new NeuralNetworkArchitecture<float>(
     inputFeatures: 8, numClasses: 2, complexity: NetworkComplexity.Simple));
 
-var options = new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>();
+// The learning rate and every other knob live on the options object.
+var options = new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
+{
+    InitialLearningRate = 3e-4,   // the learning rate
+    Epsilon = 1e-8,
+    MaxGradientNorm = 1.0,        // gradient clipping
+};
 
 var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
     .ConfigureModel(model)
@@ -136,6 +142,37 @@ var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
     .BuildAsync();
 
 Console.WriteLine("Trained with custom optimizer options.");
+```
+
+### Learning-Rate Schedules
+
+Decay the learning rate over training with a scheduler — `CosineAnnealingLRScheduler`, `StepLRScheduler`, and others live in `AiDotNet.LearningRateSchedulers` and attach via `ConfigureLearningRateScheduler(...)`.
+
+```csharp
+using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Enums;
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
+
+var trainX = new Tensor<float>(new[] { 32, 8 });
+var trainY = new Tensor<float>(new[] { 32, 2 });
+for (int i = 0; i < 32; i++) { trainX[new[] { i, 0 }] = i / 32f; trainY[new[] { i, i % 2 }] = 1f; }
+
+var model = new NeuralNetwork<float>(new NeuralNetworkArchitecture<float>(
+    inputFeatures: 8, numClasses: 2, complexity: NetworkComplexity.Simple));
+
+var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+    .ConfigureModel(model)
+    .ConfigureOptimizer(new AdamWOptimizer<float, Tensor<float>, Tensor<float>>(model))
+    // Cosine decay from 3e-4 over 100 epochs; StepLRScheduler(baseLearningRate, stepSize, gamma) for step decay.
+    .ConfigureLearningRateScheduler(new CosineAnnealingLRScheduler(baseLearningRate: 3e-4, tMax: 100))
+    .ConfigureDataLoader(DataLoaders.FromTensors(trainX, trainY))
+    .BuildAsync();
+
+Console.WriteLine("Trained with a cosine-annealing learning-rate schedule.");
 ```
 
 ---
