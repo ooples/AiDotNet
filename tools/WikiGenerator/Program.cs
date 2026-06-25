@@ -145,6 +145,7 @@ var grouped = allTypes
 // Pass 1: assign every type a category slug + collision-free page slug (global, so cross-links resolve).
 var typeCat = new Dictionary<Type, string>();
 var typeSlug = new Dictionary<Type, string>();
+var typeByXmlName = new Dictionary<string, Type>(StringComparer.Ordinal);   // "NS.Type`n" -> Type
 foreach (var grp in grouped)
 {
     string slug = grp.Key.ToLowerInvariant();
@@ -158,7 +159,23 @@ foreach (var grp in grouped)
         while (!used.Add(cand.ToLowerInvariant())) cand = $"{b}-{n++}";
         typeCat[t] = slug;
         typeSlug[t] = cand;
+        typeByXmlName[XmlName(t)] = t;
     }
+}
+
+// Resolve a doc-comment cref ("T:NS.Type", "M:NS.Type.Method(...)") to its page URL, or null.
+string? Linker(string cref)
+{
+    if (string.IsNullOrEmpty(cref)) return null;
+    int colon = cref.IndexOf(':');
+    char kind = colon > 0 ? cref[0] : 'T';
+    string b = colon >= 0 ? cref.Substring(colon + 1) : cref;
+    int paren = b.IndexOf('(');
+    if (paren >= 0) b = b.Substring(0, paren);
+    if (kind != 'T') { int dot = b.LastIndexOf('.'); if (dot >= 0) b = b.Substring(0, dot); }   // member -> declaring type
+    if (typeByXmlName.TryGetValue(b, out var t) && typeCat.TryGetValue(t, out var c) && typeSlug.TryGetValue(t, out var s))
+        return $"{urlBase}/{c}/{s.ToLowerInvariant()}/";
+    return null;
 }
 
 // Pass 1b: reverse maps — base class -> derived types, interface -> implementors (documented types only).
@@ -186,9 +203,11 @@ foreach (var grp in grouped)
         string xmlName = XmlName(t);
         typeDoc.TryGetValue(xmlName, out var md);
         string kind = KindOf(t);
-        string summary = md is not null ? NormalizeBlock(ToMarkdown(md.Element("summary"))) : "";
-        string forBeginners = md is not null ? ExtractForBeginners(md.Element("remarks")) : "";
-        string remarks = md is not null ? ExtractRemarksExcludingForBeginners(md.Element("remarks")) : "";
+        // Linked summary for the page body; plain for frontmatter/index-table cells.
+        string summary = md is not null ? NormalizeBlock(ToMarkdown(md.Element("summary"), Linker)) : "";
+        string summaryPlain = md is not null ? NormalizeBlock(ToMarkdown(md.Element("summary"))) : "";
+        string forBeginners = md is not null ? ExtractForBeginners(md.Element("remarks"), Linker) : "";
+        string remarks = md is not null ? ExtractRemarksExcludingForBeginners(md.Element("remarks"), Linker) : "";
 
         // Example selection (any domain):
         //   1. the author's <example> from the XML docs, auto-fixed to compile (verified);
@@ -209,7 +228,7 @@ foreach (var grp in grouped)
         var sb = new StringBuilder();
         sb.AppendLine("---");
         sb.AppendLine($"title: {Yaml(display)}");
-        sb.AppendLine($"description: {Yaml(summary.Length > 0 ? FirstSentence(summary) : $"{display} — {kind} in {t.Namespace}.")}");
+        sb.AppendLine($"description: {Yaml(summaryPlain.Length > 0 ? FirstSentence(summaryPlain) : $"{display} — {kind} in {t.Namespace}.")}");
         sb.AppendLine("section: \"API Reference\"");
         sb.AppendLine("---").AppendLine();
         sb.AppendLine($"`{kind}` · `{t.Namespace}`").AppendLine();
@@ -231,11 +250,30 @@ foreach (var grp in grouped)
         }
         sb.Append(RenderMembers(t, xmlName, memberSummary));
 
+        // "See also" cross-references from <seealso> tags.
+        if (md is not null)
+        {
+            var seeAlso = md.Elements("seealso")
+                .Select(sa => (string?)sa.Attribute("cref")).Where(c => !string.IsNullOrEmpty(c))
+                .Distinct(StringComparer.Ordinal).ToList();
+            if (seeAlso.Count > 0)
+            {
+                sb.AppendLine("## See Also").AppendLine();
+                foreach (var c in seeAlso)
+                {
+                    string name = StripCref(c) ?? "";
+                    string? url = Linker(c!);
+                    sb.AppendLine(url is not null ? $"- [`{name}`]({url})" : $"- `{name}`");
+                }
+                sb.AppendLine();
+            }
+        }
+
         WriteFile(Path.Combine(dir, typeSlug[t] + ".md"), sb.ToString());
         totalPages++;
 
         if (!byKind.TryGetValue(kind, out var bucket)) byKind[kind] = bucket = new();
-        bucket.Add((t, typeSlug[t].ToLowerInvariant(), summary.Length > 0 ? FirstSentence(summary) : ""));
+        bucket.Add((t, typeSlug[t].ToLowerInvariant(), summaryPlain.Length > 0 ? FirstSentence(summaryPlain) : ""));
     }
 
     WriteCategoryIndex(dir, title, slug, byKind, urlBase);
@@ -530,7 +568,7 @@ static string EscapeCell(string s) =>
 
 // ── XML → Markdown ───────────────────────────────────────────────────────────
 
-static string ToMarkdown(XElement? el)
+static string ToMarkdown(XElement? el, Func<string, string?>? linker = null)
 {
     if (el is null) return "";
     var sb = new StringBuilder();
@@ -543,20 +581,32 @@ static string ToMarkdown(XElement? el)
             case XElement e:
                 switch (e.Name.LocalName)
                 {
-                    case "para": sb.Append("\n\n").Append(ToMarkdown(e)).Append("\n\n"); break;
-                    case "b": case "strong": sb.Append("**").Append(ToMarkdown(e).Trim()).Append("**"); break;
-                    case "i": case "em": sb.Append('*').Append(ToMarkdown(e).Trim()).Append('*'); break;
+                    case "para": sb.Append("\n\n").Append(ToMarkdown(e, linker)).Append("\n\n"); break;
+                    case "b": case "strong": sb.Append("**").Append(ToMarkdown(e, linker).Trim()).Append("**"); break;
+                    case "i": case "em": sb.Append('*').Append(ToMarkdown(e, linker).Trim()).Append('*'); break;
                     case "c": sb.Append('`').Append(Regex.Replace(e.Value, @"\s+", " ").Trim()).Append('`'); break;
                     case "see": case "seealso":
-                        sb.Append('`').Append((string?)e.Attribute("langword") ?? StripCref((string?)e.Attribute("cref")) ?? "").Append('`');
+                    {
+                        var langword = (string?)e.Attribute("langword");
+                        var href = (string?)e.Attribute("href");
+                        var cref = (string?)e.Attribute("cref");
+                        if (langword is not null) { sb.Append('`').Append(langword).Append('`'); }
+                        else if (href is not null) { string txt = e.Value.Trim(); sb.Append('[').Append(txt.Length > 0 ? txt : href).Append("](").Append(href).Append(')'); }
+                        else
+                        {
+                            string name = StripCref(cref) ?? "";
+                            string? url = cref is null ? null : linker?.Invoke(cref);
+                            sb.Append(url is not null ? $"[`{name}`]({url})" : $"`{name}`");
+                        }
                         break;
+                    }
                     case "paramref": case "typeparamref":
                         sb.Append('`').Append((string?)e.Attribute("name") ?? "").Append('`'); break;
                     case "code": break;
                     case "list":
-                        foreach (var item in e.Elements("item")) sb.Append("\n- ").Append(ToMarkdown(item).Trim());
+                        foreach (var item in e.Elements("item")) sb.Append("\n- ").Append(ToMarkdown(item, linker).Trim());
                         sb.Append('\n'); break;
-                    default: sb.Append(ToMarkdown(e)); break;
+                    default: sb.Append(ToMarkdown(e, linker)); break;
                 }
                 break;
         }
@@ -572,6 +622,8 @@ static string? StripCref(string? cref)
     if (string.IsNullOrEmpty(cref)) return null;
     int colon = cref.IndexOf(':');
     var s = colon >= 0 ? cref.Substring(colon + 1) : cref;
+    int paren = s.IndexOf('(');
+    if (paren >= 0) s = s.Substring(0, paren);   // drop method params (their type names also contain dots)
     int dot = s.LastIndexOf('.');
     if (dot >= 0) s = s.Substring(dot + 1);
     return StripArity(s);
@@ -607,7 +659,7 @@ static string TidyLists(string s)
     return string.Join("\n", outL);
 }
 
-static string ExtractForBeginners(XElement? remarks)
+static string ExtractForBeginners(XElement? remarks, Func<string, string?>? linker = null)
 {
     if (remarks is null) return "";
     foreach (var para in remarks.Elements("para"))
@@ -615,7 +667,7 @@ static string ExtractForBeginners(XElement? remarks)
         var bold = para.Element("b");
         if (bold != null && bold.Value.Trim().StartsWith("For Beginners", StringComparison.OrdinalIgnoreCase))
         {
-            var md = ToMarkdown(para);
+            var md = ToMarkdown(para, linker);
             md = Regex.Replace(md, @"^\s*\*\*For Beginners:?\*\*\s*", "", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
             return NormalizeBlock(md);
         }
@@ -623,17 +675,17 @@ static string ExtractForBeginners(XElement? remarks)
     return "";
 }
 
-static string ExtractRemarksExcludingForBeginners(XElement? remarks)
+static string ExtractRemarksExcludingForBeginners(XElement? remarks, Func<string, string?>? linker = null)
 {
     if (remarks is null) return "";
     var paras = remarks.Elements("para").ToList();
-    if (paras.Count == 0) return NormalizeBlock(ToMarkdown(remarks));
+    if (paras.Count == 0) return NormalizeBlock(ToMarkdown(remarks, linker));
     var sb = new StringBuilder();
     foreach (var para in paras)
     {
         var bold = para.Element("b");
         if (bold != null && bold.Value.Trim().StartsWith("For Beginners", StringComparison.OrdinalIgnoreCase)) continue;
-        sb.Append(ToMarkdown(para)).Append("\n\n");
+        sb.Append(ToMarkdown(para, linker)).Append("\n\n");
     }
     return NormalizeBlock(sb.ToString());
 }
