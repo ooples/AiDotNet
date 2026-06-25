@@ -25794,38 +25794,41 @@ public static class LayerHelper<T>
     /// Segmentation", CVPR 2023.
     /// </para>
     /// </remarks>
-    // OneFormer (Cheng et al. 2022) uses a Swin-L / DiNAT-L transformer backbone. A faithful Swin
-    // backbone (SwinTransformerBlockLayer) outputs token features whose layout does not directly feed
-    // OneFormer's conv-based [B,C,H,W] decoder, so wiring it requires a Swin→spatial adapter (or a
-    // Swin-aware decoder) — tracked as follow-up in #1688. Backbone left as-is here to avoid a
-    // rank-3 regression; OneFormer's training OOM is addressed separately.
+    // OneFormer (Cheng et al. 2022, "One Transformer to Rule Universal Image Segmentation") uses a
+    // Swin-L transformer backbone (embed 192, depths [2,2,18,2], heads [6,12,24,48]). Build the
+    // paper-faithful Swin backbone (patch embed → W-MSA/SW-MSA blocks with alternating shifted windows
+    // → patch merging), then a tokens→spatial adapter (reshape [B,L,C]→[B,fH,fW,C] then transpose to
+    // [B,C,fH,fW]) so OneFormer's conv-based decoder receives [B,C,H,W] features at the /32 stride.
+    // Replaces the earlier hand-rolled full-width-3×3 conv stack (1536→1536 3×3 = 21M-param convs).
     public static IEnumerable<ILayer<T>> CreateOneFormerEncoderLayers(
         int inputChannels = 3, int inputHeight = 512, int inputWidth = 512,
         int[]? channelDims = null, int[]? depths = null, double dropRate = 0.1)
     {
-        channelDims ??= [192, 384, 768, 1536];
+        channelDims ??= [192, 384, 768, 1536]; // Swin-L stage embed dims
         depths ??= [2, 2, 18, 2];
+        int embedDim = channelDims[0];
+        int[] numHeads = [6, 12, 24, 48];       // Swin-L heads per stage (embedDim/32)
+        const int windowSize = 7, patchSize = 4, mlpRatio = 4;
 
-        int h = inputHeight, w = inputWidth, prevChannels = inputChannels;
-        int[] patchKernels = [7, 3, 3, 3]; int[] patchStrides = [4, 2, 2, 2]; int[] patchPaddings = [3, 1, 1, 1];
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-
+        yield return new SwinPatchEmbeddingLayer<T>(patchSize, embedDim);
+        int currentDim = embedDim;
         for (int stage = 0; stage < 4; stage++)
         {
-            int channels = channelDims[stage];
-            yield return new ConvolutionalLayer<T>(channels, patchKernels[stage], patchStrides[stage], patchPaddings[stage], relu);
-            h = (h + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
-            w = (w + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
-
             for (int block = 0; block < depths[stage]; block++)
             {
-                yield return new ConvolutionalLayer<T>(channels, 3, 1, 1, relu);
-                int ffnDim = channels * 4;
-                yield return new ConvolutionalLayer<T>(ffnDim, 1, 1, 0, relu);
-                yield return new ConvolutionalLayer<T>(channels, 1, 1, 0, relu);
+                int shiftSize = (block % 2 == 1) ? windowSize / 2 : 0; // alternate W-MSA / SW-MSA
+                yield return new SwinTransformerBlockLayer<T>(currentDim, numHeads[stage], windowSize, shiftSize, mlpRatio);
             }
-            prevChannels = channels;
+            if (stage < 3) { yield return new SwinPatchMergingLayer<T>(currentDim); currentDim *= 2; }
         }
+
+        // Adapter: the Swin backbone emits token features [B, L, C] (L = fH·fW at /32 stride); the
+        // OneFormer decoder is conv-based and expects [B, C, fH, fW]. Reshape tokens to spatial then
+        // move channels to the front. patchEmbed (/4) + 3 merges (/2³) = /32.
+        int fH = System.Math.Max(1, inputHeight / 32);
+        int fW = System.Math.Max(1, inputWidth / 32);
+        yield return new ReshapeLayer<T>(new[] { fH, fW, currentDim }); // [B, L, C] -> [B, fH, fW, C]
+        yield return new TransposeLayer<T>(new[] { 2, 0, 1 });          // [B, fH, fW, C] -> [B, C, fH, fW]
     }
 
     /// <summary>
