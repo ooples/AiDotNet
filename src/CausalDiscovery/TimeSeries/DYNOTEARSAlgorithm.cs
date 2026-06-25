@@ -136,7 +136,14 @@ public class DYNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
                 if (Math.Abs(NumOps.ToDouble(W[i, j])) >= _wThreshold)
                     result[i, j] = W[i, j];
 
-        // Lagged edges: aggregate across lags into summary d x d matrix
+        // Lagged edges: aggregate across lags into summary d x d matrix.
+        // Skip the diagonal (i == j): a lagged self-effect A[i,i] is autoregression
+        // (X_{t-p} -> X_t), not a structural self-edge in the causal graph. The
+        // contemporaneous matrix W is acyclic with a zero diagonal by construction
+        // (NOTEARS/DYNOTEARS, Pamfil et al. 2020), so the summary adjacency the
+        // algorithm reports as the causal STRUCTURE must also have a zero diagonal —
+        // a variable does not "cause itself". Aggregating lagged self-effects onto the
+        // diagonal previously produced spurious self-loops (e.g. result[0,0]=0.357).
         for (int lag = 1; lag <= MaxLag; lag++)
         {
             int colOffset = (lag - 1) * d;
@@ -144,6 +151,7 @@ public class DYNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
             {
                 for (int j = 0; j < d; j++)
                 {
+                    if (i == j) continue; // no structural self-edges in the summary graph
                     double lagWeight = Math.Abs(NumOps.ToDouble(A[colOffset + i, j]));
                     if (lagWeight >= _wThreshold)
                     {
