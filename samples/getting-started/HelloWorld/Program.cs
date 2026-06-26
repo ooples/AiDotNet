@@ -5,9 +5,11 @@
 // data → tensors → model → fit → predict → accuracy.
 
 using AiDotNet;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
 Console.WriteLine("=== AiDotNet Hello World: Iris classifier ===\n");
 
@@ -49,7 +51,7 @@ double[][] iris =
 ];
 
 // ── 2. Shuffle + 80/20 train/test split ────────────────────────────────────
-var rng = new Random(seed: 42);
+var rng = new Random(42);
 iris = iris.OrderBy(_ => rng.Next()).ToArray();
 int trainSize = (int)(iris.Length * 0.8);
 
@@ -78,8 +80,9 @@ var architecture = new NeuralNetworkArchitecture<double>(
     inputFeatures: 4, numClasses: 3, complexity: NetworkComplexity.Simple);
 
 var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
+    .ConfigureDataLoader(DataLoaders.FromTensors(trainX, trainY))
     .ConfigureModel(new NeuralNetwork<double>(architecture))
-    .BuildAsync(trainX, trainY);
+    .BuildAsync();
 
 // ── 5. Evaluate test accuracy. ─────────────────────────────────────────────
 var predictions = result.Predict(testX);
@@ -97,4 +100,3 @@ for (int i = 0; i < n; i++)
 }
 
 Console.WriteLine($"Test accuracy: {correct}/{n} = {100.0 * correct / n:F1}%");
-Console.WriteLine($"Final loss:    {result.OptimizationResult?.BestFitness:F4}");

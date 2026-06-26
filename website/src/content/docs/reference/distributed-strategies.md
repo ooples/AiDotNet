@@ -6,421 +6,119 @@ section: "Reference"
 ---
 
 
-
-Complete reference for the distributed training strategies in AiDotNet.
-
----
-
-## Overview
-
-AiDotNet supports multiple distributed training strategies to scale training across multiple GPUs and nodes:
-
-| Strategy | Memory per GPU | Communication | Best For |
-|:---------|:---------------|:--------------|:---------|
-| DDP | Full model | Gradient sync | Models that fit in GPU memory |
-| FSDP | Sharded model | All-gather | Large models |
-| ZeRO-1 | Sharded optimizer | Optimizer sync | Medium models |
-| ZeRO-2 | + Sharded gradients | Gradient sync | Large models |
-| ZeRO-3 | + Sharded params | All-gather | Very large models |
-| Pipeline | Split by layers | Forward/backward | Deep models |
-| Tensor | Split operations | All-reduce | Wide models |
+Train across multiple workers through the facade with `ConfigureDistributedTraining(backend, strategy)`. You supply a communication backend and a `DistributedStrategy`; AiDotNet handles gradient synchronization each step so replicas stay in sync.
 
 ---
 
-## DDP (Distributed Data Parallel)
+## Strategies
 
-Replicates the model on each GPU and synchronizes gradients.
+| Strategy | Description | Use When |
+|:---------|:------------|:---------|
+| `DistributedStrategy.DDP` | Distributed Data Parallel — replicate the model, all-reduce gradients | The model fits on one device (covers ~90% of cases) |
+| `DistributedStrategy.FSDP` | Fully Sharded Data Parallel — shard parameters across workers | The model is too large for one device |
+| `DistributedStrategy.ZeRO3` | ZeRO Stage 3 — full sharding (FSDP terminology) | You prefer ZeRO terminology |
+| `DistributedStrategy.PipelineParallel` | Split the model into stages across devices | Very deep models |
 
-### Configuration
+---
+
+## Data Parallel (DDP)
+
+```csharp
+using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.DistributedTraining;
+using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
+
+// One backend per process. rank/worldSize identify this worker in the group;
+// here a single-process group (worldSize 1) for a runnable example.
+var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1);
+
+var model = new NeuralNetwork<double>(new NeuralNetworkArchitecture<double>(
+    inputFeatures: 32, numClasses: 4, complexity: NetworkComplexity.Simple));
+
+var rng = new Random(42);
+var trainX = new Tensor<double>(new[] { 64, 32 });
+var trainY = new Tensor<double>(new[] { 64, 4 });
+for (int i = 0; i < 64; i++)
+{
+    for (int j = 0; j < 32; j++) trainX[new[] { i, j }] = rng.NextDouble();
+    trainY[new[] { i, i % 4 }] = 1.0;
+}
+
+var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
+    .ConfigureModel(model)
+    .ConfigureDistributedTraining(backend, DistributedStrategy.DDP)
+    .ConfigureDataLoader(DataLoaders.FromTensors(trainX, trainY))
+    .BuildAsync();
+
+Console.WriteLine($"DDP training complete; output [{string.Join(", ", result.Predict(trainX).Shape)}]");
+```
+
+## Fully Sharded (FSDP)
+
+For models too large to replicate, switch the strategy to `FSDP` — everything else is identical.
+
+```csharp
+using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.DistributedTraining;
+using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
+
+var backend = new InMemoryCommunicationBackend<double>(rank: 0, worldSize: 1);
+
+var model = new NeuralNetwork<double>(new NeuralNetworkArchitecture<double>(
+    inputFeatures: 64, numClasses: 8, complexity: NetworkComplexity.Medium));
+
+var rng = new Random(7);
+var trainX = new Tensor<double>(new[] { 64, 64 });
+var trainY = new Tensor<double>(new[] { 64, 8 });
+for (int i = 0; i < 64; i++)
+{
+    for (int j = 0; j < 64; j++) trainX[new[] { i, j }] = rng.NextDouble();
+    trainY[new[] { i, i % 8 }] = 1.0;
+}
+
+var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
+    .ConfigureModel(model)
+    .ConfigureDistributedTraining(backend, DistributedStrategy.FSDP)
+    .ConfigureDataLoader(DataLoaders.FromTensors(trainX, trainY))
+    .BuildAsync();
+
+Console.WriteLine("FSDP training complete.");
+```
+
+---
+
+## Scaling Out
+
+The single-process examples above use `worldSize: 1`. In a real multi-worker run, each process constructs a backend with its own `rank` and the shared `worldSize`, launched once per worker (e.g. via your scheduler or `torchrun`-style launcher). `ConfigureDistributedTraining` all-reduces gradients across the group every step.
 
 ```csharp
 using AiDotNet.DistributedTraining;
 
-var config = new DistributedConfig
-{
-    Backend = DistributedBackend.NCCL,
-    WorldSize = 4  // Number of GPUs
-};
+// In each worker process, rank comes from the launch environment.
+int rank = int.Parse(Environment.GetEnvironmentVariable("RANK") ?? "0");
+int worldSize = int.Parse(Environment.GetEnvironmentVariable("WORLD_SIZE") ?? "1");
 
-using var context = DistributedContext.Initialize(config);
-
-// Wrap model with DDP
-var ddpModel = DDP.Wrap(model);
+var backend = new InMemoryCommunicationBackend<double>(rank: rank, worldSize: worldSize);
+Console.WriteLine($"Worker {rank} of {worldSize}");
 ```
-
-### Training Loop
-
-```csharp
-for (int epoch = 0; epoch < epochs; epoch++)
-{
-    foreach (var batch in dataLoader)
-    {
-        var output = ddpModel.Forward(batch.Input);
-        var loss = lossFunction.Compute(output, batch.Target);
-
-        ddpModel.Backward(loss);
-        optimizer.Step();
-        optimizer.ZeroGrad();
-    }
-}
-```
-
-### Multi-Node Setup
-
-```bash
-export MASTER_ADDR=192.168.1.100
-export MASTER_PORT=29500
-export WORLD_SIZE=8
-export RANK=0
-export LOCAL_RANK=0
-dotnet run
-
-export MASTER_ADDR=192.168.1.100
-export MASTER_PORT=29500
-export WORLD_SIZE=8
-export RANK=4
-export LOCAL_RANK=0
-dotnet run
-```
-
-### Memory Usage
-
-| Model Size | DDP Memory per GPU |
-|:-----------|:-------------------|
-| 1B | 4 GB |
-| 7B | 28 GB |
-| 13B | 52 GB (may OOM) |
-
----
-
-## FSDP (Fully Sharded Data Parallel)
-
-Shards model parameters across GPUs for memory efficiency.
-
-### Configuration
-
-```csharp
-using AiDotNet.DistributedTraining.FSDP;
-
-var fsdpConfig = new FSDPConfig<float>
-{
-    ShardingStrategy = ShardingStrategy.FullShard,
-    MixedPrecision = new FSDPMixedPrecisionConfig
-    {
-        Enabled = true,
-        ParameterDtype = DataType.Float32,
-        ReduceDtype = DataType.Float32,
-        BufferDtype = DataType.BFloat16
-    },
-    ActivationCheckpointing = new ActivationCheckpointingConfig
-    {
-        Enabled = true,
-        CheckpointInterval = 2
-    }
-};
-
-var fsdpModel = FSDP<float>.Wrap(model, fsdpConfig);
-```
-
-### Sharding Strategies
-
-| Strategy | Description | Memory | Speed |
-|:---------|:------------|:-------|:------|
-| `NoShard` | No sharding (like DDP) | High | Fast |
-| `ShardGradOp` | Shard gradients + optimizer | Medium | Medium |
-| `FullShard` | Shard everything | Low | Slower |
-| `HybridShard` | Full shard within node | Balanced | Balanced |
-
-### Memory Comparison
-
-| Strategy | 7B Model Memory/GPU (4 GPUs) |
-|:---------|:-----------------------------|
-| DDP | 28+ GB (OOM) |
-| ShardGradOp | ~14 GB |
-| FullShard | ~8 GB |
-| FullShard + Checkpointing | ~5 GB |
-
-### Wrapping Policies
-
-```csharp
-// Auto-wrap transformer layers
-var fsdpConfig = new FSDPConfig<float>
-{
-    AutoWrapPolicy = new TransformerAutoWrapPolicy
-    {
-        TransformerLayerClass = typeof(TransformerBlock<float>)
-    }
-};
-
-// Size-based wrapping
-var fsdpConfig = new FSDPConfig<float>
-{
-    AutoWrapPolicy = new SizeBasedAutoWrapPolicy
-    {
-        MinNumParams = 100_000_000  // 100M params
-    }
-};
-```
-
----
-
-## ZeRO Optimization
-
-DeepSpeed-style memory optimization.
-
-### ZeRO Stage 1 (Optimizer State Partitioning)
-
-```csharp
-using AiDotNet.DistributedTraining.ZeRO;
-
-var zero1 = new ZeROOptimizer<float>(
-    baseOptimizer: new AdamOptimizer<float>(),
-    stage: ZeROStage.Stage1);
-```
-
-### ZeRO Stage 2 (+ Gradient Partitioning)
-
-```csharp
-var zero2 = new ZeROOptimizer<float>(
-    baseOptimizer: new AdamOptimizer<float>(),
-    stage: ZeROStage.Stage2);
-```
-
-### ZeRO Stage 3 (+ Parameter Partitioning)
-
-```csharp
-var zero3 = new ZeROOptimizer<float>(
-    baseOptimizer: new AdamOptimizer<float>(),
-    stage: ZeROStage.Stage3);
-```
-
-### Memory Reduction
-
-| Stage | Optimizer States | Gradients | Parameters | Memory Reduction |
-|:------|:-----------------|:----------|:-----------|:-----------------|
-| Stage 1 | Sharded | Replicated | Replicated | ~4x |
-| Stage 2 | Sharded | Sharded | Replicated | ~8x |
-| Stage 3 | Sharded | Sharded | Sharded | ~Linear with GPUs |
-
----
-
-## Pipeline Parallelism
-
-Splits model across GPUs by layers.
-
-### Configuration
-
-```csharp
-using AiDotNet.DistributedTraining.Pipeline;
-
-var pipelineConfig = new PipelineConfig
-{
-    NumStages = 4,
-    MicroBatchSize = 4,
-    NumMicroBatches = 8
-};
-
-var stages = new[]
-{
-    new PipelineStage(layers: model.Layers[..6], device: 0),
-    new PipelineStage(layers: model.Layers[6..12], device: 1),
-    new PipelineStage(layers: model.Layers[12..18], device: 2),
-    new PipelineStage(layers: model.Layers[18..], device: 3)
-};
-
-var pipelineModel = Pipeline.Wrap(model, stages, pipelineConfig);
-```
-
-### Scheduling
-
-| Schedule | Description | Bubble Overhead |
-|:---------|:------------|:----------------|
-| `GPipe` | Simple forward-backward | High |
-| `1F1B` | Interleaved forward/backward | Lower |
-| `Interleaved1F1B` | Multiple micro-batches | Lowest |
-
----
-
-## Tensor Parallelism
-
-Splits individual operations across GPUs.
-
-### Configuration
-
-```csharp
-using AiDotNet.DistributedTraining.TensorParallel;
-
-var tpConfig = new TensorParallelConfig
-{
-    WorldSize = 8,
-    ParallelMode = ParallelMode.ColumnParallel
-};
-
-// Parallel linear layer
-var parallelLinear = new ColumnParallelLinear<float>(
-    inputDim: 4096,
-    outputDim: 16384,
-    config: tpConfig);
-```
-
-### Parallel Modes
-
-| Mode | Splits | Best For |
-|:-----|:-------|:---------|
-| `ColumnParallel` | Output features | Linear layers |
-| `RowParallel` | Input features | After column parallel |
-| `SequenceParallel` | Sequence dimension | Attention |
-
----
-
-## Using AiModelBuilder
-
-```csharp
-var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
-    .ConfigureModel(largeModel)
-    .ConfigureOptimizer(new AdamWOptimizer<float>())
-    .ConfigureDistributedTraining(new DistributedConfig
-    {
-        Strategy = DistributedStrategy.FSDP,
-        WorldSize = 8,
-        ShardingStrategy = ShardingStrategy.FullShard
-    })
-    .ConfigureGpuAcceleration(new GpuAccelerationConfig
-    {
-        Enabled = true,
-        MixedPrecision = true
-    })
-    .BuildAsync(trainData, trainLabels);
-```
-
----
-
-## Cloud Training
-
-### vast.ai
-
-```csharp
-var config = new DistributedConfig
-{
-    Backend = DistributedBackend.NCCL,
-    WorldSize = int.Parse(Environment.GetEnvironmentVariable("WORLD_SIZE") ?? "1"),
-    Rank = int.Parse(Environment.GetEnvironmentVariable("RANK") ?? "0"),
-    MasterAddress = Environment.GetEnvironmentVariable("MASTER_ADDR") ?? "localhost",
-    MasterPort = int.Parse(Environment.GetEnvironmentVariable("MASTER_PORT") ?? "29500")
-};
-```
-
-### Azure ML
-
-```yaml
-compute:
-  instance_type: Standard_NC24ads_A100_v4
-  instance_count: 4
-
-distributed:
-  type: PyTorch  # Uses NCCL backend
-```
-
-### AWS SageMaker
-
-```python
-estimator = PyTorch(
-    entry_point='train.py',
-    instance_type='ml.p4d.24xlarge',
-    instance_count=4,
-    distribution={'smdistributed': {'dataparallel': {'enabled': True}}}
-)
-```
-
----
-
-## Checkpointing
-
-### DDP Checkpointing
-
-```csharp
-// Save (only on rank 0)
-if (context.Rank == 0)
-{
-    model.SaveCheckpoint("checkpoint.pt");
-}
-context.Barrier();
-
-// Load (all ranks)
-model.LoadCheckpoint("checkpoint.pt");
-```
-
-### FSDP Checkpointing
-
-```csharp
-// Full state dict (gather to rank 0)
-var stateDictConfig = new StateDictConfig
-{
-    Type = StateDictType.FullStateDict,
-    Rank0Only = true
-};
-
-fsdpModel.SaveCheckpoint("fsdp_checkpoint.pt", stateDictConfig);
-
-// Sharded state dict (each rank saves own shard)
-var shardedConfig = new StateDictConfig
-{
-    Type = StateDictType.ShardedStateDict
-};
-
-fsdpModel.SaveCheckpoint("fsdp_sharded/", shardedConfig);
-```
-
----
-
-## Troubleshooting
-
-### NCCL Timeout
-
-```bash
-export NCCL_DEBUG=INFO
-export NCCL_SOCKET_TIMEOUT=300000
-```
-
-### Memory Issues
-
-```csharp
-// Reduce batch size
-// Enable gradient checkpointing
-fsdpConfig.ActivationCheckpointing.Enabled = true;
-
-// Use FULL_SHARD
-fsdpConfig.ShardingStrategy = ShardingStrategy.FullShard;
-```
-
-### Slow Communication
-
-```bash
-nvidia-smi topo -m
-
-export NCCL_IB_DISABLE=1
-```
-
----
-
-## Strategy Selection Guide
-
-| Model Size | GPUs | Recommended Strategy |
-|:-----------|:-----|:---------------------|
-| < 1B | 1-4 | DDP |
-| 1B - 7B | 2-8 | DDP or FSDP ShardGradOp |
-| 7B - 13B | 4-8 | FSDP FullShard |
-| 13B - 70B | 8-16 | FSDP + ZeRO-3 |
-| > 70B | 16+ | FSDP + Pipeline + Tensor |
 
 ---
 
 ## Best Practices
 
-1. **Start with DDP**: Use FSDP only when necessary
-2. **Enable mixed precision**: FP16/BF16 for faster training
-3. **Use gradient accumulation**: Increase effective batch size
-4. **Enable activation checkpointing**: Trade compute for memory
-5. **Profile communication**: Ensure NCCL is performing well
-6. **Use appropriate batch size**: Scale with world size
-7. **Monitor GPU utilization**: Should be > 90%
+1. **Start with DDP**: it covers most workloads and is the simplest to reason about.
+2. **Reach for FSDP when memory-bound**: shard parameters only when the model won't fit replicated.
+3. **Scale the learning rate**: larger effective batch sizes (more workers) usually want a higher LR.
+4. **Keep workers identical**: same model, same seed handling, same data sharding.
+
+---
+
+## Notes
+
+The facade exposes distributed training through `ConfigureDistributedTraining(backend, strategy)` over a communication backend. Lower-level building blocks shown in some references — tensor-parallel layers (column/row-parallel linear), explicit activation-checkpointing configuration, and manual checkpoint/barrier APIs — are not part of the facade surface today.
