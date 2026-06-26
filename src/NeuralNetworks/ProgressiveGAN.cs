@@ -501,7 +501,7 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
 
         // Fake images - generate from Gaussian noise
         var noise = GenerateGaussianNoise(batchSize);
-        var fakeImages = Generator.Predict(ProjectLatentToGeneratorInputShape(noise));
+        var fakeImages = ToImageSpace(Generator.Predict(ProjectLatentToGeneratorInputShape(noise)));
         var fakeOutput = Discriminator.Predict(fakeImages);
         var fakeSum = fakeOutput.Sum(); // Vectorized sum
         var fakeLoss = NumOps.Divide(fakeSum.GetFlat(0), batchSizeT);
@@ -552,7 +552,7 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
         Discriminator.SetTrainingMode(true);
 
         var generatorNoise = GenerateGaussianNoise(batchSize);
-        var generatedImages = Generator.Predict(ProjectLatentToGeneratorInputShape(generatorNoise));
+        var generatedImages = ToImageSpace(Generator.Predict(ProjectLatentToGeneratorInputShape(generatorNoise)));
         var generatorOutput = Discriminator.Predict(generatedImages);
 
         var genSum = generatorOutput.Sum(); // Vectorized sum
@@ -888,6 +888,39 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Reshapes the generator network's flat [batch, C*H*W] output into the image
+    /// volume the convolutional discriminator declares as its input
+    /// (<c>Discriminator.Architecture.GetInputShape()</c>) — the authoritative
+    /// definition of "image space" for this GAN, since ProgressiveGAN tracks only
+    /// a resolution level, not a stored height/width. Without this, the train step
+    /// feeds the generator's flat output straight into the discriminator's first
+    /// conv, which rejects it with a channel-depth mismatch. Idempotent: output
+    /// already matching the discriminator's input volume is returned unchanged, so
+    /// feeding real (already-image-shaped) images through is a no-op.
+    /// </summary>
+    private Tensor<T> ToImageSpace(Tensor<T> generated)
+    {
+        int batch = generated.Shape[0];
+        int[] discInputShape = Discriminator.Architecture.GetInputShape();
+        int perSample = 1;
+        foreach (int d in discInputShape) perSample *= d;
+
+        var imageShape = new int[discInputShape.Length + 1];
+        imageShape[0] = batch;
+        for (int i = 0; i < discInputShape.Length; i++)
+            imageShape[i + 1] = discInputShape[i];
+
+        bool alreadyImage = generated.Rank == imageShape.Length;
+        if (alreadyImage)
+            for (int i = 1; i < imageShape.Length; i++)
+                alreadyImage = alreadyImage && generated.Shape[i] == imageShape[i];
+
+        if (!alreadyImage && generated.Length == batch * perSample)
+            return generated.Reshape(imageShape);
+        return generated;
+    }
+
+    /// <summary>
     /// Generates images from random latent codes.
     /// </summary>
     /// <param name="numImages">Number of images to generate</param>
@@ -908,7 +941,7 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
         // input grid and threw a weight-shape mismatch.
         var reshapedNoise = ProjectLatentToGeneratorInputShape(noise);
 
-        var newOutput = Generator.Predict(reshapedNoise);
+        var newOutput = ToImageSpace(Generator.Predict(reshapedNoise));
 
         // Apply alpha blending during fade-in phase
         return ApplyAlphaBlending(newOutput);
@@ -939,7 +972,7 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
         // prefixed with a batch dimension.
         var reshapedLatent = ProjectLatentToGeneratorInputShape(latentCodes);
 
-        var newOutput = Generator.Predict(reshapedLatent);
+        var newOutput = ToImageSpace(Generator.Predict(reshapedLatent));
 
         // Apply alpha blending during fade-in phase
         return ApplyAlphaBlending(newOutput);
@@ -1029,12 +1062,19 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (input is null)
+        // GAN training contract (mirrors GenerativeAdversarialNetwork.Train): the
+        // discriminator learns from the batch of REAL images carried by
+        // `expectedOutput` (same shape the generator emits and the discriminator
+        // consumes); `input` is the latent for Predict/Generate. TrainStep draws its
+        // own noise for the fake branch. Using `input` as the real images fed the
+        // latent to the discriminator (channel-depth mismatch).
+        if (expectedOutput is null)
         {
-            throw new ArgumentNullException(nameof(input), "Input tensor cannot be null.");
+            throw new ArgumentNullException(nameof(expectedOutput), "Expected output (real images) cannot be null.");
         }
-        var batchSize = input.Shape[0];
-        TrainStep(input, batchSize);
+        var realImages = expectedOutput;
+        var batchSize = realImages.Shape[0];
+        TrainStep(realImages, batchSize);
     }
 
     /// <inheritdoc/>

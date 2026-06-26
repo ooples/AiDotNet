@@ -465,7 +465,7 @@ public class BigGAN<T> : NeuralNetworkBase<T>
 
         // Project the concatenated (latent + class-embedding) input into the
         // generator's DECLARED input volume (see ProjectToGeneratorInputShape).
-        return Generator.Predict(ProjectToGeneratorInputShape(input));
+        return ToImageSpace(Generator.Predict(ProjectToGeneratorInputShape(input)));
     }
 
     /// <summary>
@@ -697,7 +697,28 @@ public class BigGAN<T> : NeuralNetworkBase<T>
 
         // Same generator-input projection as the inference Generate path, so the
         // train-time generation can't regress to the weight-shape mismatch.
-        return Generator.Predict(ProjectToGeneratorInputShape(input));
+        return ToImageSpace(Generator.Predict(ProjectToGeneratorInputShape(input)));
+    }
+
+    /// <summary>
+    /// Reshapes the generator network's flat [batch, C*H*W] output (its architecture's
+    /// outputSize is the flattened image) into image space [batch, channels, height, width]
+    /// so the convolutional discriminator — and external callers — receive a proper image
+    /// rather than a flat feature vector that the discriminator's first conv rejects with a
+    /// channel-depth mismatch (the BigGAN train step feeds generator output straight into
+    /// the projection discriminator). Idempotent: already-image-shaped output is returned
+    /// unchanged, so feeding real (already [batch,C,H,W]) images through is a no-op.
+    /// </summary>
+    private Tensor<T> ToImageSpace(Tensor<T> generated)
+    {
+        int batch = generated.Shape[0];
+        bool alreadyImage = generated.Rank == 4
+            && generated.Shape[1] == _imageChannels
+            && generated.Shape[2] == _imageHeight
+            && generated.Shape[3] == _imageWidth;
+        if (!alreadyImage && generated.Length == batch * _imageChannels * _imageHeight * _imageWidth)
+            return generated.Reshape(batch, _imageChannels, _imageHeight, _imageWidth);
+        return generated;
     }
 
     /// <summary>
@@ -1041,14 +1062,19 @@ public class BigGAN<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // For GANs, training is done through TrainStep
-        var batchSize = input.Shape[0];
+        // GAN training contract (mirrors GenerativeAdversarialNetwork.Train): the
+        // discriminator learns from the batch of REAL images carried by
+        // `expectedOutput`; `input` is the latent the generator path consumes.
+        // TrainStep draws its own noise for the fake branch. Using `input` as the
+        // real images fed the latent to the discriminator (channel-depth mismatch).
+        var realImages = expectedOutput;
+        var batchSize = realImages.Shape[0];
         var labels = new int[batchSize];
         for (int i = 0; i < batchSize; i++)
         {
             labels[i] = Random.Next(NumClasses);
         }
-        TrainStep(input, labels, batchSize);
+        TrainStep(realImages, labels, batchSize);
     }
 
     /// <inheritdoc/>

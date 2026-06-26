@@ -386,10 +386,29 @@ public class SAGAN<T> : NeuralNetworkBase<T>
                     nameof(classIndices));
             var classEmbeddings = CreateClassEmbeddings(classIndices);
             var input = ConcatenateTensors(reshapedLatent, classEmbeddings);
-            return Generator.Predict(input);
+            return ToImageSpace(Generator.Predict(input));
         }
 
-        return Generator.Predict(reshapedLatent);
+        return ToImageSpace(Generator.Predict(reshapedLatent));
+    }
+
+    /// <summary>
+    /// Reshapes the generator network's flat [batch, C*H*W] output (its architecture's
+    /// outputSize is the flattened image) into image space [batch, channels, height, width]
+    /// so the convolutional discriminator — and external callers — receive a proper image
+    /// rather than a flat feature vector that the discriminator's first conv rejects with a
+    /// channel-depth mismatch. Idempotent: already-image-shaped output is returned unchanged.
+    /// </summary>
+    private Tensor<T> ToImageSpace(Tensor<T> generated)
+    {
+        int batch = generated.Shape[0];
+        bool alreadyImage = generated.Rank == 4
+            && generated.Shape[1] == _imageChannels
+            && generated.Shape[2] == _imageHeight
+            && generated.Shape[3] == _imageWidth;
+        if (!alreadyImage && generated.Length == batch * _imageChannels * _imageHeight * _imageWidth)
+            return generated.Reshape(batch, _imageChannels, _imageHeight, _imageWidth);
+        return generated;
     }
 
     /// <summary>
@@ -759,8 +778,16 @@ public class SAGAN<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        var batchSize = input.Shape[0];
-        TrainStep(input, batchSize);
+        // GAN training contract (mirrors GenerativeAdversarialNetwork.Train): the
+        // discriminator learns from the batch of REAL images carried by
+        // `expectedOutput` (the same shape the generator produces and the
+        // discriminator consumes), while `input` is the latent that Predict/Generate
+        // uses. TrainStep draws its own noise for the fake branch, so the latent is
+        // not consumed here. Using `input` as the real images was incorrect — it fed
+        // the latent to the discriminator, throwing a channel-depth mismatch.
+        var realImages = expectedOutput;
+        var batchSize = realImages.Shape[0];
+        TrainStep(realImages, batchSize);
     }
 
     /// <inheritdoc/>
