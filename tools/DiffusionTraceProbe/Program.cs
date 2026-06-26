@@ -132,6 +132,46 @@ internal static class Program
                 return 0;
             }
 
+            // DEFINITIVE interleaved in-process A/B: toggle ForwardScratchGate.Override OFF/ON
+            // per-forward within ONE process so both conditions see identical box/thermal/GC
+            // drift (cross-process launches differ ±36% even on the warm MIN harness — too noisy
+            // for small deltas). Alternating per-forward cancels slow drift; MIN-of-N each side
+            // is then a true apples-to-apples comparison of the FULL *Into gate vs the original
+            // allocating path. NOTE: Override forces ALL sub-gates together, so this measures the
+            // cumulative *Into win (rounds 4-6 + fused-QKV), not one sub-gate in isolation.
+            if (args.Contains("--time-ab"))
+            {
+                int tt = Math.Max(1, diff.Scheduler.TrainTimesteps / 2);
+                var ti = RandomTensor(new[] { 1, 4, 64, 64 }, new Random(1234));
+                // Warm both paths.
+                AiDotNet.Helpers.ForwardScratchGate.Override = false;
+                for (int w = 0; w < 4; w++) { var _ = diff.PredictNoise(ti, tt); }
+                AiDotNet.Helpers.ForwardScratchGate.Override = true;
+                for (int w = 0; w < 4; w++) { var _ = diff.PredictNoise(ti, tt); }
+                int reps = ArgInt(args, "--reps", 15);
+                var off = new double[reps];
+                var on = new double[reps];
+                for (int r = 0; r < reps; r++)
+                {
+                    AiDotNet.Helpers.ForwardScratchGate.Override = false;
+                    var s1 = Stopwatch.StartNew(); var _o = diff.PredictNoise(ti, tt); s1.Stop();
+                    off[r] = s1.Elapsed.TotalMilliseconds;
+                    AiDotNet.Helpers.ForwardScratchGate.Override = true;
+                    var s2 = Stopwatch.StartNew(); var _n = diff.PredictNoise(ti, tt); s2.Stop();
+                    on[r] = s2.Elapsed.TotalMilliseconds;
+                }
+                AiDotNet.Helpers.ForwardScratchGate.Override = null;
+                Array.Sort(off); Array.Sort(on);
+                double offMin = off[0], onMin = on[0];
+                double offMed = off[reps / 2], onMed = on[reps / 2];
+                Console.WriteLine(
+                    $"[TIME-AB] OFF min={offMin:F1} median={offMed:F1} ms | ON min={onMin:F1} median={onMed:F1} ms | " +
+                    $"MIN {offMin / onMin:F2}x ({100 * (offMin - onMin) / offMin:F1}%)  " +
+                    $"MED {offMed / onMed:F2}x ({100 * (offMed - onMed) / offMed:F1}%)  (reps={reps}, interleaved)");
+                Console.WriteLine("=== done ===");
+                return 0;
+            }
+
             // Reliable in-process per-forward TIMING (the cross-process full-Predict A/B is
             // unusable on a load-noisy box — swings 85-160s). Warm thoroughly, then time each
             // of N forwards on the SAME process with the cores already hot; report MIN (the
