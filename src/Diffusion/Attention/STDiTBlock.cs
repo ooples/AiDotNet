@@ -152,22 +152,41 @@ public class STDiTBlock<T> : LayerBase<T>
     /// </summary>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
+        // The residual-stream checkpoints below double as forward locals (each stage
+        // feeds the next), so compute them into locals and only mirror them into the
+        // backward-cache fields when an eager manual Backward will read them. In
+        // inference/under tape the fields are left null so the denoise-loop arena can
+        // recycle scratch without aliasing a stale reference (issue #1668).
+        bool cacheBwd = ShouldCacheForBackward;
+        _lastInput = cacheBwd ? input : null;
 
         // 1. Spatial self-attention with residual
-        _afterSpatial = AddTensors(input, _spatialAttention.Forward(_spatialNorm.Forward(input)));
+        var afterSpatial = AddTensors(input, _spatialAttention.Forward(_spatialNorm.Forward(input)));
 
         // 2. Temporal self-attention with residual
-        _afterTemporal = AddTensors(_afterSpatial, _temporalAttention.Forward(_temporalNorm.Forward(_afterSpatial)));
+        var afterTemporal = AddTensors(afterSpatial, _temporalAttention.Forward(_temporalNorm.Forward(afterSpatial)));
 
         // 3. Cross-attention with residual
-        _afterCross = AddTensors(_afterTemporal, _crossAttention.Forward(_crossNorm.Forward(_afterTemporal)));
+        var afterCross = AddTensors(afterTemporal, _crossAttention.Forward(_crossNorm.Forward(afterTemporal)));
+
+        if (cacheBwd)
+        {
+            _afterSpatial = afterSpatial;
+            _afterTemporal = afterTemporal;
+            _afterCross = afterCross;
+        }
+        else
+        {
+            _afterSpatial = null;
+            _afterTemporal = null;
+            _afterCross = null;
+        }
 
         // 4. Feed-forward network with residual
-        var ffnInput = _ffnNorm.Forward(_afterCross);
+        var ffnInput = _ffnNorm.Forward(afterCross);
         var ffnHidden = _ffnIn.Forward(ffnInput);
         var ffnOutput = _ffnOut.Forward(ffnHidden);
-        return AddTensors(_afterCross, ffnOutput);
+        return AddTensors(afterCross, ffnOutput);
     }
 
     /// <inheritdoc />

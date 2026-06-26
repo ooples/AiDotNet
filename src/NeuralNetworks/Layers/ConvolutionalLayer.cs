@@ -1138,19 +1138,22 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         // (Conv1a output at VGG paper-scale is 25.7 MB at fp64) and inflate
         // peak retained memory across the L-layer chain. Skip the assignment
         // in tape mode; use the local input4D directly for the conv ops.
-        bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
-            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
-        if (!tapeActive)
+        // Retain the backward-activation caches (_lastInput / _lastOutput) only when an
+        // eager manual Backward will read them. The old `!tapeActive` test still cached
+        // during inference (no tape), pinning the activation set and — inside the
+        // denoise-loop arena — aliasing scratch recycled by the per-step Reset (#1668).
+        // ShouldCacheForBackward is additionally false in eval mode and inside an
+        // InferenceMode scope.
+        bool cacheBwd = ShouldCacheForBackward;
+        if (cacheBwd)
         {
             _lastInput = input4D;
         }
         else
         {
-            // Clear the cache when tape is active so prior non-tape steps
-            // can't keep an old activation rooted alongside the tape's
-            // intermediates. Empty-shape sentinel matches the ctor's
-            // initial state and lets ParameterCount / Serialize logic that
-            // reads _lastInput.Shape continue to work without an NRE.
+            // Empty-shape sentinel matches the ctor's initial state and lets
+            // ParameterCount / Serialize logic that reads _lastInput.Shape continue
+            // to work without an NRE.
             _lastInput = new Tensor<T>([0, 0, 0, 0]);
         }
 
@@ -1165,7 +1168,14 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         int batchSize_conv = input4D.Shape[0];
         int[] expectedShape = [batchSize_conv, OutputDepth, outputHeight, outputWidth];
 
+        // Cross-forward output-buffer reuse is unsafe inside the denoise-loop arena:
+        // _preAllocatedOutput is arena scratch, and reusing the same slot across the
+        // per-step Reset() would alias whatever the next step Rents into that slot
+        // (#1668). When an InferenceMode arena owns buffer reuse, Rent a fresh output
+        // each forward (the arena pools+recycles it in cursor order, so this stays
+        // zero-allocation after warmup). Outside an arena, keep the manual reuse.
         if (_preAllocatedOutput is null ||
+            InferenceMode.IsActive ||
             _preAllocatedOutput.Shape[0] != batchSize_conv ||
             _preAllocatedOutput.Shape[2] != outputHeight ||
             _preAllocatedOutput.Shape[3] != outputWidth)
@@ -1272,7 +1282,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         // for the entire inference branch). When the tape IS active, clear
         // the cache so a prior non-tape step's output can't keep its tensor
         // rooted in parallel with the tape's intermediates.
-        if (!tapeActive)
+        if (cacheBwd)
         {
             _lastOutput = result;
         }

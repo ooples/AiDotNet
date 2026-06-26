@@ -12,6 +12,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.Tensors.Helpers;
 
@@ -673,15 +674,21 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         // is [ThreadStatic] and `await ...ConfigureAwait(false)` can resume on another thread,
         // which would desynchronise the arena scope — an async-aware arena is a separate change.)
         //
-        // Gated by DiffusionDenoiseEnabled (default OFF), NOT the default-on Predict-funnel flag:
-        // unlike the single-shot Predict funnel, the multi-step denoise loop is NOT arena-safe.
-        // Diffusion forward layers hold cross-forward cached tensors (e.g. DiffusionResBlock's
-        // pre-allocated GroupNorm output buffer; attention reshape scratch) first allocated inside
-        // this arena scope; the per-step Reset() recycles that memory, so a later step's allocation
-        // aliases a still-referenced cached buffer and corrupts its shape — observed as a downsample
-        // conv output emerging with a stale [B, H*W, C] attention layout, surfacing as "Input has N
-        // channels but layer expects M" (and a native host crash when it corrupts the shared pool).
-        // Re-enable only after the layer caches are made arena-safe. See issue #1668.
+        // Arena safety (issue #1668): the multi-step denoise loop was previously NOT
+        // arena-safe because diffusion forward layers retained per-forward backward-
+        // activation caches (`_lastInput`, pre-SiLU buffers, attention reshape scratch).
+        // Those fields held references into arena scratch; the per-step arena.Reset()
+        // recycled that scratch, so a later step's allocation aliased a still-referenced
+        // cached buffer and corrupted its shape/data (a downsample conv output emerging
+        // with a stale [B, H*W, C] attention layout → "Input has N channels but layer
+        // expects M", and a native crash when it corrupted the shared pool).
+        //
+        // The fix is the InferenceMode scope below: it is the torch.inference_mode()
+        // analog, and every layer's ShouldCacheForBackward guard is false inside it, so
+        // no backward-activation cache is populated during the denoise loop. With nothing
+        // referencing scratch across a Reset, the per-step recycle is safe. The carried
+        // latent (`sample`) is separately detached to a GC buffer each step (below).
+        using var _inferenceScope = InferenceMode.Enter();
         using var arena = (InferenceArenaSettings.Enabled && InferenceArenaSettings.DiffusionDenoiseEnabled)
             ? TensorArena.Create()
             : null;

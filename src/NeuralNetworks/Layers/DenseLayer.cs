@@ -955,7 +955,13 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // pin into _lastOutput.
         bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
             && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
-        _lastInput = tapeActive ? null : input;
+        // Retain the manual-backward activation caches only when an eager Backward will
+        // read them. The old `!tapeActive` test still cached during inference (no tape),
+        // which pinned the activation set and — inside the denoise-loop arena — aliased
+        // scratch recycled by the per-step Reset (issue #1668). ShouldCacheForBackward is
+        // additionally false in eval mode and inside an InferenceMode scope.
+        bool cacheBwd = ShouldCacheForBackward;
+        _lastInput = cacheBwd ? input : null;
         _originalInputShape = input._shape;
 
         // Industry standard: Support any-rank input tensors [..., inputSize]
@@ -1022,14 +1028,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // FusedLinear entry per forward pass (calling FusedLinear twice corrupts tape
             // entries via RemoveLastNTapeEntries).
             var preActivation = Engine.FusedLinear(flattenedInput, _weights, _biases, FusedActivationType.None);
-            if (!tapeActive)
-            {
-                _lastOutput = preActivation;
-            }
-            else
-            {
-                _lastOutput = null;
-            }
+            _lastOutput = cacheBwd ? preActivation : null;
             result = ApplyActivation(preActivation);
         }
 
