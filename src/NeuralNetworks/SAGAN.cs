@@ -330,52 +330,7 @@ public class SAGAN<T> : NeuralNetworkBase<T>
         // feature count into the first dense layer and threw a weight-shape
         // mismatch. Targeting the generator's own input shape keeps the data
         // flow consistent by construction for any latent / generator pairing.
-        int[] genInputShape = Generator.Architecture.GetInputShape();
-        int genInputSize = 1;
-        foreach (int d in genInputShape) genInputSize *= d;
-
-        // Bulk span copies (vectorized memcpy) — never per-element indexer loops.
-        // The flat tensor is zero-initialized, so any tail beyond the latent
-        // length is the zero padding for free.
-        Tensor<T> reshapedLatent;
-        if (latentCodes.Shape.Length == 1)
-        {
-            int latentLen = latentCodes.Shape[0];
-            int copy = Math.Min(latentLen, genInputSize);
-            var flat = new Tensor<T>([genInputSize]);
-            latentCodes.Data.Span.Slice(0, copy).CopyTo(flat.Data.Span);
-            // Promote to a leading batch axis of 1: conditional generation concatenates
-            // BATCHED class embeddings on axis 0, so a rank-0-batch latent would hit a
-            // rank mismatch in ConcatenateTensors. A [1, ...genInputShape] latent is also
-            // what the generator's batched Predict expects.
-            var batchShape = new int[genInputShape.Length + 1];
-            batchShape[0] = 1;
-            for (int i = 0; i < genInputShape.Length; i++)
-                batchShape[i + 1] = genInputShape[i];
-            reshapedLatent = flat.Reshape(batchShape);
-        }
-        else if (latentCodes.Shape.Length == 2)
-        {
-            int batchSize = latentCodes.Shape[0];
-            int latentLen = latentCodes.Shape[1];
-            int copy = Math.Min(latentLen, genInputSize);
-            var batchShape = new int[genInputShape.Length + 1];
-            batchShape[0] = batchSize;
-            for (int i = 0; i < genInputShape.Length; i++)
-                batchShape[i + 1] = genInputShape[i];
-            var flat = new Tensor<T>([batchSize, genInputSize]);
-            var src = latentCodes.Data.Span;
-            var dst = flat.Data.Span;
-            // One vectorized row-copy per batch element (not per-element).
-            for (int b = 0; b < batchSize; b++)
-                src.Slice(b * latentLen, copy).CopyTo(dst.Slice(b * genInputSize, copy));
-            reshapedLatent = flat.Reshape(batchShape);
-        }
-        else
-        {
-            // Already in the generator's expected rank — use as-is.
-            reshapedLatent = latentCodes;
-        }
+        Tensor<T> reshapedLatent = ProjectLatentToGeneratorInputShape(latentCodes);
 
         if (_isConditional && classIndices != null)
         {
@@ -390,6 +345,85 @@ public class SAGAN<T> : NeuralNetworkBase<T>
         }
 
         return ToImageSpace(Generator.Predict(reshapedLatent));
+    }
+
+    /// <summary>
+    /// Projects a latent tensor into the generator's DECLARED input volume
+    /// (<c>Generator.Architecture.GetInputShape()</c>), zero-padding when the latent
+    /// has fewer elements than the grid and truncating when it has more, and
+    /// promoting a leading batch axis of 1 for a rank-1 latent. Factored out of
+    /// <see cref="Generate(Tensor{T}, int[])"/> so <see cref="GetNamedLayerActivations"/>
+    /// feeds the generator the same input the generation path does. Bulk span copies
+    /// (vectorized memcpy), never per-element indexer loops; the zero-initialized
+    /// buffer supplies the padding tail for free.
+    /// </summary>
+    private Tensor<T> ProjectLatentToGeneratorInputShape(Tensor<T> latentCodes)
+    {
+        int[] genInputShape = Generator.Architecture.GetInputShape();
+        int genInputSize = 1;
+        foreach (int d in genInputShape) genInputSize *= d;
+
+        if (latentCodes.Shape.Length == 1)
+        {
+            int latentLen = latentCodes.Shape[0];
+            int copy = Math.Min(latentLen, genInputSize);
+            var flat = new Tensor<T>([genInputSize]);
+            latentCodes.Data.Span.Slice(0, copy).CopyTo(flat.Data.Span);
+            var batchShape = new int[genInputShape.Length + 1];
+            batchShape[0] = 1;
+            for (int i = 0; i < genInputShape.Length; i++)
+                batchShape[i + 1] = genInputShape[i];
+            return flat.Reshape(batchShape);
+        }
+        if (latentCodes.Shape.Length == 2)
+        {
+            int batchSize = latentCodes.Shape[0];
+            int latentLen = latentCodes.Shape[1];
+            int copy = Math.Min(latentLen, genInputSize);
+            var batchShape = new int[genInputShape.Length + 1];
+            batchShape[0] = batchSize;
+            for (int i = 0; i < genInputShape.Length; i++)
+                batchShape[i + 1] = genInputShape[i];
+            var flat = new Tensor<T>([batchSize, genInputSize]);
+            var src = latentCodes.Data.Span;
+            var dst = flat.Data.Span;
+            for (int b = 0; b < batchSize; b++)
+                src.Slice(b * latentLen, copy).CopyTo(dst.Slice(b * genInputSize, copy));
+            return flat.Reshape(batchShape);
+        }
+        // Already in the generator's expected rank — use as-is.
+        return latentCodes;
+    }
+
+    /// <summary>
+    /// Returns per-layer activations for a forward pass. SAGAN's trainable layers
+    /// live inside the Generator and Discriminator sub-networks, not the (empty)
+    /// base <c>Layers</c> collection, so the base implementation would return an
+    /// empty map. Forward the latent through the generator (projected into its
+    /// input volume, with class conditioning when enabled) and the resulting image
+    /// through the discriminator, namespacing each sub-network's activations.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>();
+
+        var genInput = ProjectLatentToGeneratorInputShape(input);
+        if (_isConditional)
+        {
+            // Deterministic class-0 conditioning so the generator's first layer
+            // sees the same (latent ⊕ class-embedding) width it does in Generate.
+            var classEmbeddings = CreateClassEmbeddings(new int[genInput.Shape[0]]);
+            genInput = ConcatenateTensors(genInput, classEmbeddings);
+        }
+
+        foreach (var kvp in Generator.GetNamedLayerActivations(genInput))
+            activations["Generator_" + kvp.Key] = kvp.Value;
+
+        var image = ToImageSpace(Generator.Predict(genInput));
+        foreach (var kvp in Discriminator.GetNamedLayerActivations(image))
+            activations["Discriminator_" + kvp.Key] = kvp.Value;
+
+        return activations;
     }
 
     /// <summary>

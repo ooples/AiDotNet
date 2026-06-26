@@ -888,6 +888,29 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Returns per-layer activations for a forward pass. ProgressiveGAN's trainable
+    /// layers live inside the Generator and Discriminator sub-networks, not the
+    /// (empty) base <c>Layers</c> collection, so the base implementation would
+    /// return an empty map. Forward the latent through the generator (projected
+    /// into its input volume) and the resulting image through the discriminator,
+    /// namespacing each sub-network's activations.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>();
+
+        var genInput = ProjectLatentToGeneratorInputShape(input);
+        foreach (var kvp in Generator.GetNamedLayerActivations(genInput))
+            activations["Generator_" + kvp.Key] = kvp.Value;
+
+        var image = ToImageSpace(Generator.Predict(genInput));
+        foreach (var kvp in Discriminator.GetNamedLayerActivations(image))
+            activations["Discriminator_" + kvp.Key] = kvp.Value;
+
+        return activations;
+    }
+
+    /// <summary>
     /// Reshapes the generator network's flat [batch, C*H*W] output into the image
     /// volume the convolutional discriminator declares as its input
     /// (<c>Discriminator.Architecture.GetInputShape()</c>) — the authoritative

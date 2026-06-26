@@ -701,6 +701,41 @@ public class BigGAN<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Returns per-layer activations for a forward pass. BigGAN's trainable layers
+    /// live inside the Generator and Discriminator sub-networks, not the (empty)
+    /// base <c>Layers</c> collection, so the base implementation would return an
+    /// empty map. Build the generator input exactly as Generate does — latent ⊕
+    /// class embedding (deterministic class 0), projected into the generator's
+    /// declared input volume — forward it through the generator, then forward the
+    /// resulting image through the projection discriminator, namespacing each
+    /// sub-network's activations.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>();
+
+        int batch = input.Shape[0];
+        var classIndices = new int[batch]; // deterministic class-0 conditioning
+
+        var embeddingsTensor = new Tensor<T>([NumClasses, ClassEmbeddingDim]);
+        for (int i = 0; i < NumClasses; i++)
+            for (int j = 0; j < ClassEmbeddingDim; j++)
+                embeddingsTensor[i, j] = _classEmbeddings[i, j];
+        var indicesTensor = new Tensor<int>(classIndices, [classIndices.Length]);
+        var classEmbeddings = Engine.TensorEmbeddingLookup(embeddingsTensor, indicesTensor);
+        var genInput = ProjectToGeneratorInputShape(ConcatenateTensors(input, classEmbeddings));
+
+        foreach (var kvp in Generator.GetNamedLayerActivations(genInput))
+            activations["Generator_" + kvp.Key] = kvp.Value;
+
+        var image = ToImageSpace(Generator.Predict(genInput));
+        foreach (var kvp in Discriminator.GetNamedLayerActivations(image))
+            activations["Discriminator_" + kvp.Key] = kvp.Value;
+
+        return activations;
+    }
+
+    /// <summary>
     /// Reshapes the generator network's flat [batch, C*H*W] output (its architecture's
     /// outputSize is the flattened image) into image space [batch, channels, height, width]
     /// so the convolutional discriminator — and external callers — receive a proper image
