@@ -769,7 +769,7 @@ public partial class SpikingLayer<T> : LayerBase<T>
         int rank = input.Shape.Length;
 
         // Store the input for backward pass
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
         // Flatten input to 1D tensor for processing
         // Supports any-rank tensors by computing total element count for last dimension

@@ -439,7 +439,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
             input = Engine.Reshape(input, new[] { 1, input.Length });
         }
 
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
         // Compute output = input * weights^T + biases using Engine operations
         // input: [batchSize, inputSize]

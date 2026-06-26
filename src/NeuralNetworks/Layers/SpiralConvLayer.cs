@@ -294,7 +294,7 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
 
         if (IsTrainingMode)
         {
-            _lastInput = input;
+            _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
             // We might need gathered features for backward pass?
             // The CPU Backward uses _gatheredFeatures.
             // We should cache it if possible, or recompute.

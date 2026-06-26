@@ -189,7 +189,7 @@ public partial class RBFLayer<T> : LayerBase<T>
 
         if (IsTrainingMode)
         {
-            _lastInput = input;
+            _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
             _lastOutput = output;
         }
 

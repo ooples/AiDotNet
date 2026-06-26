@@ -163,7 +163,7 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
 
             var result = gpuEngine.AddGpu(input, noise);
 
-            _lastInput = input;
+            _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
             _lastNoise = noise;
 
             noise.Dispose();

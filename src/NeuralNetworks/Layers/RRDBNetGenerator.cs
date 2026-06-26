@@ -370,7 +370,7 @@ public class RRDBNetGenerator<T> : LayerBase<T>
     {
         if (!IsShapeResolved) OnFirstForward(input);
 
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
         // Initial feature extraction
         _conv1Output = _convFirst.Forward(input);

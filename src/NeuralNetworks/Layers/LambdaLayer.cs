@@ -277,7 +277,7 @@ public class LambdaLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         var output = _forwardFunction(input);
 
         output = ApplyActivation(output);

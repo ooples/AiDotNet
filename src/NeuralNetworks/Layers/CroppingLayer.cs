@@ -211,7 +211,7 @@ public class CroppingLayer<T> : LayerBase<T>
 
         if (IsTrainingMode)
         {
-            _lastInput = input;
+            _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
             _gpuCachedInputShape = (int[])inputShape.Clone();
         }
 
