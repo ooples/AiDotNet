@@ -48,7 +48,8 @@ public class SwinDropPathTests
         // training output must differ from the clean eval output (and stay finite).
         Assert.True(SumAbsDiff(evalOut, trainOut) > 1e-3, "DropPath should perturb the training output.");
         for (int i = 0; i < trainOut.Length; i++)
-            Assert.True(float.IsFinite(trainOut[i]), "DropPath output must be finite.");
+            // net471 has no float.IsFinite — use the !NaN && !Infinity form (both exist there).
+            Assert.True(!float.IsNaN(trainOut[i]) && !float.IsInfinity(trainOut[i]), "DropPath output must be finite.");
     }
 
     [Fact]
