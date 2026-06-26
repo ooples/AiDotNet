@@ -192,13 +192,15 @@
          AIDOTNET_GEMM_SINGLE_REGION=0; ~1.3-2x on transformer/training GEMM shapes) + the net471
          PackAOnly non-4x4 scalar-tail bugfix. 0.102.3 is a linear superset of 0.102.2, so the #632 /
          Phase C deps above are retained. -->
-    <!-- 0.103.1 ships the weight-streaming ReleaseToPool soft-defer fix (AiDotNet.Tensors #692): the
-         strict storage drop threw "sole storage ownership; refcount 2" during MaterializeScope.Dispose,
-         the ROOT CAUSE of the foundation-scale ModelFamily-NeuralNetworks shard failures (Phi3Vision et al.
-         fail with that AggregateException on a 16 GB runner). Supersedes this branch's 0.103.0 and carries
-         the conv perf (implicit-GEMM #690, dcnv3 #691 that InternImage/DeformableConv needs) + the prior
-         diffusion CUDA-graph + FP16 work (#671/#680). Ships lib/net8.0 + net10.0 + net471. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.103.1" />
+    <!-- 0.104.0 supersedes 0.103.1: adds the single-launch fused grouped/depthwise deformable (DCNv3)
+         BACKWARD on GPU + single-pass fused CPU grouped backward (#693, what InternImage's
+         DeformableConvolutionalLayer training needs) and the bounded large-array pool for conv-backward
+         K-concat stacks (#694, ~8x less GC traffic on diffusion/CNN-scale shapes). Carries forward
+         everything in 0.103.x: the weight-streaming ReleaseToPool soft-defer fix (#692, root cause of the
+         foundation-scale ModelFamily-NeuralNetworks shard AggregateException on the 16 GB runner), conv
+         implicit-GEMM (#690), the DCNv3 fused FORWARD (#691), and the diffusion CUDA-graph + FP16 work
+         (#671/#680). Ships lib/net8.0 + net10.0 + net471. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.104.0" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.102.9" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.102.9" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.102.9" />
