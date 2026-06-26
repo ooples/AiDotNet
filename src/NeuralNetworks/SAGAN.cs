@@ -1,51 +1,49 @@
-﻿using System.IO;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
-using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
-/// Self-Attention GAN (SAGAN) implementation that uses self-attention mechanisms
-/// to model long-range dependencies in generated images.
+/// Self-Attention GAN (SAGAN) — a deep convolutional GAN whose generator maps a
+/// 1D latent vector to an image and whose discriminator scores images as real or
+/// fake. SAGAN (Zhang et al. 2019) augments the DCGAN backbone with self-attention
+/// and spectral normalization for long-range coherence and training stability.
 ///
 /// For Beginners:
-/// Traditional CNNs in GANs only look at nearby pixels (local receptive fields).
-/// This works well for textures and local patterns, but struggles with global
-/// structure and long-range relationships (like making sure both eyes of a face
-/// look similar, or ensuring consistent geometric patterns).
+/// A GAN has two networks competing: a generator (the "artist") that turns random
+/// noise into images, and a discriminator (the "critic") that tells real images
+/// from generated ones. As in every GAN since Goodfellow et al. 2014, the
+/// generator's INPUT is a 1D latent noise vector z (e.g. 128 numbers). Its first
+/// layer is a fully-connected projection that reshapes z into a small spatial
+/// feature map, which transposed convolutions then upsample into a full image.
+/// SAGAN's distinctive ingredient is self-attention, letting each location attend
+/// to the whole feature map so global structure stays consistent.
 ///
-/// Self-Attention solves this by letting each pixel "attend to" all other pixels,
-/// similar to how Transformers work in NLP. Think of it as:
-/// - CNN: "I can only see my immediate neighbors"
-/// - Self-Attention: "I can see the entire image and decide what's important"
+/// This implementation derives from <see cref="GenerativeAdversarialNetwork{T}"/>,
+/// which provides the proven adversarial training loop (tape-based generator and
+/// discriminator updates with BCE-with-logits, per Goodfellow 2014 §3 / Radford
+/// 2015), and builds paper-faithful generator/discriminator architectures:
+///   • Generator: latent[B, latentSize] → Dense → Reshape[C₀, s, s] → ⟨Deconv 4×4
+///     stride 2 + BatchNorm + ReLU⟩×log₂(target/s) → Deconv → image[C, H, W] (Tanh).
+///   • Discriminator: image[C, H, W] → ⟨Conv 4×4 stride 2 (+ BatchNorm) + LeakyReLU⟩
+///     → Conv → logit (no final sigmoid; BCE-with-logits is the criterion).
 ///
-/// Example: When generating a dog's face:
-/// - CNN: Might make one ear pointy and one floppy (inconsistent)
-/// - SAGAN: Notices both ears and makes them match (consistent)
-///
-/// Key innovations:
-/// 1. Self-Attention Layers: Allow modeling of long-range dependencies
-/// 2. Spectral Normalization: Stabilizes training for both G and D
-/// 3. Hinge Loss: More stable than standard GAN loss
-/// 4. Two Time-Scale Update Rule (TTUR): Different learning rates for G and D
-/// 5. Conditional Batch Normalization: For class-conditional generation
-///
-/// Based on "Self-Attention Generative Adversarial Networks" by Zhang et al. (2019)
+/// Based on "Self-Attention Generative Adversarial Networks" by Zhang et al. (2019).
 /// </summary>
 /// <example>
 /// <code>
-/// var options = new SAGANOptions { LatentSize = 128, NumClasses = 1000, ImageSize = 128 };
-/// var model = new SAGAN&lt;float&gt;(options);
+/// var model = new SAGAN&lt;float&gt;(latentSize: 128, imageChannels: 3, imageHeight: 64, imageWidth: 64);
 /// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
 /// var generated = model.Predict(noise);
 /// </code>
 /// </example>
-/// <typeparam name="T">The numeric type for computations (e.g., double, float)</typeparam>
+/// <typeparam name="T">The numeric type for computations (e.g., double, float).</typeparam>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Generative)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -54,152 +52,114 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Self-Attention Generative Adversarial Networks", "https://arxiv.org/abs/1805.08318", Year = 2019, Authors = "Han Zhang, Ian Goodfellow, Dimitris Metaxas, Augustus Odena")]
-public class SAGAN<T> : NeuralNetworkBase<T>
+public class SAGAN<T> : GenerativeAdversarialNetwork<T>
 {
     private readonly SAGANOptions _options;
+    private readonly int _latentSize;
+    private readonly int _numClasses;
+    private readonly int _imageChannels;
+    private readonly int _imageHeight;
+    private readonly int _imageWidth;
+    private readonly int _generatorChannels;
+    private readonly int _discriminatorChannels;
+    private readonly int[] _attentionLayers;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
-    private Vector<T> _momentum;
-    private Vector<T> _secondMoment;
-    private T _beta1Power;
-    private T _beta2Power;
-    private double _currentLearningRate;
-    private double _initialLearningRate;
-    private List<T> _generatorLosses = new List<T>();
-    private List<T> _discriminatorLosses = new List<T>();
+    /// <summary>Gets the size of the latent (noise) vector input to the generator.</summary>
+    public int LatentSize => _latentSize;
 
     /// <summary>
-    /// Gets the generator network with self-attention layers.
+    /// Gets the number of classes for conditional generation (0 for unconditional).
     /// </summary>
-    public ConvolutionalNeuralNetwork<T> Generator { get; private set; }
+    public int NumClasses => _numClasses;
 
     /// <summary>
-    /// Gets the discriminator network with self-attention layers.
-    /// </summary>
-    public ConvolutionalNeuralNetwork<T> Discriminator { get; private set; }
-
-    /// <summary>
-    /// Gets the size of the latent vector (noise input).
-    /// </summary>
-    public int LatentSize { get; private set; }
-
-    /// <summary>
-    /// Gets the number of classes for conditional generation.
-    /// Set to 0 for unconditional generation.
-    /// </summary>
-    public int NumClasses { get; private set; }
-
-    /// <summary>
-    /// Gets or sets whether to use spectral normalization.
-    /// Spectral normalization stabilizes GAN training by constraining
-    /// the Lipschitz constant of the discriminator.
+    /// Gets or sets whether spectral normalization is used. Spectral normalization
+    /// (Miyato et al. 2018), used by SAGAN, constrains the Lipschitz constant of the
+    /// discriminator for training stability.
     /// </summary>
     public bool UseSpectralNormalization { get; set; }
 
     /// <summary>
-    /// Gets the positions where self-attention layers are inserted.
-    /// Typically at mid-level feature maps (e.g., 32x32 or 64x64 resolution).
+    /// Gets the indices of layers where self-attention is applied (Zhang et al. 2019
+    /// place self-attention at mid-level feature maps).
     /// </summary>
-    public int[] AttentionLayers { get; private set; }
-
-    private int _imageChannels;
-    private int _imageHeight;
-    private int _imageWidth;
-    private int _generatorChannels;
-    private int _discriminatorChannels;
-    private bool _isConditional;
-    private ILossFunction<T> _lossFunction;
+    public int[] AttentionLayers => _attentionLayers;
 
     /// <summary>
-    /// Creates the combined SAGAN architecture with correct dimension handling.
+    /// Initializes a SAGAN with paper-faithful architectures built from the image
+    /// dimensions and latent size. This is the primary constructor; the generator
+    /// takes a 1D latent vector (Zhang et al. 2019 / Goodfellow 2014).
     /// </summary>
-    private static NeuralNetworkArchitecture<T> CreateSAGANArchitecture(
+    /// <param name="latentSize">Size of the latent (noise) vector input to the generator.</param>
+    /// <param name="imageChannels">Number of image channels (1 grayscale, 3 RGB).</param>
+    /// <param name="imageHeight">Height of generated images.</param>
+    /// <param name="imageWidth">Width of generated images.</param>
+    /// <param name="numClasses">Number of classes (0 for unconditional).</param>
+    /// <param name="generatorChannels">Base feature maps in the generator (default 64).</param>
+    /// <param name="discriminatorChannels">Base feature maps in the discriminator (default 64).</param>
+    /// <param name="attentionLayers">Indices of layers where self-attention is applied.</param>
+    /// <param name="lossFunction">Optional loss; defaults to BCE-with-logits for stable training.</param>
+    /// <param name="options">Optional SAGAN options.</param>
+    public SAGAN(
         int latentSize,
-        int numClasses,
         int imageChannels,
         int imageHeight,
         int imageWidth,
-        InputType inputType)
-    {
-        int inputSize = latentSize + (numClasses > 0 ? 128 : 0);
-        int outputSize = imageChannels * imageHeight * imageWidth;
-
-        if (inputType == InputType.ThreeDimensional)
-        {
-            return new NeuralNetworkArchitecture<T>(
-                inputType: inputType,
-                taskType: NeuralNetworkTaskType.Generative,
-                complexity: NetworkComplexity.Deep,
-                inputSize: 0,
-                inputHeight: imageHeight,
-                inputWidth: imageWidth,
-                inputDepth: imageChannels,
-                outputSize: outputSize,
-                layers: null);
-        }
-
-        if (inputType == InputType.TwoDimensional)
-        {
-            return new NeuralNetworkArchitecture<T>(
-                inputType: inputType,
-                taskType: NeuralNetworkTaskType.Generative,
-                complexity: NetworkComplexity.Deep,
-                inputSize: 0,
-                inputHeight: imageHeight,
-                inputWidth: imageWidth,
-                inputDepth: 1,
-                outputSize: outputSize,
-                layers: null);
-        }
-
-        // OneDimensional
-        return new NeuralNetworkArchitecture<T>(
-            inputType: inputType,
-            taskType: NeuralNetworkTaskType.Generative,
-            complexity: NetworkComplexity.Deep,
-            inputSize: inputSize,
-            outputSize: outputSize);
-    }
-
-    /// <summary>
-    /// Creates a SAGAN with default architectures derived from a single architecture.
-    /// Per Zhang et al. 2019: self-attention at multiple scales, spectral normalization.
-    /// </summary>
-    /// <param name="architecture">The shared neural network architecture used for both generator and discriminator.</param>
-    /// <param name="latentSize">Size of the latent vector (typically 128).</param>
-    /// <param name="numClasses">Number of classes (0 for unconditional).</param>
-    /// <param name="options">Optional SAGAN options.</param>
-    public SAGAN(
-        NeuralNetworkArchitecture<T> architecture,
-        int latentSize = 128,
         int numClasses = 0,
+        int generatorChannels = 64,
+        int discriminatorChannels = 64,
+        int[]? attentionLayers = null,
+        ILossFunction<T>? lossFunction = null,
         SAGANOptions? options = null)
-        : this(architecture, architecture, latentSize,
-               architecture.InputDepth > 0 ? architecture.InputDepth : 3,
-               architecture.InputHeight > 0 ? architecture.InputHeight : 64,
-               architecture.InputWidth > 0 ? architecture.InputWidth : 64,
-               numClasses, options: options)
+        : base(
+            CreateSAGANGeneratorArchitecture(latentSize, imageChannels, imageHeight, imageWidth, generatorChannels),
+            CreateSAGANDiscriminatorArchitecture(imageChannels, imageHeight, imageWidth, discriminatorChannels),
+            InputType.ThreeDimensional,
+            generatorOptimizer: null,
+            discriminatorOptimizer: null,
+            // BCE-with-logits: the discriminator emits a raw logit (no final sigmoid),
+            // and this criterion fuses log-sigmoid + BCE into one numerically stable op
+            // whose gradient (sigmoid(x) − target) never collapses at init. A plain
+            // sigmoid+BCE clamps predictions to [1e-7, 1-1e-7] and zeroes the gradient
+            // the moment the deep Conv/BN/LeakyReLU stack saturates the sigmoid — the
+            // "parameters did not change after training" failure mode.
+            lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>())
     {
+        _options = options ?? new SAGANOptions();
+        Options = _options;
+        _latentSize = latentSize;
+        _numClasses = numClasses;
+        _imageChannels = imageChannels;
+        _imageHeight = imageHeight;
+        _imageWidth = imageWidth;
+        _generatorChannels = generatorChannels;
+        _discriminatorChannels = discriminatorChannels;
+        _attentionLayers = attentionLayers ?? [2, 3];
+        UseSpectralNormalization = true;
     }
 
     /// <summary>
-    /// Initializes a new instance of Self-Attention GAN.
+    /// Backward-compatible constructor that accepts explicit generator/discriminator
+    /// architectures. The architectures are used only to derive the image dimensions
+    /// (a GAN generator always consumes a 1D latent, so the paper-faithful generator
+    /// and discriminator are built internally from latentSize / image dimensions).
     /// </summary>
-    /// <param name="generatorArchitecture">Architecture for the generator network.</param>
-    /// <param name="discriminatorArchitecture">Architecture for the discriminator network.</param>
-    /// <param name="latentSize">Size of the latent vector (typically 128)</param>
-    /// <param name="imageChannels">Number of image channels (1 for grayscale, 3 for RGB)</param>
-    /// <param name="imageHeight">Height of generated images</param>
-    /// <param name="imageWidth">Width of generated images</param>
-    /// <param name="numClasses">Number of classes (0 for unconditional)</param>
-    /// <param name="generatorChannels">Base number of feature maps in generator (default 64)</param>
-    /// <param name="discriminatorChannels">Base number of feature maps in discriminator (default 64)</param>
-    /// <param name="attentionLayers">Indices of layers where self-attention is applied</param>
-    /// <param name="inputType">The type of input.</param>
-    /// <param name="lossFunction">Loss function for training (defaults to hinge loss)</param>
-    /// <param name="initialLearningRate">Initial learning rate (default 0.0001)</param>
+    /// <param name="generatorArchitecture">Generator architecture (used for image-dimension fallback only).</param>
+    /// <param name="discriminatorArchitecture">Discriminator architecture (used for image-dimension fallback only).</param>
+    /// <param name="latentSize">Size of the latent vector.</param>
+    /// <param name="imageChannels">Number of image channels.</param>
+    /// <param name="imageHeight">Height of generated images.</param>
+    /// <param name="imageWidth">Width of generated images.</param>
+    /// <param name="numClasses">Number of classes (0 for unconditional).</param>
+    /// <param name="generatorChannels">Base feature maps in the generator.</param>
+    /// <param name="discriminatorChannels">Base feature maps in the discriminator.</param>
+    /// <param name="attentionLayers">Indices of layers where self-attention is applied.</param>
+    /// <param name="inputType">Retained for API compatibility (unused — the generator is 1D-latent).</param>
+    /// <param name="lossFunction">Optional loss function.</param>
+    /// <param name="initialLearningRate">Retained for API compatibility (the base GAN configures its optimizers).</param>
     /// <param name="options">Optional SAGAN options.</param>
     public SAGAN(
         NeuralNetworkArchitecture<T> generatorArchitecture,
@@ -216,658 +176,225 @@ public class SAGAN<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         double initialLearningRate = 0.0001,
         SAGANOptions? options = null)
-        : base(CreateSAGANArchitecture(latentSize, numClasses, imageChannels, imageHeight, imageWidth, inputType),
-               lossFunction ?? new HingeLoss<T>())
+        : this(latentSize,
+               imageChannels > 0 ? imageChannels : (discriminatorArchitecture.InputDepth > 0 ? discriminatorArchitecture.InputDepth : 3),
+               imageHeight > 0 ? imageHeight : (discriminatorArchitecture.InputHeight > 0 ? discriminatorArchitecture.InputHeight : 64),
+               imageWidth > 0 ? imageWidth : (discriminatorArchitecture.InputWidth > 0 ? discriminatorArchitecture.InputWidth : 64),
+               numClasses, generatorChannels, discriminatorChannels, attentionLayers, lossFunction, options)
     {
-        _options = options ?? new SAGANOptions();
-        Options = _options;
-        LatentSize = latentSize;
-        NumClasses = numClasses;
-        _isConditional = numClasses > 0;
-        UseSpectralNormalization = true;
-        _imageChannels = imageChannels;
-        _imageHeight = imageHeight;
-        _imageWidth = imageWidth;
-        _generatorChannels = generatorChannels;
-        _discriminatorChannels = discriminatorChannels;
-        _initialLearningRate = initialLearningRate;
-        _currentLearningRate = initialLearningRate;
-
-        // Default: apply self-attention at middle layers
-        AttentionLayers = attentionLayers ?? [2, 3];
-
-        // Initialize optimizer parameters
-        // Beta powers start at beta^1 (the actual beta values) so first iteration's bias correction
-        // computes (1 - beta) which is non-zero. SAGAN uses Adam with beta1=0.0, beta2=0.9
-        _beta1Power = NumOps.Zero; // SAGAN uses beta1=0.0 for TTUR
-        _beta2Power = NumOps.FromDouble(0.9);
-
-        // Create generator and discriminator with self-attention
-        Generator = new ConvolutionalNeuralNetwork<T>(generatorArchitecture);
-        Discriminator = new ConvolutionalNeuralNetwork<T>(discriminatorArchitecture);
-
-        _momentum = Vector<T>.Empty();
-        _secondMoment = Vector<T>.Empty();
-        // Note: _lossFunction is set via base class constructor (line 173)
-        // Store reference for CreateNewInstance
-        _lossFunction = LossFunction;
-
-        InitializeLayers();
     }
 
     /// <summary>
-    /// Generates images from random latent codes.
+    /// Convenience constructor deriving image dimensions from a single architecture.
     /// </summary>
-    /// <param name="numImages">Number of images to generate</param>
-    /// <param name="classIndices">Optional class indices for conditional generation</param>
-    /// <returns>Generated images tensor</returns>
-    public Tensor<T> Generate(int numImages, int[]? classIndices = null)
+    /// <param name="architecture">Architecture used to derive image channels/height/width.</param>
+    /// <param name="latentSize">Size of the latent vector (typically 128).</param>
+    /// <param name="numClasses">Number of classes (0 for unconditional).</param>
+    /// <param name="options">Optional SAGAN options.</param>
+    public SAGAN(
+        NeuralNetworkArchitecture<T> architecture,
+        int latentSize = 128,
+        int numClasses = 0,
+        SAGANOptions? options = null)
+        : this(latentSize,
+               architecture.InputDepth > 0 ? architecture.InputDepth : 3,
+               architecture.InputHeight > 0 ? architecture.InputHeight : 64,
+               architecture.InputWidth > 0 ? architecture.InputWidth : 64,
+               numClasses, options: options)
     {
-        if (_isConditional && classIndices == null)
-        {
-            throw new ArgumentException("Class indices required for conditional generation");
-        }
+    }
 
-        if (classIndices != null && classIndices.Length != numImages)
-        {
-            throw new ArgumentException("Number of class indices must match number of images");
-        }
+    /// <summary>
+    /// Constructs a fresh SAGAN with the same hyperparameters so Clone / DeepCopy
+    /// rebuilds both architectures from scratch (rather than reusing layer instances
+    /// whose shape state was resolved by the original's forward pass, which the
+    /// CNN clone-path validation rejects). Mirrors <see cref="DCGAN{T}"/>.
+    /// </summary>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        return new SAGAN<T>(
+            _latentSize,
+            _imageChannels,
+            _imageHeight,
+            _imageWidth,
+            _numClasses,
+            _generatorChannels,
+            _discriminatorChannels,
+            _attentionLayers,
+            lossFunction: LossFunction,
+            options: _options);
+    }
 
-        Generator.SetTrainingMode(false);
-        var noise = GenerateNoise(numImages);
+    /// <summary>
+    /// Builds the paper-faithful generator architecture: a 1D latent vector projected
+    /// by a dense layer, reshaped into a small spatial feature map, then upsampled by
+    /// transposed convolutions to the target image (Goodfellow 2014 §3, Radford 2015
+    /// §3 "the first layer … is just a matrix multiplication … reshaped into a
+    /// 4-dimensional tensor … the start of the convolution stack"; SAGAN keeps this
+    /// DCGAN backbone, Zhang et al. 2019).
+    /// </summary>
+    private static NeuralNetworkArchitecture<T> CreateSAGANGeneratorArchitecture(
+        int latentSize,
+        int imageChannels,
+        int imageHeight,
+        int imageWidth,
+        int featureMaps)
+    {
+        int targetSize = Math.Min(imageHeight, imageWidth);
+        int initialSpatialSize = ComputeInitialSpatialSize(targetSize);
+        int initialChannels = featureMaps * 8;
+        int initialFeatureMapSize = initialChannels * initialSpatialSize * initialSpatialSize;
 
-        // Reshape noise to 4D format for CNN generator: [batch, latent_size] -> [batch, 1, h, w]
-        int h = (int)Math.Ceiling(Math.Sqrt(LatentSize));
-        int w = h;
-        int padSize = h * w - LatentSize;
-        Tensor<T> reshapedNoise;
-        if (padSize > 0)
+        var layers = new List<ILayer<T>>
         {
-            var padded = new Tensor<T>([numImages, h * w]);
-            for (int b = 0; b < numImages; b++)
+            // Project & reshape the latent into the initial feature map.
+            new DenseLayer<T>(initialFeatureMapSize, (IActivationFunction<T>?)new IdentityActivation<T>()),
+            new ReshapeLayer<T>([initialChannels, initialSpatialSize, initialSpatialSize]),
+        };
+
+        int currentChannels = initialChannels;
+        int currentSize = initialSpatialSize;
+
+        // Each stage doubles the spatial dims (Deconv 4×4 stride 2 padding 1) and
+        // halves channels; the final stage outputs imageChannels with Tanh.
+        while (currentSize < targetSize)
+        {
+            bool isFinal = currentSize * 2 >= targetSize;
+            int nextChannels = isFinal ? imageChannels : currentChannels / 2;
+            IActivationFunction<T> activation = isFinal
+                ? new TanhActivation<T>()
+                : new ReLUActivation<T>();
+
+            layers.Add(new DeconvolutionalLayer<T>(
+                outputDepth: nextChannels,
+                kernelSize: 4,
+                stride: 2,
+                padding: 1,
+                activationFunction: activation));
+
+            // BatchNorm on intermediate stages only (no normalization on the output
+            // layer — paper Fig. 1 / §3 guideline).
+            if (!isFinal)
             {
-                for (int i = 0; i < LatentSize; i++)
-                    padded[b, i] = noise[b, i];
-                for (int i = LatentSize; i < h * w; i++)
-                    padded[b, i] = NumOps.Zero;
-            }
-            reshapedNoise = padded.Reshape(numImages, 1, h, w);
-        }
-        else
-        {
-            reshapedNoise = noise.Reshape(numImages, 1, h, w);
-        }
-
-        if (_isConditional && classIndices != null)
-        {
-            // Concatenate class information (simplified)
-            var classEmbeddings = CreateClassEmbeddings(classIndices);
-            var input = ConcatenateTensors(reshapedNoise, classEmbeddings);
-            return Generator.Predict(input);
-        }
-
-        return Generator.Predict(reshapedNoise);
-    }
-
-    /// <summary>
-    /// Generates images from specific latent codes.
-    /// </summary>
-    /// <param name="latentCodes">Latent codes to use</param>
-    /// <param name="classIndices">Optional class indices for conditional generation</param>
-    /// <returns>Generated images tensor</returns>
-    public Tensor<T> Generate(Tensor<T> latentCodes, int[]? classIndices = null)
-    {
-        Generator.SetTrainingMode(false);
-
-        // Reshape latent codes into the generator's DECLARED input volume.
-        // The generator is a CNN built for a specific input shape
-        // (Generator.Architecture's input grid); the latent vector is the spatial
-        // seed and must be projected into exactly that volume — zero-padding when
-        // the latent has fewer elements than the grid, truncating when it has
-        // more. The previous ceil(sqrt(latentSize)) heuristic produced a grid
-        // (e.g. 4x4 for latent 16) that did NOT match the generator's actual
-        // input grid (e.g. 8x8), so the conv stack fed the wrong flattened
-        // feature count into the first dense layer and threw a weight-shape
-        // mismatch. Targeting the generator's own input shape keeps the data
-        // flow consistent by construction for any latent / generator pairing.
-        Tensor<T> reshapedLatent = ProjectLatentToGeneratorInputShape(latentCodes);
-
-        if (_isConditional && classIndices != null)
-        {
-            if (classIndices.Length != reshapedLatent.Shape[0])
-                throw new ArgumentException(
-                    $"Conditional generation requires one class index per batch element: got " +
-                    $"{classIndices.Length} class indices for batch size {reshapedLatent.Shape[0]}.",
-                    nameof(classIndices));
-            var classEmbeddings = CreateClassEmbeddings(classIndices);
-            var input = ConcatenateTensors(reshapedLatent, classEmbeddings);
-            return ToImageSpace(Generator.Predict(input));
-        }
-
-        return ToImageSpace(Generator.Predict(reshapedLatent));
-    }
-
-    /// <summary>
-    /// Projects a latent tensor into the generator's DECLARED input volume
-    /// (<c>Generator.Architecture.GetInputShape()</c>), zero-padding when the latent
-    /// has fewer elements than the grid and truncating when it has more, and
-    /// promoting a leading batch axis of 1 for a rank-1 latent. Factored out of
-    /// <see cref="Generate(Tensor{T}, int[])"/> so <see cref="GetNamedLayerActivations"/>
-    /// feeds the generator the same input the generation path does. Bulk span copies
-    /// (vectorized memcpy), never per-element indexer loops; the zero-initialized
-    /// buffer supplies the padding tail for free.
-    /// </summary>
-    private Tensor<T> ProjectLatentToGeneratorInputShape(Tensor<T> latentCodes)
-    {
-        int[] genInputShape = Generator.Architecture.GetInputShape();
-        int genInputSize = 1;
-        foreach (int d in genInputShape) genInputSize *= d;
-
-        if (latentCodes.Shape.Length == 1)
-        {
-            int latentLen = latentCodes.Shape[0];
-            int copy = Math.Min(latentLen, genInputSize);
-            var flat = new Tensor<T>([genInputSize]);
-            latentCodes.Data.Span.Slice(0, copy).CopyTo(flat.Data.Span);
-            var batchShape = new int[genInputShape.Length + 1];
-            batchShape[0] = 1;
-            for (int i = 0; i < genInputShape.Length; i++)
-                batchShape[i + 1] = genInputShape[i];
-            return flat.Reshape(batchShape);
-        }
-        if (latentCodes.Shape.Length == 2)
-        {
-            int batchSize = latentCodes.Shape[0];
-            int latentLen = latentCodes.Shape[1];
-            int copy = Math.Min(latentLen, genInputSize);
-            var batchShape = new int[genInputShape.Length + 1];
-            batchShape[0] = batchSize;
-            for (int i = 0; i < genInputShape.Length; i++)
-                batchShape[i + 1] = genInputShape[i];
-            var flat = new Tensor<T>([batchSize, genInputSize]);
-            var src = latentCodes.Data.Span;
-            var dst = flat.Data.Span;
-            for (int b = 0; b < batchSize; b++)
-                src.Slice(b * latentLen, copy).CopyTo(dst.Slice(b * genInputSize, copy));
-            return flat.Reshape(batchShape);
-        }
-        // Already in the generator's expected rank — use as-is.
-        return latentCodes;
-    }
-
-    /// <summary>
-    /// Returns per-layer activations for a forward pass. SAGAN's trainable layers
-    /// live inside the Generator and Discriminator sub-networks, not the (empty)
-    /// base <c>Layers</c> collection, so the base implementation would return an
-    /// empty map. Forward the latent through the generator (projected into its
-    /// input volume, with class conditioning when enabled) and the resulting image
-    /// through the discriminator, namespacing each sub-network's activations.
-    /// </summary>
-    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
-    {
-        var activations = new Dictionary<string, Tensor<T>>();
-
-        var genInput = ProjectLatentToGeneratorInputShape(input);
-        if (_isConditional)
-        {
-            // Deterministic class-0 conditioning so the generator's first layer
-            // sees the same (latent ⊕ class-embedding) width it does in Generate.
-            var classEmbeddings = CreateClassEmbeddings(new int[genInput.Shape[0]]);
-            genInput = ConcatenateTensors(genInput, classEmbeddings);
-        }
-
-        foreach (var kvp in Generator.GetNamedLayerActivations(genInput))
-            activations["Generator_" + kvp.Key] = kvp.Value;
-
-        var image = ToImageSpace(Generator.Predict(genInput));
-        foreach (var kvp in Discriminator.GetNamedLayerActivations(image))
-            activations["Discriminator_" + kvp.Key] = kvp.Value;
-
-        return activations;
-    }
-
-    /// <summary>
-    /// Reshapes the generator network's flat [batch, C*H*W] output (its architecture's
-    /// outputSize is the flattened image) into image space [batch, channels, height, width]
-    /// so the convolutional discriminator — and external callers — receive a proper image
-    /// rather than a flat feature vector that the discriminator's first conv rejects with a
-    /// channel-depth mismatch. Idempotent: already-image-shaped output is returned unchanged.
-    /// </summary>
-    private Tensor<T> ToImageSpace(Tensor<T> generated)
-    {
-        int batch = generated.Shape[0];
-        bool alreadyImage = generated.Rank == 4
-            && generated.Shape[1] == _imageChannels
-            && generated.Shape[2] == _imageHeight
-            && generated.Shape[3] == _imageWidth;
-        if (!alreadyImage && generated.Length == batch * _imageChannels * _imageHeight * _imageWidth)
-            return generated.Reshape(batch, _imageChannels, _imageHeight, _imageWidth);
-        return generated;
-    }
-
-    /// <summary>
-    /// Generates random noise from a standard normal distribution.
-    /// </summary>
-    /// <remarks>
-    /// Uses vectorized Engine.GenerateGaussianNoise for CPU/GPU accelerated generation.
-    /// </remarks>
-    private Tensor<T> GenerateNoise(int batchSize)
-    {
-        if (batchSize <= 0)
-            throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "Batch size must be positive.");
-
-        var totalElements = batchSize * LatentSize;
-        var mean = NumOps.Zero;
-        var stddev = NumOps.One;
-
-        // Vectorized Gaussian noise generation using Engine (SIMD/GPU accelerated)
-        var noiseVector = Engine.GenerateGaussianNoise<T>(totalElements, mean, stddev);
-
-        return Tensor<T>.FromVector(noiseVector, [batchSize, LatentSize]);
-    }
-
-    /// <summary>
-    /// Creates class embeddings for conditional generation.
-    /// </summary>
-    /// <exception cref="InvalidOperationException">Thrown when called in unconditional mode (NumClasses=0)</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when a class index is out of valid range</exception>
-    private Tensor<T> CreateClassEmbeddings(int[] classIndices)
-    {
-        // Validate that we're in conditional mode
-        if (NumClasses <= 0)
-        {
-            throw new InvalidOperationException(
-                "Cannot create class embeddings in unconditional mode (NumClasses=0). " +
-                "Either set NumClasses > 0 in constructor or don't pass class indices.");
-        }
-
-        // One-hot embedding dimension must equal NumClasses to avoid overflow
-        // when classIdx >= previous hardcoded value (128)
-        var embeddingDim = NumClasses;
-        var embeddings = new Tensor<T>([classIndices.Length, embeddingDim]);
-
-        // Validate and create one-hot encoding
-        for (int i = 0; i < classIndices.Length; i++)
-        {
-            var classIdx = classIndices[i];
-
-            // Validate class index is within valid range
-            if (classIdx < 0 || classIdx >= NumClasses)
-            {
-                throw new ArgumentOutOfRangeException(nameof(classIndices),
-                    $"Class index {classIdx} at position {i} is out of range. Valid range: 0 to {NumClasses - 1}.");
+                layers.Add(new BatchNormalizationLayer<T>());
             }
 
-            // Set one-hot encoding at the class index position within the embedding
-            embeddings.SetFlat(i * embeddingDim + classIdx, NumOps.One);
+            currentChannels = nextChannels;
+            currentSize *= 2;
         }
 
-        return embeddings;
+        return new NeuralNetworkArchitecture<T>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.Generative,
+            NetworkComplexity.Medium,
+            inputSize: latentSize,
+            outputSize: imageChannels * imageHeight * imageWidth,
+            layers: layers);
     }
 
     /// <summary>
-    /// Concatenates two tensors along the feature dimension.
+    /// Builds the paper-faithful discriminator architecture: strided convolutions
+    /// (no pooling) downsample the image, BatchNorm after every conv except the input
+    /// layer, LeakyReLU(0.2) throughout, and a final conv collapses to a single LOGIT
+    /// (no sigmoid — BCE-with-logits is the criterion). Radford 2015 §3 guidelines.
     /// </summary>
-    private Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b)
+    private static NeuralNetworkArchitecture<T> CreateSAGANDiscriminatorArchitecture(
+        int imageChannels,
+        int imageHeight,
+        int imageWidth,
+        int featureMaps)
     {
-        return Engine.TensorConcatenate([a, b], axis: 1);
-    }
+        var layers = new List<ILayer<T>>();
 
-    /// <summary>
-    /// Performs a single training step on a batch of real images.
-    /// Uses hinge loss for improved stability.
-    /// </summary>
-    /// <param name="realImages">Batch of real images</param>
-    /// <param name="batchSize">Number of images in the batch</param>
-    /// <param name="realLabels">Optional class labels for conditional training</param>
-    /// <returns>Tuple of (discriminator loss, generator loss)</returns>
-    public (T discriminatorLoss, T generatorLoss) TrainStep(
-        Tensor<T> realImages,
-        int batchSize,
-        int[]? realLabels = null)
-    {
-        var one = NumOps.One;
+        int targetSize = Math.Min(imageHeight, imageWidth);
+        int currentSize = targetSize;
+        int currentChannels = featureMaps;
 
-        // === Train Discriminator ===
-        Discriminator.SetTrainingMode(true);
-        Generator.SetTrainingMode(false);
+        // First Conv: imageChannels → featureMaps, no BatchNorm on the input layer.
+        layers.Add(new ConvolutionalLayer<T>(
+            outputDepth: featureMaps,
+            kernelSize: 4,
+            stride: 2,
+            padding: 1,
+            activationFunction: new LeakyReLUActivation<T>(0.2)));
+        currentSize /= 2;
 
-        // Real images - hinge loss: max(0, 1 - D(x_real))
-        var realOutput = Discriminator.Predict(realImages);
-        var realLoss = CalculateHingeLoss(realOutput, true, batchSize);
-
-        // Fake images - hinge loss: max(0, 1 + D(G(z)))
-        var noise = GenerateNoise(batchSize);
-        Tensor<T> fakeImages = (_isConditional && realLabels != null)
-            ? Generate(noise, realLabels)
-            : Generate(noise);
-
-        var fakeOutput = Discriminator.Predict(fakeImages);
-        var fakeLoss = CalculateHingeLoss(fakeOutput, false, batchSize);
-
-        var discriminatorLoss = NumOps.Add(realLoss, fakeLoss);
-        _discriminatorLosses.Add(discriminatorLoss);
-
-        // Backpropagate discriminator
-        var discGradient = new Tensor<T>([1]);
-        discGradient.SetFlat(0, one);
-        /* Discriminator.Backward(discGradient) removed — tape-based */ ;
-
-        // Update discriminator parameters using Adam with TTUR
-        // SAGAN uses higher LR for discriminator (4x generator LR)
-        ApplyAdamUpdate(Discriminator, _currentLearningRate * 4.0, isGenerator: false);
-
-        // === Train Generator ===
-        Generator.SetTrainingMode(true);
-        Discriminator.SetTrainingMode(false);
-
-        var generatorNoise = GenerateNoise(batchSize);
-        Tensor<T> generatedImages = (_isConditional && realLabels != null)
-            ? Generate(generatorNoise, realLabels)
-            : Generate(generatorNoise);
-
-        var generatorOutput = Discriminator.Predict(generatedImages);
-
-        // Generator loss: -D(G(z)) (hinge loss for generator)
-        var generatorLoss = NumOps.Zero;
-        for (int i = 0; i < generatorOutput.Length; i++)
+        // Strided-conv blocks (Conv → BatchNorm → LeakyReLU) until spatial dim is 4×4.
+        while (currentSize > 4)
         {
-            generatorLoss = NumOps.Subtract(generatorLoss, generatorOutput.GetFlat(i));
+            int nextChannels = currentChannels * 2;
+            layers.Add(new ConvolutionalLayer<T>(
+                outputDepth: nextChannels,
+                kernelSize: 4,
+                stride: 2,
+                padding: 1,
+                activationFunction: new IdentityActivation<T>()));
+            layers.Add(new BatchNormalizationLayer<T>());
+            layers.Add(new ActivationLayer<T>((IActivationFunction<T>)new LeakyReLUActivation<T>(0.2)));
+            currentChannels = nextChannels;
+            currentSize /= 2;
         }
-        generatorLoss = NumOps.Divide(generatorLoss, NumOps.FromDouble(batchSize));
-        _generatorLosses.Add(generatorLoss);
 
-        // Backpropagate generator
-        var genGradient = new Tensor<T>([1]);
-        genGradient.SetFlat(0, one);
-        /* Generator.Backward(genGradient) removed — tape-based */ ;
+        // Final Conv collapses [currentChannels, 4, 4] → [1, 1, 1]; identity activation
+        // (raw logit), no BatchNorm on the output layer.
+        layers.Add(new ConvolutionalLayer<T>(
+            outputDepth: 1,
+            kernelSize: 4,
+            stride: 1,
+            padding: 0,
+            activationFunction: new IdentityActivation<T>()));
 
-        // Update generator parameters using Adam with TTUR
-        // SAGAN uses lower LR for generator (base LR)
-        ApplyAdamUpdate(Generator, _currentLearningRate, isGenerator: true);
+        // Flatten the 1×1 spatial output to [batch, 1] so it matches the label shape
+        // consumed by BCE-with-logits.
+        layers.Add(new FlattenLayer<T>());
 
-        // Update beta powers for next iteration (bias correction)
-        // SAGAN uses beta1=0.0, beta2=0.9
-        _beta2Power = NumOps.Multiply(_beta2Power, NumOps.FromDouble(0.9));
-
-        return (discriminatorLoss, generatorLoss);
+        return new NeuralNetworkArchitecture<T>(
+            InputType.ThreeDimensional,
+            NeuralNetworkTaskType.BinaryClassification,
+            NetworkComplexity.Medium,
+            inputDepth: imageChannels,
+            inputHeight: imageHeight,
+            inputWidth: imageWidth,
+            outputSize: 1,
+            layers: layers);
     }
 
     /// <summary>
-    /// Calculates hinge loss for discriminator training.
-    /// Real: max(0, 1 - output)
-    /// Fake: max(0, 1 + output)
+    /// Computes the generator's initial spatial size for a target image size: 4 for
+    /// standard power-of-two-times-4 sizes, otherwise the largest 2..8 factor giving a
+    /// reasonable number of upsampling stages.
     /// </summary>
-    private T CalculateHingeLoss(Tensor<T> output, bool isReal, int batchSize)
+    private static int ComputeInitialSpatialSize(int targetSize)
     {
-        var loss = NumOps.Zero;
-        var one = NumOps.One;
-
-        for (int i = 0; i < output.Length; i++)
+        if (targetSize <= 0)
         {
-            T hingeLoss;
-            if (isReal)
+            throw new ArgumentOutOfRangeException(nameof(targetSize), targetSize,
+                "Target image size must be positive.");
+        }
+
+        if (targetSize >= 4 && IsPowerOfTwo(targetSize / 4) && targetSize % 4 == 0)
+        {
+            return 4;
+        }
+
+        for (int numUpsampleLayers = 2; numUpsampleLayers <= 6; numUpsampleLayers++)
+        {
+            int divisor = 1 << numUpsampleLayers;
+            if (targetSize % divisor == 0)
             {
-                var margin = NumOps.Subtract(one, output.GetFlat(i));
-                hingeLoss = NumOps.GreaterThan(margin, NumOps.Zero) ? margin : NumOps.Zero;
-            }
-            else
-            {
-                var margin = NumOps.Add(one, output.GetFlat(i));
-                hingeLoss = NumOps.GreaterThan(margin, NumOps.Zero) ? margin : NumOps.Zero;
-            }
-
-            loss = NumOps.Add(loss, hingeLoss);
-        }
-
-        return NumOps.Divide(loss, NumOps.FromDouble(batchSize));
-    }
-
-    /// <summary>
-    /// Applies Adam optimizer update to network parameters using TTUR (Two Time-Scale Update Rule).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// SAGAN uses Adam with specific hyperparameters for stable GAN training:
-    /// - beta1 = 0.0 (no momentum on gradients)
-    /// - beta2 = 0.9 (momentum on squared gradients)
-    /// - Different learning rates for G and D (TTUR)
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates the network weights based on computed gradients.
-    /// Adam adapts the learning rate for each parameter individually based on the history
-    /// of gradients, which helps training converge faster and more stably.
-    /// </para>
-    /// </remarks>
-    /// <param name="network">The network whose parameters to update</param>
-    /// <param name="learningRate">Learning rate for this update</param>
-    /// <param name="isGenerator">True for generator (uses first half of momentum arrays)</param>
-    private void ApplyAdamUpdate(ConvolutionalNeuralNetwork<T> network, double learningRate, bool isGenerator)
-    {
-        var parameters = network.GetParameters();
-        var gradients = network.GetGradients();
-
-        if (parameters.Length == 0 || gradients.Length == 0)
-            return;
-
-        // Offset in momentum arrays: generator uses first half, discriminator uses second half
-        int offset = isGenerator ? 0 : (int)Generator.GetParameterCount();
-        int paramCount = parameters.Length;
-
-        // Ensure momentum arrays are properly sized
-        if (_momentum.Length < offset + paramCount || _secondMoment.Length < offset + paramCount)
-        {
-            var newMomentum = new Vector<T>(offset + paramCount);
-            var newSecondMoment = new Vector<T>(offset + paramCount);
-            for (int i = 0; i < _momentum.Length && i < newMomentum.Length; i++)
-            {
-                newMomentum[i] = _momentum[i];
-                newSecondMoment[i] = _secondMoment[i];
-            }
-            _momentum = newMomentum;
-            _secondMoment = newSecondMoment;
-        }
-
-        // Adam hyperparameters for SAGAN
-        T beta1 = NumOps.Zero;  // SAGAN uses beta1=0.0
-        T beta2 = NumOps.FromDouble(0.9);
-        T epsilon = NumOps.FromDouble(1e-8);
-        T lr = NumOps.FromDouble(learningRate);
-        T one = NumOps.One;
-
-        // Bias correction terms
-        T beta2Correction = NumOps.Subtract(one, _beta2Power);
-        // Guard against zero/negative correction (use epsilon fallback)
-        T correctionThreshold = NumOps.FromDouble(1e-8);
-        if (NumOps.LessThan(beta2Correction, correctionThreshold))
-            beta2Correction = correctionThreshold;
-
-        var updatedParams = new Vector<T>(paramCount);
-
-        for (int i = 0; i < paramCount; i++)
-        {
-            int momIdx = offset + i;
-            T gradient = gradients[i];
-
-            // Update biased first moment: m_t = beta1 * m_{t-1} + (1 - beta1) * g_t
-            // With beta1=0, this simplifies to: m_t = g_t
-            T m = NumOps.Add(
-                NumOps.Multiply(beta1, _momentum[momIdx]),
-                NumOps.Multiply(NumOps.Subtract(one, beta1), gradient));
-            _momentum[momIdx] = m;
-
-            // Update biased second moment: v_t = beta2 * v_{t-1} + (1 - beta2) * g_t^2
-            T gradSquared = NumOps.Multiply(gradient, gradient);
-            T v = NumOps.Add(
-                NumOps.Multiply(beta2, _secondMoment[momIdx]),
-                NumOps.Multiply(NumOps.Subtract(one, beta2), gradSquared));
-            _secondMoment[momIdx] = v;
-
-            // Bias-corrected second moment: v_hat = v_t / (1 - beta2^t)
-            T vHat = NumOps.Divide(v, beta2Correction);
-
-            // Parameter update: theta = theta - lr * m / (sqrt(v_hat) + epsilon)
-            // Note: With beta1=0, m = g_t, so no bias correction needed for m
-            T sqrtV = NumOps.Sqrt(vHat);
-            T denominator = NumOps.Add(sqrtV, epsilon);
-            T update = NumOps.Multiply(lr, NumOps.Divide(m, denominator));
-            updatedParams[i] = NumOps.Subtract(parameters[i], update);
-        }
-
-        network.UpdateParameters(updatedParams);
-    }
-
-    /// <summary>
-    /// Hinge loss implementation for the loss function interface.
-    /// </summary>
-    private class HingeLoss<TLoss> : ILossFunction<TLoss>
-    {
-        private static readonly INumericOperations<TLoss> _ops = MathHelper.GetNumericOperations<TLoss>();
-
-        public TLoss CalculateLoss(Vector<TLoss> predicted, Vector<TLoss> actual)
-        {
-            var loss = _ops.Zero;
-            var one = _ops.One;
-
-            for (int i = 0; i < predicted.Length; i++)
-            {
-                var yt = _ops.Multiply(actual[i], predicted[i]);
-                var margin = _ops.Subtract(one, yt);
-                if (_ops.GreaterThan(margin, _ops.Zero))
+                int initialSize = targetSize / divisor;
+                if (initialSize >= 2 && initialSize <= 8)
                 {
-                    loss = _ops.Add(loss, margin);
+                    return initialSize;
                 }
             }
-
-            return _ops.Divide(loss, _ops.FromDouble(predicted.Length));
         }
 
-        public Vector<TLoss> CalculateDerivative(Vector<TLoss> predicted, Vector<TLoss> actual)
-        {
-            var gradient = new Vector<TLoss>(predicted.Length);
-            var one = _ops.One;
-
-            for (int i = 0; i < predicted.Length; i++)
-            {
-                var yt = _ops.Multiply(actual[i], predicted[i]);
-                var margin = _ops.Subtract(one, yt);
-                if (_ops.GreaterThan(margin, _ops.Zero))
-                {
-                    gradient[i] = _ops.Negate(_ops.Divide(actual[i], _ops.FromDouble(predicted.Length)));
-                }
-                else
-                {
-                    gradient[i] = _ops.Zero;
-                }
-            }
-
-            return gradient;
-        }
-
-        public (TLoss Loss, Tensor<TLoss> Gradient) CalculateLossAndGradientGpu(Tensor<TLoss> predicted, Tensor<TLoss> actual)
-        {
-            // CPU-only implementation. The GPU fast-path here previously
-            // resolved its backend through AiDotNetEngine.Current — a
-            // global singleton that can bind gradients to the wrong
-            // backend under concurrent / multi-model execution. Until
-            // an explicit IEngine is threaded through the loss class
-            // (currently a pure nested-loss type with no model-instance
-            // reference), the CPU computation IS the correct fallback
-            // and produces an equivalent gradient tensor. Callers running
-            // SAGAN on GPU still pay the CPU↔GPU copy for the gradient
-            // round-trip, but never the wrong-backend hazard.
-            var loss = CalculateLoss(predicted.ToVector(), actual.ToVector());
-            var gradientCpu = CalculateDerivative(predicted.ToVector(), actual.ToVector());
-
-            // The previous code copied into `gradientTensor.Data.ToArray()`
-            // — a NEW array materialised by ToArray() and immediately
-            // discarded after the copy. The tensor's backing storage stayed
-            // zero, so the returned gradient was always all-zeros. Copy
-            // directly into the tensor's writable span instead.
-            var gradientTensor = new Tensor<TLoss>(predicted._shape);
-            var src = gradientCpu.ToArray();
-            src.AsSpan(0, Math.Min(src.Length, gradientTensor.Data.Length))
-               .CopyTo(gradientTensor.Data.Span);
-            return (loss, gradientTensor);
-        }
+        return 4;
     }
 
-    /// <summary>
-    /// Gets the total number of trainable parameters in the SAGAN.
-    /// </summary>
-    /// <remarks>
-    /// This includes all parameters from both the Generator and Discriminator networks.
-    /// </remarks>
-    public override long ParameterCount => Generator.GetParameterCount() + Discriminator.GetParameterCount();
-
-    /// <inheritdoc/>
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
-
-        return Generate(input);
-    }
-
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // GAN training contract (mirrors GenerativeAdversarialNetwork.Train): the
-        // discriminator learns from the batch of REAL images carried by
-        // `expectedOutput` (the same shape the generator produces and the
-        // discriminator consumes), while `input` is the latent that Predict/Generate
-        // uses. TrainStep draws its own noise for the fake branch, so the latent is
-        // not consumed here. Using `input` as the real images was incorrect — it fed
-        // the latent to the discriminator, throwing a channel-depth mismatch.
-        var realImages = expectedOutput;
-        var batchSize = realImages.Shape[0];
-        TrainStep(realImages, batchSize);
-    }
-
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters)
-    {
-        int generatorCount = (int)Generator.GetParameterCount();
-        int discriminatorCount = (int)Discriminator.GetParameterCount();
-
-        // Update Generator parameters
-        var generatorParams = new Vector<T>(generatorCount);
-        for (int i = 0; i < generatorCount; i++)
-            generatorParams[i] = parameters[i];
-        Generator.UpdateParameters(generatorParams);
-
-        // Update Discriminator parameters
-        var discriminatorParams = new Vector<T>(discriminatorCount);
-        for (int i = 0; i < discriminatorCount; i++)
-            discriminatorParams[i] = parameters[generatorCount + i];
-        Discriminator.UpdateParameters(discriminatorParams);
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
-    {
-        var genParams = Generator.GetParameters();
-        var discParams = Discriminator.GetParameters();
-
-        var totalLength = genParams.Length + discParams.Length;
-        var parameters = new Vector<T>(totalLength);
-
-        int idx = 0;
-        for (int i = 0; i < genParams.Length; i++)
-            parameters[idx++] = genParams[i];
-        for (int i = 0; i < discParams.Length; i++)
-            parameters[idx++] = discParams[i];
-
-        return parameters;
-    }
-
-    /// <inheritdoc/>
-    public override void SetTrainingMode(bool isTraining)
-    {
-        IsTrainingMode = isTraining;
-        Generator.SetTrainingMode(isTraining);
-        Discriminator.SetTrainingMode(isTraining);
-    }
+    /// <summary>Checks if a number is a power of two.</summary>
+    private static bool IsPowerOfTwo(int n) => n > 0 && (n & (n - 1)) == 0;
 
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
@@ -879,125 +406,24 @@ public class SAGAN<T> : NeuralNetworkBase<T>
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["ModelType"] = "SAGAN",
-                ["LatentSize"] = LatentSize,
-                ["NumClasses"] = NumClasses,
+                ["LatentSize"] = _latentSize,
+                ["NumClasses"] = _numClasses,
                 ["ImageChannels"] = _imageChannels,
                 ["ImageHeight"] = _imageHeight,
-                ["ImageWidth"] = _imageWidth
+                ["ImageWidth"] = _imageWidth,
+                ["GeneratorChannels"] = _generatorChannels,
+                ["DiscriminatorChannels"] = _discriminatorChannels,
+                ["UseSpectralNormalization"] = UseSpectralNormalization
             }
         };
 
         metadata.SetProperty("ModelType", "SAGAN");
-        metadata.SetProperty("LatentSize", LatentSize);
-        metadata.SetProperty("NumClasses", NumClasses);
-        metadata.SetProperty("IsConditional", _isConditional);
+        metadata.SetProperty("LatentSize", _latentSize);
+        metadata.SetProperty("NumClasses", _numClasses);
         metadata.SetProperty("ImageChannels", _imageChannels);
         metadata.SetProperty("ImageHeight", _imageHeight);
         metadata.SetProperty("ImageWidth", _imageWidth);
-        metadata.SetProperty("GeneratorChannels", _generatorChannels);
-        metadata.SetProperty("DiscriminatorChannels", _discriminatorChannels);
-        metadata.SetProperty("UseSpectralNormalization", UseSpectralNormalization);
-        metadata.SetProperty("AttentionLayers", string.Join(",", AttentionLayers));
 
         return metadata;
-    }
-
-    /// <inheritdoc/>
-    protected override void InitializeLayers()
-    {
-        // Layers are initialized in the constructor via the Generator and Discriminator CNNs
-        int paramCount = (int)(Generator.GetParameterCount() + Discriminator.GetParameterCount());
-        _momentum = new Vector<T>(paramCount);
-        _secondMoment = new Vector<T>(paramCount);
-    }
-
-    /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(LatentSize);
-        writer.Write(NumClasses);
-        writer.Write(_isConditional);
-        writer.Write(_imageChannels);
-        writer.Write(_imageHeight);
-        writer.Write(_imageWidth);
-        writer.Write(_generatorChannels);
-        writer.Write(_discriminatorChannels);
-        writer.Write(UseSpectralNormalization);
-        writer.Write(AttentionLayers.Length);
-        foreach (var layer in AttentionLayers)
-        {
-            writer.Write(layer);
-        }
-
-        // Serialize optimizer state
-        writer.Write(_initialLearningRate);
-        writer.Write(_currentLearningRate);
-        SerializationHelper<T>.SerializeVector(writer, _momentum);
-        SerializationHelper<T>.SerializeVector(writer, _secondMoment);
-        writer.Write(NumOps.ToDouble(_beta1Power));
-        writer.Write(NumOps.ToDouble(_beta2Power));
-
-        // Serialize networks
-        byte[] generatorData = Generator.Serialize();
-        writer.Write(generatorData.Length);
-        writer.Write(generatorData);
-
-        byte[] discriminatorData = Discriminator.Serialize();
-        writer.Write(discriminatorData.Length);
-        writer.Write(discriminatorData);
-    }
-
-    /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        LatentSize = reader.ReadInt32();
-        NumClasses = reader.ReadInt32();
-        _isConditional = reader.ReadBoolean();
-        _imageChannels = reader.ReadInt32();
-        _imageHeight = reader.ReadInt32();
-        _imageWidth = reader.ReadInt32();
-        _generatorChannels = reader.ReadInt32();
-        _discriminatorChannels = reader.ReadInt32();
-        UseSpectralNormalization = reader.ReadBoolean();
-        int attentionLayerCount = reader.ReadInt32();
-        AttentionLayers = new int[attentionLayerCount];
-        for (int i = 0; i < attentionLayerCount; i++)
-        {
-            AttentionLayers[i] = reader.ReadInt32();
-        }
-
-        // Deserialize optimizer state
-        _initialLearningRate = reader.ReadDouble();
-        _currentLearningRate = reader.ReadDouble();
-        _momentum = SerializationHelper<T>.DeserializeVector(reader);
-        _secondMoment = SerializationHelper<T>.DeserializeVector(reader);
-        _beta1Power = NumOps.FromDouble(reader.ReadDouble());
-        _beta2Power = NumOps.FromDouble(reader.ReadDouble());
-
-        // Deserialize networks
-        int generatorLength = reader.ReadInt32();
-        Generator.Deserialize(reader.ReadBytes(generatorLength));
-
-        int discriminatorLength = reader.ReadInt32();
-        Discriminator.Deserialize(reader.ReadBytes(discriminatorLength));
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new SAGAN<T>(
-            Generator.Architecture,
-            Discriminator.Architecture,
-            LatentSize,
-            _imageChannels,
-            _imageHeight,
-            _imageWidth,
-            NumClasses,
-            _generatorChannels,
-            _discriminatorChannels,
-            AttentionLayers,
-            Architecture.InputType,
-            _lossFunction,
-            _initialLearningRate);
     }
 }
