@@ -420,8 +420,8 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
 
         // BF16 moment storage (UseBFloat16MomentStorage == true): 2 bytes/element, no per-block
         // scales. Mutually exclusive with the byte-quantized fields above — only one set is allocated.
-        public Vector<ushort>? MBf16;
-        public Vector<ushort>? VBf16;
+        public ushort[]? MBf16;
+        public ushort[]? VBf16;
 
         // GPU-resident 8-bit state (AIDOTNET_GPU_ADAM=1, CUDA): int8 m/v + per-block
         // double scales kept on the device across steps so the adam8bit_update kernel
@@ -710,8 +710,8 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             {
                 Length = paramLength,
                 NumBlocks = 0,
-                MBf16 = new Vector<ushort>(paramLength),
-                VBf16 = new Vector<ushort>(paramLength),
+                MBf16 = new ushort[paramLength],
+                VBf16 = new ushort[paramLength],
             };
         }
 
@@ -894,14 +894,23 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// Expands a BF16 (2 bytes/element) moment buffer into a freshly-allocated full-precision tensor of
     /// the given shape. Transient — consumed within a single Step iteration and released to the arena.
     /// </summary>
-    private Tensor<T> Bf16ToTensor(Vector<ushort> bf16, int[] paramShape)
+    private Tensor<T> Bf16ToTensor(ushort[] bf16, int[] paramShape)
     {
         var result = new Tensor<T>(paramShape);
         int length = result.Length;
-        CpuParallelSettings.ParallelForOrSerial(0, length, (long)length, i =>
+        // Raw-array dequant (no Tensor/Vector indexer, no NumOps dispatch on the float fast path).
+        // Profiled as ~half the NN-training managed hot path (ViT) before this; the typeof(T) branch
+        // folds at JIT. BF16→float is a pure widening, no scale.
+        var dst = result.GetCpuData();
+        if (typeof(T) == typeof(float))
         {
-            result[i] = NumOps.FromDouble(BitConverterHelper.Bf16BitsToFloat(bf16[i]));
-        });
+            var f = (float[])(object)dst;
+            CpuParallelSettings.ParallelForOrSerial(0, length, (long)length, i => f[i] = BitConverterHelper.Bf16BitsToFloat(bf16[i]));
+        }
+        else
+        {
+            CpuParallelSettings.ParallelForOrSerial(0, length, (long)length, i => dst[i] = NumOps.FromDouble(BitConverterHelper.Bf16BitsToFloat(bf16[i])));
+        }
         return result;
     }
 
@@ -909,13 +918,20 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// Packs a full-precision tensor's values back into a pre-allocated BF16 (2 bytes/element) buffer
     /// with round-to-nearest-even. BF16 keeps the float32 exponent, so no scale factor is needed.
     /// </summary>
-    private void TensorToBf16(Tensor<T> values, Vector<ushort> bf16)
+    private void TensorToBf16(Tensor<T> values, ushort[] bf16)
     {
         int length = values.Length;
-        CpuParallelSettings.ParallelForOrSerial(0, length, (long)length, i =>
+        // Raw-array quant (no Tensor/Vector indexer, no NumOps dispatch on the float fast path).
+        var src = values.GetCpuData();
+        if (typeof(T) == typeof(float))
         {
-            bf16[i] = BitConverterHelper.FloatToBf16Bits((float)NumOps.ToDouble(values[i]));
-        });
+            var f = (float[])(object)src;
+            CpuParallelSettings.ParallelForOrSerial(0, length, (long)length, i => bf16[i] = BitConverterHelper.FloatToBf16Bits(f[i]));
+        }
+        else
+        {
+            CpuParallelSettings.ParallelForOrSerial(0, length, (long)length, i => bf16[i] = BitConverterHelper.FloatToBf16Bits((float)NumOps.ToDouble(src[i])));
+        }
     }
 
     /// <summary>
