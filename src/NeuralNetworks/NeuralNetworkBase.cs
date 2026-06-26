@@ -9875,6 +9875,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             return false;
         }
 
+        // CreateNewInstance() must hand back an instance with its OWN layer objects. Some models are
+        // built from an explicit pre-constructed layer list that the new instance re-uses by reference,
+        // so the "clone" shares the very same layer (and therefore weight tensor) objects as the source.
+        // Sharing tensors copy-on-write onto a layer the source still owns would make any later write to
+        // EITHER side mutate BOTH — defeating Clone's independence contract (a write to the clone leaks
+        // back to the original). Detect that aliasing and fall back to the eager full-fidelity copy,
+        // which deserializes into genuinely independent layers.
+        for (int i = 0; i < srcLayers.Count; i++)
+        {
+            if (ReferenceEquals(srcLayers[i], dstLayers[i]))
+            {
+                (copy as IDisposable)?.Dispose();
+                return false;
+            }
+        }
+
         // GetExtraTrainableTensors() are raw trainable tensors the model owns OUTSIDE any layer (e.g.
         // ViT's cls_token / positional embeddings), which training DOES update. The reflection walk
         // above shares only LAYER tensors, and ParameterCount excludes the extras — so the coverage
