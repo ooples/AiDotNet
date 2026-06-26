@@ -38,6 +38,7 @@ public static class ForwardScratchGate
     private static readonly bool s_envSdpa = s_envEnabled && Sub("AIDOTNET_FWD_SCRATCH_SDPA");
     private static readonly bool s_envAdaLn = s_envEnabled && Sub("AIDOTNET_FWD_SCRATCH_ADALN");
     private static readonly bool s_envFusedLinear = s_envEnabled && Sub("AIDOTNET_FWD_SCRATCH_FUSEDLINEAR");
+    private static readonly bool s_envFusedQkv = s_envEnabled && Sub("AIDOTNET_FWD_SCRATCH_FUSEDQKV");
 
     /// <summary>
     /// Optional in-process override for the gate, used by the correctness A/B probe to flip the
@@ -64,4 +65,15 @@ public static class ForwardScratchGate
     /// on the DiT/SiT forward (#1672).
     /// </summary>
     public static bool FusedLinear => Override.HasValue ? Override.Value : s_envFusedLinear;
+
+    /// <summary>
+    /// FusedQKV sub-gate. ON when <see cref="Enabled"/> unless AIDOTNET_FWD_SCRATCH_FUSEDQKV=0
+    /// (diagnostic). Fuses the three separate Q/K/V projection matmuls in
+    /// <c>SelfAttentionLayer.Forward</c> into ONE <c>[seq, D] @ [D, 3D]</c> GEMM against a cached
+    /// horizontally-concatenated <c>[D, 3D]</c> weight, then slices the <c>[seq, 3D]</c> result back
+    /// into Q/K/V. One engine dispatch instead of three (+ three fewer allocations) per attention
+    /// block — the parallel-GEMM park/wakeup that gates the DiT/SiT inference forward (#1672).
+    /// Bit-identical: the per-output-column dot product is unchanged by the wider N.
+    /// </summary>
+    public static bool FusedQkv => Override.HasValue ? Override.Value : s_envFusedQkv;
 }
