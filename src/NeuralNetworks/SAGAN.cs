@@ -814,7 +814,16 @@ public class SAGAN<T> : NeuralNetworkBase<T>
         var metadata = new ModelMetadata<T>
         {
             Name = "SAGAN",
-            Version = "1.0"
+            Version = "1.0",
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                ["ModelType"] = "SAGAN",
+                ["LatentSize"] = LatentSize,
+                ["NumClasses"] = NumClasses,
+                ["ImageChannels"] = _imageChannels,
+                ["ImageHeight"] = _imageHeight,
+                ["ImageWidth"] = _imageWidth
+            }
         };
 
         metadata.SetProperty("ModelType", "SAGAN");

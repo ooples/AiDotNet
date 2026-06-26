@@ -1149,7 +1149,17 @@ public class BigGAN<T> : NeuralNetworkBase<T>
         var metadata = new ModelMetadata<T>
         {
             Name = "BigGAN",
-            Version = "1.0"
+            Version = "1.0",
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                ["ModelType"] = "BigGAN",
+                ["LatentSize"] = LatentSize,
+                ["NumClasses"] = NumClasses,
+                ["ClassEmbeddingDim"] = ClassEmbeddingDim,
+                ["ImageChannels"] = _imageChannels,
+                ["ImageHeight"] = _imageHeight,
+                ["ImageWidth"] = _imageWidth
+            }
         };
 
         metadata.SetProperty("ModelType", "BigGAN");

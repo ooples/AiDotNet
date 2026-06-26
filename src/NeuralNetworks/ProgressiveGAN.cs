@@ -1101,7 +1101,15 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
         var metadata = new ModelMetadata<T>
         {
             Name = "ProgressiveGAN",
-            Version = "2.0" // Updated version for production-ready implementation
+            Version = "2.0", // Updated version for production-ready implementation
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                ["ModelType"] = "ProgressiveGAN",
+                ["LatentSize"] = LatentSize,
+                ["MaxResolutionLevel"] = MaxResolutionLevel,
+                ["ImageChannels"] = _imageChannels,
+                ["BaseFeatureMaps"] = _baseFeatureMaps
+            }
         };
 
         metadata.SetProperty("ModelType", "ProgressiveGAN");
