@@ -48,8 +48,18 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Multiple Time Series", "https://doi.org/10.1002/0471667196", Year = 2005, Authors = "Helmut Lütkepohl")]
-public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
+public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>, IMultivariateForecastModel<T>
 {
+    /// <summary>The number of interrelated series this model forecasts (the VAR output dimension).</summary>
+    public int VariableCount => _varOptions.OutputDimension;
+
+    /// <summary>
+    /// Forecasts <paramref name="horizon"/> steps for all variables from the multivariate
+    /// <paramref name="history"/> (the unified facade-forecast entry point). Delegates to the
+    /// model's iterative multivariate <see cref="Forecast(Matrix{T}, int)"/>. VARMA inherits this.
+    /// </summary>
+    public Matrix<T> ForecastMultivariate(Matrix<T> history, int horizon) => Forecast(history, horizon);
+
     /// <summary>
     /// Initializes a new instance with default settings.
     /// </summary>
