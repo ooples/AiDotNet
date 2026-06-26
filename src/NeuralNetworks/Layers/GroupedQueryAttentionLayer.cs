@@ -341,7 +341,7 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
             ? Engine.Reshape(input, new[] { 1, seqLen, embDim })
             : Engine.Reshape(input, new[] { batchSize, seqLen, embDim });
 
-        _lastInput = input3D;
+        _lastInput = ShouldCacheForBackward ? input3D : null; // #1668: skip in inference (arena safety)
 
         // Project Q, K, V
         var input2D = Engine.Reshape(input3D, new[] { batchSize * seqLen, embDim });
