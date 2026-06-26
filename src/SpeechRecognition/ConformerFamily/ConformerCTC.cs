@@ -94,16 +94,17 @@ public class ConformerCTC<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         Description = "Conformer-CTC: CTC-only variant (Gulati et al., 2020)",
         FeatureCount = _options.NumMels,
         Complexity = _options.NumEncoderLayers,
-        AdditionalInfo = new Dictionary<string, object>
+        // Seed from the shared audio metadata — Mode, SampleRate and NumMels have a single
+        // source of truth in AudioNeuralNetworkBase.BaseAudioMetadataInfo() — then add the
+        // Conformer-specific keys, so these payloads don't drift as more ASR families adopt
+        // the same pattern.
+        AdditionalInfo = new Dictionary<string, object>(BaseAudioMetadataInfo())
         {
-            ["Mode"] = _useNativeMode ? "Native" : "ONNX",
             ["EncoderDim"] = _options.EncoderDim,
             ["NumEncoderLayers"] = _options.NumEncoderLayers,
             ["NumAttentionHeads"] = _options.NumAttentionHeads,
             ["FeedForwardExpansionFactor"] = _options.FeedForwardExpansionFactor,
-            ["NumMels"] = _options.NumMels,
             ["VocabSize"] = _options.VocabSize,
-            ["SampleRate"] = _options.SampleRate,
             ["MaxAudioLengthSeconds"] = _options.MaxAudioLengthSeconds,
             ["DropoutRate"] = _options.DropoutRate,
             ["Language"] = _options.Language

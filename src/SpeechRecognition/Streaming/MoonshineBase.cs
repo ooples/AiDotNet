@@ -116,7 +116,10 @@ public class MoonshineBase<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             ["MaxAudioLengthSeconds"] = _options.MaxAudioLengthSeconds,
             ["MaxTextLength"] = _options.MaxTextLength,
             ["DropoutRate"] = _options.DropoutRate,
-            ["Language"] = _options.Language
+            // Report the model's actual supported language, not the configurable
+            // _options.Language — Moonshine Base is English-only (SupportedLanguages = ["en"]),
+            // so echoing _options.Language could claim support the model doesn't have.
+            ["Language"] = SupportedLanguages.Count > 0 ? SupportedLanguages[0] : _options.Language
         }
     };
     protected override void SerializeNetworkSpecificData(BinaryWriter w) { w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty); w.Write(_options.SampleRate); w.Write(_options.MaxAudioLengthSeconds); w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers); w.Write(_options.NumAttentionHeads); w.Write(_options.NumMels); w.Write(_options.VocabSize); w.Write(_options.MaxTextLength); w.Write(_options.DropoutRate); w.Write(_options.Language); }
