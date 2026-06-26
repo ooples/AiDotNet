@@ -1,279 +1,99 @@
-using AiDotNet.ActivationFunctions;
-using AiDotNet.Interfaces;
+// AiDotNet — QLoRA Fine-Tuning
+//
+// QLoRA = a quantized, frozen base model + trainable LoRA adapters, all wired
+// through the AiModelBuilder facade: ConfigureQuantization quantizes the base
+// weights (shrinking the memory footprint) and ConfigureLoRA trains only the
+// small low-rank matrices on top. The result is an AiModelResult you predict
+// through.
+
+using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Deployment.Configuration;   // QuantizationConfig
+using AiDotNet.Enums;
 using AiDotNet.LoRA;
-using AiDotNet.LoRA.Adapters;
-using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
 Console.WriteLine("=== AiDotNet QLoRA Fine-Tuning ===");
-Console.WriteLine("4-bit Quantized LoRA for Memory-Efficient Fine-Tuning\n");
+Console.WriteLine("Quantized base model + Low-Rank Adaptation\n");
 
 // Configuration
-const int inputSize = 256;
-const int hiddenSize = 512;
-const int outputSize = 10;
-const int loraRank = 8;
-const double loraAlpha = 8.0;
+const int inputSize = 32;
+const int outputSize = 4;
+const int loraRank = 4;
+const double loraAlpha = 4.0;
 
 Console.WriteLine("Configuration:");
 Console.WriteLine($"  - Input Size: {inputSize}");
-Console.WriteLine($"  - Hidden Size: {hiddenSize}");
 Console.WriteLine($"  - Output Size: {outputSize}");
 Console.WriteLine($"  - LoRA Rank: {loraRank}");
-Console.WriteLine($"  - LoRA Alpha: {loraAlpha}");
-Console.WriteLine();
+Console.WriteLine($"  - Quantization: INT4 base weights (16 levels, ~8x smaller than FP32)\n");
 
-// Create base model layers
-Console.WriteLine("Creating base model layers...");
+// ── 1. Base model (the architecture builds a small MLP) ────────────────────
+var model = new NeuralNetwork<double>(new NeuralNetworkArchitecture<double>(
+    inputFeatures: inputSize, numClasses: outputSize, complexity: NetworkComplexity.Simple));
 
-var baseLayer1 = new DenseLayer<double>(inputSize, hiddenSize, (IActivationFunction<double>)new ReLUActivation<double>());
-var baseLayer2 = new DenseLayer<double>(hiddenSize, hiddenSize, (IActivationFunction<double>)new ReLUActivation<double>());
-var baseLayer3 = new DenseLayer<double>(hiddenSize, outputSize, (IVectorActivationFunction<double>)new SoftmaxActivation<double>());
+// ── 2. QLoRA = quantization config + LoRA config ───────────────────────────
+var quantConfig = QuantizationConfig.ForInt4();   // true 4-bit base weights — what makes this QLoRA
+var loraConfig = new DefaultLoRAConfiguration<double>(
+    rank: loraRank, alpha: loraAlpha, freezeBaseLayer: true);
 
-// Calculate memory usage for different configurations
-Console.WriteLine("\n" + new string('=', 70));
-Console.WriteLine("Memory Analysis: Standard vs QLoRA");
-Console.WriteLine(new string('=', 70));
-
-// Standard precision (16-bit/2 bytes per parameter)
-int layer1Params = inputSize * hiddenSize + hiddenSize;
-int layer2Params = hiddenSize * hiddenSize + hiddenSize;
-int layer3Params = hiddenSize * outputSize + outputSize;
-int totalBaseParams = layer1Params + layer2Params + layer3Params;
-
-long memory16bit = totalBaseParams * 2L;
-long memory32bit = totalBaseParams * 4L;
-
-Console.WriteLine("\nBase Model Memory (without LoRA):");
-Console.WriteLine($"  Total Parameters: {totalBaseParams:N0}");
-Console.WriteLine($"  Memory (FP32): {FormatBytes(memory32bit)}");
-Console.WriteLine($"  Memory (FP16): {FormatBytes(memory16bit)}");
-
-// QLoRA memory calculation
-int loraLayer1Params = loraRank * (inputSize + hiddenSize);
-int loraLayer2Params = loraRank * (hiddenSize + hiddenSize);
-int loraLayer3Params = loraRank * (hiddenSize + outputSize);
-int totalLoraParams = loraLayer1Params + loraLayer2Params + loraLayer3Params;
-
-long memoryBase4bit = (long)(totalBaseParams * 0.5);
-long memoryQuantConstants = (long)(memoryBase4bit * 0.03);
-long memoryLoraFP32 = totalLoraParams * 4L;
-long memoryQlora = memoryBase4bit + memoryQuantConstants + memoryLoraFP32;
-
-Console.WriteLine("\nQLoRA Memory Breakdown:");
-Console.WriteLine($"  Base weights (4-bit): {FormatBytes(memoryBase4bit)}");
-Console.WriteLine($"  Quantization constants: {FormatBytes(memoryQuantConstants)}");
-Console.WriteLine($"  LoRA adapters (FP32): {FormatBytes(memoryLoraFP32)}");
-Console.WriteLine($"  Total QLoRA memory: {FormatBytes(memoryQlora)}");
-
-double savings = (1.0 - (double)memoryQlora / memory16bit) * 100;
-Console.WriteLine($"\nMemory Savings vs FP16: {savings:F1}% ({(double)memory16bit / memoryQlora:F1}x reduction)");
-
-// QLoRA configuration explanation
-Console.WriteLine("\n" + new string('=', 70));
-Console.WriteLine("QLoRA Quantization Configuration");
-Console.WriteLine(new string('=', 70));
-
-Console.WriteLine("\nQuantization Types:");
-Console.WriteLine("  - INT4: Uniform 4-bit integer (-8 to 7)");
-Console.WriteLine("  - NF4: 4-bit Normal Float (optimal for normally distributed weights)");
-Console.WriteLine();
-
-Console.WriteLine("NF4 Quantization Levels (16 values optimized for normal distribution):");
-var nf4Values = new double[]
+// ── 3. Tiny synthetic memorization task ────────────────────────────────────
+var rng = new Random(42);
+const int n = 32;
+var trainX = new Tensor<double>(new[] { n, inputSize });
+var trainY = new Tensor<double>(new[] { n, outputSize });
+for (int i = 0; i < n; i++)
 {
-    -1.0, -0.6962, -0.5251, -0.3949, -0.2844, -0.1848, -0.0911, 0.0,
-    0.0796, 0.1609, 0.2461, 0.3379, 0.4407, 0.5626, 0.7230, 1.0
-};
-
-Console.WriteLine("  Index | NF4 Value | Description");
-Console.WriteLine("  ------|-----------|-------------");
-for (int i = 0; i < nf4Values.Length; i++)
-{
-    string desc = i switch
-    {
-        0 => "Minimum",
-        7 => "Zero",
-        15 => "Maximum",
-        _ => ""
-    };
-    Console.WriteLine($"  {i,5} | {nf4Values[i],9:F4} | {desc}");
+    for (int j = 0; j < inputSize; j++) trainX[new[] { i, j }] = rng.NextDouble();
+    trainY[new[] { i, i % outputSize }] = 1.0;
 }
 
-Console.WriteLine("\nNotice: Values are NOT evenly spaced - more resolution near zero");
-Console.WriteLine("        where most neural network weights are concentrated.");
-
-// Create QLoRA adapters
-Console.WriteLine("\n" + new string('=', 70));
-Console.WriteLine("Creating QLoRA Adapters");
-Console.WriteLine(new string('=', 70));
-
+// ── 4. Fine-tune through the facade ────────────────────────────────────────
+Console.WriteLine("Fine-tuning through AiModelBuilder (ConfigureQuantization + ConfigureLoRA) ...");
 try
 {
-    Console.WriteLine("\nInitializing QLoRA adapter for Layer 1...");
-    Console.WriteLine($"  - Input size: {inputSize}");
-    Console.WriteLine($"  - Output size: {hiddenSize}");
-    Console.WriteLine($"  - LoRA rank: {loraRank}");
-    Console.WriteLine($"  - Quantization: NF4");
-    Console.WriteLine($"  - Double quantization: Enabled");
-    Console.WriteLine($"  - Block size: 64");
+    var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
+        .ConfigureModel(model)
+        .ConfigureDataLoader(DataLoaders.FromTensors(trainX, trainY))
+        .ConfigureQuantization(quantConfig)
+        .ConfigureLoRA(loraConfig)
+        .BuildAsync();
 
-    var qloraLayer1 = new QLoRAAdapter<double>(
-        baseLayer: baseLayer1,
-        rank: loraRank,
-        alpha: loraAlpha,
-        quantizationType: QLoRAAdapter<double>.QuantizationType.NF4,
-        useDoubleQuantization: true,
-        quantizationBlockSize: 64,
-        freezeBaseLayer: true);
-
-    Console.WriteLine("  [OK] Layer 1 QLoRA adapter created");
-
-    Console.WriteLine("\nInitializing QLoRA adapter for Layer 2...");
-    var qloraLayer2 = new QLoRAAdapter<double>(
-        baseLayer: baseLayer2,
-        rank: loraRank,
-        alpha: loraAlpha,
-        quantizationType: QLoRAAdapter<double>.QuantizationType.NF4,
-        useDoubleQuantization: true,
-        quantizationBlockSize: 64,
-        freezeBaseLayer: true);
-
-    Console.WriteLine("  [OK] Layer 2 QLoRA adapter created");
-
-    Console.WriteLine("\nInitializing QLoRA adapter for Layer 3...");
-    var qloraLayer3 = new QLoRAAdapter<double>(
-        baseLayer: baseLayer3,
-        rank: loraRank,
-        alpha: loraAlpha,
-        quantizationType: QLoRAAdapter<double>.QuantizationType.NF4,
-        useDoubleQuantization: true,
-        quantizationBlockSize: 64,
-        freezeBaseLayer: true);
-
-    Console.WriteLine("  [OK] Layer 3 QLoRA adapter created");
-
-    // Display adapter properties
-    Console.WriteLine("\nQLoRA Adapter Properties:");
-    Console.WriteLine($"  Quantization Type: {qloraLayer1.Quantization}");
-    Console.WriteLine($"  Double Quantization: {qloraLayer1.UsesDoubleQuantization}");
-    Console.WriteLine($"  Block Size: {qloraLayer1.BlockSize}");
-
-    // Merging demonstration
-    Console.WriteLine("\n" + new string('=', 70));
-    Console.WriteLine("QLoRA Adapter Merging");
-    Console.WriteLine(new string('=', 70));
-
-    Console.WriteLine("\nMerging QLoRA adapters back to base model...");
-    Console.WriteLine("  1. Dequantize base weights (4-bit -> FP32)");
-    Console.WriteLine("  2. Compute LoRA contribution (B * A * alpha/rank)");
-    Console.WriteLine("  3. Add LoRA contribution to dequantized weights");
-    Console.WriteLine("  4. (Optional) Re-quantize for deployment");
-
-    try
+    Console.WriteLine("  Fine-tuning complete.");
+    if (result.TotalTrainableParameters is long trainable)
+        Console.WriteLine($"  Trainable parameters (LoRA only): {trainable:N0}");
+    if (result.QuantizationInfo is { } qi)
     {
-        var mergedLayer1 = qloraLayer1.MergeToOriginalLayer();
-        Console.WriteLine("  [OK] Layer 1 merged successfully");
-
-        var mergedLayer2 = qloraLayer2.MergeToOriginalLayer();
-        Console.WriteLine("  [OK] Layer 2 merged successfully");
-
-        var mergedLayer3 = qloraLayer3.MergeToOriginalLayer();
-        Console.WriteLine("  [OK] Layer 3 merged successfully");
-
-        Console.WriteLine("\nMerged model ready for deployment!");
-        Console.WriteLine("  - Can be re-quantized to 4-bit for efficient inference");
-        Console.WriteLine("  - Or kept in FP16/FP32 for maximum accuracy");
+        Console.WriteLine($"  Quantized: {qi.IsQuantized}, Mode: {qi.Mode}, BitWidth: {qi.BitWidth}");
+        if (qi.OriginalSizeBytes > 0)
+            Console.WriteLine($"  Base size: {qi.OriginalSizeBytes:N0} -> {qi.QuantizedSizeBytes:N0} bytes");
     }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"  Merge demonstration note: {ex.Message}");
-    }
+    var prediction = result.Predict(trainX);
+    Console.WriteLine($"  Prediction shape: [{string.Join(", ", prediction.Shape)}]");
 }
 catch (Exception ex)
 {
-    Console.WriteLine($"\nNote: QLoRA requires Dense/FullyConnected layers with 1D input/output.");
-    Console.WriteLine($"This sample demonstrates the API patterns and memory analysis.");
-    Console.WriteLine($"\nError details: {ex.Message}");
+    // Surface failures so the samples CI catches broken quantization/LoRA wiring.
+    Console.Error.WriteLine($"  QLoRA sample failed: {ex.Message}");
+    throw;
 }
 
-// Memory comparison visualization
-Console.WriteLine("\n" + new string('=', 70));
-Console.WriteLine("Memory Comparison Visualization");
-Console.WriteLine(new string('=', 70));
+// ── Why QLoRA: memory footprint of the base weights by precision ───────────
+Console.WriteLine("\n" + new string('=', 60));
+Console.WriteLine("Memory Footprint by Base-Weight Precision");
+Console.WriteLine(new string('=', 60));
+Console.WriteLine("\n| Precision | Bits/Weight | Relative Size | Notes                  |");
+Console.WriteLine("|-----------|-------------|---------------|------------------------|");
+Console.WriteLine("| FP32      |          32 |         1.00x | Full precision base    |");
+Console.WriteLine("| FP16      |          16 |         0.50x | Half precision         |");
+Console.WriteLine("| INT8      |           8 |         0.25x | 8-bit base             |");
+Console.WriteLine("| INT4      |           4 |         0.125x| QLoRA (this sample)    |");
 
-var memoryConfigs = new[]
-{
-    ("Full FP32 Fine-Tuning", memory32bit, totalBaseParams),
-    ("Full FP16 Fine-Tuning", memory16bit, totalBaseParams),
-    ("Standard LoRA (FP16 base)", memory16bit + totalLoraParams * 4L, totalLoraParams),
-    ("QLoRA (4-bit base)", memoryQlora, totalLoraParams)
-};
+Console.WriteLine(@"
+QLoRA keeps the large base model frozen in low precision (here INT4) and trains
+only the small LoRA adapters in full precision, so fine-tuning fits in a
+fraction of the memory a full fine-tune would need.
+");
 
-long maxMemory = memoryConfigs.Max(c => c.Item2);
-int barWidth = 40;
-
-Console.WriteLine();
-foreach (var (name, memory, trainable) in memoryConfigs)
-{
-    int barLength = (int)((double)memory / maxMemory * barWidth);
-    string bar = new string('#', barLength) + new string('.', barWidth - barLength);
-    Console.WriteLine($"  {name,-25} [{bar}] {FormatBytes(memory)}");
-    Console.WriteLine($"  {"",-25} Trainable: {trainable:N0} params\n");
-}
-
-// QLoRA vs Standard LoRA comparison table
-Console.WriteLine(new string('=', 70));
-Console.WriteLine("QLoRA vs Standard LoRA Comparison");
-Console.WriteLine(new string('=', 70));
-
-Console.WriteLine("\n| Aspect                  | Standard LoRA    | QLoRA            |");
-Console.WriteLine("|-------------------------|------------------|------------------|");
-Console.WriteLine($"| Base weight precision   | FP16 (2 bytes)   | INT4 (0.5 bytes) |");
-Console.WriteLine($"| LoRA adapter precision  | FP32             | FP32             |");
-Console.WriteLine($"| Memory for base         | {FormatBytes(memory16bit),-16} | {FormatBytes(memoryBase4bit),-16} |");
-Console.WriteLine($"| Memory for LoRA         | {FormatBytes(totalLoraParams * 4L),-16} | {FormatBytes(memoryLoraFP32),-16} |");
-Console.WriteLine($"| Total memory            | {FormatBytes(memory16bit + totalLoraParams * 4L),-16} | {FormatBytes(memoryQlora),-16} |");
-Console.WriteLine($"| Trainable parameters    | {totalLoraParams:N0,-16} | {totalLoraParams:N0,-16} |");
-Console.WriteLine($"| Forward pass overhead   | None             | Dequantization   |");
-Console.WriteLine($"| Best for                | Speed priority   | Memory limited   |");
-
-// Real-world scaling example
-Console.WriteLine("\n" + new string('=', 70));
-Console.WriteLine("Real-World Scaling: 7B Parameter Model Example");
-Console.WriteLine(new string('=', 70));
-
-long params7B = 7_000_000_000L;
-long memory7B_FP32 = params7B * 4L;
-long memory7B_FP16 = params7B * 2L;
-long memory7B_4bit = (long)(params7B * 0.5);
-
-long loraParams7B = (long)(params7B * 0.01);
-long loraMemory7B = loraParams7B * 4L;
-
-Console.WriteLine("\n7B Parameter Model Memory Requirements:");
-Console.WriteLine($"  Full Fine-Tuning (FP32):    {FormatBytes(memory7B_FP32)} (need ~56GB GPU)");
-Console.WriteLine($"  Full Fine-Tuning (FP16):    {FormatBytes(memory7B_FP16)} (need ~28GB GPU)");
-Console.WriteLine($"  Standard LoRA (FP16 base):  {FormatBytes(memory7B_FP16 + loraMemory7B)} (need ~28GB GPU)");
-Console.WriteLine($"  QLoRA (4-bit base):         {FormatBytes(memory7B_4bit + loraMemory7B)} (need ~7GB GPU)");
-
-Console.WriteLine("\nWith QLoRA, you can fine-tune a 7B model on a consumer GPU!");
-Console.WriteLine("  - NVIDIA RTX 3080 (10GB): Can train 7B models");
-Console.WriteLine("  - NVIDIA RTX 4090 (24GB): Can train 13B-30B models");
-Console.WriteLine("  - Single A100 (80GB): Can train 65B+ models");
-
-Console.WriteLine("\n=== Sample Complete ===");
-
-static string FormatBytes(long bytes)
-{
-    string[] sizes = { "B", "KB", "MB", "GB", "TB" };
-    int order = 0;
-    double size = bytes;
-
-    while (size >= 1024 && order < sizes.Length - 1)
-    {
-        order++;
-        size /= 1024;
-    }
-
-    return $"{size:F2} {sizes[order]}";
-}
+Console.WriteLine("=== Sample Complete ===");

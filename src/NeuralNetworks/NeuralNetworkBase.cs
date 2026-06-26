@@ -2905,52 +2905,96 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             return;
         }
 
+        // Last shape with rank >= 2 (a real spatial/sequence shape, not a
+        // degenerate rank-1 [features] declaration). When a later layer rejects
+        // the running shape — typically because an intervening shape-preserving
+        // layer (BatchNorm/LayerNorm/activation/dropout) reported a rank-1
+        // GetOutputShape that poisoned the walk — we backtrack to this last good
+        // shape and retry, and a single un-resolvable layer no longer ABORTS the
+        // whole walk (the old behaviour: one early break left every downstream
+        // lazy layer at its placeholder ParameterCount, so CNN/transformer
+        // backbones under-reported their parameter count by orders of magnitude
+        // and blinded every ParameterCount-gated memory decision — streaming
+        // auto-detect, ShouldUseStreamingTraining, ConfigureInferenceForScale —
+        // for exactly the foundation-scale models that need them, #1688). Robust
+        // across ALL model families, not just whichever layer breaks first.
+        int[] lastGoodShape = currentShape;
+
         for (int i = 0; i < Layers.Count; i++)
         {
             var layer = Layers[i];
             if (layer is null) continue;
 
-            try
+            if (!TryAdvanceLayerShape(layer, ref currentShape, ref lastGoodShape))
             {
-                if (layer is LayerBase<T> lb && !lb.IsShapeResolved)
-                {
-                    // Shape-only resolution — does NOT allocate or initialize
-                    // weights, so we don't consume RNG state and perturb
-                    // training. Weight allocation still happens lazily on the
-                    // first real Forward via EnsureInitializedFromInput.
-                    lb.ResolveShapesOnly(currentShape);
-                }
-
-                // Advance the chain via the layer's now-resolved output
-                // shape. We re-read GetOutputShape after ResolveFromShape
-                // so a lazy layer that just resolved contributes its
-                // real shape to the next iteration.
-                int[] outShape = layer.GetOutputShape();
-                if (outShape != null && outShape.Length > 0 && System.Array.TrueForAll(outShape, d => d > 0))
-                {
-                    currentShape = outShape;
-                }
-                else
-                {
-                    // Layer can't yield a concrete output shape (e.g., a
-                    // dynamic-size layer with -1 dims). Stop pre-resolution;
-                    // remaining layers will lazy-resolve on first Forward.
-                    break;
-                }
-            }
-            catch
-            {
-                // ResolveFromShape can fail for layers that need richer
-                // shape info than we can derive from a flat array (e.g.,
-                // some attention layers expect contextual metadata).
-                // Swallow so InitializeLayers always succeeds — those
-                // layers retain their lazy state and resolve on first
-                // Forward as before.
+                // This layer resolved from NEITHER the running shape NOR the last
+                // good shape (the backtrack above already tried both). Its true
+                // output shape is therefore unknown, so the running shape is no
+                // longer a reliable predecessor for anything downstream. STOP the
+                // walk here: every subsequent layer is left lazy and resolves
+                // correctly from its real input on the first Forward — exactly as
+                // the pre-#1688 walk did. Continuing to ResolveShapesOnly a
+                // downstream layer from a GUESSED shape (the old "reset to
+                // lastGoodShape and keep walking") would mis-size shape-polymorphic
+                // layers — e.g. a Dense after an Embedding->Attention chain the walk
+                // can't follow gets pinned to the wrong input width, corrupting
+                // inference (this regressed incremental serving decode + transformer
+                // ModelFamily forwards). The #1688 ParameterCount fix is fully
+                // preserved for the common case where the chain stays intact: every
+                // layer resolves (rank-1-declaring BatchNorm / LayerNorm / activation
+                // layers resolve via the lastGoodShape backtrack inside
+                // TryAdvanceLayerShape), so this break is never reached for those
+                // models (verified: SegFormer / MaskDINO / OneFormer / Mask2Former
+                // walks hit zero unresolved layers).
                 break;
             }
         }
 
         _layerShapesResolved = true;
+    }
+
+    /// <summary>
+    /// Resolves <paramref name="layer"/>'s shape from the running
+    /// <paramref name="currentShape"/>, falling back to <paramref name="lastGoodShape"/>
+    /// (the last rank-&gt;=2 shape) when the running shape is rejected — which happens
+    /// when an intervening shape-preserving layer reported a degenerate rank-1 output
+    /// that poisoned the walk. On success advances <paramref name="currentShape"/> to
+    /// the layer's output (and refreshes <paramref name="lastGoodShape"/> when that
+    /// output is rank &gt;= 2). Shape-only: never allocates weights or consumes RNG.
+    /// Returns false only when neither shape resolves the layer.
+    /// </summary>
+    private bool TryAdvanceLayerShape(ILayer<T> layer, ref int[] currentShape, ref int[] lastGoodShape)
+    {
+        var candidates = ReferenceEquals(lastGoodShape, currentShape)
+            ? new[] { currentShape }
+            : new[] { currentShape, lastGoodShape };
+        foreach (var tryShape in candidates)
+        {
+            try
+            {
+                if (layer is LayerBase<T> lb && !lb.IsShapeResolved)
+                {
+                    // Shape-only resolution — does NOT allocate or initialize weights,
+                    // so we don't consume RNG state and perturb training. Weight
+                    // allocation still happens lazily on the first real Forward.
+                    lb.ResolveShapesOnly(tryShape);
+                }
+                int[] outShape = layer.GetOutputShape();
+                if (outShape != null && outShape.Length > 0 && System.Array.TrueForAll(outShape, d => d > 0))
+                {
+                    currentShape = outShape;
+                    if (outShape.Length >= 2) lastGoodShape = outShape;
+                }
+                // Resolved. (A dynamic/non-concrete output leaves currentShape as a
+                // deliberate shape-preserving passthrough for the next layer.)
+                return true;
+            }
+            catch
+            {
+                // Running shape rejected — try the fallback shape, if any.
+            }
+        }
+        return false;
     }
 
     /// <summary>

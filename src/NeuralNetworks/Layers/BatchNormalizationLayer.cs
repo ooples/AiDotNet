@@ -506,7 +506,43 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
         RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
 
-        ResolveShapes(new[] { numFeatures }, new[] { numFeatures });
+        // BatchNorm is SHAPE-PRESERVING (output shape == input shape). For image
+        // inputs (rank ≥ 3) resolve the layer's declared I/O shapes to the
+        // per-sample spatial shape [C,H,W], NOT the rank-1 [numFeatures] the
+        // learnable params use. Declaring rank-1 for an image broke the pre-forward
+        // shape-resolution walk (NeuralNetworkBase.ResolveLazyLayerShapes): a
+        // Conv→BN→Conv stack fed the BN's rank-1 GetOutputShape to the next conv,
+        // which threw ("expects rank-3/4, got rank 1"), aborting resolution for every
+        // downstream conv. Those convs then reported the InputDepth=1 PLACEHOLDER
+        // ParameterCount, making whole CNN backbones under-report their size by orders
+        // of magnitude (MaskDINO: 228K vs the real ~207M) — which in turn blinded every
+        // ParameterCount-gated decision (weight-streaming auto-detect, ShouldUseStreamingTraining,
+        // ConfigureInferenceForScale) so the memory-management stack never engaged for
+        // exactly the foundation-scale models that need it. Vector inputs (rank ≤ 2)
+        // keep the original rank-1 [numFeatures] declaration (the MLP/[B,F] convention),
+        // so this only touches the image path. The channel-sized learnable params
+        // (_gamma/_beta/_runningMean/_runningVariance) stay [numFeatures] above; only
+        // the layer's transformation shape becomes rank-preserving here. Matches
+        // ConvolutionalLayer.GetOutputShape's batch-less rank-3 [C,H,W] convention.
+        int[] fullShape = input.Shape.ToArray();
+        int[] ioShape;
+        if (rank <= 2)
+        {
+            ioShape = new[] { numFeatures };          // [F] / [B,F] → [numFeatures] (unchanged)
+        }
+        else if (rank == 3)
+        {
+            ioShape = fullShape;                      // [C,H,W] (unbatched image)
+        }
+        else
+        {
+            // [B,C,H,W,…] → [C,H,W,…] (strip the leading batch dim). Manual copy
+            // rather than the range operator fullShape[1..], which needs
+            // RuntimeHelpers.GetSubArray and does not compile on net471.
+            ioShape = new int[fullShape.Length - 1];
+            System.Array.Copy(fullShape, 1, ioShape, 0, ioShape.Length);
+        }
+        ResolveShapes(ioShape, (int[])ioShape.Clone());
     }
 
     /// <summary>
