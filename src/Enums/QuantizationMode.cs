@@ -11,6 +11,10 @@ public enum QuantizationMode
     /// <summary>8-bit integer quantization</summary>
     Int8,
 
+    /// <summary>4-bit integer quantization (16 levels). Used for QLoRA-style low-bit base weights —
+    /// ~8x smaller than FP32. Pair with a LoRA adapter so the trainable delta stays full precision.</summary>
+    Int4,
+
     /// <summary>16-bit floating point quantization</summary>
     Float16,
 
