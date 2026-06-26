@@ -1320,9 +1320,25 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
                     var next = layer.ForwardGpu(current);
 
-                    // Dispose intermediate if we own it (but not the input)
+                    // Dispose intermediate if we own it (but not the input).
                     if (ownsCurrentTensor && current is not null)
                     {
+                        // If `next` is a zero-copy view sharing current's backing (e.g.
+                        // FlattenLayer's Reshape), disposing current frees the buffer the
+                        // view still needs -> the next layer reads all-zeros. Rebind `next`
+                        // onto an independent tensor over the same buffer and hand off
+                        // ownership so Dispose() is safe (no strand, no double-free).
+                        if (ReferenceEquals(next.DataVector, current.DataVector)
+                            && current._gpuBuffer is not null
+                            && current._gpuBackend is not null)
+                        {
+                            var rebound = Tensor<T>.FromGpuBuffer(
+                                current._gpuBackend, current._gpuBuffer, next.Shape.ToArray(),
+                                GpuTensorRole.Activation, ownsBuffer: current._ownsGpuBuffer);
+                            current._ownsGpuBuffer = false;
+                            next = rebound;
+                        }
+
                         current.Dispose();
                     }
 
