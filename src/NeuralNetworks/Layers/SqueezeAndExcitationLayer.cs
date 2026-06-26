@@ -730,7 +730,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
             squeezed = Engine.ReduceMean(input, spatialAxes, keepDims: false);
         }
 
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         _lastSqueezed = squeezed;
 
         // 2. Excitation: FC1 + Activation

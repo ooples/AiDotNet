@@ -518,7 +518,7 @@ public class DecoderLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> ForwardInternal(Tensor<T> input, Tensor<T> encoderOutput, Tensor<T>? attentionMask = null)
     {
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         _lastEncoderOutput = encoderOutput;
 
         // Get dimensions from input and encoder output

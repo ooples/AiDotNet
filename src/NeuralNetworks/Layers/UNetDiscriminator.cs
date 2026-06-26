@@ -298,7 +298,7 @@ public class UNetDiscriminator<T> : LayerBase<T>
     {
         if (!IsShapeResolved) OnFirstForward(input);
 
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
         // Initial conv + activation
         var x = _convFirst.Forward(input);
@@ -547,7 +547,7 @@ internal partial class UNetConvBlock<T> : LayerBase<T>
     {
         if (!IsShapeResolved) OnFirstForward(input);
 
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
         // Conv1 + LeakyReLU
         _conv1RawOutput = _conv1.Forward(input);
@@ -719,7 +719,7 @@ internal partial class UNetUpBlock<T> : LayerBase<T>
     {
         if (!IsShapeResolved) OnFirstForward(input);
 
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         _lastSkip = skip;
 
         // Upsample

@@ -188,7 +188,7 @@ public class ResidualLayer<T> : LayerBase<T>
             // Skip this expensive download during inference (50% overhead reduction)
             if (IsTrainingMode)
             {
-                _lastInput = input;
+                _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
                 _lastInnerOutput = innerOutput;
             }
         }
