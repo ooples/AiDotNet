@@ -1,4 +1,3 @@
-using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tests.ModelFamilyTests.Base;
@@ -6,12 +5,12 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
 /// <summary>
-/// Manual GAN test scaffold for ProgressiveGAN. Like SAGAN/BigGAN it takes
-/// generator/discriminator architectures and consumes image-space tensors, which
-/// the generic auto-gen GAN scaffold can't supply. Build a small ProgressiveGAN
-/// (1-channel, latent 16, maxResolutionLevel 2 → small images, baseFeatureMaps 8)
-/// and declare the latent InputShape so <see cref="GANModelTestBase{T}"/>'s
-/// generator-from-latent and adversarial-training invariants run correctly.
+/// Model-family tests for ProgressiveGAN. ProgressiveGAN derives from
+/// GenerativeAdversarialNetwork and, like every GAN, takes a 1D latent vector as the
+/// generator input (Karras et al. 2017 / Goodfellow 2014): the InputShape is the latent
+/// [16], the OutputShape is the image [1, 8, 8]. The target resolution is
+/// 4·2^maxResolutionLevel, so maxResolutionLevel 1 → 8x8. A small model (latent 16,
+/// 1-channel, 8 base feature maps) keeps the adversarial-training invariants fast.
 /// </summary>
 public class ProgressiveGANTests : GANModelTestBase<float>
 {
@@ -19,14 +18,9 @@ public class ProgressiveGANTests : GANModelTestBase<float>
     protected override int[] OutputShape => [1, 8, 8];
 
     protected override INeuralNetworkModel<float> CreateNetwork()
-    {
-        var generatorArchitecture = new NeuralNetworkArchitecture<float>(
-            InputType.ThreeDimensional, NeuralNetworkTaskType.Generative, NetworkComplexity.Simple,
-            inputSize: 64, inputHeight: 8, inputWidth: 8, inputDepth: 1, outputSize: 64);
-        var discriminatorArchitecture = new NeuralNetworkArchitecture<float>(
-            InputType.ThreeDimensional, NeuralNetworkTaskType.BinaryClassification, NetworkComplexity.Simple,
-            inputSize: 64, inputHeight: 8, inputWidth: 8, inputDepth: 1, outputSize: 1);
-        return new ProgressiveGAN<float>(generatorArchitecture, discriminatorArchitecture,
-            latentSize: 16, imageChannels: 1, maxResolutionLevel: 2, baseFeatureMaps: 8);
-    }
+        => new ProgressiveGAN<float>(
+            latentSize: 16,
+            imageChannels: 1,
+            maxResolutionLevel: 1,
+            baseFeatureMaps: 8);
 }
