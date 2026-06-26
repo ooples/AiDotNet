@@ -1049,12 +1049,16 @@ public class BigGAN<T> : NeuralNetworkBase<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        // For general prediction, generate with random classes
+        // Use deterministic per-sample class indices (round-robin over the class
+        // space) rather than random ones: Predict is an inference contract and must
+        // be reproducible — Clone-then-Predict, and repeated Predict calls, must
+        // yield the same image for the same latent. Callers who want a specific
+        // class condition use Generate(latent, classIndices) explicitly.
         var batchSize = input.Shape[0];
         var classIndices = new int[batchSize];
         for (int i = 0; i < batchSize; i++)
         {
-            classIndices[i] = Random.Next(NumClasses);
+            classIndices[i] = i % NumClasses;
         }
         return Generate(input, classIndices);
     }
