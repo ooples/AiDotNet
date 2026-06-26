@@ -132,6 +132,38 @@ internal static class Program
                 return 0;
             }
 
+            // Reliable in-process per-forward TIMING (the cross-process full-Predict A/B is
+            // unusable on a load-noisy box — swings 85-160s). Warm thoroughly, then time each
+            // of N forwards on the SAME process with the cores already hot; report MIN (the
+            // user's MIN-of-many) + median + p90 so noise is visible. Honors the ENV gate (no
+            // Override) so OFF vs ON is a clean same-binary toggle. PredictNoise = ONE forward
+            // (the unit the profiler analyzed); full Predict ~= 10x this (DDIM loop).
+            if (args.Contains("--time-forward"))
+            {
+                int tt = Math.Max(1, diff.Scheduler.TrainTimesteps / 2);
+                var ti = RandomTensor(new[] { 1, 4, 64, 64 }, new Random(1234));
+                for (int w = 0; w < 8; w++) { var _ = diff.PredictNoise(ti, tt); }
+                int reps = ArgInt(args, "--reps", 30);
+                var ms = new double[reps];
+                for (int r = 0; r < reps; r++)
+                {
+                    var sw2 = Stopwatch.StartNew();
+                    var _ = diff.PredictNoise(ti, tt);
+                    sw2.Stop();
+                    ms[r] = sw2.Elapsed.TotalMilliseconds;
+                }
+                Array.Sort(ms);
+                double median = ms[reps / 2];
+                double p90 = ms[(int)(reps * 0.9)];
+                Console.WriteLine(
+                    $"[TIME-FWD] FWD_SCRATCH={AiDotNet.Helpers.ForwardScratchGate.Enabled} " +
+                    $"FUSEDLINEAR={AiDotNet.Helpers.ForwardScratchGate.FusedLinear} " +
+                    $"SDPA={AiDotNet.Helpers.ForwardScratchGate.Sdpa} ADALN={AiDotNet.Helpers.ForwardScratchGate.AdaLn} " +
+                    $"min={ms[0]:F1} ms  median={median:F1} ms  p90={p90:F1} ms  (reps={reps})");
+                Console.WriteLine("=== done ===");
+                return 0;
+            }
+
             // Phase 1: warm-up noise-prediction probe (the test's errBefore measurement).
             int probeT = Math.Max(1, diff.Scheduler.TrainTimesteps / 2);
             var noisy = RandomTensor(new[] { 1, 4, 64, 64 }, rng);
