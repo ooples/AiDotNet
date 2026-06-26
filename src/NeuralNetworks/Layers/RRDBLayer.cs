@@ -243,7 +243,7 @@ public class RRDBLayer<T> : LayerBase<T>
     {
         if (!IsShapeResolved) OnFirstForward(input);
 
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
         // Pass through 3 Residual Dense Blocks sequentially
         var x = _rdbBlocks[0].Forward(input);

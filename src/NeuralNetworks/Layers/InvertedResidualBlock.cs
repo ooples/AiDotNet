@@ -420,7 +420,7 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
         var projectConv = _projectConv ?? throw new InvalidOperationException("OnFirstForward did not allocate _projectConv.");
         var projectBn = _projectBn ?? throw new InvalidOperationException("OnFirstForward did not allocate _projectBn.");
 
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         Tensor<T> x = input;
 
         // Expansion phase (if expansion > 1)
