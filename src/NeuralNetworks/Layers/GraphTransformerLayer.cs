@@ -539,10 +539,16 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
 
         var result = ApplyActivation(output);
 
-        // Only store for backward pass when an eager Backward will read it (#1668).
+        // Only store for backward pass when an eager Backward will read it (#1668). Clear any
+        // prior cached output otherwise, so an arena-owned tensor from a previous step is not
+        // retained across the next denoise-loop Reset().
         if (cacheBwd)
         {
             _lastOutput = result;
+        }
+        else
+        {
+            _lastOutput = null;
         }
 
         // Restore original shape for any-rank tensor support
