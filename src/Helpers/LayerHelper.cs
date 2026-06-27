@@ -9881,8 +9881,15 @@ public static class LayerHelper<T>
                 nullActivation);
         }
 
-        // Classification head (4 bbox + num_classes)
-        yield return new DenseLayer<T>(4 + numStructureClasses);
+        // Detection head: 4 bbox coords + num_classes logits, per query. LINEAR
+        // (identity) output — DenseLayer otherwise defaults to ReLU, which clips
+        // the head's pre-activations: after a few training steps they go all-
+        // negative and ReLU zeroes every output, collapsing the model to a
+        // constant (input-invariant) prediction (DifferentInputs_AfterTraining
+        // failed with L2=0). Box coordinates and class logits must pass through
+        // unclipped — the loss head, not a ReLU, decides the rest.
+        yield return new DenseLayer<T>(4 + numStructureClasses,
+            new IdentityActivation<T>() as IActivationFunction<T>);
     }
 
     #endregion
