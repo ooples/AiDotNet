@@ -204,8 +204,9 @@ public class MaskingLayer<T> : LayerBase<T>
     {
         EnsureInitializedFromInput(input);
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-        _lastMask = CreateMask(input);
-        return ApplyMask(input, _lastMask);
+        var mask = CreateMask(input);
+        _lastMask = ShouldCacheForBackward ? mask : null; // #1668: cache the mask only for backward
+        return ApplyMask(input, mask);
     }
 
     /// <summary>

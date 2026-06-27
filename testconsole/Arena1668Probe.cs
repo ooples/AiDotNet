@@ -60,7 +60,16 @@ internal static class Arena1668Probe
             InferenceArenaSettings.DiffusionDenoiseEnabled = false;
             InferenceArenaSettings.Enabled = false;
         }
-        Console.WriteLine($"  REPLAY-DETERMINISTIC (arena on): {(rmax == 0f ? "PASS" : "FAIL")}  maxAbsDiff={rmax:G9}");
+        bool replayOk = rmax == 0f;
+        Console.WriteLine($"  REPLAY-DETERMINISTIC (arena on): {(replayOk ? "PASS" : "FAIL")}  maxAbsDiff={rmax:G9}");
+
+        // Fail the process on any #1668 regression so this probe is usable as a gate
+        // (otherwise a regression would still exit 0 and look green).
+        if (!bitIdentical || !replayOk)
+        {
+            Console.Error.WriteLine("[#1668] PROBE FAILED: denoise arena is not bit-identical/deterministic.");
+            Environment.Exit(1);
+        }
     }
 
     private static float[] Generate(int[] shape, int steps, int seed, bool arena)

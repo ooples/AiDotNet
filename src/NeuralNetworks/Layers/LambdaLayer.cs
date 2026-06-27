@@ -282,7 +282,7 @@ public class LambdaLayer<T> : LayerBase<T>
 
         output = ApplyActivation(output);
 
-        _lastOutput = output;
+        _lastOutput = ShouldCacheForBackward ? output : null; // #1668: skip in inference (arena safety)
         return output;
     }
 

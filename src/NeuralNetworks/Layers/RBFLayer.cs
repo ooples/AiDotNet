@@ -187,9 +187,9 @@ public partial class RBFLayer<T> : LayerBase<T>
         // Weights are persistent tensors, handled by engine
         var output = gpuEngine.RbfKernelGpu(input2D, _centers, _widths);
 
-        if (IsTrainingMode)
+        if (ShouldCacheForBackward) // #1668: skip backward caches in inference (arena safety)
         {
-            _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
+            _lastInput = input;
             _lastOutput = output;
         }
 
@@ -349,7 +349,7 @@ public partial class RBFLayer<T> : LayerBase<T>
             : input;
 
         // Store 2D input for backward pass (RBFKernelBackward requires 2D)
-        _lastInput = processedInput;
+        _lastInput = ShouldCacheForBackward ? processedInput : null; // #1668: skip in inference (arena safety)
 
         // Use Engine.RBFKernel for GPU/CPU acceleration
         // This computes exp(-epsilon * ||x - center||²) for Gaussian RBF
@@ -358,7 +358,7 @@ public partial class RBFLayer<T> : LayerBase<T>
         var output = Engine.RBFKernel(processedInput, _centers, epsilons);
 
         // Store 2D output for backward pass
-        _lastOutput = output;
+        _lastOutput = ShouldCacheForBackward ? output : null; // #1668: skip in inference (arena safety)
 
         // Remove batch dimension if input was unbatched
         return wasUnbatched ? Engine.Reshape(output, [output.Shape[1]]) : output;

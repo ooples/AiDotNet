@@ -953,13 +953,11 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // 4096-wide intermediate `preActivation` is the larger cost — 16
         // KB at fp32 / 32 KB at fp64, and that's the value we'd otherwise
         // pin into _lastOutput.
-        bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
-            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
         // Retain the manual-backward activation caches only when an eager Backward will
-        // read them. The old `!tapeActive` test still cached during inference (no tape),
-        // which pinned the activation set and — inside the denoise-loop arena — aliased
-        // scratch recycled by the per-step Reset (issue #1668). ShouldCacheForBackward is
-        // additionally false in eval mode and inside an InferenceMode scope.
+        // read them. A plain "no tape" test still cached during inference, which pinned the
+        // activation set and — inside the denoise-loop arena — aliased scratch recycled by
+        // the per-step Reset (issue #1668). ShouldCacheForBackward is additionally false in
+        // eval mode and inside an InferenceMode scope.
         bool cacheBwd = ShouldCacheForBackward;
         _lastInput = cacheBwd ? input : null;
         _originalInputShape = input._shape;

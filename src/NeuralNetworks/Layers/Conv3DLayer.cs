@@ -497,7 +497,8 @@ public partial class Conv3DLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
+        bool cacheBwd = ShouldCacheForBackward; // #1668: gate all backward caches (arena safety)
+        _lastInput = cacheBwd ? input : null;
         _originalInputShape = input._shape;
 
         Tensor<T> batchedInput;
@@ -581,8 +582,8 @@ public partial class Conv3DLayer<T> : LayerBase<T>
                 fusedActivation);
 
             // Store for backward pass (activated output is also pre-activation for supported activations)
-            _lastPreActivation = activated;
-            _lastOutput = activated;
+            _lastPreActivation = cacheBwd ? activated : null;
+            _lastOutput = cacheBwd ? activated : null;
         }
         else
         {
@@ -595,10 +596,10 @@ public partial class Conv3DLayer<T> : LayerBase<T>
                 [1, 1, 1]);
 
             var withBias = AddBiases(convOutput);
-            _lastPreActivation = withBias;
+            _lastPreActivation = cacheBwd ? withBias : null;
 
             activated = ApplyActivation(withBias);
-            _lastOutput = activated;
+            _lastOutput = cacheBwd ? activated : null;
         }
 
         // Restore original tensor rank
@@ -818,7 +819,7 @@ public partial class Conv3DLayer<T> : LayerBase<T>
         // Broadcast bias [OC] → [1, OC, 1, 1, 1] over the spatial dims.
         var biasReshape = Engine.Reshape(_biases, new[] { 1, OC, 1, 1, 1 });
         var withBias = Engine.TensorBroadcastAdd(yNCDHW, biasReshape);
-        _lastPreActivation = withBias;
+        _lastPreActivation = ShouldCacheForBackward ? withBias : null; // #1668: skip in inference (arena safety)
 
         // Activation. ApplyActivation routes through the tape-tracked
         // Engine activation operators when the layer's IActivationFunction
@@ -827,7 +828,7 @@ public partial class Conv3DLayer<T> : LayerBase<T>
         // in. For non-fused activations (custom IVectorActivationFunction)
         // it still tape-tracks via the per-element scalar dispatch.
         var activated = ApplyActivation(withBias);
-        _lastOutput = activated;
+        _lastOutput = ShouldCacheForBackward ? activated : null; // #1668: skip in inference (arena safety)
         return activated;
     }
 

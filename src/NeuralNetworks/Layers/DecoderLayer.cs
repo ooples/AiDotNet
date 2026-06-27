@@ -519,7 +519,7 @@ public class DecoderLayer<T> : LayerBase<T>
     private Tensor<T> ForwardInternal(Tensor<T> input, Tensor<T> encoderOutput, Tensor<T>? attentionMask = null)
     {
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-        _lastEncoderOutput = encoderOutput;
+        _lastEncoderOutput = ShouldCacheForBackward ? encoderOutput : null;
 
         // Get dimensions from input and encoder output
         int batchSize = input.Shape[0];

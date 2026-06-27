@@ -489,6 +489,11 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         ValidateGenerateInputs(shape, numInferenceSteps, out long totalElements);
 
         using var _ = new NoGradScope<T>();
+        // Also enter an InferenceMode scope so layers skip their backward-activation caches
+        // on the async path too (no backward runs here). Unlike TensorArena (ThreadStatic,
+        // not wrapped here because await can resume on another thread), InferenceMode is
+        // AsyncLocal and flows across await/continuations, so this is safe for async (#1668).
+        using var _inferenceScope = InferenceMode.Enter();
 
         Vector<T> sample = ResolveInitialSample(shape, numInferenceSteps, seed, initialSample, totalElements);
 

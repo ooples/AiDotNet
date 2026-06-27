@@ -520,21 +520,24 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
+        // #1668: gate every backward-only cache (not just _lastInput) so an InferenceMode
+        // arena loop holds no recycled-scratch references. Forward uses locals throughout.
+        bool cacheBwd = ShouldCacheForBackward;
+        _lastInput = cacheBwd ? input : null;
 
         // Transform path: transform = activation(input @ weights + bias)
         var transformLinear = Engine.TensorMatMul(input, _transformWeights);
         var transformWithBias = Engine.TensorBroadcastAdd(transformLinear, _transformBias);
-        _lastTransformPreActivation = transformWithBias; // Store pre-activation for backward pass
+        _lastTransformPreActivation = cacheBwd ? transformWithBias : null; // Store pre-activation for backward pass
         var transformOutput = ApplyActivation(transformWithBias, _transformActivation, _vectorTransformActivation);
-        _lastTransformOutput = transformOutput;
+        _lastTransformOutput = cacheBwd ? transformOutput : null;
 
         // Gate path: gate = sigmoid(input @ weights + bias)
         var gateLinear = Engine.TensorMatMul(input, _gateWeights);
         var gateWithBias = Engine.TensorBroadcastAdd(gateLinear, _gateBias);
-        _lastGatePreActivation = gateWithBias; // Store pre-activation for backward pass
+        _lastGatePreActivation = cacheBwd ? gateWithBias : null; // Store pre-activation for backward pass
         var gateOutput = ApplyActivation(gateWithBias, _gateActivation, _vectorGateActivation);
-        _lastGateOutput = gateOutput;
+        _lastGateOutput = cacheBwd ? gateOutput : null;
 
         // Highway output: output = gate * transform + (1 - gate) * input
         // Rewritten as: output = gate * (transform - input) + input
@@ -542,7 +545,7 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var gatedDiff = Engine.TensorMultiply(gateOutput, transformMinusInput);
         var output = Engine.TensorAdd(gatedDiff, input);
 
-        _lastOutput = output;
+        _lastOutput = cacheBwd ? output : null;
         return output;
     }
 

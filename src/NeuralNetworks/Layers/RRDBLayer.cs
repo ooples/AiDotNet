@@ -250,7 +250,7 @@ public class RRDBLayer<T> : LayerBase<T>
         x = _rdbBlocks[1].Forward(x);
         x = _rdbBlocks[2].Forward(x);
 
-        _rdb3Output = x;
+        _rdb3Output = ShouldCacheForBackward ? x : null; // #1668: skip in inference (arena safety)
 
         // Global residual: output = RDB3_output * residualScale + input
         return AddResidual(x, input, _residualScale);

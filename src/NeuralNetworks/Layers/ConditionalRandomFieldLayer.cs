@@ -710,7 +710,7 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
             input3D = Engine.Reshape(input, [1, 1, input.Shape[0]]);
         }
 
-        _lastInput = input3D;
+        _lastInput = ShouldCacheForBackward ? input3D : null; // #1668: skip in inference (arena safety)
 
         // The actual sequence length of THIS input. Used for all Viterbi buffers and
         // loops below so the layer handles variable-length sequences (see note above).

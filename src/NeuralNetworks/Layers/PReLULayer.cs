@@ -148,8 +148,8 @@ public class PReLULayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        if (ShouldCacheForBackward) // #1668: also skip inside an InferenceMode scope (arena safety)
-            _lastInput = input;
+        // #1668: also clear a previously-cached activation when caching is off (don't leave it pinned).
+        _lastInput = ShouldCacheForBackward ? input : null;
 
         var positivePart = Engine.ReLU(input);
         var negated = Engine.TensorNegate(input);

@@ -1168,14 +1168,17 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         int batchSize_conv = input4D.Shape[0];
         int[] expectedShape = [batchSize_conv, OutputDepth, outputHeight, outputWidth];
 
-        // Cross-forward output-buffer reuse is unsafe inside the denoise-loop arena:
-        // _preAllocatedOutput is arena scratch, and reusing the same slot across the
-        // per-step Reset() would alias whatever the next step Rents into that slot
-        // (#1668). When an InferenceMode arena owns buffer reuse, Rent a fresh output
-        // each forward (the arena pools+recycles it in cursor order, so this stays
-        // zero-allocation after warmup). Outside an arena, keep the manual reuse.
+        // Cross-forward output-buffer reuse is unsafe only when a TensorArena is actually
+        // active: _preAllocatedOutput is arena scratch, and reusing the same slot across the
+        // per-step Reset() would alias whatever the next step Rents into that slot (#1668).
+        // Key this off TensorArena.Current (not InferenceMode) so the escape hatch
+        // (AIDOTNET_INFERENCE_ARENA_DIFFUSION=0, which leaves InferenceMode on but disables
+        // the arena) keeps the manual zero-allocation reuse — otherwise we'd rent a fresh
+        // buffer every forward with no arena to pool it. With the arena on, re-renting per
+        // forward stays zero-allocation after warmup (the arena recycles in cursor order).
+        bool arenaActive = AiDotNet.Tensors.Helpers.TensorArena.Current is not null;
         if (_preAllocatedOutput is null ||
-            InferenceMode.IsActive ||
+            arenaActive ||
             _preAllocatedOutput.Shape[0] != batchSize_conv ||
             _preAllocatedOutput.Shape[2] != outputHeight ||
             _preAllocatedOutput.Shape[3] != outputWidth)
