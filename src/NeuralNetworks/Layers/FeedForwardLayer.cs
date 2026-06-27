@@ -103,6 +103,18 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     private Tensor<T> _biases;
 
     /// <summary>
+    /// Reusable per-layer scratch for the fused-linear OUTPUT ([batch, outputSize]),
+    /// used only on the #1672 <see cref="ForwardScratchGate"/> inference path
+    /// (<c>ForwardScratchGate.FusedLinear</c>) for rank-2 input. Reusing this buffer across
+    /// denoising steps of the same shape removes the FFN's per-call output allocation from
+    /// the per-step churn. Reallocated whenever the required shape changes. Never aliased by
+    /// any other live tensor: <c>Engine.FusedLinearInto</c> fully overwrites every element
+    /// each call and the result is consumed before the next call to this same layer instance.
+    /// NOT used while a gradient tape is active or in training.
+    /// </summary>
+    private Tensor<T>? _fusedLinearScratch;
+
+    /// <summary>
     /// Whether the weight and bias tensors have been allocated and initialized.
     /// Lazy initialization defers the expensive allocation (potentially millions of
     /// parameters) from construction time to first Forward() call, reducing model
@@ -570,6 +582,32 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
 
         if (fusedActivation != FusedActivationType.None && !IsTrainingMode)
         {
+            // #1672 destination-buffer fast path: when the scratch gate is ON, input is
+            // rank-2, and we are NOT recording a gradient tape, compute the fused linear
+            // straight into a reused per-layer buffer instead of allocating [batch, outputSize]
+            // each call. Bit-identical math; the scratch is per-INSTANCE, fully overwritten,
+            // and consumed before the next call to this same layer. ND input keeps the
+            // original allocating path (FusedLinearInto's fast path is rank-2 only; routing ND
+            // through it would allocate AND copy).
+            bool ffTapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+                && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+            if (ForwardScratchGate.FusedLinear && !ffTapeActive && input.Rank == 2)
+            {
+                int batchDim = input.Shape[0];
+                int outputSize = _weights.Shape[1];
+                if (_fusedLinearScratch == null
+                    || _fusedLinearScratch.Shape.Length != 2
+                    || _fusedLinearScratch.Shape[0] != batchDim
+                    || _fusedLinearScratch.Shape[1] != outputSize)
+                {
+                    _fusedLinearScratch = new Tensor<T>([batchDim, outputSize]);
+                }
+                Engine.FusedLinearInto(_fusedLinearScratch, input, _weights, _biases, fusedActivation);
+                if (cacheForManualBackward)
+                    Output = _fusedLinearScratch;
+                return _fusedLinearScratch;
+            }
+
             // Pure-inference fast path — no activation-gradient cache needed.
             var fusedOut = Engine.FusedLinear(input, _weights, _biases, fusedActivation);
             if (cacheForManualBackward)
