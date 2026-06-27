@@ -547,15 +547,20 @@ internal partial class UNetConvBlock<T> : LayerBase<T>
     {
         if (!IsShapeResolved) OnFirstForward(input);
 
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
+        // #1668: chained per-stage outputs → locals; cache to fields only for backward.
+        bool cacheBwd = ShouldCacheForBackward;
+        _lastInput = cacheBwd ? input : null;
 
         // Conv1 + LeakyReLU
-        _conv1RawOutput = _conv1.Forward(input);
-        _conv1Output = ApplyLeakyReLU(_conv1RawOutput);
+        var conv1Raw = _conv1.Forward(input);
+        _conv1RawOutput = cacheBwd ? conv1Raw : null;
+        var conv1Out = ApplyLeakyReLU(conv1Raw);
+        _conv1Output = cacheBwd ? conv1Out : null;
 
         // Conv2 + LeakyReLU
-        _conv2RawOutput = _conv2.Forward(_conv1Output);
-        var output = ApplyLeakyReLU(_conv2RawOutput);
+        var conv2Raw = _conv2.Forward(conv1Out);
+        _conv2RawOutput = cacheBwd ? conv2Raw : null;
+        var output = ApplyLeakyReLU(conv2Raw);
 
         return output;
     }
@@ -719,29 +724,34 @@ internal partial class UNetUpBlock<T> : LayerBase<T>
     {
         if (!IsShapeResolved) OnFirstForward(input);
 
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-        _lastSkip = skip;
+        // #1668: gate backward caches; _upsampledInput/_concatenated are read below
+        // (chained), so forward uses locals and the fields cache only for backward.
+        bool cacheBwd = ShouldCacheForBackward;
+        _lastInput = cacheBwd ? input : null;
+        _lastSkip = cacheBwd ? skip : null;
 
         // Upsample
-        _upsampledInput = _upsample.Forward(input);
+        var upsampledInput = _upsample.Forward(input);
+        _upsampledInput = cacheBwd ? upsampledInput : null;
 
         // Concatenate with skip connection
         Tensor<T> x;
         if (skip != null)
         {
-            _concatenated = ConcatenateChannels(_upsampledInput, skip);
-            x = _concatenated;
+            var concatenated = ConcatenateChannels(upsampledInput, skip);
+            _concatenated = cacheBwd ? concatenated : null;
+            x = concatenated;
         }
         else
         {
             _concatenated = null;
-            x = _upsampledInput;
+            x = upsampledInput;
         }
 
         // Conv1 + LeakyReLU
         x = _conv1.Forward(x);
         x = ApplyLeakyReLU(x);
-        _conv1Output = x;
+        _conv1Output = cacheBwd ? x : null;
 
         // Conv2 + LeakyReLU
         x = _conv2.Forward(x);

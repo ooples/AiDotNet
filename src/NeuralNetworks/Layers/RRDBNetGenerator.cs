@@ -370,33 +370,41 @@ public class RRDBNetGenerator<T> : LayerBase<T>
     {
         if (!IsShapeResolved) OnFirstForward(input);
 
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
+        // #1668: gate every backward-only cache (the per-stage outputs + intermediate
+        // arrays). Forward uses the local `conv1Output`/`x`; the fields/arrays only hold
+        // references for an eager Backward, so in an InferenceMode arena loop nothing
+        // survives the per-step Reset.
+        bool cacheBwd = ShouldCacheForBackward;
+        _lastInput = cacheBwd ? input : null;
 
         // Initial feature extraction
-        _conv1Output = _convFirst.Forward(input);
-        var x = _conv1Output;
+        var conv1Output = _convFirst.Forward(input);
+        _conv1Output = cacheBwd ? conv1Output : null;
+        var x = conv1Output;
 
-        // Deep feature extraction through RRDB blocks
+        // Deep feature extraction through RRDB blocks. The array is always allocated
+        // (cheap — references only) but the per-block tensors are stored only when an
+        // eager Backward will read them (#1668).
         _rrdbOutputs = new Tensor<T>[_rrdbBlocks.Length];
         for (int i = 0; i < _rrdbBlocks.Length; i++)
         {
             x = _rrdbBlocks[i].Forward(x);
-            _rrdbOutputs[i] = x;
+            if (cacheBwd) _rrdbOutputs[i] = x;
         }
 
         // Trunk convolution + global residual
         var trunk = _trunkConv.Forward(x);
-        x = AddTensors(trunk, _conv1Output); // Global residual connection
+        x = AddTensors(trunk, conv1Output); // Global residual connection
 
-        // Upsampling
+        // Upsampling (array always allocated; tensors stored only for backward — #1668)
         _upsampleOutputs = new Tensor<T>[_upsampleConvs.Length * 2]; // Conv output + PixelShuffle output
         for (int i = 0; i < _upsampleConvs.Length; i++)
         {
             x = _upsampleConvs[i].Forward(x);
-            _upsampleOutputs[i * 2] = x;
+            if (cacheBwd) _upsampleOutputs[i * 2] = x;
             x = _pixelShuffleLayers[i].Forward(x);
             x = ApplyLeakyReLU(x);
-            _upsampleOutputs[i * 2 + 1] = x;
+            if (cacheBwd) _upsampleOutputs[i * 2 + 1] = x;
         }
 
         // HR convolution + activation
