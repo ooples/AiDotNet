@@ -321,7 +321,7 @@ public class BottleneckBlock<T> : LayerBase<T>
         // identity-branch decision below.
         if (!IsShapeResolved) OnFirstForward(input);
 
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
         // Main branch: conv1 -> bn1 -> relu -> conv2 -> bn2 -> relu -> conv3 -> bn3
         _lastConv1Output = _conv1.Forward(input);

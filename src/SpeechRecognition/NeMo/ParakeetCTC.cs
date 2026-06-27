@@ -106,7 +106,31 @@ public class ParakeetCTC<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) { if (MelSpec is not null) return MelSpec.Forward(rawAudio); return rawAudio; }
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
-    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "ParakeetCTC-Native" : "ParakeetCTC-ONNX", Description = "Parakeet-CTC: 1.1B Fast Conformer-CTC (NVIDIA NeMo, 2024)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers };
+    public override ModelMetadata<T> GetModelMetadata() => new()
+    {
+        Name = _useNativeMode ? "ParakeetCTC-Native" : "ParakeetCTC-ONNX",
+        Description = "Parakeet-CTC: 1.1B Fast Conformer-CTC (NVIDIA NeMo, 2024)",
+        FeatureCount = _options.NumMels,
+        Complexity = _options.NumEncoderLayers,
+        AdditionalInfo = new Dictionary<string, object>
+        {
+            ["Mode"] = _useNativeMode ? "Native" : "ONNX",
+            ["EncoderDim"] = _options.EncoderDim,
+            ["NumEncoderLayers"] = _options.NumEncoderLayers,
+            ["NumAttentionHeads"] = _options.NumAttentionHeads,
+            ["FeedForwardDim"] = _options.FeedForwardDim,
+            ["NumMels"] = _options.NumMels,
+            ["VocabSize"] = _options.VocabSize,
+            ["SampleRate"] = _options.SampleRate,
+            ["MaxAudioLengthSeconds"] = _options.MaxAudioLengthSeconds,
+            ["MaxTextLength"] = _options.MaxTextLength,
+            ["DropoutRate"] = _options.DropoutRate,
+            // Report the model's actual supported language, not the configurable
+            // _options.Language — Parakeet-CTC is English-only (SupportedLanguages = ["en"]),
+            // so echoing _options.Language could claim support the model doesn't have.
+            ["Language"] = SupportedLanguages.Count > 0 ? SupportedLanguages[0] : _options.Language
+        }
+    };
     protected override void SerializeNetworkSpecificData(BinaryWriter w) { w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty); w.Write(_options.SampleRate); w.Write(_options.MaxAudioLengthSeconds); w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers); w.Write(_options.NumAttentionHeads); w.Write(_options.FeedForwardDim); w.Write(_options.NumMels); w.Write(_options.VocabSize); w.Write(_options.MaxTextLength); w.Write(_options.DropoutRate); w.Write(_options.Language); }
     protected override void DeserializeNetworkSpecificData(BinaryReader r) { _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = r.ReadInt32(); _options.MaxAudioLengthSeconds = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32(); _options.FeedForwardDim = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32(); _options.MaxTextLength = r.ReadInt32(); _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString(); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new ParakeetCTC<T>(Architecture, mp, _options); return new ParakeetCTC<T>(Architecture, _options); }

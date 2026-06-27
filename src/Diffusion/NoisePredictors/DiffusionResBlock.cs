@@ -258,12 +258,17 @@ public class DiffusionResBlock<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _originalInputShape = input._shape;
-        _lastInput = input;
+        // Only retain the per-layer backward-activation caches when an eager manual
+        // Backward will read them. In inference (and under the tape / graph capture)
+        // these references are dead weight and, inside the denoise-loop arena, would
+        // alias scratch recycled by the per-step Reset (issue #1668).
+        bool cacheBwd = ShouldCacheForBackward;
+        _lastInput = cacheBwd ? input : null;
         _lastForwardUsedTime = false;
 
         // First block: GroupNorm → SiLU → Conv3x3
         var h = _norm1.Forward(input);
-        _preSiLU1 = h;
+        _preSiLU1 = cacheBwd ? h : null;
         h = ApplySiLU(h);
         h = _conv1.Forward(h);
 
@@ -272,7 +277,7 @@ public class DiffusionResBlock<T> : LayerBase<T>
 
         // Second block: GroupNorm → SiLU → Conv3x3
         h = _norm2.Forward(h);
-        _preSiLU2 = h;
+        _preSiLU2 = cacheBwd ? h : null;
         h = ApplySiLU(h);
         h = _conv2.Forward(h);
 
@@ -290,7 +295,11 @@ public class DiffusionResBlock<T> : LayerBase<T>
     public Tensor<T> Forward(Tensor<T> input, Tensor<T> timeEmbed)
     {
         _originalInputShape = input._shape;
-        _lastInput = input;
+        // See Forward(input): keep the backward-activation caches only when an eager
+        // manual Backward will read them, so inference (denoise-loop arena) holds no
+        // recycled-scratch reference across the per-step Reset (issue #1668).
+        bool cacheBwd = ShouldCacheForBackward;
+        _lastInput = cacheBwd ? input : null;
         _lastForwardUsedTime = true;
 
         // Eval-mode (no tape) can use the in-place Engine variants for the
@@ -351,7 +360,7 @@ public class DiffusionResBlock<T> : LayerBase<T>
             // Tape-active path: keep the allocating Forward chain so
             // backward can recover the pre-SiLU tensor.
             h = _norm1.Forward(input);
-            _preSiLU1 = h;
+            _preSiLU1 = cacheBwd ? h : null;
             h = ApplySiLU(h);
             h = _conv1.Forward(h);
         }
@@ -424,7 +433,7 @@ public class DiffusionResBlock<T> : LayerBase<T>
         else
         {
             h = _norm2.Forward(h);
-            _preSiLU2 = h;
+            _preSiLU2 = cacheBwd ? h : null;
             h = ApplySiLU(h);
             h = _conv2.Forward(h);
         }

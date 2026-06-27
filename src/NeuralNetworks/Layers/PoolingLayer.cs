@@ -326,7 +326,7 @@ public class PoolingLayer<T> : LayerBase<T>
         // chain-walkers and tests see the resolved input/output shapes.
         if (!IsShapeResolved) OnFirstForward(input);
 
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         _originalInputShape = input._shape;
 
         // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like

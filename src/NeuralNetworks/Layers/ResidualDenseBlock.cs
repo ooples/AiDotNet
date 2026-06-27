@@ -323,7 +323,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>
     {
         if (!IsShapeResolved) OnFirstForward(input);
 
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         _convOutputs = new Tensor<T>[5];
         _activationOutputs = new Tensor<T>[4]; // Only first 4 have activation
         _concatInputs = new Tensor<T>[5];

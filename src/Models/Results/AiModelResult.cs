@@ -1886,8 +1886,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     private TOutput ForecastWithTimeSeriesModelInternal(
         AiDotNet.TimeSeries.TimeSeriesModelBase<T> model, TInput newData)
     {
-        // The forecast horizon is the row count of the input; its contents are not used — a placeholder Matrix sized
-        // to the horizon is the unified way to ask for N steps.
+        // The forecast horizon is the row count of the input matrix.
         int horizon = (object?)newData is Matrix<T> matrix ? matrix.Rows : 1;
         if (horizon <= 0)
         {
@@ -1896,7 +1895,60 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 "Pass an N-row matrix to request an N-step forecast.", nameof(newData));
         }
 
-        // History is the series the model was trained on (captured during the build).
+        // Exogenous models (ARIMAX, dynamic regression): the input matrix's CONTENTS are the
+        // future exogenous regressors for each step, so forecast directly from them.
+        if (model is IExogenousForecastModel<T> exogenous && (object?)newData is Matrix<T> futureExogenous)
+        {
+            LastForecastShape = null;
+            Vector<T> exoForecast = exogenous.ForecastWithExogenous(futureExogenous);
+            if ((object)exoForecast is TOutput typedExo)
+            {
+                return typedExo;
+            }
+            throw new InvalidOperationException(
+                "Exogenous time-series forecasting produces a Vector<T>; the model's output type must be Vector<T>.");
+        }
+
+        // Multivariate models (VAR, VARMA): forecast every variable from the multivariate
+        // training history, then flatten the [horizon x variables] forecast row-major into the
+        // unified Vector<T> output. The shape is recorded on LastForecastShape so a caller can
+        // reshape it back into a matrix (see ReshapeForecastToMatrix) without knowing the layout.
+        if (model is IMultivariateForecastModel<T> multivariate)
+        {
+            int variableCount = multivariate.VariableCount;
+            Matrix<T> mvHistory = new Matrix<T>(0, variableCount);
+            var mvTraining = OptimizationResult?.TrainingResult;
+            // Seed the forecast from the SAME series the model was trained on. A multivariate model
+            // that auto-collapsed to a single variable on univariate data (e.g. VAR's univariate
+            // mode swaps the index features for the target series) trained on the TARGET Y, so its
+            // forecast history must be Y — feeding it the index features X would apply the learned
+            // dynamics to the wrong series. A genuinely multivariate model (VariableCount > 1)
+            // forecasts the multivariate X series it was fit on.
+            if (variableCount == 1 && mvTraining != null && (object?)mvTraining.Y is Vector<T> mvTargetSeries)
+            {
+                mvHistory = new Matrix<T>(mvTargetSeries.Length, 1);
+                for (int i = 0; i < mvTargetSeries.Length; i++)
+                {
+                    mvHistory[i, 0] = mvTargetSeries[i];
+                }
+            }
+            else if (mvTraining != null && (object?)mvTraining.X is Matrix<T> trainX)
+            {
+                mvHistory = trainX;
+            }
+            Matrix<T> mvForecast = multivariate.ForecastMultivariate(mvHistory, horizon);
+            LastForecastShape = new[] { mvForecast.Rows, mvForecast.Columns };
+            Vector<T> flat = FlattenRowMajor(mvForecast);
+            if ((object)flat is TOutput typedFlat)
+            {
+                return typedFlat;
+            }
+            throw new InvalidOperationException(
+                "Multivariate time-series forecasting produces a Vector<T>; the model's output type must be Vector<T>.");
+        }
+
+        // Univariate models: forecast `horizon` steps from the trained series.
+        LastForecastShape = null;
         Vector<T> history = Vector<T>.Empty();
         var trainingResult = OptimizationResult?.TrainingResult;
         if (trainingResult != null && (object?)trainingResult.Y is Vector<T> series)
@@ -1913,6 +1965,54 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         throw new InvalidOperationException(
             "Time-series forecasting produces a Vector<T>; the model's output type must be Vector<T>.");
+    }
+
+    /// <summary>
+    /// The [horizon, variables] shape of the most recent <b>multivariate</b> forecast returned
+    /// through <see cref="Predict"/>, or <c>null</c> if the last forecast was univariate /
+    /// exogenous. Pair with <see cref="ReshapeForecastToMatrix"/> to recover the 2-D form.
+    /// </summary>
+    public int[]? LastForecastShape { get; private set; }
+
+    /// <summary>
+    /// Reshapes a flat multivariate forecast vector (as returned by <see cref="Predict"/> for a
+    /// multivariate model) back into its [horizon x variables] matrix using
+    /// <see cref="LastForecastShape"/> — so callers recover the natural 2-D forecast without
+    /// needing to know the row-major flatten layout.
+    /// </summary>
+    public Matrix<T> ReshapeForecastToMatrix(Vector<T> flatForecast)
+    {
+        if (LastForecastShape is not { Length: 2 })
+        {
+            throw new InvalidOperationException(
+                "The last forecast was not multivariate; there is no [horizon, variables] shape to reshape to.");
+        }
+
+        int rows = LastForecastShape[0];
+        int cols = LastForecastShape[1];
+        if (flatForecast.Length != rows * cols)
+        {
+            throw new ArgumentException(
+                $"Forecast vector length ({flatForecast.Length}) does not match the recorded shape [{rows}, {cols}].",
+                nameof(flatForecast));
+        }
+
+        var reshaped = new Matrix<T>(rows, cols);
+        int k = 0;
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                reshaped[i, j] = flatForecast[k++];
+        return reshaped;
+    }
+
+    private static Vector<T> FlattenRowMajor(Matrix<T> source)
+    {
+        var flat = new Vector<T>(source.Rows * source.Columns);
+        int k = 0;
+        for (int i = 0; i < source.Rows; i++)
+            for (int j = 0; j < source.Columns; j++)
+                flat[k++] = source[i, j];
+        return flat;
     }
 
     public TOutput Predict(TInput newData)

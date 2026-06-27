@@ -36,25 +36,26 @@ public static class InferenceArenaSettings
 
     /// <summary>
     /// Whether the multi-step diffusion denoise loop (<c>DiffusionModelBase.Generate</c>) opens a
-    /// per-step <c>TensorArena</c>. Default <c>OFF</c> — distinct from the single-shot
-    /// <see cref="Enabled"/> Predict funnel, which is bit-identical and safe.
+    /// per-step <c>TensorArena</c> (recycling each step's noise-predictor + scheduler intermediates
+    /// instead of GC-churning them). Default <c>ON</c>; set
+    /// <c>AIDOTNET_INFERENCE_ARENA_DIFFUSION=0</c> to disable (escape hatch).
     /// </summary>
     /// <remarks>
-    /// The denoise loop is NOT arena-safe: diffusion forward layers hold <em>cross-forward</em>
-    /// cached tensors (e.g. <c>DiffusionResBlock</c>'s pre-allocated GroupNorm output buffer, and
-    /// attention reshape scratch) that are first allocated <em>inside</em> the arena scope. The
-    /// per-step <c>arena.Reset()</c> then recycles that memory, so a later step's allocation aliases
-    /// a still-referenced cached buffer and corrupts its shape/data — observed as a downsample conv
-    /// output emerging with a stale <c>[B, H*W, C]</c> attention layout, surfacing downstream as
-    /// "Input has N channels but layer expects M" (and, when it corrupts the shared pool, a native
-    /// host crash). Single-step <c>Predict</c> never hits this because there is no second step to
-    /// recycle into. Re-enable ONLY after the diffusion layer caches are made arena-safe
-    /// (GC-allocated, or pinned across <c>Reset()</c>). Opt in with
-    /// <c>AIDOTNET_INFERENCE_ARENA_DIFFUSION=1</c>.
+    /// This was OFF historically (issue #1668): the per-step <c>arena.Reset()</c> recycled scratch
+    /// that diffusion forward layers still referenced via per-forward backward-activation caches
+    /// (<c>_lastInput</c>, conv <c>_preAllocatedOutput</c>, ...), so a later step's allocation
+    /// aliased a still-referenced buffer and corrupted it. The arena cannot auto-detect this (its
+    /// pool strong-refs every buffer it hands out), so the fix is layer-side: the denoise loop runs
+    /// inside an <c>InferenceMode</c> scope (the <c>torch.inference_mode()</c> analog) under which
+    /// every layer's <c>ShouldCacheForBackward</c> guard is false, so no backward-activation cache is
+    /// populated — nothing references scratch across a <c>Reset</c> — and the convolution output
+    /// buffer is re-rented per forward instead of being reused across the recycle boundary. Verified
+    /// bit-identical (arena on vs off) on DDPM <c>Generate</c>; the diffusion model-family and
+    /// <c>DiffusionGenerateArenaIntegrationTests</c> exercise the arena across model types in CI.
     /// </remarks>
     public static bool DiffusionDenoiseEnabled { get; set; } =
-        string.Equals(
+        !string.Equals(
             Environment.GetEnvironmentVariable("AIDOTNET_INFERENCE_ARENA_DIFFUSION"),
-            "1",
+            "0",
             StringComparison.Ordinal);
 }

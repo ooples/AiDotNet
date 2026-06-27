@@ -2161,6 +2161,32 @@ public static class DeserializationHelper
             int mambaDtRank = TryGetInt(additionalParams, "MambaDtRank") ?? -1;
             int attnNumHeads = TryGetInt(additionalParams, "AttentionNumHeads") ?? 8;
 
+            // Mamba2Block dims. Zamba2 uses Mamba2Block for BOTH its SSM AND its
+            // attention-flagged positions, so SsmBlockType / AttnBlockType select
+            // the concrete inner-block class per bucket. Without this the rebuild
+            // used MambaBlock/GLA and the scheduler ParameterCount diverged from
+            // the original (Zamba2 Clone_AfterTraining: 5052928 vs 5618976).
+            int m2StateDim = TryGetInt(additionalParams, "Mamba2StateDimension") ?? 64;
+            int m2NumHeads = TryGetInt(additionalParams, "Mamba2NumHeads") ?? 8;
+            int m2Expand = TryGetInt(additionalParams, "Mamba2ExpandFactor") ?? 2;
+            int m2Conv = TryGetInt(additionalParams, "Mamba2ConvKernelSize") ?? 4;
+            int m2Chunk = TryGetInt(additionalParams, "Mamba2ChunkSize") ?? 64;
+            string ssmType = (additionalParams?.TryGetValue("SsmBlockType", out var sst) == true ? sst as string : null) ?? "Mamba1";
+            string attnType = (additionalParams?.TryGetValue("AttnBlockType", out var att) == true ? att as string : null) ?? "GLA";
+
+            ILayer<T> BuildSchedBlock(bool isAttn)
+            {
+                string bt = isAttn ? attnType : ssmType;
+                if (bt == "Mamba2")
+                    return new NeuralNetworks.Layers.SSM.Mamba2Block<T>(
+                        seqLen, modelDim, m2StateDim, m2NumHeads, m2Expand, m2Conv, m2Chunk);
+                if (isAttn)
+                    return new NeuralNetworks.Layers.SSM.GatedLinearAttentionLayer<T>(
+                        seqLen, modelDim, attnNumHeads);
+                return new NeuralNetworks.Layers.SSM.MambaBlock<T>(
+                    seqLen, modelDim, mambaStateDim, mambaExpand, mambaConv, mambaDtRank);
+            }
+
             // Construct numBlocks proper inner-block instances using the
             // metadata-driven type + dimensions. This makes the cloned
             // scheduler.ParameterCount match the original, so SetParameters
@@ -2169,20 +2195,7 @@ public static class DeserializationHelper
             var blocksArrayType = typeof(ILayer<T>).MakeArrayType();
             var blocksArray = Array.CreateInstance(typeof(ILayer<T>), numBlocks);
             for (int b = 0; b < numBlocks; b++)
-            {
-                ILayer<T> blockLayer;
-                if (isAttentionPattern[b])
-                {
-                    blockLayer = new NeuralNetworks.Layers.SSM.GatedLinearAttentionLayer<T>(
-                        seqLen, modelDim, attnNumHeads);
-                }
-                else
-                {
-                    blockLayer = new NeuralNetworks.Layers.SSM.MambaBlock<T>(
-                        seqLen, modelDim, mambaStateDim, mambaExpand, mambaConv, mambaDtRank);
-                }
-                blocksArray.SetValue(blockLayer, b);
-            }
+                blocksArray.SetValue(BuildSchedBlock(isAttentionPattern[b]), b);
 
             var ctorH = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).FirstOrDefault() ?? throw new MissingLayerCtorException($"Cannot find any public constructor for {layerType} during deserialization.");
             var psH = ctorH.GetParameters();

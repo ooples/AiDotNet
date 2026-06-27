@@ -34,7 +34,10 @@ public static class InputHelper<T, TInput>
                 ? (tensor.Shape.Length == 2
                     ? tensor.Shape[1]
                     : tensor._shape.Skip(1).Aggregate((a, b) => a * b))
-                : tensor.Shape[0],
+                // Rank-1 input size is its single dimension; a rank-0 / empty-shape tensor
+                // (e.g. a default DatasetResult with no data) has no input size — return 0
+                // rather than indexing Shape[0] out of bounds.
+                : (tensor.Shape.Length == 1 ? tensor.Shape[0] : 0),
             _ => throw new ArgumentException("Unsupported input type")
         };
     }
