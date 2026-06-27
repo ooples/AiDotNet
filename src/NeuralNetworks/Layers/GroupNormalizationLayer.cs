@@ -146,7 +146,11 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
 
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
+        // Retain backward-activation caches (_lastInput / _lastMean / _lastVariance)
+        // only when an eager manual Backward will read them; skip in inference/under
+        // tape so the denoise-loop arena can recycle scratch without aliasing (#1668).
+        bool cacheBwd = ShouldCacheForBackward;
+        _lastInput = cacheBwd ? input : null;
         _originalInputShape = input._shape;
 
         var shape = input._shape;
@@ -210,8 +214,8 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
             out var mean,
             out var variance);
 
-        _lastMean = mean;
-        _lastVariance = variance;
+        _lastMean = cacheBwd ? mean : null;
+        _lastVariance = cacheBwd ? variance : null;
 
         // Restore original tensor rank — via Engine so tape records the restore.
         if (_originalInputShape.Length > 4)
@@ -329,8 +333,10 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
             spatialSize,
             (float)NumOps.ToDouble(_epsilon));
 
-        // Cache statistics for backward pass during training
-        if (IsTrainingMode)
+        // Cache statistics for backward pass during training. Skip inside an
+        // InferenceMode scope: no backward runs, and retaining these would pin
+        // (and, in the denoise-loop arena, alias) per-step buffers (#1668).
+        if (IsTrainingMode && !InferenceMode.IsActive)
         {
             // Cache GPU tensor for GPU-resident training
             _gpuLastInput = input;

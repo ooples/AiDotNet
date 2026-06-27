@@ -347,7 +347,12 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
             processInput = Engine.Reshape(input, [flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
         }
 
-        _lastInput = processInput;
+        // #1668: compute the backward-cache decision once up front so every backward-only cache
+        // in both the sparse and dense paths (and _lastInput here) is gated/cleared consistently.
+        // Clearing (not just skipping) is required: a prior step's arena-owned tensor must not
+        // survive into the next denoise-loop Reset().
+        bool cacheBwd = ShouldCacheForBackward;
+        _lastInput = cacheBwd ? processInput : null;
 
         Tensor<T> output;
         Tensor<T> activatedOutput;
@@ -397,13 +402,14 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
             activatedOutput = ApplyActivation(output);
 
             // Reshape output to match original input rank
+            Tensor<T> sparseReshaped;
             if (rank == 1)
             {
-                _lastOutput = Engine.Reshape(activatedOutput, [_outputFeatures]);
+                sparseReshaped = Engine.Reshape(activatedOutput, [_outputFeatures]);
             }
             else if (rank == 2)
             {
-                _lastOutput = Engine.Reshape(activatedOutput, [numNodes, _outputFeatures]);
+                sparseReshaped = Engine.Reshape(activatedOutput, [numNodes, _outputFeatures]);
             }
             else
             {
@@ -417,13 +423,20 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
                     outputShape[d] = originalShape[d];
                 outputShape[rank - 2] = numNodes;
                 outputShape[rank - 1] = _outputFeatures;
-                _lastOutput = Engine.Reshape(activatedOutput, outputShape);
+                sparseReshaped = Engine.Reshape(activatedOutput, outputShape);
             }
 
-            return _lastOutput;
+            // #1668: _lastOutput is a backward-only cache; clear it in inference so the
+            // arena-owned reshaped output is not retained across the next Reset().
+            _lastOutput = cacheBwd ? sparseReshaped : null;
+            return sparseReshaped;
         }
 
         // Dense aggregation path (original implementation)
+        // #1668: these per-head buffers double as forward working scratch (written + read
+        // back below) AND manual-backward caches. They're released after their last forward
+        // use when no eager Backward will read them (see below), so an arena loop holds no
+        // reference across a Reset. (cacheBwd is computed once at the top of Forward.)
         // Step 1: Transform input for each head using Engine operations
         // transformed[b,h,n,f] = sum_i(input[b,n,i] * weights[h,i,f])
         _lastTransformed = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, _outputFeatures]);
@@ -505,6 +518,16 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         // Sum over head dimension (axis 1): [batchSize, numHeads, numNodes, outputFeatures] -> [batchSize, numNodes, outputFeatures]
         var sumOverHeads = Engine.ReduceSum(_lastHeadOutputs, [1], keepDims: false);
 
+        // #1668: last forward use of the per-head working buffers is above. When no eager
+        // Backward will read them, drop the references so the arena can recycle them safely.
+        if (!cacheBwd)
+        {
+            _lastTransformed = null;
+            _lastPreSoftmaxScores = null;
+            _lastAttentionCoefficients = null;
+            _lastHeadOutputs = null;
+        }
+
         // Divide by number of heads using scalar divide
         T numHeadsT = NumOps.FromDouble(_numHeads);
         var avgOverHeads = Engine.TensorDivideScalar(sumOverHeads, numHeadsT);
@@ -516,15 +539,16 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         activatedOutput = ApplyActivation(output);
 
         // Reshape output to match original input rank
+        Tensor<T> denseReshaped;
         if (rank == 1)
         {
             // Original was [inputFeatures], output should be [outputFeatures]
-            _lastOutput = Engine.Reshape(activatedOutput, [_outputFeatures]);
+            denseReshaped = Engine.Reshape(activatedOutput, [_outputFeatures]);
         }
         else if (rank == 2)
         {
             // Original was [numNodes, inputFeatures], output should be [numNodes, outputFeatures]
-            _lastOutput = Engine.Reshape(activatedOutput, [numNodes, _outputFeatures]);
+            denseReshaped = Engine.Reshape(activatedOutput, [numNodes, _outputFeatures]);
         }
         else
         {
@@ -539,10 +563,13 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
                 outputShape[d] = originalShape[d];
             outputShape[rank - 2] = numNodes;
             outputShape[rank - 1] = _outputFeatures;
-            _lastOutput = Engine.Reshape(activatedOutput, outputShape);
+            denseReshaped = Engine.Reshape(activatedOutput, outputShape);
         }
 
-        return _lastOutput;
+        // #1668: _lastOutput is a backward-only cache; clear it in inference so the
+        // arena-owned reshaped output is not retained across the next Reset().
+        _lastOutput = cacheBwd ? denseReshaped : null;
+        return denseReshaped;
     }
 
     private Tensor<T> ExtractHeadWeight(int h)

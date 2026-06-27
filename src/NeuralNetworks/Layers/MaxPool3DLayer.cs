@@ -187,7 +187,7 @@ public class MaxPool3DLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         _originalInputShape = input._shape;
         int rank = input.Rank;
 
@@ -294,7 +294,7 @@ public class MaxPool3DLayer<T> : LayerBase<T>
         var output = gpuEngine.MaxPool3DGpu<T>(input5D, poolSizeArr, strideArr, out _gpuIndicesBuffer);
 
         // Store _lastInput for backward pass
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
         // Restore original tensor rank
         if (_originalInputShape.Length > 5)

@@ -26,10 +26,21 @@ public class DiffusionGenerateArenaIntegrationTests
 {
     private static T WithArena<T>(bool enabled, System.Func<T> body)
     {
-        bool prev = InferenceArenaSettings.Enabled;
+        // The denoise-loop arena requires BOTH Enabled and DiffusionDenoiseEnabled
+        // (the latter was the #1668 opt-in gate). Toggle both so this test actually
+        // exercises the per-step Reset path — otherwise "enabled" only engages the
+        // single-shot Predict-funnel arena, which the denoise loop never uses, and
+        // the test would pass trivially.
+        bool prevEnabled = InferenceArenaSettings.Enabled;
+        bool prevDenoise = InferenceArenaSettings.DiffusionDenoiseEnabled;
         InferenceArenaSettings.Enabled = enabled;
+        InferenceArenaSettings.DiffusionDenoiseEnabled = enabled;
         try { return body(); }
-        finally { InferenceArenaSettings.Enabled = prev; }
+        finally
+        {
+            InferenceArenaSettings.Enabled = prevEnabled;
+            InferenceArenaSettings.DiffusionDenoiseEnabled = prevDenoise;
+        }
     }
 
     /// <summary>

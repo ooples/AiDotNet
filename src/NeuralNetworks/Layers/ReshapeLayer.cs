@@ -203,7 +203,7 @@ public class ReshapeLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         int batchSize = input.Shape[0];
         int[] targetShape = new int[_outputShape.Length + 1];
         targetShape[0] = batchSize;

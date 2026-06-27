@@ -250,7 +250,7 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         // Reshape CellStates from [ColumnCount, CellsPerColumn] to [ColumnCount * CellsPerColumn]
         var flatCellStates = Engine.Reshape(CellStates, [ColumnCount * CellsPerColumn]);
 

@@ -534,7 +534,7 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
         // Linear path: linear = input @ weights^T + bias
         var linearWeightsT = Engine.TensorPermute(_linearWeights, [1, 0]);
@@ -546,11 +546,14 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
         var gateOutput = input.MatrixMultiply(gateWeightsT);
         gateOutput = Engine.TensorBroadcastAdd(gateOutput, _gateBias); // Broadcasting
 
-        _lastLinearOutput = linearOutput;
-        _lastGateOutput = ApplyActivation(gateOutput);
+        // #1668: cache the linear/gate activations for backward only; forward uses locals.
+        var linOut = linearOutput;
+        var gateOut = ApplyActivation(gateOutput);
+        _lastLinearOutput = ShouldCacheForBackward ? linOut : null;
+        _lastGateOutput = ShouldCacheForBackward ? gateOut : null;
 
         // GLU output: output = linear * gate
-        var output = Engine.TensorMultiply(_lastLinearOutput, _lastGateOutput);
+        var output = Engine.TensorMultiply(linOut, gateOut);
 
         return output;
     }
@@ -592,8 +595,9 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
         // Element-wise multiply on GPU
         backend.Multiply(linearOutput.Buffer, gateOutput.Buffer, outputBuffer, size);
 
-        // Cache state for backward pass only during training
-        if (IsTrainingMode)
+        // Cache state for backward pass only when an eager Backward will read it (#1668:
+        // ShouldCacheForBackward is false under tape / inference scope / eval).
+        if (ShouldCacheForBackward)
         {
             // Cache GPU tensors for GPU-resident backward pass
             _gpuInput = input;

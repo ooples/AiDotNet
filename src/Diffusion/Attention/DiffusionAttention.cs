@@ -198,7 +198,10 @@ public class DiffusionAttention<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
+        // Retain the backward-activation cache only when an eager manual Backward
+        // will read it; skip in inference/under tape so the denoise-loop arena can
+        // recycle scratch without aliasing a stale reference (issue #1668).
+        _lastInput = ShouldCacheForBackward ? input : null;
 
         // Determine if input is image format [B, C, H, W] or sequence format [B, S, D]
         bool isImageFormat = input.Shape.Length == 4;
@@ -450,8 +453,10 @@ public class DiffusionCrossAttention<T> : LayerBase<T>
     /// <returns>Output tensor of the same shape as input.</returns>
     public Tensor<T> ForwardWithContext(Tensor<T> input, Tensor<T>? context)
     {
-        _lastInput = input;
-        _lastContext = context;
+        // See Forward: keep backward-activation caches only when a manual Backward reads them.
+        bool cacheBwd = ShouldCacheForBackward;
+        _lastInput = cacheBwd ? input : null;
+        _lastContext = cacheBwd ? context : null;
 
         bool isImageFormat = input.Shape.Length == 4;
         int batchSize, sequenceLength, channels;
