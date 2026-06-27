@@ -424,6 +424,11 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         }
 
         // Dense aggregation path (original implementation)
+        // #1668: these per-head buffers double as forward working scratch (written + read
+        // back below) AND manual-backward caches. They're released after their last forward
+        // use when no eager Backward will read them (see below), so an arena loop holds no
+        // reference across a Reset.
+        bool cacheBwd = ShouldCacheForBackward;
         // Step 1: Transform input for each head using Engine operations
         // transformed[b,h,n,f] = sum_i(input[b,n,i] * weights[h,i,f])
         _lastTransformed = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, _outputFeatures]);
@@ -504,6 +509,16 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         // Step 5: Average across heads and add bias using Engine operations
         // Sum over head dimension (axis 1): [batchSize, numHeads, numNodes, outputFeatures] -> [batchSize, numNodes, outputFeatures]
         var sumOverHeads = Engine.ReduceSum(_lastHeadOutputs, [1], keepDims: false);
+
+        // #1668: last forward use of the per-head working buffers is above. When no eager
+        // Backward will read them, drop the references so the arena can recycle them safely.
+        if (!cacheBwd)
+        {
+            _lastTransformed = null;
+            _lastPreSoftmaxScores = null;
+            _lastAttentionCoefficients = null;
+            _lastHeadOutputs = null;
+        }
 
         // Divide by number of heads using scalar divide
         T numHeadsT = NumOps.FromDouble(_numHeads);
