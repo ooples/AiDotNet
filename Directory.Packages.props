@@ -198,10 +198,15 @@
          fail with that AggregateException on a 16 GB runner). Also carries the 0.102.18+/0.103.0 conv perf
          (implicit-GEMM #690, dcnv3 #691) + the prior diffusion CUDA-graph + FP16 work (#671/#680).
          Ships lib/net8.0 + net10.0 + net471. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.104.5" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.104.5" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.104.5" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.104.5" />
+    <!-- 0.104.5 -> 0.104.6 (AiDotNet.Tensors #704): stop the compilation topo-sort from dropping
+         in-place op chains, which left BatchNorm running-stat updates stale. This is the fix PR #1704
+         depends on — WebRTCVad clone and TableTransformer.Clone_AfterTraining stay red until this
+         version is consumed (the linear-detection-head fix in this PR intentionally unmasked the BN
+         divergence that ReLU was hiding). Native packages coreleased in lockstep at 0.104.6. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.104.6" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.104.6" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.104.6" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.104.6" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.9" />
