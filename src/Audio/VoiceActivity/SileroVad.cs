@@ -795,7 +795,8 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         {
             Name = "SileroVad",
             Version = "1.0",
-            Description = "Silero Voice Activity Detection neural network"
+            Description = "Silero Voice Activity Detection neural network",
+            AdditionalInfo = BaseAudioMetadataInfo()
         };
 
         metadata.SetProperty("SampleRate", SampleRate);
