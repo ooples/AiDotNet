@@ -161,8 +161,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // GAN models with non-default latent / image shapes that the generic
         // GAN-family scaffold ([16] rank-1 input) can't supply correctly.
         // Manual test classes in ModelFamilyTests/NeuralNetworks supply the
-        // right latent / image shapes via the parameterless ctor's defaults.
+        // right latent / image shapes (and, for the architecture-ctor GANs below,
+        // the small generator/discriminator architectures) via GANModelTestBase.
         "DCGAN",
+        "SAGAN",
+        "BigGAN",
+        "ProgressiveGAN",
 
         // Models with ctor-required args that the auto-generator emits
         // NotImplementedException for. Manual test scaffolds in
