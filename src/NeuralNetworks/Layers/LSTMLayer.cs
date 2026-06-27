@@ -1116,7 +1116,11 @@ public partial class LSTMLayer<T> : LayerBase<T>
             input3D = Engine.Reshape(input, [flatBatch, timeSteps, _inputSize]);
         }
 
-        _lastInput = input3D;
+        // #1668: _lastInput is a manual-backward cache; gate it (and the per-timestep BPTT
+        // caches below) on ShouldCacheForBackward so inference/tape/eval keeps no arena-backed
+        // activation alive across a TensorArena.Reset().
+        bool cacheBwd = ShouldCacheForBackward;
+        _lastInput = cacheBwd ? input3D : null;
 
         // AIsEval inference fast path: route the entire sequence through
         // AiDotNet.Tensors.Engines.CpuEngine.LstmSequenceForward<T> — the
@@ -1203,9 +1207,8 @@ public partial class LSTMLayer<T> : LayerBase<T>
         var hiddenStatesList = new System.Collections.Generic.List<Tensor<T>>(timeSteps);
 
         // #1668: the per-timestep BPTT caches are read only by the manual Backward; skip
-        // renting+populating them when no eager Backward will run (inference / tape / eval),
+        // renting+populating them when no eager Backward will run (cacheBwd computed above),
         // so an arena loop holds no per-step references across a Reset.
-        bool cacheBwd = ShouldCacheForBackward;
         _cachedHiddenStates = cacheBwd ? TensorAllocator.Rent<T>(new int[] { batchSize, timeSteps, _hiddenSize }) : null;
         _cachedCellStates = cacheBwd ? TensorAllocator.Rent<T>(new int[] { batchSize, timeSteps, _hiddenSize }) : null;
 

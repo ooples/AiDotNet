@@ -688,11 +688,11 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
         if (hasBatch)
         {
             int batchSize = input.Shape[0];
-            output = ProcessBatched(input, batchSize, numVertices);
+            output = ProcessBatched(input, batchSize, numVertices, cacheBwd);
         }
         else
         {
-            output = ProcessSingle(input, numVertices);
+            output = ProcessSingle(input, numVertices, cacheBwd);
         }
 
         _lastPreActivation = cacheBwd ? output : null;
@@ -708,10 +708,11 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
     /// <param name="input">Input tensor [numVertices, InputChannels].</param>
     /// <param name="numVertices">Number of vertices.</param>
     /// <returns>Output tensor [numVertices, OutputChannels].</returns>
-    private Tensor<T> ProcessSingle(Tensor<T> input, int numVertices)
+    private Tensor<T> ProcessSingle(Tensor<T> input, int numVertices, bool cacheBwd)
     {
         var gathered = GatherSpiralFeatures(input, numVertices);
-        _gatheredFeatures = gathered;
+        // #1668: _gatheredFeatures is read only by Backward; release it when no eager Backward runs.
+        _gatheredFeatures = cacheBwd ? gathered : null;
 
         var transposedWeights = Engine.TensorTranspose(_weights);
         var output = Engine.TensorMatMul(gathered, transposedWeights);
@@ -727,7 +728,7 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
     /// <param name="batchSize">Batch size.</param>
     /// <param name="numVertices">Number of vertices per sample.</param>
     /// <returns>Output tensor [batch, numVertices, OutputChannels].</returns>
-    private Tensor<T> ProcessBatched(Tensor<T> input, int batchSize, int numVertices)
+    private Tensor<T> ProcessBatched(Tensor<T> input, int batchSize, int numVertices, bool cacheBwd)
     {
         var outputData = new T[batchSize * numVertices * OutputChannels];
 
@@ -747,9 +748,8 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
             var singleOutput = Engine.TensorMatMul(gathered, transposedWeights);
             singleOutput = AddBiases(singleOutput, numVertices);
 
-            // Apply activation
-            singleOutput = ApplyActivation(singleOutput);
-
+            // Activation is applied exactly once by Forward() after ProcessBatched returns, so the
+            // per-sample output must stay PRE-activation here (matches the ProcessSingle path).
             var singleData = singleOutput.ToArray();
             int offset = b * numVertices * OutputChannels;
             Array.Copy(singleData, 0, outputData, offset, singleData.Length);
@@ -758,9 +758,15 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
         // Combine gathered features for backward pass (sum across batch)
         // For backward pass, we need the gathered features. Store the first batch's for gradient computation.
         // A more complete solution would store all or use a different gradient strategy.
-        if (batchSize > 0 && localGatheredFeatures[0] != null)
+        // #1668: _gatheredFeatures is a backward-only cache; only build+retain it when an eager
+        // Backward will read it, so inference holds no gathered arena scratch across a Reset.
+        if (cacheBwd && batchSize > 0 && localGatheredFeatures[0] != null)
         {
             _gatheredFeatures = CombineGatheredFeatures(localGatheredFeatures, batchSize, numVertices);
+        }
+        else
+        {
+            _gatheredFeatures = null;
         }
 
         return new Tensor<T>(outputData, [batchSize, numVertices, OutputChannels]);
