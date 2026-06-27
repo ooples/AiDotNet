@@ -301,7 +301,7 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
             // Recomputing is safer for now to avoid complexity of downloading.
             // But optimal is caching.
             // For now, just cache output/input.
-            _lastOutput = result;
+            _lastOutput = ShouldCacheForBackward ? result : null; // #1668: skip in inference (arena safety)
         }
 
         return result;
@@ -669,7 +669,8 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
                 "Spiral indices must be set via SetSpiralIndices before calling Forward.");
         }
 
-        _lastInput = input;
+        bool cacheBwd = ShouldCacheForBackward; // #1668: gate all backward caches (arena safety)
+        _lastInput = cacheBwd ? input : null;
 
         bool hasBatch = input.Rank == 3;
         int numVertices = hasBatch ? input.Shape[1] : input.Shape[0];
@@ -694,9 +695,9 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
             output = ProcessSingle(input, numVertices);
         }
 
-        _lastPreActivation = output;
+        _lastPreActivation = cacheBwd ? output : null;
         var activated = ApplyActivation(output);
-        _lastOutput = activated;
+        _lastOutput = cacheBwd ? activated : null;
 
         return activated;
     }

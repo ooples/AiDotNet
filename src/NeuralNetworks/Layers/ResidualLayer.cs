@@ -186,9 +186,9 @@ public class ResidualLayer<T> : LayerBase<T>
 
             // Cache state for backward pass only during training
             // Skip this expensive download during inference (50% overhead reduction)
-            if (IsTrainingMode)
+            if (ShouldCacheForBackward) // #1668: skip backward caches in inference (arena safety)
             {
-                _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
+                _lastInput = input;
                 _lastInnerOutput = innerOutput;
             }
         }
@@ -198,8 +198,8 @@ public class ResidualLayer<T> : LayerBase<T>
             var inputCpu = input;
             var innerOutputCpu = _innerLayer.Forward(inputCpu);
 
-            // Cache state for backward pass only during training
-            if (IsTrainingMode)
+            // Cache state for backward pass only when an eager Backward will read it (#1668).
+            if (ShouldCacheForBackward)
             {
                 _lastInput = inputCpu;
                 _lastInnerOutput = innerOutputCpu;
@@ -219,8 +219,8 @@ public class ResidualLayer<T> : LayerBase<T>
             // No inner layer - input passes through
             result = input;
 
-            // Cache state for backward pass only during training
-            if (IsTrainingMode)
+            // Cache state for backward pass only when an eager Backward will read it (#1668).
+            if (ShouldCacheForBackward)
             {
                 _lastInput = input;
                 _lastInnerOutput = null;
@@ -460,9 +460,12 @@ public class ResidualLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        _lastInput = input;
-        _lastInnerOutput = _innerLayer?.Forward(input);
-        var result = _lastInnerOutput == null ? input : Engine.TensorAdd(input, _lastInnerOutput);
+        // #1668: gate backward caches; forward uses the local innerOutput (chained).
+        bool cacheBwd = ShouldCacheForBackward;
+        _lastInput = cacheBwd ? input : null;
+        var innerOutput = _innerLayer?.Forward(input);
+        _lastInnerOutput = cacheBwd ? innerOutput : null;
+        var result = innerOutput == null ? input : Engine.TensorAdd(input, innerOutput);
 
         return ApplyActivation(result);
     }
