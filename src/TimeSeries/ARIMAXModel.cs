@@ -53,8 +53,15 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Time Series Analysis: Forecasting and Control", "https://doi.org/10.1002/9781118619193", Year = 1970, Authors = "George E. P. Box, Gwilym M. Jenkins")]
-public class ARIMAXModel<T> : TimeSeriesModelBase<T>
+public class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecastModel<T>
 {
+    /// <summary>
+    /// Forecasts from future exogenous regressors (the unified facade-forecast entry point).
+    /// ARIMAX already forecasts via <see cref="Predict(Matrix{T})"/>, whose input matrix is the
+    /// per-future-step exogenous values, so this simply delegates.
+    /// </summary>
+    public Vector<T> ForecastWithExogenous(Matrix<T> futureExogenous) => Predict(futureExogenous);
+
     /// <summary>
     /// Options specific to the ARIMAX model including AR order, MA order, differencing order, and exogenous variables count.
     /// </summary>

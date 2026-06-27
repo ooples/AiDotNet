@@ -9806,6 +9806,28 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                         dstExtras.SetExtraParameters(srcExtras.GetExtraParameters());
                     }
                 }
+
+                // Copy model-level network-specific state that lives OUTSIDE the
+                // per-layer parameters/extras (e.g. TOTEM's learned VQ codebook,
+                // RevIN config). The per-layer loop above does NOT cover it, so
+                // without this the clone keeps the freshly-constructed
+                // CreateNewInstance() state — for TOTEM a fresh random codebook
+                // (InitializeCodebooks → CreateSecureRandom) — and diverges from
+                // the trained original (TOTEM Clone_AfterTraining). Round-trip
+                // through the SAME hooks the serialize path (9815+) uses so the
+                // large/custom-layer path is no longer lossy for such models.
+                using (var nsStream = new System.IO.MemoryStream())
+                {
+                    var nsWriter = new System.IO.BinaryWriter(nsStream);
+                    SerializeNetworkSpecificData(nsWriter);
+                    nsWriter.Flush();
+                    if (nsStream.Length > 0)
+                    {
+                        nsStream.Position = 0;
+                        var nsReader = new System.IO.BinaryReader(nsStream);
+                        largeBase.DeserializeNetworkSpecificData(nsReader);
+                    }
+                }
                 largeBase.InvalidateParameterCountCache();
                 largeBase.SetTrainingMode(false);
                 return largeCopy;
@@ -9873,6 +9895,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             (copy as IDisposable)?.Dispose();
             return false;
+        }
+
+        // CreateNewInstance() must hand back an instance with its OWN layer objects. Some models are
+        // built from an explicit pre-constructed layer list that the new instance re-uses by reference,
+        // so the "clone" shares the very same layer (and therefore weight tensor) objects as the source.
+        // Sharing tensors copy-on-write onto a layer the source still owns would make any later write to
+        // EITHER side mutate BOTH — defeating Clone's independence contract (a write to the clone leaks
+        // back to the original). Detect that aliasing and fall back to the eager full-fidelity copy,
+        // which deserializes into genuinely independent layers.
+        for (int i = 0; i < srcLayers.Count; i++)
+        {
+            if (ReferenceEquals(srcLayers[i], dstLayers[i]))
+            {
+                (copy as IDisposable)?.Dispose();
+                return false;
+            }
         }
 
         // GetExtraTrainableTensors() are raw trainable tensors the model owns OUTSIDE any layer (e.g.
@@ -9964,6 +10002,27 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     (copy as IDisposable)?.Dispose();
                     return false;
                 }
+            }
+        }
+
+        // Copy model-level network-specific state (e.g. TOTEM's learned VQ codebook)
+        // that lives OUTSIDE the per-layer trainable tensors / extras shared above.
+        // The COW share covers only layer tensors, so without this the clone keeps the
+        // fresh CreateNewInstance() state — for TOTEM a random codebook
+        // (InitializeCodebooks → CreateSecureRandom) — and diverges from the trained
+        // original (TOTEM Clone_AfterTraining). Round-trip through the SAME hooks the
+        // eager serialize path uses, giving the clone an INDEPENDENT deep copy (a write
+        // to either side cannot leak, unlike the shared layer tensors).
+        using (var nsStream = new System.IO.MemoryStream())
+        {
+            var nsWriter = new System.IO.BinaryWriter(nsStream);
+            SerializeNetworkSpecificData(nsWriter);
+            nsWriter.Flush();
+            if (nsStream.Length > 0)
+            {
+                nsStream.Position = 0;
+                var nsReader = new System.IO.BinaryReader(nsStream);
+                copyBase.DeserializeNetworkSpecificData(nsReader);
             }
         }
 

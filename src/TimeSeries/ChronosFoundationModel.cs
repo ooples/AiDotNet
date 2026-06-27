@@ -292,13 +292,33 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         ModelParameters = new Vector<T>(1);
         ModelParameters[0] = _numOps.FromDouble(y.Length);
 
+        // Build autoregressive training pairs from the SERIES itself: a window of past values maps to
+        // the next value. The feature matrix x carries only the time index (as for the other
+        // univariate time-series models), so training on its rows would feed the model a single index
+        // value instead of a sequence — it would never see real history and could not learn to
+        // forecast. This mirrors how Forecast/PredictSingle consume the series' own lookback window.
+        int context = _options.ContextLength;
+        var trainInputs = new List<Vector<T>>();
+        var trainTargets = new List<T>();
+        for (int idx = 1; idx < y.Length; idx++)
+        {
+            int start = Math.Max(0, idx - context);
+            var window = new Vector<T>(idx - start);
+            for (int i = start; i < idx; i++)
+            {
+                window[i - start] = y[i];
+            }
+            trainInputs.Add(window);
+            trainTargets.Add(y[idx]);
+        }
+
         T learningRate = _numOps.FromDouble(_options.LearningRate);
-        int batchSize = Math.Min(32, x.Rows);
+        int batchSize = Math.Min(32, Math.Max(1, trainInputs.Count));
 
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
             TrainingCancellationToken.ThrowIfCancellationRequested();
-            var indices = Enumerable.Range(0, x.Rows).OrderBy(_ => _random.Next()).ToList();
+            var indices = Enumerable.Range(0, trainInputs.Count).OrderBy(_ => _random.Next()).ToList();
 
             for (int batch = 0; batch < indices.Count; batch += batchSize)
             {
@@ -312,8 +332,8 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
                 {
                     if (b % 4 == 0) TrainingCancellationToken.ThrowIfCancellationRequested();
                     int idx = indices[batch + b];
-                    Vector<T> input = x.GetRow(idx);
-                    T target = y[idx];
+                    Vector<T> input = trainInputs[idx];
+                    T target = trainTargets[idx];
 
                     var gradients = ComputeGradients(input, target);
                     AccumulateGradients(gradients);
@@ -670,8 +690,21 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
 
     public override T PredictSingle(Vector<T> input)
     {
-        double scaleFactor = ComputeScaleFactor(input);
+        return PredictWithScale(input, ComputeScaleFactor(input));
+    }
 
+    /// <summary>
+    /// Predicts the next value from <paramref name="input"/> using an EXPLICIT mean-scale factor.
+    /// </summary>
+    /// <remarks>
+    /// Multi-step forecasting must hold the scale fixed across the horizon (see <see cref="Forecast"/>):
+    /// because <see cref="Detokenize"/> multiplies the de-tokenized value by the scale, recomputing the
+    /// scale from a context that already contains earlier forecasts feeds it back into itself and the
+    /// forecast amplifies geometrically. <see cref="PredictSingle"/> keeps the per-window scale for
+    /// single-step / in-sample prediction.
+    /// </remarks>
+    private T PredictWithScale(Vector<T> input, double scaleFactor)
+    {
         int seqLen = Math.Min(input.Length, _options.ContextLength);
         var tokens = new int[seqLen];
         for (int i = 0; i < seqLen; i++)
@@ -721,6 +754,61 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         }
 
         return Detokenize(predictedToken, scaleFactor);
+    }
+
+    /// <summary>
+    /// Forecasts <paramref name="steps"/> values ahead of <paramref name="history"/> autoregressively
+    /// under Chronos mean-scaling, with the scale factor held FIXED across the whole horizon.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Chronos tokenizes mean-scaled values (value / scale) and de-tokenizes by multiplying the bin
+    /// center back by that scale. The scale must be computed once from the observed history and reused
+    /// for every forecast step. The default iterative forecaster recomputes the scale from a context
+    /// that grows with each appended forecast, so the scale feeds back through <see cref="Detokenize"/>
+    /// and the multi-step forecast explodes geometrically. Fixing the scale keeps the forecast on the
+    /// numeric scale of the data.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> Forecast(Vector<T> history, int steps)
+    {
+        if (!IsTrained)
+        {
+            throw new InvalidOperationException("The model must be trained before forecasting.");
+        }
+        if (history == null)
+        {
+            throw new ArgumentNullException(nameof(history), "History cannot be null.");
+        }
+        if (steps <= 0)
+        {
+            throw new ArgumentException("Number of forecast steps must be positive.", nameof(steps));
+        }
+
+        // Mean-scale computed ONCE from the observed history and held fixed for the horizon.
+        double scaleFactor = ComputeScaleFactor(history);
+
+        var context = new List<T>(history.Length + steps);
+        for (int i = 0; i < history.Length; i++)
+        {
+            context.Add(history[i]);
+        }
+
+        var forecasts = new Vector<T>(steps);
+        for (int step = 0; step < steps; step++)
+        {
+            var window = new Vector<T>(context.Count);
+            for (int i = 0; i < context.Count; i++)
+            {
+                window[i] = context[i];
+            }
+
+            T prediction = PredictWithScale(window, scaleFactor);
+            forecasts[step] = prediction;
+            context.Add(prediction);
+        }
+
+        return forecasts;
     }
 
     private Tensor<T> ApplyLayerNorm(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta)
