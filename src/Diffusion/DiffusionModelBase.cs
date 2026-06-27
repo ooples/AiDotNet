@@ -1534,28 +1534,40 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         var type = obj.GetType();
         if (type.IsPrimitive || type == typeof(string) || type.IsEnum) return;
 
-        foreach (var field in type.GetFields(
-            System.Reflection.BindingFlags.Instance |
-            System.Reflection.BindingFlags.NonPublic |
-            System.Reflection.BindingFlags.Public))
+        // Walk the FULL inheritance chain. Type.GetFields(Instance|NonPublic|Public) does NOT return
+        // PRIVATE fields declared on base classes, so when a field is typed as a subclass (e.g.
+        // SiTPredictor) whose layers actually live in a private field on its base
+        // (DiTNoisePredictor._blocks), that base-private field — and therefore the entire noise
+        // predictor — was invisible to this walk, leaving the model's denoiser untrainable
+        // ("no trainable parameters discoverable"). Enumerate DeclaredOnly fields at every level up
+        // the hierarchy so base-class privates are included; DeclaredOnly returns each field exactly
+        // once at its declaring type and the visited set guards object cycles.
+        for (var t = type; t != null && t != typeof(object); t = t.BaseType)
         {
-            // Skip compiler-generated backing fields for non-ref properties and
-            // fields whose declared type can't hold a trainable layer.
-            if (field.FieldType.IsPrimitive || field.FieldType.IsEnum ||
-                field.FieldType == typeof(string) || field.FieldType == typeof(Tensor<T>))
-                continue;
-
-            var val = field.GetValue(obj);
-            if (val is null) continue;
-
-            if (val is System.Collections.IEnumerable enumerable && val is not string)
+            foreach (var field in t.GetFields(
+                System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.NonPublic |
+                System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.DeclaredOnly))
             {
-                foreach (var item in enumerable)
-                    CollectLayerParameters(item, allParams, visited);
-            }
-            else
-            {
-                CollectLayerParameters(val, allParams, visited);
+                // Skip compiler-generated backing fields for non-ref properties and
+                // fields whose declared type can't hold a trainable layer.
+                if (field.FieldType.IsPrimitive || field.FieldType.IsEnum ||
+                    field.FieldType == typeof(string) || field.FieldType == typeof(Tensor<T>))
+                    continue;
+
+                var val = field.GetValue(obj);
+                if (val is null) continue;
+
+                if (val is System.Collections.IEnumerable enumerable && val is not string)
+                {
+                    foreach (var item in enumerable)
+                        CollectLayerParameters(item, allParams, visited);
+                }
+                else
+                {
+                    CollectLayerParameters(val, allParams, visited);
+                }
             }
         }
     }
