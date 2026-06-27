@@ -968,9 +968,13 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // 4096-wide intermediate `preActivation` is the larger cost — 16
         // KB at fp32 / 32 KB at fp64, and that's the value we'd otherwise
         // pin into _lastOutput.
-        bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
-            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
-        _lastInput = tapeActive ? null : input;
+        // Retain the manual-backward activation caches only when an eager Backward will
+        // read them. A plain "no tape" test still cached during inference, which pinned the
+        // activation set and — inside the denoise-loop arena — aliased scratch recycled by
+        // the per-step Reset (issue #1668). ShouldCacheForBackward is additionally false in
+        // eval mode and inside an InferenceMode scope.
+        bool cacheBwd = ShouldCacheForBackward;
+        _lastInput = cacheBwd ? input : null;
         _originalInputShape = input._shape;
 
         // Industry standard: Support any-rank input tensors [..., inputSize]
@@ -1038,7 +1042,11 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // each call. Bit-identical math (same GEMM + bias/activation epilogue); the
             // scratch is per-INSTANCE, fully overwritten, and consumed before the next call
             // to this same layer, so reuse is safe across the denoise loop.
-            if (ForwardScratchGate.FusedLinear && !tapeActive)
+            // Skip the reused scratch when a gradient tape is recording (e.g. classifier-guided
+            // diffusion runs a tape in eval mode): the tape holds this output for backward, so reusing
+            // the per-instance buffer on the next call to this layer would corrupt it. cacheBwd is false
+            // under eval mode regardless of the tape, so it can't gate this — check the tape directly.
+            if (ForwardScratchGate.FusedLinear && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null)
             {
                 int outputSize = _weights.Shape[1];
                 if (_fusedLinearScratch == null
@@ -1064,14 +1072,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // FusedLinear entry per forward pass (calling FusedLinear twice corrupts tape
             // entries via RemoveLastNTapeEntries).
             var preActivation = Engine.FusedLinear(flattenedInput, _weights, _biases, FusedActivationType.None);
-            if (!tapeActive)
-            {
-                _lastOutput = preActivation;
-            }
-            else
-            {
-                _lastOutput = null;
-            }
+            _lastOutput = cacheBwd ? preActivation : null;
             result = ApplyActivation(preActivation);
         }
 

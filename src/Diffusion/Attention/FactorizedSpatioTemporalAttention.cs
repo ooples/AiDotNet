@@ -94,7 +94,9 @@ public class FactorizedSpatioTemporalAttention<T> : LayerBase<T>
     /// </summary>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
+        // #1668: skip the backward-activation cache in inference so the denoise-loop
+        // arena can recycle scratch without aliasing a stale reference.
+        _lastInput = ShouldCacheForBackward ? input : null;
 
         // Spatial attention with residual
         var spatialNormed = _spatialNorm.Forward(input);

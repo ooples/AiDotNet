@@ -304,7 +304,7 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
         // and allocate weights on the first Forward.
         if (!IsShapeResolved) OnFirstForward(input);
 
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
         // Ensure 4D input [batch, channels, height, width]
         var input4D = EnsureBatchDimension(input);

@@ -176,7 +176,9 @@ public class TimeDistributedLayer<T> : LayerBase<T>
             output = gpuEngine.ActivationGpu(output, fusedOp);
         }
 
-        if (IsTrainingMode)
+        // #1668: gate the backward caches on ShouldCacheForBackward (not IsTrainingMode) so a
+        // tape/inference scope doesn't retain backward-only tensors the arena could recycle.
+        if (ShouldCacheForBackward)
         {
             _lastInput = input;
             _lastOutput = output;

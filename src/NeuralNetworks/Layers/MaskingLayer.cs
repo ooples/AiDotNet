@@ -203,9 +203,10 @@ public class MaskingLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        _lastInput = input;
-        _lastMask = CreateMask(input);
-        return ApplyMask(input, _lastMask);
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
+        var mask = CreateMask(input);
+        _lastMask = ShouldCacheForBackward ? mask : null; // #1668: cache the mask only for backward
+        return ApplyMask(input, mask);
     }
 
     /// <summary>

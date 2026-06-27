@@ -223,7 +223,7 @@ public class ActivationLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         return _useVectorActivation ? ApplyVectorActivation(input) : ApplyScalarActivation(input);
     }
 

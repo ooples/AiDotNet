@@ -237,7 +237,7 @@ public class MeanLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
         // Use Engine operation for GPU/CPU acceleration
         _lastOutput = Engine.ReduceMean(input, [Axis], keepDims: false);

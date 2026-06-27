@@ -192,19 +192,20 @@
          AIDOTNET_GEMM_SINGLE_REGION=0; ~1.3-2x on transformer/training GEMM shapes) + the net471
          PackAOnly non-4x4 scalar-tail bugfix. 0.102.3 is a linear superset of 0.102.2, so the #632 /
          Phase C deps above are retained. -->
-    <!-- 0.104.5 supersedes 0.104.0/0.103.1: adds the single-launch fused grouped/depthwise deformable (DCNv3)
-         BACKWARD on GPU + single-pass fused CPU grouped backward (#693, what InternImage's
-         DeformableConvolutionalLayer training needs) and the bounded large-array pool for conv-backward
-         K-concat stacks (#694, ~8x less GC traffic on diffusion/CNN-scale shapes). Carries forward
-         everything in 0.103.x: the weight-streaming ReleaseToPool soft-defer fix (#692, root cause of the
-         foundation-scale ModelFamily-NeuralNetworks shard AggregateException on the 16 GB runner), conv
-         implicit-GEMM (#690), the DCNv3 fused FORWARD (#691), and the diffusion CUDA-graph + FP16 work
-         (#671/#680). Plus the 0.104.x GEMM JIT/routing/pinning wins (#700) and the parallelized SSM/
-         linear-attention scan kernels (#703). Ships lib/net8.0 + net10.0 + net471. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.104.5" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.104.5" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.104.5" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.104.5" />
+    <!-- 0.104.6 supersedes 0.104.5/0.104.0/0.103.1. 0.104.5 added the single-launch fused
+         grouped/depthwise deformable (DCNv3) kernel — fused FORWARD (#691) + GPU/CPU single-pass
+         BACKWARD (#693), what InternImage's DeformableConvolutionalLayer needs — plus the bounded
+         large-array pool for conv-backward K-concat stacks (#694, ~8x less GC). 0.104.6 adds
+         AiDotNet.Tensors #704: stop the compilation topo-sort from dropping in-place op chains, which
+         left BatchNorm running-stat updates stale (the fix PR #1704 depends on; fixes WebRTCVad and
+         TableTransformer Clone_AfterTraining). Carries forward 0.103.x weight-streaming ReleaseToPool
+         soft-defer (#692), conv implicit-GEMM (#690), diffusion CUDA-graph + FP16 (#671/#680), the
+         0.104.x GEMM JIT/routing/pinning wins (#700), and parallel SSM/linear-attention scans (#703).
+         Ships lib/net8.0 + net10.0 + net471; native packages coreleased in lockstep at 0.104.6. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.104.6" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.104.6" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.104.6" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.104.6" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.9" />

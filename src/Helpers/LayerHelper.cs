@@ -9853,14 +9853,21 @@ public static class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(hiddenDim, 3, 2, 1);
         yield return new BatchNormalizationLayer<T>();
 
-        // Flatten spatial dimensions for transformer input
-        int featureMapSize = imageSize / 32;
-        int seqLen = featureMapSize * featureMapSize;
+        // Flatten the conv feature map [hiddenDim, H, W] into a [H*W, hiddenDim]
+        // token sequence (DETR, Carion et al. 2020: each spatial location is a
+        // token and the channel dim is the transformer's model dim). patchSize=1
+        // ⇒ one token per spatial cell, with a learned 1×1 projection.
+        // Without this the encoder consumed the raw [C,H,W] map and read W (the
+        // feature-map width) as the embedding dim, so MHA got headDim =
+        // W / numHeads = 0 and threw on the first forward.
+        yield return new PatchEmbeddingLayer<T>(patchSize: 1, embeddingDim: hiddenDim,
+            expectedInputChannels: hiddenDim);
 
-        // Transformer encoder
+        // Transformer encoder. Explicit embeddingSize (= hiddenDim) so MHA's
+        // headDim = hiddenDim / numHeads is well-formed regardless of input H/W.
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>( numHeads, hiddenDim * 4);
+            yield return new TransformerEncoderLayer<T>(numHeads, hiddenDim * 4, hiddenDim);
         }
 
         // Transformer decoder with object queries
@@ -9874,8 +9881,15 @@ public static class LayerHelper<T>
                 nullActivation);
         }
 
-        // Classification head (4 bbox + num_classes)
-        yield return new DenseLayer<T>(4 + numStructureClasses);
+        // Detection head: 4 bbox coords + num_classes logits, per query. LINEAR
+        // (identity) output — DenseLayer otherwise defaults to ReLU, which clips
+        // the head's pre-activations: after a few training steps they go all-
+        // negative and ReLU zeroes every output, collapsing the model to a
+        // constant (input-invariant) prediction (DifferentInputs_AfterTraining
+        // failed with L2=0). Box coordinates and class logits must pass through
+        // unclipped — the loss head, not a ReLU, decides the rest.
+        yield return new DenseLayer<T>(4 + numStructureClasses,
+            new IdentityActivation<T>() as IActivationFunction<T>);
     }
 
     #endregion
