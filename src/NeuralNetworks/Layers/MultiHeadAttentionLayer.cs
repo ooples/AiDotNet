@@ -1234,8 +1234,17 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             context_4D = flashOutput;
             attentionWeights4D = flashWeights ?? new Tensor<T>(new[] { batchSize, _headCount, seqLengthQ, seqLengthKV });
         }
-        else if (!IsTrainingMode)
+        else if (!IsTrainingMode && typeof(T) != typeof(double))
         {
+            // FLOAT-ONLY inference fast path. FlashAttention's fused kernel converts its
+            // inputs to float (FusedAttention.DoubleToFloat), so on a T=double model it
+            // would silently compute attention in single precision — a ~1e-7 error that is
+            // also sensitive to buffer layout, so two instances with bit-identical weights
+            // (a model and its clone) diverge at ~1e-7 (Clone_ShouldProduceIdenticalOutput).
+            // Double models therefore fall through to the exact double Engine.SDPA below;
+            // they are small (tests/research), so the O(seq^2) score tensor FlashAttention
+            // avoids is not a memory concern. Large-sequence foundation models are float and
+            // keep the fast path.
             // Inference fast path (#1622 / #1630 fused attention): FlashAttention's online
             // softmax computes softmax(QKᵀ/scale)·V WITHOUT ever materializing the
             // [B, H, seq, seq] score tensor that Engine.ScaledDotProductAttention returns —

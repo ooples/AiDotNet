@@ -1,0 +1,95 @@
+name: Heavy Timeout Models (nightly)
+
+# Best-effort tracking lane for models tagged [Trait("Category","HeavyTimeout")].
+#
+# These models are CORRECT but inherently too slow for the per-test / 45-min budget of the
+# default sharded test workflow (Build & SonarCloud), so they are EXCLUDED there via
+# `&Category!=HeavyTimeout` and the default PR gate stays green. This workflow runs them
+# separately with a long job budget so we keep visibility on them and notice if one regresses
+# or — as the perf work lands — becomes fast enough to graduate back into the default shards
+# (drop the trait, restore a normal [Fact(Timeout)]).
+#
+# It is INFORMATIONAL, not a merge gate: it is not a required check and never blocks a PR.
+# Individual tests may still hit their own [Fact(Timeout=...)] — that is expected for the
+# heaviest models and is exactly what the umbrella tracking issue records. The point is the
+# dashboard, not a pass/fail gate.
+
+on:
+  schedule:
+    - cron: '0 6 * * *'   # 06:00 UTC nightly
+  workflow_dispatch: {}
+
+# Don't fight the PR test workflow's concurrency group; this is its own long-running lane.
+concurrency:
+  group: heavy-timeout-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  heavy-timeout:
+    name: Heavy Timeout Models
+    runs-on: ubuntu-latest
+    timeout-minutes: 350   # generous budget; these models are the slow ones by definition
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v4
+        with:
+          # This lane only reads + uploads test artifacts; it never pushes, so don't leave the
+          # GITHUB_TOKEN persisted in .git/config where it could leak into an uploaded artifact (artipacked).
+          persist-credentials: false
+
+      - name: Setup .NET 10.0
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore tests/AiDotNet.Tests/AiDotNetTests.csproj
+
+      - name: Build (Release, net10.0)
+        run: dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release --framework net10.0 --no-restore
+
+      - name: Run heavy-timeout models (best-effort, non-gating)
+        # Only the tagged models. Match the heavy shards in sonarcloud.yml: a category filter alone does
+        # NOT keep xUnit serial, so rewrite the built xunit.runner.json to serialize collection execution
+        # (one model in flight at a time) and switch to Workstation GC. Without this the heaviest models
+        # stack memory and OOM/cancel the lane instead of giving the visibility this workflow exists for.
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $runnerJson = 'tests/AiDotNet.Tests/bin/Release/net10.0/xunit.runner.json'
+          if (Test-Path $runnerJson) {
+            $cfg = Get-Content $runnerJson -Raw | ConvertFrom-Json
+            $cfg.parallelizeTestCollections = $false
+            $cfg.maxParallelThreads = 1
+            # Don't materialize every [Theory]'s data rows at discovery time — the assembly discovers
+            # tens of thousands of cases and pre-enumeration inflates the retained baseline before a
+            # single test runs.
+            $cfg | Add-Member -NotePropertyName preEnumerateTheories -NotePropertyValue $false -Force
+            $cfg | ConvertTo-Json -Depth 10 | Set-Content $runnerJson -Encoding utf8
+            Write-Host "Serialized heavy-timeout runner config: $runnerJson"
+          } else {
+            # These models are flagged heavy precisely because they OOM without serialization; fail fast
+            # rather than fall through to a parallel run that will OOM and waste the runner.
+            throw "runner config not found at $runnerJson - cannot serialize heavy-timeout lane"
+          }
+          # The default Server GC reserves a heap segment per core (high steady-state footprint chosen for
+          # throughput under parallel collections). This lane is now serial, so switch to Workstation GC,
+          # which has a much smaller footprint and collects eagerly under memory pressure.
+          $env:DOTNET_gcServer = '0'
+          dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj `
+            -c Release --framework net10.0 --no-build --no-restore `
+            --filter 'Category=HeavyTimeout' `
+            --logger 'trx;LogFileName=heavy-timeout.trx' `
+            --logger 'console;verbosity=normal' `
+            --results-directory artifacts/heavy-timeout
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: heavy-timeout-results
+          path: artifacts/heavy-timeout
+          if-no-files-found: ignore

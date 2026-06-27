@@ -591,7 +591,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         // allocation up front.
         EnsureEmbeddingInitialized();
 
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         _originalInputShape = input._shape;
 
         int embeddingDim = _embeddingTensor.Shape[1];

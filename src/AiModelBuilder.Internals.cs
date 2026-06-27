@@ -1793,6 +1793,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             QuantizationStrategy.MinMax or QuantizationStrategy.Dynamic => internalConfig.Mode switch
             {
                 QuantizationMode.Int8 => new Deployment.Optimization.Quantization.Int8Quantizer<T, TInput, TOutput>(),
+                QuantizationMode.Int4 => new Deployment.Optimization.Quantization.Int4Quantizer<T, TInput, TOutput>(),
                 QuantizationMode.Float16 => new Deployment.Optimization.Quantization.Float16Quantizer<T, TInput, TOutput>(),
                 QuantizationMode.Float32 => throw new NotSupportedException("Float32 mode represents no quantization. Use QuantizationMode.None instead."),
                 QuantizationMode.Mixed => throw new NotSupportedException("Mixed precision requires a specific strategy like GPTQ or AWQ."),

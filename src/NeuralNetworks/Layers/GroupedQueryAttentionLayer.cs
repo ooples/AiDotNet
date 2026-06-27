@@ -341,7 +341,8 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
             ? Engine.Reshape(input, new[] { 1, seqLen, embDim })
             : Engine.Reshape(input, new[] { batchSize, seqLen, embDim });
 
-        _lastInput = input3D;
+        bool cacheBwd = ShouldCacheForBackward; // #1668: gate all backward caches (arena safety)
+        _lastInput = cacheBwd ? input3D : null;
 
         // Project Q, K, V
         var input2D = Engine.Reshape(input3D, new[] { batchSize * seqLen, embDim });
@@ -368,23 +369,23 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
             (queries, keys) = _ropeLayer.ApplyRoPE(queries, keys, startPosition: 0);
         }
 
-        _lastProjectedQueries = queries;
-        _lastProjectedKeys = keys;
-        _lastProjectedValues = values;
+        _lastProjectedQueries = cacheBwd ? queries : null;
+        _lastProjectedKeys = cacheBwd ? keys : null;
+        _lastProjectedValues = cacheBwd ? values : null;
 
         // Expand K/V heads to match Q heads via repeat
         var expandedKeys = ExpandKVHeads(keys, batchSize, seqLen);
         var expandedValues = ExpandKVHeads(values, batchSize, seqLen);
 
-        _lastExpandedKeys = expandedKeys;
-        _lastExpandedValues = expandedValues;
+        _lastExpandedKeys = cacheBwd ? expandedKeys : null;
+        _lastExpandedValues = cacheBwd ? expandedValues : null;
 
         // Compute attention with weights caching: [batch, numHeads, seqQ, seqKV]
         var (context, attentionWeights) = _alibiLayer != null
             ? ComputeALiBiAttention(queries, expandedKeys, expandedValues, seqLen, batchSize)
             : ComputeStandardAttentionWithWeights(queries, expandedKeys, expandedValues);
 
-        _lastAttentionWeights = attentionWeights;
+        _lastAttentionWeights = cacheBwd ? attentionWeights : null;
 
         // Reshape back: [batch, numHeads, seq, headDim] -> [batch, seq, embDim]
         var contextPermuted = Engine.TensorPermute(context, new[] { 0, 2, 1, 3 });
@@ -393,9 +394,9 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
             new[] { batchSize * seqLen, _numHeads * _headDimension });
 
         // Cache pre-projection context for output weights gradient
-        _lastAttentionContext = Engine.Reshape(
-            contextTransposed,
-            new[] { batchSize, seqLen, _numHeads * _headDimension });
+        _lastAttentionContext = cacheBwd
+            ? Engine.Reshape(contextTransposed, new[] { batchSize, seqLen, _numHeads * _headDimension })
+            : null;
 
         // Output projection
         var output = Engine.TensorMatMul(contextTransposed, _outputWeights);
@@ -408,7 +409,7 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
         var outputWithBias = Engine.TensorBroadcastAdd(output3D, biasBroadcast);
         var result = ApplyActivation(outputWithBias);
 
-        _lastOutput = result;
+        _lastOutput = cacheBwd ? result : null;
 
         // Reshape back to original rank — via Engine for tape recording.
         if (rank == 2)

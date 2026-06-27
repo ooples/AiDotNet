@@ -41,6 +41,7 @@ class Program
         ["acestep-nan-diag"]    = ACEStepNanDiag.Run,
         ["ace-tail-min-repro"]  = AceTailMinRepro.Run,
         ["tape-matmul-micro"]   = TapeMatMulMicroTest.Run,
+        ["arena1668-probe"]     = Arena1668Probe.Run,
     };
 
     static async Task Main(string[] args)

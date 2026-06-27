@@ -293,7 +293,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         if (input.Shape.Length < 3)
             throw new ArgumentException($"MaxPooling layer requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
 
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 

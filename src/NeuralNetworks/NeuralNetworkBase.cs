@@ -2921,52 +2921,96 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             return;
         }
 
+        // Last shape with rank >= 2 (a real spatial/sequence shape, not a
+        // degenerate rank-1 [features] declaration). When a later layer rejects
+        // the running shape — typically because an intervening shape-preserving
+        // layer (BatchNorm/LayerNorm/activation/dropout) reported a rank-1
+        // GetOutputShape that poisoned the walk — we backtrack to this last good
+        // shape and retry, and a single un-resolvable layer no longer ABORTS the
+        // whole walk (the old behaviour: one early break left every downstream
+        // lazy layer at its placeholder ParameterCount, so CNN/transformer
+        // backbones under-reported their parameter count by orders of magnitude
+        // and blinded every ParameterCount-gated memory decision — streaming
+        // auto-detect, ShouldUseStreamingTraining, ConfigureInferenceForScale —
+        // for exactly the foundation-scale models that need them, #1688). Robust
+        // across ALL model families, not just whichever layer breaks first.
+        int[] lastGoodShape = currentShape;
+
         for (int i = 0; i < Layers.Count; i++)
         {
             var layer = Layers[i];
             if (layer is null) continue;
 
-            try
+            if (!TryAdvanceLayerShape(layer, ref currentShape, ref lastGoodShape))
             {
-                if (layer is LayerBase<T> lb && !lb.IsShapeResolved)
-                {
-                    // Shape-only resolution — does NOT allocate or initialize
-                    // weights, so we don't consume RNG state and perturb
-                    // training. Weight allocation still happens lazily on the
-                    // first real Forward via EnsureInitializedFromInput.
-                    lb.ResolveShapesOnly(currentShape);
-                }
-
-                // Advance the chain via the layer's now-resolved output
-                // shape. We re-read GetOutputShape after ResolveFromShape
-                // so a lazy layer that just resolved contributes its
-                // real shape to the next iteration.
-                int[] outShape = layer.GetOutputShape();
-                if (outShape != null && outShape.Length > 0 && System.Array.TrueForAll(outShape, d => d > 0))
-                {
-                    currentShape = outShape;
-                }
-                else
-                {
-                    // Layer can't yield a concrete output shape (e.g., a
-                    // dynamic-size layer with -1 dims). Stop pre-resolution;
-                    // remaining layers will lazy-resolve on first Forward.
-                    break;
-                }
-            }
-            catch
-            {
-                // ResolveFromShape can fail for layers that need richer
-                // shape info than we can derive from a flat array (e.g.,
-                // some attention layers expect contextual metadata).
-                // Swallow so InitializeLayers always succeeds — those
-                // layers retain their lazy state and resolve on first
-                // Forward as before.
+                // This layer resolved from NEITHER the running shape NOR the last
+                // good shape (the backtrack above already tried both). Its true
+                // output shape is therefore unknown, so the running shape is no
+                // longer a reliable predecessor for anything downstream. STOP the
+                // walk here: every subsequent layer is left lazy and resolves
+                // correctly from its real input on the first Forward — exactly as
+                // the pre-#1688 walk did. Continuing to ResolveShapesOnly a
+                // downstream layer from a GUESSED shape (the old "reset to
+                // lastGoodShape and keep walking") would mis-size shape-polymorphic
+                // layers — e.g. a Dense after an Embedding->Attention chain the walk
+                // can't follow gets pinned to the wrong input width, corrupting
+                // inference (this regressed incremental serving decode + transformer
+                // ModelFamily forwards). The #1688 ParameterCount fix is fully
+                // preserved for the common case where the chain stays intact: every
+                // layer resolves (rank-1-declaring BatchNorm / LayerNorm / activation
+                // layers resolve via the lastGoodShape backtrack inside
+                // TryAdvanceLayerShape), so this break is never reached for those
+                // models (verified: SegFormer / MaskDINO / OneFormer / Mask2Former
+                // walks hit zero unresolved layers).
                 break;
             }
         }
 
         _layerShapesResolved = true;
+    }
+
+    /// <summary>
+    /// Resolves <paramref name="layer"/>'s shape from the running
+    /// <paramref name="currentShape"/>, falling back to <paramref name="lastGoodShape"/>
+    /// (the last rank-&gt;=2 shape) when the running shape is rejected — which happens
+    /// when an intervening shape-preserving layer reported a degenerate rank-1 output
+    /// that poisoned the walk. On success advances <paramref name="currentShape"/> to
+    /// the layer's output (and refreshes <paramref name="lastGoodShape"/> when that
+    /// output is rank &gt;= 2). Shape-only: never allocates weights or consumes RNG.
+    /// Returns false only when neither shape resolves the layer.
+    /// </summary>
+    private bool TryAdvanceLayerShape(ILayer<T> layer, ref int[] currentShape, ref int[] lastGoodShape)
+    {
+        var candidates = ReferenceEquals(lastGoodShape, currentShape)
+            ? new[] { currentShape }
+            : new[] { currentShape, lastGoodShape };
+        foreach (var tryShape in candidates)
+        {
+            try
+            {
+                if (layer is LayerBase<T> lb && !lb.IsShapeResolved)
+                {
+                    // Shape-only resolution — does NOT allocate or initialize weights,
+                    // so we don't consume RNG state and perturb training. Weight
+                    // allocation still happens lazily on the first real Forward.
+                    lb.ResolveShapesOnly(tryShape);
+                }
+                int[] outShape = layer.GetOutputShape();
+                if (outShape != null && outShape.Length > 0 && System.Array.TrueForAll(outShape, d => d > 0))
+                {
+                    currentShape = outShape;
+                    if (outShape.Length >= 2) lastGoodShape = outShape;
+                }
+                // Resolved. (A dynamic/non-concrete output leaves currentShape as a
+                // deliberate shape-preserving passthrough for the next layer.)
+                return true;
+            }
+            catch
+            {
+                // Running shape rejected — try the fallback shape, if any.
+            }
+        }
+        return false;
     }
 
     /// <summary>
@@ -9778,6 +9822,28 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                         dstExtras.SetExtraParameters(srcExtras.GetExtraParameters());
                     }
                 }
+
+                // Copy model-level network-specific state that lives OUTSIDE the
+                // per-layer parameters/extras (e.g. TOTEM's learned VQ codebook,
+                // RevIN config). The per-layer loop above does NOT cover it, so
+                // without this the clone keeps the freshly-constructed
+                // CreateNewInstance() state — for TOTEM a fresh random codebook
+                // (InitializeCodebooks → CreateSecureRandom) — and diverges from
+                // the trained original (TOTEM Clone_AfterTraining). Round-trip
+                // through the SAME hooks the serialize path (9815+) uses so the
+                // large/custom-layer path is no longer lossy for such models.
+                using (var nsStream = new System.IO.MemoryStream())
+                {
+                    var nsWriter = new System.IO.BinaryWriter(nsStream);
+                    SerializeNetworkSpecificData(nsWriter);
+                    nsWriter.Flush();
+                    if (nsStream.Length > 0)
+                    {
+                        nsStream.Position = 0;
+                        var nsReader = new System.IO.BinaryReader(nsStream);
+                        largeBase.DeserializeNetworkSpecificData(nsReader);
+                    }
+                }
                 largeBase.InvalidateParameterCountCache();
                 largeBase.SetTrainingMode(false);
                 return largeCopy;
@@ -9845,6 +9911,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             (copy as IDisposable)?.Dispose();
             return false;
+        }
+
+        // CreateNewInstance() must hand back an instance with its OWN layer objects. Some models are
+        // built from an explicit pre-constructed layer list that the new instance re-uses by reference,
+        // so the "clone" shares the very same layer (and therefore weight tensor) objects as the source.
+        // Sharing tensors copy-on-write onto a layer the source still owns would make any later write to
+        // EITHER side mutate BOTH — defeating Clone's independence contract (a write to the clone leaks
+        // back to the original). Detect that aliasing and fall back to the eager full-fidelity copy,
+        // which deserializes into genuinely independent layers.
+        for (int i = 0; i < srcLayers.Count; i++)
+        {
+            if (ReferenceEquals(srcLayers[i], dstLayers[i]))
+            {
+                (copy as IDisposable)?.Dispose();
+                return false;
+            }
         }
 
         // GetExtraTrainableTensors() are raw trainable tensors the model owns OUTSIDE any layer (e.g.
@@ -9936,6 +10018,27 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     (copy as IDisposable)?.Dispose();
                     return false;
                 }
+            }
+        }
+
+        // Copy model-level network-specific state (e.g. TOTEM's learned VQ codebook)
+        // that lives OUTSIDE the per-layer trainable tensors / extras shared above.
+        // The COW share covers only layer tensors, so without this the clone keeps the
+        // fresh CreateNewInstance() state — for TOTEM a random codebook
+        // (InitializeCodebooks → CreateSecureRandom) — and diverges from the trained
+        // original (TOTEM Clone_AfterTraining). Round-trip through the SAME hooks the
+        // eager serialize path uses, giving the clone an INDEPENDENT deep copy (a write
+        // to either side cannot leak, unlike the shared layer tensors).
+        using (var nsStream = new System.IO.MemoryStream())
+        {
+            var nsWriter = new System.IO.BinaryWriter(nsStream);
+            SerializeNetworkSpecificData(nsWriter);
+            nsWriter.Flush();
+            if (nsStream.Length > 0)
+            {
+                nsStream.Position = 0;
+                var nsReader = new System.IO.BinaryReader(nsStream);
+                copyBase.DeserializeNetworkSpecificData(nsReader);
             }
         }
 

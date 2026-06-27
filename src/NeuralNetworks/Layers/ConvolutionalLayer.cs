@@ -1138,19 +1138,22 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         // (Conv1a output at VGG paper-scale is 25.7 MB at fp64) and inflate
         // peak retained memory across the L-layer chain. Skip the assignment
         // in tape mode; use the local input4D directly for the conv ops.
-        bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
-            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
-        if (!tapeActive)
+        // Retain the backward-activation caches (_lastInput / _lastOutput) only when an
+        // eager manual Backward will read them. The old `!tapeActive` test still cached
+        // during inference (no tape), pinning the activation set and — inside the
+        // denoise-loop arena — aliasing scratch recycled by the per-step Reset (#1668).
+        // ShouldCacheForBackward is additionally false in eval mode and inside an
+        // InferenceMode scope.
+        bool cacheBwd = ShouldCacheForBackward;
+        if (cacheBwd)
         {
             _lastInput = input4D;
         }
         else
         {
-            // Clear the cache when tape is active so prior non-tape steps
-            // can't keep an old activation rooted alongside the tape's
-            // intermediates. Empty-shape sentinel matches the ctor's
-            // initial state and lets ParameterCount / Serialize logic that
-            // reads _lastInput.Shape continue to work without an NRE.
+            // Empty-shape sentinel matches the ctor's initial state and lets
+            // ParameterCount / Serialize logic that reads _lastInput.Shape continue
+            // to work without an NRE.
             _lastInput = new Tensor<T>([0, 0, 0, 0]);
         }
 
@@ -1165,7 +1168,17 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         int batchSize_conv = input4D.Shape[0];
         int[] expectedShape = [batchSize_conv, OutputDepth, outputHeight, outputWidth];
 
+        // Cross-forward output-buffer reuse is unsafe only when a TensorArena is actually
+        // active: _preAllocatedOutput is arena scratch, and reusing the same slot across the
+        // per-step Reset() would alias whatever the next step Rents into that slot (#1668).
+        // Key this off TensorArena.Current (not InferenceMode) so the escape hatch
+        // (AIDOTNET_INFERENCE_ARENA_DIFFUSION=0, which leaves InferenceMode on but disables
+        // the arena) keeps the manual zero-allocation reuse — otherwise we'd rent a fresh
+        // buffer every forward with no arena to pool it. With the arena on, re-renting per
+        // forward stays zero-allocation after warmup (the arena recycles in cursor order).
+        bool arenaActive = AiDotNet.Tensors.Helpers.TensorArena.Current is not null;
         if (_preAllocatedOutput is null ||
+            arenaActive ||
             _preAllocatedOutput.Shape[0] != batchSize_conv ||
             _preAllocatedOutput.Shape[2] != outputHeight ||
             _preAllocatedOutput.Shape[3] != outputWidth)
@@ -1272,7 +1285,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         // for the entire inference branch). When the tape IS active, clear
         // the cache so a prior non-tape step's output can't keep its tensor
         // rooted in parallel with the tape's intermediates.
-        if (!tapeActive)
+        if (cacheBwd)
         {
             _lastOutput = result;
         }

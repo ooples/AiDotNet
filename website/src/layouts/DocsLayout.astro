@@ -47,6 +47,12 @@ const sidebar = [
     ],
   },
   {
+    title: 'API Reference',
+    items: [
+      { label: 'All namespaces', href: `${base}docs/reference/wiki/` },
+    ],
+  },
+  {
     title: 'Examples',
     items: [
       { label: 'Tensor Basics', href: `${base}docs/examples/tensor-basics/` },
@@ -74,6 +80,8 @@ const editUrl = `https://github.com/ooples/AiDotNet/edit/master/website/src/cont
 <BaseLayout title={`${title} - AiDotNet Docs`} description={description || `${title} documentation for AiDotNet`}>
   <div class="pt-20 min-h-screen">
     <div class="max-w-8xl mx-auto px-4 sm:px-6 lg:px-8">
+      <!-- Docs search (Pagefind — index is generated at build time) -->
+      <div id="docs-search" class="py-4 max-w-2xl"></div>
       <!-- Mobile docs nav -->
       <div class="lg:hidden py-4">
         <details class="group border border-slate-200 dark:border-slate-700 rounded-lg">
@@ -141,7 +149,7 @@ const editUrl = `https://github.com/ooples/AiDotNet/edit/master/website/src/cont
 
         <!-- Main content -->
         <div class="flex-1 min-w-0 py-8 lg:py-12">
-          <article class="prose prose-slate dark:prose-invert max-w-none prose-headings:font-semibold prose-a:text-brand-blue dark:prose-a:text-brand-purple prose-code:text-brand-blue dark:prose-code:text-brand-purple prose-pre:bg-slate-950 prose-pre:border prose-pre:border-slate-800">
+          <article data-pagefind-body class="prose prose-slate dark:prose-invert max-w-none prose-headings:font-semibold prose-a:text-brand-blue dark:prose-a:text-brand-purple prose-code:text-brand-blue dark:prose-code:text-brand-purple prose-pre:bg-slate-950 prose-pre:border prose-pre:border-slate-800">
             <h1>{title}</h1>
             <slot />
           </article>
@@ -161,4 +169,29 @@ const editUrl = `https://github.com/ooples/AiDotNet/edit/master/website/src/cont
       </div>
     </div>
   </div>
+
+  <!-- Pagefind search UI. The /pagefind/ bundle is produced by the postbuild step
+       (pagefind --site dist); it doesn't exist under `astro dev`, so search appears
+       only on built/preview/production pages. -->
+  <link rel="stylesheet" href={`${base}pagefind/pagefind-ui.css`} />
+  <script is:inline define:vars={{ base }}>
+    (function () {
+      function init() {
+        if (window.PagefindUI) {
+          new window.PagefindUI({
+            element: "#docs-search",
+            bundlePath: base + "pagefind/",
+            showSubResults: true,
+            showImages: false,
+            pageSize: 8,
+          });
+        }
+      }
+      var s = document.createElement("script");
+      s.src = base + "pagefind/pagefind-ui.js";
+      s.onload = init;
+      s.onerror = function () { /* no index in dev — search is built-only */ };
+      document.head.appendChild(s);
+    })();
+  </script>
 </BaseLayout>

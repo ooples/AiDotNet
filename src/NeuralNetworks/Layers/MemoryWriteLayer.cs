@@ -494,7 +494,7 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // but only when the layer has run at least once. Force init here.
         EnsureInitializedFromInput(input);
 
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         _lastMemory = memory;
 
         // Dynamic input dimension adaptation

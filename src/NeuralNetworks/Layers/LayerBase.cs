@@ -299,6 +299,16 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     protected bool IsTrainingMode = true;
 
     /// <summary>
+    /// When <c>true</c>, layers that have a faster but numerically-different inference path
+    /// (e.g. <see cref="DenseLayer{T}"/>'s fused matmul+activation kernel, used only in eval mode)
+    /// fall back to the same unfused path they use during training, so the eval-mode forward is
+    /// bit-identical to the training-mode forward. Default <c>false</c> — production inference keeps
+    /// the fast fused path; set this only when exact train/eval parity is required (e.g. determinism
+    /// tests). Propagated to sub-layers by <see cref="SetDeterministicForward"/>.
+    /// </summary>
+    public bool DeterministicForward { get; set; }
+
+    /// <summary>
     /// When true, Forward() records operations to a computation graph instead of executing them.
     /// Used by the JIT compiler to capture the full forward pass for compilation.
     /// Set via <see cref="SetCaptureMode"/>.
@@ -1020,12 +1030,34 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// True when the layer should populate its manual-backward activation caches:
     /// only when NO <see cref="GradientTape{T}"/> is recording (the tape-less
     /// manual-autodiff path may read them) or when <see cref="KeepActivationCacheUnderTape"/>
-    /// forces it. Under a recording tape the caches are never read — the tape
-    /// backward walks the tape, not the layers — so skipping them frees the
-    /// redundant activation reference.
+    /// forces it, AND we are not inside an <see cref="InferenceMode"/> scope. Under a
+    /// recording tape the caches are never read — the tape backward walks the tape,
+    /// not the layers — and during inference no backward runs at all, so skipping
+    /// them frees the redundant activation reference (and, in a multi-forward arena
+    /// loop, prevents aliasing recycled scratch — issue #1668).
     /// </summary>
     protected static bool ShouldCacheActivationsForManualBackward
-        => GradientTape<T>.Current is null || KeepActivationCacheUnderTape;
+        => !InferenceMode.IsActive
+        && (GradientTape<T>.Current is null || KeepActivationCacheUnderTape);
+
+    /// <summary>
+    /// True when this layer should populate its per-layer manual-backward activation
+    /// caches (the bespoke <c>_lastInput</c> / pre-activation fields a layer's own
+    /// eager <see cref="Backward(Tensor{T})"/> reads). This is the canonical guard
+    /// every such cache write should be gated on:
+    /// <code>if (ShouldCacheForBackward) _lastInput = input;</code>
+    /// It is false whenever no eager manual backward will read the caches —
+    /// during graph capture (<see cref="IsCapturing"/>), under a recording
+    /// <see cref="GradientTape{T}"/> (unless <see cref="KeepActivationCacheUnderTape"/>),
+    /// in eval mode (<see cref="IsTrainingMode"/> is false), or inside an
+    /// <see cref="InferenceMode"/> scope — so the redundant reference is dropped and the
+    /// inference caching allocator can safely recycle the buffer (issue #1668).
+    /// </summary>
+    protected bool ShouldCacheForBackward
+        => IsTrainingMode
+        && !IsCapturing
+        && !InferenceMode.IsActive
+        && (GradientTape<T>.Current is null || KeepActivationCacheUnderTape);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LayerBase{T}"/> class with the specified input and output shapes.
@@ -1238,6 +1270,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         for (int i = 0; i < _registeredSubLayers.Count; i++)
         {
             _registeredSubLayers[i].SetTrainingMode(isTraining);
+        }
+    }
+
+    /// <summary>
+    /// Sets <see cref="DeterministicForward"/> on this layer and recursively on every registered
+    /// sub-layer (mirrors <see cref="SetTrainingMode"/>'s propagation), so a composite layer can put
+    /// its embedded layers on the unfused, train/eval-identical forward path with a single call.
+    /// </summary>
+    public virtual void SetDeterministicForward(bool deterministic)
+    {
+        DeterministicForward = deterministic;
+        for (int i = 0; i < _registeredSubLayers.Count; i++)
+        {
+            (_registeredSubLayers[i] as LayerBase<T>)?.SetDeterministicForward(deterministic);
         }
     }
 
@@ -2335,13 +2381,16 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         //     isn't sufficient.
         //
         // Only push when we know the eager backward will drain it: training
-        // mode ON, not capturing, no tape recording. The tape path already
-        // preserves the pre-activation reference through its recorded GradFn
-        // closures; the capture path encodes it into the graph node — both
-        // cases make the cache redundant.
+        // mode ON, not capturing, not inside an inference scope, no tape recording.
+        // The tape path already preserves the pre-activation reference through its
+        // recorded GradFn closures; the capture path encodes it into the graph node;
+        // an InferenceMode scope guarantees no backward at all — all three make the
+        // cache redundant (and leaving it set would alias arena scratch across a
+        // denoise-loop Reset — issue #1668).
         bool eagerBackwardWillRun =
             IsTrainingMode
             && !IsCapturing
+            && !InferenceMode.IsActive
             && GradientTape<T>.Current is null;
         if (eagerBackwardWillRun)
         {

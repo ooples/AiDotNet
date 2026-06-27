@@ -420,23 +420,34 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
         var projectConv = _projectConv ?? throw new InvalidOperationException("OnFirstForward did not allocate _projectConv.");
         var projectBn = _projectBn ?? throw new InvalidOperationException("OnFirstForward did not allocate _projectBn.");
 
-        _lastInput = input;
+        // #1668: every per-stage activation below is read by the NEXT stage (chained),
+        // so compute into locals and mirror to the backward-cache fields only when an
+        // eager Backward will read them. In an InferenceMode arena loop the fields stay
+        // null, so nothing references recycled scratch across the per-step Reset.
+        bool cacheBwd = ShouldCacheForBackward;
+        _lastInput = cacheBwd ? input : null;
         Tensor<T> x = input;
 
         // Expansion phase (if expansion > 1)
         if (_hasExpansion && _expandConv is not null && _expandBn is not null)
         {
-            _lastExpandOut = _expandConv.Forward(x);
-            _lastExpandBnOut = _expandBn.Forward(_lastExpandOut);
-            _lastExpandActOut = ApplyBlockActivation(_lastExpandBnOut);
-            x = _lastExpandActOut;
+            var expandOut = _expandConv.Forward(x);
+            _lastExpandOut = cacheBwd ? expandOut : null;
+            var expandBnOut = _expandBn.Forward(expandOut);
+            _lastExpandBnOut = cacheBwd ? expandBnOut : null;
+            var expandActOut = ApplyBlockActivation(expandBnOut);
+            _lastExpandActOut = cacheBwd ? expandActOut : null;
+            x = expandActOut;
         }
 
         // Depthwise convolution phase
-        _lastDwOut = dwConv.Forward(x);
-        _lastDwBnOut = dwBn.Forward(_lastDwOut);
-        _lastDwActOut = ApplyBlockActivation(_lastDwBnOut);
-        x = _lastDwActOut;
+        var dwOut = dwConv.Forward(x);
+        _lastDwOut = cacheBwd ? dwOut : null;
+        var dwBnOut = dwBn.Forward(dwOut);
+        _lastDwBnOut = cacheBwd ? dwBnOut : null;
+        var dwActOut = ApplyBlockActivation(dwBnOut);
+        _lastDwActOut = cacheBwd ? dwActOut : null;
+        x = dwActOut;
 
         // Squeeze-and-Excitation phase (optional)
         // Note: SE layer expects NHWC format, but our tensors are in NCHW format
@@ -446,21 +457,24 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
             var seInput = TransposeNCHWToNHWC(x);
             var seOutput = _se.Forward(seInput);
             // Transpose NHWC [B, H, W, C] -> NCHW [B, C, H, W]
-            _lastSeOut = TransposeNHWCToNCHW(seOutput);
-            x = _lastSeOut;
+            var seOut = TransposeNHWCToNCHW(seOutput);
+            _lastSeOut = cacheBwd ? seOut : null;
+            x = seOut;
         }
 
         // Projection phase (LINEAR - no activation)
-        _lastProjectOut = projectConv.Forward(x);
-        _lastProjectBnOut = projectBn.Forward(_lastProjectOut);
+        var projectOut = projectConv.Forward(x);
+        _lastProjectOut = cacheBwd ? projectOut : null;
+        var projectBnOut = projectBn.Forward(projectOut);
+        _lastProjectBnOut = cacheBwd ? projectBnOut : null;
 
         // Residual connection (only if dimensions match)
         if (_useResidual)
         {
-            return AddTensors(_lastProjectBnOut, input);
+            return AddTensors(projectBnOut, input);
         }
 
-        return _lastProjectBnOut;
+        return projectBnOut;
     }
 
     /// <summary>

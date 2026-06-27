@@ -162,7 +162,7 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExt
         // run with their (possibly stale-from-init) weights.
         if (!IsShapeResolved) OnFirstForward(input);
 
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
         // BN/Conv expect [N, C, H, W] format. Add batch dim if 3D [C, H, W].
         var x = input.Shape.Length == 3 ? Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2]]) : input;

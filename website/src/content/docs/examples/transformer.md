@@ -1,328 +1,204 @@
 ---
-title: "Transformer Example"
-description: "Build a transformer model."
+title: "Text Classification & NLP"
+description: "Classify and score text through the AiModelBuilder facade."
 order: 4
 section: "Examples"
 ---
 
 
-This guide demonstrates how to use transformer-based models for NLP tasks using AiDotNet's simplified API.
+This guide demonstrates text/NLP tasks through AiDotNet's `AiModelBuilder` facade. A text vectorizer turns raw strings into features, you train any classifier or regressor on them, and you predict straight from text with `result.PredictText(...)`.
 
 ## Overview
 
-AiDotNet provides powerful transformer capabilities through the `AiModelBuilder` facade, hiding the complexity of transformer architecture while giving you full control over configuration.
+The pattern is the same as any other model, plus two text-specific pieces:
 
-## Text Classification
+- **`ConfigureTextVectorizer(vectorizer)`** hands the result a fitted vectorizer so it can convert new text the same way it converted training text.
+- **`DataLoaders.FromTextDocuments(texts, labels, vectorizer)`** fits the vectorizer on your documents and produces the numeric features the model trains on.
+
+Then `result.PredictText(strings)` goes straight from text to a prediction.
+
+## Text Classification (News Categorization)
 
 ```csharp
 using AiDotNet;
+using AiDotNet.Classification.Ensemble;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Models.Options;
+using AiDotNet.Preprocessing.TextVectorizers;
+using AiDotNet.Tensors.LinearAlgebra;
 
-// Prepare your text data
-var texts = new string[]
+// Categories: 0 = Technology, 1 = Sports, 2 = Business
+string[] articles =
+{
+    "New smartphone launches with a faster AI chip and better camera",
+    "The team won the championship final in overtime last night",
+    "Quarterly earnings beat analyst expectations as revenue grew",
+    "Cloud computing provider expands its global data centers",
+    "Star striker signs a record transfer to the rival club",
+    "Central bank raises interest rates to curb rising inflation",
+};
+double[] labels = { 0, 1, 2, 0, 1, 2 };
+
+// FromTextDocuments fits the vectorizer; ConfigureTextVectorizer lets the result reuse it.
+var vectorizer = new TfidfVectorizer<double>();
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new RandomForestClassifier<double>(
+        new RandomForestClassifierOptions<double> { NEstimators = 100 }))
+    .ConfigureTextVectorizer(vectorizer)
+    .ConfigureDataLoader(DataLoaders.FromTextDocuments(articles, labels, vectorizer))
+    .BuildAsync();
+
+// Categorize new text directly — no manual feature engineering.
+var prediction = result.PredictText(new[] { "The league announced a new playoff format" });
+Console.WriteLine($"Predicted category: {(int)prediction[0]}");
+```
+
+## Sentiment Analysis (Binary)
+
+```csharp
+using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Preprocessing.TextVectorizers;
+using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
+
+string[] reviews =
 {
     "This product is amazing, I love it!",
-    "Terrible quality, waste of money",
-    "Good value for the price",
-    "Not what I expected, disappointed",
-    "Excellent service and fast shipping"
+    "Terrible quality, a complete waste of money",
+    "Good value for the price, happy with it",
+    "Not what I expected, very disappointed",
+    "Excellent service and fast shipping",
+    "Broke after one day, would not recommend",
 };
+double[] sentiment = { 1, 0, 1, 0, 1, 0 }; // 1 = positive, 0 = negative
 
-var sentiments = new double[] { 1, 0, 1, 0, 1 }; // 1 = positive, 0 = negative
+var vectorizer = new TfidfVectorizer<double>();
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new LogisticRegression<double>())
+    .ConfigureTextVectorizer(vectorizer)
+    .ConfigureDataLoader(DataLoaders.FromTextDocuments(reviews, sentiment, vectorizer))
+    .BuildAsync();
 
-// Build and train a transformer model for text classification
-var result = await new AiModelBuilder<double, string[], double[]>()
-    .ConfigureNlp(config =>
-    {
-        config.TaskType = NlpTaskType.TextClassification;
-        config.ModelType = NlpModelType.Transformer;
-        config.MaxSequenceLength = 128;
-        config.VocabSize = 30000;
-    })
-    .ConfigurePreprocessing()
-    .BuildAsync(texts, sentiments);
+var score = result.PredictText(new[] { "I really enjoyed this purchase!" });
+Console.WriteLine($"Sentiment: {(score[0] > 0.5 ? "Positive" : "Negative")}");
 
-// Make predictions
-var newTexts = new[] { "I really enjoyed this purchase!" };
-var predictions = result.Predict(newTexts);
-Console.WriteLine($"Sentiment: {(predictions[0] > 0.5 ? "Positive" : "Negative")}");
-
-// View training metrics
-Console.WriteLine($"Training Accuracy: {result.TrainingAccuracy:P2}");
-Console.WriteLine($"Validation Accuracy: {result.ValidationAccuracy:P2}");
+// Read classification metrics off the facade (no hand-rolled math).
+var features = vectorizer.Transform(reviews);
+var stats = result.GetDataSetStats(features, new Vector<double>(sentiment));
+Console.WriteLine($"Accuracy: {stats.ErrorStats.Accuracy:P1}, F1: {stats.ErrorStats.F1Score:P1}");
 ```
 
-## Named Entity Recognition
+## Text Similarity
 
-> **Note:** Transformer-based NER requires substantial labeled data (thousands of annotated sentences). The example below demonstrates the API pattern; for production use, provide a full dataset such as CoNLL-2003.
+Score how similar two texts are by concatenating each pair and training a regressor on the similarity target.
 
 ```csharp
 using AiDotNet;
-
-// Prepare training data with entity labels
-// In production, load from a labeled corpus (CoNLL-2003, OntoNotes, etc.)
-var sentences = new string[]
-{
-    "John Smith works at Microsoft in Seattle.",
-    "Apple released a new iPhone yesterday.",
-    "Dr. Jane Doe will speak at Harvard University.",
-    "Tesla CEO Elon Musk visited Berlin last week.",
-    "The United Nations headquarters is in New York.",
-    // ... load hundreds/thousands more from your dataset
-};
-
-// Entity labels per token: 0=O, 1=PERSON, 2=ORG, 3=LOC, 4=PRODUCT
-var entityLabels = new int[][]
-{
-    new[] { 1, 1, 0, 0, 2, 0, 3 },
-    new[] { 2, 0, 0, 0, 4, 0 },
-    new[] { 1, 1, 1, 0, 0, 0, 2, 2 },
-    new[] { 2, 0, 1, 1, 0, 3, 0, 0 },
-    new[] { 2, 2, 0, 0, 3, 3 },
-};
-
-// Build NER model
-var result = await new AiModelBuilder<double, string[], int[][]>()
-    .ConfigureNlp(config =>
-    {
-        config.TaskType = NlpTaskType.NamedEntityRecognition;
-        config.ModelType = NlpModelType.Transformer;
-        config.NumLabels = 5; // O, PERSON, ORG, LOC, PRODUCT
-    })
-    .ConfigurePreprocessing()
-    .BuildAsync(sentences, entityLabels);
-
-// Extract entities from new text
-var newSentence = new[] { "Elon Musk founded SpaceX in California." };
-var entities = result.Predict(newSentence);
-Console.WriteLine($"Detected entities: {string.Join(", ", entities[0])}");
-```
-
-## Text Generation
-
-```csharp
-using AiDotNet;
-
-// Training corpus for text generation (next-token prediction)
-// In production, use a large text corpus (thousands of documents)
-var trainingTexts = new string[]
-{
-    "Once upon a time in a faraway kingdom there lived a wise old king",
-    "The scientist discovered a new element that could change everything",
-    "In the depths of the ocean lives a creature never seen before",
-    "The ancient library contained scrolls from a forgotten civilization",
-    "A young explorer set out on a journey across the vast desert",
-    "The stars aligned in a pattern the astronomers had never recorded",
-};
-
-// Build generative model (input = text prefix, output = next tokens)
-var result = await new AiModelBuilder<double, string[], string[]>()
-    .ConfigureNlp(config =>
-    {
-        config.TaskType = NlpTaskType.TextGeneration;
-        config.ModelType = NlpModelType.Transformer;
-        config.MaxSequenceLength = 256;
-        config.Temperature = 0.7;
-    })
-    .ConfigurePreprocessing()
-    .BuildAsync(trainingTexts, trainingTexts);
-
-// Generate new text
-var prompt = new[] { "The robot looked at the sunset and" };
-var generated = result.Predict(prompt);
-Console.WriteLine($"Generated: {generated[0]}");
-```
-
-## Question Answering
-
-> **Note:** QA models extract answer spans from context. The `[SEP]` token is inserted automatically by the tokenizer when using `NlpTaskType.QuestionAnswering`. In production, use a large QA dataset (e.g., SQuAD 2.0).
-
-```csharp
-using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Preprocessing.TextVectorizers;
+using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
 using System.Linq;
 
-// Context-question-answer triplets
-// In production, load from a QA dataset (SQuAD, Natural Questions, etc.)
-var contexts = new string[]
-{
-    "The Eiffel Tower is located in Paris, France. It was built in 1889.",
-    "Python is a programming language created by Guido van Rossum.",
-    "The Great Wall of China stretches over 13,000 miles.",
-    "Marie Curie discovered radium and polonium in 1898.",
-    "The Amazon River is the largest river by discharge volume.",
-};
+string[] textA = { "The cat sat on the mat", "I love programming", "The weather is nice today" };
+string[] textB = { "A cat was sitting on a rug", "Coding is my passion", "It is a beautiful sunny day" };
+double[] similarity = { 0.9, 0.85, 0.8 };
 
-var questions = new string[]
-{
-    "Where is the Eiffel Tower located?",
-    "Who created Python?",
-    "How long is the Great Wall of China?",
-    "What did Marie Curie discover?",
-    "What is the largest river by discharge?",
-};
+// Combine each pair into one document the vectorizer can featurize.
+var paired = textA.Zip(textB, (a, b) => $"{a} {b}").ToArray();
 
-var answers = new string[]
-{
-    "Paris, France",
-    "Guido van Rossum",
-    "over 13,000 miles",
-    "radium and polonium",
-    "Amazon River",
-};
+var vectorizer = new TfidfVectorizer<double>();
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new MultipleRegression<double>())
+    .ConfigureTextVectorizer(vectorizer)
+    .ConfigureDataLoader(DataLoaders.FromTextDocuments(paired, similarity, vectorizer))
+    .BuildAsync();
 
-// Combine context and question as input
-var inputs = contexts.Zip(questions, (c, q) => $"{c} [SEP] {q}").ToArray();
-
-// Build QA model
-var result = await new AiModelBuilder<double, string[], string[]>()
-    .ConfigureNlp(config =>
-    {
-        config.TaskType = NlpTaskType.QuestionAnswering;
-        config.ModelType = NlpModelType.Transformer;
-        config.MaxSequenceLength = 512;
-    })
-    .ConfigurePreprocessing()
-    .BuildAsync(inputs, answers);
-
-// Answer new questions
-// The [SEP] token separates context from question (convention used by BERT-style models)
-var newContext = "Albert Einstein developed the theory of relativity.";
-var newQuestion = "What did Einstein develop?";
-var newInput = new[] { $"{newContext} [SEP] {newQuestion}" };
-
-var answer = result.Predict(newInput);
-Console.WriteLine($"Answer: {answer[0]}");
-```
-
-## Text Similarity / Embeddings
-
-```csharp
-using AiDotNet;
-
-// Pairs of similar texts
-var text1 = new string[]
-{
-    "The cat sat on the mat",
-    "I love programming",
-    "The weather is nice today"
-};
-
-var text2 = new string[]
-{
-    "A cat was sitting on a rug",
-    "Coding is my passion",
-    "It's a beautiful sunny day"
-};
-
-var similarityScores = new double[] { 0.9, 0.85, 0.8 };
-
-// Combine pairs as "text1 [SEP] text2" input format
-var pairedInputs = text1.Zip(text2, (a, b) => $"{a} [SEP] {b}").ToArray();
-
-// Build similarity model
-var result = await new AiModelBuilder<double, string[], double[]>()
-    .ConfigureNlp(config =>
-    {
-        config.TaskType = NlpTaskType.SemanticSimilarity;
-        config.ModelType = NlpModelType.Transformer;
-    })
-    .ConfigurePreprocessing()
-    .BuildAsync(pairedInputs, similarityScores);
-
-// Compare new text pairs
-var newPair = new[] { "Hello world [SEP] Hi there" };
-var comparison = result.Predict(newPair);
+var comparison = result.PredictText(new[] { "Hello world Hi there" });
 Console.WriteLine($"Similarity: {comparison[0]:F2}");
 ```
 
 ## Configuration Options
 
+The vectorizer controls how text becomes features — n-grams, vocabulary size, lowercasing, and stop words are all real knobs.
+
 ```csharp
 using AiDotNet;
+using AiDotNet.Classification.Ensemble;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Models.Options;
+using AiDotNet.Preprocessing.TextVectorizers;
+using AiDotNet.Tensors.LinearAlgebra;
+using System.Collections.Generic;
 
-// Sample training data
-var texts = new string[] { "I love this product", "Terrible experience", "Great service", "Waste of money" };
-var labels = new double[] { 1.0, 0.0, 1.0, 0.0 };  // 1.0 = positive, 0.0 = negative
+string[] texts = { "I love this product", "Terrible experience", "Great service", "Waste of money" };
+double[] labels = { 1, 0, 1, 0 };
 
-// Full configuration example
-var result = await new AiModelBuilder<double, string[], double[]>()
-    .ConfigureNlp(config =>
-    {
-        // Model architecture
-        config.TaskType = NlpTaskType.TextClassification;
-        config.ModelType = NlpModelType.Transformer;
-        config.MaxSequenceLength = 256;
-        config.VocabSize = 32000;
+// Unigrams + bigrams, capped vocabulary, custom stop words.
+var vectorizer = new CountVectorizer<double>(
+    maxFeatures: 1000,
+    nGramRange: (1, 2),
+    lowercase: true,
+    stopWords: new HashSet<string> { "the", "a", "an", "of", "and" });
 
-        // Training parameters
-        config.LearningRate = 2e-5;
-        config.BatchSize = 16;
-        config.Epochs = 5;
-        config.WarmupSteps = 500;
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new RandomForestClassifier<double>(
+        new RandomForestClassifierOptions<double> { NEstimators = 200, MaxDepth = 10 }))
+    .ConfigureTextVectorizer(vectorizer)
+    .ConfigureDataLoader(DataLoaders.FromTextDocuments(texts, labels, vectorizer))
+    .BuildAsync();
 
-        // Regularization
-        config.Dropout = 0.1;
-        config.WeightDecay = 0.01;
-
-        // Tokenization
-        config.TokenizerType = TokenizerType.BPE;
-        config.LowercaseInput = true;
-    })
-    .ConfigurePreprocessing()
-    .ConfigureValidation(validationSplit: 0.15)
-    .BuildAsync(texts, labels);
-
-// Access training history
-foreach (var epoch in result.TrainingHistory)
-{
-    Console.WriteLine($"Epoch {epoch.EpochNumber}: Loss={epoch.Loss:F4}, Accuracy={epoch.Accuracy:P2}");
-}
+Console.WriteLine($"Class for new text: {(int)result.PredictText(new[] { "great product" })[0]}");
 ```
-
-## Best Practices
-
-1. **Use appropriate sequence length**: Shorter sequences train faster but may truncate important information
-2. **Adjust batch size for memory**: Transformer models are memory-intensive; reduce batch size if needed
-3. **Use warmup steps**: Gradually increasing learning rate helps training stability
-4. **Monitor validation metrics**: Watch for overfitting on small datasets
-5. **Provide sufficient training data**: Transformers need hundreds to thousands of labeled examples
-6. **Handle errors gracefully**: Wrap training in try-catch for OOM and tokenization errors
-7. **Save trained models**: Use `builder.SaveModel(result, "model.aimf")` for production deployment
-8. **Use cancellation tokens**: Pass `CancellationToken` to `BuildAsync` for long-running training
 
 ## Error Handling
 
+Log failures for developers and surface a sanitized message to users; never swallow exceptions silently.
+
 ```csharp
+using AiDotNet;
+using AiDotNet.Classification.Ensemble;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Models.Options;
+using AiDotNet.Preprocessing.TextVectorizers;
+using AiDotNet.Tensors.LinearAlgebra;
+
+string[] texts = { "I love this product", "Terrible experience", "Great service", "Waste of money" };
+double[] labels = { 1, 0, 1, 0 };
+
 try
 {
-    var result = await new AiModelBuilder<double, string[], double[]>()
-        .ConfigureNlp(config =>
-        {
-            config.TaskType = NlpTaskType.TextClassification;
-            config.ModelType = NlpModelType.Transformer;
-        })
-        .ConfigurePreprocessing()
-        .BuildAsync(texts, labels);
+    var vectorizer = new TfidfVectorizer<double>();
+    var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        .ConfigureModel(new RandomForestClassifier<double>(
+            new RandomForestClassifierOptions<double> { NEstimators = 100 }))
+        .ConfigureTextVectorizer(vectorizer)
+        .ConfigureDataLoader(DataLoaders.FromTextDocuments(texts, labels, vectorizer))
+        .BuildAsync();
 
-    Console.WriteLine($"Training complete. Accuracy: {result.TrainingAccuracy:P2}");
+    var features = vectorizer.Transform(texts);
+    var stats = result.GetDataSetStats(features, new Vector<double>(labels));
+    Console.WriteLine($"Training complete. Accuracy: {stats.ErrorStats.Accuracy:P2}");
 }
-catch (OutOfMemoryException)
+catch (ArgumentException)
 {
-    Console.WriteLine("Reduce batch size or sequence length to fit in available memory.");
-}
-catch (ArgumentException ex)
-{
-    Console.WriteLine($"Invalid configuration: {ex.Message}");
+    // Log the exception for developers via your ILogger; show users a safe message.
+    Console.WriteLine("Could not train the text model with the provided data.");
 }
 ```
 
+## Advanced: Sequence Models
+
+Token-level tasks — named-entity recognition (a label per token), text generation (next-token prediction), and extractive question answering (answer spans) — need a true sequence model rather than a bag-of-words vectorizer. AiDotNet ships a real `Transformer<T>` (`AiDotNet.NeuralNetworks`) that you build from a `TransformerArchitecture<T>` and train on tokenized `Tensor<T>` inputs. That path is heavier than the one-call facade flow above and is covered in the neural-network guides.
+
 ## Summary
 
-The `AiModelBuilder` provides a clean interface for transformer-based NLP tasks:
+For text classification, sentiment, and similarity, the facade gives you a one-call flow:
 
-- Text classification and sentiment analysis
-- Named entity recognition
-- Text generation
-- Question answering
-- Semantic similarity
+- `ConfigureTextVectorizer(vectorizer)` + `DataLoaders.FromTextDocuments(...)` to turn text into features
+- Any classifier or regressor via `ConfigureModel(...)`
+- Metrics through `result.GetDataSetStats(...).ErrorStats`
+- Predictions straight from raw strings with `result.PredictText(...)`
 
-All complexity is handled internally, letting you focus on your data and results.
+Token-level sequence tasks use the lower-level `Transformer<T>` directly.

@@ -124,7 +124,7 @@ Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`
 - Use nullable reference types
 - Follow Microsoft naming conventions
 
-```csharp
+```cs
 // Good
 public class NeuralNetwork<T> where T : struct, INumber<T>
 {
@@ -150,7 +150,7 @@ public class NeuralNetwork<T> where T : struct, INumber<T>
 - Include code examples in documentation
 - Document exceptions that can be thrown
 
-```csharp
+```cs
 /// <summary>
 /// Applies the forward pass through all layers.
 /// </summary>
@@ -170,7 +170,7 @@ public Tensor<T> Forward(Tensor<T> input)
 - Mirror the source structure
 - Use descriptive test names
 
-```csharp
+```cs
 public class NeuralNetworkTests
 {
     [Fact]

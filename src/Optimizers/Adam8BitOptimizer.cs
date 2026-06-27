@@ -1,6 +1,8 @@
 using AiDotNet.Helpers;
 using System.Buffers;
 using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
+using SimdVector = System.Numerics.Vector;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
@@ -420,8 +422,8 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
 
         // BF16 moment storage (UseBFloat16MomentStorage == true): 2 bytes/element, no per-block
         // scales. Mutually exclusive with the byte-quantized fields above — only one set is allocated.
-        public Vector<ushort>? MBf16;
-        public Vector<ushort>? VBf16;
+        public ushort[]? MBf16;
+        public ushort[]? VBf16;
 
         // GPU-resident 8-bit state (AIDOTNET_GPU_ADAM=1, CUDA): int8 m/v + per-block
         // double scales kept on the device across steps so the adam8bit_update kernel
@@ -559,19 +561,31 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             // at 2 bytes/element while the math runs at full precision.
             if (_options.UseBFloat16MomentStorage)
             {
-                Tensor<T> mB = Bf16ToTensor(state.MBf16!, param._shape);
-                Tensor<T> vB = Bf16ToTensor(state.VBf16!, param._shape);
+                // Moments expanded to transient full-precision tensors; update them IN PLACE to avoid
+                // ~7 extra full-size scratch allocations per parameter (#1688 Fix 2). Math identical.
+                // AllocateTapeState always allocates both BF16 buffers when UseBFloat16MomentStorage is
+                // set, so they are non-null on this path; capture into locals (no null-forgiving operator).
+                ushort[] mBf16 = state.MBf16 ?? throw new InvalidOperationException("BF16 moment buffer M was not allocated.");
+                ushort[] vBf16 = state.VBf16 ?? throw new InvalidOperationException("BF16 moment buffer V was not allocated.");
 
-                var newMB = Engine.TensorAdd(Engine.TensorMultiplyScalar(mB, beta1),
-                                             Engine.TensorMultiplyScalar(grad, oneMinusBeta1));
-                var newVB = Engine.TensorAdd(Engine.TensorMultiplyScalar(vB, beta2),
-                                             Engine.TensorMultiplyScalar(Engine.TensorMultiply(grad, grad), oneMinusBeta2));
+                Tensor<T> mB = Bf16ToTensor(mBf16, param._shape);
+                Tensor<T> vB = Bf16ToTensor(vBf16, param._shape);
 
-                TensorToBf16(newMB, state.MBf16!);
-                TensorToBf16(newVB, state.VBf16!);
+                var gradScaledB = Engine.TensorMultiplyScalar(grad, oneMinusBeta1); // (1-beta1)·g
+                Engine.TensorMultiplyScalarInPlace(mB, beta1);                      // mB *= beta1
+                Engine.TensorAddInPlace(mB, gradScaledB);                           // mB := m_t
+                var gradSqB = Engine.TensorMultiply(grad, grad);                    // g²
+                Engine.TensorMultiplyScalarInPlace(gradSqB, oneMinusBeta2);         // (1-beta2)·g²
+                Engine.TensorMultiplyScalarInPlace(vB, beta2);                      // vB *= beta2
+                Engine.TensorAddInPlace(vB, gradSqB);                               // vB := v_t
 
-                var mHatB = Engine.TensorDivideScalar(newMB, biasCorrection1);
-                var vHatB = Engine.TensorDivideScalar(newVB, biasCorrection2);
+                // mB/vB were updated in place above, so they hold m_t/v_t — pack them straight back into
+                // the null-safe BF16 buffers (no separate newMB/newVB tensors, no null-forgiving operator).
+                TensorToBf16(mB, mBf16);
+                TensorToBf16(vB, vBf16);
+
+                var mHatB = Engine.TensorDivideScalar(mB, biasCorrection1);
+                var vHatB = Engine.TensorDivideScalar(vB, biasCorrection2);
                 var denomB = Engine.TensorAddScalar(Engine.TensorSqrt(vHatB), epsilon);
                 var updateB = Engine.TensorMultiplyScalar(Engine.TensorDivide(mHatB, denomB), CurrentLearningRate);
                 Engine.TensorSubtractInPlace(param, updateB);
@@ -651,43 +665,36 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             }
             Tensor<T> v = DequantizeTensor(state.VQuantized, state.VScales, param._shape, state.NumBlocks, isSigned: false);
 
-            // Update biased first / second moments — same recurrences the legacy
-            // UpdateSolution path uses, expressed against engine Tensor ops:
+            // Update biased first / second moments IN PLACE to minimize per-parameter transient
+            // allocations (#1688 Fix 2). Identical recurrences to the legacy path, but expressed with
+            // in-place ops so a step over a large parameter no longer allocates ~7 full-size scratch
+            // tensors for the moment update (plus it removes the prior TensorCopy):
             //     m_t = beta1·m_{t-1} + (1-beta1)·g
             //     v_t = beta2·v_{t-1} + (1-beta2)·g²
-            var newM = Engine.TensorAdd(Engine.TensorMultiplyScalar(m, beta1),
-                                        Engine.TensorMultiplyScalar(grad, oneMinusBeta1));
-            var newV = Engine.TensorAdd(Engine.TensorMultiplyScalar(v, beta2),
-                                        Engine.TensorMultiplyScalar(Engine.TensorMultiply(grad, grad), oneMinusBeta2));
+            // `m` is either the persistent state.MFullPrecision (CompressBothMoments == false) or a
+            // transient dequant — either way updating it in place IS the moment update, so when
+            // CompressBothMoments is false no separate copy into state.MFullPrecision is needed. `v` is
+            // always a transient dequant. `grad` is tape-owned/shared, so it is never mutated.
+            var gradScaled = Engine.TensorMultiplyScalar(grad, oneMinusBeta1); // (1-beta1)·g
+            Engine.TensorMultiplyScalarInPlace(m, beta1);                      // m *= beta1
+            Engine.TensorAddInPlace(m, gradScaled);                            // m := m_t
+            var gradSq = Engine.TensorMultiply(grad, grad);                    // g²
+            Engine.TensorMultiplyScalarInPlace(gradSq, oneMinusBeta2);         // (1-beta2)·g²
+            Engine.TensorMultiplyScalarInPlace(v, beta2);                      // v *= beta2
+            Engine.TensorAddInPlace(v, gradSq);                                // v := v_t
 
-            // Re-quantize the updated moments back into the byte[] state. After
-            // this the transient newM / newV Tensors are no longer reachable
-            // and the arena will reclaim their backing memory on Step exit;
-            // only state.MQuantized, state.VQuantized, and (if applicable)
-            // state.MFullPrecision remain resident.
+            // Re-quantize the updated moments back into the byte[] state. When CompressBothMoments is
+            // false, m IS state.MFullPrecision and was updated in place above — no copy needed.
             if (_options.CompressBothMoments)
             {
-                QuantizeTensor(newM, state.MQuantized!, state.MScales!, state.NumBlocks, isSigned: true);
+                QuantizeTensor(m, state.MQuantized!, state.MScales!, state.NumBlocks, isSigned: true);
             }
-            else
-            {
-                // Copy newM's values into the persistent state.MFullPrecision
-                // tensor in place rather than replacing the reference. The
-                // engine's tensor ops (TensorAdd / TensorMultiplyScalar) return
-                // arena-allocated tensors that the arena will reclaim on Step
-                // exit — assigning newM to state.MFullPrecision would either
-                // (a) retain a tensor backed by reclaimed memory, or (b) keep
-                // the arena allocation alive across Step calls and bypass the
-                // arena's per-iteration recycling. TensorCopy keeps the
-                // long-lived state on a stable backing buffer.
-                Engine.TensorCopy(newM, state.MFullPrecision!);
-            }
-            QuantizeTensor(newV, state.VQuantized, state.VScales, state.NumBlocks, isSigned: false);
+            QuantizeTensor(v, state.VQuantized, state.VScales, state.NumBlocks, isSigned: false);
 
             // Apply the bias-corrected Adam update directly to the parameter.
             //     update = lr · (m_t / (1 - beta1^t)) / (sqrt(v_t / (1 - beta2^t)) + eps)
-            var mHat = Engine.TensorDivideScalar(newM, biasCorrection1);
-            var vHat = Engine.TensorDivideScalar(newV, biasCorrection2);
+            var mHat = Engine.TensorDivideScalar(m, biasCorrection1);
+            var vHat = Engine.TensorDivideScalar(v, biasCorrection2);
             var denom = Engine.TensorAddScalar(Engine.TensorSqrt(vHat), epsilon);
             var update = Engine.TensorMultiplyScalar(Engine.TensorDivide(mHat, denom), CurrentLearningRate);
             Engine.TensorSubtractInPlace(param, update);
@@ -710,8 +717,8 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             {
                 Length = paramLength,
                 NumBlocks = 0,
-                MBf16 = new Vector<ushort>(paramLength),
-                VBf16 = new Vector<ushort>(paramLength),
+                MBf16 = new ushort[paramLength],
+                VBf16 = new ushort[paramLength],
             };
         }
 
@@ -894,14 +901,35 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// Expands a BF16 (2 bytes/element) moment buffer into a freshly-allocated full-precision tensor of
     /// the given shape. Transient — consumed within a single Step iteration and released to the arena.
     /// </summary>
-    private Tensor<T> Bf16ToTensor(Vector<ushort> bf16, int[] paramShape)
+    private Tensor<T> Bf16ToTensor(ushort[] bf16, int[] paramShape)
     {
         var result = new Tensor<T>(paramShape);
         int length = result.Length;
-        CpuParallelSettings.ParallelForOrSerial(0, length, (long)length, i =>
+        // Raw-array dequant (no Tensor/Vector indexer, no NumOps dispatch on the float fast path).
+        // Profiled as ~half the NN-training managed hot path (ViT) before this; the typeof(T) branch
+        // folds at JIT. BF16→float is a pure widening, no scale.
+        var dst = result.GetCpuData();
+        if (typeof(T) == typeof(float))
         {
-            result[i] = NumOps.FromDouble(BitConverterHelper.Bf16BitsToFloat(bf16[i]));
-        });
+            var f = (float[])(object)dst;
+            // Chunked range loop (not per-element delegate) so the inner loop is tight and can run a
+            // SIMD bulk widen on NET7+. Bit-identical to BitConverterHelper.Bf16BitsToFloat (the scalar
+            // tail uses it directly, and the SIMD body reproduces the same high-16-bits placement).
+            CpuParallelSettings.ParallelForChunks(length, Bf16BulkChunkGrain, (chunkStart, chunkCount) =>
+            {
+                int i = chunkStart;
+                int chunkEnd = chunkStart + chunkCount;
+#if NET7_0_OR_GREATER
+                i = ConvertBf16ToFloatSimd(bf16, f, chunkStart, chunkCount);
+#endif
+                for (; i < chunkEnd; i++)
+                    f[i] = BitConverterHelper.Bf16BitsToFloat(bf16[i]);
+            });
+        }
+        else
+        {
+            CpuParallelSettings.ParallelForOrSerial(0, length, (long)length, i => dst[i] = NumOps.FromDouble(BitConverterHelper.Bf16BitsToFloat(bf16[i])));
+        }
         return result;
     }
 
@@ -909,14 +937,117 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// Packs a full-precision tensor's values back into a pre-allocated BF16 (2 bytes/element) buffer
     /// with round-to-nearest-even. BF16 keeps the float32 exponent, so no scale factor is needed.
     /// </summary>
-    private void TensorToBf16(Tensor<T> values, Vector<ushort> bf16)
+    private void TensorToBf16(Tensor<T> values, ushort[] bf16)
     {
         int length = values.Length;
-        CpuParallelSettings.ParallelForOrSerial(0, length, (long)length, i =>
+        // Raw-array quant (no Tensor/Vector indexer, no NumOps dispatch on the float fast path).
+        var src = values.GetCpuData();
+        if (typeof(T) == typeof(float))
         {
-            bf16[i] = BitConverterHelper.FloatToBf16Bits((float)NumOps.ToDouble(values[i]));
-        });
+            var f = (float[])(object)src;
+            // Chunked range loop + SIMD bulk round-to-nearest-even on NET7+. Bit-identical to
+            // BitConverterHelper.FloatToBf16Bits (the scalar tail calls it; the SIMD body reproduces
+            // the same RNE add + NaN-preserving path lane-for-lane).
+            CpuParallelSettings.ParallelForChunks(length, Bf16BulkChunkGrain, (chunkStart, chunkCount) =>
+            {
+                int i = chunkStart;
+                int chunkEnd = chunkStart + chunkCount;
+#if NET7_0_OR_GREATER
+                i = ConvertFloatToBf16Simd(f, bf16, chunkStart, chunkCount);
+#endif
+                for (; i < chunkEnd; i++)
+                    bf16[i] = BitConverterHelper.FloatToBf16Bits(f[i]);
+            });
+        }
+        else
+        {
+            CpuParallelSettings.ParallelForOrSerial(0, length, (long)length, i => bf16[i] = BitConverterHelper.FloatToBf16Bits((float)NumOps.ToDouble(src[i])));
+        }
     }
+
+    /// <summary>
+    /// Minimum elements per parallel chunk for the BF16 bulk conversions. Below this the work runs
+    /// serially (single chunk); above it the work is split across cores, and within each chunk the
+    /// inner loop runs a SIMD bulk convert (NET7+) followed by a scalar tail.
+    /// </summary>
+    private const int Bf16BulkChunkGrain = 8192;
+
+#if NET7_0_OR_GREATER
+    /// <summary>
+    /// SIMD bulk float→BF16 with round-to-nearest-even, bit-identical to
+    /// <see cref="BitConverterHelper.FloatToBf16Bits(float)"/>. Processes whole <see cref="Vector{T}"/>
+    /// blocks in <paramref name="src"/>[<paramref name="start"/>, start+count); returns the first index
+    /// not covered (the caller finishes the &lt; one-vector tail with the scalar helper).
+    /// </summary>
+    private static int ConvertFloatToBf16Simd(float[] src, ushort[] dst, int start, int count)
+    {
+        int laneU = System.Numerics.Vector<uint>.Count;        // == Vector<float>.Count
+        int stride = System.Numerics.Vector<ushort>.Count;     // == 2 * laneU ushorts produced per iteration
+        var c7fff = new System.Numerics.Vector<uint>(0x7FFFu);
+        var cInf = new System.Numerics.Vector<uint>(0x7F800000u);
+        var cAbs = new System.Numerics.Vector<uint>(0x7FFFFFFFu);
+        var cNan = new System.Numerics.Vector<uint>(0x0040u);
+        var cOne = new System.Numerics.Vector<uint>(1u);
+        int i = start;
+        int end = start + count;
+        for (; i + stride <= end; i += stride)
+        {
+            System.Numerics.Vector<uint> lo = FloatLaneToBf16(new System.Numerics.Vector<float>(src, i), c7fff, cInf, cAbs, cNan, cOne);
+            System.Numerics.Vector<uint> hi = FloatLaneToBf16(new System.Numerics.Vector<float>(src, i + laneU), c7fff, cInf, cAbs, cNan, cOne);
+            SimdVector.Narrow(lo, hi).CopyTo(dst, i);
+        }
+        return i;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static System.Numerics.Vector<uint> FloatLaneToBf16(System.Numerics.Vector<float> value,
+        System.Numerics.Vector<uint> c7fff, System.Numerics.Vector<uint> cInf,
+        System.Numerics.Vector<uint> cAbs, System.Numerics.Vector<uint> cNan, System.Numerics.Vector<uint> cOne)
+    {
+        System.Numerics.Vector<uint> bits = SimdVector.AsVectorUInt32(value);
+        System.Numerics.Vector<uint> high = SimdVector.ShiftRightLogical(bits, 16);
+        System.Numerics.Vector<uint> isNan = SimdVector.GreaterThan(bits & cAbs, cInf);   // (bits & 0x7FFFFFFF) > 0x7F800000
+        System.Numerics.Vector<uint> nanResult = high | cNan;                              // (bits>>16) | 0x40
+        System.Numerics.Vector<uint> lsb = high & cOne;                                    // (bits>>16) & 1
+        System.Numerics.Vector<uint> rounded = SimdVector.ShiftRightLogical(bits + c7fff + lsb, 16);
+        // Narrow takes the low 16 bits, matching the scalar (ushort) truncation.
+        return SimdVector.ConditionalSelect(isNan, nanResult, rounded);
+    }
+
+    /// <summary>
+    /// SIMD bulk BF16→float (pure widening, bit-identical to
+    /// <see cref="BitConverterHelper.Bf16BitsToFloat(ushort)"/>). Returns the first index not covered.
+    /// </summary>
+    private static int ConvertBf16ToFloatSimd(ushort[] src, float[] dst, int start, int count)
+    {
+        int laneU = System.Numerics.Vector<uint>.Count;
+        int stride = System.Numerics.Vector<ushort>.Count;
+        int i = start;
+        int end = start + count;
+        for (; i + stride <= end; i += stride)
+        {
+            SimdVector.Widen(new System.Numerics.Vector<ushort>(src, i), out System.Numerics.Vector<uint> lo, out System.Numerics.Vector<uint> hi);
+            SimdVector.AsVectorSingle(SimdVector.ShiftLeft(lo, 16)).CopyTo(dst, i);
+            SimdVector.AsVectorSingle(SimdVector.ShiftLeft(hi, 16)).CopyTo(dst, i + laneU);
+        }
+        return i;
+    }
+
+    /// <summary>
+    /// Test-only hook: runs the exact production float→BF16→float path (SIMD block + scalar tail) over
+    /// whole arrays so a unit test can assert bit-identity against the scalar
+    /// <see cref="BitConverterHelper"/> reference. Not part of the optimizer's runtime behavior.
+    /// </summary>
+    internal static void Bf16RoundTripForTest(float[] src, ushort[] bf16, float[] back)
+    {
+        int i = ConvertFloatToBf16Simd(src, bf16, 0, src.Length);
+        for (; i < src.Length; i++)
+            bf16[i] = BitConverterHelper.FloatToBf16Bits(src[i]);
+        int j = ConvertBf16ToFloatSimd(bf16, back, 0, bf16.Length);
+        for (; j < bf16.Length; j++)
+            back[j] = BitConverterHelper.Bf16BitsToFloat(bf16[j]);
+    }
+#endif
 
     /// <summary>
     /// Updates the adaptive parameters of the optimizer based on the current and previous optimization steps.

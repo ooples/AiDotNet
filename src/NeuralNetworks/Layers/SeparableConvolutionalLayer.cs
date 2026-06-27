@@ -619,7 +619,7 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
         // Convert input from NHWC [batch, H, W, channels] to NCHW [batch, channels, H, W]
         var inputNCHW = Engine.TensorPermute(input, [0, 3, 1, 2]);

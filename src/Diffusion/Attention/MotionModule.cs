@@ -123,7 +123,8 @@ public class MotionModule<T> : LayerBase<T>
     /// </summary>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
+        // #1668: skip the backward-activation cache in inference (denoise-loop arena safety).
+        _lastInput = ShouldCacheForBackward ? input : null;
 
         // Temporal attention with residual
         var normed1 = _norm1.Forward(input);

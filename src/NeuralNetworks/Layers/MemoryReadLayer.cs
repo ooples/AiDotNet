@@ -463,7 +463,7 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // initial [0, 0] sentinel — matmul then throws on incompatible dims.
         EnsureInitializedFromInput(input);
 
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         _lastMemory = memory;
 
         // Use Engine operations for matrix multiplications

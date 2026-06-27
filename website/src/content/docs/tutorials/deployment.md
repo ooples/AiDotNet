@@ -1,353 +1,123 @@
 ---
 title: "Deployment"
-description: "Production model serving."
+description: "Quantize, save, and load models for production."
 order: 11
 section: "Tutorials"
 ---
 
+Prepare trained models for production: shrink them with quantization, then save and reload them through the `AiModelBuilder` facade and `AiModelResult`.
 
+## Quantization
 
-Deploy your trained models to production with AiDotNet.
-
-## Overview
-
-AiDotNet provides multiple deployment options:
-- **AiDotNet.Serving**: Production REST API server
-- **Model Quantization**: Optimize for inference
-- **ONNX Export**: Cross-platform deployment
-- **Edge Deployment**: Mobile and IoT
-
----
-
-## AiDotNet.Serving
-
-### Quick Start
+`ConfigureQuantization(...)` quantizes the model during the build to cut its memory footprint — pass a `QuantizationConfig` with the precision mode.
 
 ```csharp
-using AiDotNet.Serving;
-using AiDotNet.Serving.Configuration;
-using AiDotNet.Serving.Services;
+using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Deployment.Configuration;
+using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
-var builder = WebApplication.CreateBuilder(args);
-
-// Configure serving options
-builder.Services.Configure<ServingOptions>(options =>
+var rng = new Random(42);
+var trainX = new Tensor<double>(new[] { 64, 32 });
+var trainY = new Tensor<double>(new[] { 64, 4 });
+for (int i = 0; i < 64; i++)
 {
-    options.Port = 8080;
-    options.BatchingWindowMs = 10;
-    options.MaxBatchSize = 32;
-});
-
-// Register services
-builder.Services.AddSingleton<IModelRepository, ModelRepository>();
-builder.Services.AddSingleton<IRequestBatcher, RequestBatcher>();
-builder.Services.AddControllers();
-
-var app = builder.Build();
-
-// Load model from saved AIMF file
-var repository = app.Services.GetRequiredService<IModelRepository>();
-var modelPath = "models/my-model.aimf";
-repository.LoadModel("my-model", modelPath);
-
-app.MapControllers();
-app.Run();
-```
-
-### API Endpoints
-
-| Endpoint | Method | Description |
-|:---------|:-------|:------------|
-| `/api/models` | GET | List loaded models |
-| `/api/models` | POST | Load a model |
-| `/api/models/{name}` | DELETE | Unload a model |
-| `/api/inference/predict/{name}` | POST | Make prediction |
-| `/api/inference/stats` | GET | Batching statistics |
-
-### Making Predictions
-
-```bash
-curl -X POST http://localhost:8080/api/inference/predict/my-model \
-  -H "Content-Type: application/json" \
-  -d '{"features": [[1.0, 2.0, 3.0, 4.0]]}'
-```
-
----
-
-## Model Quantization
-
-### Post-Training Quantization (PTQ)
-
-```csharp
-using AiDotNet.Quantization;
-
-var config = new QuantizationConfig<float>
-{
-    QuantizationType = QuantizationType.INT8,
-    CalibrationMethod = CalibrationMethod.MinMax,
-    CalibrationSamples = 100
-};
-
-var quantizer = new ModelQuantizer<float>(config);
-quantizer.Calibrate(model, calibrationData);
-var quantizedModel = quantizer.Quantize(model);
-```
-
-### Quantization-Aware Training (QAT)
-
-```csharp
-var qatConfig = new QATConfig<float>
-{
-    TargetQuantization = QuantizationType.INT8,
-    SimulateQuantization = true,
-    QATEpochs = 10
-};
-
-var qatWrapper = new QATWrapper<float>(model, qatConfig);
-qatWrapper.EnableFakeQuantization();
-
-for (int epoch = 0; epoch < qatConfig.QATEpochs; epoch++)
-{
-    qatWrapper.Train(trainData, trainLabels);
+    for (int j = 0; j < 32; j++) trainX[new[] { i, j }] = rng.NextDouble();
+    trainY[new[] { i, i % 4 }] = 1.0;
 }
 
-var quantizedModel = qatWrapper.ConvertToQuantized();
+var model = new NeuralNetwork<double>(new NeuralNetworkArchitecture<double>(
+    inputFeatures: 32, numClasses: 4, complexity: NetworkComplexity.Simple));
+
+var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
+    .ConfigureModel(model)
+    .ConfigureQuantization(new QuantizationConfig { Mode = QuantizationMode.Int8 })
+    .ConfigureDataLoader(DataLoaders.FromTensors(trainX, trainY))
+    .BuildAsync();
+
+Console.WriteLine("Trained an Int8-quantized model ready for deployment.");
 ```
 
-### Results Comparison
+## Saving and Loading
 
-| Method | Size | Accuracy | Speedup |
-|:-------|:-----|:---------|:--------|
-| FP32 | 100% | Baseline | 1.0x |
-| FP16 | 50% | ~99.9% | 1.5x |
-| INT8 (PTQ) | 25% | ~99% | 2-4x |
-| INT8 (QAT) | 25% | ~99.5% | 2-4x |
-
----
-
-## Model Saving and Loading
-
-### Save Trained Model
+Persist a trained model and reload it later, supplying a factory that recreates the model type.
 
 ```csharp
-// After training
-var result = await builder.BuildAsync(trainData, trainLabels);
+using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Models.Options;
+using AiDotNet.Models.Results;
+using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
 
-// Save to file
-result.SaveToFile("model.aidotnet");
-```
-
-### Load for Inference
-
-```csharp
-// Load model
-var loadedResult = AiModelResult<double, double[], double>
-    .LoadFromFile("model.aidotnet");
-
-// Make predictions
-var prediction = loadedResult.Model.Predict(input);
-```
-
----
-
-## ONNX Export
-
-Export to ONNX for cross-platform deployment:
-
-```csharp
-using AiDotNet.ONNX;
-
-// Export to ONNX
-model.ExportToONNX("model.onnx", new ONNXExportConfig
+double[][] features =
 {
-    OpsetVersion = 17,
-    InputNames = ["input"],
-    OutputNames = ["output"],
-    DynamicAxes = new Dictionary<string, int[]>
-    {
-        ["input"] = [0],   // Batch dimension
-        ["output"] = [0]
-    }
-});
+    new[] { 1.0, 2.0, 3.0 }, new[] { 4.0, 5.0, 6.0 },
+    new[] { 7.0, 8.0, 9.0 }, new[] { 10.0, 11.0, 12.0 }
+};
+double[] targets = { 10.0, 20.0, 30.0, 40.0 };
+
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new MultipleRegression<double>())
+    .ConfigureDataLoader(DataLoaders.FromArrays(features, targets))
+    .BuildAsync();
+
+// Save for production.
+result.SaveModel("model.aimodel");
+
+// Reload it on the serving side.
+var loaded = AiModelResult<double, Matrix<double>, Vector<double>>.LoadModel(
+    "model.aimodel",
+    metadata => new MultipleRegression<double>());
+
+var input = new Matrix<double>(1, 3);
+input[0, 0] = 1.0; input[0, 1] = 2.0; input[0, 2] = 3.0;
+Console.WriteLine($"Reloaded model prediction: {loaded.Predict(input)[0]:F2}");
 ```
 
-### Use with ONNX Runtime
+## Serving Predictions
+
+A reloaded `AiModelResult` predicts exactly like a freshly trained one — wire `result.Predict(...)` behind your API or batch job.
 
 ```csharp
-using Microsoft.ML.OnnxRuntime;
+using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Models.Options;
+using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
 
-using var session = new InferenceSession("model.onnx");
+double[][] features = { new[] { 1.0, 2.0 }, new[] { 3.0, 4.0 }, new[] { 5.0, 6.0 } };
+double[] targets = { 3.0, 7.0, 11.0 };
 
-var input = new DenseTensor<float>(data, shape);
-var inputs = new[] { NamedOnnxValue.CreateFromTensor("input", input) };
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(new MultipleRegression<double>())
+    .ConfigureDataLoader(DataLoaders.FromArrays(features, targets))
+    .BuildAsync();
 
-using var results = session.Run(inputs);
-var output = results.First().AsEnumerable<float>().ToArray();
+// Batch-score requests by stacking them into one matrix.
+var batch = new Matrix<double>(2, 2);
+batch[0, 0] = 2.0; batch[0, 1] = 3.0;
+batch[1, 0] = 4.0; batch[1, 1] = 5.0;
+
+var predictions = result.Predict(batch);
+for (int i = 0; i < predictions.Length; i++)
+    Console.WriteLine($"Request {i}: {predictions[i]:F2}");
 ```
-
----
-
-## Docker Deployment
-
-### Dockerfile
-
-```dockerfile
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
-WORKDIR /app
-EXPOSE 8080
-
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
-WORKDIR /src
-COPY . .
-RUN dotnet publish -c Release -o /app/publish
-
-FROM base AS final
-WORKDIR /app
-COPY --from=build /app/publish .
-COPY models/ /app/models/
-ENTRYPOINT ["dotnet", "ModelServer.dll"]
-```
-
-### Docker Compose
-
-```yaml
-version: '3.8'
-services:
-  model-server:
-    build: .
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./models:/app/models
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Production
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-```
-
----
-
-## Kubernetes Deployment
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: model-server
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: model-server
-  template:
-    metadata:
-      labels:
-        app: model-server
-    spec:
-      containers:
-      - name: model-server
-        image: myregistry/model-server:latest
-        ports:
-        - containerPort: 8080
-        resources:
-          limits:
-            nvidia.com/gpu: 1
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8080
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: model-server
-spec:
-  selector:
-    app: model-server
-  ports:
-  - port: 80
-    targetPort: 8080
-  type: LoadBalancer
-```
-
----
-
-## Performance Optimization
-
-### Batching
-
-```csharp
-builder.Services.Configure<ServingOptions>(options =>
-{
-    options.BatchingWindowMs = 10;  // Wait 10ms to collect requests
-    options.MaxBatchSize = 64;      // Max batch size
-});
-```
-
-### Caching
-
-```csharp
-// Enable response caching for repeated inputs
-builder.Services.AddResponseCaching();
-app.UseResponseCaching();
-```
-
-### Connection Pooling
-
-```csharp
-// For database-backed model stores
-builder.Services.AddDbContextPool<ModelDbContext>(options =>
-    options.UseSqlServer(connectionString));
-```
-
----
-
-## Monitoring
-
-### Health Checks
-
-```csharp
-builder.Services.AddHealthChecks()
-    .AddCheck<ModelHealthCheck>("models")
-    .AddCheck<GpuHealthCheck>("gpu");
-
-app.MapHealthChecks("/health");
-app.MapHealthChecks("/ready", new HealthCheckOptions
-{
-    Predicate = check => check.Tags.Contains("ready")
-});
-```
-
-### Metrics
-
-```csharp
-// Prometheus metrics endpoint
-app.MapGet("/metrics", (IMetricsCollector metrics) =>
-{
-    return Results.Text(metrics.GetPrometheusMetrics(), "text/plain");
-});
-```
-
----
 
 ## Best Practices
 
-1. **Quantize for production**: INT8 gives 2-4x speedup
-2. **Enable batching**: Improves throughput significantly
-3. **Use health checks**: For load balancer integration
-4. **Monitor latency**: Track p50, p95, p99
-5. **Horizontal scaling**: Use Kubernetes for auto-scaling
-6. **GPU sharing**: Multiple models on one GPU with CUDA MPS
+1. **Quantize for size**: `ConfigureQuantization` with `QuantizationMode.Int8` shrinks the model.
+2. **Validate after quantizing**: compare metrics before/after to confirm acceptable accuracy.
+3. **Version your model files**: keep the model type/factory in sync with the saved file.
+4. **Batch at serving time**: stack requests into one matrix/tensor for throughput.
 
----
+## Notes
+
+The facade covers post-training quantization (`ConfigureQuantization`) plus `SaveModel` / `LoadModel`. Quantization-aware training (QAT) wrappers and a built-in serving runtime are configured outside the single facade call today.
 
 ## Next Steps
 
-- [ModelServing Sample](/samples/deployment/ModelServing/)
-- [Quantization Sample](/samples/deployment/Quantization/)
-- [AiDotNet.Serving API Reference](/api/AiDotNet.Serving/)
+- [LLM Fine-tuning Tutorial](/docs/tutorials/llm-fine-tuning/) — QLoRA quantization
+- [Quick Start](/docs/getting-started/quickstart/)

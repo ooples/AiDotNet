@@ -12,6 +12,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.Tensors.Helpers;
 
@@ -488,6 +489,11 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         ValidateGenerateInputs(shape, numInferenceSteps, out long totalElements);
 
         using var _ = new NoGradScope<T>();
+        // Also enter an InferenceMode scope so layers skip their backward-activation caches
+        // on the async path too (no backward runs here). Unlike TensorArena (ThreadStatic,
+        // not wrapped here because await can resume on another thread), InferenceMode is
+        // AsyncLocal and flows across await/continuations, so this is safe for async (#1668).
+        using var _inferenceScope = InferenceMode.Enter();
 
         Vector<T> sample = ResolveInitialSample(shape, numInferenceSteps, seed, initialSample, totalElements);
 
@@ -673,15 +679,21 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         // is [ThreadStatic] and `await ...ConfigureAwait(false)` can resume on another thread,
         // which would desynchronise the arena scope — an async-aware arena is a separate change.)
         //
-        // Gated by DiffusionDenoiseEnabled (default OFF), NOT the default-on Predict-funnel flag:
-        // unlike the single-shot Predict funnel, the multi-step denoise loop is NOT arena-safe.
-        // Diffusion forward layers hold cross-forward cached tensors (e.g. DiffusionResBlock's
-        // pre-allocated GroupNorm output buffer; attention reshape scratch) first allocated inside
-        // this arena scope; the per-step Reset() recycles that memory, so a later step's allocation
-        // aliases a still-referenced cached buffer and corrupts its shape — observed as a downsample
-        // conv output emerging with a stale [B, H*W, C] attention layout, surfacing as "Input has N
-        // channels but layer expects M" (and a native host crash when it corrupts the shared pool).
-        // Re-enable only after the layer caches are made arena-safe. See issue #1668.
+        // Arena safety (issue #1668): the multi-step denoise loop was previously NOT
+        // arena-safe because diffusion forward layers retained per-forward backward-
+        // activation caches (`_lastInput`, pre-SiLU buffers, attention reshape scratch).
+        // Those fields held references into arena scratch; the per-step arena.Reset()
+        // recycled that scratch, so a later step's allocation aliased a still-referenced
+        // cached buffer and corrupted its shape/data (a downsample conv output emerging
+        // with a stale [B, H*W, C] attention layout → "Input has N channels but layer
+        // expects M", and a native crash when it corrupted the shared pool).
+        //
+        // The fix is the InferenceMode scope below: it is the torch.inference_mode()
+        // analog, and every layer's ShouldCacheForBackward guard is false inside it, so
+        // no backward-activation cache is populated during the denoise loop. With nothing
+        // referencing scratch across a Reset, the per-step recycle is safe. The carried
+        // latent (`sample`) is separately detached to a GC buffer each step (below).
+        using var _inferenceScope = InferenceMode.Enter();
         using var arena = (InferenceArenaSettings.Enabled && InferenceArenaSettings.DiffusionDenoiseEnabled)
             ? TensorArena.Create()
             : null;
@@ -1522,28 +1534,40 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         var type = obj.GetType();
         if (type.IsPrimitive || type == typeof(string) || type.IsEnum) return;
 
-        foreach (var field in type.GetFields(
-            System.Reflection.BindingFlags.Instance |
-            System.Reflection.BindingFlags.NonPublic |
-            System.Reflection.BindingFlags.Public))
+        // Walk the FULL inheritance chain. Type.GetFields(Instance|NonPublic|Public) does NOT return
+        // PRIVATE fields declared on base classes, so when a field is typed as a subclass (e.g.
+        // SiTPredictor) whose layers actually live in a private field on its base
+        // (DiTNoisePredictor._blocks), that base-private field — and therefore the entire noise
+        // predictor — was invisible to this walk, leaving the model's denoiser untrainable
+        // ("no trainable parameters discoverable"). Enumerate DeclaredOnly fields at every level up
+        // the hierarchy so base-class privates are included; DeclaredOnly returns each field exactly
+        // once at its declaring type and the visited set guards object cycles.
+        for (var t = type; t != null && t != typeof(object); t = t.BaseType)
         {
-            // Skip compiler-generated backing fields for non-ref properties and
-            // fields whose declared type can't hold a trainable layer.
-            if (field.FieldType.IsPrimitive || field.FieldType.IsEnum ||
-                field.FieldType == typeof(string) || field.FieldType == typeof(Tensor<T>))
-                continue;
-
-            var val = field.GetValue(obj);
-            if (val is null) continue;
-
-            if (val is System.Collections.IEnumerable enumerable && val is not string)
+            foreach (var field in t.GetFields(
+                System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.NonPublic |
+                System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.DeclaredOnly))
             {
-                foreach (var item in enumerable)
-                    CollectLayerParameters(item, allParams, visited);
-            }
-            else
-            {
-                CollectLayerParameters(val, allParams, visited);
+                // Skip compiler-generated backing fields for non-ref properties and
+                // fields whose declared type can't hold a trainable layer.
+                if (field.FieldType.IsPrimitive || field.FieldType.IsEnum ||
+                    field.FieldType == typeof(string) || field.FieldType == typeof(Tensor<T>))
+                    continue;
+
+                var val = field.GetValue(obj);
+                if (val is null) continue;
+
+                if (val is System.Collections.IEnumerable enumerable && val is not string)
+                {
+                    foreach (var item in enumerable)
+                        CollectLayerParameters(item, allParams, visited);
+                }
+                else
+                {
+                    CollectLayerParameters(val, allParams, visited);
+                }
             }
         }
     }

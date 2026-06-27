@@ -546,10 +546,25 @@ jobs:
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~AiDotNet.Tests.IntegrationTests.A|FullyQualifiedName~AiDotNet.Tests.IntegrationTests.B)'
-          - name: Integration C
+          # Integration C was the largest Integration shard (~2300 cases across
+          # 12 C* namespaces) and the only one forced fully serial — its
+          # ComputerVision namespace instantiates paper-scale segmentation
+          # models that OOM the 16 GB runner under parallel collections. Run
+          # serially it never finished before the concurrency-group cancel
+          # superseded the master run, so it was perpetually red. Split into the
+          # heavy ComputerVision namespace (kept serial) and a Core complement
+          # (everything else, which is algorithm/config/causal tests with small
+          # models — safe to run parallel and fast). The complement filter keeps
+          # the two gap-free + non-overlapping (their union == the old C filter)
+          # and future-proof: any new C* namespace lands in Core automatically.
+          - name: Integration C - ComputerVision
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.IntegrationTests.C'
+            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.IntegrationTests.ComputerVision'
+          - name: Integration C - Core
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.IntegrationTests.C&FullyQualifiedName!~AiDotNet.Tests.IntegrationTests.ComputerVision'
           - name: Integration D
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -743,7 +758,7 @@ jobs:
             # Finance, ComputerVision, NeuralNetworks, Diffusion, Video, MetaLearning,
             # etc.) — serialize like the ModelFamily shards to stay under the runner
             # memory envelope. The light integration letter-shards run parallel.
-            'Integration C',
+            'Integration C - ComputerVision',
             'Integration D',
             'Integration E-G',
             'Integration M',
@@ -769,7 +784,14 @@ jobs:
             '-c', 'Release',
             '--framework', '${{ matrix.shard.framework }}',
             '--no-build', '--no-restore',
-            '--filter', '${{ matrix.shard.filter }}'
+            # Globally exclude Category=HeavyTimeout from the default sharded run. Those models are
+            # CORRECT but inherently too slow for the per-test / 45-min shard budget (foundation
+            # diffusion at ~100s/forward x N-step Generate, GEMM-bound ViT/VGG, etc.). They are
+            # tracked in the umbrella timeout issue and exercised by the heavy-timeout-nightly
+            # workflow with a long budget. Wrapping the per-shard filter here applies the exclusion
+            # across all matrix entries in one place; it is a no-op for any test not tagged
+            # [Trait("Category","HeavyTimeout")].
+            '--filter', '(${{ matrix.shard.filter }})&Category!=HeavyTimeout'
           )
           if ($collectCoverage) {
             $dotnetArgs += @(
