@@ -614,84 +614,97 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
             throw new InvalidOperationException("Adjacency matrix and score tensors must be set before computing attention scores.");
         }
         var adjacencyMatrix = _adjacencyMatrix;
-        var lastPreSoftmaxScores = _lastPreSoftmaxScores;
-        var lastAttentionCoefficients = _lastAttentionCoefficients;
 
         // Handle 2D or 3D adjacency matrix
         bool adj2D = adjacencyMatrix.Shape.Length == 2;
 
-        // Compute attention scores with LeakyReLU and softmax
-        var maxScores = new T[numNodes];
-        for (int i = 0; i < numNodes; i++)
-        {
-            maxScores[i] = NumOps.MinValue;
-        }
+        // Raw-array flat indexing. The 4-D tensor indexer [b, h, i, j] resolves to the params-int[]
+        // overload, which HEAP-ALLOCATES an int[4] on every access (plus a virtual call + stride
+        // resolution). Across the three O(numNodes^2) passes per (b, h) that was on the order of
+        // millions of int[4] allocations per forward. Work on the backing arrays with computed flat
+        // offsets instead — identical math, no per-element allocation or dispatch.
+        var pre = _lastPreSoftmaxScores.GetCpuData();        // [batch, numHeads, numNodes, numNodes]
+        var coeff = _lastAttentionCoefficients.GetCpuData(); // same shape
+        var adj = adjacencyMatrix.GetCpuData();
+        var self = selfScores.GetCpuData();
+        var neigh = neighborScores.GetCpuData();
+        T zero = NumOps.Zero;
+        T minVal = NumOps.MinValue;
 
-        // First pass: compute raw scores and find max for numerical stability
-        // Adjacency matrix may be 2D [numNodes, numNodes] or 3D [batch, numNodes, numNodes]
+        // Base offset of the [i, j] block for this (b, h) slice in the [batch, numHeads, N, N] tensor.
+        int bhBase = ((b * _numHeads) + h) * numNodes * numNodes;
+        // Adjacency: 2D is shared across the batch (base 0); 3D is offset by b.
+        int adjBase = adj2D ? 0 : b * numNodes * numNodes;
+
+        // Compute attention scores with LeakyReLU and softmax.
+        var maxScores = new T[numNodes];
+
+        // First pass: compute raw scores and find the per-node max for numerical stability.
         for (int i = 0; i < numNodes; i++)
         {
+            int rowBase = bhBase + i * numNodes;
+            int adjRow = adjBase + i * numNodes;
+            T selfI = self[i];
+            T maxI = minVal;
             for (int j = 0; j < numNodes; j++)
             {
-                T adjValue = adj2D ? adjacencyMatrix[i, j] : adjacencyMatrix[b, i, j];
-                if (NumOps.Equals(adjValue, NumOps.Zero))
+                if (NumOps.Equals(adj[adjRow + j], zero))
                 {
-                    lastPreSoftmaxScores[b, h, i, j] = NumOps.MinValue;
+                    pre[rowBase + j] = minVal;
                     continue;
                 }
 
                 // e_ij = LeakyReLU(a_1^T * Wh_i + a_2^T * Wh_j)
-                T score = NumOps.Add(selfScores.GetFlat(i), neighborScores.GetFlat(j));
-                score = LeakyReLU(score);
-                lastPreSoftmaxScores[b, h, i, j] = score;
-
-                if (NumOps.GreaterThan(score, maxScores[i]))
+                T score = LeakyReLU(NumOps.Add(selfI, neigh[j]));
+                pre[rowBase + j] = score;
+                if (NumOps.GreaterThan(score, maxI))
                 {
-                    maxScores[i] = score;
+                    maxI = score;
                 }
             }
+            maxScores[i] = maxI;
         }
 
-        // Second pass: compute softmax
+        // Second pass: softmax over neighbors per node.
         for (int i = 0; i < numNodes; i++)
         {
-            T sumExp = NumOps.Zero;
+            int rowBase = bhBase + i * numNodes;
+            int adjRow = adjBase + i * numNodes;
+            T maxI = maxScores[i];
+            T sumExp = zero;
 
-            // Compute exp(score - max) for numerical stability
+            // exp(score - max) for numerical stability.
             for (int j = 0; j < numNodes; j++)
             {
-                T adjVal = adj2D ? adjacencyMatrix[i, j] : adjacencyMatrix[b, i, j];
-                if (!NumOps.Equals(adjVal, NumOps.Zero))
+                if (!NumOps.Equals(adj[adjRow + j], zero))
                 {
-                    T expVal = NumOps.Exp(NumOps.Subtract(lastPreSoftmaxScores[b, h, i, j], maxScores[i]));
-                    lastAttentionCoefficients[b, h, i, j] = expVal;
+                    T expVal = NumOps.Exp(NumOps.Subtract(pre[rowBase + j], maxI));
+                    coeff[rowBase + j] = expVal;
                     sumExp = NumOps.Add(sumExp, expVal);
                 }
             }
 
-            // Normalize and apply dropout
+            // Normalize and apply dropout.
             for (int j = 0; j < numNodes; j++)
             {
-                T adjVal2 = adj2D ? adjacencyMatrix[i, j] : adjacencyMatrix[b, i, j];
-                if (!NumOps.Equals(adjVal2, NumOps.Zero))
+                if (!NumOps.Equals(adj[adjRow + j], zero))
                 {
-                    T coeff = NumOps.Divide(lastAttentionCoefficients[b, h, i, j], sumExp);
+                    T c = NumOps.Divide(coeff[rowBase + j], sumExp);
 
-                    // Apply dropout during training
                     if (_dropoutRate > 0.0 && IsTrainingMode && _random.NextDouble() < _dropoutRate)
                     {
-                        coeff = NumOps.Zero;
+                        c = zero;
                     }
                     else if (_dropoutRate > 0.0 && IsTrainingMode)
                     {
-                        coeff = NumOps.Multiply(coeff, NumOps.FromDouble(1.0 / (1.0 - _dropoutRate)));
+                        c = NumOps.Multiply(c, NumOps.FromDouble(1.0 / (1.0 - _dropoutRate)));
                     }
 
-                    lastAttentionCoefficients[b, h, i, j] = coeff;
+                    coeff[rowBase + j] = c;
                 }
                 else
                 {
-                    lastAttentionCoefficients[b, h, i, j] = NumOps.Zero;
+                    coeff[rowBase + j] = zero;
                 }
             }
         }
@@ -838,165 +851,6 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Computes weight gradients using vectorized Engine operations as a fallback.
-    /// </summary>
-    private void ComputeWeightGradientsViaEngine(Tensor<T> activationGradient, int batchSize, int numNodes, T numHeadsT)
-    {
-        // Proper null guards - store in non-nullable locals after check
-        if (_lastInput == null || _lastTransformed == null || _lastAttentionCoefficients == null ||
-            _lastPreSoftmaxScores == null || _adjacencyMatrix == null || _weightsGradient == null ||
-            _attentionWeightsGradient == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before computing gradients.");
-        }
-
-        // Cache non-null references in local variables for compiler flow analysis
-        var lastInput = _lastInput;
-        var lastTransformed = _lastTransformed;
-        var lastAttentionCoefficients = _lastAttentionCoefficients;
-        var lastPreSoftmaxScores = _lastPreSoftmaxScores;
-        var adjacencyMatrix = _adjacencyMatrix;
-        var weightsGradient = _weightsGradient;
-        var attentionWeightsGradient = _attentionWeightsGradient;
-
-        // Check if adjacency matrix is 2D (shared across batches) or 3D (per-batch)
-        bool adj2D = adjacencyMatrix.Shape.Length == 2;
-
-        // Gradient from averaging heads: dL/d(headOutput) = dL/d(output) / numHeads
-        var headOutputGrad = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, _outputFeatures]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < _numHeads; h++)
-            {
-                for (int n = 0; n < numNodes; n++)
-                {
-                    for (int f = 0; f < _outputFeatures; f++)
-                    {
-                        headOutputGrad[b, h, n, f] = NumOps.Divide(activationGradient[b, n, f], numHeadsT);
-                    }
-                }
-            }
-        }
-
-        // Backprop through attention aggregation for each head
-        for (int h = 0; h < _numHeads; h++)
-        {
-            for (int b = 0; b < batchSize; b++)
-            {
-                // Extract head output gradient slice
-                var headGradSlice = new Tensor<T>([numNodes, _outputFeatures]);
-                for (int n = 0; n < numNodes; n++)
-                {
-                    for (int f = 0; f < _outputFeatures; f++)
-                    {
-                        headGradSlice[n, f] = headOutputGrad[b, h, n, f];
-                    }
-                }
-
-                // Extract attention coefficients
-                var attnCoeffs = new Tensor<T>([numNodes, numNodes]);
-                for (int i = 0; i < numNodes; i++)
-                {
-                    for (int j = 0; j < numNodes; j++)
-                    {
-                        attnCoeffs[i, j] = lastAttentionCoefficients[b, h, i, j];
-                    }
-                }
-
-                // Gradient w.r.t. transformed features: attn_coeffs^T @ headGradSlice
-                var attnCoeffsT = Engine.TensorTranspose(attnCoeffs);
-                var transformedGrad = Engine.TensorMatMul(attnCoeffsT, headGradSlice);
-
-                // Gradient w.r.t. weights: input^T @ transformedGrad
-                var inputSlice = Engine.TensorSlice(lastInput, [b, 0, 0], [1, numNodes, _inputFeatures])
-                    .Reshape([numNodes, _inputFeatures]);
-                var inputT = Engine.TensorTranspose(inputSlice);
-                var weightGrad = Engine.TensorMatMul(inputT, transformedGrad);
-
-                // Accumulate weight gradient for this head
-                for (int i = 0; i < _inputFeatures; i++)
-                {
-                    for (int j = 0; j < _outputFeatures; j++)
-                    {
-                        weightsGradient[h, i, j] = NumOps.Add(weightsGradient[h, i, j], weightGrad[i, j]);
-                    }
-                }
-
-                // First pass: compute attention coefficient gradients (dL/d alpha)
-                var attnGradMatrix = new T[numNodes, numNodes];
-                for (int i = 0; i < numNodes; i++)
-                {
-                    for (int j = 0; j < numNodes; j++)
-                    {
-                        T adjValue = adj2D ? adjacencyMatrix[i, j] : adjacencyMatrix[b, i, j];
-                        if (!NumOps.Equals(adjValue, NumOps.Zero))
-                        {
-                            T attnGrad = NumOps.Zero;
-                            for (int f = 0; f < _outputFeatures; f++)
-                            {
-                                attnGrad = NumOps.Add(attnGrad,
-                                    NumOps.Multiply(headGradSlice[i, f], lastTransformed[b, h, j, f]));
-                            }
-                            attnGradMatrix[i, j] = attnGrad;
-                        }
-                        else
-                        {
-                            attnGradMatrix[i, j] = NumOps.Zero;
-                        }
-                    }
-                }
-
-                // Second pass: backprop through softmax using full Jacobian and compute attention weight gradients
-                for (int i = 0; i < numNodes; i++)
-                {
-                    // Compute sum_k(dL/d(alpha_ik) * alpha_ik) for this row
-                    T weightedSum = NumOps.Zero;
-                    for (int k = 0; k < numNodes; k++)
-                    {
-                        T adjValueK = adj2D ? adjacencyMatrix[i, k] : adjacencyMatrix[b, i, k];
-                        if (!NumOps.Equals(adjValueK, NumOps.Zero))
-                        {
-                            T attnCoeff_ik = lastAttentionCoefficients[b, h, i, k];
-                            weightedSum = NumOps.Add(weightedSum,
-                                NumOps.Multiply(attnGradMatrix[i, k], attnCoeff_ik));
-                        }
-                    }
-
-                    // Compute score gradients for each edge
-                    for (int j = 0; j < numNodes; j++)
-                    {
-                        T adjValueJ = adj2D ? adjacencyMatrix[i, j] : adjacencyMatrix[b, i, j];
-                        if (!NumOps.Equals(adjValueJ, NumOps.Zero))
-                        {
-                            T attnCoeff = lastAttentionCoefficients[b, h, i, j];
-
-                            // Full softmax gradient: dL/d(e_ij) = alpha_ij * (dL/d(alpha_ij) - sum_k(dL/d(alpha_ik) * alpha_ik))
-                            T softmaxGrad = NumOps.Multiply(attnCoeff,
-                                NumOps.Subtract(attnGradMatrix[i, j], weightedSum));
-
-                            // Backprop through LeakyReLU
-                            T leakyGrad = NumOps.GreaterThan(lastPreSoftmaxScores[b, h, i, j], NumOps.Zero)
-                                ? NumOps.One : _alpha;
-                            T scoreGrad = NumOps.Multiply(softmaxGrad, leakyGrad);
-
-                            // Gradient for attention weights
-                            for (int f = 0; f < _outputFeatures; f++)
-                            {
-                                attentionWeightsGradient[h, f] = NumOps.Add(
-                                    attentionWeightsGradient[h, f],
-                                    NumOps.Multiply(scoreGrad, lastTransformed[b, h, i, f]));
-                                attentionWeightsGradient[h, _outputFeatures + f] = NumOps.Add(
-                                    attentionWeightsGradient[h, _outputFeatures + f],
-                                    NumOps.Multiply(scoreGrad, lastTransformed[b, h, j, f]));
-                            }
-                        }
-                    }
-                }
-            }
-        }
     }
 
     /// <inheritdoc/>
