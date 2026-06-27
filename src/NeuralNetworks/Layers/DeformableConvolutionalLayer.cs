@@ -152,7 +152,7 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
     /// <param name="kernelSize">Size of the convolution kernel (default: 3).</param>
     /// <param name="stride">Convolution stride (default: 1).</param>
     /// <param name="padding">Padding size (default: 1).</param>
-    /// <param name="groups">Number of convolution groups. Currently only groups=1 is supported (default: 1).</param>
+    /// <param name="groups">Number of convolution groups for grouped/depthwise deformable conv, e.g. DCNv3 (default: 1).</param>
     /// <param name="deformGroups">Number of deformable groups (default: 1).</param>
     /// <param name="useModulation">Whether to use modulation mask (DCNv2, default: true).</param>
     /// <param name="engine">Optional computation engine. If null, uses default CPU engine.</param>
@@ -182,12 +182,12 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
         if (groups < 1) throw new ArgumentOutOfRangeException(nameof(groups), "Groups must be at least 1.");
         if (outputChannels % groups != 0)
             throw new ArgumentException(
-                $"Output channels ({outputChannels}) must be divisible by groups ({groups}); otherwise the per-group " +
-                "weight slicing in Forward truncates channels and leaves weights unused.",
+                $"Output channels ({outputChannels}) must be divisible by groups ({groups}) so the grouped " +
+                "deformable convolution partitions output channels evenly across groups.",
                 nameof(groups));
-        // Grouped deformable conv (DCNv3) is supported here by per-group composition over the engine's
-        // groups=1 DeformableConv2D (see Forward). Each per-group call runs the backend's real kernel
-        // and is tape-recorded, so backward composes automatically.
+        // Grouped deformable conv (DCNv3) runs as a single fused DeformableConv2DGrouped launch over the
+        // engine (one real CPU/GPU kernel pass; reduces to plain DeformableConv2D at groups=deformGroups=1).
+        // The engine records it on the tape, so backward flows to input/weights/offsets/mask automatically.
         if (deformGroups < 1) throw new ArgumentOutOfRangeException(nameof(deformGroups), "Deformable groups must be at least 1.");
         if (groups > 1 && groups % deformGroups != 0)
             throw new ArgumentException(
