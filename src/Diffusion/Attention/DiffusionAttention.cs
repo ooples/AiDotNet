@@ -256,6 +256,19 @@ public class DiffusionAttention<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Propagates eval/training mode to the nested Flash / standard attention sublayers.
+    /// Without this override the private sublayers never see model.SetTrainingMode(false),
+    /// keeping their internal Dense projections on the allocating tape/training Forward
+    /// branch during inference instead of the GPU-resident inference fast path.
+    /// </summary>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        _flashAttention.SetTrainingMode(isTraining);
+        _standardAttention.SetTrainingMode(isTraining);
+    }
+
+    /// <summary>
     /// Updates parameters using computed gradients.
     /// </summary>
     public override void UpdateParameters(T learningRate)
@@ -485,6 +498,16 @@ public class DiffusionCrossAttention<T> : LayerBase<T>
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Propagates eval/training mode to the nested cross-attention sublayer so inference
+    /// uses the GPU-resident fast path rather than the allocating tape/training branch.
+    /// </summary>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        _crossAttention.SetTrainingMode(isTraining);
     }
 
     /// <summary>

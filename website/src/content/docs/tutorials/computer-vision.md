@@ -1,290 +1,119 @@
 ---
 title: "Computer Vision"
-description: "Build image and video models with AiDotNet."
+description: "Build image models with AiDotNet."
 order: 4
 section: "Tutorials"
 ---
 
-
-
-Build powerful image and video understanding models with AiDotNet.
-
----
-
-
-
----
-
-## Overview
-
-AiDotNet provides 50+ computer vision models for:
-- Object Detection (YOLO, DETR, Faster R-CNN)
-- Image Classification (ResNet, EfficientNet, ViT)
-- Instance Segmentation (Mask R-CNN, SAM)
-- OCR (CRNN, TrOCR)
-- And more!
-
----
+Train image models through the `AiModelBuilder` facade. Images are `Tensor<T>` batches, and the general-purpose `NeuralNetwork<T>` builds an appropriate network from a `NeuralNetworkArchitecture<T>`.
 
 ## Image Classification
 
-### Using Pre-trained Models
-
-```csharp
-using AiDotNet.ComputerVision;
-
-// Load a pre-trained ResNet-50
-var classifier = await ImageClassifier.LoadAsync<float>("resnet50");
-
-// Classify an image
-var image = await Image.LoadAsync("cat.jpg");
-var prediction = classifier.Classify(image);
-
-Console.WriteLine($"Prediction: {prediction.Label}");
-Console.WriteLine($"Confidence: {prediction.Confidence:P1}");
-```
-
-### Training a Custom Classifier
+Flatten each image into a feature vector (or feed a convolutional architecture) and train like any other model.
 
 ```csharp
 using AiDotNet;
-using AiDotNet.NeuralNetworks.Architectures;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
-// Configure a CNN
-var model = new ResNet<float>(new ResNetConfig<float>
+// 100 synthetic 28x28 grayscale images (784 features), one-hot labels for 10 classes.
+var rng = new Random(42);
+var trainX = new Tensor<double>(new[] { 100, 784 });
+var trainY = new Tensor<double>(new[] { 100, 10 });
+for (int i = 0; i < 100; i++)
 {
-    Variant = ResNetVariant.ResNet18,
-    NumClasses = 10,
-    InputChannels = 3,
-    InputHeight = 224,
-    InputWidth = 224
-});
+    for (int j = 0; j < 784; j++) trainX[new[] { i, j }] = rng.NextDouble();
+    trainY[new[] { i, i % 10 }] = 1.0;
+}
 
-// Build and train
-var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+var model = new NeuralNetwork<double>(new NeuralNetworkArchitecture<double>(
+    inputFeatures: 784, numClasses: 10, complexity: NetworkComplexity.Medium));
+
+var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
     .ConfigureModel(model)
-    .ConfigureOptimizer(new AdamOptimizer<float>(learningRate: 1e-4f))
-    .ConfigureDataAugmentation(new ImageAugmentationConfig
-    {
-        RandomHorizontalFlip = true,
-        RandomRotation = 15,
-        ColorJitter = true
-    })
-    .ConfigureGpuAcceleration()
-    .BuildAsync(trainImages, trainLabels);
+    .ConfigureDataLoader(DataLoaders.FromTensors(trainX, trainY))
+    .BuildAsync();
+
+var scores = result.Predict(trainX);
+int predicted = 0;
+for (int c = 1; c < 10; c++)
+    if (scores[new[] { 0, c }] > scores[new[] { 0, predicted }]) predicted = c;
+Console.WriteLine($"Predicted class for image 0: {predicted}");
 ```
-
----
-
-## Object Detection
-
-### YOLOv8 Detection
-
-```csharp
-using AiDotNet.ComputerVision;
-
-// Create detector
-var detector = new YOLOv8Detector<float>(
-    modelPath: "yolov8n.onnx",
-    confidenceThreshold: 0.5f,
-    nmsThreshold: 0.45f);
-
-// Detect objects
-var image = await Image.LoadAsync("street.jpg");
-var detections = detector.Detect(image);
-
-foreach (var det in detections)
-{
-    Console.WriteLine($"{det.Label}: {det.Confidence:P0}");
-    Console.WriteLine($"  Box: {det.BoundingBox}");
-}
-```
-
-### Available Detection Models
-
-| Model | Description | Speed | Accuracy |
-|:------|:------------|:------|:---------|
-| YOLOv8n | Nano - fastest | ⚡⚡⚡⚡ | ⭐⭐ |
-| YOLOv8s | Small | ⚡⚡⚡ | ⭐⭐⭐ |
-| YOLOv8m | Medium | ⚡⚡ | ⭐⭐⭐⭐ |
-| YOLOv8l | Large | ⚡ | ⭐⭐⭐⭐⭐ |
-| DETR | Transformer-based | ⚡⚡ | ⭐⭐⭐⭐⭐ |
-
-### Training Custom Object Detection
-
-```csharp
-var detector = new YOLOv8<float>(new YOLOConfig<float>
-{
-    NumClasses = 5,
-    ImageSize = 640
-});
-
-await detector.TrainAsync(
-    trainDataset,
-    epochs: 100,
-    batchSize: 16,
-    learningRate: 0.01f);
-```
-
----
-
-## Instance Segmentation
-
-### Using Mask R-CNN
-
-```csharp
-using AiDotNet.ComputerVision;
-
-var segmenter = new MaskRCNN<float>(numClasses: 80);
-
-var image = await Image.LoadAsync("people.jpg");
-var instances = segmenter.Segment(image);
-
-foreach (var instance in instances)
-{
-    Console.WriteLine($"{instance.Label}: {instance.Confidence:P0}");
-    Console.WriteLine($"  Mask pixels: {instance.Mask.Sum()}");
-}
-```
-
-### Segment Anything Model (SAM)
-
-```csharp
-var sam = await SAM.LoadAsync<float>("sam_vit_h");
-
-// Segment with point prompts
-var masks = sam.Segment(image, points: [(512, 384)]);
-
-// Segment with box prompt
-var masks2 = sam.Segment(image, box: new Box(100, 100, 400, 400));
-```
-
----
-
-## OCR (Text Recognition)
-
-### Basic OCR
-
-```csharp
-using AiDotNet.ComputerVision;
-
-var ocr = new OCREngine<float>();
-
-var image = await Image.LoadAsync("document.png");
-var result = ocr.Recognize(image);
-
-Console.WriteLine("Extracted text:");
-Console.WriteLine(result.Text);
-
-// With bounding boxes
-foreach (var line in result.Lines)
-{
-    Console.WriteLine($"[{line.BoundingBox}] {line.Text}");
-}
-```
-
-### Scene Text Recognition
-
-```csharp
-var sceneOCR = new SceneTextRecognizer<float>();
-
-var image = await Image.LoadAsync("street_sign.jpg");
-var texts = sceneOCR.Detect(image);
-
-foreach (var text in texts)
-{
-    Console.WriteLine($"'{text.Content}' at {text.Location}");
-}
-```
-
----
-
-## Data Augmentation
-
-```csharp
-.ConfigureDataAugmentation(new ImageAugmentationConfig
-{
-    // Geometric transforms
-    RandomHorizontalFlip = true,
-    RandomVerticalFlip = false,
-    RandomRotation = 15,  // degrees
-    RandomCrop = 0.8f,    // min scale
-
-    // Color transforms
-    ColorJitter = true,
-    Brightness = 0.2f,
-    Contrast = 0.2f,
-    Saturation = 0.2f,
-    Hue = 0.1f,
-
-    // Other
-    RandomErasing = true,
-    Mixup = 0.2f,
-    CutMix = 0.2f
-})
-```
-
----
-
-## Transfer Learning
-
-Use pre-trained weights and fine-tune on your data:
-
-```csharp
-var model = await ResNet.LoadPretrainedAsync<float>(
-    "resnet50",
-    weights: "imagenet");
-
-// Freeze backbone
-model.FreezeBackbone();
-
-// Replace classification head
-model.SetNumClasses(5);
-
-// Train
-await model.TrainAsync(myData, epochs: 10);
-```
-
----
 
 ## GPU Acceleration
 
+Vision models are compute-heavy — add `ConfigureGpuAcceleration()` to use the GPU when available.
+
 ```csharp
-.ConfigureGpuAcceleration(new GpuAccelerationConfig
+using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
+
+var rng = new Random(1);
+var trainX = new Tensor<float>(new[] { 64, 256 });
+var trainY = new Tensor<float>(new[] { 64, 5 });
+for (int i = 0; i < 64; i++)
 {
-    Enabled = true,
-    DeviceId = 0,
-    MixedPrecision = true  // FP16 for faster training
-})
+    for (int j = 0; j < 256; j++) trainX[new[] { i, j }] = (float)rng.NextDouble();
+    trainY[new[] { i, i % 5 }] = 1f;
+}
+
+var model = new NeuralNetwork<float>(new NeuralNetworkArchitecture<float>(
+    inputFeatures: 256, numClasses: 5, complexity: NetworkComplexity.Medium));
+
+var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+    .ConfigureModel(model)
+    .ConfigureGpuAcceleration()
+    .ConfigureDataLoader(DataLoaders.FromTensors(trainX, trainY))
+    .BuildAsync();
+
+Console.WriteLine($"Trained on GPU when available; output [{string.Join(", ", result.Predict(trainX).Shape)}]");
 ```
 
----
-
-## Batch Processing
+## Reading Metrics
 
 ```csharp
-// Process multiple images efficiently
-var images = await Task.WhenAll(
-    imagePaths.Select(p => Image.LoadAsync(p)));
+using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
-var results = detector.DetectBatch(images, batchSize: 32);
+var rng = new Random(3);
+var trainX = new Tensor<double>(new[] { 120, 64 });
+var trainY = new Tensor<double>(new[] { 120, 4 });
+for (int i = 0; i < 120; i++)
+{
+    for (int j = 0; j < 64; j++) trainX[new[] { i, j }] = rng.NextDouble();
+    trainY[new[] { i, i % 4 }] = 1.0;
+}
+
+var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
+    .ConfigureModel(new NeuralNetwork<double>(new NeuralNetworkArchitecture<double>(
+        inputFeatures: 64, numClasses: 4, complexity: NetworkComplexity.Simple)))
+    .ConfigureDataLoader(DataLoaders.FromTensors(trainX, trainY))
+    .BuildAsync();
+
+Console.WriteLine($"Layers: {result.LayerCount}, params: {result.TotalTrainableParameters:N0}");
 ```
-
----
 
 ## Best Practices
 
-1. **Resize consistently**: Use the same input size as training
-2. **Normalize correctly**: Match the preprocessing of pre-trained models
-3. **Use data augmentation**: Prevents overfitting, improves generalization
-4. **Start with pre-trained**: Fine-tuning is usually faster than training from scratch
-5. **Monitor GPU memory**: Reduce batch size if OOM errors occur
+1. **Normalize pixels**: scale inputs to `[0, 1]` before training.
+2. **Use GPU**: add `ConfigureGpuAcceleration()` for image-scale workloads.
+3. **Augment data**: more varied training images improve generalization.
+4. **Right-size complexity**: start `Medium`, increase only if the model underfits.
 
----
+## Notes
+
+The facade trains image classifiers built from `NeuralNetwork<T>` / `NeuralNetworkArchitecture<T>`. Task-specific vision pipelines — object detection (Mask R-CNN / YOLO heads), semantic segmentation, and OCR engines — are configured through their own model types rather than a single facade call today.
 
 ## Next Steps
 
-- [YOLOv8 Sample](/samples/computer-vision/ObjectDetection/YOLOv8Detection/)
-- [Image Classification Sample](/samples/computer-vision/ImageClassification/)
-- [OCR Sample](/samples/computer-vision/OCR/)
-- [Computer Vision API Reference](/api/AiDotNet.ComputerVision/)
+- [Neural Network Training](/docs/examples/neural-network-training/)
+- [Classification Tutorial](/docs/tutorials/classification/)

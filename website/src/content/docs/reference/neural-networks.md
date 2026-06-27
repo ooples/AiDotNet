@@ -1,339 +1,153 @@
 ---
 title: "Neural Networks"
-description: "Complete reference for 110+ neural network architectures."
+description: "Reference for AiDotNet's neural network architectures."
 order: 1
 section: "Reference"
 ---
 
 
-
-Complete reference for all 110+ neural network architectures in AiDotNet.
+Reference for AiDotNet's neural network architectures. Every architecture trains through the same facade — `ConfigureModel(...)` + `ConfigureDataLoader(...)` + `BuildAsync()` — and the general-purpose `NeuralNetwork<T>` is configured from a `NeuralNetworkArchitecture<T>`. Specialized architectures take their own architecture/options type but build and predict the same way.
 
 ---
 
 ## Convolutional Networks (CNN)
 
-### Standard Architectures
-
-| Architecture | Parameters | Use Case |
-|:-------------|:-----------|:---------|
-| `ConvolutionalNetwork<T>` | Configurable | General image tasks |
-| `ResNet<T>` | 11M-60M | Image classification, feature extraction |
-| `VGG<T>` | 138M | Deep feature extraction |
-| `Inception<T>` | 23M | Multi-scale features |
-| `DenseNet<T>` | 8M-20M | Dense connections |
-| `EfficientNet<T>` | 5M-66M | Efficient scaling |
-
-```csharp
-var model = new ResNet<float>(
-    variant: ResNetVariant.ResNet50,
-    numClasses: 1000,
-    pretrained: true);
-```
-
-### Lightweight Networks
-
-| Architecture | Parameters | Use Case |
-|:-------------|:-----------|:---------|
-| `MobileNet<T>` | 3.4M | Mobile/edge deployment |
-| `ShuffleNet<T>` | 2M | Efficient channel shuffle |
-| `SqueezeNet<T>` | 1.2M | Ultra-compact |
-| `GhostNet<T>` | 5M | Ghost features |
-
-### Attention-Enhanced CNNs
-
-| Architecture | Description |
-|:-------------|:------------|
-| `SENet<T>` | Squeeze-and-Excitation blocks |
-| `CBAM<T>` | Convolutional Block Attention |
-| `SKNet<T>` | Selective Kernel Networks |
-| `ECANet<T>` | Efficient Channel Attention |
-
----
+| Architecture | Use Case |
+|:-------------|:---------|
+| `ConvolutionalNeuralNetwork<T>` | General image tasks |
+| `ResNet<T>` | Image classification, feature extraction |
+| `VGG<T>` | Deep feature extraction |
+| `DenseNet<T>` | Dense connections |
+| `EfficientNet<T>` | Efficient scaling |
+| `MobileNet<T>` | Mobile / edge deployment |
+| `SqueezeNet<T>` | Ultra-compact |
 
 ## Recurrent Networks (RNN)
 
-### Core Architectures
-
-| Architecture | Description | Bidirectional |
-|:-------------|:------------|:--------------|
-| `RNN<T>` | Basic recurrent network | Yes |
-| `LSTM<T>` | Long Short-Term Memory | Yes |
-| `GRU<T>` | Gated Recurrent Unit | Yes |
-| `IndRNN<T>` | Independently Recurrent | Yes |
-
-```csharp
-var model = new LSTM<float>(
-    inputSize: 100,
-    hiddenSize: 256,
-    numLayers: 2,
-    dropout: 0.2f,
-    bidirectional: true);
-```
-
-### Advanced RNNs
-
 | Architecture | Description |
 |:-------------|:------------|
-| `StackedLSTM<T>` | Multi-layer LSTM |
-| `PeepholeLSTM<T>` | LSTM with peephole connections |
-| `AttentionLSTM<T>` | LSTM with attention mechanism |
+| `RNN<T>` | Basic recurrent network |
+| `LSTMNeuralNetwork<T>` | Long Short-Term Memory |
+| `GRUNeuralNetwork<T>` | Gated Recurrent Unit |
 | `ConvLSTM<T>` | Convolutional LSTM for sequences |
-
----
 
 ## Transformers
 
-### Text Transformers
+| Architecture | Use Case |
+|:-------------|:---------|
+| `Transformer<T>` | Seq-to-seq tasks |
+| `VisionTransformer<T>` | Image classification |
+| `BERT<T>` | Language understanding |
+| `GPT<T>` | Text generation |
 
-| Architecture | Parameters | Use Case |
-|:-------------|:-----------|:---------|
-| `Transformer<T>` | Configurable | Seq-to-seq tasks |
-| `BERT<T>` | 110M-340M | Language understanding |
-| `GPT<T>` | 117M-175B | Text generation |
-| `T5<T>` | 60M-11B | Text-to-text |
-| `RoBERTa<T>` | 125M-355M | Robust BERT |
-| `ALBERT<T>` | 12M-235M | Factorized embeddings |
-| `XLNet<T>` | 110M-340M | Permutation language model |
+## Generative
+
+| Architecture | Description |
+|:-------------|:------------|
+| `GAN<T>`, `DCGAN<T>`, `WGAN<T>` | Generative adversarial networks |
+| `ConditionalGAN<T>`, `CycleGAN<T>` | Conditional / image-to-image GANs |
+| `VAE<T>`, `ConditionalVAE<T>`, `VQVAE<T>` | Variational autoencoders |
+
+## Graph & Specialized
+
+| Architecture | Description |
+|:-------------|:------------|
+| `GraphConvolutionalNetwork<T>` | Graph convolution (GCN) |
+| `GraphAttentionNetwork<T>` | Graph attention (GAT) |
+| `CapsuleNetwork<T>` | Capsule network |
+| `NeuralRadianceField<T>` | NeRF |
+| `TemporalConvolutionalNetwork<T>` | Sequence modeling (TCN) |
+
+> Tip: discover concrete architecture types under the `AiDotNet.NeuralNetworks` namespace; each pairs with an architecture or options type in the same namespace.
+
+---
+
+## Building a Neural Network
+
+The general-purpose `NeuralNetwork<T>` builds an appropriate stack from a `NeuralNetworkArchitecture<T>` (input feature count, class count, and a complexity preset).
 
 ```csharp
-var model = new Transformer<float>(
-    vocabSize: 30522,
-    dModel: 768,
-    numHeads: 12,
-    numLayers: 12,
-    dFf: 3072,
-    maxSeqLen: 512);
-```
+using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
-### Vision Transformers
+// 200 samples of 64 features, one-hot labels for 10 classes.
+var rng = new Random(42);
+var trainX = new Tensor<double>(new[] { 200, 64 });
+var trainY = new Tensor<double>(new[] { 200, 10 });
+for (int i = 0; i < 200; i++)
+{
+    for (int j = 0; j < 64; j++) trainX[new[] { i, j }] = rng.NextDouble();
+    trainY[new[] { i, i % 10 }] = 1.0;
+}
 
-| Architecture | Description |
-|:-------------|:------------|
-| `ViT<T>` | Vision Transformer |
-| `DeiT<T>` | Data-efficient Image Transformer |
-| `Swin<T>` | Shifted Window Transformer |
-| `BEiT<T>` | BERT for images |
-| `CvT<T>` | Convolutional Vision Transformer |
+var model = new NeuralNetwork<double>(new NeuralNetworkArchitecture<double>(
+    inputFeatures: 64, numClasses: 10, complexity: NetworkComplexity.Medium));
 
-### Multi-Modal Transformers
-
-| Architecture | Modalities |
-|:-------------|:-----------|
-| `CLIP<T>` | Image + Text |
-| `BLIP<T>` | Image + Text |
-| `Flamingo<T>` | Image + Text |
-| `ImageBind<T>` | Multiple modalities |
-
----
-
-## Generative Adversarial Networks (GAN)
-
-### Standard GANs
-
-| Architecture | Description |
-|:-------------|:------------|
-| `GAN<T>` | Basic GAN |
-| `DCGAN<T>` | Deep Convolutional GAN |
-| `WGAN<T>` | Wasserstein GAN |
-| `WGANGP<T>` | WGAN with Gradient Penalty |
-| `SNGAN<T>` | Spectral Normalization GAN |
-
-```csharp
-var gan = new DCGAN<float>(
-    latentDim: 100,
-    imageSize: 64,
-    numChannels: 3);
-```
-
-### Conditional GANs
-
-| Architecture | Description |
-|:-------------|:------------|
-| `ConditionalGAN<T>` | Class-conditional |
-| `InfoGAN<T>` | Information-maximizing |
-| `ACGAN<T>` | Auxiliary Classifier |
-
-### Style GANs
-
-| Architecture | Description |
-|:-------------|:------------|
-| `StyleGAN<T>` | Style-based generator |
-| `StyleGAN2<T>` | Improved StyleGAN |
-| `StyleGAN3<T>` | Alias-free generation |
-
-### Image-to-Image
-
-| Architecture | Description |
-|:-------------|:------------|
-| `Pix2Pix<T>` | Paired image translation |
-| `CycleGAN<T>` | Unpaired image translation |
-| `StarGAN<T>` | Multi-domain translation |
-
----
-
-## Variational Autoencoders (VAE)
-
-| Architecture | Description |
-|:-------------|:------------|
-| `VAE<T>` | Standard VAE |
-| `CVAE<T>` | Conditional VAE |
-| `BetaVAE<T>` | Disentangled VAE |
-| `VQVAE<T>` | Vector Quantized VAE |
-| `VQVAE2<T>` | Hierarchical VQ-VAE |
-| `NVAE<T>` | Nouveau VAE |
-
-```csharp
-var vae = new VAE<float>(
-    inputDim: 784,
-    latentDim: 32,
-    hiddenDims: [512, 256]);
-```
-
----
-
-## Diffusion Models
-
-| Architecture | Description |
-|:-------------|:------------|
-| `DDPM<T>` | Denoising Diffusion Probabilistic |
-| `DDIM<T>` | Denoising Diffusion Implicit |
-| `ScoreSDE<T>` | Score-based SDE |
-| `StableDiffusion<T>` | Latent diffusion |
-| `DiT<T>` | Diffusion Transformer |
-| `Consistency<T>` | Consistency Models |
-
-```csharp
-var diffusion = new DDPM<float>(
-    imageSize: 256,
-    timesteps: 1000,
-    betaSchedule: BetaSchedule.Linear);
-```
-
----
-
-## Graph Neural Networks (GNN)
-
-| Architecture | Description |
-|:-------------|:------------|
-| `GCN<T>` | Graph Convolutional Network |
-| `GAT<T>` | Graph Attention Network |
-| `GraphSAGE<T>` | Sampling and Aggregation |
-| `GIN<T>` | Graph Isomorphism Network |
-| `MPNN<T>` | Message Passing NN |
-| `PNA<T>` | Principal Neighborhood Aggregation |
-
-```csharp
-var gnn = new GAT<float>(
-    inputDim: 64,
-    hiddenDim: 128,
-    outputDim: 7,
-    numHeads: 8);
-```
-
----
-
-## Capsule Networks
-
-| Architecture | Description |
-|:-------------|:------------|
-| `CapsuleNetwork<T>` | Standard capsule network |
-| `DynamicRouting<T>` | Dynamic routing between capsules |
-| `EMRouting<T>` | Expectation-Maximization routing |
-
----
-
-## Neural Radiance Fields (NeRF)
-
-| Architecture | Description |
-|:-------------|:------------|
-| `NeRF<T>` | Original NeRF |
-| `InstantNGP<T>` | Instant Neural Graphics |
-| `TensoRF<T>` | Tensorial Radiance Fields |
-| `Plenoxels<T>` | Plenoptic Voxels |
-
----
-
-## Physics-Informed Neural Networks
-
-| Architecture | Description |
-|:-------------|:------------|
-| `PINN<T>` | Physics-Informed NN |
-| `DeepONet<T>` | Deep Operator Network |
-| `FNO<T>` | Fourier Neural Operator |
-| `PhysicsNet<T>` | Generic physics network |
-
----
-
-## Specialized Architectures
-
-### Sequence Models
-
-| Architecture | Description |
-|:-------------|:------------|
-| `TCN<T>` | Temporal Convolutional Network |
-| `WaveNet<T>` | Dilated causal convolutions |
-| `Mamba<T>` | State Space Model |
-| `RWKV<T>` | Receptance Weighted Key Value |
-
-### Memory Networks
-
-| Architecture | Description |
-|:-------------|:------------|
-| `MemoryNetwork<T>` | End-to-end memory network |
-| `NTM<T>` | Neural Turing Machine |
-| `DNC<T>` | Differentiable Neural Computer |
-
-### Attention Mechanisms
-
-| Module | Description |
-|:-------|:------------|
-| `MultiHeadAttention<T>` | Standard multi-head attention |
-| `FlashAttention<T>` | Memory-efficient attention |
-| `LinearAttention<T>` | Linear complexity attention |
-| `CrossAttention<T>` | Cross-modal attention |
-
----
-
-## Usage Examples
-
-### Image Classification
-
-```csharp
-var model = new EfficientNet<float>(
-    variant: EfficientNetVariant.B4,
-    numClasses: 100);
-
-var result = await new AiModelBuilder<float, Tensor<float>, int>()
+var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
     .ConfigureModel(model)
-    .ConfigureOptimizer(new AdamWOptimizer<float>())
-    .ConfigureGpuAcceleration(new GpuAccelerationConfig { Enabled = true })
-    .BuildAsync(images, labels);
+    .ConfigureDataLoader(DataLoaders.FromTensors(trainX, trainY))
+    .BuildAsync();
+
+var scores = result.Predict(trainX);
+Console.WriteLine($"Output shape: [{string.Join(", ", scores.Shape)}]");
+Console.WriteLine($"Layers: {result.LayerCount}, params: {result.TotalTrainableParameters:N0}");
 ```
 
-### Text Generation
+## Choosing Complexity
+
+`NetworkComplexity` controls depth/width without hand-specifying layers.
 
 ```csharp
-var model = new GPT<float>(
-    vocabSize: 50257,
-    dModel: 768,
-    numHeads: 12,
-    numLayers: 12);
+using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
-var generated = model.Generate(
-    prompt: "Once upon a time",
-    maxTokens: 100,
-    temperature: 0.7f);
+var trainX = new Tensor<double>(new[] { 64, 16 });
+var trainY = new Tensor<double>(new[] { 64, 2 });
+for (int i = 0; i < 64; i++) { trainX[new[] { i, 0 }] = i / 64.0; trainY[new[] { i, i % 2 }] = 1.0; }
+
+foreach (var complexity in new[] { NetworkComplexity.Simple, NetworkComplexity.Medium })
+{
+    var model = new NeuralNetwork<double>(new NeuralNetworkArchitecture<double>(
+        inputFeatures: 16, numClasses: 2, complexity: complexity));
+
+    var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
+        .ConfigureModel(model)
+        .ConfigureDataLoader(DataLoaders.FromTensors(trainX, trainY))
+        .BuildAsync();
+
+    Console.WriteLine($"{complexity}: {result.TotalTrainableParameters:N0} parameters");
+}
 ```
 
-### Graph Classification
+## GPU Acceleration
+
+Add `ConfigureGpuAcceleration()` — it uses the GPU when available and falls back to CPU otherwise.
 
 ```csharp
-var model = new GIN<float>(
-    inputDim: 32,
-    hiddenDim: 64,
-    outputDim: 10,
-    numLayers: 5);
+using AiDotNet;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
-var prediction = model.Classify(graph);
+var trainX = new Tensor<float>(new[] { 64, 32 });
+var trainY = new Tensor<float>(new[] { 64, 4 });
+for (int i = 0; i < 64; i++) { trainX[new[] { i, 0 }] = i / 64f; trainY[new[] { i, i % 4 }] = 1f; }
+
+var model = new NeuralNetwork<float>(new NeuralNetworkArchitecture<float>(
+    inputFeatures: 32, numClasses: 4, complexity: NetworkComplexity.Simple));
+
+var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+    .ConfigureModel(model)
+    .ConfigureGpuAcceleration()
+    .ConfigureDataLoader(DataLoaders.FromTensors(trainX, trainY))
+    .BuildAsync();
+
+Console.WriteLine($"Trained; output [{string.Join(", ", result.Predict(trainX).Shape)}]");
 ```

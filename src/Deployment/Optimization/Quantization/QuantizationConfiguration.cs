@@ -104,6 +104,7 @@ public class QuantizationConfiguration
     private int DefaultBitWidth => Mode switch
     {
         QuantizationMode.Int8 => 8,
+        QuantizationMode.Int4 => 4,
         QuantizationMode.Float16 => 16,
         QuantizationMode.Float32 => 32,
         QuantizationMode.Dynamic => 8,

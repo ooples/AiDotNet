@@ -695,7 +695,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             sampleSpan.CopyTo(tensorSpan);
 
             // Predict the noise
-            var noisePrediction = PredictNoise(sampleTensor, timestep);
+            var noisePrediction = PredictNoiseStep(sampleTensor, timestep);
 
             // Copy prediction to pre-allocated vector (avoids ToVector() allocation).
             // Fail fast on length mismatch — silently truncating or leaving stale
@@ -761,6 +761,97 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
 
     /// <inheritdoc />
     public abstract Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep);
+
+    /// <summary>
+    /// Runs one denoising-step noise prediction, optionally inside a GPU deferred execution graph
+    /// (AiDotNet.Tensors #642) when <see cref="DiffusionModelOptions{T}.UseGpuExecutionGraph"/> is
+    /// enabled and the active engine is a CUDA <c>DirectGpuTensorEngine</c>. Recording the whole
+    /// forward into one graph keeps intermediates on-device, fuses kernels, overlaps streams, reuses
+    /// buffers, and drops per-op host round-trips — the substrate a CUDA-graph capture replays.
+    /// A recoverable failure (or a non-CUDA / unavailable engine) transparently falls back to the
+    /// eager <see cref="PredictNoise"/> — but only failures that surface as exceptions are caught;
+    /// an op that is not yet deferred-correct can still silently produce wrong-but-finite output, so
+    /// this is NOT an unconditional "never worse than eager" guarantee (see
+    /// <see cref="DiffusionModelOptions{T}.UseGpuExecutionGraph"/>).
+    /// </summary>
+    // #1650/#638: the predictor's own CUDA-graph STREAM capture (AIDOTNET_DIFFUSION_CUDA_GRAPH=1, handled inside
+    // PredictNoise) and the #642 deferred-recording scope are MUTUALLY EXCLUSIVE graph mechanisms on the same
+    // engine stream — running the deferred scope around a PredictNoise that itself stream-captures conflicts.
+    // When stream capture is on it SUPERSEDES the deferred scope, so skip the scope and let PredictNoise capture.
+    // Read the env LIVE each call (not a cached static): it's the mutual-exclusion switch between the predictor's
+    // stream capture and the #642 deferred scope, so a value cached before the env is set could wrap a
+    // stream-capturing PredictNoise in the deferred scope. A per-step env read is negligible. (CodeRabbit #671/#1650)
+    private static bool PredictorStreamCapture =>
+        System.Environment.GetEnvironmentVariable("AIDOTNET_DIFFUSION_CUDA_GRAPH") == "1";
+
+    private Tensor<T> PredictNoiseStep(Tensor<T> noisySample, int timestep)
+    {
+        if (!_options.UseGpuExecutionGraph || PredictorStreamCapture)
+            return PredictNoise(noisySample, timestep);
+
+        var engine = AiDotNetEngine.Current as AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
+        if (engine is null || !engine.IsGpuAvailable)
+        {
+            // Enabled but there is no CUDA engine to record into → this IS a fallback per the
+            // diagnostics contract (the "no GPU" case documented on
+            // DiffusionDeferredStepDiagnostics.FellBackCount), so count it rather than returning
+            // eager silently and undercounting non-CUDA fallbacks.
+            DiffusionDeferredStepDiagnostics.RecordFellBack();
+            return PredictNoise(noisySample, timestep);
+        }
+
+        try
+        {
+            // ExecuteEagerlyWhileRecording=true is REQUIRED for correctness: the RecordingGpuBackend overrides
+            // only a subset of ops, so non-overridden UNet ops (GroupNorm, reductions, upsample, concat) would
+            // otherwise execute eagerly mid-record reading not-yet-produced buffers → garbage (#1650/#642 trace-
+            // by-execution fix). Without it the deferred path silently produces wrong-but-finite denoising.
+            using var scope = engine.BeginDeferredScope(
+                new AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions { ExecuteEagerlyWhileRecording = true });
+            if (scope is null)
+            {
+                DiffusionDeferredStepDiagnostics.RecordFellBack();
+                return PredictNoise(noisySample, timestep);
+            }
+
+            // Ops inside PredictNoise route through DeferredScope.Current.RecordingBackend
+            // automatically; Execute() replays the recorded, optimized graph. The result tensor
+            // stays GPU-resident (lazy) and is materialised on first CPU read by the caller — its
+            // output buffer is owned by the activation cache, so it survives the scope dispose.
+            var prediction = PredictNoise(noisySample, timestep);
+            scope.Execute();
+            // Materialise the result to a GC-owned CPU tensor BEFORE the deferred scope disposes.
+            // The lazy result is GPU-resident and its backing buffer is owned by the scope's
+            // recording backend / activation cache, which is torn down on scope dispose — reading
+            // it AFTER dispose (as the denoise loop does, via AsSpan) yields recycled/garbage
+            // values. ToArray() forces the GPU->CPU download while the buffers are still alive,
+            // and wrapping in a fresh Tensor detaches from the scope-owned storage. (Mirrors the
+            // inference-arena DetachFromArena pattern.)
+            var dims = new int[prediction.Rank];
+            for (int d = 0; d < dims.Length; d++) dims[d] = prediction.Shape[d];
+            var materialized = new Tensor<T>(prediction.ToArray(), dims);
+            DiffusionDeferredStepDiagnostics.RecordExecuted();
+            return materialized;
+        }
+        // Fall back to eager only for RECOVERABLE failures (an op not yet deferred-correct, a
+        // transient GPU/runtime fault, a deferred-scope rejection). Unrecoverable conditions
+        // (host OOM, access violation, stack overflow) are NOT masked — re-running the same
+        // forward eagerly cannot help and would hide a real fault behind a "never worse than
+        // eager" claim, exactly the silent-wrong-output risk #1650 is meant to avoid.
+        catch (System.Exception ex) when (!IsUnrecoverable(ex))
+        {
+            DiffusionDeferredStepDiagnostics.RecordFellBack();
+            System.Diagnostics.Trace.TraceWarning(
+                "DiffusionModelBase.PredictNoiseStep: deferred GPU forward failed, falling back to "
+              + $"eager PredictNoise (timestep {timestep}): {ex.GetType().Name}: {ex.Message}");
+            return PredictNoise(noisySample, timestep);
+        }
+    }
+
+    private static bool IsUnrecoverable(System.Exception ex) =>
+        ex is OutOfMemoryException
+           or System.StackOverflowException
+           or System.AccessViolationException;
 
     /// <inheritdoc />
     /// <remarks>
@@ -1593,4 +1684,33 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     }
 
     #endregion
+}
+
+/// <summary>
+/// Process-wide observability for the opt-in GPU deferred denoising step
+/// (<see cref="DiffusionModelOptions{T}.UseGpuExecutionGraph"/>, #642 / #1650). The step falls back
+/// to the eager forward on any recoverable failure, which would otherwise be invisible — a
+/// not-yet-deferred-correct op would silently run eagerly and look "fine". These counters let tests
+/// (and production telemetry) assert the deferred GPU graph ACTUALLY executed, rather than trusting a
+/// bit-equivalence that an eager fallback would also satisfy.
+/// </summary>
+internal static class DiffusionDeferredStepDiagnostics
+{
+    private static long _executed;
+    private static long _fellBack;
+
+    /// <summary>Number of denoising steps whose forward ran through the deferred GPU graph + Execute().</summary>
+    public static long ExecutedCount => System.Threading.Interlocked.Read(ref _executed);
+
+    /// <summary>Number of denoising steps that fell back to the eager forward (no GPU, null scope, or a recoverable deferred failure).</summary>
+    public static long FellBackCount => System.Threading.Interlocked.Read(ref _fellBack);
+
+    public static void Reset()
+    {
+        System.Threading.Interlocked.Exchange(ref _executed, 0);
+        System.Threading.Interlocked.Exchange(ref _fellBack, 0);
+    }
+
+    internal static void RecordExecuted() => System.Threading.Interlocked.Increment(ref _executed);
+    internal static void RecordFellBack() => System.Threading.Interlocked.Increment(ref _fellBack);
 }

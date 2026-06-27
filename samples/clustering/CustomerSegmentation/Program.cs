@@ -1,6 +1,8 @@
+using AiDotNet;
 using AiDotNet.Clustering.Evaluation;
 using AiDotNet.Clustering.Options;
 using AiDotNet.Clustering.Partitioning;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Tensors.LinearAlgebra;
 
 Console.WriteLine("=== AiDotNet Customer Segmentation ===");
@@ -43,7 +45,11 @@ for (int k = 2; k <= 8; k++)
     });
 
     kmeans.Train(normalizedFeatures);
-    var labels = kmeans.Labels!;
+    var labels = kmeans.Labels;
+    if (labels is null)
+    {
+        throw new InvalidOperationException($"K-Means produced no labels for k={k}; clustering failed.");
+    }
 
     var silhouetteCalculator = new SilhouetteScore<double>();
     double silhouette = silhouetteCalculator.Compute(normalizedFeatures, labels);
@@ -70,17 +76,35 @@ var finalKMeans = new KMeans<double>(new KMeansOptions<double>
     InitMethod = KMeansInitMethod.KMeansPlusPlus
 });
 
-finalKMeans.Train(normalizedFeatures);
-var finalLabels = finalKMeans.Labels!;
+// Train through the AiModelBuilder facade. FromMatrix is the unsupervised loader (features only);
+// the trained model and its clustering quality metrics come back on the AiModelResult.
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureModel(finalKMeans)
+    .ConfigureDataLoader(DataLoaders.FromMatrix(normalizedFeatures))
+    .BuildAsync();
 
-Console.WriteLine($"Converged in {finalKMeans.NumIterations} iterations\n");
+// Cluster assignments for every customer come straight from the trained model.
+var finalLabels = result.Predict(normalizedFeatures);
+
+Console.WriteLine("Training complete.\n");
 
 // Analyze cluster characteristics
 Console.WriteLine("=== Cluster Analysis ===\n");
 AnalyzeClusters(features, finalLabels, optimalK);
 
-// Compute and display comprehensive metrics
-Console.WriteLine("\n=== Clustering Quality Metrics ===\n");
+// The facade computes clustering quality metrics automatically — read them off result.Evaluation,
+// no need to wire up a separate evaluator.
+Console.WriteLine("\n=== Clustering Quality Metrics (result.Evaluation) ===\n");
+var clusteringMetrics = result.Evaluation.ClusteringMetrics;
+if (clusteringMetrics is not null)
+{
+    Console.WriteLine($"  Silhouette:         {clusteringMetrics.SilhouetteScore,8:F4}  {InterpretMetric("Silhouette Score", clusteringMetrics.SilhouetteScore)}");
+    Console.WriteLine($"  Davies-Bouldin:     {clusteringMetrics.DaviesBouldinIndex,8:F4}  {InterpretMetric("Davies-Bouldin Index", clusteringMetrics.DaviesBouldinIndex)}");
+    Console.WriteLine($"  Calinski-Harabasz:  {clusteringMetrics.CalinskiHarabaszIndex,8:F4}  {InterpretMetric("Calinski-Harabasz Index", clusteringMetrics.CalinskiHarabaszIndex)}");
+}
+
+// For a deeper per-cluster breakdown, the standalone ClusteringEvaluator is still available.
+Console.WriteLine("\n=== Detailed Cluster Breakdown ===\n");
 var evaluator = new ClusteringEvaluator<double>();
 var evalResult = evaluator.EvaluateAll(normalizedFeatures, finalLabels);
 

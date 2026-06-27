@@ -1,0 +1,85 @@
+name: Samples (build + run)
+
+# Compiles AND runs every example under samples/ so that API drift can never again
+# silently break the published examples (root cause of the "broken examples everywhere"
+# report: the samples were in no solution, so CI never built them). The build step
+# catches compile breakage; the run step catches runtime/crash regressions. Examples are
+# short, CPU-only, self-contained console apps (no datasets/models/GPU required).
+on:
+  push:
+    branches: [ master ]
+    paths: [ 'samples/**', 'src/**', '.github/workflows/samples.yml' ]
+  pull_request:
+    paths: [ 'samples/**', 'src/**', '.github/workflows/samples.yml' ]
+  workflow_dispatch:
+
+concurrency:
+  group: samples-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-run:
+    name: Build & run samples
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # Examples are illustrative CPU programs; keep CI deterministic and off any GPU.
+      AIDOTNET_DISABLE_GPU: '1'
+      DOTNET_NOLOGO: '1'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET 10.0
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
+        with:
+          dotnet-version: '10.0.x'
+
+      # Build the shared library once so each sample reuses it instead of rebuilding.
+      - name: Build shared AiDotNet library
+        run: dotnet build src/AiDotNet.csproj -c Release
+
+      # Build + run each sample ONE AT A TIME, reclaiming its output before the next.
+      # Every sample's bin/ copies the large AiDotNet dependency (~1.4 GB each), so
+      # materializing all ~36 at once (e.g. building the whole solution) would exhaust the
+      # runner's disk. Building sequentially and deleting bin/obj after each keeps peak disk
+      # bounded to roughly one sample. `dotnet run` compiles the sample (reusing the
+      # prebuilt library) AND runs it, so a compile error or a non-zero exit both fail the job.
+      - name: Build + run each sample (disk-bounded)
+        shell: bash
+        run: |
+          set -uo pipefail
+          fail=0
+          while IFS= read -r proj; do
+            name=$(basename "$proj" .csproj)
+            dir=$(dirname "$proj")
+            echo "::group::$name"
+            if grep -q 'Microsoft.NET.Sdk.Web' "$proj"; then
+              # ASP.NET samples are long-running servers (they never exit), so they
+              # are compile-verified only — `dotnet run` would hang until timeout.
+              if dotnet build "$proj" -c Release; then
+                echo "PASS (build-only, web app): $name"
+              else
+                echo "::error::FAIL (build): $name"
+                fail=1
+              fi
+            else
+              if timeout 300s dotnet run --project "$proj" -c Release; then
+                echo "PASS: $name"
+              else
+                code=$?
+                echo "::error::FAIL ($code): $name"
+                fail=1
+              fi
+            fi
+            # Reclaim the ~1.4 GB output copy before moving to the next sample.
+            rm -rf "$dir/bin" "$dir/obj"
+            echo "::endgroup::"
+          done < <(find samples -name '*.csproj' | sort)
+          exit $fail
