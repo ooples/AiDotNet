@@ -784,7 +784,14 @@ jobs:
             '-c', 'Release',
             '--framework', '${{ matrix.shard.framework }}',
             '--no-build', '--no-restore',
-            '--filter', '${{ matrix.shard.filter }}'
+            # Globally exclude Category=HeavyTimeout from the default sharded run. Those models are
+            # CORRECT but inherently too slow for the per-test / 45-min shard budget (foundation
+            # diffusion at ~100s/forward x N-step Generate, GEMM-bound ViT/VGG, etc.). They are
+            # tracked in the umbrella timeout issue and exercised by the heavy-timeout-nightly
+            # workflow with a long budget. Wrapping the per-shard filter here applies the exclusion
+            # across all matrix entries in one place; it is a no-op for any test not tagged
+            # [Trait("Category","HeavyTimeout")].
+            '--filter', '(${{ matrix.shard.filter }})&Category!=HeavyTimeout'
           )
           if ($collectCoverage) {
             $dotnetArgs += @(
