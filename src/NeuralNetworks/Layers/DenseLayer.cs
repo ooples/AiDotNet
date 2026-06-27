@@ -1029,8 +1029,13 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         Tensor<T> result;
 
-        if (fusedActivation != FusedActivationType.None && !IsTrainingMode)
+        if (fusedActivation != FusedActivationType.None && !IsTrainingMode && !DeterministicForward)
         {
+            // Inference: use fused activation for maximum performance (no tape needed). This whole
+            // fast block is gated above on !DeterministicForward, so when DeterministicForward is set
+            // the eval forward falls through to the unfused training path below and stays bit-identical
+            // to it (fusion reorders the matmul+activation rounding by ~1e-8/element otherwise).
+            //
             // #1672 destination-buffer fast path: when the scratch gate is ON and we are
             // NOT recording a gradient tape (inference), compute the fused linear straight
             // into a reused per-layer buffer instead of allocating [batchDim, outputSize]

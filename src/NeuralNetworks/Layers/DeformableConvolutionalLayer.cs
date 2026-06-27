@@ -152,7 +152,7 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
     /// <param name="kernelSize">Size of the convolution kernel (default: 3).</param>
     /// <param name="stride">Convolution stride (default: 1).</param>
     /// <param name="padding">Padding size (default: 1).</param>
-    /// <param name="groups">Number of convolution groups. Currently only groups=1 is supported (default: 1).</param>
+    /// <param name="groups">Number of convolution groups for grouped/depthwise deformable conv, e.g. DCNv3 (default: 1).</param>
     /// <param name="deformGroups">Number of deformable groups (default: 1).</param>
     /// <param name="useModulation">Whether to use modulation mask (DCNv2, default: true).</param>
     /// <param name="engine">Optional computation engine. If null, uses default CPU engine.</param>
@@ -180,8 +180,20 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
         if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride), "Stride must be positive.");
         if (padding < 0) throw new ArgumentOutOfRangeException(nameof(padding), "Padding must be non-negative.");
         if (groups < 1) throw new ArgumentOutOfRangeException(nameof(groups), "Groups must be at least 1.");
-        if (groups != 1) throw new NotSupportedException("Grouped deformable convolution is not supported; set groups to 1 or implement engine support.");
+        if (outputChannels % groups != 0)
+            throw new ArgumentException(
+                $"Output channels ({outputChannels}) must be divisible by groups ({groups}) so the grouped " +
+                "deformable convolution partitions output channels evenly across groups.",
+                nameof(groups));
+        // Grouped deformable conv (DCNv3) runs as a single fused DeformableConv2DGrouped launch over the
+        // engine (one real CPU/GPU kernel pass; reduces to plain DeformableConv2D at groups=deformGroups=1).
+        // The engine records it on the tape, so backward flows to input/weights/offsets/mask automatically.
         if (deformGroups < 1) throw new ArgumentOutOfRangeException(nameof(deformGroups), "Deformable groups must be at least 1.");
+        if (groups > 1 && groups % deformGroups != 0)
+            throw new ArgumentException(
+                $"Groups ({groups}) must be divisible by deformable groups ({deformGroups}) for grouped deformable " +
+                "convolution, so each convolution group maps cleanly onto a deformable group.",
+                nameof(deformGroups));
 
         _engine = engine ?? new CpuEngine();
         _inputHeight = -1;
@@ -313,15 +325,14 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
             _lastMask = mask;
         }
 
-        // Perform deformable convolution using IEngine
-        var output = _engine.DeformableConv2D(
-            input4D,
-            _weights,
-            offsets,
-            mask,
-            new[] { _stride, _stride },
-            new[] { _padding, _padding },
-            new[] { 1, 1 });
+        // Perform deformable convolution using IEngine's fused grouped (DCNv3) kernel — a single
+        // backend launch (one real GPU/CPU kernel pass) instead of per-group composition. It records on
+        // the tape (DCN v1 and, when a modulation mask is present, DCN v2/v3) so backward flows to
+        // input/weights/offsets/mask, and reduces to plain DeformableConv2D when groups=deformGroups=1.
+        var output = _engine.DeformableConv2DGrouped(
+            input4D, _weights, offsets, mask,
+            new[] { _stride, _stride }, new[] { _padding, _padding }, new[] { 1, 1 },
+            _groups, _deformGroups);
 
         // Add bias
         output = AddBias(output);
