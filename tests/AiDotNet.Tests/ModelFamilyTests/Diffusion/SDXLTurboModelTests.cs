@@ -6,6 +6,9 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
+// HeavyTimeout (#1706): correct but too slow for the default per-test gate (foundation-scale diffusion,
+// ~100 s/forward x N-step Generate); runs in the nightly lane. Drop this trait once it fits the budget.
+[Xunit.Trait("Category", "HeavyTimeout")]
 public class SDXLTurboModelTests : DiffusionModelTestBase<float>
 {
     // SD-based latent diffusion: 4 channels, 64x64 latent (512x512 images / 8x VAE)

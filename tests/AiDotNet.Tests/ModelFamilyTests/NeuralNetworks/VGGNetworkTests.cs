@@ -4,6 +4,9 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
+// HeavyTimeout (#1706): correct but too slow for the default per-test gate (VGG is GEMM-bound,
+// ~7 s/iter); runs in the nightly lane. Drop this trait once it fits the budget.
+[Xunit.Trait("Category", "HeavyTimeout")]
 public class VGGNetworkTests : NeuralNetworkModelTestBase<float>
 {
     // Paper-canonical VGG16-BN on ImageNet input per Simonyan & Zisserman 2014

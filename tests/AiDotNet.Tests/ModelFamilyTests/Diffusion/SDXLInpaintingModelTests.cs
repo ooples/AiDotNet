@@ -36,6 +36,9 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 /// <c>T = double</c> at configure-time), so this is also the only numeric
 /// type compatible with the documented production training path.
 /// </remarks>
+// HeavyTimeout (#1706): correct but too slow for the default per-test gate (foundation-scale diffusion,
+// ~100 s/forward x N-step Generate); runs in the nightly lane. Drop this trait once it fits the budget.
+[Xunit.Trait("Category", "HeavyTimeout")]
 public class SDXLInpaintingModelTests : DiffusionModelTestBase<float>
 {
     // SDXL inpainting denoises 4-channel latents. The UNet itself receives
