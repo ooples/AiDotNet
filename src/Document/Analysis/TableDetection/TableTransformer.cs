@@ -1179,11 +1179,22 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
         }
 
         SetTrainingMode(true);
-
-        TrainWithTape(input, expectedOutput);
-        var paramGradients = CollectParameterGradients();
-        UpdateParameters(paramGradients);
-        SetTrainingMode(false);}
+        try
+        {
+            // TrainWithTape runs forward + backward + the optimizer update (the same
+            // tape path the base Train uses). The previous code followed it with a
+            // manual CollectParameterGradients()/UpdateParameters() — a SECOND,
+            // redundant update whose flat per-parameter gradient vector length did
+            // not match GetParameters() (a layer's gradient count differs from its
+            // ParameterCount), throwing in Engine.Subtract once the forward stopped
+            // crashing. TrainWithTape owns the whole step.
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
 
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> gradients)
