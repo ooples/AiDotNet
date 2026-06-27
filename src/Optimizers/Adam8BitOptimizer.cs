@@ -561,6 +561,8 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             // at 2 bytes/element while the math runs at full precision.
             if (_options.UseBFloat16MomentStorage)
             {
+                // Moments expanded to transient full-precision tensors; update them IN PLACE to avoid
+                // ~7 extra full-size scratch allocations per parameter (#1688 Fix 2). Math identical.
                 // AllocateTapeState always allocates both BF16 buffers when UseBFloat16MomentStorage is
                 // set, so they are non-null on this path; capture into locals (no null-forgiving operator).
                 ushort[] mBf16 = state.MBf16 ?? throw new InvalidOperationException("BF16 moment buffer M was not allocated.");
@@ -569,16 +571,21 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 Tensor<T> mB = Bf16ToTensor(mBf16, param._shape);
                 Tensor<T> vB = Bf16ToTensor(vBf16, param._shape);
 
-                var newMB = Engine.TensorAdd(Engine.TensorMultiplyScalar(mB, beta1),
-                                             Engine.TensorMultiplyScalar(grad, oneMinusBeta1));
-                var newVB = Engine.TensorAdd(Engine.TensorMultiplyScalar(vB, beta2),
-                                             Engine.TensorMultiplyScalar(Engine.TensorMultiply(grad, grad), oneMinusBeta2));
+                var gradScaledB = Engine.TensorMultiplyScalar(grad, oneMinusBeta1); // (1-beta1)·g
+                Engine.TensorMultiplyScalarInPlace(mB, beta1);                      // mB *= beta1
+                Engine.TensorAddInPlace(mB, gradScaledB);                           // mB := m_t
+                var gradSqB = Engine.TensorMultiply(grad, grad);                    // g²
+                Engine.TensorMultiplyScalarInPlace(gradSqB, oneMinusBeta2);         // (1-beta2)·g²
+                Engine.TensorMultiplyScalarInPlace(vB, beta2);                      // vB *= beta2
+                Engine.TensorAddInPlace(vB, gradSqB);                               // vB := v_t
 
-                TensorToBf16(newMB, mBf16);
-                TensorToBf16(newVB, vBf16);
+                // mB/vB were updated in place above, so they hold m_t/v_t — pack them straight back into
+                // the null-safe BF16 buffers (no separate newMB/newVB tensors, no null-forgiving operator).
+                TensorToBf16(mB, mBf16);
+                TensorToBf16(vB, vBf16);
 
-                var mHatB = Engine.TensorDivideScalar(newMB, biasCorrection1);
-                var vHatB = Engine.TensorDivideScalar(newVB, biasCorrection2);
+                var mHatB = Engine.TensorDivideScalar(mB, biasCorrection1);
+                var vHatB = Engine.TensorDivideScalar(vB, biasCorrection2);
                 var denomB = Engine.TensorAddScalar(Engine.TensorSqrt(vHatB), epsilon);
                 var updateB = Engine.TensorMultiplyScalar(Engine.TensorDivide(mHatB, denomB), CurrentLearningRate);
                 Engine.TensorSubtractInPlace(param, updateB);
@@ -658,43 +665,36 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             }
             Tensor<T> v = DequantizeTensor(state.VQuantized, state.VScales, param._shape, state.NumBlocks, isSigned: false);
 
-            // Update biased first / second moments — same recurrences the legacy
-            // UpdateSolution path uses, expressed against engine Tensor ops:
+            // Update biased first / second moments IN PLACE to minimize per-parameter transient
+            // allocations (#1688 Fix 2). Identical recurrences to the legacy path, but expressed with
+            // in-place ops so a step over a large parameter no longer allocates ~7 full-size scratch
+            // tensors for the moment update (plus it removes the prior TensorCopy):
             //     m_t = beta1·m_{t-1} + (1-beta1)·g
             //     v_t = beta2·v_{t-1} + (1-beta2)·g²
-            var newM = Engine.TensorAdd(Engine.TensorMultiplyScalar(m, beta1),
-                                        Engine.TensorMultiplyScalar(grad, oneMinusBeta1));
-            var newV = Engine.TensorAdd(Engine.TensorMultiplyScalar(v, beta2),
-                                        Engine.TensorMultiplyScalar(Engine.TensorMultiply(grad, grad), oneMinusBeta2));
+            // `m` is either the persistent state.MFullPrecision (CompressBothMoments == false) or a
+            // transient dequant — either way updating it in place IS the moment update, so when
+            // CompressBothMoments is false no separate copy into state.MFullPrecision is needed. `v` is
+            // always a transient dequant. `grad` is tape-owned/shared, so it is never mutated.
+            var gradScaled = Engine.TensorMultiplyScalar(grad, oneMinusBeta1); // (1-beta1)·g
+            Engine.TensorMultiplyScalarInPlace(m, beta1);                      // m *= beta1
+            Engine.TensorAddInPlace(m, gradScaled);                            // m := m_t
+            var gradSq = Engine.TensorMultiply(grad, grad);                    // g²
+            Engine.TensorMultiplyScalarInPlace(gradSq, oneMinusBeta2);         // (1-beta2)·g²
+            Engine.TensorMultiplyScalarInPlace(v, beta2);                      // v *= beta2
+            Engine.TensorAddInPlace(v, gradSq);                                // v := v_t
 
-            // Re-quantize the updated moments back into the byte[] state. After
-            // this the transient newM / newV Tensors are no longer reachable
-            // and the arena will reclaim their backing memory on Step exit;
-            // only state.MQuantized, state.VQuantized, and (if applicable)
-            // state.MFullPrecision remain resident.
+            // Re-quantize the updated moments back into the byte[] state. When CompressBothMoments is
+            // false, m IS state.MFullPrecision and was updated in place above — no copy needed.
             if (_options.CompressBothMoments)
             {
-                QuantizeTensor(newM, state.MQuantized!, state.MScales!, state.NumBlocks, isSigned: true);
+                QuantizeTensor(m, state.MQuantized!, state.MScales!, state.NumBlocks, isSigned: true);
             }
-            else
-            {
-                // Copy newM's values into the persistent state.MFullPrecision
-                // tensor in place rather than replacing the reference. The
-                // engine's tensor ops (TensorAdd / TensorMultiplyScalar) return
-                // arena-allocated tensors that the arena will reclaim on Step
-                // exit — assigning newM to state.MFullPrecision would either
-                // (a) retain a tensor backed by reclaimed memory, or (b) keep
-                // the arena allocation alive across Step calls and bypass the
-                // arena's per-iteration recycling. TensorCopy keeps the
-                // long-lived state on a stable backing buffer.
-                Engine.TensorCopy(newM, state.MFullPrecision!);
-            }
-            QuantizeTensor(newV, state.VQuantized, state.VScales, state.NumBlocks, isSigned: false);
+            QuantizeTensor(v, state.VQuantized, state.VScales, state.NumBlocks, isSigned: false);
 
             // Apply the bias-corrected Adam update directly to the parameter.
             //     update = lr · (m_t / (1 - beta1^t)) / (sqrt(v_t / (1 - beta2^t)) + eps)
-            var mHat = Engine.TensorDivideScalar(newM, biasCorrection1);
-            var vHat = Engine.TensorDivideScalar(newV, biasCorrection2);
+            var mHat = Engine.TensorDivideScalar(m, biasCorrection1);
+            var vHat = Engine.TensorDivideScalar(v, biasCorrection2);
             var denom = Engine.TensorAddScalar(Engine.TensorSqrt(vHat), epsilon);
             var update = Engine.TensorMultiplyScalar(Engine.TensorDivide(mHat, denom), CurrentLearningRate);
             Engine.TensorSubtractInPlace(param, update);

@@ -25125,16 +25125,23 @@ public static class LayerHelper<T>
             h = (h + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
             w = (w + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
 
-            // DCNv3 blocks (approximated as standard convolutions)
+            // DCNv3 blocks (Wang et al. 2023): a grouped deformable 3×3 conv (the DCNv3 core
+            // operator) + a 1×1-expand→1×1-project feed-forward. The grouping is what gives DCNv3 its
+            // parameter efficiency — InternImage uses group width 16 (groups = channels/16, matching the
+            // paper's per-stage groups [4,8,16,32]…[20,40,80,160]); the 3×3 weight is therefore
+            // [channels, channels/groups=16, 3, 3] rather than the full [channels, channels, 3, 3].
+            // (Modulation/mask is omitted here so the path is trainable via the wired DCNv1 autograd; the
+            // fused grouped-deformable kernel + modulation is the production follow-up, #1691.)
+            int dcnGroups = System.Math.Max(1, channels / 16);
             for (int block = 0; block < depths[stage]; block++)
             {
-                // Deformable convolution approximation
-                yield return new ConvolutionalLayer<T>(
-                    channels,
-                    3, 1, 1,
-                    relu);
+                // DCNv3 grouped deformable spatial mixing (channels -> channels)
+                yield return new DeformableConvolutionalLayer<T>(
+                    outputChannels: channels,
+                    kernelSize: 3, stride: 1, padding: 1,
+                    groups: dcnGroups, deformGroups: dcnGroups, useModulation: false);
 
-                // Feed-forward network
+                // Feed-forward network (1×1 expand 4× -> 1×1 project back)
                 int ffnDim = channels * 4;
                 yield return new ConvolutionalLayer<T>(
                     ffnDim,
@@ -25791,12 +25798,13 @@ public static class LayerHelper<T>
     /// <summary>
     /// Creates encoder layers for OneFormer's backbone with text-conditioned features.
     /// </summary>
-    /// <param name="inputChannels">Number of input image channels.</param>
     /// <param name="inputHeight">Input image height.</param>
     /// <param name="inputWidth">Input image width.</param>
     /// <param name="channelDims">Channel dimensions per stage.</param>
     /// <param name="depths">Block depths per stage.</param>
-    /// <param name="dropRate">Dropout rate.</param>
+    /// <param name="dropPathRate">Maximum stochastic-depth (drop-path) rate. Applied with the
+    /// paper's linear schedule across all transformer blocks — 0 at the first block, rising to this
+    /// value at the last (Swin-L for OneFormer uses 0.3).</param>
     /// <returns>Encoder layers for OneFormer.</returns>
     /// <remarks>
     /// <para>
@@ -25808,33 +25816,50 @@ public static class LayerHelper<T>
     /// Segmentation", CVPR 2023.
     /// </para>
     /// </remarks>
+    // OneFormer (Cheng et al. 2022, "One Transformer to Rule Universal Image Segmentation") uses a
+    // Swin-L transformer backbone (embed 192, depths [2,2,18,2], heads [6,12,24,48]). Build the
+    // paper-faithful Swin backbone (patch embed → W-MSA/SW-MSA blocks with alternating shifted windows
+    // → patch merging), then a tokens→spatial adapter (reshape [B,L,C]→[B,fH,fW,C] then transpose to
+    // [B,C,fH,fW]) so OneFormer's conv-based decoder receives [B,C,H,W] features at the /32 stride.
+    // Replaces the earlier hand-rolled full-width-3×3 conv stack (1536→1536 3×3 = 21M-param convs).
     public static IEnumerable<ILayer<T>> CreateOneFormerEncoderLayers(
-        int inputChannels = 3, int inputHeight = 512, int inputWidth = 512,
-        int[]? channelDims = null, int[]? depths = null, double dropRate = 0.1)
+        int inputHeight = 512, int inputWidth = 512,
+        int[]? channelDims = null, int[]? depths = null, double dropPathRate = 0.3)
     {
-        channelDims ??= [192, 384, 768, 1536];
+        channelDims ??= [192, 384, 768, 1536]; // Swin-L stage embed dims
         depths ??= [2, 2, 18, 2];
+        int embedDim = channelDims[0];
+        int[] numHeads = [6, 12, 24, 48];       // Swin-L heads per stage (embedDim/32)
+        const int windowSize = 7, patchSize = 4, mlpRatio = 4;
 
-        int h = inputHeight, w = inputWidth, prevChannels = inputChannels;
-        int[] patchKernels = [7, 3, 3, 3]; int[] patchStrides = [4, 2, 2, 2]; int[] patchPaddings = [3, 1, 1, 1];
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        // Stochastic depth: linearly increasing drop-path rate from 0 (first block) to dropPathRate
+        // (last block) across the whole backbone, exactly as the Swin reference does
+        // (torch.linspace(0, drop_path_rate, sum(depths))).
+        int totalBlocks = 0;
+        for (int i = 0; i < depths.Length; i++) totalBlocks += depths[i];
 
+        yield return new SwinPatchEmbeddingLayer<T>(patchSize, embedDim);
+        int currentDim = embedDim;
+        int blockIndex = 0;
         for (int stage = 0; stage < 4; stage++)
         {
-            int channels = channelDims[stage];
-            yield return new ConvolutionalLayer<T>(channels, patchKernels[stage], patchStrides[stage], patchPaddings[stage], relu);
-            h = (h + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
-            w = (w + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
-
             for (int block = 0; block < depths[stage]; block++)
             {
-                yield return new ConvolutionalLayer<T>(channels, 3, 1, 1, relu);
-                int ffnDim = channels * 4;
-                yield return new ConvolutionalLayer<T>(ffnDim, 1, 1, 0, relu);
-                yield return new ConvolutionalLayer<T>(channels, 1, 1, 0, relu);
+                int shiftSize = (block % 2 == 1) ? windowSize / 2 : 0; // alternate W-MSA / SW-MSA
+                double blockDropPath = totalBlocks > 1 ? dropPathRate * blockIndex / (totalBlocks - 1) : 0.0;
+                yield return new SwinTransformerBlockLayer<T>(currentDim, numHeads[stage], windowSize, shiftSize, mlpRatio, blockDropPath);
+                blockIndex++;
             }
-            prevChannels = channels;
+            if (stage < 3) { yield return new SwinPatchMergingLayer<T>(currentDim); currentDim *= 2; }
         }
+
+        // Adapter: the Swin backbone emits token features [B, L, C] (L = fH·fW at /32 stride); the
+        // OneFormer decoder is conv-based and expects [B, C, fH, fW]. Reshape tokens to spatial then
+        // move channels to the front. patchEmbed (/4) + 3 merges (/2³) = /32.
+        int fH = System.Math.Max(1, inputHeight / 32);
+        int fW = System.Math.Max(1, inputWidth / 32);
+        yield return new ReshapeLayer<T>(new[] { fH, fW, currentDim }); // [B, L, C] -> [B, fH, fW, C]
+        yield return new TransposeLayer<T>(new[] { 2, 0, 1 });          // [B, fH, fW, C] -> [B, C, fH, fW]
     }
 
     /// <summary>
@@ -25912,32 +25937,11 @@ public static class LayerHelper<T>
     /// <summary>
     /// Creates the backbone encoder layers for Mask DINO.
     /// </summary>
+    // MaskDINO (Li et al. 2023) uses a ResNet-50 / Swin backbone — paper-faithful ResNet bottleneck.
     public static IEnumerable<ILayer<T>> CreateMaskDINOEncoderLayers(
         int inputChannels, int inputHeight, int inputWidth,
         int[] channelDims, int[] depths, double dropRate)
-    {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        int h = inputHeight, w = inputWidth;
-
-        for (int stage = 0; stage < 4; stage++)
-        {
-            int inCh = stage == 0 ? inputChannels : channelDims[stage - 1];
-            int outCh = channelDims[stage];
-            int stride = stage == 0 ? 4 : 2;
-            int kernel = stage == 0 ? 7 : 3;
-            int pad = stage == 0 ? 3 : 1;
-
-            yield return new ConvolutionalLayer<T>(outCh, kernel, stride, pad, relu);
-            h = (h + 2 * pad - kernel) / stride + 1;
-            w = (w + 2 * pad - kernel) / stride + 1;
-
-            for (int d = 0; d < depths[stage]; d++)
-            {
-                yield return new BatchNormalizationLayer<T>();
-                yield return new ConvolutionalLayer<T>(outCh, 3, 1, 1, relu);
-            }
-        }
-    }
+        => CreateResNetBottleneckEncoderLayers(inputChannels, inputHeight, inputWidth, channelDims, depths);
 
     /// <summary>
     /// Creates the mask decoder layers for Mask DINO.
@@ -26052,32 +26056,11 @@ public static class LayerHelper<T>
     /// <summary>
     /// Creates the backbone encoder layers for QueryMeldNet.
     /// </summary>
+    // QueryMeldNet uses a ResNet-50 backbone — paper-faithful ResNet bottleneck.
     public static IEnumerable<ILayer<T>> CreateQueryMeldNetEncoderLayers(
         int inputChannels, int inputHeight, int inputWidth,
         int[] channelDims, int[] depths, double dropRate)
-    {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        int h = inputHeight, w = inputWidth;
-
-        for (int stage = 0; stage < 4; stage++)
-        {
-            int inCh = stage == 0 ? inputChannels : channelDims[stage - 1];
-            int outCh = channelDims[stage];
-            int stride = stage == 0 ? 4 : 2;
-            int kernel = stage == 0 ? 7 : 3;
-            int pad = stage == 0 ? 3 : 1;
-
-            yield return new ConvolutionalLayer<T>(outCh, kernel, stride, pad, relu);
-            h = (h + 2 * pad - kernel) / stride + 1;
-            w = (w + 2 * pad - kernel) / stride + 1;
-
-            for (int d = 0; d < depths[stage]; d++)
-            {
-                yield return new BatchNormalizationLayer<T>();
-                yield return new ConvolutionalLayer<T>(outCh, 3, 1, 1, relu);
-            }
-        }
-    }
+        => CreateResNetBottleneckEncoderLayers(inputChannels, inputHeight, inputWidth, channelDims, depths);
 
     /// <summary>
     /// Creates the query-meld decoder layers for QueryMeldNet.
@@ -26150,32 +26133,12 @@ public static class LayerHelper<T>
     /// <summary>
     /// Creates the backbone encoder layers for UNINEXT.
     /// </summary>
+    // UNINEXT (Yan et al. 2023) uses a ResNet-50 / Swin backbone — build the paper-faithful ResNet
+    // bottleneck backbone from the [256,512,1024,2048] / [3,4,6,3] defaults.
     public static IEnumerable<ILayer<T>> CreateUNINEXTEncoderLayers(
         int inputChannels, int inputHeight, int inputWidth,
         int[] channelDims, int[] depths, double dropRate)
-    {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        int h = inputHeight, w = inputWidth;
-
-        for (int stage = 0; stage < 4; stage++)
-        {
-            int inCh = stage == 0 ? inputChannels : channelDims[stage - 1];
-            int outCh = channelDims[stage];
-            int stride = stage == 0 ? 4 : 2;
-            int kernel = stage == 0 ? 7 : 3;
-            int pad = stage == 0 ? 3 : 1;
-
-            yield return new ConvolutionalLayer<T>(outCh, kernel, stride, pad, relu);
-            h = (h + 2 * pad - kernel) / stride + 1;
-            w = (w + 2 * pad - kernel) / stride + 1;
-
-            for (int d = 0; d < depths[stage]; d++)
-            {
-                yield return new BatchNormalizationLayer<T>();
-                yield return new ConvolutionalLayer<T>(outCh, 3, 1, 1, relu);
-            }
-        }
-    }
+        => CreateResNetBottleneckEncoderLayers(inputChannels, inputHeight, inputWidth, channelDims, depths);
 
     /// <summary>
     /// Creates the query-based decoder layers for UNINEXT.
@@ -26445,33 +26408,11 @@ public static class LayerHelper<T>
     /// <summary>
     /// Creates encoder layers for the KMaXDeepLab model.
     /// </summary>
+    // kMaX-DeepLab (Yu et al. 2022) uses a ResNet-50 backbone — paper-faithful ResNet bottleneck.
     public static IEnumerable<ILayer<T>> CreateKMaXDeepLabEncoderLayers(
         int inputChannels, int inputHeight, int inputWidth,
         int[] channelDims, int[] depths, double dropRate)
-    {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        int h = inputHeight, w = inputWidth, inC = inputChannels;
-
-        for (int stage = 0; stage < channelDims.Length; stage++)
-        {
-            int outC = channelDims[stage];
-            int stride = stage == 0 ? 4 : 2;
-            int kernel = stage == 0 ? 7 : 3;
-            int pad = stage == 0 ? 3 : 1;
-
-            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
-            h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>();
-
-            for (int d = 1; d < depths[stage]; d++)
-            {
-                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>();
-            }
-
-            inC = outC;
-        }
-    }
+        => CreateResNetBottleneckEncoderLayers(inputChannels, inputHeight, inputWidth, channelDims, depths);
 
     /// <summary>
     /// Creates decoder layers for the KMaXDeepLab model.
@@ -26701,33 +26642,11 @@ public static class LayerHelper<T>
     /// <summary>
     /// Creates encoder layers for the SegGPT model.
     /// </summary>
+    // SegGPT (Wang et al. 2023) backbone — paper-faithful ResNet bottleneck (ViT variants build elsewhere).
     public static IEnumerable<ILayer<T>> CreateSegGPTEncoderLayers(
         int inputChannels, int inputHeight, int inputWidth,
         int[] channelDims, int[] depths, double dropRate)
-    {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        int h = inputHeight, w = inputWidth, inC = inputChannels;
-
-        for (int stage = 0; stage < channelDims.Length; stage++)
-        {
-            int outC = channelDims[stage];
-            int stride = stage == 0 ? 4 : 2;
-            int kernel = stage == 0 ? 7 : 3;
-            int pad = stage == 0 ? 3 : 1;
-
-            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
-            h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>();
-
-            for (int d = 1; d < depths[stage]; d++)
-            {
-                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>();
-            }
-
-            inC = outC;
-        }
-    }
+        => CreateResNetBottleneckEncoderLayers(inputChannels, inputHeight, inputWidth, channelDims, depths);
 
     /// <summary>
     /// Creates decoder layers for the SegGPT model.
@@ -26895,35 +26814,52 @@ public static class LayerHelper<T>
     #region UniVS Layers
 
     /// <summary>
-    /// Creates encoder layers for the UniVS model.
+    /// Paper-faithful ResNet backbone (He et al. 2015, "Deep Residual Learning for Image Recognition")
+    /// built from <see cref="BottleneckBlock{T}"/> stages — the canonical ResNet-50/101/152 design.
+    /// <paramref name="channelDims"/> are the per-stage OUTPUT channels (ResNet-50: [256,512,1024,2048]);
+    /// the bottleneck base width per stage is <c>channelDims[stage] / 4</c> ([64,128,256,512]) so the
+    /// expensive 3×3 runs at the reduced width, NOT the full output width. <paramref name="depths"/> is
+    /// the blocks-per-stage schedule (ResNet-50: [3,4,6,3], ResNet-101: [3,4,23,3]).
+    /// <para>
+    /// Stem: 7×7 stride-2 conv → 64 → BN → ReLU → 3×3 stride-2 max-pool (total /4); stages 2–4 downsample
+    /// /2 on their first block (total /32, matching the standard feature-stride contract). This replaces
+    /// the earlier hand-rolled stack of full-width 3×3 convs with no residuals — which was both
+    /// non-paper-faithful and allocated a 2048→2048 3×3 = 37.7M-param (144 MB) conv per block (issue #1688).
+    /// </para>
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateResNetBottleneckEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+
+        // ResNet stem: 7×7 s2 conv (→64), BN, ReLU, 3×3 s2 max-pool.
+        yield return new ConvolutionalLayer<T>(64, 7, 2, 3, relu);
+        yield return new BatchNormalizationLayer<T>();
+        yield return new MaxPoolingLayer<T>(poolSize: 3, stride: 2);
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            if (channelDims[stage] % 4 != 0)
+                throw new ArgumentException(
+                    $"channelDims[{stage}] ({channelDims[stage]}) must be divisible by 4: the BottleneckBlock expands its " +
+                    "base width ×4, so a non-divisible stage width would silently truncate and change the block shape.",
+                    nameof(channelDims));
+            int baseChannels = channelDims[stage] / 4; // BottleneckBlock expands ×4 back to channelDims[stage]
+            int stageStride = stage == 0 ? 1 : 2;       // stem already did /4; stages 2-4 downsample /2
+            for (int b = 0; b < depths[stage]; b++)
+                yield return new BottleneckBlock<T>(baseChannels: baseChannels, stride: b == 0 ? stageStride : 1);
+        }
+    }
+
+    /// <summary>
+    /// Creates encoder layers for the UniVS model (Li et al. 2024) — a paper-faithful ResNet-50
+    /// backbone from the [256,512,1024,2048] / [3,4,6,3] defaults.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateUniVSEncoderLayers(
         int inputChannels, int inputHeight, int inputWidth,
         int[] channelDims, int[] depths, double dropRate)
-    {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        int h = inputHeight, w = inputWidth, inC = inputChannels;
-
-        for (int stage = 0; stage < channelDims.Length; stage++)
-        {
-            int outC = channelDims[stage];
-            int stride = stage == 0 ? 4 : 2;
-            int kernel = stage == 0 ? 7 : 3;
-            int pad = stage == 0 ? 3 : 1;
-
-            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
-            h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>();
-
-            for (int d = 1; d < depths[stage]; d++)
-            {
-                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>();
-            }
-
-            inC = outC;
-        }
-    }
+        => CreateResNetBottleneckEncoderLayers(inputChannels, inputHeight, inputWidth, channelDims, depths);
 
     /// <summary>
     /// Creates decoder layers for the UniVS model.

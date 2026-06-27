@@ -1029,15 +1029,24 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         Tensor<T> result;
 
-        if (fusedActivation != FusedActivationType.None && !IsTrainingMode)
+        if (fusedActivation != FusedActivationType.None && !IsTrainingMode && !DeterministicForward)
         {
+            // Inference: use fused activation for maximum performance (no tape needed). This whole
+            // fast block is gated above on !DeterministicForward, so when DeterministicForward is set
+            // the eval forward falls through to the unfused training path below and stays bit-identical
+            // to it (fusion reorders the matmul+activation rounding by ~1e-8/element otherwise).
+            //
             // #1672 destination-buffer fast path: when the scratch gate is ON and we are
             // NOT recording a gradient tape (inference), compute the fused linear straight
             // into a reused per-layer buffer instead of allocating [batchDim, outputSize]
             // each call. Bit-identical math (same GEMM + bias/activation epilogue); the
             // scratch is per-INSTANCE, fully overwritten, and consumed before the next call
             // to this same layer, so reuse is safe across the denoise loop.
-            if (ForwardScratchGate.FusedLinear && !tapeActive)
+            // Skip the reused scratch when a gradient tape is recording (e.g. classifier-guided
+            // diffusion runs a tape in eval mode): the tape holds this output for backward, so reusing
+            // the per-instance buffer on the next call to this layer would corrupt it. cacheBwd is false
+            // under eval mode regardless of the tape, so it can't gate this — check the tape directly.
+            if (ForwardScratchGate.FusedLinear && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null)
             {
                 int outputSize = _weights.Shape[1];
                 if (_fusedLinearScratch == null

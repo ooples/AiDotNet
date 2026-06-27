@@ -299,6 +299,16 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     protected bool IsTrainingMode = true;
 
     /// <summary>
+    /// When <c>true</c>, layers that have a faster but numerically-different inference path
+    /// (e.g. <see cref="DenseLayer{T}"/>'s fused matmul+activation kernel, used only in eval mode)
+    /// fall back to the same unfused path they use during training, so the eval-mode forward is
+    /// bit-identical to the training-mode forward. Default <c>false</c> — production inference keeps
+    /// the fast fused path; set this only when exact train/eval parity is required (e.g. determinism
+    /// tests). Propagated to sub-layers by <see cref="SetDeterministicForward"/>.
+    /// </summary>
+    public bool DeterministicForward { get; set; }
+
+    /// <summary>
     /// When true, Forward() records operations to a computation graph instead of executing them.
     /// Used by the JIT compiler to capture the full forward pass for compilation.
     /// Set via <see cref="SetCaptureMode"/>.
@@ -1260,6 +1270,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         for (int i = 0; i < _registeredSubLayers.Count; i++)
         {
             _registeredSubLayers[i].SetTrainingMode(isTraining);
+        }
+    }
+
+    /// <summary>
+    /// Sets <see cref="DeterministicForward"/> on this layer and recursively on every registered
+    /// sub-layer (mirrors <see cref="SetTrainingMode"/>'s propagation), so a composite layer can put
+    /// its embedded layers on the unfused, train/eval-identical forward path with a single call.
+    /// </summary>
+    public virtual void SetDeterministicForward(bool deterministic)
+    {
+        DeterministicForward = deterministic;
+        for (int i = 0; i < _registeredSubLayers.Count; i++)
+        {
+            (_registeredSubLayers[i] as LayerBase<T>)?.SetDeterministicForward(deterministic);
         }
     }
 
