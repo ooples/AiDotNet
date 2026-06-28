@@ -1432,38 +1432,48 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             mlpRatio: _mlpRatio,
             latentSpatialSize: _latentSpatialSize);
 
-        // Preserve trained/materialized weights without forcing a foundation-scale default
-        // constructor to allocate and copy billions of random parameters (HasMaterializedParameters
-        // gates the copy to a source that genuinely has allocated weights).
-        //
-        // The DiT's projection layers are LazyDense — they only ALLOCATE their weight tensors on
-        // the first forward, not in EnsureLayersInitialized. A fresh clone therefore has the layer
-        // STRUCTURE but unallocated weights, so CopyParametersFrom alone has nothing to copy INTO;
-        // the clone would re-initialize those tensors with a fresh RNG on its first real forward
-        // and diverge from the source (observed: ~50k fewer materialized params, divergent Predict).
-        // Run one throwaway forward at the canonical input shape to materialize EVERY weight tensor
-        // on the clone first (weight dims are fixed by config, so the probe's spatial size is
-        // irrelevant), then copy the source's trained values. The probe must materialize exactly the
-        // paths the source has materialized so CopyParametersFrom finds a target for every source
-        // weight. A null-conditioned probe only touches the unconditional path, so if the source was
-        // used WITH conditioning its class-embedding (_labelEmbed) and/or cross-attention K/V/Out
-        // projections are materialized — leaving the clone's equivalents lazy would let them re-init
-        // with fresh RNG on the first conditioned forward and diverge from the source.
-        // BuildProbeConditioning returns representative conditioning whenever a conditioned path is
-        // materialized on the source (and null otherwise, keeping those layers lazy on both).
-        if (HasMaterializedParameters())
-        {
-            var probe = new Tensor<T>(new[] { 1, _inputChannels, _latentSpatialSize, _latentSpatialSize });
-            clone.PredictNoise(probe, timestep: 0, conditioning: BuildProbeConditioning());
-            clone.CopyParametersFrom(this);
-            // The probe forward traced a compiled plan over the clone's random init; drop it so
-            // the next real forward re-traces against the copied weights.
-            clone.InvalidateCompiledPlans();
-        }
-        // else: source has no materialized weights — nothing to copy. The clone shares the same
-        // config and initializes lazily on first use; calling GetParameters() here would allocate
-        // the full (foundation-scale) parameter vector for nothing.
+        ProbeMaterializeAndCopyInto(clone);
         return clone;
+    }
+
+    /// <summary>
+    /// Materializes <paramref name="clone"/> through the FORWARD path and copies this predictor's
+    /// trained weights into it. Shared by <see cref="Clone"/> and every derived predictor's
+    /// <c>Clone</c> (e.g. <c>SiTPredictor</c>) so they all get the correct clone semantics.
+    /// </summary>
+    /// <remarks>
+    /// Preserve trained/materialized weights without forcing a foundation-scale default
+    /// constructor to allocate and copy billions of random parameters (HasMaterializedParameters
+    /// gates the copy to a source that genuinely has allocated weights).
+    /// <para>
+    /// The DiT's projection layers are LazyDense — they only ALLOCATE their weight tensors on
+    /// the first forward, not in EnsureLayersInitialized. A fresh clone therefore has the layer
+    /// STRUCTURE but unallocated weights, so CopyParametersFrom alone has nothing to copy INTO;
+    /// the clone would re-initialize those tensors with a fresh RNG on its first real forward
+    /// and diverge from the source (observed: ~50k fewer materialized params, divergent Predict).
+    /// Run one throwaway forward at the canonical input shape to materialize EVERY weight tensor
+    /// on the clone first (weight dims are fixed by config, so the probe's spatial size is
+    /// irrelevant), then copy the source's trained values. The probe must materialize exactly the
+    /// paths the source has materialized so CopyParametersFrom finds a target for every source
+    /// weight. A null-conditioned probe only touches the unconditional path, so if the source was
+    /// used WITH conditioning its class-embedding (_labelEmbed) and/or cross-attention K/V/Out
+    /// projections are materialized — leaving the clone's equivalents lazy would let them re-init
+    /// with fresh RNG on the first conditioned forward and diverge from the source.
+    /// BuildProbeConditioning returns representative conditioning whenever a conditioned path is
+    /// materialized on the source (and null otherwise, keeping those layers lazy on both).
+    /// </para>
+    /// </remarks>
+    protected void ProbeMaterializeAndCopyInto(DiTNoisePredictor<T> clone)
+    {
+        Guard.NotNull(clone);
+        if (!HasMaterializedParameters()) return;
+
+        var probe = new Tensor<T>(new[] { 1, _inputChannels, _latentSpatialSize, _latentSpatialSize });
+        clone.PredictNoise(probe, timestep: 0, conditioning: BuildProbeConditioning());
+        clone.CopyParametersFrom(this);
+        // The probe forward traced a compiled plan over the clone's random init; drop it so
+        // the next real forward re-traces against the copied weights.
+        clone.InvalidateCompiledPlans();
     }
 
     /// <summary>

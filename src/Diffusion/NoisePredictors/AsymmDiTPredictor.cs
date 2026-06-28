@@ -91,7 +91,10 @@ public class AsymmDiTPredictor<T> : MMDiTNoisePredictor<T>
     {
         var clone = new AsymmDiTPredictor<T>(
             _asymInputChannels, _asymHiddenSize, _asymNumLayers, _asymNumHeads, _asymContextDim, _asymSeed);
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
+        // #1711: MMDiT LazyDense weights resolve via the FORWARD path, so a naive
+        // SetParameters(GetParameters()) clone re-RNG-initializes on its first forward and
+        // diverges from the source. ProbeMaterializeAndCopyInto probe-forwards the clone, then copies.
+        ProbeMaterializeAndCopyInto(clone);
         return clone;
     }
 
