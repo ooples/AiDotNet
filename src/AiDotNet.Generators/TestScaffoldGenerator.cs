@@ -3223,15 +3223,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             //
             // - UCBBandit: Auer 2002 §2.1 — non-contextual; picks by
             //   arm-uncertainty (sqrt(ln(t)/N[a])), not state.
-            // - GradientBandit: Sutton & Barto 2018 §2.8 — non-contextual;
-            //   softmax over learned per-arm preferences H(a), independent of
-            //   the state vector (a k-armed bandit has no state input).
+            // - GradientBandit / ThompsonSampling / EpsilonGreedyBandit:
+            //   Sutton & Barto 2018 §2 — non-contextual k-armed bandits. They
+            //   select arms from learned per-arm statistics (preferences H(a),
+            //   a Beta posterior, or ε-greedy value estimates), with no state
+            //   input at all — every one lives in Agents.Bandits.
             // - ModifiedPolicyIteration: Sutton & Barto 2018 §4.3 — tabular
             //   DP; returns default action for unobserved states.
             // - A2C: actor-critic; at random init with no training data, the
             //   actor's policy is essentially uniform across actions.
             if (model.ClassName == "UCBBanditAgent"
                 || model.ClassName == "GradientBanditAgent"
+                || model.ClassName == "ThompsonSamplingAgent"
+                || model.ClassName == "EpsilonGreedyBanditAgent"
                 || model.ClassName == "ModifiedPolicyIterationAgent"
                 || model.ClassName == "A2CAgent")
             {

@@ -115,11 +115,17 @@ public class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
         int armIndex = ArgMax(action);
         _totalSteps++;
 
-        // Compute the preference gradient using the baseline R̄ that EXCLUDES the current reward
-        // (Sutton & Barto 2018, eq. 2.12 uses the running average up to — not including — step t).
-        // Updating the baseline first incorporates the current reward, so for a constant reward
-        // stream the very first step sets R̄ = R, making (R − R̄) = 0 and freezing all preferences.
-        // We therefore compute rewardDiff against the OLD baseline, then update the baseline below.
+        // Update average reward baseline. Per Sutton & Barto 2018 §2.8, R̄_t is the average of all
+        // rewards up through and including time t, so it is updated before the preference step. A
+        // consequence — by design, not a bug — is that a CONSTANT reward stream produces (R − R̄) = 0
+        // and therefore no preference change: if every pull returns the same reward there is nothing
+        // to learn and the softmax policy correctly stays uniform.
+        if (_options.UseBaseline)
+        {
+            T alpha = NumOps.Divide(NumOps.One, NumOps.FromDouble(_totalSteps));
+            T delta = NumOps.Subtract(reward, _averageReward);
+            _averageReward = NumOps.Add(_averageReward, NumOps.Multiply(alpha, delta));
+        }
 
         // Compute softmax probabilities
         var probs = ComputeSoftmax(_preferences);
@@ -143,14 +149,6 @@ public class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
                 T update = NumOps.Multiply(stepSize, NumOps.Multiply(rewardDiff, NumOps.Negate(probs[a])));
                 _preferences[a] = NumOps.Add(_preferences[a], update);
             }
-        }
-
-        // Update the running average-reward baseline AFTER the preference step (see note above).
-        if (_options.UseBaseline)
-        {
-            T alpha = NumOps.Divide(NumOps.One, NumOps.FromDouble(_totalSteps));
-            T delta = NumOps.Subtract(reward, _averageReward);
-            _averageReward = NumOps.Add(_averageReward, NumOps.Multiply(alpha, delta));
         }
     }
 
