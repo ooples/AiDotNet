@@ -233,6 +233,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
+    // Foundation-scale models whose CORRECT forward/backward is simply too slow for the 120s default
+    // per-test gate in the multi-iteration training tests. Their generated class is tagged
+    // [Trait("Category","HeavyTimeout")] so the default PR shard excludes it (Category!=HeavyTimeout) and
+    // the heavy-timeout-nightly lane runs it. NB: this is ONLY for genuine timeouts — a model that fails
+    // fast with an exception is a real bug and must be fixed, not tagged (e.g. METER's input-embedding bug).
+    private static readonly System.Collections.Generic.HashSet<string> HeavyTimeoutTestClassNames =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+    {
+        // Generated A-M shard foundation-scale training timeouts (#1719): DPT-Large depth, 768-dim VLMs.
+        "MiDaS", "METER", "DocPedia", "MERT", "LXMERT",
+    };
+
     private static readonly System.Collections.Generic.HashSet<string> Fp32TestClassNames =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
     {
@@ -2212,6 +2224,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
         sb.AppendLine();
+        // Foundation-scale models whose correct training is too slow for the 120s default gate run in the
+        // nightly heavy-timeout lane instead of the default PR shard (which filters Category!=HeavyTimeout).
+        if (HeavyTimeoutTestClassNames.Contains(model.ClassName))
+            sb.AppendLine("[Xunit.Trait(\"Category\", \"HeavyTimeout\")]");
         sb.AppendLine($"public class {testClassName} : {baseClassName}");
         sb.AppendLine("{");
 
