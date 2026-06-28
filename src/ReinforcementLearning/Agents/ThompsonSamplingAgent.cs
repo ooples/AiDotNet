@@ -76,18 +76,38 @@ public class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        // Sample from Beta distribution for each arm
         int selectedArm = 0;
-        double maxSample = double.NegativeInfinity;
 
-        for (int a = 0; a < _options.NumArms; a++)
+        if (!training)
         {
-            // Sample from Beta(successes, failures)
-            double sample = SampleBeta(_successCounts[a], _failureCounts[a]);
-            if (sample > maxSample)
+            // Evaluation: exploit the arm with the highest POSTERIOR MEAN
+            // (successes / (successes + failures)). This is the deterministic greedy
+            // action a trained Thompson sampler commits to — making Predict
+            // reproducible and clone-stable. Posterior SAMPLING below is the
+            // exploration mechanism, used only while training.
+            double bestMean = double.NegativeInfinity;
+            for (int a = 0; a < _options.NumArms; a++)
             {
-                maxSample = sample;
-                selectedArm = a;
+                double mean = (double)_successCounts[a] / (_successCounts[a] + _failureCounts[a]);
+                if (mean > bestMean)
+                {
+                    bestMean = mean;
+                    selectedArm = a;
+                }
+            }
+        }
+        else
+        {
+            // Sample from Beta(successes, failures) for each arm and pick the largest draw.
+            double maxSample = double.NegativeInfinity;
+            for (int a = 0; a < _options.NumArms; a++)
+            {
+                double sample = SampleBeta(_successCounts[a], _failureCounts[a]);
+                if (sample > maxSample)
+                {
+                    maxSample = sample;
+                    selectedArm = a;
+                }
             }
         }
 
