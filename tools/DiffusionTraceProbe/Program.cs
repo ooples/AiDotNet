@@ -31,15 +31,19 @@ internal static class Program
             return 2;
         }
 
+        // Pin the CPU engine + disable GPU so the profile reflects the CPU path the
+        // CI shard runs (AIDOTNET_DISABLE_GPU=1 is also set by the test harness).
+        AiDotNetEngine.Current = new CpuEngine();
+
+        // P0 (#642): isolate the SD-UNet forward and time it at a chosen degree of
+        // parallelism so the 1-vs-N speedup curve = parallel efficiency = utilization.
+        if (args[0] == "--unet") return RunUNetParallelProbe(args);
+
         string modelName = args[0];
         int trainIters = ArgInt(args, "--train-iters", 5);
         bool doPredict = ArgInt(args, "--predict", 1) != 0;
         bool correctness = args.Contains("--correctness");
         bool allocIsolate = args.Contains("--alloc-isolate");
-
-        // Pin the CPU engine + disable GPU so the profile reflects the CPU path the
-        // CI shard runs (AIDOTNET_DISABLE_GPU=1 is also set by the test harness).
-        AiDotNetEngine.Current = new CpuEngine();
 
         var model = Construct(modelName);
         if (model is null) return 1;
@@ -263,6 +267,62 @@ internal static class Program
         {
             if (model is IDisposable d) d.Dispose();
         }
+    }
+
+    /// <summary>
+    /// P0 #642: build a runnable SD-UNet noise predictor and time a single PredictNoise
+    /// forward at a chosen MaxDegreeOfParallelism. Sweeping maxdop=1..N gives the speedup
+    /// curve; speedup/N = parallel efficiency = effective core utilization for this op mix.
+    /// Eager by default (--compile 0) so we measure per-op parallelism without the
+    /// compiled-plan decision confound; this is also the path Train() uses.
+    /// </summary>
+    private static int RunUNetParallelProbe(string[] args)
+    {
+        int baseCh = ArgInt(args, "--base", 128);
+        int maxdop = ArgInt(args, "--maxdop", Environment.ProcessorCount);
+        int reps = ArgInt(args, "--reps", 3);
+        int height = ArgInt(args, "--height", 64);
+        bool attn = ArgInt(args, "--attn", 1) != 0;
+        bool compile = ArgInt(args, "--compile", 0) != 0;
+
+        AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism = maxdop;
+        AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation = compile;
+
+        var predictor = new AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<float>(
+            inputChannels: 4, outputChannels: 4, baseChannels: baseCh,
+            channelMultipliers: new[] { 1, 2, 4, 4 }, numResBlocks: 2,
+            attentionResolutions: attn ? new[] { 4, 2, 1 } : Array.Empty<int>(),
+            contextDim: 768, numHeads: 8, inputHeight: height, seed: 42);
+
+        var rng = new Random(42);
+        var input = RandomTensor(new[] { 1, 4, height, height }, rng);
+        var cond = attn ? RandomTensor(new[] { 1, 77, 768 }, rng) : null;
+        const int t = 500;
+
+        // Warm-up: lazy weight allocation + (if enabled) first-forward trace/compile.
+        // Excluded from timing so steady-state per-op cost is what we measure.
+        var sww = Stopwatch.StartNew();
+        _ = predictor.PredictNoise(input, t, cond);
+        sww.Stop();
+
+        var times = new double[reps];
+        for (int i = 0; i < reps; i++)
+        {
+            var sw = Stopwatch.StartNew();
+            _ = predictor.PredictNoise(input, t, cond);
+            sw.Stop();
+            times[i] = sw.Elapsed.TotalMilliseconds;
+        }
+        Array.Sort(times);
+        double median = times[reps / 2];
+        long pc = -1;
+        try { pc = predictor.ParameterCount; } catch { }
+        Console.WriteLine(
+            $"UNET base={baseCh} attn={attn} h={height} compile={compile} " +
+            $"maxdop={maxdop} procs={Environment.ProcessorCount} params={pc} " +
+            $"warmup_ms={sww.Elapsed.TotalMilliseconds:F0} median_ms={median:F1} min_ms={times[0]:F1}");
+        if (predictor is IDisposable d) d.Dispose();
+        return 0;
     }
 
     private static object? Construct(string modelName)
