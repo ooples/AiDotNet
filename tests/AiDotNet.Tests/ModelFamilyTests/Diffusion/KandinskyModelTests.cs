@@ -10,6 +10,9 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 /// probes at FP64 on the 16 GB CI host.
 /// </summary>
 [Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4)
+// HeavyTimeout (#1706): correct but too slow for the default per-test gate (foundation-scale diffusion,
+// ~100 s/forward x N-step Generate); runs in the nightly lane. Drop this trait once it fits the budget.
+[Xunit.Trait("Category", "HeavyTimeout")]
 public class KandinskyModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 4, 64, 64];

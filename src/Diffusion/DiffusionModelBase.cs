@@ -1554,6 +1554,15 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             }
         }
 
+        // #1713: a Tensor<T> is a DATA LEAF — its scalar values are model parameters (already
+        // collected via the owning ITrainableLayer above), never a container of further layers.
+        // Descending into its backing storage and recursing element-by-element is the Meissonic
+        // hang: a 304M-parameter model walked one boxed scalar at a time (each added to the
+        // visited set). Stop at the tensor boundary. Tensor<T> fields are already skipped below,
+        // but tensors reached via Tensor<T>[] / List<Tensor<T>> / object-typed fields are not, so
+        // this guard is what actually closes the walk.
+        if (obj is Tensor<T>) return;
+
         // Recurse into every reference-type instance field so nested composites
         // (e.g., DiffusionModel -> UNetNoisePredictor -> List<Layer>) are fully
         // walked even when the intermediate types don't implement ITrainableLayer.
@@ -1588,8 +1597,15 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
 
                 if (val is System.Collections.IEnumerable enumerable && val is not string)
                 {
-                    foreach (var item in enumerable)
-                        CollectLayerParameters(item, allParams, visited);
+                    // #1713: only descend into collections whose ELEMENTS could be layers/composites.
+                    // Skip value-type element collections (a layer's float[] weight buffer, a Tensor's
+                    // backing array, List<int> shapes, etc.) — iterating their scalar elements is
+                    // pathological on a foundation-scale model and never yields a layer.
+                    if (!EnumerableElementsAreValueTypes(val.GetType()))
+                    {
+                        foreach (var item in enumerable)
+                            CollectLayerParameters(item, allParams, visited);
+                    }
                 }
                 else
                 {
@@ -1597,6 +1613,34 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// #1713: true when <paramref name="enumerableType"/> is a collection of value-type elements
+    /// (e.g. <c>float[]</c>, <c>List&lt;int&gt;</c>, a tensor's scalar backing array). Such collections
+    /// hold data, not layers, so the trainable-parameter walk must not recurse element-by-element into
+    /// them — on a foundation-scale model that is millions of boxed scalars (the Meissonic Train hang).
+    /// A non-generic or reference-element enumerable returns false so genuine layer collections
+    /// (List&lt;ILayer&gt;, ITrainableLayer[]) are still walked.
+    /// </summary>
+    private static bool EnumerableElementsAreValueTypes(Type enumerableType)
+    {
+        if (enumerableType.IsArray)
+        {
+            var elem = enumerableType.GetElementType();
+            return elem is not null && elem.IsValueType;
+        }
+
+        foreach (var iface in enumerableType.GetInterfaces())
+        {
+            if (iface.IsGenericType &&
+                iface.GetGenericTypeDefinition() == typeof(System.Collections.Generic.IEnumerable<>))
+            {
+                return iface.GetGenericArguments()[0].IsValueType;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
