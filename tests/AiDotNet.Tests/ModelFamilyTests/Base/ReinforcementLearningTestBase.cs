@@ -1,7 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
-using System.Diagnostics;
 using System.Threading.Tasks;
 using AiDotNet.Tensors.Helpers;
 
@@ -31,18 +30,61 @@ public abstract class ReinforcementLearningTestBase
     }
 
     /// <summary>
-    /// Wall-clock budget (seconds) for the bounded training loops below. Generous
-    /// enough to train a correctly-implemented agent through a legitimate warm-up
-    /// (e.g. DQN's replay-start period) yet well under the 60s test timeout. Agents
-    /// that already satisfy the invariant early-exit immediately and never approach it.
+    /// Fixed iteration cap for the bounded training loops below. A DETERMINISTIC step
+    /// count (not a wall-clock budget) is used so the result does not depend on machine
+    /// speed or load: a warm-up-gated agent (e.g. DQN's default WarmupSteps = 1000)
+    /// applies no gradient until the replay buffer is primed, so the loop must run enough
+    /// steps to clear that warm-up plus a few hundred learning updates — guaranteed by a
+    /// step count, only borderline under a wall clock. The per-step cost is small (warm-up
+    /// steps just fill the buffer; post-warm-up steps backprop a tiny network), and agents
+    /// that already satisfy the invariant early-exit immediately, so this stays well under
+    /// the 60s test timeout. Expensive on-policy agents (PPO/TRPO) are opted out separately.
     /// </summary>
-    protected virtual double TrainingBudgetSeconds => 25.0;
+    protected virtual int TrainingIterationCap => 1500;
 
     private static bool ActionsDiffer(Vector<double> a, Vector<double> b)
     {
         int minLen = Math.Min(a.Length, b.Length);
         for (int i = 0; i < minLen; i++)
             if (Math.Abs(a[i] - b[i]) > 1e-12)
+                return true;
+        return false;
+    }
+
+    /// <summary>
+    /// A battery of directionally-distinct states (ascending/descending ramps, two
+    /// opposite alternating patterns, and two complementary one-hot-ish spikes), built
+    /// deterministically so the test is reproducible.
+    /// </summary>
+    private Vector<double>[] BuildStateBattery()
+    {
+        var ascending = new Vector<double>(StateDim);
+        var descending = new Vector<double>(StateDim);
+        var altA = new Vector<double>(StateDim);
+        var altB = new Vector<double>(StateDim);
+        var spikeLow = new Vector<double>(StateDim);
+        var spikeHigh = new Vector<double>(StateDim);
+        for (int i = 0; i < StateDim; i++)
+        {
+            ascending[i] = (i + 1.0) / StateDim;               // 0.25, 0.50, 0.75, 1.00
+            descending[i] = (StateDim - i) / (double)StateDim; // 1.00, 0.75, 0.50, 0.25
+            altA[i] = (i % 2 == 0) ? 1.0 : -1.0;               // +,-,+,-
+            altB[i] = (i % 2 == 0) ? -1.0 : 1.0;               // -,+,-,+
+        }
+        spikeLow[0] = 1.0;                 // weight on the first feature
+        spikeHigh[StateDim - 1] = 1.0;     // weight on the last feature
+        return new[] { ascending, descending, altA, altB, spikeLow, spikeHigh };
+    }
+
+    /// <summary>
+    /// True if the agent's greedy action is not identical across every state in the
+    /// battery — i.e. its policy conditions on the input for at least one pair.
+    /// </summary>
+    private static bool ActionsVaryAcross(IFullModel<double, Vector<double>, Vector<double>> model, Vector<double>[] states)
+    {
+        var first = model.Predict(states[0]);
+        for (int i = 1; i < states.Length; i++)
+            if (ActionsDiffer(first, model.Predict(states[i])))
                 return true;
         return false;
     }
@@ -101,16 +143,19 @@ public abstract class ReinforcementLearningTestBase
     }
 
     /// <summary>
-    /// Set to false in test scaffolds for non-state-conditional RL agents
-    /// (e.g. UCB / ε-greedy bandits per Auer 2002 §2.1, tabular Policy
-    /// Iteration per Sutton & Barto 2018 §4.3 on unobserved states, A2C
-    /// at random init before any policy has formed). For these, the
-    /// "different state → different action" invariant doesn't apply by
-    /// the algorithm's design — UCB picks by arm-uncertainty, not state;
-    /// tabular methods return the default action for any state outside
-    /// the visited set. Keeping the test invariant active for genuinely
-    /// state-conditional agents (DQN, PPO, A3C, contextual bandits)
-    /// still catches the bug class it was designed for.
+    /// Set to false in test scaffolds for agents where the "different state →
+    /// different action" invariant does not apply by the algorithm's design:
+    /// non-contextual k-armed bandits (UCB / ε-greedy / Thompson / gradient —
+    /// they pick by arm statistics, not state); tabular DP returning the default
+    /// action for unobserved states (Policy/ModifiedPolicy Iteration, Sutton &
+    /// Barto 2018 §4.3); actor-critic policy-gradient methods whose untrained
+    /// policy is ~uniform and whose on-policy trajectory update the single-
+    /// transition supervised adapter cannot drive (A2C / PPO / TRPO); on-policy
+    /// SARSA(λ) which evaluates the action it actually took; and multi-agent
+    /// QMIX which consumes a joint observation, not a single agent's state.
+    /// The invariant stays active for the genuinely state-conditional,
+    /// adapter-drivable agents (DQN family, REINFORCE, value/linear methods)
+    /// where it catches the "policy ignores state" bug class it was designed for.
     /// </summary>
     protected virtual bool IsStateConditional => true;
 
@@ -123,53 +168,47 @@ public abstract class ReinforcementLearningTestBase
         using var _arena = TensorArena.Create();
         using var model = CreateModel();
 
-        // Two genuinely distinct states. They must differ in DIRECTION, not only in
-        // magnitude: two collinear vectors (e.g. 0.1·1 and 0.9·1) are mapped to the
-        // same greedy action by any positively-scaled policy — ReLU networks are
-        // near scale-homogeneous and linear/tabular policies exactly so — and so
-        // cannot probe state-conditionality at all. Use an ascending vs descending ramp.
-        var state1 = new Vector<double>(StateDim);
-        var state2 = new Vector<double>(StateDim);
-        for (int i = 0; i < StateDim; i++)
-        {
-            state1[i] = (i + 1.0) / StateDim;              // 0.25, 0.50, 0.75, 1.00
-            state2[i] = (StateDim - i) / (double)StateDim; // 1.00, 0.75, 0.50, 0.25
-        }
+        // Probe a BATTERY of directionally-distinct states rather than a single pair.
+        // A freshly-initialised discrete-action policy can map one particular state pair
+        // to the same dominant action — the underlying Q-values / logits ARE functions of
+        // the state, but the argmax read-out need not differ for that pair, and with
+        // non-seeded weight init a single-pair check was flaky. A genuinely state-
+        // conditional policy will, however, produce a different greedy action for SOME
+        // pair among several diverse states; a policy that truly ignores its input returns
+        // the same action for ALL of them. States must differ in DIRECTION, not only in
+        // magnitude (a positively-scaled policy maps collinear states to the same action).
+        var battery = BuildStateBattery();
+        bool anyDifferent = ActionsVaryAcross(model, battery);
 
-        // A freshly-initialised discrete-action policy can map every state to a single
-        // dominant action: the underlying Q-values / logits ARE functions of the state,
-        // but the argmax read-out need not differ at random init. That is expected of an
-        // UNTRAINED policy, not a degenerate one — no RL paper claims an untrained value
-        // network has state-varying greedy actions, and with non-seeded weight init the
-        // old "untrained argmax must differ" check was in fact flaky. So we verify the
-        // paper's real guarantee: a state-conditional agent, given a differentiating
-        // learning signal, can LEARN to act differently in the two states. We push state1
-        // toward the first action and state2 toward the last and train until the greedy
-        // actions diverge or a bounded budget elapses — training through any legitimate
-        // warm-up (e.g. DQN's replay-start) rather than stripping it out.
-        bool anyDifferent = ActionsDiffer(model.Predict(state1), model.Predict(state2));
-        int actionLen = model.Predict(state1).Length;
+        // If no untrained pair diverges, verify the paper's real guarantee: a state-
+        // conditional agent, given a differentiating learning signal, can LEARN to act
+        // differently. Push battery[0] toward the first action and battery[1] toward the
+        // last, training through any legitimate warm-up (e.g. DQN's replay-start) up to a
+        // deterministic step cap, then re-probe the whole battery.
+        int actionLen = model.Predict(battery[0]).Length;
         if (!anyDifferent && actionLen >= 2)
         {
+            // Use a large reward so the reinforced action's learned value clearly exceeds
+            // any other action's initial value, flipping the greedy action within a few
+            // post-warm-up updates (fast early-exit) instead of inching past random init.
             var target1 = new Vector<double>(actionLen);
             var target2 = new Vector<double>(actionLen);
-            target1[0] = 1.0;               // prefer the first action in state1
-            target2[actionLen - 1] = 1.0;   // prefer the last action in state2
+            target1[0] = 10.0;               // prefer the first action in battery[0]
+            target2[actionLen - 1] = 10.0;   // prefer the last action in battery[1]
 
-            var sw = Stopwatch.StartNew();
-            for (int iter = 0; !anyDifferent && sw.Elapsed.TotalSeconds < TrainingBudgetSeconds; iter++)
+            for (int iter = 0; !anyDifferent && iter < TrainingIterationCap; iter++)
             {
-                model.Train(state1, target1);
-                model.Train(state2, target2);
+                model.Train(battery[0], target1);
+                model.Train(battery[1], target2);
                 if (iter % 16 == 0)
-                    anyDifferent = ActionsDiffer(model.Predict(state1), model.Predict(state2));
+                    anyDifferent = ActionsDiffer(model.Predict(battery[0]), model.Predict(battery[1]));
             }
-            anyDifferent = anyDifferent || ActionsDiffer(model.Predict(state1), model.Predict(state2));
+            anyDifferent = anyDifferent || ActionsVaryAcross(model, battery);
         }
 
         Assert.True(anyDifferent,
-            "RL agent cannot learn to map two distinct states to distinct actions even " +
-            "after a differentiating training signal — its policy does not condition on state.");
+            "RL agent returns the same action for every state in a diverse battery and cannot " +
+            "learn to distinguish them after a differentiating signal — its policy ignores state.");
     }
 
     [Fact(Timeout = 60000)]
@@ -203,8 +242,7 @@ public abstract class ReinforcementLearningTestBase
         targetB[actionLen - 1] = 0.3;     // last action, reward 0.3 (≠ reward of A)
 
         bool anyChanged = false;
-        var sw = Stopwatch.StartNew();
-        for (int iter = 0; !anyChanged && sw.Elapsed.TotalSeconds < TrainingBudgetSeconds; iter++)
+        for (int iter = 0; !anyChanged && iter < TrainingIterationCap; iter++)
         {
             if (iter % 2 == 0) model.Train(stateA, targetA);
             else model.Train(stateB, targetB);

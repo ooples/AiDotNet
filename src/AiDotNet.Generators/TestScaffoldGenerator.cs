@@ -3230,8 +3230,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             //   input at all — every one lives in Agents.Bandits.
             // - ModifiedPolicyIteration: Sutton & Barto 2018 §4.3 — tabular
             //   DP; returns default action for unobserved states.
-            // - A2C: actor-critic; at random init with no training data, the
-            //   actor's policy is essentially uniform across actions.
+            // - A2C / PPO / TRPO: actor-critic policy-gradient methods. At random
+            //   init with no training data the actor's policy is essentially uniform
+            //   across actions, so its argmax read-out is not reliably state-varying;
+            //   and the on-policy update needs whole trajectories with advantages,
+            //   which the single-transition supervised adapter cannot supply, so the
+            //   trained probe does not reliably converge within a unit-test budget.
+            //   (REINFORCE — Monte-Carlo policy gradient, no critic — does converge
+            //   here and stays active.)
             // - SARSA(lambda): Sutton & Barto 2018 §12.7 — ON-policy. Its update
             //   evaluates the action it actually took (the behaviour policy), so
             //   the generic supervised Train(state, target) adapter cannot tell it
@@ -3247,6 +3253,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 || model.ClassName == "EpsilonGreedyBanditAgent"
                 || model.ClassName == "ModifiedPolicyIterationAgent"
                 || model.ClassName == "A2CAgent"
+                || model.ClassName == "PPOAgent"
+                || model.ClassName == "TRPOAgent"
                 || model.ClassName == "SARSALambdaAgent"
                 || model.ClassName == "QMIXAgent")
             {
