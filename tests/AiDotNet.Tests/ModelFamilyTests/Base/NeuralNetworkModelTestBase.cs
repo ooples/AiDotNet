@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -221,6 +222,19 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             _heavyGateAcquired = true;
         }
 
+        // #1706: start each streaming-scale test with a clean process-global WeightRegistry. The
+        // DisposeAsync reset below does NOT run when the prior test TIMED OUT (xUnit abandons the
+        // test thread, so IAsyncLifetime teardown is skipped), leaving its 1 partially-registered
+        // streaming entry behind — the next test's ctor then throws "existing streaming pool has N
+        // registered entries". Resetting here, before this test constructs its model, recovers from a
+        // timed-out predecessor too. Safe for the same reason as the DisposeAsync reset: every
+        // streaming-scale test is serialized (heavy gate acquired just above, or the
+        // FoundationScaleSerial collection's DisableParallelization), so nothing else is running.
+        if (ResetsWeightStreamingBetweenTests)
+        {
+            NeuralNetworkBase<T>.ResetWeightStreamingForTests();
+        }
+
         // Bit-exact reproducibility for per-test loss / parameter assertions.
         // OpenBLAS's multi-threaded GEMM partitions K across native threads
         // and sums partial products in thread-completion order — fixed via
@@ -292,10 +306,25 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         try
         {
             ModelFamilyTestGcGate.ReclaimBetweenTests();
+
+            // #1706: foundation-scale models auto-enable weight streaming, which registers their
+            // weights with the process-global WeightRegistry singleton. That registry is NOT cleared
+            // when the model goes out of scope, so the NEXT streaming model's ctor hits
+            // "WeightRegistry.Configure: existing streaming pool has N registered entries" (observed
+            // across sequential Phi3Vision tests). Reset it between tests using the sanctioned
+            // test-only reset. Safe only because every streaming-scale test is serialized — via the
+            // heavy gate (RequiresHeavySerialization) OR the FoundationScaleSerial collection
+            // (DisableParallelization = nothing else runs concurrently) — so the reset can never race
+            // another model's streaming forward. Not swallowed: a reset failure means the next
+            // streaming test would run against a contaminated singleton, which must surface here.
+            if (ResetsWeightStreamingBetweenTests)
+            {
+                NeuralNetworkBase<T>.ResetWeightStreamingForTests();
+            }
         }
         finally
         {
-            // #1706: release the heavy gate if this test acquired it, so the next heavy test can run.
+            // Release the heavy gate if this test acquired it, so the next heavy test can run.
             if (_heavyGateAcquired)
             {
                 _heavyTestGate.Release();
@@ -304,6 +333,27 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         }
         return Task.CompletedTask;
     }
+
+    /// <summary>
+    /// Whether <see cref="InitializeAsync"/> / <see cref="DisposeAsync"/> reset the process-global
+    /// weight-streaming registry around this test. Defaults to <c>false</c>; ONLY foundation-scale
+    /// models that auto-enable weight streaming (the large VLMs — Phi3Vision, SmolVLM) override it
+    /// to <c>true</c>, so the reset never runs for the small/non-streaming models that make up the
+    /// rest of the suite (keeping their behaviour unchanged). Only override when the test is
+    /// serialized — via the heavy gate or the <c>FoundationScaleSerial</c> collection — because the
+    /// reset must not run concurrently with another model's streaming forward (#1706).
+    /// </summary>
+    /// <remarks>
+    /// This recovers a clean registry between sequential streaming tests that COMPLETE normally, and
+    /// protects a later streaming model from a prior one's leftover entries. It cannot fully clean up
+    /// after a test that TIMES OUT: xUnit only abandons the timed-out test thread, which keeps running
+    /// its (multi-minute) forward and re-registering weights into the global registry, so a reset
+    /// before the next test races that still-live thread. The large VLMs that opt in here are tagged
+    /// <c>HeavyTimeout</c> precisely because their forwards exceed the 120 s budget — so their
+    /// residual registry errors are a downstream symptom of that (deferred) timeout, not a separate
+    /// unfixed leak.
+    /// </remarks>
+    protected virtual bool ResetsWeightStreamingBetweenTests => false;
 
     /// <summary>
     /// Tolerance for the MoreData test. Models with non-continuous outputs

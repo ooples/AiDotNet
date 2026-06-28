@@ -37,6 +37,12 @@ public class SmolVLMTests : VisionLanguageTestBase<float>
     // Serialize the 2.2B forward in the nightly heavy lane so it doesn't self-contend (#1706).
     protected override bool RequiresHeavySerialization => true;
 
+    // SmolVLM is foundation-scale and auto-enables weight streaming, registering its weights with
+    // the process-global WeightRegistry. Reset that registry around each test so a later streaming
+    // model isn't blocked by SmolVLM's leftover entries (#1706). Safe: RequiresHeavySerialization
+    // serializes it, so the reset never races another model's streaming forward.
+    protected override bool ResetsWeightStreamingBetweenTests => true;
+
     // Paper-faithful image size (384×384 RGB per SmolVLM cards and
     // SmolVLMOptions.ImageSize). VisionLanguageModelBase's contract
     // is [batch, channels=3, height, width].
