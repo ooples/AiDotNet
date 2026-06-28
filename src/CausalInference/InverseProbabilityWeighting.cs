@@ -673,7 +673,12 @@ public class InverseProbabilityWeighting<T> : CausalModelBase<T>
     /// </summary>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        return EstimatePropensityScores(input);
+        // #1713: Train(X, Y) drops column 0 (the treatment indicator) before fitting the
+        // propensity model, so this IFullModel Predict path must reconcile the same
+        // [treatment | covariates] layout — otherwise the extra column overruns the fitted
+        // coefficient vector. ExtractCovariates passes covariate-only input through unchanged
+        // for callers that already supply just the covariates.
+        return EstimatePropensityScores(ExtractCovariates(input));
     }
 
     #region IFullModel Implementation
