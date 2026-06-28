@@ -51,21 +51,6 @@ public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
         int embDim = HiddenUnits;
         if (n < 3 || d < 2) return new Matrix<T>(d, d);
 
-        // Raw per-column variance (BEFORE standardizing) — used only to orient the final DAG. An exogenous
-        // root has higher variance than its attenuated descendants (X1 = 0.8·X0 + noise ⇒ var(X1) < var(X0)),
-        // which gives the causal direction that a symmetric reconstruction loss cannot recover on its own.
-        // Variance ratios are preserved under uniform data scaling, so using it keeps scale-invariance.
-        var rawVar = new double[d];
-        for (int j = 0; j < d; j++)
-        {
-            double mean = 0;
-            for (int i = 0; i < n; i++) mean += NumOps.ToDouble(data[i, j]);
-            mean /= n;
-            double v = 0;
-            for (int i = 0; i < n; i++) { double c = NumOps.ToDouble(data[i, j]) - mean; v += c * c; }
-            rawVar[j] = v / Math.Max(1, n - 1);
-        }
-
         // Standardize columns so the LEARNING is invariant to per-variable scaling.
         data = StandardizeColumns(data);
 
@@ -181,11 +166,12 @@ public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
                 finalP[i, j] = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
             }
 
-        // Project the asymmetric learned probabilities onto a DAG. DAG-GNN's reconstruction loss cannot
-        // orient edges under (near-)symmetric correlations, so orient by raw variance — the exogenous root
-        // has the highest variance — which yields the correct causal direction AND is scale-invariant.
-        // BuildFinalAdjacency then thresholds and weights the acyclic probabilities.
-        return BuildFinalAdjacency(ProjectToDag(finalP, d, rawVar), cov, d);
+        // Project the asymmetric learned probabilities onto a DAG using their scale-invariant net out-flow
+        // (Σ_j P[i,j] − P[j,i]): the source-like node points OUT more than IN. Orienting from the learned P
+        // (rather than raw per-column variance) keeps the final graph invariant to per-variable rescaling,
+        // matching the standardized learning path. BuildFinalAdjacency then thresholds and weights the
+        // acyclic probabilities.
+        return BuildFinalAdjacency(ProjectToDag(finalP, d), cov, d);
     }
 
 }
