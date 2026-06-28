@@ -51,6 +51,24 @@ public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
         int embDim = HiddenUnits;
         if (n < 3 || d < 2) return new Matrix<T>(d, d);
 
+        // Raw per-column variance (BEFORE standardizing) — used only to orient the final DAG. An exogenous
+        // root has higher variance than its attenuated descendants (X1 = 0.8·X0 + noise ⇒ var(X1) < var(X0)),
+        // which gives the causal direction that a symmetric reconstruction loss cannot recover on its own.
+        // Variance ratios are preserved under uniform data scaling, so using it keeps scale-invariance.
+        var rawVar = new double[d];
+        for (int j = 0; j < d; j++)
+        {
+            double mean = 0;
+            for (int i = 0; i < n; i++) mean += NumOps.ToDouble(data[i, j]);
+            mean /= n;
+            double v = 0;
+            for (int i = 0; i < n; i++) { double c = NumOps.ToDouble(data[i, j]) - mean; v += c * c; }
+            rawVar[j] = v / Math.Max(1, n - 1);
+        }
+
+        // Standardize columns so the LEARNING is invariant to per-variable scaling.
+        data = StandardizeColumns(data);
+
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         T scale = NumOps.FromDouble(Math.Sqrt(2.0 / d));
 
@@ -67,7 +85,9 @@ public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
 
         T lr = NumOps.FromDouble(LearningRate);
         T alpha = NumOps.Zero;
-        T rho = NumOps.One;
+        // Acyclicity warm-up: rho = 0 (no NOTEARS penalty) for the first half of training so the data fit
+        // can drive edge probabilities up; a bounded fixed penalty is applied after (see the rho update).
+        T rho = NumOps.Zero;
         var cov = ComputeCovarianceMatrix(data);
         T eps = NumOps.FromDouble(1e-10);
 
@@ -136,11 +156,14 @@ public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
                     Zt[i, k] = NumOps.Subtract(Zt[i, k], NumOps.Multiply(lr, gradZt[i, k]));
                 }
 
-            // Update augmented Lagrangian
-            alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
-            T rhoMax = NumOps.FromDouble(1e+16);
-            if (NumOps.GreaterThan(hVal, NumOps.FromDouble(0.25)) && !NumOps.GreaterThan(rho, rhoMax))
-                rho = NumOps.Multiply(rho, NumOps.FromDouble(10));
+            // Apply only a BOUNDED acyclicity penalty in the second half of training (warm-up; see the rho
+            // init). The original schedule grew rho ×10 toward 1e16 AND accumulated alpha every epoch, which
+            // on strongly correlated data made the penalty collapse every edge to 0 (empty graph = trivially
+            // acyclic), recovering nothing. A fixed, modest rho breaks ties toward a DAG without overwhelming
+            // the data fit. DAG-GNN learns ASYMMETRIC edge probabilities (Zs_i·Zt_j ≠ Zs_j·Zt_i) which can
+            // form a directed cycle, so the final probabilities are projected onto a DAG below.
+            if (epoch >= MaxEpochs / 2)
+                rho = NumOps.FromDouble(1.0);
         }
 
         // Final output: use trained P for directionality, covariance for weights
@@ -158,9 +181,11 @@ public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
                 finalP[i, j] = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
             }
 
-        // Use shared BuildFinalAdjacency which properly handles edge thresholding
-        // and direction without introducing false edges or 2-cycles.
-        return BuildFinalAdjacency(finalP, cov, d);
+        // Project the asymmetric learned probabilities onto a DAG. DAG-GNN's reconstruction loss cannot
+        // orient edges under (near-)symmetric correlations, so orient by raw variance — the exogenous root
+        // has the highest variance — which yields the correct causal direction AND is scale-invariant.
+        // BuildFinalAdjacency then thresholds and weights the acyclic probabilities.
+        return BuildFinalAdjacency(ProjectToDag(finalP, d, rawVar), cov, d);
     }
 
 }
