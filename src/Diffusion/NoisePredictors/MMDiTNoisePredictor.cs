@@ -1300,37 +1300,48 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
             contextDim: _contextDim,
             mlpRatio: _mlpRatio);
 
-        // The LazyDense weights resolve+allocate through the FORWARD path
-        // (EnsureInitializedFromInput) — a different entry than the SetParameters/GetParameters
-        // path (EnsureInitialized). Copying parameters into a clone whose layers were never
-        // forwarded leaves its first real forward to re-resolve and RNG-initialize along the
-        // forward path, discarding the copied values and diverging from the source. Run one
-        // throwaway forward to materialize the clone through the same path the source used,
-        // THEN copy the source's weights so they persist. Gated on the source having been
-        // forwarded (a never-forwarded foundation-scale model has nothing materialized to copy
-        // and must not pay a full forward here).
-        if (_patchEmbed.IsInitialized)
-        {
-            int probeSpatial = _patchSize * 2;
-            var probe = new Tensor<T>(new[] { 1, _inputChannels, probeSpatial, probeSpatial });
-            // A null-conditioned probe only materializes the unconditional (image-stream) path.
-            // When the source ran conditioned forwards its context projection (_contextProj) and
-            // text-stream block layers are materialized, so probe the clone WITH a representative
-            // text-conditioning tensor — otherwise those layers stay lazy on the clone and re-init
-            // with fresh RNG on the first conditioned forward, diverging from the source.
-            Tensor<T>? probeConditioning = _contextProj.IsInitialized
-                ? new Tensor<T>(new[] { 1, 1, _contextDim })
-                : null;
-            clone.PredictNoise(probe, timestep: 0, conditioning: probeConditioning);
-            // Layer-by-layer copy: each layer's GetParameters/SetParameters works on its own small
-            // vector, so cloning never materializes one contiguous foundation-scale parameter vector
-            // (the flat List<T> -> ToArray() path in GetParameters that OOMs at SD3/FLUX scale).
-            clone.CopyParametersFrom(this);
-            // The probe forward traced a compiled plan over the clone's random init; drop it so
-            // the next real forward re-traces against the copied weights.
-            clone.InvalidateCompiledPlans();
-        }
+        ProbeMaterializeAndCopyInto(clone);
         return clone;
+    }
+
+    /// <summary>
+    /// Materializes <paramref name="clone"/> through one throwaway probe forward (the same path the
+    /// source's weights resolved on) and then copies this predictor's weights into it.
+    /// </summary>
+    /// <remarks>
+    /// The LazyDense weights resolve+allocate through the FORWARD path (EnsureInitializedFromInput)
+    /// — a different entry than the SetParameters/GetParameters path (EnsureInitialized). Copying
+    /// parameters into a clone whose layers were never forwarded leaves its first real forward to
+    /// re-resolve and RNG-initialize along the forward path, discarding the copied values and
+    /// diverging from the source (the #1706 HiDream/MMDiTX Clone_ShouldProduceIdenticalOutput
+    /// failure). Run one throwaway forward to materialize the clone through the same path the source
+    /// used, THEN copy the source's weights so they persist. Shared by the base <see cref="Clone"/>
+    /// and the <c>MMDiTXNoisePredictor</c> override so both materialize-then-copy rather than copy
+    /// onto unmaterialized layers. Gated on the source having been forwarded (a never-forwarded
+    /// foundation-scale model has nothing materialized to copy and must not pay a full forward here).
+    /// </remarks>
+    protected void ProbeMaterializeAndCopyInto(MMDiTNoisePredictor<T> clone)
+    {
+        if (!_patchEmbed.IsInitialized) return;
+
+        int probeSpatial = _patchSize * 2;
+        var probe = new Tensor<T>(new[] { 1, _inputChannels, probeSpatial, probeSpatial });
+        // A null-conditioned probe only materializes the unconditional (image-stream) path.
+        // When the source ran conditioned forwards its context projection (_contextProj) and
+        // text-stream block layers are materialized, so probe the clone WITH a representative
+        // text-conditioning tensor — otherwise those layers stay lazy on the clone and re-init
+        // with fresh RNG on the first conditioned forward, diverging from the source.
+        Tensor<T>? probeConditioning = _contextProj.IsInitialized
+            ? new Tensor<T>(new[] { 1, 1, _contextDim })
+            : null;
+        clone.PredictNoise(probe, timestep: 0, conditioning: probeConditioning);
+        // Layer-by-layer copy: each layer's GetParameters/SetParameters works on its own small
+        // vector, so cloning never materializes one contiguous foundation-scale parameter vector
+        // (the flat List<T> -> ToArray() path in GetParameters that OOMs at SD3/FLUX scale).
+        clone.CopyParametersFrom(this);
+        // The probe forward traced a compiled plan over the clone's random init; drop it so
+        // the next real forward re-traces against the copied weights.
+        clone.InvalidateCompiledPlans();
     }
 
     /// <summary>
