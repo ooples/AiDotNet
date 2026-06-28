@@ -285,6 +285,15 @@ internal static class Program
         bool attn = ArgInt(args, "--attn", 1) != 0;
         bool compile = ArgInt(args, "--compile", 0) != 0;
 
+        // Fail fast on a non-positive rep count before allocating buffers / constructing the predictor:
+        // --reps 0 would index an empty times[] (IndexOutOfRange), and a negative value throws on the
+        // `new double[reps]` allocation — neither gives the user an actionable message.
+        if (reps <= 0)
+        {
+            Console.Error.WriteLine($"--reps must be a positive integer (got {reps}).");
+            return 1;
+        }
+
         AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism = maxdop;
         AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation = compile;
 
@@ -294,35 +303,44 @@ internal static class Program
             attentionResolutions: attn ? new[] { 4, 2, 1 } : Array.Empty<int>(),
             contextDim: 768, numHeads: 8, inputHeight: height, seed: 42);
 
-        var rng = new Random(42);
-        var input = RandomTensor(new[] { 1, 4, height, height }, rng);
-        var cond = attn ? RandomTensor(new[] { 1, 77, 768 }, rng) : null;
-        const int t = 500;
-
-        // Warm-up: lazy weight allocation + (if enabled) first-forward trace/compile.
-        // Excluded from timing so steady-state per-op cost is what we measure.
-        var sww = Stopwatch.StartNew();
-        _ = predictor.PredictNoise(input, t, cond);
-        sww.Stop();
-
-        var times = new double[reps];
-        for (int i = 0; i < reps; i++)
+        // Dispose the predictor on every exit path: if PredictNoise / ParameterCount / output
+        // formatting throws, the model and its backing buffers would otherwise leak for the rest
+        // of the process.
+        try
         {
-            var sw = Stopwatch.StartNew();
+            var rng = new Random(42);
+            var input = RandomTensor(new[] { 1, 4, height, height }, rng);
+            var cond = attn ? RandomTensor(new[] { 1, 77, 768 }, rng) : null;
+            const int t = 500;
+
+            // Warm-up: lazy weight allocation + (if enabled) first-forward trace/compile.
+            // Excluded from timing so steady-state per-op cost is what we measure.
+            var sww = Stopwatch.StartNew();
             _ = predictor.PredictNoise(input, t, cond);
-            sw.Stop();
-            times[i] = sw.Elapsed.TotalMilliseconds;
+            sww.Stop();
+
+            var times = new double[reps];
+            for (int i = 0; i < reps; i++)
+            {
+                var sw = Stopwatch.StartNew();
+                _ = predictor.PredictNoise(input, t, cond);
+                sw.Stop();
+                times[i] = sw.Elapsed.TotalMilliseconds;
+            }
+            Array.Sort(times);
+            double median = times[reps / 2];
+            long pc = -1;
+            try { pc = predictor.ParameterCount; } catch { }
+            Console.WriteLine(
+                $"UNET base={baseCh} attn={attn} h={height} compile={compile} " +
+                $"maxdop={maxdop} procs={Environment.ProcessorCount} params={pc} " +
+                $"warmup_ms={sww.Elapsed.TotalMilliseconds:F0} median_ms={median:F1} min_ms={times[0]:F1}");
+            return 0;
         }
-        Array.Sort(times);
-        double median = times[reps / 2];
-        long pc = -1;
-        try { pc = predictor.ParameterCount; } catch { }
-        Console.WriteLine(
-            $"UNET base={baseCh} attn={attn} h={height} compile={compile} " +
-            $"maxdop={maxdop} procs={Environment.ProcessorCount} params={pc} " +
-            $"warmup_ms={sww.Elapsed.TotalMilliseconds:F0} median_ms={median:F1} min_ms={times[0]:F1}");
-        if (predictor is IDisposable d) d.Dispose();
-        return 0;
+        finally
+        {
+            if (predictor is IDisposable d) d.Dispose();
+        }
     }
 
     private static object? Construct(string modelName)
