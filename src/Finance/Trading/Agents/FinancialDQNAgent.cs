@@ -163,10 +163,16 @@ public class FinancialDQNAgent<T> : TradingAgentBase<T>
     /// </remarks>
     public override T Train()
     {
-        if (ReplayBuffer.Count < TradingOptions.BatchSize)
+        // Train on whatever is available: sample min(BatchSize, Count). A hard "Count < BatchSize ⇒
+        // no-op" gate silently skips learning during the warm-up window (the replay buffer starts
+        // empty and only fills one transition per step), so short training runs never update the
+        // Q-network at all. Sampling a partial minibatch lets the agent learn from the first
+        // transition onward, matching the supervised one-step semantics callers expect.
+        if (ReplayBuffer.Count == 0)
             return NumOps.Zero;
 
-        var batch = ReplayBuffer.Sample(TradingOptions.BatchSize);
+        int sampleSize = Math.Min(TradingOptions.BatchSize, ReplayBuffer.Count);
+        var batch = ReplayBuffer.Sample(sampleSize);
         int n = batch.Count;
         if (n == 0) return NumOps.Zero;
 

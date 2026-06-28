@@ -76,6 +76,18 @@ public class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
+        var result = new Vector<T>(_options.NumArms);
+
+        if (!training)
+        {
+            // Evaluation: act greedily on the learned preferences. This makes the policy
+            // deterministic (Predict called twice returns the same arm) and clone-stable
+            // (a clone with identical preferences picks the same arm). Stochastic softmax
+            // sampling below is only used while training/exploring.
+            result[ArgMax(_preferences)] = NumOps.One;
+            return result;
+        }
+
         // Compute softmax probabilities
         var probs = ComputeSoftmax(_preferences);
 
@@ -94,7 +106,6 @@ public class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
             }
         }
 
-        var result = new Vector<T>(_options.NumArms);
         result[selectedArm] = NumOps.One;
         return result;
     }
@@ -104,13 +115,11 @@ public class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
         int armIndex = ArgMax(action);
         _totalSteps++;
 
-        // Update average reward baseline
-        if (_options.UseBaseline)
-        {
-            T alpha = NumOps.Divide(NumOps.One, NumOps.FromDouble(_totalSteps));
-            T delta = NumOps.Subtract(reward, _averageReward);
-            _averageReward = NumOps.Add(_averageReward, NumOps.Multiply(alpha, delta));
-        }
+        // Compute the preference gradient using the baseline R̄ that EXCLUDES the current reward
+        // (Sutton & Barto 2018, eq. 2.12 uses the running average up to — not including — step t).
+        // Updating the baseline first incorporates the current reward, so for a constant reward
+        // stream the very first step sets R̄ = R, making (R − R̄) = 0 and freezing all preferences.
+        // We therefore compute rewardDiff against the OLD baseline, then update the baseline below.
 
         // Compute softmax probabilities
         var probs = ComputeSoftmax(_preferences);
@@ -134,6 +143,14 @@ public class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
                 T update = NumOps.Multiply(stepSize, NumOps.Multiply(rewardDiff, NumOps.Negate(probs[a])));
                 _preferences[a] = NumOps.Add(_preferences[a], update);
             }
+        }
+
+        // Update the running average-reward baseline AFTER the preference step (see note above).
+        if (_options.UseBaseline)
+        {
+            T alpha = NumOps.Divide(NumOps.One, NumOps.FromDouble(_totalSteps));
+            T delta = NumOps.Subtract(reward, _averageReward);
+            _averageReward = NumOps.Add(_averageReward, NumOps.Multiply(alpha, delta));
         }
     }
 
