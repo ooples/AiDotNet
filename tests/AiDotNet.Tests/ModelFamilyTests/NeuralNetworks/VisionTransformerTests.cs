@@ -4,6 +4,9 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
+// HeavyTimeout (#1706): correct but too slow for the default per-test gate (ViT is GEMM-bound,
+// ~44 s/iter); runs in the nightly lane. Drop this trait once it fits the budget.
+[Xunit.Trait("Category", "HeavyTimeout")]
 public class VisionTransformerTests : NeuralNetworkModelTestBase<float>
 {
     // ViT default architecture is [batch, 3, 224, 224] (paper-faithful
