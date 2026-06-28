@@ -1264,6 +1264,35 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Guards the in-loop dispose shared by the GPU-resident forward paths. When the next layer's output is a
+    /// zero-copy view sharing <paramref name="current"/>'s backing Vector (e.g. <c>FlattenLayer</c> returns
+    /// <c>current.Reshape(...)</c>), disposing <paramref name="current"/> frees the GPU buffer and removes the
+    /// deferred-download materializer the view still needs, so the view materializes to all-zeros and the next
+    /// layer reads garbage. This rebinds <paramref name="next"/> onto an independent tensor over the same GPU
+    /// buffer and transfers buffer ownership, so the following <c>current.Dispose()</c> neither strands the view
+    /// nor double-frees. The guard is true only for the zero-copy view path; normal GPU layers (Dense/Conv)
+    /// return fresh tensors with their own backing and are returned unchanged.
+    /// </summary>
+    private static Tensor<T> RebindGpuAliasBeforeDispose(Tensor<T> current, Tensor<T> next)
+    {
+        if (!ReferenceEquals(next.DataVector, current.DataVector)
+            || current._gpuBuffer is null
+            || current._gpuBackend is null)
+        {
+            return next;
+        }
+
+        var rebound = Tensor<T>.FromGpuBuffer(
+            current._gpuBackend,
+            current._gpuBuffer,
+            next.Shape.ToArray(),
+            GpuTensorRole.Activation,
+            ownsBuffer: current._ownsGpuBuffer);
+        current._ownsGpuBuffer = false;
+        return rebound;
+    }
+
+    /// <summary>
     /// Performs a GPU-resident forward pass, keeping intermediate results on GPU.
     /// Only downloads the final result to CPU when the returned tensor is accessed.
     /// </summary>
@@ -1320,9 +1349,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
                     var next = layer.ForwardGpu(current);
 
-                    // Dispose intermediate if we own it (but not the input)
+                    // Dispose intermediate if we own it (but not the input).
                     if (ownsCurrentTensor && current is not null)
                     {
+                        // If `next` aliases current's backing (zero-copy reshape view, e.g. FlattenLayer),
+                        // rebind it onto an independent tensor first so the dispose is safe (see helper).
+                        next = RebindGpuAliasBeforeDispose(current, next);
                         current.Dispose();
                     }
 
@@ -1461,6 +1493,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
                                 if (ownsCurrentTensor && current is not null)
                                 {
+                                    // Same zero-copy alias guard as ForwardGpu (e.g. FlattenLayer's Reshape view):
+                                    // rebind next off current's backing before disposing so it isn't stranded.
+                                    next = RebindGpuAliasBeforeDispose(current, next);
                                     current.Dispose();
                                 }
 
@@ -1574,6 +1609,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
                                 if (ownsCurrentTensor && current is not null)
                                 {
+                                    // Same zero-copy alias guard as ForwardGpu (e.g. FlattenLayer's Reshape view):
+                                    // rebind next off current's backing before disposing so it isn't stranded.
+                                    next = RebindGpuAliasBeforeDispose(current, next);
                                     current.Dispose();
                                 }
 
