@@ -76,6 +76,11 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
+// LinkPredictionModel IS a graph neural network (it requires an adjacency matrix), so it must carry the
+// GraphNetwork category like its siblings GraphClassificationModel / NodeClassificationModel. Without it the
+// test scaffold classified it as a generic NN and exercised it through the non-graph test base, which never
+// enables the implicit-identity adjacency — so every Predict/Train threw "Adjacency matrix must be set".
+[ModelCategory(ModelCategory.GraphNetwork)]
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
