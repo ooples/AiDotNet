@@ -787,7 +787,10 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> CreatePositionEmbedding(int numPatches)
     {
-        var posEmbed = TensorAllocator.Rent<T>(new[] { 1, numPatches, _hiddenSize });
+        // GC-owned (NOT TensorAllocator.Rent): _posEmbed is cached across forwards and must survive the
+        // diffusion denoise loop's per-step arena Reset(), which recycles arena-rented scratch. Renting it
+        // aliased recycled scratch -> the cached posEmbed corrupted between steps -> non-deterministic Predict.
+        var posEmbed = new Tensor<T>(new[] { 1, numPatches, _hiddenSize });
         var span = posEmbed.AsWritableSpan();
 
         for (int pos = 0; pos < numPatches; pos++)

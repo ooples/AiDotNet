@@ -604,7 +604,12 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
     private Tensor<T> CreateSinusoidalPositionEmbedding(int numPatches)
     {
-        var posEmbed = TensorAllocator.Rent<T>(new[] { 1, numPatches, _hiddenSize });
+        // GC-owned (NOT TensorAllocator.Rent): _posEmbed is cached across forwards (see AddPositionEmbedding)
+        // and must survive the diffusion denoise loop's per-step arena Reset(), which recycles arena-rented
+        // scratch. Renting it here aliased recycled scratch, so the cached posEmbed was corrupted between
+        // steps -> garbage added to every token -> non-deterministic Predict (the StableDiffusion3
+        // Predict_ShouldBeDeterministic / clone failures). A long-lived cache must be plain GC-owned.
+        var posEmbed = new Tensor<T>(new[] { 1, numPatches, _hiddenSize });
         var span = posEmbed.AsWritableSpan();
 
         for (int pos = 0; pos < numPatches; pos++)
