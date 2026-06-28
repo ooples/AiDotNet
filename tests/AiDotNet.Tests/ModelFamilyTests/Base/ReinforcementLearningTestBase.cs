@@ -211,9 +211,23 @@ public abstract class ReinforcementLearningTestBase
             "learn to distinguish them after a differentiating signal — its policy ignores state.");
     }
 
+    /// <summary>
+    /// Set to false in test scaffolds for agents that cannot be trained through the
+    /// generic single-transition <c>Train(state, target)</c> adapter, because their
+    /// learning rule needs an input this harness does not provide. The parameter-change
+    /// invariant then does not apply by the algorithm's design. Examples:
+    /// multi-agent QMIX (Train consumes a joint observation across all agents, not a
+    /// single agent's state) and TRPO (Sutton & Barto 2018 §13; Schulman et al. 2015 —
+    /// its KL-constrained trust-region step is computed over whole on-policy trajectories
+    /// with advantages, so a stream of isolated terminal transitions yields ~zero update).
+    /// </summary>
+    protected virtual bool TrainsViaSingleTransitionAdapter => true;
+
     [Fact(Timeout = 60000)]
     public async Task Training_ShouldChangeParameters()
     {
+        if (!TrainsViaSingleTransitionAdapter) return;
+
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();

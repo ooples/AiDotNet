@@ -298,6 +298,20 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
         var batch = _replayBuffer.Sample(_options.BatchSize);
         T totalLoss = NumOps.Zero;
 
+        // QMIX trains on JOINT observations: each stored state must be a concatenation of
+        // every agent's observation plus the global state. If the stored transitions are
+        // not joint-sized (e.g. a single-agent state vector was passed), the joint
+        // decomposition below would read out of bounds — skip training on malformed input
+        // rather than throwing an opaque index error.
+        int expectedJointLength = _options.NumAgents * _options.StateSize + _options.GlobalStateSize;
+        foreach (var experience in batch)
+        {
+            if (experience.State.Length < expectedJointLength || experience.NextState.Length < expectedJointLength)
+            {
+                return NumOps.Zero;
+            }
+        }
+
         foreach (var experience in batch)
         {
             // Decompose joint experience

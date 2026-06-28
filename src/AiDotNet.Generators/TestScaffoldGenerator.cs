@@ -3260,6 +3260,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             {
                 sb.AppendLine("    protected override bool IsStateConditional => false;");
             }
+
+            // Agents that cannot be trained through the single-transition Train(state,
+            // target) adapter, so the parameter-change invariant does not apply:
+            // - QMIX (Rashid et al. 2018): multi-agent — Train decomposes its input as a
+            //   joint observation (NumAgents*StateSize + GlobalStateSize), which a single
+            //   agent's state vector cannot supply.
+            // - TRPO (Schulman et al. 2015): its KL-constrained trust-region update is
+            //   computed over whole on-policy trajectories with advantages; a stream of
+            //   isolated terminal transitions yields a ~zero step, so parameters do not move.
+            if (model.ClassName == "QMIXAgent"
+                || model.ClassName == "TRPOAgent")
+            {
+                sb.AppendLine("    protected override bool TrainsViaSingleTransitionAdapter => false;");
+            }
         }
         else if (family == TestFamily.Forecasting)
         {
