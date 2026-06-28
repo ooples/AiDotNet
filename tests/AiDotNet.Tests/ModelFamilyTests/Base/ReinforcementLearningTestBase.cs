@@ -49,6 +49,11 @@ public abstract class ReinforcementLearningTestBase
 
     private static bool ParametersChanged(double[] snapshot, Vector<double> current)
     {
+        // A change in length is itself a parameter change: tabular agents grow their
+        // Q-table lazily as new states are visited, so an agent that starts with an empty
+        // parameter vector and acquires entries during training HAS changed its parameters.
+        if (snapshot.Length != current.Length)
+            return true;
         for (int i = 0; i < Math.Min(snapshot.Length, current.Length); i++)
             if (Math.Abs(snapshot[i] - current[i]) > 1e-15)
                 return true;

@@ -3232,12 +3232,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             //   DP; returns default action for unobserved states.
             // - A2C: actor-critic; at random init with no training data, the
             //   actor's policy is essentially uniform across actions.
+            // - SARSA(lambda): Sutton & Barto 2018 §12.7 — ON-policy. Its update
+            //   evaluates the action it actually took (the behaviour policy), so
+            //   the generic supervised Train(state, target) adapter cannot tell it
+            //   which action to prefer in each state; the invariant can't be driven
+            //   through this harness (the agent is still state-conditional).
+            // - QMIX: Rashid et al. 2018 — MULTI-AGENT value decomposition. Its
+            //   input is a structured joint observation (NumAgents x StateSize +
+            //   GlobalStateSize), not a single agent's state vector, so the
+            //   single-agent state-conditionality probe does not apply.
             if (model.ClassName == "UCBBanditAgent"
                 || model.ClassName == "GradientBanditAgent"
                 || model.ClassName == "ThompsonSamplingAgent"
                 || model.ClassName == "EpsilonGreedyBanditAgent"
                 || model.ClassName == "ModifiedPolicyIterationAgent"
-                || model.ClassName == "A2CAgent")
+                || model.ClassName == "A2CAgent"
+                || model.ClassName == "SARSALambdaAgent"
+                || model.ClassName == "QMIXAgent")
             {
                 sb.AppendLine("    protected override bool IsStateConditional => false;");
             }
