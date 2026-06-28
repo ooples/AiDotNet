@@ -12677,8 +12677,13 @@ public static class LayerHelper<T>
         for (int block = 0; block < numBlocks; block++)
         {
             // Time-mixing MLP (operates across time dimension)
-            // Layer normalization before time mixing
-            yield return new LayerNormalizationLayer<T>();
+            // Layer normalization before time mixing. Per TSMixer (Chen et al. 2023) the norm is
+            // applied over the feature/channel (hidden) axis, so size it explicitly to hiddenDim.
+            // Eager sizing is REQUIRED: the lazy last-dim resolver runs the layers in declared order
+            // without TSMixer's time-mixing transpose, so the preceding time-Dense (outputSize =
+            // sequenceLength) would otherwise mis-resolve a following norm's gamma to seqLen and the
+            // real (transposed) forward would then fail with a gamma/last-dim mismatch.
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
 
             // Time-mixing feedforward: expand
             yield return new DenseLayer<T>(
@@ -12694,8 +12699,8 @@ public static class LayerHelper<T>
             yield return new DropoutLayer<T>(dropout);
 
             // Feature-mixing MLP (operates across feature dimension)
-            // Layer normalization before feature mixing
-            yield return new LayerNormalizationLayer<T>();
+            // Layer normalization before feature mixing (over the hidden/feature axis — see above).
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
 
             // Feature-mixing feedforward: expand
             yield return new DenseLayer<T>(
@@ -12711,8 +12716,8 @@ public static class LayerHelper<T>
             yield return new DropoutLayer<T>(dropout);
         }
 
-        // Final layer normalization
-        yield return new LayerNormalizationLayer<T>();
+        // Final layer normalization (over the hidden/feature axis — eager-sized; see block norms above).
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
 
         // Temporal projection: maps sequence length to prediction horizon
         yield return new DenseLayer<T>(
