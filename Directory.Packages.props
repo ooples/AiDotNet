@@ -204,7 +204,7 @@
          Ships lib/net8.0 + net10.0 + net471; native packages coreleased in lockstep at 0.104.6. -->
     <PackageVersion Include="AiDotNet.Tensors" Version="0.104.6" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.104.6" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.104.6" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.105.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.104.6" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
