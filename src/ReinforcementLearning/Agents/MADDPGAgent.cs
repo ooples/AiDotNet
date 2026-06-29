@@ -80,6 +80,12 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     private UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
     private int _stepCount;
 
+    // Actor-update hyperparameters (named rather than magic literals). ActorGradientStepSize is the
+    // deterministic-policy-gradient ascent step; ActorFiniteDifferenceEpsilon is the central
+    // finite-difference interval used to estimate ∇_{a_i} Q_i (Lowe et al. 2017).
+    private const double ActorGradientStepSize = 0.05;
+    private const double ActorFiniteDifferenceEpsilon = 1e-3;
+
     // Track per-agent rewards for competitive/mixed-motive scenarios
     // Maps experience index to array of per-agent rewards
     private Dictionary<int, List<T>> _perAgentRewards;
@@ -292,6 +298,15 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
+        // Clear any per-agent reward override left at this buffer position by an earlier joint
+        // transition. _perAgentRewards is keyed only by replay index, so without this a scalar
+        // transition that reuses a circular-buffer slot would inherit the previous occupant's STALE
+        // per-agent rewards in Train(). Index computed exactly as StoreMultiAgentExperience does.
+        int bufferIndex = _replayBuffer.Count < _replayBuffer.Capacity
+            ? _replayBuffer.Count
+            : _stepCount % _replayBuffer.Capacity;
+        _perAgentRewards.Remove(bufferIndex);
+
         _replayBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(state, action, reward, nextState, done));
         _stepCount++;
     }
@@ -313,12 +328,29 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         T gamma = DiscountFactor;
 
         // MADDPG trains on JOINT transitions stored by StoreMultiAgentExperience: the state is the
-        // concatenation of every agent's observation and the action of every agent's action. If the
-        // buffer holds non-joint transitions (e.g. a single-agent state vector passed through the
-        // generic StoreExperience), skip training rather than reading out of bounds.
-        if (n == 0 || batch[0].State.Length < numAgents * sd || batch[0].Action.Length < numAgents * ad)
+        // concatenation of every agent's observation and the action of every agent's action. Validate
+        // EVERY sampled item (not just batch[0]) and fail loudly on a non-joint transition (e.g. a
+        // single-agent vector passed through the generic StoreExperience) rather than silently
+        // no-op'ing or indexing out of bounds deep in the per-agent loops below.
+        int expectedJointState = numAgents * sd;
+        int expectedJointAction = numAgents * ad;
+        if (n == 0)
         {
             return NumOps.Zero;
+        }
+        for (int i = 0; i < n; i++)
+        {
+            var item = batch[i];
+            if (item.State.Length != expectedJointState ||
+                item.NextState.Length != expectedJointState ||
+                item.Action.Length != expectedJointAction)
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(MADDPGAgent<T>)}.{nameof(Train)} requires joint transitions stored via " +
+                    $"{nameof(StoreMultiAgentExperience)}. Batch item {i} has state/action/next-state " +
+                    $"lengths {item.State.Length}/{item.Action.Length}/{item.NextState.Length}; expected " +
+                    $"{expectedJointState}/{expectedJointAction}/{expectedJointState}.");
+            }
         }
 
         T totalLoss = NumOps.Zero;
@@ -344,7 +376,19 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
                 T qNext = _targetCriticNetworks[agentId].Predict(Tensor<T>.FromVector(targetCriticInput)).ToVector()[0];
 
                 T rI = exp.Reward;
-                if (_perAgentRewards.TryGetValue(indices[i], out var pr) && agentId < pr.Count) rI = pr[agentId];
+                if (_perAgentRewards.TryGetValue(indices[i], out var pr))
+                {
+                    // A per-agent reward override must cover EVERY agent; a partial list would
+                    // silently fall back to the averaged scalar reward for the later agents and
+                    // train their critics on inconsistent targets. Reject it loudly instead.
+                    if (pr.Count != numAgents)
+                    {
+                        throw new InvalidOperationException(
+                            $"Per-agent reward override for replay index {indices[i]} contains {pr.Count} " +
+                            $"rewards; expected {numAgents}.");
+                    }
+                    rI = pr[agentId];
+                }
                 T y = rI;
                 if (!exp.Done) y = NumOps.Add(y, NumOps.Multiply(gamma, qNext));
 
@@ -360,9 +404,9 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             // agents' actions fixed), then train actor_i toward the improved action. ---
             var actorInputs = new Tensor<T>([n, sd]);
             var actorTargets = new Tensor<T>([n, ad]);
-            T step = NumOps.FromDouble(0.05);
-            T eps = NumOps.FromDouble(1e-3);
-            T twoEps = NumOps.FromDouble(2e-3);
+            T step = NumOps.FromDouble(ActorGradientStepSize);
+            T eps = NumOps.FromDouble(ActorFiniteDifferenceEpsilon);
+            T twoEps = NumOps.FromDouble(2.0 * ActorFiniteDifferenceEpsilon);
             for (int i = 0; i < n; i++)
             {
                 var exp = batch[i];

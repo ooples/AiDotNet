@@ -63,6 +63,13 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private TD3Options<T> _options;
 
+    // Actor-update hyperparameters (named rather than magic literals). ActorPolicyGradientStep is the
+    // deterministic-policy-gradient ascent step on the action; FiniteDifferenceEpsilon is the central
+    // finite-difference interval used to estimate ∇a Q1 (the critic exposes no analytic input
+    // gradient). Distinct from the actor NETWORK optimizer's learning rate.
+    private const double ActorPolicyGradientStep = 0.05;
+    private const double FiniteDifferenceEpsilon = 1e-3;
+
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
     private readonly INumericOperations<T> _numOps;
@@ -237,6 +244,16 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
         for (int i = 0; i < n; i++)
         {
             var exp = batch[i];
+            // Validate replay-sample shapes before any tensor write/index: a malformed transition
+            // (wrong State/Action/NextState length) would otherwise crash tensor construction or
+            // train the twin critics on corrupted inputs.
+            if (exp.State.Length != stateDim || exp.NextState.Length != stateDim || exp.Action.Length != actionDim)
+            {
+                throw new InvalidOperationException(
+                    $"TD3 replay experience has wrong dimensions; expected State={stateDim}, " +
+                    $"NextState={stateDim}, Action={actionDim} but got State={exp.State.Length}, " +
+                    $"NextState={exp.NextState.Length}, Action={exp.Action.Length}.");
+            }
             var nextA = _targetActorNetwork.Predict(Tensor<T>.FromVector(exp.NextState)).ToVector();
             for (int k = 0; k < actionDim; k++)
             {
@@ -272,7 +289,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
         {
             var actorInputs = new Tensor<T>([n, stateDim]);
             var actorTargets = new Tensor<T>([n, actionDim]);
-            T step = _numOps.FromDouble(0.05);
+            T step = _numOps.FromDouble(ActorPolicyGradientStep);
             for (int i = 0; i < n; i++)
             {
                 var s = batch[i].State;
@@ -303,8 +320,8 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
     private Vector<T> FiniteDiffActionGradient(INeuralNetwork<T> critic, Vector<T> state, Vector<T> action)
     {
         var grad = new Vector<T>(action.Length);
-        T eps = _numOps.FromDouble(1e-3);
-        T twoEps = _numOps.FromDouble(2e-3);
+        T eps = _numOps.FromDouble(FiniteDifferenceEpsilon);
+        T twoEps = _numOps.FromDouble(2.0 * FiniteDifferenceEpsilon);
         for (int i = 0; i < action.Length; i++)
         {
             var aPlus = action.Clone();

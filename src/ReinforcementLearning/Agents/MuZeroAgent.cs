@@ -391,6 +391,16 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void StoreExperience(Vector<T> observation, Vector<T> action, T reward, Vector<T> nextObservation, bool done)
     {
+        // Validate transition shapes at this public ingestion boundary so a malformed experience
+        // can't reach Train() (which indexes observations/actions per _options) and crash or build
+        // wrong policy/value targets.
+        if (observation.Length != _options.ObservationSize)
+            throw new ArgumentException($"Observation length must be {_options.ObservationSize}, got {observation.Length}.", nameof(observation));
+        if (nextObservation.Length != _options.ObservationSize)
+            throw new ArgumentException($"Next observation length must be {_options.ObservationSize}, got {nextObservation.Length}.", nameof(nextObservation));
+        if (action.Length != _options.ActionSize)
+            throw new ArgumentException($"Action length must be {_options.ActionSize}, got {action.Length}.", nameof(action));
+
         _replayBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(observation, action, reward, nextObservation, done));
     }
 
@@ -420,6 +430,17 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         int latent = _options.LatentStateSize;
         int actionDim = _options.ActionSize;
         T gamma = DiscountFactor;
+        // This training path builds ONE-STEP recurrent targets. Honoring UnrollSteps > 1 requires
+        // sequence replay and per-unroll-step targets (Schrittwieser et al. 2020); rather than
+        // silently ignoring the configured value, fail fast so a user cannot believe they are
+        // training a multi-step unroll when they are not.
+        if (_options.UnrollSteps != 1)
+        {
+            throw new InvalidOperationException(
+                $"MuZeroAgent.Train currently builds one-step targets, but UnrollSteps is " +
+                $"{_options.UnrollSteps}. Implement sequence replay / unrolled targets before " +
+                "configuring UnrollSteps > 1.");
+        }
 
         // MuZero joint training (Schrittwieser et al. 2020): the representation, dynamics and
         // prediction networks are trained together. Earlier this method computed losses and built

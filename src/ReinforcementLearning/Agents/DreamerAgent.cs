@@ -206,6 +206,16 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void StoreExperience(Vector<T> observation, Vector<T> action, T reward, Vector<T> nextObservation, bool done)
     {
+        // Validate transition shapes at this public ingestion boundary so a malformed experience
+        // can't enter the replay buffer and later cause indexing / network-shape failures deep in
+        // Train() (building dynIn/repIn/rewIn/contIn).
+        if (observation.Length != _options.ObservationSize)
+            throw new ArgumentException($"Observation length must be {_options.ObservationSize}, got {observation.Length}.", nameof(observation));
+        if (nextObservation.Length != _options.ObservationSize)
+            throw new ArgumentException($"Next observation length must be {_options.ObservationSize}, got {nextObservation.Length}.", nameof(nextObservation));
+        if (action.Length != _options.ActionSize)
+            throw new ArgumentException($"Action length must be {_options.ActionSize}, got {action.Length}.", nameof(action));
+
         _replayBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(observation, action, reward, nextObservation, done));
     }
 
@@ -273,9 +283,14 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         var valTgt = new Tensor<T>([n, 1]);
         var actIn = new Tensor<T>([n, latentSize]);
         var actTgt = new Tensor<T>([n, actionDim]);
-        T step = NumOps.FromDouble(0.05);
-        T eps = NumOps.FromDouble(1e-3);
-        T twoEps = NumOps.FromDouble(2e-3);
+        // Named constants for the behaviour-learning hyperparameters (no magic literals). `step` is
+        // the deterministic-policy-gradient ascent step on the imagined value; `eps`/`twoEps` are the
+        // central finite-difference interval used to estimate ∇a q(z,a).
+        const double behaviorUpdateStep = 0.05;
+        const double finiteDifferenceEpsilon = 1e-3;
+        T step = NumOps.FromDouble(behaviorUpdateStep);
+        T eps = NumOps.FromDouble(finiteDifferenceEpsilon);
+        T twoEps = NumOps.FromDouble(2 * finiteDifferenceEpsilon);
         for (int i = 0; i < n; i++)
         {
             var z = latents[i];

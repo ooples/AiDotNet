@@ -242,6 +242,16 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         for (int i = 0; i < n; i++)
         {
             var exp = batch[i];
+            // Validate replay-sample shapes before any tensor write: StoreExperience() is a public
+            // input boundary, so a malformed transition would otherwise corrupt the critic inputs
+            // (saInputs) or throw deep inside the target-network forwards. Reject it with a clear message.
+            if (exp.State.Length != stateDim || exp.NextState.Length != stateDim || exp.Action.Length != actionDim)
+            {
+                throw new InvalidOperationException(
+                    $"DDPG replay experience has wrong dimensions; expected State={stateDim}, " +
+                    $"NextState={stateDim}, Action={actionDim} but got State={exp.State.Length}, " +
+                    $"NextState={exp.NextState.Length}, Action={exp.Action.Length}.");
+            }
             var nextA = _actorTargetNetwork.Predict(Tensor<T>.FromVector(exp.NextState)).ToVector();
             var nextSA = Tensor<T>.FromVector(ConcatenateStateAction(exp.NextState, nextA));
             T qNext = _criticTargetNetwork.Predict(nextSA).ToVector()[0];
@@ -263,7 +273,12 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         // ∇θ mu through the network's MSE Train.
         var actorInputs = new Tensor<T>([n, stateDim]);
         var actorTargets = new Tensor<T>([n, actionDim]);
-        T stepSize = NumOps.FromDouble(0.05);
+        // DPG action-space ascent step for building the actor's regression target (Lillicrap et al.
+        // 2015). Named constant rather than a magic literal; deliberately distinct from the actor
+        // NETWORK's optimizer learning rate (_options.ActorLearningRate, already wired into
+        // _actorNetwork) — they play different roles and must not be conflated.
+        const double actorPolicyGradientStep = 0.05;
+        T stepSize = NumOps.FromDouble(actorPolicyGradientStep);
         for (int i = 0; i < n; i++)
         {
             var s = batch[i].State;

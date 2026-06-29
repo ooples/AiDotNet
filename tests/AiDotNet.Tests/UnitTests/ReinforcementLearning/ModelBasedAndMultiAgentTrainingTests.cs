@@ -13,7 +13,7 @@ using Xunit;
 namespace AiDotNet.Tests.UnitTests.ReinforcementLearning;
 
 /// <summary>
-/// Regression tests for issue #1727: MADDPG, Dreamer, and World Models shipped a stubbed
+/// Regression tests for issue #1727: MADDPG, Dreamer, World Models, and MuZero shipped a stubbed
 /// <c>Train()</c> whose losses were hardcoded to zero so their networks were never updated.
 /// These tests fill each agent's buffer with the kind of transition it expects, run a few
 /// training steps, and assert the agent's parameters actually change and stay finite.
