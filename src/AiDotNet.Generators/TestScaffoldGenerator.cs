@@ -1831,6 +1831,31 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         => IsFrameInterpolationModel(model) || IsOpticalFlowModel(model);
 
     /// <summary>
+    /// VisionLanguage models that consume POST-PATCH-EMBEDDING tokens of shape
+    /// [batch, num_tokens, vision_dim] rather than raw images. Single source of truth for the
+    /// roster — both the constructor/factory-body branch and the architecture-shape branch use this
+    /// (and <see cref="GetTokenConsumingVlmVisionDim"/>) so the generated InputShape's vision_dim and
+    /// the architecture's inputSize can never drift apart and re-introduce the gamma/weight
+    /// shape-mismatch this contract prevents.
+    /// </summary>
+    private static bool IsTokenConsumingVisionLanguageModel(string className)
+        => className is "GPT4Point" or "Helix" or "Octo" or "SigLIP2" or "ViLT" or "Florence2";
+
+    /// <summary>
+    /// The post-patch-embedding vision_dim for a <see cref="IsTokenConsumingVisionLanguageModel"/>
+    /// model — the value the generated [1, 4, vision_dim] InputShape and the architecture's inputSize
+    /// must agree on.
+    /// </summary>
+    private static int GetTokenConsumingVlmVisionDim(string className)
+        => className switch
+        {
+            "GPT4Point" => 512,
+            "Helix" => 1024,
+            "Octo" => 384,
+            _ => 768, // SigLIP2, ViLT, Florence2
+        };
+
+    /// <summary>
     /// Emits a generated test class for a model that has no manual test
     /// coverage. The caller (autogen loop) must have already verified the
     /// model has a usable parameterless / architecture-only constructor —
@@ -2026,8 +2051,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // the architecture is a 3D image (inputHeight: GetVisionSpatialSize=128) and the
                 // lazy fusion LayerNorm resolves gamma to 128 during the architecture-driven
                 // warm-up, so the real vision_dim forward throws a gamma/weight shape mismatch.
-                bool isTokenConsumingVlm = model.ClassName is "GPT4Point" or "Helix" or "Octo"
-                    or "SigLIP2" or "ViLT" or "Florence2";
+                bool isTokenConsumingVlm = IsTokenConsumingVisionLanguageModel(model.ClassName);
                 bool isVision = (model.Domains.Contains(1) || model.Domains.Contains(11)) // Vision=1, ThreeD=11
                     && !model.ExtendsForecastingModelBase
                     && !isTokenConsumingVlm;
@@ -2119,16 +2143,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // inputSize MUST equal that vision_dim. Otherwise the lazy fusion LayerNorm /
                     // attention resolves to 128 during the architecture-driven warm-up and the real
                     // vision_dim forward throws a gamma/weight shape mismatch.
-                    if (model.ClassName is "GPT4Point" or "Helix" or "Octo"
-                        or "SigLIP2" or "ViLT" or "Florence2")
+                    if (IsTokenConsumingVisionLanguageModel(model.ClassName))
                     {
-                        inputSize1D = model.ClassName switch
-                        {
-                            "GPT4Point" => 512,
-                            "Helix" => 1024,
-                            "Octo" => 384,
-                            _ => 768, // SigLIP2, ViLT, Florence2
-                        };
+                        inputSize1D = GetTokenConsumingVlmVisionDim(model.ClassName);
                     }
 
                     inputTypeExpr = "AiDotNet.Enums.InputType.OneDimensional";
