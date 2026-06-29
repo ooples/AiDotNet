@@ -19,8 +19,23 @@ public abstract class TransformerNERTestBase<T> : NERModelTestBase<T>
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var network = CreateNetwork();
-        var input1 = CreateConstantTensor(InputShape, 0.3);
-        var input2 = CreateConstantTensor(InputShape, 0.7);
+        // Two CONTENT-distinct contexts. The previous probe used two SPATIALLY
+        // CONSTANT inputs (0.3 vs 0.7) that differ only by a global scale, but a
+        // BERT-class NER encoder is LayerNorm-first and therefore invariant to a
+        // uniform scale/shift of its input — it correctly maps both constants to
+        // the same output, so the test was a false positive for "attention is
+        // broken". Use two inputs that differ in their PER-POSITION pattern (which
+        // survives LayerNorm) so the test exercises genuine contextual sensitivity
+        // and still fails loudly if the encoder truly ignores its input.
+        int lastDim = InputShape[InputShape.Length - 1];
+        var input1 = new Tensor<T>(InputShape);
+        var input2 = new Tensor<T>(InputShape);
+        for (int i = 0; i < input1.Length; i++)
+        {
+            int posInRow = i % lastDim;
+            input1[i] = NumOps.FromDouble(0.2 + 0.6 * (posInRow / (double)lastDim));
+            input2[i] = NumOps.FromDouble(0.8 - 0.6 * (posInRow / (double)lastDim));
+        }
 
         var labels1 = network.Predict(input1);
         var labels2 = network.Predict(input2);
