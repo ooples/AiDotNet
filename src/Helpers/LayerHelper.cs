@@ -33439,7 +33439,12 @@ public static class LayerHelper<T>
         {
             yield return new TransformerEncoderLayer<T>(
                 numHeads: nerHeads,
-                feedForwardDim: intermediateDimension);
+                feedForwardDim: intermediateDimension,
+                // Pass the embedding size explicitly (matching the sibling transformer-NER helper) so
+                // the encoder eagerly materializes its weights at construction. Without it the layer
+                // stays lazy and ParameterCount reads 0 until the first forward, which breaks
+                // pre-forward model gating / the Parameters_ShouldBeNonEmpty invariant.
+                embeddingSize: hiddenDimension);
 
             if (dropoutRate > 0 && layer < numTransformerLayers - 1)
             {
