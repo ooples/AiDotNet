@@ -2016,8 +2016,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // forecaster: its public input is a 1-D context, not an RGB image.
                 // Excluding forecasters here keeps the architecture (inputSize) and
                 // the InputShape (below) on the 1-D forecasting contract.
+                // VisionLanguage models that consume POST-PATCH-EMBEDDING tokens
+                // [batch, num_tokens, vision_dim] (GPT4Point/Helix/Octo/SigLIP2/ViLT/Florence2)
+                // carry the Vision domain but must NOT be built as raw-image 3D inputs: their
+                // InputShape override feeds [1, 4, vision_dim] and their architecture inputSize
+                // must equal vision_dim. Excluding them here drops them through to the generic 1D
+                // architecture branch below, where inputSize1D is set to each model's vision_dim
+                // (kept in lockstep with the [1, 4, vlVisionDim] InputShape override). Without this
+                // the architecture is a 3D image (inputHeight: GetVisionSpatialSize=128) and the
+                // lazy fusion LayerNorm resolves gamma to 128 during the architecture-driven
+                // warm-up, so the real vision_dim forward throws a gamma/weight shape mismatch.
+                bool isTokenConsumingVlm = model.ClassName is "GPT4Point" or "Helix" or "Octo"
+                    or "SigLIP2" or "ViLT" or "Florence2";
                 bool isVision = (model.Domains.Contains(1) || model.Domains.Contains(11)) // Vision=1, ThreeD=11
-                    && !model.ExtendsForecastingModelBase;
+                    && !model.ExtendsForecastingModelBase
+                    && !isTokenConsumingVlm;
                 bool isAudio = model.Domains.Contains(3); // Audio=3 (enum ordinal, not Video=4)
                 // Use the shared two-frame helpers so the constructor /
                 // factory-body emission and the architecture-shape emission
@@ -2087,6 +2100,35 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     if (family == TestFamily.SequenceLabelingNER)
                     {
                         inputSize1D = 100;
+                    }
+
+                    // Transformer / span-based NER (SpERT, etc.) feed [seqLen, 768] (the
+                    // HiddenDimension=768 InputShape override emitted below). Same lazy-resolution
+                    // hazard as the LSTM-CRF case above: the architecture's inputSize must equal
+                    // that 768, otherwise the lazy MultiHeadAttention inside the encoder resolves
+                    // its Q/K/V/O weights to 128 during ResolveLazyLayerShapes and the real 768-wide
+                    // forward then throws "embedding dimension does not match weight dimension".
+                    if (family == TestFamily.TransformerNER || family == TestFamily.SpanBasedNER)
+                    {
+                        inputSize1D = 768;
+                    }
+
+                    // VisionLanguage models that consume POST-PATCH-EMBEDDING tokens
+                    // [batch, num_tokens, vision_dim] (see the [1, 4, vision_dim] InputShape override
+                    // for GPT4Point / Helix / Octo / SigLIP2 / ViLT / Florence2): the architecture's
+                    // inputSize MUST equal that vision_dim. Otherwise the lazy fusion LayerNorm /
+                    // attention resolves to 128 during the architecture-driven warm-up and the real
+                    // vision_dim forward throws a gamma/weight shape mismatch.
+                    if (model.ClassName is "GPT4Point" or "Helix" or "Octo"
+                        or "SigLIP2" or "ViLT" or "Florence2")
+                    {
+                        inputSize1D = model.ClassName switch
+                        {
+                            "GPT4Point" => 512,
+                            "Helix" => 1024,
+                            "Octo" => 384,
+                            _ => 768, // SigLIP2, ViLT, Florence2
+                        };
                     }
 
                     inputTypeExpr = "AiDotNet.Enums.InputType.OneDimensional";
@@ -5491,6 +5533,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // 120 s timeout and let gradients drift to NaN. Routed through the VL
             // token-feature InputShape branch, which applies this smoke-test override.
             "Florence2" => true,
+            // ViLT (Kim et al. 2021): single-stream fusion with FusionDim=768 and
+            // NumFusionLayers=12 (~73 stacked attention/FFN/LayerNorm sublayers at
+            // d=768, fp64). Once the architecture-vs-InputShape dim fix (#1725) lets
+            // the forward run, a single Predict already walks all 12 fusion blocks;
+            // the default 10/100/200-iter training invariants then overflow the
+            // 120/180 s xUnit timeouts (measured: ForwardPass_AfterTraining and
+            // LossStrictlyDecreasesOnMemorizationTask both time out). Apply the same
+            // smoke-test iteration override as SigLIP2/Florence2 — the fusion depth
+            // and width stay paper-faithful; only the iteration COUNT is reduced so
+            // the train path is exercised without overflowing the budget.
+            "ViLT" => true,
             // Gemma3 (Google 2025): VisionDim=1152, DecoderDim=3584, 27 vision
             // layers, 36 decoder layers, ImageSize=896 SigLIP-SO. Default Adam
             // step OOMs the test runner before even completing the warm-up
