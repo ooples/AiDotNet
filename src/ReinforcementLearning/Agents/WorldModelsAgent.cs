@@ -306,12 +306,65 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             return NumOps.Zero;
         }
 
-        // Tape-based training handles gradient computation
+        var batch = _replayBuffer.Sample(_options.BatchSize);
+        int n = batch.Count;
         T vaeLoss = NumOps.Zero;
         T rnnLoss = NumOps.Zero;
+
+        if (n > 0)
+        {
+            int obsSize = _options.ObservationWidth * _options.ObservationHeight * _options.ObservationChannels;
+            int latentSize = _options.LatentSize;
+            int actionDim = _options.ActionSize;
+            int hiddenSize = _options.RNNHiddenSize;
+            int rnnInSize = latentSize + actionDim + hiddenSize;
+            int rnnOutSize = latentSize + hiddenSize;
+
+            var decIn = new Tensor<T>([n, latentSize]);
+            var decTgt = new Tensor<T>([n, obsSize]);
+            var rnnIn = new Tensor<T>([n, rnnInSize]);
+            var rnnTgt = new Tensor<T>([n, rnnOutSize]);
+            var encIn = new Tensor<T>([n, obsSize]);
+            var encTgt = new Tensor<T>([n, latentSize * 2]);
+            var zeroHidden = new Vector<T>(hiddenSize);
+
+            for (int i = 0; i < n; i++)
+            {
+                var exp = batch[i];
+                var mean = ExtractMean(_vaeEncoder.Predict(Tensor<T>.FromVector(exp.State)).ToVector());
+                var encNextOut = _vaeEncoder.Predict(Tensor<T>.FromVector(exp.NextState)).ToVector();
+                var meanNext = ExtractMean(encNextOut);
+
+                // MDN-RNN next-latent prediction: predict z_{t+1} from (z_t, a_t, h).
+                var rnnInput = ConcatenateVectors(ConcatenateVectors(mean, exp.Action), zeroHidden);
+                var rnnOut = _rnnNetwork.Predict(Tensor<T>.FromVector(rnnInput)).ToVector();
+
+                // VAE decoder reconstruction: D(z_t) -> o_t.
+                for (int j = 0; j < latentSize; j++) decIn[i, j] = mean[j];
+                for (int j = 0; j < obsSize && j < exp.State.Length; j++) decTgt[i, j] = exp.State[j];
+
+                // RNN target = its own output with the LATENT half steered toward z_{t+1}.
+                for (int j = 0; j < rnnInSize; j++) rnnIn[i, j] = rnnInput[j];
+                for (int j = 0; j < rnnOutSize; j++) rnnTgt[i, j] = rnnOut[j];
+                for (int j = 0; j < latentSize; j++) rnnTgt[i, j] = meanNext[j];
+
+                // Encoder consistency: steer E(o_{t+1}) mean toward the RNN's predicted next latent
+                // (keep its log-variance) so encoder and dynamics agree on the latent space.
+                for (int j = 0; j < obsSize && j < exp.NextState.Length; j++) encIn[i, j] = exp.NextState[j];
+                for (int j = 0; j < latentSize; j++) encTgt[i, j] = rnnOut[j];
+                for (int j = 0; j < latentSize; j++) encTgt[i, latentSize + j] = encNextOut[latentSize + j];
+            }
+
+            _vaeDecoder.Train(decIn, decTgt);
+            _vaeEncoder.Train(encIn, encTgt);
+            _rnnNetwork.Train(rnnIn, rnnTgt);
+            vaeLoss = NumOps.Add(_vaeDecoder.GetLastLoss(), _vaeEncoder.GetLastLoss());
+            rnnLoss = _rnnNetwork.GetLastLoss();
+        }
+
         T totalLoss = NumOps.Add(vaeLoss, rnnLoss);
 
-        // Train Controller (evolution strategy - simplified to gradient-based)
+        // Train Controller (evolution strategy - (1+1)-ES; full World Models uses CMA-ES)
         T controllerLoss = TrainController();
         totalLoss = NumOps.Add(totalLoss, controllerLoss);
 

@@ -227,10 +227,56 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         var batch = _replayBuffer.Sample(_options.BatchSize);
+        int n = batch.Count;
+        if (n == 0) return NumOps.Zero;
 
-        // Update critic and actor with tape-based training
-        T criticLoss = NumOps.Zero;
-        T actorLoss = NumOps.Zero;
+        int stateDim = _options.StateSize;
+        int actionDim = _options.ActionSize;
+        int saDim = stateDim + actionDim;
+        T gamma = _options.DiscountFactor;
+
+        // --- Critic update (Lillicrap et al. 2015) ---
+        // y = r + gamma*(1-done)*Q'(s', mu'(s')); regress the critic toward y.
+        var saInputs = new Tensor<T>([n, saDim]);
+        var yTargets = new Tensor<T>([n, 1]);
+        for (int i = 0; i < n; i++)
+        {
+            var exp = batch[i];
+            var nextA = _actorTargetNetwork.Predict(Tensor<T>.FromVector(exp.NextState)).ToVector();
+            var nextSA = Tensor<T>.FromVector(ConcatenateStateAction(exp.NextState, nextA));
+            T qNext = _criticTargetNetwork.Predict(nextSA).ToVector()[0];
+
+            T y = exp.Reward;
+            if (!exp.Done) y = NumOps.Add(y, NumOps.Multiply(gamma, qNext));
+
+            var saVec = ConcatenateStateAction(exp.State, exp.Action);
+            for (int j = 0; j < saDim; j++) saInputs[i, j] = saVec[j];
+            yTargets[i, 0] = y;
+        }
+        _criticNetwork.Train(saInputs, yTargets);
+        T criticLoss = _criticNetwork.GetLastLoss();
+
+        // --- Actor update via the deterministic policy gradient ---
+        // ∇θ J = E[∇a Q(s,a)|a=mu(s) · ∇θ mu(s)]. ComputeDDPGPolicyGradient returns −∇a Q (a loss
+        // gradient for gradient ASCENT on Q); the Q-ascending action target is therefore
+        // a − step·(−∇a Q) = a + step·∇a Q. Training the actor toward it realises the chain rule
+        // ∇θ mu through the network's MSE Train.
+        var actorInputs = new Tensor<T>([n, stateDim]);
+        var actorTargets = new Tensor<T>([n, actionDim]);
+        T stepSize = NumOps.FromDouble(0.05);
+        for (int i = 0; i < n; i++)
+        {
+            var s = batch[i].State;
+            var a = _actorNetwork.Predict(Tensor<T>.FromVector(s)).ToVector();
+            var negGrad = ComputeDDPGPolicyGradient(s, a);
+            for (int j = 0; j < stateDim; j++) actorInputs[i, j] = s[j];
+            for (int k = 0; k < actionDim; k++)
+                actorTargets[i, k] = MathHelper.Clamp<T>(
+                    NumOps.Subtract(a[k], NumOps.Multiply(stepSize, negGrad[k])),
+                    NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0));
+        }
+        _actorNetwork.Train(actorInputs, actorTargets);
+        T actorLoss = _actorNetwork.GetLastLoss();
 
         // Soft update target networks
         SoftUpdateTargets();
