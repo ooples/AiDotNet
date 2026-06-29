@@ -243,6 +243,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         // Generated A-M shard foundation-scale training timeouts (#1719): DPT-Large depth, 768-dim VLMs.
         "MiDaS", "METER", "DocPedia", "MERT", "LXMERT",
+        // #1719 follow-up (#1694 endgame): verified-genuine foundation-scale OOM/120s-timeout on the gate
+        // box — 9B-class generative VLM (same family as LXMERT/METER/SmolVLM) and an audio-LM. The
+        // gradients DO flow; the footprint simply exceeds the runner, so they run in the nightly heavy lane.
+        "IDEFICS", "MusicFlamingo",
     };
 
     private static readonly System.Collections.Generic.HashSet<string> Fp32TestClassNames =
