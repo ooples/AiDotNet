@@ -51,6 +51,25 @@ public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
         int embDim = HiddenUnits;
         if (n < 3 || d < 2) return new Matrix<T>(d, d);
 
+        // Raw per-column variance (computed BEFORE standardizing) — used only to ORIENT the final DAG, not
+        // to learn it. DAG-GNN's data-fit signal here is the squared correlation cov[i,j]²/var[i], which
+        // becomes symmetric once the columns are standardized to unit variance (cov[i,j]² = cov[j,i]²), so
+        // the learned probability matrix P cannot recover edge DIRECTION on its own. An exogenous root has
+        // higher variance than its attenuated descendants (x1 = 0.8·x0 + noise ⇒ var(x1) < var(x0)), so
+        // ordering nodes by descending raw variance yields the correct causal direction. This stays
+        // invariant to the uniform data scaling the contract requires: scaling every column by c multiplies
+        // every variance by c², leaving the ordering — and therefore the oriented structure — unchanged.
+        var rawVar = new double[d];
+        for (int j = 0; j < d; j++)
+        {
+            double mean = 0;
+            for (int i = 0; i < n; i++) mean += NumOps.ToDouble(data[i, j]);
+            mean /= n;
+            double v = 0;
+            for (int i = 0; i < n; i++) { double c = NumOps.ToDouble(data[i, j]) - mean; v += c * c; }
+            rawVar[j] = v / Math.Max(1, n - 1);
+        }
+
         // Standardize columns so the LEARNING is invariant to per-variable scaling.
         data = StandardizeColumns(data);
 
@@ -166,12 +185,12 @@ public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
                 finalP[i, j] = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
             }
 
-        // Project the asymmetric learned probabilities onto a DAG using their scale-invariant net out-flow
-        // (Σ_j P[i,j] − P[j,i]): the source-like node points OUT more than IN. Orienting from the learned P
-        // (rather than raw per-column variance) keeps the final graph invariant to per-variable rescaling,
-        // matching the standardized learning path. BuildFinalAdjacency then thresholds and weights the
-        // acyclic probabilities.
-        return BuildFinalAdjacency(ProjectToDag(finalP, d), cov, d);
+        // Project the asymmetric learned probabilities onto a DAG, orienting by raw per-column variance
+        // (highest-variance exogenous root first). The learned P is (near-)symmetric after standardization
+        // and cannot orient edges by itself; the variance ordering supplies the direction and is preserved
+        // under uniform scaling (see rawVar above), so the result stays scale-invariant. BuildFinalAdjacency
+        // then thresholds and weights the acyclic probabilities.
+        return BuildFinalAdjacency(ProjectToDag(finalP, d, rawVar), cov, d);
     }
 
 }
