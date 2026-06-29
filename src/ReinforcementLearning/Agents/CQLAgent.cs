@@ -281,6 +281,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         for (int i = 0; i < n; i++)
         {
             var exp = batch[i];
+            var stateTensor = Tensor<T>.FromVector(exp.State);
 
             // Next action from the (current) policy — deterministic mean for a stable target.
             var nextAction = SelectAction(exp.NextState, training: false);
@@ -312,14 +313,24 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             for (int j = 0; j < saDim; j++) randSA[i, j] = randomSAVec[j];
             consTargets[i, 0] = _numOps.Subtract(qRand, _options.CQLAlpha);
 
-            // --- Offline policy extraction: regress the policy mean toward the dataset action
-            // (logarithm of std toward 0), so the actor imitates the behaviour actions whose
-            // value the conservative critic has learned. ---
+            // --- Policy improvement (CQL is built on SAC; Kumar et al. 2020 §3.2): the actor
+            // MAXIMISES the (conservative) Q. We take the squashed policy mean as the current
+            // action, estimate ∇a min(Q1,Q2) by central finite differences (the deterministic
+            // policy gradient), and regress the policy mean toward the Q-ascending action target
+            // a + step·∇a Q. log_std targets 0. The conservative critic keeps this maximisation
+            // from exploiting over-valued out-of-distribution actions. ---
+            var polOut = _policyNetwork.Predict(stateTensor).ToVector();
+            var aCur = new Vector<T>(actionDim);
+            for (int k = 0; k < actionDim; k++) aCur[k] = MathHelper.Tanh<T>(polOut[k]);
+            var qGrad = FiniteDiffMinQActionGradient(exp.State, aCur);
+            T polStep = _numOps.FromDouble(0.05);
             for (int j = 0; j < stateDim; j++) policyInputs[i, j] = exp.State[j];
             for (int k = 0; k < actionDim; k++)
             {
-                policyTargets[i, k] = exp.Action[k];                 // mean -> data action
-                policyTargets[i, actionDim + k] = _numOps.Zero;      // log_std -> 0
+                policyTargets[i, k] = MathHelper.Clamp<T>(
+                    _numOps.Add(aCur[k], _numOps.Multiply(polStep, qGrad[k])),
+                    _numOps.FromDouble(-1), _numOps.FromDouble(1));   // mean -> Q-ascending action
+                policyTargets[i, actionDim + k] = _numOps.Zero;       // log_std -> 0
             }
         }
 
@@ -346,6 +357,35 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         _updateCount++;
 
         return _numOps.Divide(totalLoss, _numOps.FromDouble(3));
+    }
+
+    /// <summary>
+    /// Central finite-difference estimate of ∇a min(Q1(s,a), Q2(s,a)) — the action gradient the
+    /// SAC-based CQL actor ascends (the deterministic policy gradient), used because the critics
+    /// expose no analytic gradient w.r.t. their action input.
+    /// </summary>
+    private Vector<T> FiniteDiffMinQActionGradient(Vector<T> state, Vector<T> action)
+    {
+        var grad = new Vector<T>(action.Length);
+        T eps = _numOps.FromDouble(1e-3);
+        T twoEps = _numOps.FromDouble(2e-3);
+        for (int i = 0; i < action.Length; i++)
+        {
+            var aPlus = action.Clone();
+            var aMinus = action.Clone();
+            aPlus[i] = _numOps.Add(action[i], eps);
+            aMinus[i] = _numOps.Subtract(action[i], eps);
+            var saPlus = Tensor<T>.FromVector(ConcatenateStateAction(state, aPlus));
+            var saMinus = Tensor<T>.FromVector(ConcatenateStateAction(state, aMinus));
+            T qPlus1 = _q1Network.Predict(saPlus).ToVector()[0];
+            T qPlus2 = _q2Network.Predict(saPlus).ToVector()[0];
+            T qMinus1 = _q1Network.Predict(saMinus).ToVector()[0];
+            T qMinus2 = _q2Network.Predict(saMinus).ToVector()[0];
+            T qPlus = _numOps.LessThan(qPlus1, qPlus2) ? qPlus1 : qPlus2;
+            T qMinus = _numOps.LessThan(qMinus1, qMinus2) ? qMinus1 : qMinus2;
+            grad[i] = _numOps.Divide(_numOps.Subtract(qPlus, qMinus), twoEps);
+        }
+        return grad;
     }
 
     private T ComputeCQLPenalty(Vector<T> state, Vector<T> dataAction, T q1Value, T q2Value)
