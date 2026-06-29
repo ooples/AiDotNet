@@ -414,97 +414,65 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         // degrades gracefully to single-step updates when it isn't.
         int effectiveBatchSize = Math.Min(_replayBuffer.Count, _options.BatchSize);
         var batch = _replayBuffer.Sample(effectiveBatchSize);
-        T totalLoss = NumOps.Zero;
-        int lossCount = 0;
+        int n = batch.Count;
+        if (n == 0) return NumOps.Zero;
 
-        foreach (var experience in batch)
+        int latent = _options.LatentStateSize;
+        int actionDim = _options.ActionSize;
+        T gamma = DiscountFactor;
+
+        // MuZero joint training (Schrittwieser et al. 2020): the representation, dynamics and
+        // prediction networks are trained together. Earlier this method computed losses and built
+        // gradient tensors but never applied them, so the networks stayed frozen. Build the targets
+        // and apply real gradient steps through the tape-based Train(input, target).
+        var repIn = new Tensor<T>([n, _options.ObservationSize]);
+        var repTgt = new Tensor<T>([n, latent]);
+        var dynIn = new Tensor<T>([n, latent + actionDim]);
+        var dynTgt = new Tensor<T>([n, latent + 1]);
+        var predIn = new Tensor<T>([n, latent]);
+        var predTgt = new Tensor<T>([n, actionDim + 1]);
+
+        for (int i = 0; i < n; i++)
         {
-            // Step 1: Representation Network - encode initial observation to hidden state
-            var stateTensor = Tensor<T>.FromVector(experience.State);
-            var representationOutputTensor = _representationNetwork.Predict(stateTensor);
-            var hiddenState = representationOutputTensor.ToVector();
+            var exp = batch[i];
+            var hidden = _representationNetwork.Predict(Tensor<T>.FromVector(exp.State)).ToVector();
+            var nextHidden = _representationNetwork.Predict(Tensor<T>.FromVector(exp.NextState)).ToVector();
 
-            // Step 2: Prediction Network at initial state - predict policy and value
-            var predictionTensor = Tensor<T>.FromVector(hiddenState);
-            var predictionOutputTensor = _predictionNetwork.Predict(predictionTensor);
-            var prediction = predictionOutputTensor.ToVector();
-            var predictedValue = ExtractValue(prediction);
+            // Dynamics prediction g(h, a) -> (h', r); used for the encoder-consistency target.
+            var dynInput = ConcatenateVectors(hidden, exp.Action);
+            var dynOut = _dynamicsNetwork.Predict(Tensor<T>.FromVector(dynInput)).ToVector();
 
-            // Compute value loss for initial state
-            var valueTarget = experience.Done ? experience.Reward :
-                NumOps.Add(experience.Reward, NumOps.Multiply(DiscountFactor, predictedValue));
+            // Value target bootstraps off the prediction head at the next latent.
+            var nextPred = _predictionNetwork.Predict(Tensor<T>.FromVector(nextHidden)).ToVector();
+            T nextValue = ExtractValue(nextPred);
+            T valueTarget = exp.Done ? exp.Reward : NumOps.Add(exp.Reward, NumOps.Multiply(gamma, nextValue));
 
-            var valueDiff = NumOps.Subtract(valueTarget, predictedValue);
-            var valueLoss = NumOps.Multiply(valueDiff, valueDiff);
-            totalLoss = NumOps.Add(totalLoss, valueLoss);
-            lossCount++;
+            // Prediction head: policy toward the (MCTS-selected) action one-hot, value toward bootstrap.
+            for (int j = 0; j < latent; j++) predIn[i, j] = hidden[j];
+            for (int k = 0; k < actionDim; k++) predTgt[i, k] = k < exp.Action.Length ? exp.Action[k] : NumOps.Zero;
+            predTgt[i, actionDim] = valueTarget;
 
-            // Backpropagate prediction loss through prediction network
-            var predictionGradient = new Vector<T>(_options.ActionSize + 1);
-            predictionGradient[_options.ActionSize] = NumOps.Multiply(NumOps.FromDouble(2.0), valueDiff);
-            var predictionGradTensor = Tensor<T>.FromVector(predictionGradient);
+            // Dynamics: next latent = representation(o'), reward = r.
+            for (int j = 0; j < latent + actionDim; j++) dynIn[i, j] = dynInput[j];
+            for (int j = 0; j < latent; j++) dynTgt[i, j] = nextHidden[j];
+            dynTgt[i, latent] = exp.Reward;
 
-            // Step 3: Unroll dynamics for K steps
-            for (int k = 0; k < _options.UnrollSteps; k++)
-            {
-                // Dynamics Network: predict next hidden state and reward
-                var actionVec = experience.Action;
-                var dynamicsInput = ConcatenateVectors(hiddenState, actionVec);
-                var dynamicsInputTensor = Tensor<T>.FromVector(dynamicsInput);
-                var dynamicsOutputTensor = _dynamicsNetwork.Predict(dynamicsInputTensor);
-                var dynamicsOutput = dynamicsOutputTensor.ToVector();
-
-                // Extract predicted reward and next hidden state
-                var predictedReward = dynamicsOutput[_options.LatentStateSize];
-                var nextHiddenState = new Vector<T>(_options.LatentStateSize);
-                for (int i = 0; i < _options.LatentStateSize; i++)
-                {
-                    nextHiddenState[i] = dynamicsOutput[i];
-                }
-
-                // Compute reward loss
-                var rewardDiff = NumOps.Subtract(experience.Reward, predictedReward);
-                var rewardLoss = NumOps.Multiply(rewardDiff, rewardDiff);
-                totalLoss = NumOps.Add(totalLoss, rewardLoss);
-                lossCount++;
-
-                // Backpropagate reward loss through dynamics network
-                var dynamicsGradient = new Vector<T>(_options.LatentStateSize + 1);
-                dynamicsGradient[_options.LatentStateSize] = NumOps.Multiply(NumOps.FromDouble(2.0), rewardDiff);
-                var dynamicsGradTensor = Tensor<T>.FromVector(dynamicsGradient);
-
-                // Prediction Network at next state
-                var nextPredictionTensor = Tensor<T>.FromVector(nextHiddenState);
-                var nextPredictionOutputTensor = _predictionNetwork.Predict(nextPredictionTensor);
-                var nextPrediction = nextPredictionOutputTensor.ToVector();
-                var nextPredictedValue = ExtractValue(nextPrediction);
-
-                // Compute value loss for next state
-                var nextValueTarget = experience.Done ? NumOps.Zero : nextPredictedValue;
-                var nextValueDiff = NumOps.Subtract(nextValueTarget, nextPredictedValue);
-                var nextValueLoss = NumOps.Multiply(nextValueDiff, nextValueDiff);
-                totalLoss = NumOps.Add(totalLoss, nextValueLoss);
-                lossCount++;
-
-                // Backpropagate next state value loss through prediction network
-                var nextPredictionGradient = new Vector<T>(_options.ActionSize + 1);
-                nextPredictionGradient[_options.ActionSize] = NumOps.Multiply(NumOps.FromDouble(2.0), nextValueDiff);
-                var nextPredictionGradTensor = Tensor<T>.FromVector(nextPredictionGradient);
-
-                // Move to next state
-                hiddenState = nextHiddenState;
-            }
-
-            // Step 4: Backpropagate through representation network
-            // The representation gradient comes from the prediction network loss
-            var representationGradient = new Vector<T>(_options.LatentStateSize);
-            representationGradient[0] = NumOps.Multiply(NumOps.FromDouble(2.0), valueDiff);
-            var representationGradTensor = Tensor<T>.FromVector(representationGradient);
+            // Encoder/dynamics consistency: representation(o') toward the dynamics-predicted next latent.
+            for (int j = 0; j < _options.ObservationSize; j++) repIn[i, j] = exp.NextState[j];
+            for (int j = 0; j < latent; j++) repTgt[i, j] = dynOut[j];
         }
+
+        _predictionNetwork.Train(predIn, predTgt);
+        _dynamicsNetwork.Train(dynIn, dynTgt);
+        _representationNetwork.Train(repIn, repTgt);
+
+        T totalLoss = NumOps.Add(
+            NumOps.Add(_predictionNetwork.GetLastLoss(), _dynamicsNetwork.GetLastLoss()),
+            _representationNetwork.GetLastLoss());
 
         _updateCount++;
 
-        return lossCount > 0 ? NumOps.Divide(totalLoss, NumOps.FromDouble(lossCount)) : NumOps.Zero;
+        return totalLoss;
     }
 
 

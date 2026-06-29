@@ -5,6 +5,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.ReinforcementLearning.Agents.Dreamer;
 using AiDotNet.ReinforcementLearning.Agents.MADDPG;
+using AiDotNet.ReinforcementLearning.Agents.MuZero;
 using AiDotNet.ReinforcementLearning.Agents.WorldModels;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
@@ -134,5 +135,33 @@ public class ModelBasedAndMultiAgentTrainingTests
 
         Assert.True(ParametersChangedAndFinite(before, after),
             "WorldModelsAgent parameters did not change after training — Train() is not applying a gradient step.");
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task MuZero_Train_UpdatesParameters()
+    {
+        await Task.Yield();
+        const int obs = 4, actionDim = 2, batch = 8;
+        var agent = new MuZeroAgent<double>(new MuZeroOptions<double>
+        {
+            ObservationSize = obs,
+            ActionSize = actionDim,
+            LatentStateSize = 16,
+            BatchSize = batch,
+        });
+        var rng = RandomHelper.CreateSeededRandom(13);
+        for (int t = 0; t < batch * 2; t++)
+        {
+            var a = new Vector<double>(actionDim);
+            a[rng.Next(actionDim)] = 1.0; // one-hot action
+            agent.StoreExperience(Rand(rng, obs), a, rng.NextDouble(), Rand(rng, obs), false);
+        }
+
+        var before = agent.GetParameters();
+        for (int step = 0; step < 5; step++) agent.Train();
+        var after = agent.GetParameters();
+
+        Assert.True(ParametersChangedAndFinite(before, after),
+            "MuZeroAgent parameters did not change after training — Train() builds gradients but never applies them.");
     }
 }
