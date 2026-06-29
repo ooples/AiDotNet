@@ -5655,15 +5655,31 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // unified). The enable itself is latched in Predict (guaranteed inference mode
         // there, so it is correct regardless of whether this finalize ran from a
         // training- or inference-mode call) keyed on _streamingEngagedByAutoDetect.
-        ConfigureWeightLifetime(options);
-        // Declare the default (inference) execution mode so the zero-copy mmap
-        // fast path is eligible immediately — a freshly-built model is in
-        // inference mode until Train() flips it via SetTrainingMode(true), which
-        // forwards the training state here and correctly disables zero-copy
-        // (training writes weights; the mmap alias is read-only).
-        SetStreamingExecutionTrainingIfSupported(IsTrainingMode);
-        _streamingEngagedByAutoDetect = true;
-        _streamingAutoDetectFinalized = true;
+        //
+        // Claim the process-global, single-tenant streaming registry ATOMICALLY. The early
+        // RegisteredEntryCount==0 guard above is only a fast path; on its own it is TOCTOU — two
+        // foundation-scale models constructing concurrently could both observe an empty registry and
+        // then both reach ConfigureWeightLifetime, the second of which throws ("existing streaming
+        // pool has N registered entries") or clobbers the first model's pool. Re-check the count
+        // under a process-wide gate immediately around the configure+finalize so exactly one model
+        // claims streaming; a racer that lost cleanly DECLINES (runs in-memory) instead of throwing.
+        lock (WeightStreamingAutoDetectGate.Sync)
+        {
+            if (WeightRegistry.GetStreamingReport().RegisteredEntryCount > 0)
+            {
+                _streamingAutoDetectFinalized = true;
+                return;
+            }
+            ConfigureWeightLifetime(options);
+            // Declare the default (inference) execution mode so the zero-copy mmap
+            // fast path is eligible immediately — a freshly-built model is in
+            // inference mode until Train() flips it via SetTrainingMode(true), which
+            // forwards the training state here and correctly disables zero-copy
+            // (training writes weights; the mmap alias is read-only).
+            SetStreamingExecutionTrainingIfSupported(IsTrainingMode);
+            _streamingEngagedByAutoDetect = true;
+            _streamingAutoDetectFinalized = true;
+        }
     }
 
     /// <summary>
@@ -11421,5 +11437,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     #endregion
 
+}
+
+/// <summary>
+/// Process-wide gate that serializes the weight-streaming auto-detect claim on the single-tenant,
+/// process-global <c>WeightRegistry</c>. NON-generic on purpose: a static field inside the generic
+/// <see cref="NeuralNetworkBase{T}"/> gets a SEPARATE instance per closed type
+/// (<c>&lt;float&gt;</c> vs <c>&lt;double&gt;</c>), which would let two models of different element
+/// types both win the "registry is empty" race and both configure the shared pool. Every model
+/// type locks on this single object so exactly one auto-detect claim configures streaming at a time.
+/// </summary>
+internal static class WeightStreamingAutoDetectGate
+{
+    internal static readonly object Sync = new();
 }
 
