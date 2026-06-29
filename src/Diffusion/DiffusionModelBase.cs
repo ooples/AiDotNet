@@ -174,6 +174,11 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// </summary>
     private Tensor<T>[]? _cachedTrainableParameters;
 
+    // #1706: set once the noise predictor's lazy weights have been materialized OUTSIDE the
+    // transient per-Generate denoise arena (see the warmup in Generate). Stops the first Generate
+    // from allocating model-lifetime weights into that arena, which frees them on dispose.
+    private bool _lazyWeightsWarmed;
+
     // ── Copy-on-write weight sharing (cheap Clone of large models) ───────────────────────────────
     //
     // Clone() shares the parent's weight TENSORS by reference instead of deep-copying every
@@ -664,6 +669,28 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
 
         // Pre-allocate reusable noise prediction vector to avoid per-step allocation
         var noisePredVec = new Vector<T>(sample.Length);
+
+        // #1706 (HiDream/MMDiTX; #1710 follow-up): a freshly-constructed noise predictor
+        // materializes its lazy weights (LazyDense / conv / embedding) on its FIRST forward, via
+        // the forward path. If that first forward runs inside the transient per-Generate arena
+        // created below, those model-lifetime weights are RentPinned into it and freed when the
+        // arena disposes at the end of THIS call — so the NEXT Generate reads recycled memory and
+        // Predict becomes non-deterministic (confirmed: arena-on differs by ~5e5, arena-off is
+        // exact, and a single warmup outside the arena restores determinism). Materialize them
+        // once here with a single warmup forward OUTSIDE the arena so they land on the GC heap
+        // (or an outer, longer-lived arena) and survive. One forward, one time per model; the
+        // denoise loop's per-step arena recycling below is unchanged.
+        if (!_lazyWeightsWarmed)
+        {
+            int warmupTimestep = 0;
+            foreach (var t in _scheduler.Timesteps) { warmupTimestep = t; break; }
+            sample.AsSpan().CopyTo(sampleTensor.AsWritableSpan());
+            using (InferenceMode.Enter())
+            {
+                PredictNoiseStep(sampleTensor, warmupTimestep);
+            }
+            _lazyWeightsWarmed = true;
+        }
 
         // Forward caching allocator (Tensors #661 consumer wiring, second boundary
         // after NeuralNetworkBase.Predict): a NoisePredictorBase forward is NOT a

@@ -159,6 +159,7 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
         IDiffusionModel<T>? diffusionPrior = null,
         DreamFusionConfig? config = null,
         IConditioningModule<T>? conditioner = null,
+        UNetNoisePredictor<T>? unet = null,
         int? seed = null)
         : base(
             new DiffusionModelOptions<T>
@@ -175,7 +176,7 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
         _conditioner = conditioner;
         _diffusionPrior = diffusionPrior ?? this;
 
-        InitializeLayers(seed);
+        InitializeLayers(unet, seed);
     }
 
     #endregion
@@ -186,9 +187,9 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
     /// Initializes the U-Net, VAE, and NeRF network layers.
     /// </summary>
     [MemberNotNull(nameof(_unet), nameof(_vae), nameof(_nerf))]
-    private void InitializeLayers(int? seed)
+    private void InitializeLayers(UNetNoisePredictor<T>? unet, int? seed)
     {
-        _unet = new UNetNoisePredictor<T>(
+        _unet = unet ?? new UNetNoisePredictor<T>(
             inputChannels: DREAM_LATENT_CHANNELS,
             outputChannels: DREAM_LATENT_CHANNELS,
             baseChannels: 64,
@@ -662,14 +663,22 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new DreamFusionModel<T>(
-            diffusionPrior: null,
+        // #1706: clone the noise predictor through its OWN Clone() (UNetNoisePredictor.Clone
+        // materializes the clone's lazy layers then copies weights). The previous fresh-construct +
+        // model-level TryShareParametersFrom left the clone's U-Net (and the NeRF DenseLayers) lazy:
+        // the share saw zero-shape tensors, fell back to SetParameters, and the clone re-RNG-
+        // initialized on its first forward and diverged from the source
+        // (Clone_ShouldProduceIdenticalOutput, maxDiff ~3e1). Only the U-Net is on the Predict
+        // (denoise) path, so passing a faithful U-Net clone makes Predict output identical; the VAE
+        // and NeRF (used by VAE-decode / 3D rendering, not by Predict) are rebuilt fresh. The prior
+        // is preserved so non-Predict behaviour is unchanged.
+        return new DreamFusionModel<T>(
+            architecture: Architecture,
+            diffusionPrior: ReferenceEquals(_diffusionPrior, this) ? null : _diffusionPrior,
             config: _config,
             conditioner: _conditioner,
+            unet: (UNetNoisePredictor<T>)_unet.Clone(),
             seed: RandomGenerator.Next());
-
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
-        return clone;
     }
 
     /// <inheritdoc />

@@ -153,9 +153,18 @@ public class TCDModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new TCDModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
-        return clone;
+        // #1706: delegate to the sub-models' own Clone() (UNetNoisePredictor.Clone materializes the
+        // clone's lazy layers then copies weights). The previous fresh-construct + model-level
+        // TryShareParametersFrom path left the clone's U-Net lazy — the share saw zero-shape tensors,
+        // fell back to SetParameters, and the clone re-RNG-initialized on its first forward, diverging
+        // from the source (Clone_ShouldProduceIdenticalOutput; the seed was random too).
+        return new TCDModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner);
     }
 
     /// <inheritdoc />
