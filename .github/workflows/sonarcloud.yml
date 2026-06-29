@@ -129,7 +129,7 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Cache NuGet packages
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
@@ -184,7 +184,7 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Cache NuGet packages
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
@@ -669,7 +669,7 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Cache NuGet packages
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
@@ -927,7 +927,7 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Cache NuGet packages
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
@@ -935,7 +935,7 @@ jobs:
             nuget-${{ runner.os }}-
 
       - name: Cache SonarCloud packages
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
         with:
           path: ~/.sonar/cache
           key: ${{ runner.os }}-sonar
@@ -943,7 +943,7 @@ jobs:
 
       - name: Cache SonarCloud scanner
         id: cache-sonar-scanner
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
         with:
           path: ${{ runner.temp }}/scanner
           key: ${{ runner.os }}-sonar-scanner
@@ -1043,7 +1043,7 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Cache NuGet packages
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
