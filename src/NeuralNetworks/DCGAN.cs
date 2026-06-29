@@ -3,8 +3,10 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -200,6 +202,23 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
             lossFunction: LossFunction,
             options: _options);
     }
+
+    /// <summary>
+    /// DCGAN-faithful default optimizer (Radford et al. 2015 §4): Adam with learning rate 0.0002
+    /// and beta1 0.5 for both the generator and discriminator. The framework default (lr=0.001,
+    /// beta1=0.9) is exactly the regime the paper reports causes "training oscillation and
+    /// instability"; these are the paper's canonical stabilizing hyperparameters and belong in the
+    /// model rather than every caller.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer(
+        NeuralNetworkBase<T> network)
+        => new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            network,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 0.0002,
+                Beta1 = 0.5,
+            });
 
     /// <summary>
     /// Creates the architecture for the DCGAN generator following the original paper's guidelines.

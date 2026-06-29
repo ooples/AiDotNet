@@ -424,12 +424,26 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
             discriminatorArchitecture.InputType, lossFunction: lossFunction);
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType);
 
-        // Initialize optimizers (default to Adam if not provided)
-        _generatorOptimizer = generatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Generator);
-        _discriminatorOptimizer = discriminatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Discriminator);
+        // Initialize optimizers (default to Adam if not provided). CreateDefaultOptimizer is
+        // virtual so a specific GAN can supply paper-faithful default hyperparameters for its
+        // networks (e.g. DCGAN's lr=0.0002 / beta1=0.5) without having to construct the optimizer
+        // itself — Generator/Discriminator are only built above, inside this ctor.
+        _generatorOptimizer = generatorOptimizer ?? CreateDefaultOptimizer(Generator);
+        _discriminatorOptimizer = discriminatorOptimizer ?? CreateDefaultOptimizer(Discriminator);
 
         InitializeLayers();
     }
+
+    /// <summary>
+    /// Creates the default per-network optimizer used when the caller does not supply one.
+    /// The base implementation is a plain Adam with framework defaults. Virtual so a specific GAN
+    /// can override the default hyperparameters for its networks (e.g. DCGAN uses the paper's
+    /// lr=0.0002 / beta1=0.5 to avoid the generator/discriminator imbalance the framework default
+    /// lr=0.001 / beta1=0.9 induces — Radford et al. 2015 §4).
+    /// </summary>
+    protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer(
+        NeuralNetworkBase<T> network)
+        => new AdamOptimizer<T, Tensor<T>, Tensor<T>>(network);
 
     /// <summary>
     /// Creates the appropriate neural network type based on the input type.
