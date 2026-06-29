@@ -743,6 +743,14 @@ jobs:
             'ModelFamily - NeuralNetworks O-R',
             'ModelFamily - NeuralNetworks S',
             'ModelFamily - NeuralNetworks T-Z',
+            # TimeSeries/Activation/Loss: the double-precision Transformer/CNN forecasters
+            # (Autoformer, Chronos, DeepANT, LSTM-VAE, ...) each fit the 60 s [Fact] budget in
+            # isolation (~15 s) but TIME OUT under the shard's default 4-way collection parallelism —
+            # their managed-engine forward parallelizes over all cores, so N classes in flight
+            # oversubscribe the runner's 4 cores and stall well past 60 s. Serialize so each runs
+            # uncontended with the whole machine (the contention is CPU, not paper-scale heaviness, so
+            # these stay in the default gate rather than HeavyTimeout). #1706/#1305.
+            'ModelFamily - TimeSeries/Activation/Loss',
             'ModelFamily - Code/Forecast/Segment/Survival',
             'Unit - 03a Diffusion Core/Schedulers/Encoding',
             'Unit - 03b Diffusion Models Control/DDPM/Preprocessor',
