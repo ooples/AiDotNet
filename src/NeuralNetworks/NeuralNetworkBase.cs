@@ -8558,7 +8558,25 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // ~50M params ⇒ ~400 MB fp32 moment state (2 buffers x 4B); BF16 halves that to ~200 MB. Below
         // this the fp32 state is small enough that the pack/unpack overhead isn't worth it.
         const long bf16ParamThreshold = 50_000_000L;
-        return ParameterCount >= bf16ParamThreshold;
+        if (ParameterCount < bf16ParamThreshold)
+            return false;
+
+        // BF16-Adam (the Adam8BitOptimizer with BF16 moment storage) is NOT fused-kernel-compatible:
+        // TryMapToFusedOptimizerConfig only accepts plain Adam/AdamW/SGD, so selecting it drops the ENTIRE
+        // model off the compiled fused-training fast path onto the eager autograd tape (~10x slower per
+        // step — measured ~5 s/step vs the fused path on ViT-Base). Proactively trading the fast path for a
+        // BF16 moment saving is only worth it when that saving actually matters — i.e. when the fp32 moment
+        // state would consume a meaningful fraction of available memory. For a model that fits comfortably
+        // (the common case: a ≥50M model on a normal host), the fp32 moments are a small slice of RAM and
+        // losing the fused path is a terrible trade. Gate the proactive BF16 on real memory pressure,
+        // mirroring the fits-in-memory guard used for weight streaming. Models that genuinely don't fit
+        // still get BF16; the reactive memory ladder (_memoryLeversForced, set on an actual OOM) is
+        // unaffected and still engages BF16/8-bit on demand. AIDOTNET_BF16_ADAM=1 forces it regardless.
+        long fp32MomentBytes = checked(ParameterCount * 2L * System.Runtime.CompilerServices.Unsafe.SizeOf<T>());
+        long available = ResolveAvailableMemoryForStreaming();
+        if (available <= 0)
+            return true; // can't measure memory → keep the conservative proactive BF16
+        return fp32MomentBytes > available / 4;
     }
 
     /// <summary>
