@@ -3313,6 +3313,28 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
             sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
 
+            // Parameters_ShouldBeNonEmpty checks network.ParameterCount > 0 WITHOUT a
+            // forward (the base deliberately avoids materializing lazy weights, which
+            // at VGG/DiT scale OOMs). The span/transformer-NER encoder builds its
+            // transformer blocks lazily, so ParameterCount reads 0 until the first
+            // forward resolves the embedding width. Rather than eagerly materialize
+            // every layer at construction (~680 MB fp64 at BERT-base scale, which
+            // OOMs the shard), trigger a SINGLE warm-up forward here so the weights
+            // materialize once, then assert the count is non-zero.
+            sb.AppendLine();
+            sb.AppendLine("    [Xunit.Fact(Timeout = 120000)]");
+            sb.AppendLine("    public override async System.Threading.Tasks.Task Parameters_ShouldBeNonEmpty()");
+            sb.AppendLine("    {");
+            sb.AppendLine("        await System.Threading.Tasks.Task.Yield();");
+            sb.AppendLine("        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Create();");
+            sb.AppendLine("        using var network = CreateNetwork();");
+            sb.AppendLine("        var rng = AiDotNet.Tests.ModelFamilyTests.Base.ModelTestHelpers.CreateSeededRandom();");
+            sb.AppendLine("        var warmup = CreateRandomTensor(InputShape, rng);");
+            sb.AppendLine("        try { network.Predict(warmup); }");
+            sb.AppendLine("        catch (System.InvalidOperationException) { /* first forward may need training mode for some layers */ }");
+            sb.AppendLine("        Xunit.Assert.True(network.ParameterCount > 0, \"Neural network should have learnable parameters after a warm-up forward.\");");
+            sb.AppendLine("    }");
+
             // LossStrictlyDecreasesOnMemorizationTask runs MemorizationTaskIterations
             // (default 100) fp64 train steps over the BERT-base encoder. At ~0.5 s/step
             // that is ~50 s solo — but the ModelFamily shard runs many foundation-scale

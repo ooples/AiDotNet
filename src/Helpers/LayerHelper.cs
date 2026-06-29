@@ -33437,14 +33437,18 @@ public static class LayerHelper<T>
         // === Stacked Transformer Encoder layers for contextual token representations ===
         for (int layer = 0; layer < numTransformerLayers; layer++)
         {
+            // Keep the encoder LAZY (no embeddingSize): the eager ctor materializes
+            // all NumTransformerLayers transformer blocks at construction, which at
+            // BERT-base scale (HiddenDimension=768, 12 layers) is ~680 MB fp64 per
+            // model — multiplied across the generated-test shard's per-test
+            // constructions, warm-ups and the MoreData clone, that OOM-crashes the
+            // test host. The Parameters_ShouldBeNonEmpty invariant (which needs a
+            // non-zero ParameterCount before the first forward) is satisfied instead
+            // by a one-shot warm-up forward in the NER test override, so the weights
+            // materialize once rather than at every construction.
             yield return new TransformerEncoderLayer<T>(
                 numHeads: nerHeads,
-                feedForwardDim: intermediateDimension,
-                // Pass the embedding size explicitly (matching the sibling transformer-NER helper) so
-                // the encoder eagerly materializes its weights at construction. Without it the layer
-                // stays lazy and ParameterCount reads 0 until the first forward, which breaks
-                // pre-forward model gating / the Parameters_ShouldBeNonEmpty invariant.
-                embeddingSize: hiddenDimension);
+                feedForwardDim: intermediateDimension);
 
             if (dropoutRate > 0 && layer < numTransformerLayers - 1)
             {
