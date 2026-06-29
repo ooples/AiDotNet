@@ -399,6 +399,45 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         }
     }
 
+    private bool _lazyShapesResolved;
+
+    /// <summary>
+    /// Resolves every lazy encoder/decoder layer's input/output shape by running
+    /// ONE real forward through ODISE's actual skip-connection topology.
+    /// </summary>
+    /// <remarks>
+    /// ODISE's decoder is the Stable-Diffusion U-Net decoder: <see cref="Forward"/>
+    /// CONCATENATES each encoder tap onto the upsampled feature map before the next
+    /// transposed-conv stage (Xu et al. 2023 §3), so a post-concat deconv's true
+    /// input channel count is DOUBLE its sequential predecessor's (e.g. 320 + 320 =
+    /// 640). The base class's sequential shape-walk cannot model the concats — it
+    /// would resolve that deconv against its non-concatenated predecessor (320),
+    /// pin the lazy kernel to the wrong inChannels, and crash the first real
+    /// (skip-path) forward with "Input inChannels (640) must match kernel inChannels
+    /// (320)". Resolving through the real forward fixes the channel counts AND keeps
+    /// <see cref="NeuralNetworkBase{T}.ParameterCount"/> non-zero before the first
+    /// user forward (the contract the base method upholds for ModelFamily's
+    /// pre-forward Parameters_ShouldBeNonEmpty invariant).
+    /// </remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_lazyShapesResolved) return;
+        // Called during base construction before InitializeLayers has run (Layers still
+        // empty, _useNativeMode not yet assigned): nothing to resolve and nothing to
+        // latch — the post-construction call does the real work. Check this BEFORE the
+        // native-mode guard so a base-ctor call can't prematurely mark shapes resolved.
+        if (Layers is null || Layers.Count == 0) return;
+        // ONNX mode has no native layers to resolve.
+        if (!_useNativeMode) { _lazyShapesResolved = true; return; }
+        // A single inference-mode forward through the real skip topology
+        // materializes every lazy layer with its correct (concatenated) channels.
+        using (InferenceMode.Enter())
+        {
+            Forward(new Tensor<T>([1, _channels, _height, _width]));
+        }
+        _lazyShapesResolved = true;
+    }
+
     /// <summary>
     /// Updates all trainable parameters from a flat parameter vector.
     /// </summary>

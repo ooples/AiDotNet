@@ -82,7 +82,9 @@ public class EMMDiTPredictor<T> : MMDiTNoisePredictor<T>
     public override INoisePredictor<T> Clone()
     {
         var clone = new EMMDiTPredictor<T>(_emmInputChannels, _emmContextDim, _emmSeed);
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
+        // #1711: MMDiT LazyDense weights resolve via the FORWARD path; ProbeMaterializeAndCopyInto
+        // probe-forwards the clone then copies, instead of a naive re-RNG-initializing copy.
+        ProbeMaterializeAndCopyInto(clone);
         return clone;
     }
 

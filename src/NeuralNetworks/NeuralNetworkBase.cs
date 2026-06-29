@@ -2927,7 +2927,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// queries on the parent network. Issue #1136 plan part 3 cleanup.
     /// Idempotent — runs at most once per network instance.
     /// </summary>
-    protected void ResolveLazyLayerShapes()
+    /// <remarks>
+    /// Virtual so a model whose <see cref="Forward"/> topology is NOT a plain
+    /// sequential chain (e.g. U-Net skip connections that CONCATENATE earlier
+    /// taps and so double a downstream layer's input channel count) can resolve
+    /// its lazy layers through its real topology instead. The sequential walk
+    /// below would silently mis-size a post-concat layer against its
+    /// non-concatenated predecessor and crash the first real forward.
+    /// </remarks>
+    protected virtual void ResolveLazyLayerShapes()
     {
         if (_layerShapesResolved) return;
         if (Layers is null || Layers.Count == 0) return;

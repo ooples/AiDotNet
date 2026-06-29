@@ -98,7 +98,12 @@ public class MMDiTXNoisePredictor<T> : MMDiTNoisePredictor<T>
         var clone = new MMDiTXNoisePredictor<T>(
             _variant, _mmxInputChannels, _mmxPatchSize, _mmxContextDim, _mmxSeed,
             _mmxHiddenOverride, _mmxLayersOverride, _mmxHeadsOverride);
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
+        // #1706: probe-materialize the clone through the forward path, THEN copy weights — the same
+        // pattern the base MMDiTNoisePredictor.Clone uses. The previous TryShareParametersFrom /
+        // SetParameters path copied onto unmaterialized lazy layers, which then re-RNG-initialized
+        // on the clone's first real forward and diverged from the source (HiDream
+        // Clone_ShouldProduceIdenticalOutput, maxDiff ~7e2).
+        ProbeMaterializeAndCopyInto(clone);
         return clone;
     }
 
