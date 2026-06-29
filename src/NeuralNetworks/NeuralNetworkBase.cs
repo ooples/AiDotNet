@@ -5581,6 +5581,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             return;
         }
 
+        // Don't clobber a WeightRegistry another model instance is already using. The
+        // streaming pool is process-global and single-tenant: WeightRegistry.Configure
+        // throws ("existing streaming pool has N registered entries") if it already holds
+        // another model's registered weights. That happens whenever two foundation-scale
+        // models are live at once in one process — most commonly a model AND its Clone()
+        // (e.g. MoreData_ShouldNotDegrade trains an original and a clone; UnifiedMultimodal
+        // hit exactly this). Streaming is a memory optimization, not a correctness
+        // requirement, so the second model gracefully DECLINES it and runs in-memory
+        // instead of throwing. Mirrors the identical guard in NoisePredictorBase.
+        // Sequential tests start from a clean registry via ResetWeightStreamingForTests (#1722).
+        if (WeightRegistry.GetStreamingReport().RegisteredEntryCount > 0)
+        {
+            _streamingAutoDetectFinalized = true;
+            return;
+        }
+
         // Above threshold: enable streaming with conservative defaults.
         // The locked design (#1222 weight-streaming v1) calls for LZ4
         // compression on the disk-backing store and a prefetch window of

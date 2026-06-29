@@ -5,6 +5,18 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
+// UnifiedMultimodalNetwork is foundation-scale (768-dim embeddings, 12 transformer layers
+// plus text/image/audio/video encoders + cross-modal attention + decoders — over the 500M
+// streaming threshold). Its multi-iteration training invariants (MoreData_ShouldNotDegrade
+// trains 50 + 200 steps across an original AND a clone) are CORRECT but inherently exceed
+// the 120s default per-test gate under single-threaded determinism BLAS — verified a genuine
+// timeout (the test runs the full 120s, no hang/exception), not a regression. Per the #1706
+// strategy these are tagged HeavyTimeout: excluded from the default PR gate (Category!=HeavyTimeout)
+// and run full-fidelity in the nightly heavy lane (deferred, not skipped; graduates back once
+// the foundation forward is fast enough). The separate WeightRegistry single-tenant collision
+// this model also hit (original + clone both auto-streaming) is fixed at the source in
+// NeuralNetworkBase.TryAutoEnableWeightStreaming (decline streaming when the pool is occupied). #1738.
+[Xunit.Trait("Category", "HeavyTimeout")]
 public class UnifiedMultimodalNetworkTests : NeuralNetworkModelTestBase<float>
 {
     // Default: inputSize=768 (embedding dim), outputSize=100
