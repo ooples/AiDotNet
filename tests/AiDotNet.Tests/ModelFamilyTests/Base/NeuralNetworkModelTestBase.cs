@@ -68,6 +68,31 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// <summary>Numeric operations for the model's element type <typeparamref name="T"/>.</summary>
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    /// <summary>
+    /// #1706/#1305: process-wide gate (cap = 1) that serializes the heaviest NeuralNetworks
+    /// ModelFamily tests so a slow forward/backward runs UNCONTENDED. These models fit their
+    /// per-test <c>[Fact(Timeout)]</c> budget in isolation (e.g. SmolVLM ~104s, SPLADE ~93s,
+    /// SimCSE ~53s) — but the determinism mode pins BLAS to a single thread, and xunit runs the
+    /// shard's tests in parallel, so under core contention they slip past the envelope and time out
+    /// (the #1305 "fits in isolation, fails in the shard" failure). Serializing only the heavy ones
+    /// keeps every light test fully parallel. Mirrors <c>DiffusionModelTestBase</c>'s heavy gate.
+    /// </summary>
+    private static readonly System.Threading.SemaphoreSlim _heavyTestGate = new(1, 1);
+
+    /// <summary>
+    /// Per-instance flag: whether THIS test acquired <see cref="_heavyTestGate"/>, so DisposeAsync
+    /// only releases when it actually acquired (no release-without-acquire if init fails earlier).
+    /// </summary>
+    private bool _heavyGateAcquired;
+
+    /// <summary>
+    /// Override to <c>true</c> on a model whose forward/backward fits its per-test timeout only when
+    /// run uncontended; it then serializes through <see cref="_heavyTestGate"/>. Default <c>false</c>
+    /// keeps light models fully parallel. (Deferred, not skipped — a model graduates back to
+    /// <c>false</c> once its forward is fast enough to survive parallel contention.)
+    /// </summary>
+    protected virtual bool RequiresHeavySerialization => false;
+
     protected abstract INeuralNetworkModel<T> CreateNetwork();
 
     protected virtual int[] InputShape => [1, 4];
@@ -185,8 +210,17 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     protected virtual int MoreDataLongIterations => 200;
 
     /// <inheritdoc />
-    public virtual Task InitializeAsync()
+    public virtual async Task InitializeAsync()
     {
+        // #1706/#1305: heavy models serialize so their (single-threaded-BLAS) forward/backward runs
+        // uncontended and fits the per-test timeout. Acquired before the determinism setup so the
+        // entire test body is covered; released in DisposeAsync.
+        if (RequiresHeavySerialization)
+        {
+            await _heavyTestGate.WaitAsync().ConfigureAwait(false);
+            _heavyGateAcquired = true;
+        }
+
         // Bit-exact reproducibility for per-test loss / parameter assertions.
         // OpenBLAS's multi-threaded GEMM partitions K across native threads
         // and sums partial products in thread-completion order — fixed via
@@ -226,7 +260,6 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // test's actual subject. Reset clears the registry + disposes
         // the pool so each test starts from a clean global state.
         AiDotNet.Tensors.LinearAlgebra.WeightRegistry.Reset();
-        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -256,7 +289,19 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// </remarks>
     public virtual Task DisposeAsync()
     {
-        ModelFamilyTestGcGate.ReclaimBetweenTests();
+        try
+        {
+            ModelFamilyTestGcGate.ReclaimBetweenTests();
+        }
+        finally
+        {
+            // #1706: release the heavy gate if this test acquired it, so the next heavy test can run.
+            if (_heavyGateAcquired)
+            {
+                _heavyTestGate.Release();
+                _heavyGateAcquired = false;
+            }
+        }
         return Task.CompletedTask;
     }
 
