@@ -94,14 +94,11 @@ public class SiTPredictor<T> : DiTNoisePredictor<T>
     public override INoisePredictor<T> Clone()
     {
         var clone = new SiTPredictor<T>(_sitInputChannels, _sitHiddenSize, _sitNumLayers, _sitNumHeads, _sitSeed);
-        // Only copy weights once the source has materialized them (a forward,
-        // GetParameters, or SetParameters has run). An unmaterialized source shares
-        // the same config + seed, so the clone's lazy init reproduces it exactly;
-        // forcing GetParameters here would allocate the full foundation-scale vector
-        // for nothing. TryShareParametersFrom does a copy-on-write share of the
-        // resolved tensors; SetParameters is the deep-copy fallback.
-        if (AreLayersInitialized)
-            if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
+        // #1711: DiT LazyDense weights resolve via the FORWARD path, so a naive
+        // SetParameters(GetParameters()) / COW clone re-RNG-initializes on its first forward and
+        // diverges from the source. Use the base DiT clone semantics (probe-forward + copy), which
+        // also no-ops cleanly when the source has no materialized weights.
+        ProbeMaterializeAndCopyInto(clone);
         return clone;
     }
 
