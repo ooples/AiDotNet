@@ -113,7 +113,11 @@ public class DUT<T> : VideoStabilizationBase<T>
             int ch = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
             int h = Architecture.InputHeight > 0 ? Architecture.InputHeight : 128;
             int w = Architecture.InputWidth > 0 ? Architecture.InputWidth : 128;
-            Layers.AddRange(LayerHelper<T>.CreateDefaultVideoStabilizationLayers(
+            // DUT predicts per-pixel flow fields (dense, coarse-to-fine) and warps frames — its output
+            // is a stabilized frame of the same dimensions as the input, NOT a global 6-affine-param
+            // vector. Use the length-preserving conv encoder-decoder (which a dense-flow stabilizer is
+            // realized by) rather than the affine-parameter regressor.
+            Layers.AddRange(LayerHelper<T>.CreateSynthesisVideoStabilizationLayers(
                 inputChannels: ch, inputHeight: h, inputWidth: w));
         }
     }
