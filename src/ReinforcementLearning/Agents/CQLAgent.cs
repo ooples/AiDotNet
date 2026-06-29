@@ -260,11 +260,79 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         var batch = _offlineBuffer.Sample(_options.BatchSize);
+        int n = batch.Count;
+        if (n == 0) return _numOps.Zero;
 
-        // Tape-based training handles gradient computation
-        T qLoss = _numOps.Zero;
-        T policyLoss = _numOps.Zero;
-        T totalLoss = _numOps.Add(qLoss, policyLoss);
+        int stateDim = _options.StateSize;
+        int actionDim = _options.ActionSize;
+        int saDim = stateDim + actionDim;
+        T gamma = _options.DiscountFactor;
+
+        // --- Twin-Q Bellman regression (Kumar et al. 2020, eq. for the standard TD term) ---
+        // Build the data state-action inputs and the clipped double-Q TD targets:
+        //   y = r + gamma * (1 - done) * min(Q'_1(s', a'), Q'_2(s', a')),  a' ~ pi(s').
+        var dataSA = new Tensor<T>([n, saDim]);
+        var tdTargets = new Tensor<T>([n, 1]);
+        var randSA = new Tensor<T>([n, saDim]);
+        var consTargets = new Tensor<T>([n, 1]);
+        var policyInputs = new Tensor<T>([n, stateDim]);
+        var policyTargets = new Tensor<T>([n, actionDim * 2]);
+
+        for (int i = 0; i < n; i++)
+        {
+            var exp = batch[i];
+
+            // Next action from the (current) policy — deterministic mean for a stable target.
+            var nextAction = SelectAction(exp.NextState, training: false);
+            var nextSA = ConcatenateStateAction(exp.NextState, nextAction);
+            var nextSATensor = Tensor<T>.FromVector(nextSA);
+            T q1Next = _targetQ1Network.Predict(nextSATensor).ToVector()[0];
+            T q2Next = _targetQ2Network.Predict(nextSATensor).ToVector()[0];
+            T minNext = _numOps.LessThan(q1Next, q2Next) ? q1Next : q2Next;
+
+            T y = exp.Reward;
+            if (!exp.Done)
+            {
+                y = _numOps.Add(y, _numOps.Multiply(gamma, minNext));
+            }
+
+            var dataAction = ConcatenateStateAction(exp.State, exp.Action);
+            for (int j = 0; j < saDim; j++) dataSA[i, j] = dataAction[j];
+            tdTargets[i, 0] = y;
+
+            // --- CQL conservative penalty: push Q DOWN on out-of-distribution (random) actions ---
+            // so the agent does not over-estimate the value of actions absent from the dataset.
+            // Realised as a regression of Q(s, a_random) toward (current value − CQLAlpha).
+            var randomAction = new Vector<T>(actionDim);
+            for (int k = 0; k < actionDim; k++)
+                randomAction[k] = _numOps.FromDouble(_random.NextDouble() * 2.0 - 1.0);
+            var randomSAVec = ConcatenateStateAction(exp.State, randomAction);
+            var randomSATensor = Tensor<T>.FromVector(randomSAVec);
+            T qRand = _q1Network.Predict(randomSATensor).ToVector()[0];
+            for (int j = 0; j < saDim; j++) randSA[i, j] = randomSAVec[j];
+            consTargets[i, 0] = _numOps.Subtract(qRand, _options.CQLAlpha);
+
+            // --- Offline policy extraction: regress the policy mean toward the dataset action
+            // (logarithm of std toward 0), so the actor imitates the behaviour actions whose
+            // value the conservative critic has learned. ---
+            for (int j = 0; j < stateDim; j++) policyInputs[i, j] = exp.State[j];
+            for (int k = 0; k < actionDim; k++)
+            {
+                policyTargets[i, k] = exp.Action[k];                 // mean -> data action
+                policyTargets[i, actionDim + k] = _numOps.Zero;      // log_std -> 0
+            }
+        }
+
+        // Apply the gradient updates (each Train() is a tape-based forward/backward/step).
+        _q1Network.Train(dataSA, tdTargets);
+        _q2Network.Train(dataSA, tdTargets);
+        _q1Network.Train(randSA, consTargets);
+        _q2Network.Train(randSA, consTargets);
+        _policyNetwork.Train(policyInputs, policyTargets);
+
+        T totalLoss = _numOps.Add(
+            _numOps.Add(_q1Network.GetLastLoss(), _q2Network.GetLastLoss()),
+            _policyNetwork.GetLastLoss());
 
         // Update temperature
         if (_options.AutoTuneTemperature)
@@ -277,7 +345,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         _updateCount++;
 
-        return _numOps.Divide(totalLoss, _numOps.FromDouble(2));
+        return _numOps.Divide(totalLoss, _numOps.FromDouble(3));
     }
 
     private T ComputeCQLPenalty(Vector<T> state, Vector<T> dataAction, T q1Value, T q2Value)
