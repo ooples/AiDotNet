@@ -174,6 +174,11 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// </summary>
     private Tensor<T>[]? _cachedTrainableParameters;
 
+    // #1706: set once the noise predictor's lazy weights have been materialized OUTSIDE the
+    // transient per-Generate denoise arena (see the warmup in Generate). Stops the first Generate
+    // from allocating model-lifetime weights into that arena, which frees them on dispose.
+    private bool _lazyWeightsWarmed;
+
     // ── Copy-on-write weight sharing (cheap Clone of large models) ───────────────────────────────
     //
     // Clone() shares the parent's weight TENSORS by reference instead of deep-copying every
@@ -664,6 +669,28 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
 
         // Pre-allocate reusable noise prediction vector to avoid per-step allocation
         var noisePredVec = new Vector<T>(sample.Length);
+
+        // #1706 (HiDream/MMDiTX; #1710 follow-up): a freshly-constructed noise predictor
+        // materializes its lazy weights (LazyDense / conv / embedding) on its FIRST forward, via
+        // the forward path. If that first forward runs inside the transient per-Generate arena
+        // created below, those model-lifetime weights are RentPinned into it and freed when the
+        // arena disposes at the end of THIS call — so the NEXT Generate reads recycled memory and
+        // Predict becomes non-deterministic (confirmed: arena-on differs by ~5e5, arena-off is
+        // exact, and a single warmup outside the arena restores determinism). Materialize them
+        // once here with a single warmup forward OUTSIDE the arena so they land on the GC heap
+        // (or an outer, longer-lived arena) and survive. One forward, one time per model; the
+        // denoise loop's per-step arena recycling below is unchanged.
+        if (!_lazyWeightsWarmed)
+        {
+            int warmupTimestep = 0;
+            foreach (var t in _scheduler.Timesteps) { warmupTimestep = t; break; }
+            sample.AsSpan().CopyTo(sampleTensor.AsWritableSpan());
+            using (InferenceMode.Enter())
+            {
+                PredictNoiseStep(sampleTensor, warmupTimestep);
+            }
+            _lazyWeightsWarmed = true;
+        }
 
         // Forward caching allocator (Tensors #661 consumer wiring, second boundary
         // after NeuralNetworkBase.Predict): a NoisePredictorBase forward is NOT a
@@ -1527,6 +1554,15 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             }
         }
 
+        // #1713: a Tensor<T> is a DATA LEAF — its scalar values are model parameters (already
+        // collected via the owning ITrainableLayer above), never a container of further layers.
+        // Descending into its backing storage and recursing element-by-element is the Meissonic
+        // hang: a 304M-parameter model walked one boxed scalar at a time (each added to the
+        // visited set). Stop at the tensor boundary. Tensor<T> fields are already skipped below,
+        // but tensors reached via Tensor<T>[] / List<Tensor<T>> / object-typed fields are not, so
+        // this guard is what actually closes the walk.
+        if (obj is Tensor<T>) return;
+
         // Recurse into every reference-type instance field so nested composites
         // (e.g., DiffusionModel -> UNetNoisePredictor -> List<Layer>) are fully
         // walked even when the intermediate types don't implement ITrainableLayer.
@@ -1561,8 +1597,15 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
 
                 if (val is System.Collections.IEnumerable enumerable && val is not string)
                 {
-                    foreach (var item in enumerable)
-                        CollectLayerParameters(item, allParams, visited);
+                    // #1713: only descend into collections whose ELEMENTS could be layers/composites.
+                    // Skip value-type element collections (a layer's float[] weight buffer, a Tensor's
+                    // backing array, List<int> shapes, etc.) — iterating their scalar elements is
+                    // pathological on a foundation-scale model and never yields a layer.
+                    if (!EnumerableElementsAreValueTypes(val.GetType()))
+                    {
+                        foreach (var item in enumerable)
+                            CollectLayerParameters(item, allParams, visited);
+                    }
                 }
                 else
                 {
@@ -1570,6 +1613,34 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// #1713: true when <paramref name="enumerableType"/> is a collection of value-type elements
+    /// (e.g. <c>float[]</c>, <c>List&lt;int&gt;</c>, a tensor's scalar backing array). Such collections
+    /// hold data, not layers, so the trainable-parameter walk must not recurse element-by-element into
+    /// them — on a foundation-scale model that is millions of boxed scalars (the Meissonic Train hang).
+    /// A non-generic or reference-element enumerable returns false so genuine layer collections
+    /// (List&lt;ILayer&gt;, ITrainableLayer[]) are still walked.
+    /// </summary>
+    private static bool EnumerableElementsAreValueTypes(Type enumerableType)
+    {
+        if (enumerableType.IsArray)
+        {
+            var elem = enumerableType.GetElementType();
+            return elem is not null && elem.IsValueType;
+        }
+
+        foreach (var iface in enumerableType.GetInterfaces())
+        {
+            if (iface.IsGenericType &&
+                iface.GetGenericTypeDefinition() == typeof(System.Collections.Generic.IEnumerable<>))
+            {
+                return iface.GetGenericArguments()[0].IsValueType;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
