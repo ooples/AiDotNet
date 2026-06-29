@@ -232,12 +232,19 @@ public class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>
+        var m = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "NaturalSpeech2-Native" : "NaturalSpeech2-ONNX",
             Description = "NaturalSpeech 2: Latent Diffusion TTS (Shen et al., 2023)",
             FeatureCount = _options.HiddenDim
         };
+        m.AdditionalInfo["Architecture"] = "NaturalSpeech2";
+        m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
+        m.AdditionalInfo["HiddenDim"] = base.HiddenDim;
+        m.AdditionalInfo["SampleRate"] = base.SampleRate;
+        m.AdditionalInfo["MelChannels"] = base.MelChannels;
+        m.AdditionalInfo["HopSize"] = base.HopSize;
+        return m;
     }
 
     /// <inheritdoc />

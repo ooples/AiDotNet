@@ -245,12 +245,19 @@ public class ParlerTTS<T> : TtsModelBase<T>, ICodecTts<T>
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>
+        var m = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "ParlerTTS-Native" : "ParlerTTS-ONNX",
             Description = "Parler-TTS: Description-Guided TTS (Lyth et al., 2024)",
             FeatureCount = _options.LLMDim
         };
+        m.AdditionalInfo["Architecture"] = "ParlerTTS";
+        m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
+        m.AdditionalInfo["HiddenDim"] = base.HiddenDim;
+        m.AdditionalInfo["SampleRate"] = base.SampleRate;
+        m.AdditionalInfo["MelChannels"] = base.MelChannels;
+        m.AdditionalInfo["HopSize"] = base.HopSize;
+        return m;
     }
 
     /// <inheritdoc />

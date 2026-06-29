@@ -299,12 +299,19 @@ public class Voicebox<T> : TtsModelBase<T>, ICodecTts<T>
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>
+        var m = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "Voicebox-Native" : "Voicebox-ONNX",
             Description = "Voicebox: Text-Guided Multilingual Speech Generation (Le et al., 2023)",
             FeatureCount = _options.LLMDim
         };
+        m.AdditionalInfo["Architecture"] = "Voicebox";
+        m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
+        m.AdditionalInfo["HiddenDim"] = base.HiddenDim;
+        m.AdditionalInfo["SampleRate"] = base.SampleRate;
+        m.AdditionalInfo["MelChannels"] = base.MelChannels;
+        m.AdditionalInfo["HopSize"] = base.HopSize;
+        return m;
     }
 
     /// <inheritdoc />

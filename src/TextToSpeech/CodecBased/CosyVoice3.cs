@@ -226,12 +226,19 @@ public class CosyVoice3<T> : TtsModelBase<T>, ICodecTts<T>
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>
+        var m = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "CosyVoice3-Native" : "CosyVoice3-ONNX",
             Description = "CosyVoice 3: Zero-Shot Multilingual TTS (Alibaba DAMO, 2025)",
             FeatureCount = _options.LLMDim
         };
+        m.AdditionalInfo["Architecture"] = "CosyVoice3";
+        m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
+        m.AdditionalInfo["HiddenDim"] = base.HiddenDim;
+        m.AdditionalInfo["SampleRate"] = base.SampleRate;
+        m.AdditionalInfo["MelChannels"] = base.MelChannels;
+        m.AdditionalInfo["HopSize"] = base.HopSize;
+        return m;
     }
 
     /// <inheritdoc />
