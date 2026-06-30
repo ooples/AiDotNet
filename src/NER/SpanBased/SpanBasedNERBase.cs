@@ -310,9 +310,14 @@ public abstract class SpanBasedNERBase<T> : SequenceLabeling.SequenceLabelingNER
             //      pollutes the loss, and would multiply the per-step cost by
             //      ~MaxSequenceLength / seqLen. Training on the real tokens keeps
             //      the loss meaningful and the step cheap.
-            int naturalSeqLen = input.Rank == 3 ? input.Shape[1] : input.Shape[0];
-            var alignedExpected = PreprocessLabels(expected, naturalSeqLen);
-            TrainWithTape(input, alignedExpected);
+
+            // Canonicalize and validate input, matching the preprocessing path used
+            // by PredictLabels. This ensures unsupported tensor ranks are rejected
+            // and sequences are truncated to MaxSequenceLength before label alignment.
+            var preprocessed = PreprocessTokens(input);
+            int validatedSeqLen = preprocessed.Rank == 3 ? preprocessed.Shape[1] : preprocessed.Shape[0];
+            var alignedExpected = PreprocessLabels(expected, validatedSeqLen);
+            TrainWithTape(preprocessed, alignedExpected);
         }
         finally { SetTrainingMode(false); }
     }
@@ -336,7 +341,10 @@ public abstract class SpanBasedNERBase<T> : SequenceLabeling.SequenceLabelingNER
         int maxLen = _options.MaxSequenceLength;
         int hidDim = _options.HiddenDimension;
 
-        if (rawEmbeddings.Rank < 2) return rawEmbeddings;
+        // Reject unsupported tensor ranks instead of falling through to rank-2 path
+        if (rawEmbeddings.Rank < 2 || rawEmbeddings.Rank > 3)
+            throw new ArgumentException(
+                $"Expected rank-2 [seqLen, hiddenDim] or rank-3 [batch, seqLen, hiddenDim] tensor. Got rank {rawEmbeddings.Rank}.");
 
         // Process the input's NATURAL sequence length: the transformer encoder is
         // length-agnostic, so only TRUNCATE sequences that exceed the configured

@@ -3330,8 +3330,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("        using var network = CreateNetwork();");
             sb.AppendLine("        var rng = AiDotNet.Tests.ModelFamilyTests.Base.ModelTestHelpers.CreateSeededRandom();");
             sb.AppendLine("        var warmup = CreateRandomTensor(InputShape, rng);");
-            sb.AppendLine("        try { network.Predict(warmup); }");
-            sb.AppendLine("        catch (System.InvalidOperationException) { /* first forward may need training mode for some layers */ }");
+            sb.AppendLine("        network.Predict(warmup);");
             sb.AppendLine("        Xunit.Assert.True(network.ParameterCount > 0, \"Neural network should have learnable parameters after a warm-up forward.\");");
             sb.AppendLine("    }");
 
