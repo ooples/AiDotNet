@@ -288,6 +288,16 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void StoreExperience(Vector<T> observation, Vector<T> action, T reward, Vector<T> nextObservation, bool done)
     {
+        // Validate transition shapes at this public input boundary so a malformed experience can't
+        // enter the replay buffer and later overflow rnnInput / encIn / decIn during Train().
+        int obsSize = _options.ObservationWidth * _options.ObservationHeight * _options.ObservationChannels;
+        if (observation.Length != obsSize)
+            throw new ArgumentException($"Observation length must be {obsSize}, got {observation.Length}.", nameof(observation));
+        if (nextObservation.Length != obsSize)
+            throw new ArgumentException($"Next observation length must be {obsSize}, got {nextObservation.Length}.", nameof(nextObservation));
+        if (action.Length != _options.ActionSize)
+            throw new ArgumentException($"Action length must be {_options.ActionSize}, got {action.Length}.", nameof(action));
+
         // Store using Experience<T, TState, TAction> which expects Vector<T>
         var experience = new Experience<T, Vector<T>, Vector<T>>(observation, action, reward, nextObservation, done);
         _replayBuffer.Add(experience);
@@ -306,12 +316,65 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             return NumOps.Zero;
         }
 
-        // Tape-based training handles gradient computation
+        var batch = _replayBuffer.Sample(_options.BatchSize);
+        int n = batch.Count;
         T vaeLoss = NumOps.Zero;
         T rnnLoss = NumOps.Zero;
+
+        if (n > 0)
+        {
+            int obsSize = _options.ObservationWidth * _options.ObservationHeight * _options.ObservationChannels;
+            int latentSize = _options.LatentSize;
+            int actionDim = _options.ActionSize;
+            int hiddenSize = _options.RNNHiddenSize;
+            int rnnInSize = latentSize + actionDim + hiddenSize;
+            int rnnOutSize = latentSize + hiddenSize;
+
+            var decIn = new Tensor<T>([n, latentSize]);
+            var decTgt = new Tensor<T>([n, obsSize]);
+            var rnnIn = new Tensor<T>([n, rnnInSize]);
+            var rnnTgt = new Tensor<T>([n, rnnOutSize]);
+            var encIn = new Tensor<T>([n, obsSize]);
+            var encTgt = new Tensor<T>([n, latentSize * 2]);
+            var zeroHidden = new Vector<T>(hiddenSize);
+
+            for (int i = 0; i < n; i++)
+            {
+                var exp = batch[i];
+                var mean = ExtractMean(_vaeEncoder.Predict(Tensor<T>.FromVector(exp.State)).ToVector());
+                var encNextOut = _vaeEncoder.Predict(Tensor<T>.FromVector(exp.NextState)).ToVector();
+                var meanNext = ExtractMean(encNextOut);
+
+                // MDN-RNN next-latent prediction: predict z_{t+1} from (z_t, a_t, h).
+                var rnnInput = ConcatenateVectors(ConcatenateVectors(mean, exp.Action), zeroHidden);
+                var rnnOut = _rnnNetwork.Predict(Tensor<T>.FromVector(rnnInput)).ToVector();
+
+                // VAE decoder reconstruction: D(z_t) -> o_t.
+                for (int j = 0; j < latentSize; j++) decIn[i, j] = mean[j];
+                for (int j = 0; j < obsSize && j < exp.State.Length; j++) decTgt[i, j] = exp.State[j];
+
+                // RNN target = its own output with the LATENT half steered toward z_{t+1}.
+                for (int j = 0; j < rnnInSize; j++) rnnIn[i, j] = rnnInput[j];
+                for (int j = 0; j < rnnOutSize; j++) rnnTgt[i, j] = rnnOut[j];
+                for (int j = 0; j < latentSize; j++) rnnTgt[i, j] = meanNext[j];
+
+                // Encoder consistency: steer E(o_{t+1}) mean toward the RNN's predicted next latent
+                // (keep its log-variance) so encoder and dynamics agree on the latent space.
+                for (int j = 0; j < obsSize && j < exp.NextState.Length; j++) encIn[i, j] = exp.NextState[j];
+                for (int j = 0; j < latentSize; j++) encTgt[i, j] = rnnOut[j];
+                for (int j = 0; j < latentSize; j++) encTgt[i, latentSize + j] = encNextOut[latentSize + j];
+            }
+
+            _vaeDecoder.Train(decIn, decTgt);
+            _vaeEncoder.Train(encIn, encTgt);
+            _rnnNetwork.Train(rnnIn, rnnTgt);
+            vaeLoss = NumOps.Add(_vaeDecoder.GetLastLoss(), _vaeEncoder.GetLastLoss());
+            rnnLoss = _rnnNetwork.GetLastLoss();
+        }
+
         T totalLoss = NumOps.Add(vaeLoss, rnnLoss);
 
-        // Train Controller (evolution strategy - simplified to gradient-based)
+        // Train Controller (evolution strategy - (1+1)-ES; full World Models uses CMA-ES)
         T controllerLoss = TrainController();
         totalLoss = NumOps.Add(totalLoss, controllerLoss);
 
@@ -322,29 +385,56 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private T TrainController()
     {
-        // Simplified Evolution Strategy for controller training
-        // Note: Full World Models uses CMA-ES; this is a basic (1+1)-ES approximation
+        // (1+1)-ES controller improvement (full World Models uses CMA-ES). The candidate objective
+        // MUST depend on the candidate weights — the previous version scored every candidate from the
+        // same replay rewards (independent of perturbedWeights), so the search never moved the
+        // controller and merely added a reward as "loss". Here each candidate is scored by
+        // REWARD-WEIGHTED behavior agreement: a controller that reproduces the actions taken on
+        // HIGH-reward transitions scores higher. This is a legitimate offline policy-improvement
+        // signal (advantage/reward-weighted behavior) and genuinely depends on the candidate policy.
 
         const int numCandidates = 5;
         const double perturbationScale = 0.01;
 
         var batch = _replayBuffer.Sample(Math.Min(10, _replayBuffer.Count));
+        if (batch.Count == 0) return NumOps.Zero;
 
-        // Evaluate current controller
-        T currentReward = NumOps.Zero;
-        foreach (var experience in batch)
+        // Pre-encode each batch state to its latent code once (the controller maps
+        // latent ⊕ zero-hidden -> action, mirroring Act()).
+        var zeroHidden = new Vector<T>(_options.RNNHiddenSize);
+        var controllerInputs = new Vector<T>[batch.Count];
+        for (int b = 0; b < batch.Count; b++)
         {
-            currentReward = NumOps.Add(currentReward, experience.Reward);
+            var z = ExtractMean(_vaeEncoder.Predict(Tensor<T>.FromVector(batch[b].State)).ToVector());
+            controllerInputs[b] = ConcatenateVectors(z, zeroHidden);
         }
-        currentReward = NumOps.Divide(currentReward, NumOps.FromDouble(batch.Count));
 
-        // Try random perturbations and keep the best one
+        // Score(weights) = mean over the batch of -reward · ||controller(z) - storedAction||²
+        // (higher = better: low action error on high-reward transitions). Depends on `weights`.
+        T ScoreCandidate(Matrix<T> weights)
+        {
+            T total = NumOps.Zero;
+            for (int b = 0; b < batch.Count; b++)
+            {
+                var input = controllerInputs[b];
+                T err = NumOps.Zero;
+                for (int i = 0; i < _options.ActionSize; i++)
+                {
+                    var col = new Vector<T>(input.Length);
+                    for (int j = 0; j < input.Length; j++) col[j] = weights[j, i];
+                    T act = MathHelper.Tanh<T>(Engine.DotProduct(input, col));
+                    T d = NumOps.Subtract(act, batch[b].Action[i]);
+                    err = NumOps.Add(err, NumOps.Multiply(d, d));
+                }
+                total = NumOps.Subtract(total, NumOps.Multiply(batch[b].Reward, err));
+            }
+            return NumOps.Divide(total, NumOps.FromDouble(batch.Count));
+        }
+
+        T bestScore = ScoreCandidate(_controllerWeights);
         Matrix<T>? bestWeights = null;
-        T bestReward = currentReward;
-
         for (int candidate = 0; candidate < numCandidates; candidate++)
         {
-            // Create perturbed weights
             var perturbedWeights = new Matrix<T>(_controllerWeights.Rows, _controllerWeights.Columns);
             for (int i = 0; i < _controllerWeights.Rows; i++)
             {
@@ -355,29 +445,35 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
                 }
             }
 
-            // Evaluate perturbed controller (simplified: use same batch)
-            T perturbedReward = NumOps.Zero;
-            foreach (var experience in batch)
+            T candidateScore = ScoreCandidate(perturbedWeights);
+            if (NumOps.GreaterThan(candidateScore, bestScore))
             {
-                perturbedReward = NumOps.Add(perturbedReward, experience.Reward);
-            }
-            perturbedReward = NumOps.Divide(perturbedReward, NumOps.FromDouble(batch.Count));
-
-            // Keep if better
-            if (NumOps.GreaterThan(perturbedReward, bestReward))
-            {
-                bestReward = perturbedReward;
+                bestScore = candidateScore;
                 bestWeights = perturbedWeights;
             }
         }
 
-        // Update controller weights if we found a better candidate
-        if (bestWeights is not null && !object.ReferenceEquals(bestWeights, null))
+        if (bestWeights is not null)
         {
             _controllerWeights = bestWeights;
         }
 
-        return bestReward;
+        // Return a clean, non-negative behavior LOSS for the chosen controller (mean unweighted
+        // action MSE over the batch) for the totalLoss aggregation — lower is better.
+        T lossTotal = NumOps.Zero;
+        for (int b = 0; b < batch.Count; b++)
+        {
+            var input = controllerInputs[b];
+            for (int i = 0; i < _options.ActionSize; i++)
+            {
+                var col = new Vector<T>(input.Length);
+                for (int j = 0; j < input.Length; j++) col[j] = _controllerWeights[j, i];
+                T act = MathHelper.Tanh<T>(Engine.DotProduct(input, col));
+                T d = NumOps.Subtract(act, batch[b].Action[i]);
+                lossTotal = NumOps.Add(lossTotal, NumOps.Multiply(d, d));
+            }
+        }
+        return NumOps.Divide(lossTotal, NumOps.FromDouble(batch.Count));
     }
 
     private Vector<T> ExtractMean(Vector<T> encoderOutput)
@@ -628,17 +724,16 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
-        // The fresh constructor reproduces the VAE/RNN networks EXACTLY: their
-        // lazy weights initialize from the deterministic per-layer seeds, and
-        // Train() never updates them (only the controller is trained, via the
-        // evolution strategy). So the only state we must copy is the trained
-        // controller weights plus the rollout/bookkeeping fields.
-        //
-        // A serialization round-trip would instead REBUILD the networks' layers
-        // from the serialized graph, dropping the RandomSeed pins — the clone
-        // would then re-initialize to different weights and produce a different
-        // policy (Clone_ShouldProduceSamePolicy).
+        // The fresh constructor reproduces the VAE/RNN network ARCHITECTURE exactly (deterministic
+        // per-layer seeds), but Train() now UPDATES those networks' weights (the VAE encoder/decoder
+        // and the MDN-RNN are trained, not just the controller). So we must copy the learned network
+        // parameters onto the clone — otherwise it would keep the seed-initial weights and produce a
+        // different world model / policy than the trained original (Clone_ShouldProduceSamePolicy).
+        // GetParameters/SetParameters round-trip the network weights in-place WITHOUT rebuilding the
+        // layer graph, so the RandomSeed pins (and thus tensor shapes) are preserved — unlike a full
+        // serialization round-trip. The trained controller weights are copied separately below.
         var clone = new WorldModelsAgent<T>(_options);
+        clone.SetParameters(GetParameters());
 
         var controllerCopy = new Matrix<T>(_controllerWeights.Rows, _controllerWeights.Columns);
         for (int i = 0; i < _controllerWeights.Rows; i++)
