@@ -2,31 +2,23 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tests.ModelFamilyTests.Base;
-using Xunit;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-// UnifiedMultimodalNetwork's default config is a foundation-scale multimodal model: 12 transformer
-// layers (DEFAULT_NUM_LAYERS) at embeddingDim=768 with maxSeq=2048, PLUS text/image/audio/video
-// encoders AND decoders AND a generation head. It auto-enables weight streaming (SupportsStreaming
-// = true; CI observed 22 registered streaming entries), confirming it sits above the streaming
-// parameter threshold. On the 16 GB CI runner (DOTNET_GCHeapHardLimit) its construction OOMs
-// ("OutOfMemoryException: Array dimensions exceeded supported range"), and a timed-out/OOM'd
-// predecessor leaves the process-global WeightRegistry contaminated so the next test fails with
-// "existing streaming pool has N registered entries" — a downstream symptom of the size, not a
-// separate leak. This is inherent to a paper-scale 4-modality transformer, not a regression and not
-// shrinkable (never-shrink rule). Tag HeavyTimeout so the class is excluded from the default gate
-// and runs full-fidelity in the nightly heavy lane (deferred, not skipped); #1706/#1305.
-[Trait("Category", "HeavyTimeout")]
-[Collection("FoundationScaleSerial")] // serialized so its forward gets the whole machine + the streaming reset can't race
+// UnifiedMultimodalNetwork is foundation-scale (768-dim embeddings, 12 transformer layers
+// plus text/image/audio/video encoders + cross-modal attention + decoders — over the 500M
+// streaming threshold). Its multi-iteration training invariants (MoreData_ShouldNotDegrade
+// trains 50 + 200 steps across an original AND a clone) are CORRECT but inherently exceed
+// the 120s default per-test gate under single-threaded determinism BLAS — verified a genuine
+// timeout (the test runs the full 120s, no hang/exception), not a regression. Per the #1706
+// strategy these are tagged HeavyTimeout: excluded from the default PR gate (Category!=HeavyTimeout)
+// and run full-fidelity in the nightly heavy lane (deferred, not skipped; graduates back once
+// the foundation forward is fast enough). The separate WeightRegistry single-tenant collision
+// this model also hit (original + clone both auto-streaming) is fixed at the source in
+// NeuralNetworkBase.TryAutoEnableWeightStreaming (decline streaming when the pool is occupied). #1738.
+[Xunit.Trait("Category", "HeavyTimeout")]
 public class UnifiedMultimodalNetworkTests : NeuralNetworkModelTestBase<float>
 {
-    // Auto-enables weight streaming (foundation-scale), registering its weights with the process-
-    // global WeightRegistry. Reset that registry between tests so the next ctor doesn't fail on
-    // leftover entries (#1706). Safe: the FoundationScaleSerial collection disables parallelization,
-    // so nothing else runs concurrently with the reset.
-    protected override bool ResetsWeightStreamingBetweenTests => true;
-
     // Default: inputSize=768 (embedding dim), outputSize=100
     protected override int[] InputShape => [768];
     protected override int[] OutputShape => [100];
