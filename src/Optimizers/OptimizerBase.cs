@@ -1636,6 +1636,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
 
         // Allow derived classes to serialize additional data
         SerializeAdditionalData(writer);
+        SerializeExtensionData(writer);
 
         return memoryStream.ToArray();
     }
@@ -1691,6 +1692,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
 
         // Allow derived classes to deserialize additional data
         DeserializeAdditionalData(reader);
+        DeserializeExtensionData(reader);
     }
 
     /// <summary>
@@ -1719,6 +1721,20 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     }
 
     /// <summary>
+    /// Serializes optional extension data after the base and derived optimizer payloads.
+    /// </summary>
+    /// <param name="writer">The binary writer to use for serialization.</param>
+    /// <remarks>
+    /// This hook is intentionally separate from <see cref="SerializeAdditionalData"/>
+    /// so framework-level optimizer infrastructure can append versioned data without
+    /// changing every optimizer-specific serialization layout.
+    /// </remarks>
+    protected virtual void SerializeExtensionData(BinaryWriter writer)
+    {
+        // Base implementation does nothing.
+    }
+
+    /// <summary>
     /// Deserializes additional data specific to derived optimizer classes.
     /// </summary>
     /// <param name="reader">The binary reader to use for deserialization.</param>
@@ -1741,6 +1757,18 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     protected virtual void DeserializeAdditionalData(BinaryReader reader)
     {
         // Base implementation does nothing
+    }
+
+    /// <summary>
+    /// Deserializes optional extension data appended by <see cref="SerializeExtensionData"/>.
+    /// </summary>
+    /// <param name="reader">The binary reader to use for deserialization.</param>
+    /// <remarks>
+    /// Implementations must tolerate older payloads where no extension data was present.
+    /// </remarks>
+    protected virtual void DeserializeExtensionData(BinaryReader reader)
+    {
+        // Base implementation does nothing.
     }
 
     /// <summary>

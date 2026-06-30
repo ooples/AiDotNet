@@ -56,6 +56,8 @@ public class CheckpointManagerTests : IDisposable
     {
         public double LearningRate { get; set; } = 0.001;
         public double Momentum { get; set; } = 0.9;
+        public byte[] SerializedState { get; set; } = new byte[] { 1, 2, 3, 5, 8, 13 };
+        public byte[] LastDeserializedState { get; private set; } = Array.Empty<byte>();
 
         public OptimizationResult<double, double[], double> Optimize(OptimizationInputData<double, double[], double> inputData)
         {
@@ -72,8 +74,8 @@ public class CheckpointManagerTests : IDisposable
         public void Reset() { }
 
         // IModelSerializer implementation
-        public byte[] Serialize() => Array.Empty<byte>();
-        public void Deserialize(byte[] data) { }
+        public byte[] Serialize() => SerializedState.ToArray();
+        public void Deserialize(byte[] data) => LastDeserializedState = data.ToArray();
         public void SaveModel(string filePath) { }
         public void LoadModel(string filePath) { }
 
@@ -123,6 +125,50 @@ public class CheckpointManagerTests : IDisposable
         // Assert
         Assert.NotNull(checkpoint.Metadata);
         Assert.Equal(32, Convert.ToInt32(checkpoint.Metadata["batch_size"]));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task SaveCheckpoint_WithOptimizer_PersistsSerializedOptimizerPayload()
+    {
+        await Task.Yield();
+
+        // Arrange
+        var model = new MockModel();
+        var optimizer = new MockOptimizer
+        {
+            SerializedState = new byte[] { 42, 99, 123, 7 }
+        };
+        var metrics = new Dictionary<string, double> { ["loss"] = 0.5 };
+
+        // Act
+        var checkpointId = _manager.SaveCheckpoint(model, optimizer, epoch: 1, step: 10, metrics);
+        var checkpoint = _manager.LoadCheckpoint(checkpointId);
+
+        // Assert
+        Assert.Equal(optimizer.SerializedState, checkpoint.OptimizerData);
+        Assert.Equal(optimizer.SerializedState.Length, Convert.ToInt32(checkpoint.OptimizerState["SerializedStateLengthBytes"]));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task RestoreOptimizer_WithSerializedPayload_RestoresOptimizerState()
+    {
+        await Task.Yield();
+
+        // Arrange
+        var model = new MockModel();
+        var optimizer = new MockOptimizer
+        {
+            SerializedState = new byte[] { 3, 1, 4, 1, 5, 9 }
+        };
+        var checkpointId = _manager.SaveCheckpoint(model, optimizer, epoch: 1, step: 10, new Dictionary<string, double> { ["loss"] = 0.5 });
+        var checkpoint = _manager.LoadCheckpoint(checkpointId);
+        var restoredOptimizer = new MockOptimizer();
+
+        // Act
+        checkpoint.RestoreOptimizer(restoredOptimizer);
+
+        // Assert
+        Assert.Equal(optimizer.SerializedState, restoredOptimizer.LastDeserializedState);
     }
 
     [Fact(Timeout = 60000)]

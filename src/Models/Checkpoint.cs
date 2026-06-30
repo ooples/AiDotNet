@@ -39,6 +39,17 @@ public class Checkpoint<T, TInput, TOutput>
     public Dictionary<string, object> OptimizerState { get; set; } = new();
 
     /// <summary>
+    /// Gets or sets the serialized optimizer payload.
+    /// </summary>
+    /// <remarks>
+    /// This stores the optimizer's full <see cref="IModelSerializer.Serialize"/>
+    /// payload, including transient state such as moment vectors, accumulators,
+    /// velocities, and scheduler counters. <see cref="OptimizerState"/> remains
+    /// as lightweight metadata for inspection and backwards compatibility.
+    /// </remarks>
+    public byte[] OptimizerData { get; set; } = Array.Empty<byte>();
+
+    /// <summary>
     /// Gets or sets the optimizer type name for reconstruction.
     /// </summary>
     public string? OptimizerTypeName { get; set; }
@@ -101,11 +112,13 @@ public class Checkpoint<T, TInput, TOutput>
         int epoch,
         int step,
         Dictionary<string, T> metrics,
-        Dictionary<string, object>? metadata = null)
+        Dictionary<string, object>? metadata = null,
+        byte[]? optimizerData = null)
         : this()
     {
         Model = model;
         OptimizerState = optimizerState ?? new Dictionary<string, object>();
+        OptimizerData = optimizerData ?? Array.Empty<byte>();
         OptimizerTypeName = optimizerTypeName;
         Epoch = epoch;
         Step = step;
@@ -133,11 +146,43 @@ public class Checkpoint<T, TInput, TOutput>
     {
         Model = model;
         OptimizerState = ExtractOptimizerState(optimizer);
+        OptimizerData = optimizer?.Serialize() ?? Array.Empty<byte>();
+        OptimizerState["SerializedStateLengthBytes"] = OptimizerData.Length;
         OptimizerTypeName = optimizer?.GetType().AssemblyQualifiedName;
         Epoch = epoch;
         Step = step;
         Metrics = metrics ?? new Dictionary<string, T>();
         Metadata = metadata ?? new Dictionary<string, object>();
+    }
+
+    /// <summary>
+    /// Restores the saved optimizer state into an existing optimizer instance.
+    /// </summary>
+    /// <param name="optimizer">The optimizer instance to restore.</param>
+    public void RestoreOptimizer(IOptimizer<T, TInput, TOutput> optimizer)
+    {
+        if (!TryRestoreOptimizer(optimizer))
+        {
+            throw new InvalidOperationException(
+                $"Checkpoint '{CheckpointId}' does not contain serialized optimizer state.");
+        }
+    }
+
+    /// <summary>
+    /// Attempts to restore the saved optimizer state into an existing optimizer instance.
+    /// </summary>
+    /// <param name="optimizer">The optimizer instance to restore.</param>
+    /// <returns><c>true</c> when optimizer state was restored; otherwise <c>false</c>.</returns>
+    public bool TryRestoreOptimizer(IOptimizer<T, TInput, TOutput> optimizer)
+    {
+        if (optimizer == null)
+            throw new ArgumentNullException(nameof(optimizer));
+
+        if (OptimizerData == null || OptimizerData.Length == 0)
+            return false;
+
+        optimizer.Deserialize(OptimizerData);
+        return true;
     }
 
     /// <summary>

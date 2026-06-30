@@ -13,6 +13,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Optimizers;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.Tensors.Helpers;
 
@@ -165,6 +166,20 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// </summary>
     protected T LearningRate;
 
+    // Gradient-based optimizer driving the shared diffusion Train step. DDPM (Ho et al. 2020,
+    // Algorithm 1) trains with Adam — NOT plain SGD: adaptive per-parameter steps are far more robust
+    // than a single global LR. Plain SGD's tiny, undirected steps let the fixed (x0, ε, t)
+    // noise-prediction probe drift the WRONG way over a few steps on an unlucky init / FP reduction
+    // order (exactly the intermittent Training_ShouldReducePredictionError failure); Adam's normalized
+    // step reliably descends. Fully user-configurable via DiffusionModelOptions.OptimizerFactory; when none is
+    // supplied this is lazily set on the first Train step to the paper-faithful default — a plain Adam
+    // (β1=0.9, β2=0.999, ε=1e-8, NO weight decay, and the non-paper adaptive-betas / adaptive-LR /
+    // AMSGrad extras left OFF). The optimizer owns its state (moments, step counter, bias correction)
+    // internally and checkpoints serialize that optimizer payload separately from model parameters,
+    // mirroring PyTorch's optimizer.state separation. A clone starts from a fresh optimizer because
+    // this field is not copied.
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainingOptimizer;
+
     /// <summary>
     /// Cached result of the reflection walk that discovers trainable parameter tensors.
     /// The walk was called per Train step, consuming a non-trivial amount of time on
@@ -288,6 +303,9 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         _shareGroup = null;
         if (group.LeaveAndNeedsCopy())
         {
+            _trainingOptimizer?.Reset();
+            _trainingOptimizer = null;
+
             foreach (var layer in CollectTrainableLayers())
             {
                 var shared = layer.GetTrainableParameters();
@@ -1089,19 +1107,10 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         // threshold, so it bounds the step magnitude while preserving its direction —
         // it can only stabilise training, never reverse a descent direction. The norm
         // is computed with Engine reductions (no per-element scalar loop).
-        const double MaxGradNorm = 1.0;
-        T sumSq = NumOps.Zero;
-        foreach (var param in paramTensors)
-        {
-            if (!grads.TryGetValue(param, out var g) || g is null) continue;
-            var gsq = Engine.ReduceSum(Engine.TensorMultiply(g, g), null);
-            sumSq = NumOps.Add(sumSq, gsq[0]);
-        }
-        double gradNorm = Math.Sqrt(Convert.ToDouble(sumSq));
-        T clipScale = gradNorm > MaxGradNorm
-            ? NumOps.FromDouble(MaxGradNorm / gradNorm)
-            : NumOps.One;
-        T effectiveLr = NumOps.Multiply(LearningRate, clipScale);
+        // Global gradient-norm clipping is delegated to the optimizer (configured at MaxGradientNorm
+        // = 1.0 below — the canonical DDPM / HuggingFace-diffusers recipe of
+        // clip_grad_norm_(params, 1.0)). The optimizer's Step performs the clip on its SIMD path
+        // right before the moment update, so there's no separate per-step scalar reduction here.
 
         // G5 (#1624): restore the full-precision shadow weights before the optimizer step, so the
         // update lands on full precision (straight-through estimator). The forward used the quantized
@@ -1116,20 +1125,57 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             }
         }
 
-        // Per-tensor SGD: param -= effectiveLr * grad, applied in place so registered
-        // tensor references stay stable across training steps.
-        foreach (var param in paramTensors)
-        {
-            if (!grads.TryGetValue(param, out var grad) || grad is null) continue;
-            var update = Engine.TensorMultiplyScalar(grad, effectiveLr);
-            var paramSpan = param.Data.Span;
-            var updateSpan = update.AsSpan();
-            int n = Math.Min(paramSpan.Length, updateSpan.Length);
-            for (int i = 0; i < n; i++)
+        // Apply the configured gradient-based optimizer. Default: paper-faithful Adam (DDPM, Ho et al.
+        // 2020 — Adam, NOT AdamW: β1=0.9, β2=0.999, ε=1e-8, no weight decay), reusing the shared
+        // optimizer infrastructure so nothing is hardcoded and the update runs on its vectorized (SIMD)
+        // Engine path. The non-paper extras (adaptive betas, adaptive LR, AMSGrad) are disabled so the
+        // default reproduces the paper exactly. Built lazily so a never-trained model pays nothing and
+        // LearningRate (which subclasses may set post-construction) is read at first use. The caller can
+        // substitute ANY optimizer via DiffusionModelOptions.OptimizerFactory (bring-your-own).
+        _trainingOptimizer ??= _options.OptimizerFactory?.Invoke() ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            model: null,
+            options: new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                paramSpan[i] = NumOps.Subtract(paramSpan[i], updateSpan[i]);
-            }
+                InitialLearningRate = Convert.ToDouble(LearningRate),
+                Beta1 = 0.9,
+                Beta2 = 0.999,
+                Epsilon = 1e-8,
+                UseAdaptiveBetas = false,
+                UseAdaptiveLearningRate = false,
+                UseAMSGrad = false,
+                // DDPM does no NaN-skipping; disabling the guard also drops the O(total-gradient)
+                // pre-scan the lean Step kernel would otherwise run every step.
+                AnomalyGuardMode = AdamAnomalyGuardMode.Never,
+                EnableGradientClipping = true,
+                GradientClippingMethod = GradientClippingMethod.ByNorm,
+                MaxGradientNorm = 1.0,
+            });
+
+        // Drive the optimizer through its tape-step entry point. Step(TapeStepContext) runs the
+        // optimizer's fused, in-place, allocation-free SIMD kernel directly on the parameter tensors
+        // and their gradients — it does NOT take the legacy flat-vector UpdateParameters round-trip
+        // (~17 intermediate Vector<T> allocations per step) that dominated foundation-scale training
+        // wall-time and timed the FateZero/Step1XEdit probes out. The optimizer owns its per-parameter
+        // moment state (keyed by tensor reference, stable across in-place steps) plus the global-norm
+        // clip; nothing is materialized or copied here. The forward/loss closures are only consulted by
+        // optimizers that re-evaluate the objective (e.g. line search); Adam ignores them.
+        T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
+        Tensor<T> RecomputeForward(Tensor<T> inp, Tensor<T> _) => PredictNoise(inp, timestep);
+        Tensor<T> RecomputeLoss(Tensor<T> inp, Tensor<T> target)
+        {
+            using var noGrad = new NoGradScope<T>();
+            var recomputed = RecomputeForward(inp, target);
+            var diff2 = Engine.TensorSubtract(recomputed, target);
+            var sq2 = Engine.TensorMultiply(diff2, diff2);
+            return Engine.TensorMultiplyScalar(
+                Engine.ReduceSum(sq2, null),
+                NumOps.FromDouble(1.0 / sq2.Length));
         }
+        var stepContext = new TapeStepContext<T>(
+            paramTensors.ToList(), grads, lossValue,
+            noisySampleTensor, noiseTensor,
+            RecomputeForward, RecomputeLoss);
+        _trainingOptimizer.Step(stepContext);
     }
 
     /// <inheritdoc />

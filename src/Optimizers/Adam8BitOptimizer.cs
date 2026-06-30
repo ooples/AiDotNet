@@ -438,11 +438,14 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
 
     private readonly ConcurrentDictionary<Tensor<T>, QuantizedTapeState> _tapeStates =
         new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly Dictionary<int, QuantizedTapeState> _pendingTapeStatesByParameterIndex = new();
     private int _tapeStep;
 
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
     {
+        PrepareTapeState(context);
+
         _tapeStep++;
 
         T beta1 = _currentBeta1;
@@ -466,8 +469,12 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             && _options.QuantizationPercentile >= 100
             && !_options.UseStochasticRounding;
 
+        int parameterIndex = -1;
         foreach (var param in context.Parameters)
         {
+            parameterIndex++;
+            RestorePendingTapeState(parameterIndex, param);
+
             // True sparse scatter Adam8Bit: dequant + Adam + requant only on the
             // BLOCKS that contain touched indices. The block granularity is
             // necessary because changing a block's per-block scale re-interprets
@@ -1286,6 +1293,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         // correction step counter in place — the next training run
         // would resume from old state instead of cold-starting.
         _tapeStates.Clear();
+        _pendingTapeStatesByParameterIndex.Clear();
         _tapeStep = 0;
     }
 
@@ -1454,6 +1462,292 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         return snapshot;
     }
 
+    private void WriteTapeStates(BinaryWriter writer)
+    {
+        var entries = new SortedDictionary<int, QuantizedTapeState>();
+
+        foreach (var entry in _pendingTapeStatesByParameterIndex)
+        {
+            entries[entry.Key] = entry.Value;
+        }
+
+        foreach (var entry in _tapeStates)
+        {
+            if (TryGetTapeParameterIndex(entry.Key, out int parameterIndex))
+            {
+                entries[parameterIndex] = entry.Value;
+            }
+        }
+
+        writer.Write(entries.Count);
+        foreach (var entry in entries)
+        {
+            writer.Write(entry.Key);
+            WriteTapeState(writer, entry.Value);
+        }
+    }
+
+    private void ReadTapeStates(BinaryReader reader)
+    {
+        _pendingTapeStatesByParameterIndex.Clear();
+
+        int count = reader.ReadInt32();
+        for (int i = 0; i < count; i++)
+        {
+            int parameterIndex = reader.ReadInt32();
+            _pendingTapeStatesByParameterIndex[parameterIndex] = ReadTapeState(reader);
+        }
+    }
+
+    private void WriteTapeState(BinaryWriter writer, QuantizedTapeState state)
+    {
+        writer.Write(state.Length);
+        writer.Write(state.NumBlocks);
+        WriteByteVector(writer, state.MQuantized);
+        WriteTensor(writer, state.MFullPrecision);
+        WriteByteVector(writer, state.VQuantized);
+        WriteDoubleVector(writer, state.MScales);
+        WriteDoubleVector(writer, state.VScales);
+        WriteUShortArray(writer, state.MBf16);
+        WriteUShortArray(writer, state.VBf16);
+    }
+
+    private QuantizedTapeState ReadTapeState(BinaryReader reader)
+    {
+        var state = new QuantizedTapeState
+        {
+            Length = reader.ReadInt32(),
+            NumBlocks = reader.ReadInt32(),
+            MQuantized = ReadByteVector(reader),
+            MFullPrecision = ReadTensor(reader),
+            VQuantized = ReadByteVector(reader) ?? null!,
+            MScales = ReadDoubleVector(reader),
+            VScales = ReadDoubleVector(reader) ?? null!,
+            MBf16 = ReadUShortArray(reader),
+            VBf16 = ReadUShortArray(reader),
+            GpuResident = false
+        };
+
+        if (state.Length < 0)
+        {
+            throw new InvalidOperationException($"Adam8BitOptimizer: invalid tape-state length {state.Length}.");
+        }
+
+        if (_options.UseBFloat16MomentStorage)
+        {
+            if (state.MBf16 is null || state.VBf16 is null)
+            {
+                throw new InvalidOperationException("Adam8BitOptimizer: BF16 tape-state payload is incomplete.");
+            }
+        }
+        else
+        {
+            if (state.VQuantized is null || state.VScales is null)
+            {
+                throw new InvalidOperationException("Adam8BitOptimizer: V tape-state payload is incomplete.");
+            }
+
+            if (_options.CompressBothMoments)
+            {
+                if (state.MQuantized is null || state.MScales is null)
+                {
+                    throw new InvalidOperationException("Adam8BitOptimizer: quantized M tape-state payload is incomplete.");
+                }
+            }
+            else if (state.MFullPrecision is null)
+            {
+                throw new InvalidOperationException("Adam8BitOptimizer: full-precision M tape-state payload is incomplete.");
+            }
+        }
+
+        if (!_options.UseBFloat16MomentStorage)
+        {
+            int expectedBlocks = state.Length == 0 ? 0 : (state.Length + _options.BlockSize - 1) / _options.BlockSize;
+            if (state.NumBlocks != expectedBlocks)
+            {
+                throw new InvalidOperationException(
+                    $"Adam8BitOptimizer: tape-state block count {state.NumBlocks} does not match " +
+                    $"length {state.Length} and BlockSize {_options.BlockSize} (expected {expectedBlocks}).");
+            }
+        }
+
+        return state;
+    }
+
+    private void RestorePendingTapeState(int parameterIndex, Tensor<T> parameter)
+    {
+        if (!_pendingTapeStatesByParameterIndex.TryGetValue(parameterIndex, out var state))
+        {
+            return;
+        }
+
+        if (state.Length != parameter.Length)
+        {
+            throw new InvalidOperationException(
+                $"Adam8BitOptimizer checkpoint tape state for parameter {parameterIndex} has length " +
+                $"{state.Length}, but the current parameter has length {parameter.Length}.");
+        }
+
+        if (state.MFullPrecision is not null && !state.MFullPrecision._shape.SequenceEqual(parameter._shape))
+        {
+            var reshaped = new Tensor<T>(parameter._shape);
+            state.MFullPrecision.AsSpan().CopyTo(reshaped.AsWritableSpan());
+            state.MFullPrecision = reshaped;
+        }
+
+        _tapeStates[parameter] = state;
+        _pendingTapeStatesByParameterIndex.Remove(parameterIndex);
+    }
+
+    private static void WriteByteVector(BinaryWriter writer, Vector<byte>? vector)
+    {
+        writer.Write(vector is not null);
+        if (vector is null) return;
+
+        writer.Write(vector.Length);
+        for (int i = 0; i < vector.Length; i++)
+        {
+            writer.Write(vector[i]);
+        }
+    }
+
+    private static Vector<byte>? ReadByteVector(BinaryReader reader)
+    {
+        if (!reader.ReadBoolean()) return null;
+
+        int length = reader.ReadInt32();
+        if (length < 0)
+        {
+            throw new InvalidOperationException($"Adam8BitOptimizer: invalid byte-vector length {length}.");
+        }
+
+        var vector = new Vector<byte>(length);
+        for (int i = 0; i < length; i++)
+        {
+            vector[i] = reader.ReadByte();
+        }
+
+        return vector;
+    }
+
+    private static void WriteDoubleVector(BinaryWriter writer, Vector<double>? vector)
+    {
+        writer.Write(vector is not null);
+        if (vector is null) return;
+
+        writer.Write(vector.Length);
+        for (int i = 0; i < vector.Length; i++)
+        {
+            writer.Write(vector[i]);
+        }
+    }
+
+    private static Vector<double>? ReadDoubleVector(BinaryReader reader)
+    {
+        if (!reader.ReadBoolean()) return null;
+
+        int length = reader.ReadInt32();
+        if (length < 0)
+        {
+            throw new InvalidOperationException($"Adam8BitOptimizer: invalid double-vector length {length}.");
+        }
+
+        var vector = new Vector<double>(length);
+        for (int i = 0; i < length; i++)
+        {
+            vector[i] = reader.ReadDouble();
+        }
+
+        return vector;
+    }
+
+    private void WriteTensor(BinaryWriter writer, Tensor<T>? tensor)
+    {
+        writer.Write(tensor is not null);
+        if (tensor is null) return;
+
+        writer.Write(tensor._shape.Length);
+        foreach (int dimension in tensor._shape)
+        {
+            writer.Write(dimension);
+        }
+
+        var span = tensor.AsSpan();
+        writer.Write(span.Length);
+        for (int i = 0; i < span.Length; i++)
+        {
+            writer.Write(NumOps.ToDouble(span[i]));
+        }
+    }
+
+    private Tensor<T>? ReadTensor(BinaryReader reader)
+    {
+        if (!reader.ReadBoolean()) return null;
+
+        int rank = reader.ReadInt32();
+        if (rank < 0)
+        {
+            throw new InvalidOperationException($"Adam8BitOptimizer: invalid tensor rank {rank}.");
+        }
+
+        var shape = new int[rank];
+        for (int i = 0; i < rank; i++)
+        {
+            shape[i] = reader.ReadInt32();
+            if (shape[i] < 0)
+            {
+                throw new InvalidOperationException($"Adam8BitOptimizer: invalid tensor dimension {shape[i]} at axis {i}.");
+            }
+        }
+
+        int length = reader.ReadInt32();
+        var tensor = new Tensor<T>(shape);
+        if (tensor.Length != length)
+        {
+            throw new InvalidOperationException(
+                $"Adam8BitOptimizer: serialized tensor length {length} does not match shape length {tensor.Length}.");
+        }
+
+        var span = tensor.AsWritableSpan();
+        for (int i = 0; i < length; i++)
+        {
+            span[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+
+        return tensor;
+    }
+
+    private static void WriteUShortArray(BinaryWriter writer, ushort[]? values)
+    {
+        writer.Write(values is not null);
+        if (values is null) return;
+
+        writer.Write(values.Length);
+        for (int i = 0; i < values.Length; i++)
+        {
+            writer.Write(values[i]);
+        }
+    }
+
+    private static ushort[]? ReadUShortArray(BinaryReader reader)
+    {
+        if (!reader.ReadBoolean()) return null;
+
+        int length = reader.ReadInt32();
+        if (length < 0)
+        {
+            throw new InvalidOperationException($"Adam8BitOptimizer: invalid ushort-array length {length}.");
+        }
+
+        var values = new ushort[length];
+        for (int i = 0; i < length; i++)
+        {
+            values[i] = reader.ReadUInt16();
+        }
+
+        return values;
+    }
+
     /// <summary>
     /// Serializes the optimizer's state into a byte array.
     /// </summary>
@@ -1553,30 +1847,14 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 }
             }
 
-            // Tape-state checkpoint partial: persist the global step counter
-            // (_tapeStep) so bias-correction terms resume correctly after
-            // load. Per-parameter tape moments (_tapeStates) are NOT
-            // persisted because the dictionary is keyed by Tensor<T>
-            // reference — those references don't survive a process restart,
-            // and there's no stable parameter-id mapping to re-key them on
-            // load. Warn loudly so users know mid-training Adam-state
-            // checkpoint/resume is partial: the bias-correction step
-            // counter resumes (so update magnitudes match), but per-
-            // parameter moments cold-start (first few steps after resume
-            // see a small spike before momentum re-accumulates). Full
-            // tape-state checkpoint is a larger architectural change
-            // tracked separately.
-            if (_tapeStates.Count > 0)
-            {
-                System.Diagnostics.Trace.TraceWarning(
-                    $"Adam8BitOptimizer.Serialize: {_tapeStates.Count} per-parameter " +
-                    $"tape Adam moments are NOT persisted (dictionary keyed by Tensor " +
-                    $"reference, not stable across serialize/deserialize). The global " +
-                    $"step counter _tapeStep={_tapeStep} IS persisted for bias-correction " +
-                    $"continuity. Mid-training resume will cold-start moments but match " +
-                    $"the bias-correction trajectory.");
-            }
+            // Tape-state checkpoint: persist both the bias-correction step
+            // counter and the per-parameter quantized moments by parameter
+            // order. The runtime dictionary is still keyed by Tensor<T>
+            // reference for hot-path lookup, but the serialized form uses
+            // the stable TapeStepContext parameter index and rebinds to the
+            // next model's tensor references on the first resumed Step.
             writer.Write(_tapeStep);
+            WriteTapeStates(writer);
 
             return ms.ToArray();
         }
@@ -1835,33 +2113,40 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 _vScales = null;
             }
 
-            // Tape-state checkpoint partial (matches Serialize): read the
-            // global step counter so bias-correction continues from the
-            // saved trajectory. Per-parameter tape moments cold-start —
-            // _tapeStates is left empty and the next tape Step lazily
-            // re-allocates entries on first touch.
-            //
-            // Defensive try/catch: a valid v2 payload always contains
-            // _tapeStep (the magic-header check above already rejects v1
-            // payloads, so format-migration is not the concern here).
-            // The catch handles a different failure mode — a v2 payload
-            // truncated mid-write (disk full, process killed during
-            // serialize, partial network transfer). Falling back to
-            // _tapeStep=0 lets the optimizer resume with cold-started
-            // bias correction rather than throwing on a recoverable
-            // truncation. Cold-start matches the contract of an
-            // optimizer that was checkpointed before any training had
-            // run, so the resumed run sees one step's worth of slightly-
-            // overconfident updates before bias correction stabilizes.
-            try
-            {
-                _tapeStep = reader.ReadInt32();
-            }
-            catch (EndOfStreamException)
+            // Tape-state checkpoint (matches Serialize): read the global
+            // step counter plus per-parameter quantized moments. Some older
+            // v2 payloads ended before any tape-step data existed; those
+            // remain readable and resume with cold-started tape moments.
+            _tapeStates.Clear();
+            _pendingTapeStatesByParameterIndex.Clear();
+            long tapePayloadBytes = reader.BaseStream.Length - reader.BaseStream.Position;
+            if (tapePayloadBytes == 0)
             {
                 _tapeStep = 0;
+                InitializeAdaptiveParameters();
+                return;
             }
-            _tapeStates.Clear();
+
+            if (tapePayloadBytes < sizeof(int))
+            {
+                throw new InvalidOperationException(
+                    "Adam8BitOptimizer: truncated tape-state payload before the tape-step header.");
+            }
+
+            _tapeStep = reader.ReadInt32();
+            if (reader.BaseStream.Position < reader.BaseStream.Length)
+            {
+                try
+                {
+                    ReadTapeStates(reader);
+                }
+                catch (EndOfStreamException ex)
+                {
+                    throw new InvalidOperationException(
+                        "Adam8BitOptimizer: truncated tape-state payload after the tape-step header.",
+                        ex);
+                }
+            }
 
             InitializeAdaptiveParameters();
         }

@@ -123,6 +123,23 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Free runner disk space
+        # The full solution Release build compiles net10.0 + net471 outputs and can exhaust
+        # ubuntu-latest's runner volume before downstream cleanup steps run. Keep the .NET
+        # host frameworks intact and remove only preinstalled toolchains this job does not use.
+        run: |
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /opt/ghc || true
+          sudo rm -rf /opt/hostedtoolcache/CodeQL || true
+          sudo rm -rf /opt/hostedtoolcache/PyPy || true
+          sudo rm -rf /opt/hostedtoolcache/Ruby || true
+          sudo rm -rf /opt/hostedtoolcache/go || true
+          sudo rm -rf /usr/share/swift || true
+          sudo rm -rf /usr/share/miniconda || true
+          sudo rm -rf /usr/local/share/boost || true
+          sudo apt-get clean || true
+          df -h /
+
       - name: Setup .NET 10.0
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
@@ -151,19 +168,24 @@ jobs:
       - name: Build for CodeQL (net10.0)
         run: dotnet build src/AiDotNet.csproj -c Release --no-restore -f net10.0
 
-      - name: Perform CodeQL Analysis (no SARIF upload for huge PRs)
-        if: github.event_name == 'pull_request' && github.event.pull_request.changed_files > 250
-        uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
-        with:
-          category: "/language:csharp"
-          upload: never
+      - name: Select CodeQL upload mode
+        id: codeql_upload
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          CHANGED_FILES: ${{ github.event.pull_request.changed_files || 0 }}
+        run: |
+          if [[ "$EVENT_NAME" == "pull_request" && "$CHANGED_FILES" -gt 250 ]]; then
+            echo "mode=never" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=always" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Perform CodeQL Analysis
-        if: github.event_name != 'pull_request' || github.event.pull_request.changed_files <= 250
         uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4
         with:
           category: "/language:csharp"
-          upload: always
+          upload: ${{ steps.codeql_upload.outputs.mode }}
 
   # Build once on ubuntu (net10.0 + net471), then run tests in parallel shards.
   build:
@@ -250,10 +272,35 @@ jobs:
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.Encoding|FullyQualifiedName~UnitTests.Diffusion.AudioProcessingTests|FullyQualifiedName~UnitTests.Diffusion.MemoryManagementTests|FullyQualifiedName~UnitTests.Diffusion.SchedulerTests|FullyQualifiedName~UnitTests.Diffusion.Conditioning|FullyQualifiedName~UnitTests.Diffusion.Schedulers)'
-          - name: Unit - 03b Diffusion Models Control/DDPM/Preprocessor
+          - name: Unit - 03b1 Diffusion Preprocessors
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&(FullyQualifiedName~ControlModelContractTests|FullyQualifiedName~DDPMModelTests|FullyQualifiedName~PreprocessorContractTests)'
+            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&FullyQualifiedName~PreprocessorContractTests'
+          - name: Unit - 03b2 Diffusion DDPM
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&FullyQualifiedName~DDPMModelTests'
+          - name: Unit - 03b3 Diffusion Control Guidance/Adapters
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&
+              FullyQualifiedName~ControlModelContractTests&
+              (FullyQualifiedName~PerturbedAttentionGuidance|FullyQualifiedName~SelfAttentionGuidance|FullyQualifiedName~DynamicCFGScheduler|FullyQualifiedName~RescaledCFG|FullyQualifiedName~AdaptiveProjectedGuidance|FullyQualifiedName~IPAdapterPlusModel_DefaultConstructor|FullyQualifiedName~IPAdapterFaceIDPlusModel_DefaultConstructor|FullyQualifiedName~IPAdapterModel_DefaultConstructor)
+          - name: Unit - 03b4 Diffusion ControlNet Core A
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&
+              FullyQualifiedName~ControlModelContractTests&
+              (FullyQualifiedName~ControlNetPlusPlusModel_DefaultConstructor|FullyQualifiedName~ControlNetFluxModel_DefaultConstructor|FullyQualifiedName~ControlNetSD3Model_DefaultConstructor|FullyQualifiedName~ControlNetUnionProModel_DefaultConstructor|FullyQualifiedName~ControlNetPlusPlusFluxModel_DefaultConstructor|FullyQualifiedName~ControlNetPlusPlusModel_Clone|FullyQualifiedName~ControlNetFluxModel_Clone)
+          - name: Unit - 03b5 Diffusion ControlNet Core B
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&
+              FullyQualifiedName~ControlModelContractTests&
+              (FullyQualifiedName~ControlNetLiteModel_DefaultConstructor|FullyQualifiedName~ControlNetQRModel_DefaultConstructor|FullyQualifiedName~ReferenceOnlyModel_DefaultConstructor|FullyQualifiedName~StyleAlignedModel_DefaultConstructor|FullyQualifiedName~ControlNetTileModel_DefaultConstructor|FullyQualifiedName~ControlNetInpaintingModel_DefaultConstructor|FullyQualifiedName~ControlNeXtModel_DefaultConstructor|FullyQualifiedName~ControlARModel_DefaultConstructor)
           - name: Unit - 03c1 Diffusion Contracts A-C
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -282,10 +329,59 @@ jobs:
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&(FullyQualifiedName~EditingModelContractTests.J|FullyQualifiedName~EditingModelContractTests.K|FullyQualifiedName~EditingModelContractTests.L|FullyQualifiedName~EditingModelContractTests.M|FullyQualifiedName~EditingModelContractTests.N|FullyQualifiedName~EditingModelContractTests.O|FullyQualifiedName~EditingModelContractTests.P|FullyQualifiedName~EditingModelContractTests.Q|FullyQualifiedName~EditingModelContractTests.R|FullyQualifiedName~EditingModelContractTests.S|FullyQualifiedName~EditingModelContractTests.T|FullyQualifiedName~EditingModelContractTests.U|FullyQualifiedName~EditingModelContractTests.V|FullyQualifiedName~EditingModelContractTests.W|FullyQualifiedName~EditingModelContractTests.X|FullyQualifiedName~EditingModelContractTests.Y|FullyQualifiedName~EditingModelContractTests.Z)'
-          - name: Unit - 03d Diffusion Models FastGen/Conditioner
+          - name: Unit - 03d1 Diffusion FastGen Image/VAE
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&(FullyQualifiedName~FastGenContractTests|FullyQualifiedName~NewConditionerContractTests)'
+            filter: >-
+              Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&
+              FullyQualifiedName~FastGenContractTests&
+              (FullyQualifiedName~Flux2Model_DefaultConstructor|FullyQualifiedName~SANAModel_DefaultConstructor|FullyQualifiedName~StableDiffusion35Model_DefaultConstructor|FullyQualifiedName~LuminaImage2Model_DefaultConstructor|FullyQualifiedName~HiDreamModel_DefaultConstructor|FullyQualifiedName~CogView4Model_DefaultConstructor|FullyQualifiedName~PlaygroundV3Model_DefaultConstructor|FullyQualifiedName~Imagen3Model_DefaultConstructor|FullyQualifiedName~MeissonicModel_DefaultConstructor|FullyQualifiedName~RecraftV3Model_DefaultConstructor|FullyQualifiedName~Ideogram3Model_DefaultConstructor|FullyQualifiedName~MidJourneyV7Model_DefaultConstructor|FullyQualifiedName~DeepCompressionVAE_DefaultConstructor|FullyQualifiedName~EQVAEModel_DefaultConstructor|FullyQualifiedName~LiteVAEModel_DefaultConstructor|FullyQualifiedName~SDXLVAEModel_DefaultConstructor)
+          - name: Unit - 03d2 Diffusion FastGen Consistency/Turbo
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&
+              FullyQualifiedName~FastGenContractTests&
+              (FullyQualifiedName~ImprovedConsistencyModel_DefaultConstructor|FullyQualifiedName~EasyConsistencyModel_DefaultConstructor|FullyQualifiedName~MultiStepConsistencyModel_DefaultConstructor|FullyQualifiedName~MultistepLCModel_DefaultConstructor|FullyQualifiedName~TrainingEfficientLCM_DefaultConstructor|FullyQualifiedName~SDXLTurboModel_DefaultConstructor|FullyQualifiedName~SDXLLightningModel_DefaultConstructor|FullyQualifiedName~HyperSDModel_DefaultConstructor|FullyQualifiedName~DMD2Model_DefaultConstructor|FullyQualifiedName~SenseFlowModel_DefaultConstructor|FullyQualifiedName~SANASprintModel_DefaultConstructor|FullyQualifiedName~SwiftBrushModel_DefaultConstructor|FullyQualifiedName~FlashDiffusionModel_DefaultConstructor)
+          - name: Unit - 03d3 Diffusion FastGen Flow/AR
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&
+              FullyQualifiedName~FastGenContractTests&
+              (FullyQualifiedName~PCMModel_DefaultConstructor|FullyQualifiedName~TCDModel_DefaultConstructor|FullyQualifiedName~InstaFlowModel_DefaultConstructor|FullyQualifiedName~FlowMapModel_DefaultConstructor|FullyQualifiedName~SCottModel_DefaultConstructor|FullyQualifiedName~PeRFlowModel_DefaultConstructor|FullyQualifiedName~SiDModel_DefaultConstructor|FullyQualifiedName~SiDDiTModel_DefaultConstructor|FullyQualifiedName~SD3TurboModel_DefaultConstructor|FullyQualifiedName~FluxSchnellModel_DefaultConstructor|FullyQualifiedName~SD3FlashModel_DefaultConstructor|FullyQualifiedName~Flux2SchnellModel_DefaultConstructor|FullyQualifiedName~PixArtDeltaLCMModel_DefaultConstructor|FullyQualifiedName~TransfusionModel_DefaultConstructor|FullyQualifiedName~MARModel_DefaultConstructor|FullyQualifiedName~ARDiffusionModel_DefaultConstructor|FullyQualifiedName~AutoRegressiveMaskedDiffusion_DefaultConstructor)
+          - name: Unit - 03d4 Diffusion FastGen Schedulers
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&
+              FullyQualifiedName~FastGenContractTests&
+              (FullyQualifiedName~RectifiedFlowScheduler_DefaultConstructor|FullyQualifiedName~FlowDPMSolverScheduler_DefaultConstructor|FullyQualifiedName~DPMSolverV3Scheduler_DefaultConstructor|FullyQualifiedName~SASolverScheduler_DefaultConstructor)
+          - name: Unit - 03d5 Diffusion FastGen SDXL State
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&
+              FullyQualifiedName~FastGenContractTests&
+              (FullyQualifiedName~SDXLTurboModel_Clone|FullyQualifiedName~ImprovedConsistencyModel_Clone|FullyQualifiedName~SDXLTurboModel_GetSetParameters|FullyQualifiedName~SDXLTurboModel_GetModelMetadata)
+          - name: Unit - 03d6 Diffusion FastGen Flux State
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&
+              FullyQualifiedName~FastGenContractTests&
+              (FullyQualifiedName~FluxSchnellModel_Clone|FullyQualifiedName~Flux2Model_GetSetParameters|FullyQualifiedName~FluxSchnellModel_GetModelMetadata|FullyQualifiedName~SANAModel_GetModelMetadata)
+          - name: Unit - 03d7 Diffusion FastGen Distillation
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&
+              FullyQualifiedName~FastGenContractTests&
+              (FullyQualifiedName~OSDSModel_DefaultConstructor|FullyQualifiedName~ScoreDistillationSampling_Constructor|FullyQualifiedName~VariationalScoreDistillation_Constructor|FullyQualifiedName~ConsistencyDistillationSampling_Constructor|FullyQualifiedName~IntervalScoreMatching_Constructor|FullyQualifiedName~DenoisedScoreDistillation_Constructor|FullyQualifiedName~UnifiedDistillationSampling_Constructor|FullyQualifiedName~RewardScoreDistillation_Constructor|FullyQualifiedName~SemanticScoreDistillation_Constructor|FullyQualifiedName~FastGenContractTests.ConsistencyModel_DefaultConstructor)
+          - name: Unit - 03d8 Diffusion New Conditioners
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.Diffusion.Models&FullyQualifiedName~NewConditionerContractTests'
           - name: Unit - 04 Feature/Fit/Fitness/Genetics
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -450,14 +546,14 @@ jobs:
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: '(FullyQualifiedName~ModelFamilyTests.TimeSeries|FullyQualifiedName~ModelFamilyTests.ActivationFunctions|FullyQualifiedName~ModelFamilyTests.LossFunctions)'
-          # Diffusion (244 model classes) split into 6 shards by MODEL CLASS first
+          # Diffusion (244 model classes) split by MODEL CLASS first
           # letter (Diffusion.<Letter>), NOT by test METHOD letter. Method-based
           # sharding made every shard instantiate ALL ~244 models and OOM-kill the
           # 16 GB ubuntu-latest runner; model-class sharding limits each shard to a
           # letter range so per-runner cumulative model/tensor footprint stays
-          # bounded. Was 3 shards (~80 models each) — still OOM'd even serialized
-          # (footprint, not parallelism), so split finer to 9 shards. 'S' is the
-          # single heaviest letter and is split by class prefix.
+          # bounded. Was 3 shards (~80 models each) - still OOM'd even serialized
+          # (footprint, not parallelism), so split finer. 'S' and 'M' are split by
+          # class prefix because they are among the heaviest letter groups.
           - name: ModelFamily - Diffusion A-C
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -470,12 +566,35 @@ jobs:
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Diffusion&
               (FullyQualifiedName~Diffusion.D|FullyQualifiedName~Diffusion.E|FullyQualifiedName~Diffusion.F|FullyQualifiedName~Diffusion.G|FullyQualifiedName~Diffusion.H|FullyQualifiedName~Diffusion.I)
-          - name: ModelFamily - Diffusion J-M
+          - name: ModelFamily - Diffusion J-K
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Diffusion&
-              (FullyQualifiedName~Diffusion.J|FullyQualifiedName~Diffusion.K|FullyQualifiedName~Diffusion.L|FullyQualifiedName~Diffusion.M)
+              (FullyQualifiedName~Diffusion.J|FullyQualifiedName~Diffusion.K)
+          - name: ModelFamily - Diffusion L
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Diffusion&FullyQualifiedName~Diffusion.L
+          - name: ModelFamily - Diffusion M A-Mi
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Diffusion&
+              (FullyQualifiedName~Diffusion.MAGI|FullyQualifiedName~Diffusion.Magic|FullyQualifiedName~Diffusion.Make|FullyQualifiedName~Diffusion.MAR|FullyQualifiedName~Diffusion.Me|FullyQualifiedName~Diffusion.Mid|FullyQualifiedName~Diffusion.Min)
+          - name: ModelFamily - Diffusion M Mochi-Model
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Diffusion&
+              (FullyQualifiedName~Diffusion.Mochi|FullyQualifiedName~Diffusion.ModelScope|FullyQualifiedName~Diffusion.MoMask)
+          - name: ModelFamily - Diffusion M Motion-MZ
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Diffusion&
+              (FullyQualifiedName~Diffusion.Motion|FullyQualifiedName~Diffusion.Movie|FullyQualifiedName~Diffusion.Multi|FullyQualifiedName~Diffusion.Music|FullyQualifiedName~Diffusion.MV)
           - name: ModelFamily - Diffusion N-R
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -713,12 +832,12 @@ jobs:
 
           # Per-shard parallelism control. The streaming + Server GC
           # changes earlier in this PR helped most shards stop cancelling,
-          # but the heaviest model-family shards (Diffusion A-C / D-I / J-M /
-          # N-R / S-prefix / T-Z, Generated Layers A-M/N-Z,
+          # but the heaviest model-family shards (Diffusion letter/prefix shards,
+          # Generated Layers A-M/N-Z,
           # Unit-03 diffusion, ModelFamily-NeuralNetworks) still trip OOM
           # with 4 parallel BERT-class
           # model loads in flight on a 16 GB ubuntu-latest runner. Per-iter
-          # peak memory ≈ 880 MB weights + 1.76 GB Adam state per slot;
+          # peak memory ~= 880 MB weights + 1.76 GB Adam state per slot;
           # 4 slots × 2.6 GB + dotnet/xUnit overhead overruns the envelope.
           # For these specific shards we rewrite the built xunit.runner.json
           # to serialize collection execution so heavy models load serially —
@@ -729,7 +848,11 @@ jobs:
           $heavyShards = @(
             'ModelFamily - Diffusion A-C',
             'ModelFamily - Diffusion D-I',
-            'ModelFamily - Diffusion J-M',
+            'ModelFamily - Diffusion J-K',
+            'ModelFamily - Diffusion L',
+            'ModelFamily - Diffusion M A-Mi',
+            'ModelFamily - Diffusion M Mochi-Model',
+            'ModelFamily - Diffusion M Motion-MZ',
             'ModelFamily - Diffusion N-R',
             'ModelFamily - Diffusion SA-SD',
             'ModelFamily - Diffusion SE-SP',
@@ -753,7 +876,11 @@ jobs:
             'ModelFamily - TimeSeries/Activation/Loss',
             'ModelFamily - Code/Forecast/Segment/Survival',
             'Unit - 03a Diffusion Core/Schedulers/Encoding',
-            'Unit - 03b Diffusion Models Control/DDPM/Preprocessor',
+            'Unit - 03b1 Diffusion Preprocessors',
+            'Unit - 03b2 Diffusion DDPM',
+            'Unit - 03b3 Diffusion Control Guidance/Adapters',
+            'Unit - 03b4 Diffusion ControlNet Core A',
+            'Unit - 03b5 Diffusion ControlNet Core B',
             'Unit - 03c1 Diffusion Contracts A-C',
             'Unit - 03c2 Diffusion Contracts D-I',
             'Unit - 03c3 Diffusion Contracts J-R',
@@ -761,7 +888,14 @@ jobs:
             'Unit - 03c5 Diffusion Contracts T-Z',
             'Unit - 03c6 Editing Contracts A-I',
             'Unit - 03c7 Editing Contracts J-Z',
-            'Unit - 03d Diffusion Models FastGen/Conditioner',
+            'Unit - 03d1 Diffusion FastGen Image/VAE',
+            'Unit - 03d2 Diffusion FastGen Consistency/Turbo',
+            'Unit - 03d3 Diffusion FastGen Flow/AR',
+            'Unit - 03d4 Diffusion FastGen Schedulers',
+            'Unit - 03d5 Diffusion FastGen SDXL State',
+            'Unit - 03d6 Diffusion FastGen Flux State',
+            'Unit - 03d7 Diffusion FastGen Distillation',
+            'Unit - 03d8 Diffusion New Conditioners',
             # Integration shards that instantiate paper-scale models (Document AI,
             # Finance, ComputerVision, NeuralNetworks, Diffusion, Video, MetaLearning,
             # etc.) — serialize like the ModelFamily shards to stay under the runner

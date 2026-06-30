@@ -14,6 +14,8 @@ using LocalMixedPrecisionConfig = AiDotNet.MixedPrecision.MixedPrecisionConfig;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
+using System.Collections.Concurrent;
+using System.Reflection;
 
 namespace AiDotNet.Optimizers;
 
@@ -96,6 +98,16 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// Returns Vector&lt;T&gt;.Empty() if no gradients have been computed yet.
     /// </remarks>
     protected Vector<T> _lastComputedGradients;
+
+    private const string TapeStateExtensionMarker = "AiDotNet.GradientTapeOptimizerState.v1";
+
+    private readonly ConcurrentDictionary<Tensor<T>, int> _tapeParameterIndices =
+        new(TensorReferenceComparer<Tensor<T>>.Instance);
+
+    private readonly Dictionary<string, Dictionary<int, Tensor<T>>> _pendingTapeTensorStates =
+        new(StringComparer.Ordinal);
+
+    private readonly object _tapeStateSync = new();
 
     /// <summary>
     /// A cache for storing and retrieving gradients to improve performance.
@@ -1851,6 +1863,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     {
         base.Reset();
         GradientCache.ClearCache();
+        ClearSerializedTapeState();
 
         // Reset learning rate scheduler state
         _learningRateScheduler?.Reset();
@@ -2078,8 +2091,270 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         return NumOps.FromDouble(_currentLearningRate);
     }
 
+    /// <summary>
+    /// Rebinds optimizer tape state loaded from a checkpoint to the current
+    /// parameter tensors and records the current parameter order for future
+    /// serialization.
+    /// </summary>
+    protected void PrepareTapeState(TapeStepContext<T> context)
+    {
+        Guard.NotNull(context);
+
+        lock (_tapeStateSync)
+        {
+            for (int parameterIndex = 0; parameterIndex < context.Parameters.Count; parameterIndex++)
+            {
+                var parameter = context.Parameters[parameterIndex];
+                if (parameter is null) continue;
+
+                _tapeParameterIndices[parameter] = parameterIndex;
+                RestorePendingTapeTensorStates(parameterIndex, parameter);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the stable parameter-order index recorded from the latest tape step.
+    /// </summary>
+    protected bool TryGetTapeParameterIndex(Tensor<T> parameter, out int parameterIndex)
+    {
+        return _tapeParameterIndices.TryGetValue(parameter, out parameterIndex);
+    }
+
     /// <inheritdoc />
     public abstract void Step(TapeStepContext<T> context);
+
+    /// <inheritdoc />
+    protected override void SerializeExtensionData(BinaryWriter writer)
+    {
+        writer.Write(TapeStateExtensionMarker);
+
+        var tapeStepFields = EnumerateOptimizerFields()
+            .Where(field => field.Name == "_tapeStep" && field.FieldType == typeof(int))
+            .ToList();
+
+        writer.Write(tapeStepFields.Count);
+        foreach (var field in tapeStepFields)
+        {
+            writer.Write(field.Name);
+            writer.Write((int)(field.GetValue(this) ?? 0));
+        }
+
+        var tensorStateFields = EnumerateTapeTensorStateFields().ToList();
+        writer.Write(tensorStateFields.Count);
+        foreach (var field in tensorStateFields)
+        {
+            writer.Write(field.Name);
+            WriteTapeTensorStateDictionary(writer, field);
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void DeserializeExtensionData(BinaryReader reader)
+    {
+        if (reader.BaseStream.Position >= reader.BaseStream.Length)
+        {
+            return;
+        }
+
+        string marker = reader.ReadString();
+        if (!string.Equals(marker, TapeStateExtensionMarker, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Unknown optimizer extension payload '{marker}'.");
+        }
+
+        ClearSerializedTapeState();
+
+        int tapeStepFieldCount = reader.ReadInt32();
+        for (int i = 0; i < tapeStepFieldCount; i++)
+        {
+            string fieldName = reader.ReadString();
+            int value = reader.ReadInt32();
+            var field = EnumerateOptimizerFields()
+                .FirstOrDefault(candidate => candidate.Name == fieldName && candidate.FieldType == typeof(int));
+            field?.SetValue(this, value);
+        }
+
+        int tensorStateFieldCount = reader.ReadInt32();
+        lock (_tapeStateSync)
+        {
+            for (int i = 0; i < tensorStateFieldCount; i++)
+            {
+                string fieldName = reader.ReadString();
+                _pendingTapeTensorStates[fieldName] = ReadTapeTensorStateDictionary(reader);
+            }
+        }
+    }
+
+    private void WriteTapeTensorStateDictionary(BinaryWriter writer, FieldInfo field)
+    {
+        var entries = new SortedDictionary<int, Tensor<T>>();
+
+        lock (_tapeStateSync)
+        {
+            if (_pendingTapeTensorStates.TryGetValue(field.Name, out var pendingEntries))
+            {
+                foreach (var entry in pendingEntries)
+                {
+                    entries[entry.Key] = entry.Value;
+                }
+            }
+
+            if (field.GetValue(this) is ConcurrentDictionary<Tensor<T>, Tensor<T>> activeEntries)
+            {
+                foreach (var entry in activeEntries)
+                {
+                    if (_tapeParameterIndices.TryGetValue(entry.Key, out int parameterIndex))
+                    {
+                        entries[parameterIndex] = entry.Value;
+                    }
+                }
+            }
+        }
+
+        writer.Write(entries.Count);
+        foreach (var entry in entries)
+        {
+            writer.Write(entry.Key);
+            WriteTapeTensor(writer, entry.Value);
+        }
+    }
+
+    private Dictionary<int, Tensor<T>> ReadTapeTensorStateDictionary(BinaryReader reader)
+    {
+        int count = reader.ReadInt32();
+        var entries = new Dictionary<int, Tensor<T>>(count);
+        for (int i = 0; i < count; i++)
+        {
+            int parameterIndex = reader.ReadInt32();
+            entries[parameterIndex] = ReadTapeTensor(reader);
+        }
+
+        return entries;
+    }
+
+    private void WriteTapeTensor(BinaryWriter writer, Tensor<T> tensor)
+    {
+        writer.Write(tensor._shape.Length);
+        foreach (int dimension in tensor._shape)
+        {
+            writer.Write(dimension);
+        }
+
+        var span = tensor.AsSpan();
+        writer.Write(span.Length);
+        for (int i = 0; i < span.Length; i++)
+        {
+            writer.Write(NumOps.ToDouble(span[i]));
+        }
+    }
+
+    private Tensor<T> ReadTapeTensor(BinaryReader reader)
+    {
+        int rank = reader.ReadInt32();
+        if (rank < 0)
+        {
+            throw new InvalidOperationException($"Invalid optimizer tensor rank {rank}.");
+        }
+
+        var shape = new int[rank];
+        for (int i = 0; i < rank; i++)
+        {
+            shape[i] = reader.ReadInt32();
+            if (shape[i] < 0)
+            {
+                throw new InvalidOperationException($"Invalid optimizer tensor dimension {shape[i]} at axis {i}.");
+            }
+        }
+
+        int length = reader.ReadInt32();
+        var tensor = new Tensor<T>(shape);
+        if (tensor.Length != length)
+        {
+            throw new InvalidOperationException(
+                $"Serialized optimizer tensor length {length} does not match shape length {tensor.Length}.");
+        }
+
+        var span = tensor.AsWritableSpan();
+        for (int i = 0; i < length; i++)
+        {
+            span[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+
+        return tensor;
+    }
+
+    private void RestorePendingTapeTensorStates(int parameterIndex, Tensor<T> parameter)
+    {
+        foreach (var field in EnumerateTapeTensorStateFields())
+        {
+            if (!_pendingTapeTensorStates.TryGetValue(field.Name, out var pendingEntries) ||
+                !pendingEntries.TryGetValue(parameterIndex, out var restoredState))
+            {
+                continue;
+            }
+
+            if (restoredState.Length != parameter.Length)
+            {
+                throw new InvalidOperationException(
+                    $"Checkpoint optimizer state for {GetType().Name}.{field.Name}[{parameterIndex}] has length " +
+                    $"{restoredState.Length}, but the current parameter has length {parameter.Length}.");
+            }
+
+            if (!restoredState._shape.SequenceEqual(parameter._shape))
+            {
+                var reshapedState = new Tensor<T>(parameter._shape);
+                restoredState.AsSpan().CopyTo(reshapedState.AsWritableSpan());
+                restoredState = reshapedState;
+            }
+
+            if (field.GetValue(this) is ConcurrentDictionary<Tensor<T>, Tensor<T>> activeState)
+            {
+                activeState[parameter] = restoredState;
+            }
+
+            pendingEntries.Remove(parameterIndex);
+            if (pendingEntries.Count == 0)
+            {
+                _pendingTapeTensorStates.Remove(field.Name);
+            }
+        }
+    }
+
+    private void ClearSerializedTapeState()
+    {
+        lock (_tapeStateSync)
+        {
+            _tapeParameterIndices.Clear();
+            _pendingTapeTensorStates.Clear();
+
+            foreach (var field in EnumerateTapeTensorStateFields())
+            {
+                if (field.GetValue(this) is ConcurrentDictionary<Tensor<T>, Tensor<T>> activeState)
+                {
+                    activeState.Clear();
+                }
+            }
+        }
+    }
+
+    private IEnumerable<FieldInfo> EnumerateTapeTensorStateFields()
+    {
+        return EnumerateOptimizerFields()
+            .Where(field => field.Name.StartsWith("_tape", StringComparison.Ordinal) &&
+                            field.FieldType == typeof(ConcurrentDictionary<Tensor<T>, Tensor<T>>));
+    }
+
+    private IEnumerable<FieldInfo> EnumerateOptimizerFields()
+    {
+        for (var type = GetType(); type is not null && type != typeof(object); type = type.BaseType)
+        {
+            foreach (var field in type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
+            {
+                yield return field;
+            }
+        }
+    }
 
     /// <summary>
     /// Applies PyTorch-style global-norm gradient clipping across every gradient
