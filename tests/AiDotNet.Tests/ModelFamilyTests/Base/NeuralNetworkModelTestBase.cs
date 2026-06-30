@@ -48,16 +48,15 @@ internal static class ModelFamilyTestGcGate
         // disposed. The next streaming model's ctor then throws "WeightRegistry.Configure: existing
         // streaming pool has N registered entries" (and a timed-out streaming test leaves a partial
         // registration behind too). Reset the registry here — in the between-tests hook EVERY
-        // model-family base already calls — whenever streaming was actually engaged. This is the
+        // model-family base already calls — after every test. This is the
         // generic cross-test fix for all foundation-scale streaming models (Phi3Vision, SmolVLM,
-        // GrokVision, …) across every shard, replacing per-model opt-ins. Guarded on a non-empty
-        // registry so a non-streaming test never touches it; safe because streaming-scale models run
-        // in serialized shards (no concurrent streaming forward to alias the pool). Best-effort —
-        // a reset failure must not mask the test's own result.
+        // GrokVision, …) across every shard, replacing per-model opt-ins. It is unconditional so a
+        // broken registry state cannot make the readable-report pre-check fail closed; safe because
+        // streaming-scale models run in serialized shards (no concurrent streaming forward to alias
+        // the pool). Best-effort — a reset failure must not mask the test's own result.
         try
         {
-            if (NeuralNetworkBase<float>.HasRegisteredStreamingWeightsForTests())
-                NeuralNetworkBase<float>.ResetWeightStreamingForTests();
+            NeuralNetworkBase<float>.ResetWeightStreamingForTests();
         }
         catch { /* contaminated registry surfaces on the next streaming ctor; never fail teardown here */ }
 

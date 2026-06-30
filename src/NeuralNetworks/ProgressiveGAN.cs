@@ -109,7 +109,10 @@ public class ProgressiveGAN<T> : GenerativeAdversarialNetwork<T>
             InputType.ThreeDimensional,
             generatorOptimizer: null,
             discriminatorOptimizer: null,
-            lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>())
+            lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>(),
+            options: null,
+            defaultGeneratorOptimizerOptions: CreateAdamOptimizerOptions(DefaultLearningRate, 0.0, 0.99),
+            defaultDiscriminatorOptimizerOptions: CreateAdamOptimizerOptions(DefaultLearningRate, 0.0, 0.99))
     {
         if (latentSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(latentSize), latentSize, "Latent size must be positive.");

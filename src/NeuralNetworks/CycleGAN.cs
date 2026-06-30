@@ -2,6 +2,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
 
@@ -65,6 +66,14 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
+
+    private static AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> CreateStandardGanAdamOptions()
+        => new()
+        {
+            InitialLearningRate = 0.0002,
+            Beta1 = 0.5,
+            Beta2 = 0.999,
+        };
 
     /// <summary>
     /// The optimizer used for training generator A→B.
@@ -307,11 +316,11 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         DiscriminatorA = CreateNetworkForInputType(discriminatorA, inputType);
         DiscriminatorB = CreateNetworkForInputType(discriminatorB, inputType);
 
-        // Initialize optimizers - use provided optimizers or create default Adam optimizers
-        _generatorAtoBOptimizer = generatorAtoBOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(GeneratorAtoB);
-        _generatorBtoAOptimizer = generatorBtoAOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(GeneratorBtoA);
-        _discriminatorAOptimizer = discriminatorAOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(DiscriminatorA);
-        _discriminatorBOptimizer = discriminatorBOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(DiscriminatorB);
+        // Initialize optimizers - use provided optimizers or create default GAN-standard Adam optimizers.
+        _generatorAtoBOptimizer = generatorAtoBOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(GeneratorAtoB, CreateStandardGanAdamOptions());
+        _generatorBtoAOptimizer = generatorBtoAOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(GeneratorBtoA, CreateStandardGanAdamOptions());
+        _discriminatorAOptimizer = discriminatorAOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(DiscriminatorA, CreateStandardGanAdamOptions());
+        _discriminatorBOptimizer = discriminatorBOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(DiscriminatorB, CreateStandardGanAdamOptions());
 
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative);
 
