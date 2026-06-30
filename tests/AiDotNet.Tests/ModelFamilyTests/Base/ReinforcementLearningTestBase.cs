@@ -92,12 +92,18 @@ public abstract class ReinforcementLearningTestBase
         using var _arena = TensorArena.Create();
         using var model = CreateModel();
 
+        // Use genuinely DIFFERENT state patterns, not colinear scalings of one vector. A uniform
+        // 0.1 vector and a uniform 0.9 vector differ only in magnitude, and a discrete agent whose
+        // action is argmax over a (near-linear, zero-bias-init) Q-network is scale-invariant in its
+        // argmax — so colinear states can't exercise state-conditionality for DQN-family agents.
+        // An alternating second pattern is non-colinear, so any genuinely state-conditional policy
+        // (discrete OR continuous) must respond to it differently. (Assertion unchanged.)
         var state1 = new Vector<double>(StateDim);
         var state2 = new Vector<double>(StateDim);
         for (int i = 0; i < StateDim; i++)
         {
             state1[i] = 0.1;
-            state2[i] = 0.9;
+            state2[i] = (i % 2 == 0) ? 0.9 : 0.2;
         }
 
         var action1 = model.Predict(state1);

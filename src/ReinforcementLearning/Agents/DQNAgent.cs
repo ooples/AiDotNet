@@ -203,14 +203,21 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         _steps++;
         TrainingSteps++;
 
-        // Wait for warmup period
-        if (_steps < _dqnOptions.WarmupSteps || !_replayBuffer.CanSample(_dqnOptions.BatchSize))
+        // Wait for warmup period — unless this is an explicit supervised one-shot update
+        // (ReinforcementLearningAgentBase.Train(state, target)), which trains on the samples
+        // gathered so far (clamped to the buffer) regardless of warmup.
+        int effectiveBatchSize = SupervisedUpdateRequested
+            ? System.Math.Min(_dqnOptions.BatchSize, _replayBuffer.Count)
+            : _dqnOptions.BatchSize;
+        if ((!SupervisedUpdateRequested && _steps < _dqnOptions.WarmupSteps)
+            || effectiveBatchSize <= 0
+            || !_replayBuffer.CanSample(effectiveBatchSize))
         {
             return NumOps.Zero;
         }
 
         // Sample batch from replay buffer
-        var batch = _replayBuffer.Sample(_dqnOptions.BatchSize);
+        var batch = _replayBuffer.Sample(effectiveBatchSize);
         int stateSize = _dqnOptions.StateSize;
         int actionSize = _dqnOptions.ActionSize;
 
