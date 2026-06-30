@@ -275,6 +275,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // on CPU (verified: MoreData_ShouldNotDegrade times out). Genuine foundation-scale compute —
         // same heavy lane as the other foundation models.
         "MaskDINO",
+        // KOSMOS2: foundation-scale vision-language model (Peng 2023) — paper-scale CLIP-ViT-L vision
+        // encoder (VisionDim=1024, 24 layers, 32 heads) + a 2048-dim/24-layer text decoder (~300M params).
+        // Each test must construct that full stack; the construction footprint alone makes the 25-test
+        // class take ~6.5 min, and the multi-iteration training invariants exceed the 120s per-test gate
+        // on CPU. Genuine foundation-scale compute, same class as IDEFICS/LLaVAVideo — runs in the nightly
+        // heavy lane rather than the default PR shard.
+        "KOSMOS2",
     };
 
     private static readonly System.Collections.Generic.HashSet<string> Fp32TestClassNames =
@@ -1883,7 +1890,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// shape-mismatch this contract prevents.
     /// </summary>
     private static bool IsTokenConsumingVisionLanguageModel(string className)
-        => className is "GPT4Point" or "Helix" or "Octo" or "SigLIP2" or "ViLT" or "Florence2";
+        => className is "GPT4Point" or "Helix" or "Octo" or "SigLIP2" or "ViLT" or "Florence2" or "KOSMOS2";
 
     /// <summary>
     /// The post-patch-embedding vision_dim for a <see cref="IsTokenConsumingVisionLanguageModel"/>
@@ -1896,6 +1903,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "GPT4Point" => 512,
             "Helix" => 1024,
             "Octo" => 384,
+            "KOSMOS2" => 1024, // KOSMOS2Options.VisionDim
             _ => 768, // SigLIP2, ViLT, Florence2
         };
 
@@ -2615,13 +2623,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] InputShape => new[] { 128, 3 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 40 };");
         }
-        else if (isVisionModel &&
-                 (model.ClassName == "GPT4Point"
-                  || model.ClassName == "Helix"
-                  || model.ClassName == "Octo"
-                  || model.ClassName == "SigLIP2"
-                  || model.ClassName == "ViLT"
-                  || model.ClassName == "Florence2"))
+        else if (isVisionModel && IsTokenConsumingVisionLanguageModel(model.ClassName))
         {
             // These VisionLanguage models (GPT4Point — Qi et al. 2024;
             // Helix — Figure AI 2025; Octo — Octo Model Team 2024;
@@ -2642,23 +2644,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             //   first joint-encoder attention sees the 768-d fusion tokens).
             // num_tokens kept small (4) so attention intermediates stay
             // bounded; batch=1 since these are per-sample models.
-            int vlVisionDim;
-            switch (model.ClassName)
-            {
-                case "GPT4Point":
-                    vlVisionDim = 512;
-                    break;
-                case "Helix":
-                    vlVisionDim = 1024;
-                    break;
-                case "Octo":
-                    vlVisionDim = 384;
-                    break;
-                default:
-                    // SigLIP2, ViLT
-                    vlVisionDim = 768;
-                    break;
-            }
+            // Single source of truth for the post-patch-embedding vision_dim (KOSMOS2 = 1024, etc.).
+            int vlVisionDim = GetTokenConsumingVlmVisionDim(model.ClassName);
             sb.AppendLine($"    protected override int[] InputShape => new[] {{ 1, 4, {vlVisionDim} }};");
             if (model.ClassName == "Helix")
             {
