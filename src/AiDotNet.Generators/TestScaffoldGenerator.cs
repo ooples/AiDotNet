@@ -270,6 +270,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // CPU (verified: Training_ShouldChangeParameters times out). Genuine foundation-scale compute,
         // not a correctness bug — same heavy lane.
         "MegaTTS3",
+        // MaskDINO: foundation-scale unified DETR detection+segmentation transformer (Li 2023, in the
+        // Segmentation/Foundation namespace). The training invariants exceed the 120s per-test timeout
+        // on CPU (verified: MoreData_ShouldNotDegrade times out). Genuine foundation-scale compute —
+        // same heavy lane as the other foundation models.
+        "MaskDINO",
     };
 
     private static readonly System.Collections.Generic.HashSet<string> Fp32TestClassNames =
