@@ -230,18 +230,24 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
         // Hinton 2006 ("A fast learning algorithm for deep belief nets") and
         // Hinton & Salakhutdinov 2006 ("Reducing the Dimensionality of Data
         // with Neural Networks") fine-tune the post-CD stack with SGD +
-        // momentum (β=0.9, lr~0.1), NOT Adam. Adam's per-parameter adaptive
-        // step amplifies the (vanishingly small) backprop signal coming out
-        // of the deep sigmoid stack into noise, and long-run loss diverges
-        // above short-run loss (the failure mode the
-        // MoreData_ShouldNotDegrade invariant catches). Default to the
-        // paper-canonical optimizer so the post-pretrain backprop stays in
-        // the regime the original DBN authors validated.
+        // momentum (β=0.9), NOT Adam. Adam's per-parameter adaptive step
+        // amplifies the (vanishingly small) backprop signal coming out of the
+        // deep sigmoid stack into noise, and long-run loss diverges above
+        // short-run loss (the failure mode the MoreData_ShouldNotDegrade
+        // invariant catches). Use a fine-tuning learning rate of 0.01 (the
+        // value documented on the learningRate parameter): the lr~0.1 used for
+        // CD-1 up-down pre-training (see PreTrain) is too aggressive for plain
+        // backprop fine-tuning of the pre-trained stack — at lr=0.1 the β=0.9
+        // momentum term overshoots the post-pretrain minimum and the supervised
+        // loss climbs back ABOVE its post-pretrain baseline (initial 0.168 ->
+        // 0.182 over 30 steps, caught by Training_ShouldReduceLoss). 0.01 keeps
+        // the momentum-SGD update in the convergent regime the DBN authors
+        // validated while still being the paper-canonical (non-Adam) optimizer.
         _optimizer = optimizer ?? new MomentumOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new MomentumOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = 0.1,
+                InitialLearningRate = 0.01,
                 InitialMomentum = 0.9,
                 BatchSize = batchSize
             });
