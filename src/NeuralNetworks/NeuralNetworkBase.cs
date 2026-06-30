@@ -7960,14 +7960,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // fused/compiled state and fall back to the eager path — the optimizer moments reset
             // (a one-time trajectory perturbation), which is far better than crashing. Non-GPU
             // causes (shape drift, hyperparameter changes) still surface loudly below.
-            if (IsGpuTransientFailure(fallbackEx))
-            {
-                _fusedTrainingDisabled = true;
-                _fusedTrainingCommitted = false;
-                InvalidateParameterCountCache();
-                return false;
-            }
-
             // Out-of-memory in the committed compiled plan: the model is too large
             // (or the host too pressured) to keep the fused plan's buffers + Adam
             // moments resident. This is precisely what the memory-bounded streaming
@@ -7983,14 +7975,23 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // and disable the OOMing fused plan so it is never re-engaged. This
             // mirrors the IsGpuTransientFailure graceful-degradation policy above:
             // a one-time trajectory perturbation is far better than crashing.
-            if (fallbackEx is OutOfMemoryException)
+            if (IsGpuOutOfMemoryFailure(fallbackEx))
             {
-                _fusedTrainingDisabled = true;
-                _fusedTrainingCommitted = false;
                 StreamingTraining = StreamingTrainingMode.ForceOn;
-                InvalidateParameterCountCache();
+                ResetCompiledFusedStateAfterCommittedFailure(stickyDisableFused: true);
+                ForceSinglePassStreamingClipAfterFusedOom();
                 TrainWithTapeStreaming(input, expected, resolvedOptimizer, useStreamingDefaults);
+                EmitFusedPathEventIfEnabled(
+                    hit: false,
+                    reason: $"committed fused plan OOM; switched to streaming training ({DescribeException(fallbackEx)})");
                 return true; // step handled via the streaming path
+            }
+
+            if (IsGpuTransientFailure(fallbackEx))
+            {
+                _pendingFusedMissReason = $"committed fused plan GPU transient; reset to eager ({DescribeException(fallbackEx)})";
+                ResetCompiledFusedStateAfterCommittedFailure(stickyDisableFused: true);
+                return false;
             }
 
             var rootCauseSuffix = fallbackEx is not null
@@ -8022,6 +8023,57 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         return ran;
     }
 
+    private void ResetCompiledFusedStateAfterCommittedFailure(bool stickyDisableFused)
+    {
+        InvalidateParameterCountCache();
+
+        // InvalidateParameterCountCache intentionally re-enables fused training
+        // for normal explicit resets. A committed-plan failure is different:
+        // the current plan already proved unsafe for this run, so preserve the
+        // sticky-disable after the reset and reclaim dead GPU transients before
+        // the eager/streaming fallback allocates its first backward buffers.
+        _fusedTrainingDisabled = stickyDisableFused;
+        _fusedTrainingCommitted = false;
+        ReclaimGpuTransientsAfterFusedFailure();
+    }
+
+    private static void ReclaimGpuTransientsAfterFusedFailure()
+    {
+        if (AiDotNetEngine.Current is not DirectGpuTensorEngine gpuEngine)
+            return;
+
+        try
+        {
+            gpuEngine.DropActivationCache();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"[AiDotNet] Failed to drop GPU activation cache after fused-plan failure: {ex.GetType().Name}: {ex.Message}");
+        }
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+    }
+
+    private void ForceSinglePassStreamingClipAfterFusedOom()
+    {
+        if (MaxGradNormValue <= 0.0 || FastApproxGradClip)
+            return;
+
+        // Exact clipped streaming uses a two-pass persistent tape so it can
+        // compute the current global grad norm before applying updates. That is
+        // a correctness-preserving path when it fits, but it cannot be the OOM
+        // recovery path because it keeps the forward activations resident for a
+        // second backward pass. After a committed fused-plan allocation OOM,
+        // switch this run to the documented single-pass clipped approximation.
+        FastApproxGradClip = true;
+        _fastClipEmaNorm = -1.0;
+        System.Diagnostics.Trace.TraceWarning(
+            "[AiDotNet] Committed fused-plan OOM forced streaming fallback to single-pass approximate gradient clipping.");
+    }
+
     /// <summary>
     /// True if the exception chain indicates a transient GPU/CUDA fault (device error, failed
     /// host/device copy, or the activation-cache deferred-materializer race) — as opposed to a
@@ -8046,6 +8098,51 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// True when an exception chain represents a GPU allocation OOM even if the
+    /// backend surfaced it as a driver <see cref="InvalidOperationException"/>
+    /// rather than a managed <see cref="OutOfMemoryException"/>.
+    /// </summary>
+    protected static bool IsGpuOutOfMemoryFailure(Exception? exception)
+    {
+        for (var e = exception; e is not null; e = e.InnerException)
+        {
+            if (e is OutOfMemoryException)
+                return true;
+
+            var message = e.Message;
+            if (message.Contains("Out of memory", StringComparison.OrdinalIgnoreCase)
+                && (message.Contains("cuMem", StringComparison.Ordinal)
+                    || message.Contains("CUDA", StringComparison.OrdinalIgnoreCase)
+                    || message.Contains("GPU", StringComparison.OrdinalIgnoreCase)
+                    || message.Contains("CL_OUT_OF", StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string DescribeException(Exception? exception)
+        => exception is null
+            ? "no exception"
+            : $"{exception.GetType().Name}: {exception.Message}";
+
+    private static void EmitFusedPathEventIfEnabled(bool hit, string? reason)
+    {
+        if (Configuration.TrainingDiagnosticsConfig.Level
+            < Configuration.TrainingDiagnosticLevel.PerStep)
+            return;
+
+        int stepIdx = Configuration.TrainingDiagnosticsConfig.AdvanceStep();
+        Configuration.TrainingDiagnosticsConfig.Emit(
+            new Configuration.FusedOptimizerPathEvent(
+                StepIndex: stepIdx,
+                Hit: hit,
+                Reason: reason));
     }
 
     /// <summary>

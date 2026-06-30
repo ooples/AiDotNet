@@ -195,9 +195,11 @@
     <!-- 0.104.8-capture (local-nuget) is the capture-branch (PR #705) Tensors that HRE runs: diffusion
          CUDA-graph capture + all-backend FP16 conv/activations (#671) PLUS the at-scale capture-learns fixes
          and the new LrSchedule.LinearWarmup mapping (warmup-then-Constant/Linear/Cosine on the fused captured
-         path — was falling to the eager tape, a 14-23x slowdown). Public path: 0.102.17 was the last published
-         release; the LinearWarmup + capture fixes go public via #705 then AiDotNet re-pins to that release. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.104.8-capture" />
+         path — was falling to the eager tape, a 14-23x slowdown). 0.104.9-capture adds the compiled-step
+         activation cleanup and GPU memory accounting fixes from the local Tensors PR branch. Public path:
+         0.102.17 was the last published release; the capture fixes go public via #705/#715 then AiDotNet
+         re-pins to that release. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.104.9-capture" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.102.9" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.102.9" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.102.9" />
