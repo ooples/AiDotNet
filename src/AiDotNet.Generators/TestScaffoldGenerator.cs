@@ -257,6 +257,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // (MoreData = 200 iterations) multiply that out well past the 120s per-test timeout on CPU.
         // Genuine foundation-scale diffusion compute, not a correctness bug — same heavy lane.
         "MGLDVSR",
+        // FireRedTTS: industry-scale FOUNDATION TTS (Guo 2024) — a 24-layer / 2048-dim LLM generating
+        // multi-codebook codec tokens AUTOREGRESSIVELY (50 frames/s) before the neural codec decoder.
+        // The autoregressive decode over a full utterance inherently exceeds the 120s per-test timeout
+        // on CPU. Genuine foundation-scale generative compute, not a correctness bug — same heavy lane.
+        "FireRedTTS",
     };
 
     private static readonly System.Collections.Generic.HashSet<string> Fp32TestClassNames =
