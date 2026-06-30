@@ -2,11 +2,31 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tests.ModelFamilyTests.Base;
+using Xunit;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
+// UnifiedMultimodalNetwork's default config is a foundation-scale multimodal model: 12 transformer
+// layers (DEFAULT_NUM_LAYERS) at embeddingDim=768 with maxSeq=2048, PLUS text/image/audio/video
+// encoders AND decoders AND a generation head. It auto-enables weight streaming (SupportsStreaming
+// = true; CI observed 22 registered streaming entries), confirming it sits above the streaming
+// parameter threshold. On the 16 GB CI runner (DOTNET_GCHeapHardLimit) its construction OOMs
+// ("OutOfMemoryException: Array dimensions exceeded supported range"), and a timed-out/OOM'd
+// predecessor leaves the process-global WeightRegistry contaminated so the next test fails with
+// "existing streaming pool has N registered entries" — a downstream symptom of the size, not a
+// separate leak. This is inherent to a paper-scale 4-modality transformer, not a regression and not
+// shrinkable (never-shrink rule). Tag HeavyTimeout so the class is excluded from the default gate
+// and runs full-fidelity in the nightly heavy lane (deferred, not skipped); #1706/#1305.
+[Trait("Category", "HeavyTimeout")]
+[Collection("FoundationScaleSerial")] // serialized so its forward gets the whole machine + the streaming reset can't race
 public class UnifiedMultimodalNetworkTests : NeuralNetworkModelTestBase<float>
 {
+    // Auto-enables weight streaming (foundation-scale), registering its weights with the process-
+    // global WeightRegistry. Reset that registry between tests so the next ctor doesn't fail on
+    // leftover entries (#1706). Safe: the FoundationScaleSerial collection disables parallelization,
+    // so nothing else runs concurrently with the reset.
+    protected override bool ResetsWeightStreamingBetweenTests => true;
+
     // Default: inputSize=768 (embedding dim), outputSize=100
     protected override int[] InputShape => [768];
     protected override int[] OutputShape => [100];

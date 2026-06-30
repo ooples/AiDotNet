@@ -1939,7 +1939,18 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             _numHeads,
             _numFrames,
             _frameRate,
-            _temporalAggregation);
+            _temporalAggregation,
+            // Carry the configured tokenizer, optimizer, and loss function into the clone.
+            // Without these the clone falls back to the constructor defaults — most
+            // critically lossFunction => CrossEntropyWithLogitsLoss, which is wrong for a
+            // unit-norm embedding output: it routes the embedding through softmax and
+            // computes class-CE against a continuous target, plateauing at a ~136 baseline
+            // regardless of training. A clone must be functionally identical to its source,
+            // so a paper-faithful CosineSimilarityLoss + Adam(5e-5, β=0.9/0.98) configuration
+            // would otherwise be silently lost on Clone()/Deserialize.
+            tokenizer: _tokenizer,
+            optimizer: _optimizer,
+            lossFunction: _lossFunction);
     }
 
     /// <inheritdoc/>
