@@ -8018,7 +8018,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         if (!TryMapToFusedOptimizerConfig(
                 resolvedOptimizer, out var fusedType, out float lr, out float b1, out float b2, out float eps, out float wd,
-                out AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSched))
+                out AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSched, out bool useBf16Moments))
             return EmitFusedMissAndFallback($"optimizer {resolvedOptimizer.GetType().Name} not compatible with fused kernel");
 
         // Use the existing recursive trainable-layer collector instead of the
@@ -8105,6 +8105,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 out lossValue,
                 maxGradNorm: MaxGradNormValue,
                 lrSchedule: lrSched,
+                useBf16Moments: useBf16Moments,
                 // Lets the compiled FP16-activation path (AIDOTNET_FP16_ACTIVATIONS=1) cover
                 // fused optimizers beyond the inline Adam/SGD fast paths by applying this
                 // optimizer's own master update to the FP16-computed FP32 gradients.
@@ -8298,7 +8299,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         out float beta2,
         out float epsilon,
         out float weightDecay,
-        out AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule)
+        out AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule,
+        out bool useBf16Moments)
     {
         // Open/closed-compliant dispatch: the optimizer self-describes its fused
         // config (incl. selecting the AMSGrad kernel variant when it opts in, and
@@ -8315,6 +8317,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         epsilon = 0f;
         weightDecay = 0f;
         lrSchedule = null;
+        useBf16Moments = false;
 
         if (optimizer is not Optimizers.Fused.IFusedOptimizerSpec spec
             || !spec.TryGetFusedOptimizerConfig(out var cfg))
@@ -8327,6 +8330,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         epsilon = cfg.Epsilon;
         weightDecay = cfg.WeightDecay;
         lrSchedule = cfg.Schedule;
+        useBf16Moments = cfg.UseBf16Moments;
         return true;
     }
 
@@ -8557,26 +8561,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             return true;
         // ~50M params ⇒ ~400 MB fp32 moment state (2 buffers x 4B); BF16 halves that to ~200 MB. Below
         // this the fp32 state is small enough that the pack/unpack overhead isn't worth it.
+        //
+        // #1745: BF16-Adam now KEEPS the fused fast path. The Adam8BitOptimizer's BF16 moment mode
+        // implements IFusedOptimizerSpec (UseBf16Moments) and the fused CPU Adam/AdamW kernel stores its
+        // m/v as bfloat16 directly (Tensors PR #713, RequestBf16MomentStorage). So selecting BF16 no longer
+        // drops the model onto the eager tape — it gets BOTH the fused speed AND the halved moment
+        // footprint. The earlier "gate proactive BF16 on memory pressure" guard existed only to avoid
+        // losing the fused path; that tradeoff is gone, so a plain size threshold is correct again.
+        // AIDOTNET_BF16_ADAM=1/0 still forces/pins. The reactive 8-bit ladder (_memoryLeversForced on an
+        // actual OOM) is unaffected.
         const long bf16ParamThreshold = 50_000_000L;
-        if (ParameterCount < bf16ParamThreshold)
-            return false;
-
-        // BF16-Adam (the Adam8BitOptimizer with BF16 moment storage) is NOT fused-kernel-compatible:
-        // TryMapToFusedOptimizerConfig only accepts plain Adam/AdamW/SGD, so selecting it drops the ENTIRE
-        // model off the compiled fused-training fast path onto the eager autograd tape (~10x slower per
-        // step — measured ~5 s/step vs the fused path on ViT-Base). Proactively trading the fast path for a
-        // BF16 moment saving is only worth it when that saving actually matters — i.e. when the fp32 moment
-        // state would consume a meaningful fraction of available memory. For a model that fits comfortably
-        // (the common case: a ≥50M model on a normal host), the fp32 moments are a small slice of RAM and
-        // losing the fused path is a terrible trade. Gate the proactive BF16 on real memory pressure,
-        // mirroring the fits-in-memory guard used for weight streaming. Models that genuinely don't fit
-        // still get BF16; the reactive memory ladder (_memoryLeversForced, set on an actual OOM) is
-        // unaffected and still engages BF16/8-bit on demand. AIDOTNET_BF16_ADAM=1 forces it regardless.
-        long fp32MomentBytes = checked(ParameterCount * 2L * System.Runtime.CompilerServices.Unsafe.SizeOf<T>());
-        long available = ResolveAvailableMemoryForStreaming();
-        if (available <= 0)
-            return true; // can't measure memory → keep the conservative proactive BF16
-        return fp32MomentBytes > available / 4;
+        return ParameterCount >= bf16ParamThreshold;
     }
 
     /// <summary>

@@ -15,6 +15,11 @@ namespace AiDotNet.Optimizers.Fused;
 /// <param name="Epsilon">Denominator epsilon (0 for SGD).</param>
 /// <param name="WeightDecay">Decoupled weight decay (AdamW); 0 otherwise.</param>
 /// <param name="Schedule">Optional fused-side LR schedule, or null for constant LR.</param>
+/// <param name="UseBf16Moments">
+/// When true, request bfloat16 storage for the fused Adam/AdamW moment buffers
+/// (#1745) — half the optimizer-state footprint, same fp32 update math. Honored
+/// only by the CPU float Adam/AdamW fused kernel; a safe no-op otherwise.
+/// </param>
 internal readonly record struct FusedOptimizerConfig(
     OptimizerType Type,
     float LearningRate,
@@ -22,7 +27,8 @@ internal readonly record struct FusedOptimizerConfig(
     float Beta2,
     float Epsilon,
     float WeightDecay,
-    LrSchedule? Schedule);
+    LrSchedule? Schedule,
+    bool UseBf16Moments = false);
 
 /// <summary>
 /// Implemented by optimizers that have a compiled fused-kernel equivalent, so the
