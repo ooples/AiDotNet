@@ -192,10 +192,12 @@
          AIDOTNET_GEMM_SINGLE_REGION=0; ~1.3-2x on transformer/training GEMM shapes) + the net471
          PackAOnly non-4x4 scalar-tail bugfix. 0.102.3 is a linear superset of 0.102.2, so the #632 /
          Phase C deps above are retained. -->
-    <!-- 0.102.17 is the published AiDotNet.Tensors release that ships the diffusion CUDA-graph capture +
-         all-backend FP16 conv + FP16-activation work (AiDotNet.Tensors #671, merged + released) on top of the
-         net8.0 target (#680). Ships lib/net8.0 + net10.0 + net471. This is what #1650's diffusion path requires. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.102.17" />
+    <!-- 0.104.8-capture (local-nuget) is the capture-branch (PR #705) Tensors that HRE runs: diffusion
+         CUDA-graph capture + all-backend FP16 conv/activations (#671) PLUS the at-scale capture-learns fixes
+         and the new LrSchedule.LinearWarmup mapping (warmup-then-Constant/Linear/Cosine on the fused captured
+         path — was falling to the eager tape, a 14-23x slowdown). Public path: 0.102.17 was the last published
+         release; the LinearWarmup + capture fixes go public via #705 then AiDotNet re-pins to that release. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.104.8-capture" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.102.9" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.102.9" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.102.9" />

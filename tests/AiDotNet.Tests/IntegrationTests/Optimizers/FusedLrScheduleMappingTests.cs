@@ -116,6 +116,52 @@ public class FusedLrScheduleMappingTests
     }
 
     [Fact]
+    public void LinearWarmup_Constant_MapsToFused_StepForStepParity()
+    {
+        // Warmup-then-constant is the HRE cortex recipe; before the LinearWarmup
+        // mapping it fell through to the eager tape (no CUDA-graph capture, 14-23x).
+        var fused = MapToFused(new LinearWarmupScheduler(
+            baseLearningRate: 0.002, warmupSteps: 10,
+            decayMode: LinearWarmupScheduler.DecayMode.Constant));
+        Assert.NotNull(fused);
+        AssertStepForStepParity(
+            new LinearWarmupScheduler(
+                baseLearningRate: 0.002, warmupSteps: 10,
+                decayMode: LinearWarmupScheduler.DecayMode.Constant),
+            fused!, steps: 40, label: "LinearWarmup(Constant)");
+    }
+
+    [Fact]
+    public void LinearWarmup_LinearDecay_MapsToFused_StepForStepParity()
+    {
+        var fused = MapToFused(new LinearWarmupScheduler(
+            baseLearningRate: 0.1, warmupSteps: 8, totalSteps: 50,
+            decayMode: LinearWarmupScheduler.DecayMode.Linear, endLr: 0.001));
+        Assert.NotNull(fused);
+        AssertStepForStepParity(
+            new LinearWarmupScheduler(
+                baseLearningRate: 0.1, warmupSteps: 8, totalSteps: 50,
+                decayMode: LinearWarmupScheduler.DecayMode.Linear, endLr: 0.001),
+            fused!, steps: 60, label: "LinearWarmup(Linear)");
+    }
+
+    [Fact]
+    public void LinearWarmup_CosineDecay_MapsToFused_StepForStepParity()
+    {
+        var fused = MapToFused(new LinearWarmupScheduler(
+            baseLearningRate: 0.05, warmupSteps: 12, totalSteps: 80,
+            warmupInitLr: 1e-5,
+            decayMode: LinearWarmupScheduler.DecayMode.Cosine, endLr: 1e-4));
+        Assert.NotNull(fused);
+        AssertStepForStepParity(
+            new LinearWarmupScheduler(
+                baseLearningRate: 0.05, warmupSteps: 12, totalSteps: 80,
+                warmupInitLr: 1e-5,
+                decayMode: LinearWarmupScheduler.DecayMode.Cosine, endLr: 1e-4),
+            fused!, steps: 90, label: "LinearWarmup(Cosine)");
+    }
+
+    [Fact]
     public void ExistingMappings_CosineAndExponential_RemainStepForStepCorrect()
     {
         var cosFused = MapToFused(new CosineAnnealingLRScheduler(baseLearningRate: 0.1, tMax: 50));
