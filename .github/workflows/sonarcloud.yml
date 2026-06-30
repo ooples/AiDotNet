@@ -31,8 +31,9 @@ on:
     - cron: '0 8 * * 1'
 
 concurrency:
-  # For PR events: group by PR number, cancel-in-progress=true so a rapid
-  # synchronize / reopen cancels the previous run for the same PR.
+  # For PR events: group by PR number; cancel-in-progress is FALSE (see the
+  # cancel-in-progress note below) so an in-progress test-shard run completes
+  # rather than being cancelled mid-matrix by a rapid synchronize / reopen.
   #
   # For push events (master / main): group by ref ONLY (no SHA suffix) AND
   # cancel-in-progress=true so a newer master commit supersedes the prior
@@ -59,7 +60,15 @@ concurrency:
   # downstream check (branch-protection, PR mergeability, release tagging)
   # actually consumes. The intermediate-SHA loss is acceptable.
   group: build-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # cancel-in-progress is TRUE for push/master events (a newer master tip supersedes
+  # the prior in-flight run — only the latest tip needs a green signal, saves ~45min)
+  # but FALSE for pull_request events: a rapid synchronize must NOT kill an in-progress
+  # test-shard run, because cancelling mid-shard marks in-flight tests as FAILED and
+  # leaves the 49-shard matrix with no completed signal to verify a PR against
+  # (observed repeatedly on #1719: DQNAgent / FastConformer "failures" that pass
+  # locally were cancellation artifacts). GitHub still supersedes only PENDING runs in
+  # the group, so at most one run is queued per PR — bounded, no matrix pile-up.
+  cancel-in-progress: ${{ github.event_name != 'pull_request' }}
 
 env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
