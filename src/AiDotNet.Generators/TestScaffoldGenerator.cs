@@ -262,6 +262,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // The autoregressive decode over a full utterance inherently exceeds the 120s per-test timeout
         // on CPU. Genuine foundation-scale generative compute, not a correctness bug — same heavy lane.
         "FireRedTTS",
+        // InternVideo2: foundation-scale video-understanding transformer. Training OOMs the 16 GB runner
+        // (verified: System.OutOfMemoryException in TensorAllocator.RentUninitialized during the train
+        // step) — the activation/gradient footprint, not a correctness bug. Same heavy lane.
+        "InternVideo2",
+        // MegaTTS3: foundation-scale TTS. The training invariants exceed the 120s per-test timeout on
+        // CPU (verified: Training_ShouldChangeParameters times out). Genuine foundation-scale compute,
+        // not a correctness bug — same heavy lane.
+        "MegaTTS3",
     };
 
     private static readonly System.Collections.Generic.HashSet<string> Fp32TestClassNames =
@@ -2532,6 +2540,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // so farthest-point sampling has enough points to draw from.
             sb.AppendLine("    protected override int[] InputShape => new[] { 512, 3 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+        }
+        else if (model.ClassName == "DGCNN")
+        {
+            // DGCNN (Wang et al. 2019) is a point-cloud model: ForwardWithMemory hard-rejects any
+            // input whose shape is not [N, InputFeatureDim] (default 3 — x,y,z). The generic vision
+            // branch emits [3, spatial, spatial], tripping that guard. Feed a raw point cloud of N
+            // points; N must exceed the dynamic k-NN neighbour count (DGCNNOptions.KnnK default 20).
+            // Output is the class logits (DGCNNOptions.NumClasses default 40), independent of N.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 128, 3 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 40 };");
         }
         else if (isVisionModel &&
                  (model.ClassName == "GPT4Point"
