@@ -1,4 +1,5 @@
 namespace AiDotNet.TextToSpeech.Vocoders;
+
 /// <summary>Options for BigVGAN (universal vocoder with anti-aliased multi-periodicity composition and Snake activation).</summary>
 /// <remarks>
 /// <para><b>For Beginners:</b> These options configure the BigVGAN model. Default values follow the original paper settings.</para>

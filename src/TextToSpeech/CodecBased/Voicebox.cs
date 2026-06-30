@@ -45,7 +45,12 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Voicebox: Text-Guided Multilingual Universal Speech Generation at Scale", "https://arxiv.org/abs/2306.15687", Year = 2023, Authors = "Le et al.")]
+[ResearchPaper(
+    "Voicebox: Text-Guided Multilingual Universal Speech Generation at Scale",
+    "https://arxiv.org/abs/2306.15687",
+    Year = 2023,
+    Authors = "Le et al."
+)]
 public class Voicebox<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly VoiceboxOptions _options;
@@ -65,7 +70,9 @@ public class Voicebox<T> : TtsModelBase<T>, ICodecTts<T>
     public Voicebox(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        VoiceboxOptions? options = null) : base(architecture)
+        VoiceboxOptions? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new VoiceboxOptions();
         _useNativeMode = false;
@@ -91,7 +98,9 @@ public class Voicebox<T> : TtsModelBase<T>, ICodecTts<T>
     public Voicebox(
         NeuralNetworkArchitecture<T> architecture,
         VoiceboxOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new VoiceboxOptions();
         _useNativeMode = true;
@@ -155,8 +164,8 @@ public class Voicebox<T> : TtsModelBase<T>, ICodecTts<T>
             double dt = 1.0 / 10;
             for (int f = 0; f < cF; f++)
             {
-                double vel = textCond[f] * 0.5 - latent[f] * 0.3
-                    + Math.Sin(f * 0.06 + step * 0.2) * 0.1;
+                double vel =
+                    textCond[f] * 0.5 - latent[f] * 0.3 + Math.Sin(f * 0.06 + step * 0.2) * 0.1;
                 latent[f] += vel * dt;
                 latent[f] = Math.Tanh(latent[f]);
             }
@@ -168,8 +177,7 @@ public class Voicebox<T> : TtsModelBase<T>, ICodecTts<T>
         for (int i = 0; i < waveLen; i++)
         {
             int fr = Math.Min(i * _options.CodecFrameRate / SampleRate, cF - 1);
-            waveform[i] = NumOps.FromDouble(
-                latent[fr] * Math.Sin(i * 0.008 + latent[fr]) * 0.85);
+            waveform[i] = NumOps.FromDouble(latent[fr] * Math.Sin(i * 0.008 + latent[fr]) * 0.85);
         }
         return waveform;
     }
@@ -236,22 +244,32 @@ public class Voicebox<T> : TtsModelBase<T>, ICodecTts<T>
     /// <inheritdoc />
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
             Layers.AddRange(Architecture.Layers);
         else
-            Layers.AddRange(LayerHelper<T>.CreateDefaultCodecLMLayers(
-                _options.TextEncoderDim, _options.LLMDim,
-                _options.NumCodebooks * _options.CodebookSize,
-                _options.NumEncoderLayers, _options.NumLLMLayers,
-                _options.NumHeads, _options.DropoutRate));
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultCodecLMLayers(
+                    _options.TextEncoderDim,
+                    _options.LLMDim,
+                    _options.NumCodebooks * _options.CodebookSize,
+                    _options.NumEncoderLayers,
+                    _options.NumLLMLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate
+                )
+            );
         ComputeEncoderDecoderBoundary();
     }
 
     private void ComputeEncoderDecoderBoundary()
     {
         int total = Layers.Count;
-        _encoderLayerEnd = total > 4 ? total / 3 : total > 0 ? 1 : 0;
+        _encoderLayerEnd =
+            total > 4 ? total / 3
+            : total > 0 ? 1
+            : 0;
     }
 
     /// <inheritdoc />
@@ -260,7 +278,8 @@ public class Voicebox<T> : TtsModelBase<T>, ICodecTts<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        SetTrainingMode(false); var c = input;
+        SetTrainingMode(false);
+        var c = input;
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
@@ -303,7 +322,7 @@ public class Voicebox<T> : TtsModelBase<T>, ICodecTts<T>
         {
             Name = _useNativeMode ? "Voicebox-Native" : "Voicebox-ONNX",
             Description = "Voicebox: Text-Guided Multilingual Speech Generation (Le et al., 2023)",
-            FeatureCount = _options.LLMDim
+            FeatureCount = _options.LLMDim,
         };
         m.AdditionalInfo["Architecture"] = "Voicebox";
         m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
@@ -375,7 +394,8 @@ public class Voicebox<T> : TtsModelBase<T>, ICodecTts<T>
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         base.Dispose(disposing);
     }

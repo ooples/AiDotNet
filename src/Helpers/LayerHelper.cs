@@ -24770,6 +24770,27 @@ public static class LayerHelper<T>
         }
     }
 
+    /// <summary>
+    /// Computes the encoder/decoder split index for a layer stack built by
+    /// <see cref="CreateDefaultProprietaryAPILayers"/> — the count of encoder-side layers, i.e. the
+    /// index one past the last vision-encoder layer. Centralized here so GeminiVision, ClaudeVision,
+    /// and GrokVision share a single source of truth with the layer factory instead of each
+    /// re-deriving the formula (which silently drifts whenever the layout above changes).
+    /// </summary>
+    /// <param name="numVisionLayers">Number of vision-encoder blocks (matches the factory argument).</param>
+    /// <param name="dropoutRate">Dropout rate; when &gt; 0 each block emits an extra Dropout layer.</param>
+    /// <returns>
+    /// <c>2 + numVisionLayers * layersPerBlock + 2</c>: the leading vision-feature projection (Dense)
+    /// plus its LayerNorm, then each block's 5 layers (MHA, LayerNorm, Dense, Dense, LayerNorm) — 6
+    /// when a Dropout layer is appended — then the 2-layer projection (Dense + LayerNorm) that begins
+    /// the decoder section.
+    /// </returns>
+    public static int ComputeProprietaryAPIEncoderBoundary(int numVisionLayers, double dropoutRate)
+    {
+        int layersPerBlock = dropoutRate > 0 ? 6 : 5;
+        return 2 + numVisionLayers * layersPerBlock + 2;
+    }
+
     #endregion
 
 

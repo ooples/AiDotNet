@@ -43,7 +43,12 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Speak, Read and Prompt: High-Fidelity Text-to-Speech with Minimal Supervision", "https://arxiv.org/abs/2302.03540", Year = 2023, Authors = "Kharitonov et al.")]
+[ResearchPaper(
+    "Speak, Read and Prompt: High-Fidelity Text-to-Speech with Minimal Supervision",
+    "https://arxiv.org/abs/2302.03540",
+    Year = 2023,
+    Authors = "Kharitonov et al."
+)]
 public class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly SPEARTTSOptions _options;
@@ -63,7 +68,9 @@ public class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
     public SPEARTTS(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        SPEARTTSOptions? options = null) : base(architecture)
+        SPEARTTSOptions? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new SPEARTTSOptions();
         _useNativeMode = false;
@@ -89,7 +96,9 @@ public class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
     public SPEARTTS(
         NeuralNetworkArchitecture<T> architecture,
         SPEARTTSOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new SPEARTTSOptions();
         _useNativeMode = true;
@@ -135,8 +144,9 @@ public class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
             int t = Math.Min(i * textLen / semFrames, textLen - 1);
             semTok[i] = Math.Tanh(
                 (text[t] % 128) / 128.0 * 0.7
-                + (i > 0 ? semTok[i - 1] * 0.2 : 0)
-                + Math.Sin(i * 0.12) * 0.1);
+                    + (i > 0 ? semTok[i - 1] * 0.2 : 0)
+                    + Math.Sin(i * 0.12) * 0.1
+            );
         }
 
         int nQ = _options.NumCodebooks;
@@ -144,8 +154,7 @@ public class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
         for (int q = 0; q < nQ; q++)
         {
             for (int f = 0; f < semFrames; f++)
-                acCodes[q, f] = semTok[f] * (1.0 - q * 0.08)
-                    + Math.Cos(f * 0.04 * (q + 1)) * 0.15;
+                acCodes[q, f] = semTok[f] * (1.0 - q * 0.08) + Math.Cos(f * 0.04 * (q + 1)) * 0.15;
         }
 
         int waveLen = semFrames * (SampleRate / _options.CodecFrameRate);
@@ -223,22 +232,32 @@ public class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
     /// <inheritdoc />
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
             Layers.AddRange(Architecture.Layers);
         else
-            Layers.AddRange(LayerHelper<T>.CreateDefaultCodecLMLayers(
-                _options.TextEncoderDim, _options.LLMDim,
-                _options.NumCodebooks * _options.CodebookSize,
-                _options.NumEncoderLayers, _options.NumLLMLayers,
-                _options.NumHeads, _options.DropoutRate));
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultCodecLMLayers(
+                    _options.TextEncoderDim,
+                    _options.LLMDim,
+                    _options.NumCodebooks * _options.CodebookSize,
+                    _options.NumEncoderLayers,
+                    _options.NumLLMLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate
+                )
+            );
         ComputeEncoderDecoderBoundary();
     }
 
     private void ComputeEncoderDecoderBoundary()
     {
         int total = Layers.Count;
-        _encoderLayerEnd = total > 4 ? total / 3 : total > 0 ? 1 : 0;
+        _encoderLayerEnd =
+            total > 4 ? total / 3
+            : total > 0 ? 1
+            : 0;
     }
 
     /// <inheritdoc />
@@ -247,7 +266,8 @@ public class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        SetTrainingMode(false); var c = input;
+        SetTrainingMode(false);
+        var c = input;
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
@@ -289,8 +309,9 @@ public class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
         var m = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "SPEARTTS-Native" : "SPEARTTS-ONNX",
-            Description = "SPEAR-TTS: High-Fidelity TTS with Minimal Supervision (Kharitonov et al., 2023)",
-            FeatureCount = _options.LLMDim
+            Description =
+                "SPEAR-TTS: High-Fidelity TTS with Minimal Supervision (Kharitonov et al., 2023)",
+            FeatureCount = _options.LLMDim,
         };
         m.AdditionalInfo["Architecture"] = "SPEARTTS";
         m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
@@ -307,6 +328,8 @@ public class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
         writer.Write(_useNativeMode);
         writer.Write(_options.ModelPath ?? string.Empty);
         writer.Write(_options.SampleRate);
+        writer.Write(_options.MelChannels);
+        writer.Write(_options.HopSize);
         writer.Write(_options.CodebookSize);
         writer.Write(_options.DropoutRate);
         writer.Write(_options.LLMDim);
@@ -325,6 +348,8 @@ public class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (!string.IsNullOrEmpty(mp))
             _options.ModelPath = mp;
         _options.SampleRate = reader.ReadInt32();
+        _options.MelChannels = reader.ReadInt32();
+        _options.HopSize = reader.ReadInt32();
         _options.CodebookSize = reader.ReadInt32();
         _options.DropoutRate = reader.ReadDouble();
         _options.LLMDim = reader.ReadInt32();
@@ -358,7 +383,8 @@ public class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         base.Dispose(disposing);
     }

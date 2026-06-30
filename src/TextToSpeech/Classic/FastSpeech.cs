@@ -6,9 +6,9 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
-using AiDotNet.TextToSpeech.Interfaces;
 
 namespace AiDotNet.TextToSpeech.Classic;
 
@@ -43,18 +43,70 @@ namespace AiDotNet.TextToSpeech.Classic;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("FastSpeech: Fast, Robust and Controllable Text to Speech", "https://arxiv.org/abs/1905.09263", Year = 2019, Authors = "Ren et al.")]
+[ResearchPaper(
+    "FastSpeech: Fast, Robust and Controllable Text to Speech",
+    "https://arxiv.org/abs/1905.09263",
+    Year = 2019,
+    Authors = "Ren et al."
+)]
 public class FastSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
 {
-    private readonly FastSpeechOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly FastSpeechOptions _options;
+
+    public override ModelOptions GetOptions() => _options;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer; private bool _useNativeMode; private bool _disposed;
+    private readonly ITokenizer? _tokenizer;
+    private bool _useNativeMode;
+    private bool _disposed;
     private int _encoderLayerEnd;
 
-    public FastSpeech(NeuralNetworkArchitecture<T> architecture, string modelPath, FastSpeechOptions? options = null) : base(architecture) { _options = options ?? new FastSpeechOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.HiddenDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
-    public FastSpeech(NeuralNetworkArchitecture<T> architecture, FastSpeechOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new FastSpeechOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.HiddenDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
+    public FastSpeech(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        FastSpeechOptions? options = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new FastSpeechOptions();
+        _useNativeMode = false;
+        base.SampleRate = _options.SampleRate;
+        base.MelChannels = _options.MelChannels;
+        base.HopSize = _options.HopSize;
+        base.HiddenDim = _options.HiddenDim;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path required.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
 
-    int ITtsModel<T>.SampleRate => _options.SampleRate; public int MaxTextLength => _options.MaxTextLength; public new int MelChannels => _options.MelChannels; public new int HopSize => _options.HopSize; public int FftSize => _options.FftSize;
+    public FastSpeech(
+        NeuralNetworkArchitecture<T> architecture,
+        FastSpeechOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new FastSpeechOptions();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.SampleRate = _options.SampleRate;
+        base.MelChannels = _options.MelChannels;
+        base.HopSize = _options.HopSize;
+        base.HiddenDim = _options.HiddenDim;
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    int ITtsModel<T>.SampleRate => _options.SampleRate;
+    public int MaxTextLength => _options.MaxTextLength;
+    public new int MelChannels => _options.MelChannels;
+    public new int HopSize => _options.HopSize;
+    public int FftSize => _options.FftSize;
 
     /// <summary>
     /// Synthesizes mel-spectrogram using FastSpeech's parallel generation pipeline.
@@ -69,7 +121,8 @@ public class FastSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
     {
         ThrowIfDisposed();
         var tokens = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(tokens);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(tokens);
 
         // Step 1: FFT encoder
         var encoded = tokens;
@@ -84,8 +137,10 @@ public class FastSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         {
             double val = Math.Abs(NumOps.ToDouble(encoded[i % encoded.Length]));
             // Conv layer 1: local context from neighboring phonemes
-            double prev = i > 0 ? Math.Abs(NumOps.ToDouble(encoded[(i - 1) % encoded.Length])) : val;
-            double next = i < seqLen - 1 ? Math.Abs(NumOps.ToDouble(encoded[(i + 1) % encoded.Length])) : val;
+            double prev =
+                i > 0 ? Math.Abs(NumOps.ToDouble(encoded[(i - 1) % encoded.Length])) : val;
+            double next =
+                i < seqLen - 1 ? Math.Abs(NumOps.ToDouble(encoded[(i + 1) % encoded.Length])) : val;
             double conv1 = Math.Max(0, prev * 0.2 + val * 0.6 + next * 0.2); // ReLU
             // Conv layer 2 + linear projection to log-duration
             double logDur = Math.Log(1.0 + conv1 * _options.DurationScale);
@@ -120,18 +175,56 @@ public class FastSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; }
-        else { Layers.AddRange(LayerHelper<T>.CreateDefaultAcousticModelLayers(_options.EncoderDim, _options.DecoderDim, _options.HiddenDim, _options.NumEncoderLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, _options.VocabSize)); ComputeEncoderDecoderBoundary(); }
+        if (!_useNativeMode)
+            return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            _encoderLayerEnd = Layers.Count / 2;
+        }
+        else
+        {
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultAcousticModelLayers(
+                    _options.EncoderDim,
+                    _options.DecoderDim,
+                    _options.HiddenDim,
+                    _options.NumEncoderLayers,
+                    _options.NumDecoderLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate,
+                    _options.VocabSize
+                )
+            );
+            ComputeEncoderDecoderBoundary();
+        }
     }
 
-    private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; _encoderLayerEnd = 1 + _options.NumEncoderLayers * lpb; }
-    protected override Tensor<T> PreprocessText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var enc = _tokenizer.Encode(text); int sl = Math.Min(enc.TokenIds.Count, _options.MaxTextLength); var t = new Tensor<T>([sl]); for (int i = 0; i < sl; i++) t[i] = NumOps.FromDouble(enc.TokenIds[i]); return t; }
+    private void ComputeEncoderDecoderBoundary()
+    {
+        int lpb = _options.DropoutRate > 0 ? 6 : 5;
+        _encoderLayerEnd = 1 + _options.NumEncoderLayers * lpb;
+    }
+
+    protected override Tensor<T> PreprocessText(string text)
+    {
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
+        var enc = _tokenizer.Encode(text);
+        int sl = Math.Min(enc.TokenIds.Count, _options.MaxTextLength);
+        var t = new Tensor<T>([sl]);
+        for (int i = 0; i < sl; i++)
+            t[i] = NumOps.FromDouble(enc.TokenIds[i]);
+        return t;
+    }
+
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
+
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
         // Force eval mode so Dropout (DropoutRate=0.1 default) doesn't fire
         // fresh randomness on every Predict call — required for the
         // SpeakerConsistency invariant. PyTorch / TF idiom: inference disables
@@ -141,17 +234,102 @@ public class FastSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         try
         {
             var c = input;
-            foreach (var l in Layers) c = l.Forward(c);
+            foreach (var l in Layers)
+                c = l.Forward(c);
             return c;
         }
-        finally { SetTrainingMode(prev); }
+        finally
+        {
+            SetTrainingMode(prev);
+        }
     }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "FastSpeech-Native" : "FastSpeech-ONNX", Description = "FastSpeech: Fast, Robust and Controllable Text to Speech (Ren et al., 2019)", FeatureCount = _options.HiddenDim, Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "FastSpeech"; return m; }
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.SampleRate); writer.Write(_options.MelChannels); writer.Write(_options.HiddenDim); writer.Write(_options.NumEncoderLayers); writer.Write(_options.NumDecoderLayers); writer.Write(_options.DurationPredictorFilterSize); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = reader.ReadInt32(); _options.MelChannels = reader.ReadInt32(); _options.HiddenDim = reader.ReadInt32(); _options.NumEncoderLayers = reader.ReadInt32(); _options.NumDecoderLayers = reader.ReadInt32(); _options.DurationPredictorFilterSize = reader.ReadInt32();  base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.HiddenDim; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new FastSpeech<T>(Architecture, mp, _options); return new FastSpeech<T>(Architecture, _options); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(FastSpeech<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training not supported in ONNX mode.");
+        SetTrainingMode(true);
+        TrainWithTape(input, expected);
+        SetTrainingMode(false);
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "FastSpeech-Native" : "FastSpeech-ONNX",
+            Description =
+                "FastSpeech: Fast, Robust and Controllable Text to Speech (Ren et al., 2019)",
+            FeatureCount = _options.HiddenDim,
+            Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers,
+        };
+        m.AdditionalInfo["Architecture"] = "FastSpeech";
+        return m;
+    }
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_useNativeMode);
+        writer.Write(_options.ModelPath ?? string.Empty);
+        writer.Write(_options.SampleRate);
+        writer.Write(_options.MelChannels);
+        writer.Write(_options.HiddenDim);
+        writer.Write(_options.NumEncoderLayers);
+        writer.Write(_options.NumDecoderLayers);
+        writer.Write(_options.DurationPredictorFilterSize);
+    }
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _useNativeMode = reader.ReadBoolean();
+        string mp = reader.ReadString();
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
+        _options.SampleRate = reader.ReadInt32();
+        _options.MelChannels = reader.ReadInt32();
+        _options.HiddenDim = reader.ReadInt32();
+        _options.NumEncoderLayers = reader.ReadInt32();
+        _options.NumDecoderLayers = reader.ReadInt32();
+        _options.DurationPredictorFilterSize = reader.ReadInt32();
+        base.SampleRate = _options.SampleRate;
+        base.MelChannels = _options.MelChannels;
+        base.HopSize = _options.HopSize;
+        base.HiddenDim = _options.HiddenDim;
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new FastSpeech<T>(Architecture, mp, _options);
+        return new FastSpeech<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(FastSpeech<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
 }

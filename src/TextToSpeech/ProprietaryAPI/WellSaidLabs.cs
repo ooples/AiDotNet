@@ -9,6 +9,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.TextToSpeech.Interfaces;
 
 namespace AiDotNet.TextToSpeech.ProprietaryAPI;
+
 /// <summary>WellSaid Labs: enterprise neural TTS with custom voice avatars for brand consistency.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
@@ -36,27 +37,106 @@ namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 [ResearchPaper("WellSaid Labs", "https://wellsaidlabs.com")]
 public class WellSaidLabs<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
-    private readonly WellSaidLabsOptions _options; public override ModelOptions GetOptions() => _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
-    public WellSaidLabs(NeuralNetworkArchitecture<T> architecture, string modelPath, WellSaidLabsOptions? options = null) : base(architecture) { _options = options ?? new WellSaidLabsOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.HiddenDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); InitializeLayers(); }
-    public WellSaidLabs(NeuralNetworkArchitecture<T> architecture, WellSaidLabsOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new WellSaidLabsOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.HiddenDim; InitializeLayers(); }
-    int ITtsModel<T>.SampleRate => _options.SampleRate; public int MaxTextLength => _options.MaxTextLength; public new int HiddenDim => _options.HiddenDim; public int NumFlowSteps => _options.NumFlowSteps;
+    private readonly WellSaidLabsOptions _options;
+
+    public override ModelOptions GetOptions() => _options;
+
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _useNativeMode;
+    private bool _disposed;
+
+    public WellSaidLabs(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        WellSaidLabsOptions? options = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new WellSaidLabsOptions();
+        _useNativeMode = false;
+        base.SampleRate = _options.SampleRate;
+        base.MelChannels = _options.MelChannels;
+        base.HopSize = _options.HopSize;
+        base.HiddenDim = _options.HiddenDim;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path required.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        InitializeLayers();
+    }
+
+    public WellSaidLabs(
+        NeuralNetworkArchitecture<T> architecture,
+        WellSaidLabsOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new WellSaidLabsOptions();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.SampleRate = _options.SampleRate;
+        base.MelChannels = _options.MelChannels;
+        base.HopSize = _options.HopSize;
+        base.HiddenDim = _options.HiddenDim;
+        InitializeLayers();
+    }
+
+    int ITtsModel<T>.SampleRate => _options.SampleRate;
+    public int MaxTextLength => _options.MaxTextLength;
+    public new int HiddenDim => _options.HiddenDim;
+    public int NumFlowSteps => _options.NumFlowSteps;
+
     /// <summary>Synthesizes speech using WellSaidLabs's API-compatible local inference pipeline.</summary>
     public Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null) return PostprocessAudio(OnnxModel.Run(input));
+        if (IsOnnxMode && OnnxModel is not null)
+            return PostprocessAudio(OnnxModel.Run(input));
         var output = Predict(input);
         return PostprocessAudio(output);
     }
+
     /// <summary>Converts text to normalized character embeddings (char/128.0). Uses character-level encoding as the default; model-specific tokenization applies when corresponding weights are loaded.</summary>
-    protected override Tensor<T> PreprocessText(string text) { int len = Math.Min(text.Length, _options.MaxTextLength); var t = new Tensor<T>([len]); for (int i = 0; i < len; i++) t[i] = NumOps.FromDouble(text[i] / 128.0); return t; } protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultProprietaryTTSLayers(_options.HiddenDim, _options.HiddenDim, _options.NumEncoderLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, _options.VocabSize)); }
+    protected override Tensor<T> PreprocessText(string text)
+    {
+        int len = Math.Min(text.Length, _options.MaxTextLength);
+        var t = new Tensor<T>([len]);
+        for (int i = 0; i < len; i++)
+            t[i] = NumOps.FromDouble(text[i] / 128.0);
+        return t;
+    }
+
+    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
+
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode)
+            return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+            Layers.AddRange(Architecture.Layers);
+        else
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultProprietaryTTSLayers(
+                    _options.HiddenDim,
+                    _options.HiddenDim,
+                    _options.NumEncoderLayers,
+                    _options.NumDecoderLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate,
+                    _options.VocabSize
+                )
+            );
+    }
+
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
         // Force eval mode so Dropout (DropoutRate=0.1 default) doesn't fire
         // fresh randomness on every Predict call — required for the
         // SpeakerConsistency invariant. PyTorch / TF idiom: inference disables
@@ -66,13 +146,46 @@ public class WellSaidLabs<T> : TtsModelBase<T>, IEndToEndTts<T>
         try
         {
             var c = input;
-            foreach (var l in Layers) c = l.Forward(c);
+            foreach (var l in Layers)
+                c = l.Forward(c);
             return c;
         }
-        finally { SetTrainingMode(prev); }
+        finally
+        {
+            SetTrainingMode(prev);
+        }
     }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { ThrowIfDisposed(); if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); try { TrainWithTape(input, expected); } finally { SetTrainingMode(false); } }
-    public override void UpdateParameters(Vector<T> parameters) { ThrowIfDisposed(); if (IsOnnxMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training not supported in ONNX mode.");
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expected);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -86,7 +199,7 @@ public class WellSaidLabs<T> : TtsModelBase<T>, IEndToEndTts<T>
             // longer describe the instantiated model.
             Complexity = Architecture.Layers is { Count: > 0 }
                 ? Architecture.Layers.Count
-                : (long)_options.NumEncoderLayers + _options.NumDecoderLayers
+                : (long)_options.NumEncoderLayers + _options.NumDecoderLayers,
         };
         m.AdditionalInfo["Architecture"] = "WellSaidLabs";
         m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
@@ -99,9 +212,65 @@ public class WellSaidLabs<T> : TtsModelBase<T>, IEndToEndTts<T>
         m.AdditionalInfo["HopSize"] = _options.HopSize;
         return m;
     }
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.SampleRate); writer.Write(_options.HiddenDim); writer.Write(_options.DropoutRate); writer.Write(_options.NumDecoderLayers); writer.Write(_options.NumEncoderLayers); writer.Write(_options.NumHeads); writer.Write(_options.MaxTextLength); writer.Write(_options.HopSize); writer.Write(_options.MelChannels); writer.Write(_options.NumFlowSteps); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = reader.ReadInt32(); _options.HiddenDim = reader.ReadInt32();  _options.DropoutRate = reader.ReadDouble(); _options.NumDecoderLayers = reader.ReadInt32(); _options.NumEncoderLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); _options.MaxTextLength = reader.ReadInt32(); _options.HopSize = reader.ReadInt32(); _options.MelChannels = reader.ReadInt32(); _options.NumFlowSteps = reader.ReadInt32();  base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.HiddenDim; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (IsOnnxMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new WellSaidLabs<T>(Architecture, mp, _options); return new WellSaidLabs<T>(Architecture, _options, _optimizer); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(WellSaidLabs<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_useNativeMode);
+        writer.Write(_options.ModelPath ?? string.Empty);
+        writer.Write(_options.SampleRate);
+        writer.Write(_options.HiddenDim);
+        writer.Write(_options.DropoutRate);
+        writer.Write(_options.NumDecoderLayers);
+        writer.Write(_options.NumEncoderLayers);
+        writer.Write(_options.NumHeads);
+        writer.Write(_options.MaxTextLength);
+        writer.Write(_options.HopSize);
+        writer.Write(_options.MelChannels);
+        writer.Write(_options.NumFlowSteps);
+    }
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _useNativeMode = reader.ReadBoolean();
+        string mp = reader.ReadString();
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
+        _options.SampleRate = reader.ReadInt32();
+        _options.HiddenDim = reader.ReadInt32();
+        _options.DropoutRate = reader.ReadDouble();
+        _options.NumDecoderLayers = reader.ReadInt32();
+        _options.NumEncoderLayers = reader.ReadInt32();
+        _options.NumHeads = reader.ReadInt32();
+        _options.MaxTextLength = reader.ReadInt32();
+        _options.HopSize = reader.ReadInt32();
+        _options.MelChannels = reader.ReadInt32();
+        _options.NumFlowSteps = reader.ReadInt32();
+        base.SampleRate = _options.SampleRate;
+        base.MelChannels = _options.MelChannels;
+        base.HopSize = _options.HopSize;
+        base.HiddenDim = _options.HiddenDim;
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (IsOnnxMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new WellSaidLabs<T>(Architecture, mp, _options);
+        return new WellSaidLabs<T>(Architecture, _options, _optimizer);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(WellSaidLabs<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
 }

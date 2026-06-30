@@ -18,7 +18,17 @@ public class TacotronOptions : AcousticModelOptions
         PrenetDim = other.PrenetDim;
     }
 
-    public TacotronOptions() { EncoderDim = 256; DecoderDim = 80; HiddenDim = 256; NumEncoderLayers = 3; NumDecoderLayers = 2; NumHeads = 1; OutputsPerStep = 2; UsePostnet = true; }
+    public TacotronOptions()
+    {
+        EncoderDim = 256;
+        DecoderDim = 80;
+        HiddenDim = 256;
+        NumEncoderLayers = 3;
+        NumDecoderLayers = 2;
+        NumHeads = 1;
+        OutputsPerStep = 2;
+        UsePostnet = true;
+    }
 
     /// <summary>Gets or sets the CBHG encoder bank size.</summary>
     public int CbhgBankSize { get; set; } = 16;

@@ -44,7 +44,12 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("VALL-E X: Speak Foreign Languages with Your Own Voice: Cross-Lingual Neural Codec Language Modeling", "https://arxiv.org/abs/2303.03926", Year = 2023, Authors = "Zhang et al.")]
+[ResearchPaper(
+    "VALL-E X: Speak Foreign Languages with Your Own Voice: Cross-Lingual Neural Codec Language Modeling",
+    "https://arxiv.org/abs/2303.03926",
+    Year = 2023,
+    Authors = "Zhang et al."
+)]
 public class VALLEX<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly VALLEXOptions _options;
@@ -64,7 +69,9 @@ public class VALLEX<T> : TtsModelBase<T>, ICodecTts<T>
     public VALLEX(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        VALLEXOptions? options = null) : base(architecture)
+        VALLEXOptions? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new VALLEXOptions();
         _useNativeMode = false;
@@ -90,7 +97,9 @@ public class VALLEX<T> : TtsModelBase<T>, ICodecTts<T>
     public VALLEX(
         NeuralNetworkArchitecture<T> architecture,
         VALLEXOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new VALLEXOptions();
         _useNativeMode = true;
@@ -165,7 +174,8 @@ public class VALLEX<T> : TtsModelBase<T>, ICodecTts<T>
         {
             int fr = Math.Min(i * _options.CodecFrameRate / SampleRate, codecFrames - 1);
             waveform[i] = NumOps.FromDouble(
-                tokens[fr] * Math.Sin(i * 2.0 * Math.PI * 193 / SampleRate) * 0.71);
+                tokens[fr] * Math.Sin(i * 2.0 * Math.PI * 193 / SampleRate) * 0.71
+            );
         }
         return waveform;
     }
@@ -233,23 +243,33 @@ public class VALLEX<T> : TtsModelBase<T>, ICodecTts<T>
     /// <inheritdoc />
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
             Layers.AddRange(Architecture.Layers);
         else
-            Layers.AddRange(LayerHelper<T>.CreateDefaultCodecLMLayers(
-                _options.TextEncoderDim, _options.LLMDim,
-                _options.NumCodebooks * _options.CodebookSize,
-                _options.NumEncoderLayers, _options.NumLLMLayers,
-                _options.NumHeads, _options.DropoutRate,
-                _options.VocabSize));
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultCodecLMLayers(
+                    _options.TextEncoderDim,
+                    _options.LLMDim,
+                    _options.NumCodebooks * _options.CodebookSize,
+                    _options.NumEncoderLayers,
+                    _options.NumLLMLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate,
+                    _options.VocabSize
+                )
+            );
         ComputeEncoderDecoderBoundary();
     }
 
     private void ComputeEncoderDecoderBoundary()
     {
         int total = Layers.Count;
-        _encoderLayerEnd = total > 4 ? total / 3 : total > 0 ? 1 : 0;
+        _encoderLayerEnd =
+            total > 4 ? total / 3
+            : total > 0 ? 1
+            : 0;
     }
 
     /// <inheritdoc />
@@ -258,7 +278,8 @@ public class VALLEX<T> : TtsModelBase<T>, ICodecTts<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        SetTrainingMode(false); var c = input;
+        SetTrainingMode(false);
+        var c = input;
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
@@ -318,9 +339,9 @@ public class VALLEX<T> : TtsModelBase<T>, ICodecTts<T>
                 ["NumLLMLayers"] = _options.NumLLMLayers,
                 ["NumHeads"] = _options.NumHeads,
                 ["MaxTextLength"] = _options.MaxTextLength,
-                ["LayerCount"] = Layers.Count
+                ["LayerCount"] = Layers.Count,
             },
-            ModelData = SerializeForMetadata()
+            ModelData = SerializeForMetadata(),
         };
     }
 
@@ -378,18 +399,22 @@ public class VALLEX<T> : TtsModelBase<T>, ICodecTts<T>
             throw new ObjectDisposedException(GetType().FullName ?? nameof(VALLEX<T>));
     }
 
-    private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
-        => new(this, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-        {
-            InitialLearningRate = _options.LearningRate,
-            WeightDecay = _options.WeightDecay,
-            UseAdaptiveLearningRate = false
-        });
+    private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer() =>
+        new(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                UseAdaptiveLearningRate = false,
+            }
+        );
 
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         base.Dispose(disposing);
     }

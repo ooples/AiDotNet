@@ -17,7 +17,15 @@ public class AdaSpeech2Options : AcousticModelOptions
         Mel2PhDim = other.Mel2PhDim;
     }
 
-    public AdaSpeech2Options() { EncoderDim = 256; DecoderDim = 80; HiddenDim = 256; NumEncoderLayers = 4; NumDecoderLayers = 4; NumHeads = 2; }
+    public AdaSpeech2Options()
+    {
+        EncoderDim = 256;
+        DecoderDim = 80;
+        HiddenDim = 256;
+        NumEncoderLayers = 4;
+        NumDecoderLayers = 4;
+        NumHeads = 2;
+    }
 
     /// <summary>Gets or sets the mel-to-phoneme encoder dimension for untranscribed data.</summary>
     public int Mel2PhDim { get; set; } = 256;

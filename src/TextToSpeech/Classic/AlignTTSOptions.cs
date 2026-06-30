@@ -17,7 +17,15 @@ public class AlignTTSOptions : AcousticModelOptions
         NumMixtures = other.NumMixtures;
     }
 
-    public AlignTTSOptions() { EncoderDim = 256; DecoderDim = 80; HiddenDim = 256; NumEncoderLayers = 6; NumDecoderLayers = 6; NumHeads = 2; }
+    public AlignTTSOptions()
+    {
+        EncoderDim = 256;
+        DecoderDim = 80;
+        HiddenDim = 256;
+        NumEncoderLayers = 6;
+        NumDecoderLayers = 6;
+        NumHeads = 2;
+    }
 
     /// <summary>Gets or sets the number of mixture components for the alignment loss.</summary>
     public int NumMixtures { get; set; } = 1;

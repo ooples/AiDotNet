@@ -9,6 +9,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.TextToSpeech.Interfaces;
 
 namespace AiDotNet.TextToSpeech.Vocoders;
+
 /// <summary>Multi-band MelGAN: decomposes target into sub-bands, generates each in parallel, then synthesizes full-band.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Multi-band MelGAN: Faster Waveform Generation for High-Quality Text-to-Speech" (Yang et al., 2021)</item></list></para><para><b>For Beginners:</b> Multi-band MelGAN: decomposes target into sub-bands, generates each in parallel, then synthesizes full-band.. This model converts text input into speech audio output.</para></remarks>
@@ -33,14 +34,62 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Multi-band MelGAN: Faster Waveform Generation for High-Quality Text-to-Speech", "https://arxiv.org/abs/2005.05106", Year = 2021, Authors = "Yang et al.")]
+[ResearchPaper(
+    "Multi-band MelGAN: Faster Waveform Generation for High-Quality Text-to-Speech",
+    "https://arxiv.org/abs/2005.05106",
+    Year = 2021,
+    Authors = "Yang et al."
+)]
 public class MultiBandMelGAN<T> : TtsModelBase<T>, IVocoder<T>
 {
-    private readonly MultiBandMelGANOptions _options; public override ModelOptions GetOptions() => _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
-    public MultiBandMelGAN(NeuralNetworkArchitecture<T> architecture, string modelPath, MultiBandMelGANOptions? options = null) : base(architecture) { _options = options ?? new MultiBandMelGANOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); InitializeLayers(); }
-    public MultiBandMelGAN(NeuralNetworkArchitecture<T> architecture, MultiBandMelGANOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new MultiBandMelGANOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; InitializeLayers(); }
-    int IVocoder<T>.SampleRate => _options.SampleRate; int IVocoder<T>.MelChannels => _options.MelChannels; public int UpsampleFactor => _options.HopSize;
+    private readonly MultiBandMelGANOptions _options;
+
+    public override ModelOptions GetOptions() => _options;
+
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _useNativeMode;
+    private bool _disposed;
+
+    public MultiBandMelGAN(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        MultiBandMelGANOptions? options = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new MultiBandMelGANOptions();
+        _useNativeMode = false;
+        base.SampleRate = _options.SampleRate;
+        base.MelChannels = _options.MelChannels;
+        base.HopSize = _options.HopSize;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path required.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        InitializeLayers();
+    }
+
+    public MultiBandMelGAN(
+        NeuralNetworkArchitecture<T> architecture,
+        MultiBandMelGANOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new MultiBandMelGANOptions();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.SampleRate = _options.SampleRate;
+        base.MelChannels = _options.MelChannels;
+        base.HopSize = _options.HopSize;
+        InitializeLayers();
+    }
+
+    int IVocoder<T>.SampleRate => _options.SampleRate;
+    int IVocoder<T>.MelChannels => _options.MelChannels;
+    public int UpsampleFactor => _options.HopSize;
 
     /// <summary>
     /// Converts mel to waveform using Multi-band MelGAN's sub-band parallel generation.
@@ -51,17 +100,141 @@ public class MultiBandMelGAN<T> : TtsModelBase<T>, IVocoder<T>
     /// (4) Multi-resolution STFT loss applied per sub-band + full-band.
     /// Key: 7x speedup over original MelGAN with equal quality.
     /// </summary>
-    public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(melSpectrogram); return Predict(melSpectrogram); }
+    public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(melSpectrogram);
+        return Predict(melSpectrogram);
+    }
 
-    protected override Tensor<T> PreprocessText(string text) { var t = new Tensor<T>([1]); t[0] = NumOps.FromDouble(0.0); return t; } protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); return; } var d = new MultiBandMelGANOptions(); if (_options.NumBands != d.NumBands || _options.DropoutRate > double.Epsilon) throw new InvalidOperationException("MultiBandMelGANOptions.NumBands/DropoutRate are configured but not applied by the paper-faithful HiFi-GAN generator default; supply explicit Architecture.Layers for a custom multi-band configuration."); Layers.AddRange(LayerHelper<T>.CreateDefaultHiFiGANLayers(_options.MelChannels, 384, 1)); }
-    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>(); SetTrainingMode(false); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); try { TrainWithTape(input, expected); } finally { SetTrainingMode(false); } }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "MultiBandMelGAN-Native" : "MultiBandMelGAN-ONNX", Description = "Multi-band MelGAN (Yang et al., 2021)", FeatureCount = _options.MelChannels, Complexity = _options.NumBands * 4 }; m.AdditionalInfo["Architecture"] = "MultiBandMelGAN"; return m; }
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.SampleRate); writer.Write(_options.MelChannels); writer.Write(_options.HopSize); writer.Write(_options.NumBands); writer.Write(_options.DropoutRate); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = reader.ReadInt32(); _options.MelChannels = reader.ReadInt32(); _options.HopSize = reader.ReadInt32(); _options.NumBands = reader.ReadInt32();  _options.DropoutRate = reader.ReadDouble();  base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new MultiBandMelGAN<T>(Architecture, mp, _options); return new MultiBandMelGAN<T>(Architecture, _options); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(MultiBandMelGAN<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
+    protected override Tensor<T> PreprocessText(string text)
+    {
+        var t = new Tensor<T>([1]);
+        t[0] = NumOps.FromDouble(0.0);
+        return t;
+    }
+
+    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
+
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode)
+            return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            return;
+        }
+        var d = new MultiBandMelGANOptions();
+        if (_options.NumBands != d.NumBands || _options.DropoutRate > double.Epsilon)
+            throw new InvalidOperationException(
+                "MultiBandMelGANOptions.NumBands/DropoutRate are configured but not applied by the paper-faithful HiFi-GAN generator default; supply explicit Architecture.Layers for a custom multi-band configuration."
+            );
+        Layers.AddRange(LayerHelper<T>.CreateDefaultHiFiGANLayers(_options.MelChannels, 384, 1));
+    }
+
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        SetTrainingMode(false);
+        var c = input;
+        foreach (var l in Layers)
+            c = l.Forward(c);
+        return c;
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training not supported in ONNX mode.");
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expected);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "MultiBandMelGAN-Native" : "MultiBandMelGAN-ONNX",
+            Description = "Multi-band MelGAN (Yang et al., 2021)",
+            FeatureCount = _options.MelChannels,
+            Complexity = _options.NumBands * 4,
+        };
+        m.AdditionalInfo["Architecture"] = "MultiBandMelGAN";
+        return m;
+    }
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_useNativeMode);
+        writer.Write(_options.ModelPath ?? string.Empty);
+        writer.Write(_options.SampleRate);
+        writer.Write(_options.MelChannels);
+        writer.Write(_options.HopSize);
+        writer.Write(_options.NumBands);
+        writer.Write(_options.DropoutRate);
+    }
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _useNativeMode = reader.ReadBoolean();
+        string mp = reader.ReadString();
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
+        _options.SampleRate = reader.ReadInt32();
+        _options.MelChannels = reader.ReadInt32();
+        _options.HopSize = reader.ReadInt32();
+        _options.NumBands = reader.ReadInt32();
+        _options.DropoutRate = reader.ReadDouble();
+        base.SampleRate = _options.SampleRate;
+        base.MelChannels = _options.MelChannels;
+        base.HopSize = _options.HopSize;
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new MultiBandMelGAN<T>(Architecture, mp, _options);
+        return new MultiBandMelGAN<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(MultiBandMelGAN<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
 }

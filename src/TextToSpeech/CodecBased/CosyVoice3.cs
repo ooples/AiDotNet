@@ -43,7 +43,10 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("CosyVoice: Scalable Streaming Speech Synthesis", "https://arxiv.org/abs/2412.10117")]
+[ResearchPaper(
+    "CosyVoice: Scalable Streaming Speech Synthesis",
+    "https://arxiv.org/abs/2412.10117"
+)]
 public class CosyVoice3<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly CosyVoice3Options _options;
@@ -62,7 +65,9 @@ public class CosyVoice3<T> : TtsModelBase<T>, ICodecTts<T>
     public CosyVoice3(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        CosyVoice3Options? options = null) : base(architecture)
+        CosyVoice3Options? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new CosyVoice3Options();
         _useNativeMode = false;
@@ -88,7 +93,9 @@ public class CosyVoice3<T> : TtsModelBase<T>, ICodecTts<T>
     public CosyVoice3(
         NeuralNetworkArchitecture<T> architecture,
         CosyVoice3Options? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new CosyVoice3Options();
         _useNativeMode = true;
@@ -170,15 +177,22 @@ public class CosyVoice3<T> : TtsModelBase<T>, ICodecTts<T>
     /// <inheritdoc />
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
             Layers.AddRange(Architecture.Layers);
         else
-            Layers.AddRange(LayerHelper<T>.CreateDefaultCodecLMLayers(
-                _options.TextEncoderDim, _options.LLMDim,
-                _options.NumCodebooks * _options.CodebookSize,
-                _options.NumEncoderLayers, _options.NumLLMLayers,
-                _options.NumHeads, _options.DropoutRate));
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultCodecLMLayers(
+                    _options.TextEncoderDim,
+                    _options.LLMDim,
+                    _options.NumCodebooks * _options.CodebookSize,
+                    _options.NumEncoderLayers,
+                    _options.NumLLMLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate
+                )
+            );
     }
 
     /// <inheritdoc />
@@ -187,7 +201,8 @@ public class CosyVoice3<T> : TtsModelBase<T>, ICodecTts<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        SetTrainingMode(false); var c = input;
+        SetTrainingMode(false);
+        var c = input;
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
@@ -201,7 +216,7 @@ public class CosyVoice3<T> : TtsModelBase<T>, ICodecTts<T>
         SetTrainingMode(true);
         try
         {
-        TrainWithTape(input, expected);
+            TrainWithTape(input, expected);
         }
         finally
         {
@@ -230,7 +245,7 @@ public class CosyVoice3<T> : TtsModelBase<T>, ICodecTts<T>
         {
             Name = _useNativeMode ? "CosyVoice3-Native" : "CosyVoice3-ONNX",
             Description = "CosyVoice 3: Zero-Shot Multilingual TTS (Alibaba DAMO, 2025)",
-            FeatureCount = _options.LLMDim
+            FeatureCount = _options.LLMDim,
         };
         m.AdditionalInfo["Architecture"] = "CosyVoice3";
         m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
@@ -302,7 +317,8 @@ public class CosyVoice3<T> : TtsModelBase<T>, ICodecTts<T>
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         base.Dispose(disposing);
     }

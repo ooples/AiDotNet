@@ -53,7 +53,8 @@ public abstract class TtsModelBase<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets whether this model is running in ONNX inference mode.
     /// </summary>
-    public bool IsOnnxMode => OnnxEncoder is not null || OnnxDecoder is not null || OnnxModel is not null;
+    public bool IsOnnxMode =>
+        OnnxEncoder is not null || OnnxDecoder is not null || OnnxModel is not null;
 
     /// <summary>
     /// Gets or sets the ONNX encoder model (for two-stage architectures).
@@ -79,10 +80,9 @@ public abstract class TtsModelBase<T> : NeuralNetworkBase<T>
     protected TtsModelBase(
         NeuralNetworkArchitecture<T> architecture,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), maxGradNorm)
-    {
-    }
+        double maxGradNorm = 1.0
+    )
+        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), maxGradNorm) { }
 
     /// <summary>
     /// Gets whether this network supports training.
@@ -104,11 +104,16 @@ public abstract class TtsModelBase<T> : NeuralNetworkBase<T>
     /// </summary>
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
     {
-        if (this is AiDotNet.TextToSpeech.Interfaces.IVocoder<T>
-            || this is AiDotNet.TextToSpeech.Interfaces.IEndToEndTts<T>)
+        if (
+            this is AiDotNet.TextToSpeech.Interfaces.IVocoder<T>
+            || this is AiDotNet.TextToSpeech.Interfaces.IEndToEndTts<T>
+        )
         {
-            return _vocoderBaseOptimizer ??= new AiDotNet.Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-                this, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { UseAMSGrad = true });
+            return _vocoderBaseOptimizer ??= new AiDotNet.Optimizers.AdamOptimizer<
+                T,
+                Tensor<T>,
+                Tensor<T>
+            >(this, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { UseAMSGrad = true });
         }
         return base.GetOrCreateBaseOptimizer();
     }
@@ -134,11 +139,16 @@ public abstract class TtsModelBase<T> : NeuralNetworkBase<T>
     /// <param name="minLevel">Minimum amplitude level in dB (default: -100).</param>
     /// <param name="refLevel">Reference amplitude level in dB (default: 20).</param>
     /// <returns>Normalized mel-spectrogram tensor.</returns>
-    protected Tensor<T> NormalizeMel(Tensor<T> mel, double minLevel = -100.0, double refLevel = 20.0)
+    protected Tensor<T> NormalizeMel(
+        Tensor<T> mel,
+        double minLevel = -100.0,
+        double refLevel = 20.0
+    )
     {
         var result = new Tensor<T>(mel._shape);
         double range = refLevel - minLevel;
-        if (Math.Abs(range) < 1e-10) range = 1.0;
+        if (Math.Abs(range) < 1e-10)
+            range = 1.0;
 
         for (int i = 0; i < mel.Length; i++)
         {
@@ -172,7 +182,8 @@ public abstract class TtsModelBase<T> : NeuralNetworkBase<T>
         for (int i = 0; i < logits.Length; i++)
         {
             double v = NumOps.ToDouble(logits[i]);
-            if (v > maxVal) maxVal = v;
+            if (v > maxVal)
+                maxVal = v;
         }
 
         var result = new Tensor<T>(logits._shape);
@@ -208,7 +219,8 @@ public abstract class TtsModelBase<T> : NeuralNetworkBase<T>
         }
 
         norm = Math.Sqrt(norm);
-        if (norm < 1e-8) return tensor;
+        if (norm < 1e-8)
+            return tensor;
 
         var result = new Tensor<T>(tensor._shape);
         for (int i = 0; i < tensor.Length; i++)

@@ -17,7 +17,15 @@ public class SpeedySpeechOptions : AcousticModelOptions
         ResidualKernelSize = other.ResidualKernelSize;
     }
 
-    public SpeedySpeechOptions() { EncoderDim = 128; DecoderDim = 80; HiddenDim = 128; NumEncoderLayers = 6; NumDecoderLayers = 6; NumHeads = 2; }
+    public SpeedySpeechOptions()
+    {
+        EncoderDim = 128;
+        DecoderDim = 80;
+        HiddenDim = 128;
+        NumEncoderLayers = 6;
+        NumDecoderLayers = 6;
+        NumHeads = 2;
+    }
 
     /// <summary>Gets or sets the convolutional residual block kernel size.</summary>
     public int ResidualKernelSize { get; set; } = 3;

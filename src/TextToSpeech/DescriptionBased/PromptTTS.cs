@@ -9,6 +9,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.TextToSpeech.Interfaces;
 
 namespace AiDotNet.TextToSpeech.DescriptionBased;
+
 /// <summary>PromptTTS: description-based TTS that controls speaker attributes via natural language prompts (e.g., "a young female with a cheerful tone").</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "PromptTTS: Controllable Text-to-Speech with Text Descriptions" (Guo et al., 2023)</item></list></para><para><b>For Beginners:</b> PromptTTS: description-based TTS that controls speaker attributes via natural language prompts (e.g., "a young female with a cheerful tone").. This model converts text input into speech audio output.</para></remarks>
@@ -33,14 +34,66 @@ namespace AiDotNet.TextToSpeech.DescriptionBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("PromptTTS: Controllable Text-to-Speech with Text Descriptions", "https://arxiv.org/abs/2211.12171", Year = 2023, Authors = "Guo et al.")]
+[ResearchPaper(
+    "PromptTTS: Controllable Text-to-Speech with Text Descriptions",
+    "https://arxiv.org/abs/2211.12171",
+    Year = 2023,
+    Authors = "Guo et al."
+)]
 public class PromptTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
-    private readonly PromptTTSOptions _options; public override ModelOptions GetOptions() => _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
-    public PromptTTS(NeuralNetworkArchitecture<T> architecture, string modelPath, PromptTTSOptions? options = null) : base(architecture) { _options = options ?? new PromptTTSOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.HiddenDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); InitializeLayers(); }
-    public PromptTTS(NeuralNetworkArchitecture<T> architecture, PromptTTSOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new PromptTTSOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.HiddenDim; InitializeLayers(); }
-    int ITtsModel<T>.SampleRate => _options.SampleRate; public int MaxTextLength => _options.MaxTextLength; public new int HiddenDim => _options.HiddenDim; public int NumFlowSteps => _options.NumFlowSteps;
+    private readonly PromptTTSOptions _options;
+
+    public override ModelOptions GetOptions() => _options;
+
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _useNativeMode;
+    private bool _disposed;
+
+    public PromptTTS(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        PromptTTSOptions? options = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new PromptTTSOptions();
+        _useNativeMode = false;
+        base.SampleRate = _options.SampleRate;
+        base.MelChannels = _options.MelChannels;
+        base.HopSize = _options.HopSize;
+        base.HiddenDim = _options.HiddenDim;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path required.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        InitializeLayers();
+    }
+
+    public PromptTTS(
+        NeuralNetworkArchitecture<T> architecture,
+        PromptTTSOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new PromptTTSOptions();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.SampleRate = _options.SampleRate;
+        base.MelChannels = _options.MelChannels;
+        base.HopSize = _options.HopSize;
+        base.HiddenDim = _options.HiddenDim;
+        InitializeLayers();
+    }
+
+    int ITtsModel<T>.SampleRate => _options.SampleRate;
+    public int MaxTextLength => _options.MaxTextLength;
+    public new int HiddenDim => _options.HiddenDim;
+    public int NumFlowSteps => _options.NumFlowSteps;
+
     /// <summary>
     /// Synthesizes speech using PromptTTS's description-conditioned pipeline.
     /// Per the paper (Guo et al., 2023):
@@ -55,19 +108,160 @@ public class PromptTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
         var output = Predict(input);
         return PostprocessAudio(output);
     }
-    protected override Tensor<T> PreprocessText(string text) { int len = Math.Min(text.Length, _options.MaxTextLength); var t = new Tensor<T>([len]); for (int i = 0; i < len; i++) t[i] = NumOps.FromDouble(text[i] / 128.0); return t; } protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultStyleTTSLayers(_options.HiddenDim, _options.PromptEncoderDim, _options.MelChannels, _options.NumEncoderLayers, _options.NumPromptLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, inputFeatureDim: _options.MelChannels)); }
-    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); SetTrainingMode(false); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); try { TrainWithTape(input, expected); } finally { SetTrainingMode(false); } }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "PromptTTS-Native" : "PromptTTS-ONNX", Description = "PromptTTS: Description-Controlled TTS (Guo et al., 2023)", FeatureCount = _options.HiddenDim }; m.AdditionalInfo["Architecture"] = "PromptTTS"; m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX"; m.AdditionalInfo["HiddenDim"] = base.HiddenDim; m.AdditionalInfo["SampleRate"] = base.SampleRate; m.AdditionalInfo["MelChannels"] = base.MelChannels; m.AdditionalInfo["HopSize"] = base.HopSize; return m; }
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.SampleRate); writer.Write(_options.MelChannels); writer.Write(_options.HiddenDim); writer.Write(_options.DropoutRate); writer.Write(_options.NumDecoderLayers); writer.Write(_options.NumEncoderLayers); writer.Write(_options.NumHeads); writer.Write(_options.NumPromptLayers); writer.Write(_options.PromptEncoderDim); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = reader.ReadInt32(); _options.MelChannels = reader.ReadInt32(); _options.HiddenDim = reader.ReadInt32();  _options.DropoutRate = reader.ReadDouble(); _options.NumDecoderLayers = reader.ReadInt32(); _options.NumEncoderLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); _options.NumPromptLayers = reader.ReadInt32(); _options.PromptEncoderDim = reader.ReadInt32();  base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.HiddenDim; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new PromptTTS<T>(Architecture, mp, _options); return new PromptTTS<T>(Architecture, _options); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(PromptTTS<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
+
+    protected override Tensor<T> PreprocessText(string text)
+    {
+        int len = Math.Min(text.Length, _options.MaxTextLength);
+        var t = new Tensor<T>([len]);
+        for (int i = 0; i < len; i++)
+            t[i] = NumOps.FromDouble(text[i] / 128.0);
+        return t;
+    }
+
+    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
+
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode)
+            return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+            Layers.AddRange(Architecture.Layers);
+        else
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultStyleTTSLayers(
+                    _options.HiddenDim,
+                    _options.PromptEncoderDim,
+                    _options.MelChannels,
+                    _options.NumEncoderLayers,
+                    _options.NumPromptLayers,
+                    _options.NumDecoderLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate,
+                    inputFeatureDim: _options.MelChannels
+                )
+            );
+    }
+
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
+        SetTrainingMode(false);
+        var c = input;
+        foreach (var l in Layers)
+            c = l.Forward(c);
+        return c;
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training not supported in ONNX mode.");
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expected);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "PromptTTS-Native" : "PromptTTS-ONNX",
+            Description = "PromptTTS: Description-Controlled TTS (Guo et al., 2023)",
+            FeatureCount = _options.HiddenDim,
+        };
+        m.AdditionalInfo["Architecture"] = "PromptTTS";
+        m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
+        m.AdditionalInfo["HiddenDim"] = base.HiddenDim;
+        m.AdditionalInfo["SampleRate"] = base.SampleRate;
+        m.AdditionalInfo["MelChannels"] = base.MelChannels;
+        m.AdditionalInfo["HopSize"] = base.HopSize;
+        return m;
+    }
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_useNativeMode);
+        writer.Write(_options.ModelPath ?? string.Empty);
+        writer.Write(_options.SampleRate);
+        writer.Write(_options.MelChannels);
+        writer.Write(_options.HopSize);
+        writer.Write(_options.HiddenDim);
+        writer.Write(_options.DropoutRate);
+        writer.Write(_options.NumDecoderLayers);
+        writer.Write(_options.NumEncoderLayers);
+        writer.Write(_options.NumHeads);
+        writer.Write(_options.NumPromptLayers);
+        writer.Write(_options.PromptEncoderDim);
+    }
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _useNativeMode = reader.ReadBoolean();
+        string mp = reader.ReadString();
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
+        _options.SampleRate = reader.ReadInt32();
+        _options.MelChannels = reader.ReadInt32();
+        _options.HopSize = reader.ReadInt32();
+        _options.HiddenDim = reader.ReadInt32();
+        _options.DropoutRate = reader.ReadDouble();
+        _options.NumDecoderLayers = reader.ReadInt32();
+        _options.NumEncoderLayers = reader.ReadInt32();
+        _options.NumHeads = reader.ReadInt32();
+        _options.NumPromptLayers = reader.ReadInt32();
+        _options.PromptEncoderDim = reader.ReadInt32();
+        base.SampleRate = _options.SampleRate;
+        base.MelChannels = _options.MelChannels;
+        base.HopSize = _options.HopSize;
+        base.HiddenDim = _options.HiddenDim;
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new PromptTTS<T>(Architecture, mp, _options);
+        return new PromptTTS<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(PromptTTS<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
 }
