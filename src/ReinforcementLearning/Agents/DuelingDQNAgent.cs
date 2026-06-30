@@ -64,7 +64,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.DuelingDQN;
     "https://arxiv.org/abs/1511.06581",
     Year = 2016,
     Authors = "Wang, Z., Schaul, T., Hessel, M., van Hasselt, H., Lanctot, M., & de Freitas, N.")]
-public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
+public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>
 {
     private DuelingDQNOptions<T> _options;
 
@@ -149,6 +149,9 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         greedyAction[bestAction] = NumOps.One;
         return greedyAction;
     }
+
+    /// <inheritdoc/>
+    public Vector<T> GetActionValues(Vector<T> state) => _qNetwork.Forward(state);
 
     /// <inheritdoc/>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)

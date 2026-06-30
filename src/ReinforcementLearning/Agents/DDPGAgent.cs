@@ -215,6 +215,43 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         _replayBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(state, action, reward, nextState, done));
     }
 
+    /// <summary>
+    /// Performs a one-shot supervised update for the training/test harness.
+    /// </summary>
+    /// <remarks>
+    /// The shared base adapter decodes <paramref name="target"/> into a discrete one-hot action sized
+    /// to the target length, which is incompatible with DDPG's continuous critic input
+    /// (StateSize + ActionSize) — the stored experience would have the wrong action dimensionality.
+    /// We act in the state to obtain an action of the agent's own ActionSize, derive a bounded scalar
+    /// reward from the supervised target, store the transition, and run a DDPG update.
+    /// </remarks>
+    public override void Train(Vector<T> state, Vector<T> target)
+    {
+        if (state is null) throw new ArgumentNullException(nameof(state));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        if (target.Length == 0)
+            throw new ArgumentException("target must contain at least one element.", nameof(target));
+
+        var action = SelectAction(state, training: true);
+
+        T reward = NumOps.Zero;
+        for (int i = 0; i < target.Length; i++)
+            reward = NumOps.Add(reward, target[i]);
+        reward = NumOps.Divide(reward, NumOps.FromDouble(target.Length));
+
+        StoreExperience(state, action, reward, state, done: false);
+
+        SupervisedUpdateRequested = true;
+        try
+        {
+            Train();
+        }
+        finally
+        {
+            SupervisedUpdateRequested = false;
+        }
+    }
+
     /// <inheritdoc/>
     public override T Train()
     {

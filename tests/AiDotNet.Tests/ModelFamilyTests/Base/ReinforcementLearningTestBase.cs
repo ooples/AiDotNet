@@ -168,6 +168,24 @@ public abstract class ReinforcementLearningTestBase
         using var _arena = TensorArena.Create();
         using var model = CreateModel();
 
+        // For a VALUE-BASED agent the greedy action is argmax over Q(s,·) — a lossy projection that
+        // can be constant across inputs at random init even when Q is genuinely state-conditional.
+        // When the agent exposes its raw action-values, probe those directly: that signal is the
+        // deterministic, non-projected evidence of state-conditionality and removes the random-init
+        // flakiness of an argmax-only read-out (no reliance on a training fallback flipping the argmax).
+        if (model is IActionValueProvider<double> valueProvider)
+        {
+            var qBattery = BuildStateBattery();
+            var firstQ = valueProvider.GetActionValues(qBattery[0]);
+            bool qDiffers = false;
+            for (int i = 1; i < qBattery.Length && !qDiffers; i++)
+                qDiffers = ActionsDiffer(firstQ, valueProvider.GetActionValues(qBattery[i]));
+            Assert.True(qDiffers,
+                "Value-based RL agent's action-values are identical across a diverse state battery — " +
+                "its Q-function ignores the input (degenerate policy).");
+            return;
+        }
+
         // Probe a BATTERY of directionally-distinct states rather than a single pair.
         // A freshly-initialised discrete-action policy can map one particular state pair
         // to the same dominant action — the underlying Q-values / logits ARE functions of

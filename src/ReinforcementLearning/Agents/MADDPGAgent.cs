@@ -311,6 +311,55 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         _stepCount++;
     }
 
+    /// <summary>
+    /// Performs a one-shot supervised update for the training/test harness.
+    /// </summary>
+    /// <remarks>
+    /// MADDPG trains on JOINT transitions across all agents (centralized critic over the concatenated
+    /// per-agent states and actions), so the shared single-transition adapter — which supplies one
+    /// agent's state and a one-hot action — cannot drive it. We synthesize a valid joint transition:
+    /// use this state for every agent, take each agent's own continuous action, derive a bounded scalar
+    /// reward from the supervised target, store it via <see cref="StoreMultiAgentExperience"/>, and run
+    /// a MADDPG update.
+    /// </remarks>
+    public override void Train(Vector<T> state, Vector<T> target)
+    {
+        if (state is null) throw new ArgumentNullException(nameof(state));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        if (target.Length == 0)
+            throw new ArgumentException("target must contain at least one element.", nameof(target));
+
+        T reward = NumOps.Zero;
+        for (int i = 0; i < target.Length; i++)
+            reward = NumOps.Add(reward, target[i]);
+        reward = NumOps.Divide(reward, NumOps.FromDouble(target.Length));
+
+        int numAgents = _options.NumAgents;
+        var states = new List<Vector<T>>(numAgents);
+        var actions = new List<Vector<T>>(numAgents);
+        var rewards = new List<T>(numAgents);
+        var nextStates = new List<Vector<T>>(numAgents);
+        for (int a = 0; a < numAgents; a++)
+        {
+            states.Add(state);
+            actions.Add(SelectActionForAgent(a, state, training: true));
+            rewards.Add(reward);
+            nextStates.Add(state);
+        }
+
+        StoreMultiAgentExperience(states, actions, rewards, nextStates, done: false);
+
+        SupervisedUpdateRequested = true;
+        try
+        {
+            Train();
+        }
+        finally
+        {
+            SupervisedUpdateRequested = false;
+        }
+    }
+
     public override T Train()
     {
         // A supervised one-shot Train(state, target) call bypasses the autonomous-exploration warmup

@@ -219,6 +219,43 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
         _stepCount++;
     }
 
+    /// <summary>
+    /// Performs a one-shot supervised update for the training/test harness.
+    /// </summary>
+    /// <remarks>
+    /// The shared base adapter decodes <paramref name="target"/> into a discrete one-hot action sized
+    /// to the target length, which is incompatible with TD3's continuous critic input
+    /// (StateSize + ActionSize). We act in the state to obtain an action of the agent's own ActionSize,
+    /// derive a bounded scalar reward from the supervised target, store the transition, and run a TD3
+    /// update.
+    /// </remarks>
+    public override void Train(Vector<T> state, Vector<T> target)
+    {
+        if (state is null) throw new ArgumentNullException(nameof(state));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        if (target.Length == 0)
+            throw new ArgumentException("target must contain at least one element.", nameof(target));
+
+        var action = SelectAction(state, training: true);
+
+        T reward = NumOps.Zero;
+        for (int i = 0; i < target.Length; i++)
+            reward = NumOps.Add(reward, target[i]);
+        reward = NumOps.Divide(reward, NumOps.FromDouble(target.Length));
+
+        StoreExperience(state, action, reward, state, done: false);
+
+        SupervisedUpdateRequested = true;
+        try
+        {
+            Train();
+        }
+        finally
+        {
+            SupervisedUpdateRequested = false;
+        }
+    }
+
     public override T Train()
     {
         // A supervised one-shot Train(state, target) call bypasses the autonomous-exploration warmup

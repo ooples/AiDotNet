@@ -60,7 +60,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.DQN;
     "https://arxiv.org/abs/1312.5602",
     Year = 2015,
     Authors = "Mnih, V., Kavukcuoglu, K., Silver, D., Rusu, A. A., Veness, J., Bellemare, M. G., et al.")]
-public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
+public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>
 {
     private DQNOptions<T> _dqnOptions;
 
@@ -189,6 +189,10 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         greedyAction[bestAction] = NumOps.One;
         return greedyAction;
     }
+
+    /// <inheritdoc/>
+    public Vector<T> GetActionValues(Vector<T> state)
+        => _qNetwork.Predict(Tensor<T>.FromVector(state)).ToVector();
 
     /// <inheritdoc/>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
