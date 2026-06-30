@@ -247,6 +247,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // box — 9B-class generative VLM (same family as LXMERT/METER/SmolVLM) and an audio-LM. The
         // gradients DO flow; the footprint simply exceeds the runner, so they run in the nightly heavy lane.
         "IDEFICS", "MusicFlamingo",
+        // LLaVAVideo: foundation-scale video-language model — 336px frames / 16px patches = 441 vision
+        // tokens x up to 64 frames (~28K tokens) at VisionDim 1024 with 32-head O(n^2) attention, so a
+        // single CPU forward inherently exceeds the 120s per-test timeout. Not a correctness bug (same
+        // class as IDEFICS/MusicFlamingo); runs in the nightly heavy lane rather than the default shard.
+        "LLaVAVideo",
+        // MGLDVSR: motion-guided LATENT DIFFUSION for video super-resolution (Yang 2024). Each forward
+        // runs 20 denoising steps (20 U-Net passes) over video latents, and the training invariants
+        // (MoreData = 200 iterations) multiply that out well past the 120s per-test timeout on CPU.
+        // Genuine foundation-scale diffusion compute, not a correctness bug — same heavy lane.
+        "MGLDVSR",
     };
 
     private static readonly System.Collections.Generic.HashSet<string> Fp32TestClassNames =
