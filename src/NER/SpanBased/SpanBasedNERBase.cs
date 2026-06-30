@@ -292,7 +292,33 @@ public abstract class SpanBasedNERBase<T> : SequenceLabeling.SequenceLabelingNER
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         if (_optimizer is null) throw new InvalidOperationException("Optimizer is not initialized.");
         SetTrainingMode(true);
-        try { TrainWithTape(input, expected); }
+        try
+        {
+            // Train on the input's NATURAL sequence length and align the labels
+            // to it. The transformer encoder is length-agnostic, so there is no
+            // need to pad up to MaxSequenceLength here (the way the inference
+            // PreprocessTokens does). Two bugs are avoided by NOT padding:
+            //   1. Shape contract: training previously fed the RAW [seqLen, hid]
+            //      input to TrainWithTape -> [seqLen, numLabels] logits, while the
+            //      label tensor was shaped from Predict's PADDED output
+            //      [MaxSequenceLength]. CrossEntropyWithLogitsLoss then indexed
+            //      past its one-hot buffer (IndexOutOfRange). Aligning the labels
+            //      to the logits' natural length fixes this.
+            //   2. Loss quality + cost: padding to MaxSequenceLength would make
+            //      the forward process MaxSequenceLength positions whose
+            //      (zero-input, arbitrary-label) pairs are unlearnable noise that
+            //      pollutes the loss, and would multiply the per-step cost by
+            //      ~MaxSequenceLength / seqLen. Training on the real tokens keeps
+            //      the loss meaningful and the step cheap.
+
+            // Canonicalize and validate input, matching the preprocessing path used
+            // by PredictLabels. This ensures unsupported tensor ranks are rejected
+            // and sequences are truncated to MaxSequenceLength before label alignment.
+            var preprocessed = PreprocessTokens(input);
+            int validatedSeqLen = preprocessed.Rank == 3 ? preprocessed.Shape[1] : preprocessed.Shape[0];
+            var alignedExpected = PreprocessLabels(expected, validatedSeqLen);
+            TrainWithTape(preprocessed, alignedExpected);
+        }
         finally { SetTrainingMode(false); }
     }
 
@@ -315,35 +341,45 @@ public abstract class SpanBasedNERBase<T> : SequenceLabeling.SequenceLabelingNER
         int maxLen = _options.MaxSequenceLength;
         int hidDim = _options.HiddenDimension;
 
-        if (rawEmbeddings.Rank < 2) return rawEmbeddings;
+        // Reject unsupported tensor ranks instead of falling through to rank-2 path
+        if (rawEmbeddings.Rank < 2 || rawEmbeddings.Rank > 3)
+            throw new ArgumentException(
+                $"Expected rank-2 [seqLen, hiddenDim] or rank-3 [batch, seqLen, hiddenDim] tensor. Got rank {rawEmbeddings.Rank}.");
+
+        // Process the input's NATURAL sequence length: the transformer encoder is
+        // length-agnostic, so only TRUNCATE sequences that exceed the configured
+        // MaxSequenceLength — never pad shorter ones UP to it. Padding a single
+        // sequence up to MaxSequenceLength multiplies the per-forward cost by
+        // ~MaxSequenceLength / seqLen (e.g. 256/8 = 32x) for zero benefit, and on
+        // the training path it pollutes the loss with zero-input positions. The
+        // Train() override above already operates on the natural length, so this
+        // keeps inference and training on matching shapes.
 
         // Handle rank-3 [batch, seqLen, hidDim]
         if (rawEmbeddings.Rank == 3)
         {
             int batch = rawEmbeddings.Shape[0];
             int seqLen3 = rawEmbeddings.Shape[1];
-            if (seqLen3 == maxLen) return rawEmbeddings;
+            if (seqLen3 <= maxLen) return rawEmbeddings;
 
-            var padded3 = new Tensor<T>([batch, maxLen, hidDim]);
-            int copyLen3 = Math.Min(seqLen3, maxLen);
+            var truncated3 = new Tensor<T>([batch, maxLen, hidDim]);
             for (int b = 0; b < batch; b++)
-                for (int s = 0; s < copyLen3; s++)
+                for (int s = 0; s < maxLen; s++)
                     for (int d = 0; d < hidDim; d++)
-                        padded3[b, s, d] = rawEmbeddings[b, s, d];
-            return padded3;
+                        truncated3[b, s, d] = rawEmbeddings[b, s, d];
+            return truncated3;
         }
 
         // Rank-2 [seqLen, hidDim]
         int seqLen = rawEmbeddings.Shape[0];
-        if (seqLen == maxLen) return rawEmbeddings;
+        if (seqLen <= maxLen) return rawEmbeddings;
 
-        var padded = new Tensor<T>([maxLen, hidDim]);
-        int copyLen = Math.Min(seqLen, maxLen);
-        for (int s = 0; s < copyLen; s++)
+        var truncated = new Tensor<T>([maxLen, hidDim]);
+        for (int s = 0; s < maxLen; s++)
             for (int d = 0; d < hidDim; d++)
-                padded[s, d] = rawEmbeddings[s, d];
+                truncated[s, d] = rawEmbeddings[s, d];
 
-        return padded;
+        return truncated;
     }
 
     /// <inheritdoc />

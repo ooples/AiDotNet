@@ -206,6 +206,16 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void StoreExperience(Vector<T> observation, Vector<T> action, T reward, Vector<T> nextObservation, bool done)
     {
+        // Validate transition shapes at this public ingestion boundary so a malformed experience
+        // can't enter the replay buffer and later cause indexing / network-shape failures deep in
+        // Train() (building dynIn/repIn/rewIn/contIn).
+        if (observation.Length != _options.ObservationSize)
+            throw new ArgumentException($"Observation length must be {_options.ObservationSize}, got {observation.Length}.", nameof(observation));
+        if (nextObservation.Length != _options.ObservationSize)
+            throw new ArgumentException($"Next observation length must be {_options.ObservationSize}, got {nextObservation.Length}.", nameof(nextObservation));
+        if (action.Length != _options.ActionSize)
+            throw new ArgumentException($"Action length must be {_options.ActionSize}, got {action.Length}.", nameof(action));
+
         _replayBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(observation, action, reward, nextObservation, done));
     }
 
@@ -217,10 +227,100 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         var batch = _replayBuffer.Sample(_options.BatchSize);
+        int n = batch.Count;
+        if (n == 0) return NumOps.Zero;
 
-        // Tape-based training handles gradient computation
-        T worldModelLoss = NumOps.Zero;
-        T policyLoss = NumOps.Zero;
+        int obsSize = _options.ObservationSize;
+        int latentSize = _options.LatentSize;
+        int actionDim = _options.ActionSize;
+        T gamma = _options.DiscountFactor is not null ? _options.DiscountFactor : NumOps.FromDouble(0.99);
+
+        // ===== World-model learning (Hafner et al. 2020) =====
+        // Encode each observation to a latent, and train the predictive heads:
+        //   dynamics(z_t, a_t) -> z_{t+1};  reward(z_t) -> r_t;  continue(z_t) -> 1-done;
+        // and keep the encoder consistent with the dynamics (representation(o_{t+1}) -> z_pred).
+        var dynIn = new Tensor<T>([n, latentSize + actionDim]);
+        var dynTgt = new Tensor<T>([n, latentSize]);
+        var repIn = new Tensor<T>([n, obsSize]);
+        var repTgt = new Tensor<T>([n, latentSize]);
+        var rewIn = new Tensor<T>([n, latentSize]);
+        var rewTgt = new Tensor<T>([n, 1]);
+        var contIn = new Tensor<T>([n, latentSize]);
+        var contTgt = new Tensor<T>([n, 1]);
+        var latents = new Vector<T>[n];
+
+        for (int i = 0; i < n; i++)
+        {
+            var exp = batch[i];
+            var z = _representationNetwork.Predict(Tensor<T>.FromVector(exp.State)).ToVector();
+            var zNext = _representationNetwork.Predict(Tensor<T>.FromVector(exp.NextState)).ToVector();
+            var dynInput = ConcatenateVectors(z, exp.Action);
+            var zPred = _dynamicsNetwork.Predict(Tensor<T>.FromVector(dynInput)).ToVector();
+            latents[i] = z;
+
+            for (int j = 0; j < latentSize + actionDim; j++) dynIn[i, j] = dynInput[j];
+            for (int j = 0; j < latentSize; j++) dynTgt[i, j] = zNext[j];       // dynamics -> next latent
+            for (int j = 0; j < obsSize; j++) repIn[i, j] = exp.NextState[j];
+            for (int j = 0; j < latentSize; j++) repTgt[i, j] = zPred[j];        // encoder <-> dynamics consistency
+            for (int j = 0; j < latentSize; j++) rewIn[i, j] = z[j];
+            rewTgt[i, 0] = exp.Reward;                                           // reward(z) -> r
+            for (int j = 0; j < latentSize; j++) contIn[i, j] = z[j];
+            contTgt[i, 0] = exp.Done ? NumOps.Zero : NumOps.One;                 // continue(z) -> 1-done
+        }
+        _dynamicsNetwork.Train(dynIn, dynTgt);
+        _representationNetwork.Train(repIn, repTgt);
+        _rewardNetwork.Train(rewIn, rewTgt);
+        _continueNetwork.Train(contIn, contTgt);
+        T worldModelLoss = NumOps.Add(
+            NumOps.Add(_dynamicsNetwork.GetLastLoss(), _representationNetwork.GetLastLoss()),
+            NumOps.Add(_rewardNetwork.GetLastLoss(), _continueNetwork.GetLastLoss()));
+
+        // ===== Behaviour learning in imagination =====
+        // Value regresses toward the imagined discounted return; the actor is improved toward the
+        // action that increases the one-step imagined value q(z,a) = gamma * V(dynamics(z,a)) via the
+        // deterministic policy gradient (finite-difference ∇a q).
+        var valIn = new Tensor<T>([n, latentSize]);
+        var valTgt = new Tensor<T>([n, 1]);
+        var actIn = new Tensor<T>([n, latentSize]);
+        var actTgt = new Tensor<T>([n, actionDim]);
+        // Named constants for the behaviour-learning hyperparameters (no magic literals). `step` is
+        // the deterministic-policy-gradient ascent step on the imagined value; `eps`/`twoEps` are the
+        // central finite-difference interval used to estimate ∇a q(z,a).
+        const double behaviorUpdateStep = 0.05;
+        const double finiteDifferenceEpsilon = 1e-3;
+        T step = NumOps.FromDouble(behaviorUpdateStep);
+        T eps = NumOps.FromDouble(finiteDifferenceEpsilon);
+        T twoEps = NumOps.FromDouble(2 * finiteDifferenceEpsilon);
+        for (int i = 0; i < n; i++)
+        {
+            var z = latents[i];
+            T imaginedReturn = ImagineTrajectory(z);
+            for (int j = 0; j < latentSize; j++) valIn[i, j] = z[j];
+            valTgt[i, 0] = imaginedReturn;
+
+            var a = _actorNetwork.Predict(Tensor<T>.FromVector(z)).ToVector();
+            var grad = new Vector<T>(actionDim);
+            for (int k = 0; k < actionDim; k++)
+            {
+                var aPlus = a.Clone();
+                var aMinus = a.Clone();
+                aPlus[k] = NumOps.Add(a[k], eps);
+                aMinus[k] = NumOps.Subtract(a[k], eps);
+                var zPlus = _dynamicsNetwork.Predict(Tensor<T>.FromVector(ConcatenateVectors(z, aPlus))).ToVector();
+                var zMinus = _dynamicsNetwork.Predict(Tensor<T>.FromVector(ConcatenateVectors(z, aMinus))).ToVector();
+                T vPlus = _valueNetwork.Predict(Tensor<T>.FromVector(zPlus)).ToVector()[0];
+                T vMinus = _valueNetwork.Predict(Tensor<T>.FromVector(zMinus)).ToVector()[0];
+                grad[k] = NumOps.Divide(NumOps.Multiply(gamma, NumOps.Subtract(vPlus, vMinus)), twoEps);
+            }
+            for (int j = 0; j < latentSize; j++) actIn[i, j] = z[j];
+            for (int k = 0; k < actionDim; k++)
+                actTgt[i, k] = MathHelper.Clamp<T>(
+                    NumOps.Add(a[k], NumOps.Multiply(step, grad[k])),
+                    NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0));
+        }
+        _valueNetwork.Train(valIn, valTgt);
+        _actorNetwork.Train(actIn, actTgt);
+        T policyLoss = NumOps.Add(_valueNetwork.GetLastLoss(), _actorNetwork.GetLastLoss());
 
         _updateCount++;
 

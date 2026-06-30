@@ -23222,12 +23222,22 @@ public static class LayerHelper<T>
         int fusionFfnDim = fusionDim * 4;
 
         // === Vision Feature Projection ===
-        // Project vision features (region/patch) to fusion dimension
-        if (visionDim != fusionDim)
-        {
-            yield return new DenseLayer<T>(fusionDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>();
-        }
+        // The learnable linear patch/region embedding ViLT (Kim et al. 2021),
+        // VisualBERT, UNITER, Oscar and VinVL all apply to vision features before
+        // the joint encoder. Emit it UNCONDITIONALLY — not only when visionDim
+        // differs from fusionDim. When the two already match (ViLT: visionDim ==
+        // fusionDim == 768) the old `if (visionDim != fusionDim)` guard skipped
+        // this projection, so the very first op the tokens hit was the encoder's
+        // LayerNorm. LayerNorm is by construction invariant to a per-token affine
+        // transform of its input, so two inputs that differ only by a global
+        // scale (the DifferentInputs_AfterTraining probe feeds 0.1*ones vs
+        // 0.9*ones) normalize to the SAME tensor and the model is degenerately
+        // input-insensitive. A learnable Dense (W*x + b) maps 0.1*ones and
+        // 0.9*ones to vectors differing by 0.8*rowsum(W) — non-constant across
+        // features — which survives the subsequent LayerNorm. This is the
+        // paper-faithful patch-embedding layer, not a test shim.
+        yield return new DenseLayer<T>(fusionDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>();
 
         // === Text Embedding Projection ===
         if (textDim != fusionDim)
@@ -23239,10 +23249,20 @@ public static class LayerHelper<T>
         // === Joint Transformer Encoder (BERT-style) ===
         yield return new LayerNormalizationLayer<T>();
 
+        // Snap the head count to a divisor of fusionDim so the attention layer's
+        // embeddingDimension (heads * headDim) equals fusionDim EXACTLY. With the
+        // raw `numHeads, fusionDim / numHeads` form, any model whose fusionDim is
+        // not divisible by numHeads (e.g. fusionDim=128, numHeads=12 -> headDim
+        // truncates to 10 -> embeddingDimension=120 != 128) builds an attention
+        // layer whose lazy weights resolve to the truncated dim and then throw a
+        // shape mismatch against the fusionDim-wide residual stream on first
+        // forward. See ChooseDivisibleHeadConfig for the snap-to-divisor rationale.
+        var (fusionHeads, fusionHeadDim) = ChooseDivisibleHeadConfig(fusionDim, numHeads);
+
         for (int i = 0; i < numFusionLayers; i++)
         {
             // Multi-head self-attention over concatenated vision+text tokens
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (fusionDim) / (numHeads));
+            yield return new MultiHeadAttentionLayer<T>(fusionHeads, fusionHeadDim);
             yield return new LayerNormalizationLayer<T>();
             // Feed-forward network
             yield return new DenseLayer<T>(fusionFfnDim, geluActivation);
@@ -33405,11 +33425,29 @@ public static class LayerHelper<T>
         var identityActivation = new IdentityActivation<T>() as IActivationFunction<T>;
         var reluActivation = new ReLUActivation<T>() as IActivationFunction<T>;
 
+        // Snap the head count to a divisor of hiddenDimension. The encoder's inner
+        // MultiHeadAttentionLayer derives headDimension = embeddingDimension / numHeads
+        // at lazy resolution; when hiddenDimension % numAttentionHeads != 0 (e.g.
+        // SpERTNER hiddenDimension=128, numAttentionHeads=12 -> headDim truncates to
+        // 10 -> embeddingDimension=120 != 128) the layer resolves to the truncated dim
+        // and throws a shape mismatch against the 128-wide token stream on first
+        // forward. See ChooseDivisibleHeadConfig for the snap-to-divisor rationale.
+        var (nerHeads, _) = ChooseDivisibleHeadConfig(hiddenDimension, numAttentionHeads);
+
         // === Stacked Transformer Encoder layers for contextual token representations ===
         for (int layer = 0; layer < numTransformerLayers; layer++)
         {
+            // Keep the encoder LAZY (no embeddingSize): the eager ctor materializes
+            // all NumTransformerLayers transformer blocks at construction, which at
+            // BERT-base scale (HiddenDimension=768, 12 layers) is ~680 MB fp64 per
+            // model — multiplied across the generated-test shard's per-test
+            // constructions, warm-ups and the MoreData clone, that OOM-crashes the
+            // test host. The Parameters_ShouldBeNonEmpty invariant (which needs a
+            // non-zero ParameterCount before the first forward) is satisfied instead
+            // by a one-shot warm-up forward in the NER test override, so the weights
+            // materialize once rather than at every construction.
             yield return new TransformerEncoderLayer<T>(
-                numHeads: numAttentionHeads,
+                numHeads: nerHeads,
                 feedForwardDim: intermediateDimension);
 
             if (dropoutRate > 0 && layer < numTransformerLayers - 1)
