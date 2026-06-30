@@ -63,6 +63,13 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private TD3Options<T> _options;
 
+    // Actor-update hyperparameters (named rather than magic literals). ActorPolicyGradientStep is the
+    // deterministic-policy-gradient ascent step on the action; FiniteDifferenceEpsilon is the central
+    // finite-difference interval used to estimate ∇a Q1 (the critic exposes no analytic input
+    // gradient). Distinct from the actor NETWORK optimizer's learning rate.
+    private const double ActorPolicyGradientStep = 0.05;
+    private const double FiniteDifferenceEpsilon = 1e-3;
+
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
     private readonly INumericOperations<T> _numOps;
@@ -228,21 +235,112 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         var batch = _replayBuffer.Sample(effectiveBatchSize);
+        int n = batch.Count;
+        if (n == 0) return _numOps.Zero;
 
-        // Update critics and policy with tape-based training
-        T criticLoss = _numOps.Zero;
+        int stateDim = _options.StateSize;
+        int actionDim = _options.ActionSize;
+        int saDim = stateDim + actionDim;
+        T gamma = DiscountFactor;
 
-        // Delayed policy update
+        // --- Critic update (Fujimoto et al. 2018) ---
+        // Target action with policy smoothing: a' = clip(mu'(s') + clip(N(0,sigma), -c, c), -1, 1).
+        // Clipped double-Q target: y = r + gamma*(1-done)*min(Q'1(s',a'), Q'2(s',a')). Regress both
+        // critics toward y.
+        var saInputs = new Tensor<T>([n, saDim]);
+        var yTargets = new Tensor<T>([n, 1]);
+        for (int i = 0; i < n; i++)
+        {
+            var exp = batch[i];
+            // Validate replay-sample shapes before any tensor write/index: a malformed transition
+            // (wrong State/Action/NextState length) would otherwise crash tensor construction or
+            // train the twin critics on corrupted inputs.
+            if (exp.State.Length != stateDim || exp.NextState.Length != stateDim || exp.Action.Length != actionDim)
+            {
+                throw new InvalidOperationException(
+                    $"TD3 replay experience has wrong dimensions; expected State={stateDim}, " +
+                    $"NextState={stateDim}, Action={actionDim} but got State={exp.State.Length}, " +
+                    $"NextState={exp.NextState.Length}, Action={exp.Action.Length}.");
+            }
+            var nextA = _targetActorNetwork.Predict(Tensor<T>.FromVector(exp.NextState)).ToVector();
+            for (int k = 0; k < actionDim; k++)
+            {
+                T noise = MathHelper.GetNormalRandom<T>(_numOps.Zero, _numOps.FromDouble(_options.TargetPolicyNoise));
+                noise = MathHelper.Clamp<T>(noise,
+                    _numOps.FromDouble(-_options.TargetNoiseClip), _numOps.FromDouble(_options.TargetNoiseClip));
+                nextA[k] = MathHelper.Clamp<T>(_numOps.Add(nextA[k], noise),
+                    _numOps.FromDouble(-1), _numOps.FromDouble(1));
+            }
+            var nextSA = Tensor<T>.FromVector(ConcatenateStateAction(exp.NextState, nextA));
+            T q1n = _targetCritic1Network.Predict(nextSA).ToVector()[0];
+            T q2n = _targetCritic2Network.Predict(nextSA).ToVector()[0];
+            T minN = _numOps.LessThan(q1n, q2n) ? q1n : q2n;
+
+            T y = exp.Reward;
+            if (!exp.Done) y = _numOps.Add(y, _numOps.Multiply(gamma, minN));
+
+            var saVec = ConcatenateStateAction(exp.State, exp.Action);
+            for (int j = 0; j < saDim; j++) saInputs[i, j] = saVec[j];
+            yTargets[i, 0] = y;
+        }
+        _critic1Network.Train(saInputs, yTargets);
+        _critic2Network.Train(saInputs, yTargets);
+        T criticLoss = _numOps.Divide(
+            _numOps.Add(_critic1Network.GetLastLoss(), _critic2Network.GetLastLoss()), _numOps.FromDouble(2));
+
+        // --- Delayed actor update via the deterministic policy gradient ---
+        // The DPG is ∇θ J = E[∇a Q1(s,a)|a=mu(s) · ∇θ mu(s)]. We obtain ∇a Q1 by central finite
+        // differences (the critic exposes no analytic input gradient) and realise the chain rule
+        // through the network's MSE Train: regressing the actor toward the Q-ascending target
+        // a + step·∇a Q1 makes its parameters move along ∇θ mu in the gradient-ascent direction.
         if (_updateCount % _options.PolicyUpdateFrequency == 0)
         {
+            var actorInputs = new Tensor<T>([n, stateDim]);
+            var actorTargets = new Tensor<T>([n, actionDim]);
+            T step = _numOps.FromDouble(ActorPolicyGradientStep);
+            for (int i = 0; i < n; i++)
+            {
+                var s = batch[i].State;
+                var a = _actorNetwork.Predict(Tensor<T>.FromVector(s)).ToVector();
+                var g = FiniteDiffActionGradient(_critic1Network, s, a);
+                for (int j = 0; j < stateDim; j++) actorInputs[i, j] = s[j];
+                for (int k = 0; k < actionDim; k++)
+                    actorTargets[i, k] = MathHelper.Clamp<T>(
+                        _numOps.Add(a[k], _numOps.Multiply(step, g[k])),
+                        _numOps.FromDouble(-1), _numOps.FromDouble(1));
+            }
+            _actorNetwork.Train(actorInputs, actorTargets);
 
-            // Update target networks with soft updates
+            // Update target networks with soft updates (delayed, with the policy)
             SoftUpdateTargetNetworks();
         }
 
         _updateCount++;
 
         return criticLoss;
+    }
+
+    /// <summary>
+    /// Central finite-difference estimate of ∇a Q(s, a) — the action-gradient at the heart of the
+    /// deterministic policy gradient (Silver et al. 2014; Lillicrap et al. 2015). Used because the
+    /// critic network does not expose an analytic gradient w.r.t. its input.
+    /// </summary>
+    private Vector<T> FiniteDiffActionGradient(INeuralNetwork<T> critic, Vector<T> state, Vector<T> action)
+    {
+        var grad = new Vector<T>(action.Length);
+        T eps = _numOps.FromDouble(FiniteDifferenceEpsilon);
+        T twoEps = _numOps.FromDouble(2.0 * FiniteDifferenceEpsilon);
+        for (int i = 0; i < action.Length; i++)
+        {
+            var aPlus = action.Clone();
+            var aMinus = action.Clone();
+            aPlus[i] = _numOps.Add(action[i], eps);
+            aMinus[i] = _numOps.Subtract(action[i], eps);
+            T qPlus = critic.Predict(Tensor<T>.FromVector(ConcatenateStateAction(state, aPlus))).ToVector()[0];
+            T qMinus = critic.Predict(Tensor<T>.FromVector(ConcatenateStateAction(state, aMinus))).ToVector()[0];
+            grad[i] = _numOps.Divide(_numOps.Subtract(qPlus, qMinus), twoEps);
+        }
+        return grad;
     }
 
     private void SoftUpdateTargetNetworks()
