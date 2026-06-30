@@ -7,6 +7,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks.Tasks.Graph;
@@ -698,27 +699,28 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
             layer.SetTrainingMode(true);
         }
 
-        var predictions = Forward(input);
-
-        var flattenedPredictions = predictions.ToVector();
-        var flattenedExpected = expectedOutput.ToVector();
-
-        LastLoss = _lossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
-
-        var outputGradients = _lossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
-        var gradOutput = Tensor<T>.FromVector(outputGradients);
-
-        if (gradOutput.Shape.Length == 1 && predictions.Shape.Length > 1)
+        // ILayer.Backward was removed in favour of GradientTape autodiff. The previous code computed a
+        // loss derivative but NEVER ran a backward pass — it read GetParameterGradients() (stale zeros)
+        // straight away — so the optimizer applied a zero step and training was a silent no-op ("No
+        // parameters changed after training — gradients may all be zero"). Record the GNN forward
+        // (edge scores) and the binary-cross-entropy loss on the tape, compute real gradients for every
+        // trainable parameter, then drive the update through the model's configured optimizer
+        // (default Adam) so the loss actually converges.
+        var tapeLoss = _lossFunction as LossFunctionBase<T> ?? new BinaryCrossEntropyLoss<T>();
+        using (var tape = new GradientTape<T>())
         {
-            gradOutput = gradOutput.Reshape(predictions._shape);
+            var predictions = Forward(input);
+            var lossTensor = tapeLoss.ComputeTapeLoss(predictions, expectedOutput);
+            var trainableParameters = Training.TapeTrainingStep<T>.CollectParameters(Layers, LayerStructureVersion);
+            if (trainableParameters.Count > 0)
+            {
+                var gradients = tape.ComputeGradients(lossTensor, trainableParameters);
+                T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+                var context = new TapeStepContext<T>(trainableParameters, gradients, lossValue);
+                _optimizer.Step(context);
+                LastLoss = lossValue;
+            }
         }
-
-
-        Vector<T> parameterGradients = GetParameterGradients();
-        Vector<T> currentParameters = GetParameters();
-        Vector<T> updatedParameters = _optimizer.UpdateParameters(currentParameters, parameterGradients);
-
-        UpdateParameters(updatedParameters);
     }
 
     /// <summary>

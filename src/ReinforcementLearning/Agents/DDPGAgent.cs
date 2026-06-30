@@ -221,12 +221,20 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         _steps++;
         TrainingSteps++;
 
-        if (_steps < _options.WarmupSteps || !_replayBuffer.CanSample(_options.BatchSize))
+        // A supervised one-shot Train(state, target) call bypasses the autonomous-exploration warmup
+        // and trains on the samples gathered so far (clamped to the buffer); autonomous stepping still
+        // respects warmup.
+        int effectiveBatchSize = SupervisedUpdateRequested
+            ? System.Math.Min(_options.BatchSize, _replayBuffer.Count)
+            : _options.BatchSize;
+        if ((!SupervisedUpdateRequested && _steps < _options.WarmupSteps)
+            || effectiveBatchSize <= 0
+            || !_replayBuffer.CanSample(effectiveBatchSize))
         {
             return NumOps.Zero;
         }
 
-        var batch = _replayBuffer.Sample(_options.BatchSize);
+        var batch = _replayBuffer.Sample(effectiveBatchSize);
 
         // Update critic and actor with tape-based training
         T criticLoss = NumOps.Zero;

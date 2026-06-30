@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tests.ModelFamilyTests.Base;
 using AiDotNet.VisionLanguage.InstructionTuned;
+using Xunit;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
@@ -29,9 +30,25 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 // ~4.7 TFLOP; in double on CPU that exceeds the 120s test budget even though the
 // underlying layers already use optimal fused GEMM/SDPA kernels. The paper itself
 // runs in fp16/bf16, never double, so float is both faster and more paper-faithful.
-[Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4): serialized so its forward gets the whole machine
+// #1706: Phi-3-Vision is a ~3.9B foundation VLM. Even in float with whole-machine cores
+// (FoundationScaleSerial), the Train-based and generation tests (Metadata_ShouldExist,
+// ImageOnly_ShouldProduceOutput) run a full forward+backward / multi-token generation that is
+// inherently >120s under the suite's single-threaded determinism BLAS — not a regression and not
+// shrinkable (never-shrink rule, see <remarks>). Tag HeavyTimeout so the class is excluded from the
+// default gate and runs full-fidelity in the nightly heavy lane (deferred, not skipped — it
+// graduates back once the 3.9B forward is fast enough). The separate WeightRegistry-leak failures
+// (ForwardPass/ScaledInput/Clone) are fixed by ResetsWeightStreamingBetweenTests below, so the
+// nightly lane no longer sees the spurious "existing streaming pool has N registered entries".
+[Trait("Category", "HeavyTimeout")]
+[Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4): serialized so its forward gets the whole machine
 public class Phi3VisionTests : VisionLanguageTestBase<float>
 {
+    // Phi3Vision auto-enables weight streaming (foundation-scale), registering its weights with the
+    // process-global WeightRegistry. Reset that registry between tests so the next Phi3Vision ctor
+    // doesn't fail on leftover entries (#1706). Safe: the FoundationScaleSerial collection disables
+    // parallelization, so nothing else runs concurrently with the reset.
+    protected override bool ResetsWeightStreamingBetweenTests => true;
+
     // Paper-faithful image size (336×336 RGB per Phi-3-Vision §3 and
     // Phi3VisionOptions.ImageSize). VisionLanguageModelBase's contract
     // is [batch, channels=3, height, width].

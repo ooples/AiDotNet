@@ -148,10 +148,13 @@ public class Flux2SchnellModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new Flux2SchnellModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
-        // #1624: O(1)-until-write copy-on-write parameter share (avoids the full-model flatten copy that
-        // OOMs the 16 GB runner). Falls back to the flat copy if the structure doesn't match 1:1.
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
+        // #1711: delegate to predictor/VAE Clone (probe-forward + copy); DiT LazyDense weights resolve
+        // via the FORWARD path so a model-level SetParameters(GetParameters()) clone re-RNG-initialized.
+        var clone = new Flux2SchnellModel<T>(
+            conditioner: _conditioner,
+            predictor: (FluxDoubleStreamPredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            seed: RandomGenerator.Next());
         return clone;
     }
 

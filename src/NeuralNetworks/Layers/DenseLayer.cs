@@ -483,32 +483,44 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
             // Streaming-aware allocation: when the parent network has
             // engaged streaming, route through WeightRegistry.AllocateStreaming
-            // so the pool can pre-evict competing weights to disk before
-            // this allocation hits the GC heap. Otherwise allocate from the
-            // arena's PINNED tier (#1643): these weights are long-lived, but
-            // lazy materialization can run inside a training step's active
-            // TensorArena (the first forward). The old TensorAllocator.Rent
-            // path handed out RECYCLABLE scratch that Reset() reissues as
-            // transient activations on the next step — silently corrupting the
-            // weights (eval Predict became non-deterministic, weights drifted).
-            // RentPinned lands in the pinned tier that survives Reset, and
-            // degrades to a plain heap Tensor<T> when no arena is active.
+            // so the pool can pre-evict competing weights to disk before this
+            // allocation hits the GC heap. Otherwise allocate on the plain GC
+            // heap (AllocateLazyWeight's default `new Tensor<T>(shape)`).
+            //
+            // These weights are long-lived model parameters, but lazy
+            // materialization can run inside an active TensorArena (the first
+            // forward of a training step OR a diffusion denoise loop). Two
+            // earlier attempts routed weights through the arena and were both
+            // incomplete: TensorAllocator.Rent handed out scratch that the
+            // per-step Reset() reissued as transient activations (#1643), then
+            // TensorAllocator.RentPinned moved them to the pinned tier that
+            // survives Reset(). But RentPinned does NOT survive the arena's
+            // DISPOSE: across two separate Predict calls, each Generate creates
+            // and disposes its OWN denoise arena, the disposed arena's pinned
+            // buffers return to the shared pool, and the next Predict's arena
+            // reissues them as scratch — aliasing these still-referenced weights
+            // and corrupting them (#1711: eval Predict was non-deterministic —
+            // first call sane, second call garbage; HiDream/SD3-class MMDiT and
+            // any lazy DenseLayer in a per-step-Reset denoise loop). GC-heap
+            // weights are owned by the layer and never recycled by any arena, so
+            // they are correct by construction and survive both Reset AND
+            // Dispose. This matches AttentionLayer's Q/K/V/O weights, which
+            // already use the plain (no-arena-factory) AllocateLazyWeight.
             int[] wShape = [inputSize, outputSize];
             int[] bShape = [outputSize];
-            // fp16-resident eval: allocate the fp32 weights on the plain GC heap (not the arena PINNED
-            // tier) so that, immediately after this forward downcasts them to _weightsHalf, dropping the
-            // fp32 reference actually lets the GC reclaim it. Arena-pinned buffers survive Reset and
-            // would never free, so the fp32 masters would accumulate to the full model → OOM (the bug
-            // the per-block attempt hit). Biases stay tiny so their allocation tier doesn't matter.
+            // fp16-resident eval: allocate the fp32 weights on the plain GC heap so that, immediately
+            // after this forward downcasts them to _weightsHalf, dropping the fp32 reference actually
+            // lets the GC reclaim it (AllocateLazyWeight would still GC-allocate when streaming is off,
+            // but bypass it here so the fp32 master is never registered with the streaming pool).
             if (LowPrecisionResident)
             {
                 _weights = new Tensor<T>(wShape);
             }
             else
             {
-                _weights = AllocateLazyWeight(wShape, () => TensorAllocator.RentPinned<T>(wShape));
+                _weights = AllocateLazyWeight(wShape);
             }
-            _biases = AllocateLazyWeight(bShape, () => TensorAllocator.RentPinned<T>(bShape));
+            _biases = AllocateLazyWeight(bShape);
 
             // Initialize using strategy or default. Skip strategies that only
             // advertise the LAZY deferral contract (IsLazy): their InitializeWeights
@@ -1273,7 +1285,15 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         int existingInputSize = _weights.Shape[0];
         int outputSize = _weights.Shape[1];
-        var resizedWeights = TensorAllocator.Rent<T>([actualInputSize, outputSize]);
+        // GC-heap, NOT TensorAllocator.Rent (#1711): the resized tensor is assigned to _weights
+        // below — it is the layer's persistent parameter, not transient scratch. A lazily-sized
+        // Dense whose first forward widens its input (e.g. MMDiT's _timeEmbed1, declared at
+        // _hiddenSize but fed a TimeEmbeddingDim-wide sinusoidal embedding) lands here on the first
+        // forward. The first forward of a diffusion denoise loop runs inside the per-step TensorArena,
+        // so an arena-rented resize would be reissued as scratch on the next Reset()/Dispose and
+        // corrupt the weights — eval Predict became non-deterministic (call #1 sane, call #2 garbage).
+        // Mirrors the EnsureInitialized GC-heap allocation; arena recycling must never own weights.
+        var resizedWeights = new Tensor<T>([actualInputSize, outputSize]);
 
         int sharedInputSize = Math.Min(existingInputSize, actualInputSize);
         for (int i = 0; i < sharedInputSize; i++)

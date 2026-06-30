@@ -202,10 +202,10 @@
          soft-defer (#692), conv implicit-GEMM (#690), diffusion CUDA-graph + FP16 (#671/#680), the
          0.104.x GEMM JIT/routing/pinning wins (#700), and parallel SSM/linear-attention scans (#703).
          Ships lib/net8.0 + net10.0 + net471; native packages coreleased in lockstep at 0.104.6. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.104.6" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.104.6" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.104.6" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.104.6" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.105.0" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.105.0" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.105.0" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.105.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.9" />

@@ -604,7 +604,12 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
     private Tensor<T> CreateSinusoidalPositionEmbedding(int numPatches)
     {
-        var posEmbed = TensorAllocator.Rent<T>(new[] { 1, numPatches, _hiddenSize });
+        // GC-owned (NOT TensorAllocator.Rent): _posEmbed is cached across forwards (see AddPositionEmbedding)
+        // and must survive the diffusion denoise loop's per-step arena Reset(), which recycles arena-rented
+        // scratch. Renting it here aliased recycled scratch, so the cached posEmbed was corrupted between
+        // steps -> garbage added to every token -> non-deterministic Predict (the StableDiffusion3
+        // Predict_ShouldBeDeterministic / clone failures). A long-lived cache must be plain GC-owned.
+        var posEmbed = new Tensor<T>(new[] { 1, numPatches, _hiddenSize });
         var span = posEmbed.AsWritableSpan();
 
         for (int pos = 0; pos < numPatches; pos++)
@@ -1052,52 +1057,43 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        var allParams = new List<T>();
+        // Pre-size and write each layer's parameters in place — mirrors DiTNoisePredictor.GetParameters.
+        // The old List<T> + ToArray() + new Vector<T>(IEnumerable) (which calls ToArray AGAIN) held up to
+        // 3× the flat parameter size in transient copies and OOM'd CI test hosts at MMDiT/EMMDiT scale
+        // (#1715: a 12-block × 1024-hidden EMMDiT is ~450 M params ≈ 3.6 GB as doubles, so the triple-copy
+        // peaked near 11 GB and OOM'd the 16 GB runner once two predictors were resident). Iterating
+        // MMDiTLayerSequence — the SAME sequence GetParameterChunks walks — keeps the flat vector and the
+        // chunk concatenation index-identical BY CONSTRUCTION (no parallel hand-maintained layer list to
+        // drift out of order).
+        long count = ParameterCount;
+        if (count > int.MaxValue)
+            throw new InvalidOperationException(
+                $"MMDiTNoisePredictor.GetParameters: {count} parameters overflow a flat Vector<T> " +
+                "(int-indexed). Use GetParameterChunks for foundation-scale (>2.1B-param) predictors.");
 
-        AddLayerParams(allParams, _patchEmbed);
-        AddLayerParams(allParams, _timeEmbed1);
-        AddLayerParams(allParams, _timeEmbed2);
-        AddLayerParams(allParams, _contextProj);
+        var result = new Vector<T>((int)count);
+        int offset = 0;
+        foreach (var layer in MMDiTLayerSequence())
+            WriteLayerParams(result, ref offset, layer);
 
-        foreach (var block in _jointBlocks)
-        {
-            AddLayerParams(allParams, block.ImageNorm1);
-            AddLayerParams(allParams, block.ImageQProj);
-            AddLayerParams(allParams, block.ImageKProj);
-            AddLayerParams(allParams, block.ImageVProj);
-            AddLayerParams(allParams, block.ImageOutProj);
-            AddLayerParams(allParams, block.ImageNorm2);
-            AddLayerParams(allParams, block.ImageMLP1);
-            AddLayerParams(allParams, block.ImageMLP2);
-            AddLayerParams(allParams, block.ImageAdaLN);
-            AddLayerParams(allParams, block.TextNorm1);
-            AddLayerParams(allParams, block.TextQProj);
-            AddLayerParams(allParams, block.TextKProj);
-            AddLayerParams(allParams, block.TextVProj);
-            AddLayerParams(allParams, block.TextOutProj);
-            AddLayerParams(allParams, block.TextNorm2);
-            AddLayerParams(allParams, block.TextMLP1);
-            AddLayerParams(allParams, block.TextMLP2);
-            AddLayerParams(allParams, block.TextAdaLN);
-        }
+        if (offset != (int)count)
+            throw new InvalidOperationException(
+                $"MMDiTNoisePredictor.GetParameters wrote {offset} elements but ParameterCount reported " +
+                $"{count} — a layer's GetParameters().Length disagreed with its ParameterCount (likely a " +
+                "lazy layer that materialized weights between the count and the write).");
+        return result;
+    }
 
-        foreach (var block in _singleBlocks)
-        {
-            AddLayerParams(allParams, block.Norm);
-            AddLayerParams(allParams, block.QProj);
-            AddLayerParams(allParams, block.KProj);
-            AddLayerParams(allParams, block.VProj);
-            AddLayerParams(allParams, block.OutProj);
-            AddLayerParams(allParams, block.MLP1);
-            AddLayerParams(allParams, block.MLP2);
-            AddLayerParams(allParams, block.AdaLN);
-        }
-
-        AddLayerParams(allParams, _finalNorm);
-        AddLayerParams(allParams, _adalnModulation);
-        AddLayerParams(allParams, _outputProj);
-
-        return new Vector<T>(allParams.ToArray());
+    private static void WriteLayerParams(Vector<T> dst, ref int offset, ILayer<T> layer)
+    {
+        var p = layer.GetParameters();
+        if (offset + p.Length > dst.Length)
+            throw new InvalidOperationException(
+                $"WriteLayerParams overflow at layer {layer.GetType().Name}: offset={offset}, " +
+                $"p.Length={p.Length}, buffer.Length={dst.Length}. ParameterCount under-counted this layer.");
+        for (int i = 0; i < p.Length; i++)
+            dst[offset + i] = p[i];
+        offset += p.Length;
     }
 
     /// <inheritdoc />
@@ -1210,6 +1206,13 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override IEnumerable<Tensor<T>> GetParameterChunks()
     {
+        // Foundation-scale (#1715): engage weight streaming before materializing — at FLUX/MMDiT scale
+        // (billions of params) the per-layer MaterializeParameters below otherwise routes to
+        // TensorAllocator.RentPinned and accumulates the full ~25 GB weight set in the pinned heap → OOM.
+        // Streaming flags the layers so AllocateLazyWeight pre-evicts to disk (bounded resident set).
+        // No-op below the param-count/memory threshold, so smaller MMDiT predictors stay resident.
+        MaybeEngageWeightStreaming(fullPrecisionStore: true);
+
         // #1624 zero-copy: materialize each layer's lazy weights, then yield its resident trainable
         // tensors BY REFERENCE — one chunk per tensor, in canonical MMDiTLayerSequence × GetTrainable
         // order — instead of concatenating each layer's params into a transient multi-GB Vector<T>
@@ -1227,6 +1230,9 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
     {
+        // Foundation-scale (#1715): engage streaming before materializing weights — see GetParameterChunks.
+        MaybeEngageWeightStreaming(fullPrecisionStore: true);
+
         using var e = chunks.GetEnumerator();
         foreach (var layer in MMDiTLayerSequence())
         {
@@ -1255,15 +1261,6 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
             throw new System.ArgumentException(
                 "SetParameterChunks received more chunks than MMDiT has parameter tensors.",
                 nameof(chunks));
-    }
-
-    private void AddLayerParams(List<T> allParams, ILayer<T> layer)
-    {
-        var p = layer.GetParameters();
-        for (int i = 0; i < p.Length; i++)
-        {
-            allParams.Add(p[i]);
-        }
     }
 
     private int SetLayerParams(ILayer<T> layer, Vector<T> parameters, int offset)
@@ -1295,37 +1292,48 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
             contextDim: _contextDim,
             mlpRatio: _mlpRatio);
 
-        // The LazyDense weights resolve+allocate through the FORWARD path
-        // (EnsureInitializedFromInput) — a different entry than the SetParameters/GetParameters
-        // path (EnsureInitialized). Copying parameters into a clone whose layers were never
-        // forwarded leaves its first real forward to re-resolve and RNG-initialize along the
-        // forward path, discarding the copied values and diverging from the source. Run one
-        // throwaway forward to materialize the clone through the same path the source used,
-        // THEN copy the source's weights so they persist. Gated on the source having been
-        // forwarded (a never-forwarded foundation-scale model has nothing materialized to copy
-        // and must not pay a full forward here).
-        if (_patchEmbed.IsInitialized)
-        {
-            int probeSpatial = _patchSize * 2;
-            var probe = new Tensor<T>(new[] { 1, _inputChannels, probeSpatial, probeSpatial });
-            // A null-conditioned probe only materializes the unconditional (image-stream) path.
-            // When the source ran conditioned forwards its context projection (_contextProj) and
-            // text-stream block layers are materialized, so probe the clone WITH a representative
-            // text-conditioning tensor — otherwise those layers stay lazy on the clone and re-init
-            // with fresh RNG on the first conditioned forward, diverging from the source.
-            Tensor<T>? probeConditioning = _contextProj.IsInitialized
-                ? new Tensor<T>(new[] { 1, 1, _contextDim })
-                : null;
-            clone.PredictNoise(probe, timestep: 0, conditioning: probeConditioning);
-            // Layer-by-layer copy: each layer's GetParameters/SetParameters works on its own small
-            // vector, so cloning never materializes one contiguous foundation-scale parameter vector
-            // (the flat List<T> -> ToArray() path in GetParameters that OOMs at SD3/FLUX scale).
-            clone.CopyParametersFrom(this);
-            // The probe forward traced a compiled plan over the clone's random init; drop it so
-            // the next real forward re-traces against the copied weights.
-            clone.InvalidateCompiledPlans();
-        }
+        ProbeMaterializeAndCopyInto(clone);
         return clone;
+    }
+
+    /// <summary>
+    /// Materializes <paramref name="clone"/> through one throwaway probe forward (the same path the
+    /// source's weights resolved on) and then copies this predictor's weights into it.
+    /// </summary>
+    /// <remarks>
+    /// The LazyDense weights resolve+allocate through the FORWARD path (EnsureInitializedFromInput)
+    /// — a different entry than the SetParameters/GetParameters path (EnsureInitialized). Copying
+    /// parameters into a clone whose layers were never forwarded leaves its first real forward to
+    /// re-resolve and RNG-initialize along the forward path, discarding the copied values and
+    /// diverging from the source (the #1706 HiDream/MMDiTX Clone_ShouldProduceIdenticalOutput
+    /// failure). Run one throwaway forward to materialize the clone through the same path the source
+    /// used, THEN copy the source's weights so they persist. Shared by the base <see cref="Clone"/>
+    /// and the <c>MMDiTXNoisePredictor</c> override so both materialize-then-copy rather than copy
+    /// onto unmaterialized layers. Gated on the source having been forwarded (a never-forwarded
+    /// foundation-scale model has nothing materialized to copy and must not pay a full forward here).
+    /// </remarks>
+    protected void ProbeMaterializeAndCopyInto(MMDiTNoisePredictor<T> clone)
+    {
+        if (!_patchEmbed.IsInitialized) return;
+
+        int probeSpatial = _patchSize * 2;
+        var probe = new Tensor<T>(new[] { 1, _inputChannels, probeSpatial, probeSpatial });
+        // A null-conditioned probe only materializes the unconditional (image-stream) path.
+        // When the source ran conditioned forwards its context projection (_contextProj) and
+        // text-stream block layers are materialized, so probe the clone WITH a representative
+        // text-conditioning tensor — otherwise those layers stay lazy on the clone and re-init
+        // with fresh RNG on the first conditioned forward, diverging from the source.
+        Tensor<T>? probeConditioning = _contextProj.IsInitialized
+            ? new Tensor<T>(new[] { 1, 1, _contextDim })
+            : null;
+        clone.PredictNoise(probe, timestep: 0, conditioning: probeConditioning);
+        // Layer-by-layer copy: each layer's GetParameters/SetParameters works on its own small
+        // vector, so cloning never materializes one contiguous foundation-scale parameter vector
+        // (the flat List<T> -> ToArray() path in GetParameters that OOMs at SD3/FLUX scale).
+        clone.CopyParametersFrom(this);
+        // The probe forward traced a compiled plan over the clone's random init; drop it so
+        // the next real forward re-traces against the copied weights.
+        clone.InvalidateCompiledPlans();
     }
 
     /// <summary>

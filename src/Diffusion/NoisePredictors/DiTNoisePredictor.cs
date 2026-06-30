@@ -787,7 +787,10 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> CreatePositionEmbedding(int numPatches)
     {
-        var posEmbed = TensorAllocator.Rent<T>(new[] { 1, numPatches, _hiddenSize });
+        // GC-owned (NOT TensorAllocator.Rent): _posEmbed is cached across forwards and must survive the
+        // diffusion denoise loop's per-step arena Reset(), which recycles arena-rented scratch. Renting it
+        // aliased recycled scratch -> the cached posEmbed corrupted between steps -> non-deterministic Predict.
+        var posEmbed = new Tensor<T>(new[] { 1, numPatches, _hiddenSize });
         var span = posEmbed.AsWritableSpan();
 
         for (int pos = 0; pos < numPatches; pos++)
@@ -1318,11 +1321,15 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
 
     private IEnumerable<ILayer<T>?> EnumerateAllLayers()
     {
+        // ORDER IS LOAD-BEARING: GetParameterChunks/SetParameterChunks walk this sequence, so it MUST
+        // match GetParameters/SetParameters element-for-element (PredictorParameterStreamingTests'
+        // *_Chunks_IndexIdentical contract). The model-level _adaln_modulation is serialized near the
+        // END (after _finalNorm, before _outputProj) by GetParameters/SetParameters — emit it there,
+        // NOT after _labelEmbed, or the chunk concatenation desyncs from the flat vector.
         yield return _patchEmbed;
         yield return _timeEmbed1;
         yield return _timeEmbed2;
         yield return _labelEmbed;
-        yield return _adaln_modulation;
         foreach (var block in _blocks)
         {
             yield return block.Norm1;
@@ -1338,6 +1345,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             yield return block.CrossAttnOut;
         }
         yield return _finalNorm;
+        yield return _adaln_modulation;
         yield return _outputProj;
     }
 
@@ -1429,38 +1437,48 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             mlpRatio: _mlpRatio,
             latentSpatialSize: _latentSpatialSize);
 
-        // Preserve trained/materialized weights without forcing a foundation-scale default
-        // constructor to allocate and copy billions of random parameters (HasMaterializedParameters
-        // gates the copy to a source that genuinely has allocated weights).
-        //
-        // The DiT's projection layers are LazyDense — they only ALLOCATE their weight tensors on
-        // the first forward, not in EnsureLayersInitialized. A fresh clone therefore has the layer
-        // STRUCTURE but unallocated weights, so CopyParametersFrom alone has nothing to copy INTO;
-        // the clone would re-initialize those tensors with a fresh RNG on its first real forward
-        // and diverge from the source (observed: ~50k fewer materialized params, divergent Predict).
-        // Run one throwaway forward at the canonical input shape to materialize EVERY weight tensor
-        // on the clone first (weight dims are fixed by config, so the probe's spatial size is
-        // irrelevant), then copy the source's trained values. The probe must materialize exactly the
-        // paths the source has materialized so CopyParametersFrom finds a target for every source
-        // weight. A null-conditioned probe only touches the unconditional path, so if the source was
-        // used WITH conditioning its class-embedding (_labelEmbed) and/or cross-attention K/V/Out
-        // projections are materialized — leaving the clone's equivalents lazy would let them re-init
-        // with fresh RNG on the first conditioned forward and diverge from the source.
-        // BuildProbeConditioning returns representative conditioning whenever a conditioned path is
-        // materialized on the source (and null otherwise, keeping those layers lazy on both).
-        if (HasMaterializedParameters())
-        {
-            var probe = new Tensor<T>(new[] { 1, _inputChannels, _latentSpatialSize, _latentSpatialSize });
-            clone.PredictNoise(probe, timestep: 0, conditioning: BuildProbeConditioning());
-            clone.CopyParametersFrom(this);
-            // The probe forward traced a compiled plan over the clone's random init; drop it so
-            // the next real forward re-traces against the copied weights.
-            clone.InvalidateCompiledPlans();
-        }
-        // else: source has no materialized weights — nothing to copy. The clone shares the same
-        // config and initializes lazily on first use; calling GetParameters() here would allocate
-        // the full (foundation-scale) parameter vector for nothing.
+        ProbeMaterializeAndCopyInto(clone);
         return clone;
+    }
+
+    /// <summary>
+    /// Materializes <paramref name="clone"/> through the FORWARD path and copies this predictor's
+    /// trained weights into it. Shared by <see cref="Clone"/> and every derived predictor's
+    /// <c>Clone</c> (e.g. <c>SiTPredictor</c>) so they all get the correct clone semantics.
+    /// </summary>
+    /// <remarks>
+    /// Preserve trained/materialized weights without forcing a foundation-scale default
+    /// constructor to allocate and copy billions of random parameters (HasMaterializedParameters
+    /// gates the copy to a source that genuinely has allocated weights).
+    /// <para>
+    /// The DiT's projection layers are LazyDense — they only ALLOCATE their weight tensors on
+    /// the first forward, not in EnsureLayersInitialized. A fresh clone therefore has the layer
+    /// STRUCTURE but unallocated weights, so CopyParametersFrom alone has nothing to copy INTO;
+    /// the clone would re-initialize those tensors with a fresh RNG on its first real forward
+    /// and diverge from the source (observed: ~50k fewer materialized params, divergent Predict).
+    /// Run one throwaway forward at the canonical input shape to materialize EVERY weight tensor
+    /// on the clone first (weight dims are fixed by config, so the probe's spatial size is
+    /// irrelevant), then copy the source's trained values. The probe must materialize exactly the
+    /// paths the source has materialized so CopyParametersFrom finds a target for every source
+    /// weight. A null-conditioned probe only touches the unconditional path, so if the source was
+    /// used WITH conditioning its class-embedding (_labelEmbed) and/or cross-attention K/V/Out
+    /// projections are materialized — leaving the clone's equivalents lazy would let them re-init
+    /// with fresh RNG on the first conditioned forward and diverge from the source.
+    /// BuildProbeConditioning returns representative conditioning whenever a conditioned path is
+    /// materialized on the source (and null otherwise, keeping those layers lazy on both).
+    /// </para>
+    /// </remarks>
+    protected void ProbeMaterializeAndCopyInto(DiTNoisePredictor<T> clone)
+    {
+        Guard.NotNull(clone);
+        if (!HasMaterializedParameters()) return;
+
+        var probe = new Tensor<T>(new[] { 1, _inputChannels, _latentSpatialSize, _latentSpatialSize });
+        clone.PredictNoise(probe, timestep: 0, conditioning: BuildProbeConditioning());
+        clone.CopyParametersFrom(this);
+        // The probe forward traced a compiled plan over the clone's random init; drop it so
+        // the next real forward re-traces against the copied weights.
+        clone.InvalidateCompiledPlans();
     }
 
     /// <summary>
@@ -1523,12 +1541,52 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     public override IEnumerable<Tensor<T>> GetParameterChunks()
     {
+        // #1715: engage full-precision weight streaming before initializing/iterating so foundation-scale
+        // DiT predictors (e.g. SiT) route their weight allocation through the streaming pool (bounded
+        // resident set + lossless write-back) instead of accumulating the full set via RentPinned → OOM.
+        // No-op below the param-count/memory threshold; full-precision so the round-trip is exact.
+        MaybeEngageWeightStreaming(fullPrecisionStore: true);
         EnsureLayersInitialized();
 
         foreach (var layer in EnumerateAllLayers())
         {
             foreach (var parameter in EnumerateMaterializedParameters(layer))
                 yield return parameter;
+        }
+    }
+
+    /// <summary>
+    /// #1715: per-tensor counterpart to <see cref="GetParameterChunks"/> — copies each incoming chunk
+    /// IN PLACE into the corresponding resident weight, in the same EnumerateAllLayers ×
+    /// EnumerateMaterializedParameters order, instead of the base implementation that buffers every
+    /// chunk into one flat list + Vector (which re-materializes the whole foundation-scale weight set
+    /// at once → OOM). Engages full-precision streaming first so the writes round-trip losslessly and
+    /// the resident set stays bounded.
+    /// </summary>
+    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
+        MaybeEngageWeightStreaming(fullPrecisionStore: true);
+        EnsureLayersInitialized();
+
+        using var e = chunks.GetEnumerator();
+        foreach (var layer in EnumerateAllLayers())
+        {
+            foreach (var dst in EnumerateMaterializedParameters(layer))
+            {
+                if (!e.MoveNext())
+                    throw new System.ArgumentException(
+                        "SetParameterChunks received fewer chunks than the predictor has parameter tensors.",
+                        nameof(chunks));
+                var src = e.Current;
+                if (src is null)
+                    throw new System.ArgumentException("SetParameterChunks received a null chunk.", nameof(chunks));
+                if (src.Length != dst.Length)
+                    throw new System.ArgumentException(
+                        $"SetParameterChunks chunk length {src.Length} does not match parameter length {dst.Length}.",
+                        nameof(chunks));
+                src.Data.Span.CopyTo(dst.Data.Span); // in place — no rebinding, no flat aggregate
+            }
         }
     }
 

@@ -490,6 +490,15 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// </summary>
     public virtual IEnumerable<Tensor<T>> GetParameterChunks()
     {
+        // Foundation-scale (#1715): the param-materialization path must engage weight streaming just
+        // like the forward path (BeginWeightStreamingForward), otherwise materializing every layer's
+        // lazy weights here routes through TensorAllocator.RentPinned and accumulates the full weight
+        // set in the pinned heap → OOM for billion-parameter predictors (Flux2/SiT). Engaging streaming
+        // flags the layers so AllocateLazyWeight routes to WeightRegistry.AllocateStreaming, which
+        // pre-evicts competing weights to disk and keeps the resident set bounded. No-op below the
+        // param-count/memory threshold, so tractable predictors stay fully resident.
+        MaybeEngageWeightStreaming(fullPrecisionStore: true);
+
         // Default: single chunk wrapping GetParameters(). Concrete predictors
         // with tractable per-block weight stores SHOULD override to yield
         // per-tensor chunks so foundation-scale models avoid materialising a
@@ -516,6 +525,9 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         // to touch a disposed predictor's layer graph.
         ThrowIfDisposed();
         if (chunks is null) throw new ArgumentNullException(nameof(chunks));
+
+        // Foundation-scale (#1715): engage streaming before materializing weights — see GetParameterChunks.
+        MaybeEngageWeightStreaming(fullPrecisionStore: true);
 
         var buffered = new List<Tensor<T>>();
         long total = 0;
@@ -684,7 +696,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// empty registry.
     /// </para>
     /// </summary>
-    protected void MaybeEngageWeightStreaming()
+    protected void MaybeEngageWeightStreaming(bool fullPrecisionStore = false)
     {
         if (System.Threading.Volatile.Read(ref _streamingEngaged) != 0) return;
 
@@ -726,6 +738,14 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         {
             StreamingPoolMaxResidentBytes = StreamingResidentCapOverride ?? ComputeResidentCapBytes(),
             TransparentAutoEviction = true,
+            // #1715: the parameter-IO path (GetParameters round-trip / Clone) MUTATES rehydrated weights
+            // and reads them back, so the store must be lossless full-precision — bf16 (the inference
+            // default) would round-trip lossily and the eviction write-back (native-only) would skip,
+            // losing the mutation. The forward path leaves this Auto (bf16 in inference is fine; weights
+            // are read-only there).
+            StreamingStoreDtype = fullPrecisionStore
+                ? AiDotNet.Tensors.LinearAlgebra.StreamingStoreDtype.FullPrecision
+                : AiDotNet.Tensors.LinearAlgebra.StreamingStoreDtype.Auto,
         };
         try
         {

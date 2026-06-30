@@ -141,8 +141,14 @@ public class SiDDiTModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new SiDDiTModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
+        // #1711: delegate to the predictor's/VAE's own Clone (probe-forward + copy). The DiT/SiT
+        // LazyDense weights resolve via the FORWARD path, so the model-level
+        // SetParameters(GetParameters()) clone re-RNG-initialized them on first forward and diverged.
+        var clone = new SiDDiTModel<T>(
+            conditioner: _conditioner,
+            predictor: (SiTPredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            seed: RandomGenerator.Next());
         return clone;
     }
 

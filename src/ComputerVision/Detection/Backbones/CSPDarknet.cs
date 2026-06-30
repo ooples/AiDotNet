@@ -141,14 +141,17 @@ public class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
                 $"CSPDarknet expects a [C,H,W] or [N,C,H,W] image tensor, but got rank-{input.Shape.Length} " +
                 $"[{string.Join(",", input.Shape.ToArray())}].", nameof(input));
 
+        // Keys are prefixed with a zero-padded forward-depth index so a consumer that sorts by key
+        // (AiModelResult treats the lexicographically-highest key as the final/deepest activation)
+        // reads the deepest CSP stage, not the stem. Plain "Stem"/"Stage{i}" sorted "Stem" last.
         var activations = new Dictionary<string, Tensor<T>>();
         var x = _stem.Forward(input);
         x = _activation.Activate(x);
-        activations["Stem"] = x.Clone();
+        activations["Layer_00_Stem"] = x.Clone();
         for (int i = 0; i < _stages.Count; i++)
         {
             x = _stages[i].Forward(x);
-            activations[$"Stage{i + 1}"] = x.Clone();
+            activations[$"Layer_{i + 1:D2}_Stage{i + 1}"] = x.Clone();
         }
         return activations;
     }

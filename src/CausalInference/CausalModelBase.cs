@@ -477,6 +477,43 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     }
 
     /// <summary>
+    /// Reconciles a Predict-time feature matrix with the [treatment | covariates] layout that
+    /// <see cref="Train(Matrix{T}, Vector{T})"/> consumes. Models fit through Train drop column 0
+    /// (the treatment indicator) before learning, so a later Predict handed the same matrix must
+    /// drop it too — otherwise the covariate count no longer matches the fitted parameters (the
+    /// #1713 InverseProbabilityWeighting coefficient-overrun). If <paramref name="input"/> already
+    /// has <see cref="NumFeatures"/> columns it is returned unchanged, so the covariate-only API
+    /// surface (e.g. EstimatePropensityScores called directly) keeps working.
+    /// </summary>
+    protected Matrix<T> ExtractCovariates(Matrix<T> input)
+    {
+        if (input.Columns == NumFeatures)
+        {
+            return input;
+        }
+
+        if (input.Columns == NumFeatures + 1)
+        {
+            int n = input.Rows;
+            var covariates = new Matrix<T>(n, NumFeatures);
+            for (int i = 0; i < n; i++)
+            {
+                for (int j = 0; j < NumFeatures; j++)
+                {
+                    covariates[i, j] = input[i, j + 1];
+                }
+            }
+            return covariates;
+        }
+
+        throw new ArgumentException(
+            $"Predict input has {input.Columns} columns but the model was fit with {NumFeatures} " +
+            $"covariates; expected {NumFeatures} (covariates only) or {NumFeatures + 1} " +
+            $"([treatment | covariates], matching Train).",
+            nameof(input));
+    }
+
+    /// <summary>
     /// Standard prediction - returns predicted outcomes.
     /// </summary>
     public abstract Vector<T> Predict(Matrix<T> input);

@@ -7991,6 +7991,47 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Creates a length-preserving conv encoder-decoder for SYNTHESIS-based video stabilization
+    /// (full-frame neural rendering / multi-frame fusion — e.g. FuSta, 3D multi-frame fusion).
+    /// Unlike the affine-parameter regressor in <see cref="CreateDefaultVideoStabilizationLayers"/>
+    /// (which global-pools to a 6-vector), this directly synthesises a stabilized frame of the SAME
+    /// spatial dimensions as the input, so Stabilize returns a full stabilized video rather than a
+    /// bare transform vector. Mirrors the DIFRINT decoder topology (the proven length-preserving
+    /// reference).
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
+    /// <param name="inputHeight">Input frame height.</param>
+    /// <param name="inputWidth">Input frame width.</param>
+    /// <param name="numFeatures">Base feature width (default: 64).</param>
+    /// <returns>A length-preserving encoder-decoder layer stack.</returns>
+    public static IEnumerable<ILayer<T>> CreateSynthesisVideoStabilizationLayers(
+        int inputChannels = 3,
+        int inputHeight = 128,
+        int inputWidth = 128,
+        int numFeatures = 64)
+    {
+        // Encoder: three stride-2 convolutions (8x spatial downsample).
+        yield return new ConvolutionalLayer<T>(numFeatures, 7, 2, 3, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 2, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 2, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+
+        // Bottleneck refinement.
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+
+        // Decoder: symmetric upsample back to the input resolution (8x).
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>(2);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>(2);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>(2);
+
+        // Output a stabilized frame with the same channel count as the input.
+        yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1);
+    }
+
+    /// <summary>
     /// Creates layers for an InternVideo2-style video understanding model.
     /// </summary>
     /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>

@@ -392,6 +392,21 @@ public class TSMixer<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
+    /// Opts out of the base linear lazy-shape pre-resolution (#1712). The base
+    /// <c>ResolveLazyLayerShapes</c> walks <see cref="NeuralNetworkBase{T}.Layers"/> in order with no
+    /// transpose, but <see cref="Forward"/> applies per-block time-mixing TRANSPOSES
+    /// (<c>Engine.TensorPermute [0,2,1]</c> around the time-mixing Dense layers). The linear walk
+    /// therefore runs the time-mixing <c>Dense(sequenceLength)</c> WITHOUT the transpose, so its output
+    /// last dim becomes the sequence length, and the following feature-mixing lazy
+    /// <c>LayerNormalizationLayer</c> binds its gamma to that value instead of the hidden dimension the
+    /// real forward feeds it — "Gamma shape (8) does not match the last 1 dimensions of input shape
+    /// (1, 8, 24)". Returning null skips the walk and lets every layer resolve on the first real Forward,
+    /// which models the transposes correctly (the Dense layers auto-adapt; the LayerNorms bind to the
+    /// hidden dim). TSMixer is small, so deferring per-layer ParameterCount to the first forward is fine.
+    /// </summary>
+    protected override int[]? TryGetArchitectureInputShape() => null;
+
+    /// <summary>
     /// Extracts references to specific layers for the TSMixer architecture.
     /// </summary>
     /// <remarks>

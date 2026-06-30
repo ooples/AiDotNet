@@ -85,7 +85,6 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
             W2[k, 0] = NumOps.Multiply(initScale, NumOps.FromDouble(rng.NextDouble() - 0.5));
 
         T lr = NumOps.FromDouble(LearningRate);
-        T alpha = NumOps.Zero;
         // Acyclicity warm-up: rho = 0 (no NOTEARS penalty) for the first half of training so the data fit
         // can drive edge probabilities toward the correlations; a bounded fixed penalty is applied after.
         T rho = NumOps.Zero;
@@ -158,10 +157,12 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
                     T absCorr = NumOps.Abs(corr[i, j]);
                     T dataGrad = NumOps.Subtract(pij, absCorr);
 
-                    // Acyclicity gradient: d/dP[i,j] of (alpha * h + rho/2 * h^2)
-                    // where h = tr(exp(P∘P)) - d, gradient = (alpha + rho*h) * [exp(P∘P)^T ∘ 2P][i,j]
+                    // Acyclicity gradient: d/dP[i,j] of the bounded NOTEARS penalty (rho/2 * h^2),
+                    // where h = tr(exp(P∘P)) - d, so gradient = (rho*h) * [exp(P∘P)^T ∘ 2P][i,j].
+                    // (No augmented-Lagrangian alpha term: this schedule uses a fixed rho, not the
+                    // alpha-accumulating dual ascent that collapsed every edge on correlated data.)
                     T acycGrad = NumOps.Multiply(
-                        NumOps.Add(alpha, NumOps.Multiply(rho, hValPrev)),
+                        NumOps.Multiply(rho, hValPrev),
                         NumOps.Multiply(expWW[j, i], NumOps.Multiply(pij, NumOps.FromDouble(2))));
 
                     T totalGradP = NumOps.Add(dataGrad, acycGrad);

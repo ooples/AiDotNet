@@ -214,12 +214,20 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override T Train()
     {
-        if (_replayBuffer.Count < _options.WarmupSteps || _replayBuffer.Count < _options.BatchSize)
+        // A supervised one-shot Train(state, target) call bypasses the autonomous-exploration warmup
+        // and trains on the samples gathered so far (clamped to the buffer); autonomous stepping still
+        // respects warmup.
+        int effectiveBatchSize = SupervisedUpdateRequested
+            ? System.Math.Min(_options.BatchSize, _replayBuffer.Count)
+            : _options.BatchSize;
+        if ((!SupervisedUpdateRequested && _replayBuffer.Count < _options.WarmupSteps)
+            || effectiveBatchSize <= 0
+            || _replayBuffer.Count < effectiveBatchSize)
         {
             return _numOps.Zero;
         }
 
-        var batch = _replayBuffer.Sample(_options.BatchSize);
+        var batch = _replayBuffer.Sample(effectiveBatchSize);
 
         // Update critics and policy with tape-based training
         T criticLoss = _numOps.Zero;

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Enums;
@@ -28,9 +29,15 @@ public class PredictorParameterStreamingTests
     private static SiTPredictor<double> SiT(int seed) =>
         new SiTPredictor<double>(inputChannels: 4, hiddenSize: 32, numLayers: 2, numHeads: 4, seed: seed);
 
-    // EMMDiT has fixed internal dims (1024 hidden, 12 layers ≈ 15M params); small enough to construct.
-    private static EMMDiTPredictor<double> EMMDiT(int seed) =>
-        new EMMDiTPredictor<double>(inputChannels: 4, contextDim: 64, seed: seed);
+    // EMMDiT has FIXED internal dims (1024 hidden / 12 joint blocks / 16 heads) and no size override, so
+    // it cannot be scaled down — it is genuinely ~540 M parameters (NOT the ~15M an earlier comment
+    // claimed). At FP64 that is ~4.3 GB resident PER instance, and SetChunks round-trips TWO instances
+    // plus two flat vectors (~17 GB) — over the 16 GB CI runner. Use FP32 (the production-canonical
+    // precision, matching the foundation-scale round-trip tests in FastGenContractTests), which halves
+    // the footprint to ~8.6 GB so the contract is exercised without OOM. The chunk-framing contract is
+    // precision-independent (pure read/copy, no arithmetic), so FP32 is a faithful check, not a weakening.
+    private static EMMDiTPredictor<float> EMMDiT(int seed) =>
+        new EMMDiTPredictor<float>(inputChannels: 4, contextDim: 64, seed: seed);
 
     // MMDiT-X exposes size overrides for a reduced-scale same-architecture fixture; it also has a raw
     // positional-embedding table appended after the layers, so this exercises the mixed layer + raw-array
@@ -114,12 +121,17 @@ public class PredictorParameterStreamingTests
             Assert.Equal(sf[i], cf[i], 12);
     }
 
-    private static void AssertIndexIdentical(NoisePredictorBase<double> predictor)
+    // Generic over the element type so fixtures can choose precision (FP64 for the tiny ones; FP32 for the
+    // ~540 M EMMDiT so two instances fit the 16 GB runner). Values are compared after widening to double:
+    // for an FP64 predictor this is identical to the previous Assert.Equal(.., 12) behavior, and for FP32
+    // the chunk path reads the SAME stored values as the flat path (no arithmetic), so they widen
+    // bit-identically — 12 decimal places is satisfied exactly.
+    private static void AssertIndexIdentical<T>(NoisePredictorBase<T> predictor) where T : struct
     {
         var flat = predictor.GetParameters();
 
         long sum = 0;
-        var rebuilt = new List<double>();
+        var rebuilt = new List<T>();
         foreach (var chunk in predictor.GetParameterChunks())
         {
             var v = chunk.ToVector();
@@ -130,17 +142,17 @@ public class PredictorParameterStreamingTests
         Assert.Equal(predictor.ParameterCount, sum);
         Assert.Equal(flat.Length, rebuilt.Count);
         for (int i = 0; i < flat.Length; i++)
-            Assert.Equal(flat[i], rebuilt[i], 12);
+            Assert.Equal(Convert.ToDouble((object)flat[i]), Convert.ToDouble((object)rebuilt[i]), 12);
     }
 
-    private static void AssertRoundTrips(NoisePredictorBase<double> source, NoisePredictorBase<double> dest)
+    private static void AssertRoundTrips<T>(NoisePredictorBase<T> source, NoisePredictorBase<T> dest) where T : struct
     {
         var sourceFlat = source.GetParameters();
         var destBefore = dest.GetParameters();
 
         bool anyDifferent = false;
         for (int i = 0; i < sourceFlat.Length && !anyDifferent; i++)
-            if (sourceFlat[i] != destBefore[i]) anyDifferent = true;
+            if (!sourceFlat[i].Equals(destBefore[i])) anyDifferent = true;
         Assert.True(anyDifferent, "Test setup invalid: the two seeds produced identical weights.");
 
         dest.SetParameterChunks(source.GetParameterChunks());
@@ -148,6 +160,6 @@ public class PredictorParameterStreamingTests
         var destAfter = dest.GetParameters();
         Assert.Equal(sourceFlat.Length, destAfter.Length);
         for (int i = 0; i < sourceFlat.Length; i++)
-            Assert.Equal(sourceFlat[i], destAfter[i], 12);
+            Assert.Equal(Convert.ToDouble((object)sourceFlat[i]), Convert.ToDouble((object)destAfter[i]), 12);
     }
 }

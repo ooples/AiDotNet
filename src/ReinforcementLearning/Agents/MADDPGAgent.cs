@@ -298,13 +298,21 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override T Train()
     {
-        if (_replayBuffer.Count < _options.WarmupSteps || _replayBuffer.Count < _options.BatchSize)
+        // A supervised one-shot Train(state, target) call bypasses the autonomous-exploration warmup
+        // and trains on the samples gathered so far (clamped to the buffer); autonomous stepping still
+        // respects warmup.
+        int effectiveBatchSize = SupervisedUpdateRequested
+            ? System.Math.Min(_options.BatchSize, _replayBuffer.Count)
+            : _options.BatchSize;
+        if ((!SupervisedUpdateRequested && _replayBuffer.Count < _options.WarmupSteps)
+            || effectiveBatchSize <= 0
+            || _replayBuffer.Count < effectiveBatchSize)
         {
             return NumOps.Zero;
         }
 
         // Sample batch with indices to retrieve per-agent rewards
-        var (batch, indices) = _replayBuffer.SampleWithIndices(_options.BatchSize);
+        var (batch, indices) = _replayBuffer.SampleWithIndices(effectiveBatchSize);
         T totalLoss = NumOps.Zero;
 
         // Update each agent's critic and actor with tape-based training
