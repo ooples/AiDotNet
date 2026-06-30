@@ -2212,6 +2212,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
         sb.AppendLine();
+        // Foundation-scale generated models that are CORRECT but too slow for the
+        // default per-test gate (a single forward at their paper-scale width exceeds
+        // the 120 s [Fact(Timeout)] envelope). Tag them HeavyTimeout so the default
+        // sharded run (which filters Category!=HeavyTimeout) skips them and they run
+        // in the nightly lane, and serialize them onto dedicated cores.
+        if (IsHeavyTimeoutGeneratedModel(model.ClassName))
+        {
+            sb.AppendLine("[Xunit.Collection(\"FoundationScaleSerial\")]");
+            sb.AppendLine("[Xunit.Trait(\"Category\", \"HeavyTimeout\")]");
+        }
         sb.AppendLine($"public class {testClassName} : {baseClassName}");
         sb.AppendLine("{");
 
@@ -5470,6 +5480,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// whose <c>Training_*</c> invariants exceed the 120 s timeout because
     /// the encoder is wide / deep enough to make a full step take ≳ 1 s.
     /// </remarks>
+    // Generated models whose tests are CORRECT but foundation-scale: a single
+    // forward at their paper-scale width (e.g. the proprietary VLMs at
+    // VisionDim=1024) exceeds the 120 s per-test gate. Tagged HeavyTimeout so the
+    // default sharded run skips them (it filters Category!=HeavyTimeout) and they
+    // run in the nightly lane. Drop a model from here once it fits the budget.
+    private static bool IsHeavyTimeoutGeneratedModel(string className)
+    {
+        int tickIdx = className.IndexOf('`');
+        if (tickIdx > 0) className = className.Substring(0, tickIdx);
+        return className is "ClaudeVision" or "GeminiVision" or "GrokVision";
+    }
+
     private static bool IsPaperScaleVisionLanguageModel(string className)
     {
         int tickIdx = className.IndexOf('`');

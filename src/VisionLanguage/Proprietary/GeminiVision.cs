@@ -204,7 +204,7 @@ public class GeminiVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM<T>
     private void ComputeEncoderDecoderBoundary()
     {
         int lpb = _options.DropoutRate > 0 ? 6 : 5;
-        _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 2;
+        _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb + 2; // +1 leading: vision-feature projection (Dense) prepended in CreateDefaultProprietaryAPILayers
     }
 
     private Tensor<T> TokenizeText(string text)
