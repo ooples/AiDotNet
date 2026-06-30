@@ -328,6 +328,8 @@ public class Voicebox<T> : TtsModelBase<T>, ICodecTts<T>
         writer.Write(_options.NumHeads);
         writer.Write(_options.NumLLMLayers);
         writer.Write(_options.TextEncoderDim);
+        writer.Write(_options.MelChannels);
+        writer.Write(_options.HopSize);
     }
 
     /// <inheritdoc />
@@ -346,6 +348,8 @@ public class Voicebox<T> : TtsModelBase<T>, ICodecTts<T>
         _options.NumHeads = reader.ReadInt32();
         _options.NumLLMLayers = reader.ReadInt32();
         _options.TextEncoderDim = reader.ReadInt32();
+        _options.MelChannels = reader.ReadInt32();
+        _options.HopSize = reader.ReadInt32();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
