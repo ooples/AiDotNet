@@ -27,14 +27,25 @@ public abstract class TransformerNERTestBase<T> : NERModelTestBase<T>
         // broken". Use two inputs that differ in their PER-POSITION pattern (which
         // survives LayerNorm) so the test exercises genuine contextual sensitivity
         // and still fails loudly if the encoder truly ignores its input.
+        //
+        // The pattern is driven from BOTH the sequence axis (token position) and the
+        // feature axis. A feature-only pattern (i % lastDim) gives every token the
+        // SAME row vector, so a model that ignores cross-token attention — reacting
+        // only to a single repeated embedding — could still pass. Varying per token
+        // index makes each position distinct, so the probe genuinely requires the
+        // encoder to attend across the sequence.
         int lastDim = InputShape[InputShape.Length - 1];
+        int seqDim = InputShape.Length > 1 ? InputShape[InputShape.Length - 2] : 1;
         var input1 = new Tensor<T>(InputShape);
         var input2 = new Tensor<T>(InputShape);
         for (int i = 0; i < input1.Length; i++)
         {
-            int posInRow = i % lastDim;
-            input1[i] = NumOps.FromDouble(0.2 + 0.6 * (posInRow / (double)lastDim));
-            input2[i] = NumOps.FromDouble(0.8 - 0.6 * (posInRow / (double)lastDim));
+            int featureIndex = i % lastDim;
+            int tokenIndex = (i / lastDim) % seqDim;
+            double featurePhase = featureIndex / (double)lastDim;
+            double tokenPhase = tokenIndex / (double)System.Math.Max(1, seqDim - 1);
+            input1[i] = NumOps.FromDouble(0.2 + 0.3 * tokenPhase + 0.3 * featurePhase);
+            input2[i] = NumOps.FromDouble(0.8 - 0.3 * tokenPhase - 0.3 * featurePhase);
         }
 
         var labels1 = network.Predict(input1);

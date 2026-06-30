@@ -80,7 +80,13 @@ public class WellSaidLabs<T> : TtsModelBase<T>, IEndToEndTts<T>
             Name = _useNativeMode ? "WellSaidLabs-Native" : "WellSaidLabs-ONNX",
             Description = "WellSaid Labs: enterprise neural TTS with custom voice avatars",
             FeatureCount = _options.HiddenDim,
-            Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers
+            // Reflect the realized layer graph: when a caller supplies custom
+            // Architecture.Layers (the same list InitializeLayers consumes), report
+            // its actual count instead of the default option block-counts, which no
+            // longer describe the instantiated model.
+            Complexity = Architecture.Layers is { Count: > 0 }
+                ? Architecture.Layers.Count
+                : (long)_options.NumEncoderLayers + _options.NumDecoderLayers
         };
         m.AdditionalInfo["Architecture"] = "WellSaidLabs";
         m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
