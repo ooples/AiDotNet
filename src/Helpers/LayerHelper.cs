@@ -24725,12 +24725,28 @@ public static class LayerHelper<T>
         int visionFfnDim = visionDim * 4;
         int decoderFfnDim = decoderDim * 4;
 
+        // Snap the head counts to a divisor of the encoder/decoder widths so each
+        // MultiHeadAttentionLayer's embeddingDimension (heads * headDim) equals the
+        // stream width EXACTLY (a non-divisible numHeads truncates headDim and the
+        // lazy weights resolve to the wrong width). See ChooseDivisibleHeadConfig.
+        var (visionHeads, visionHeadDim) = ChooseDivisibleHeadConfig(visionDim, numHeads);
+        var (decoderHeads, decoderHeadDim) = ChooseDivisibleHeadConfig(decoderDim, numHeads);
+
+        // === Vision Feature Projection ===
+        // Project the raw input embeddings to the vision-encoder width so the first
+        // attention layer (built at visionDim) receives a visionDim-wide input.
+        // Without it a model fed post-embedding tokens at any other width (e.g. the
+        // generated test feeds [.., 128] while VisionDim=1024) throws "input
+        // embedding dimension (128) does not match weight dimension (1024)" at the
+        // first MHA. This is the model's vision patch/feature embedding.
+        yield return new DenseLayer<T>(visionDim, geluActivation);
+
         // === Lightweight Vision Encoder ===
         yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (visionDim) / (numHeads));
+            yield return new MultiHeadAttentionLayer<T>(visionHeads, visionHeadDim);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -24745,7 +24761,7 @@ public static class LayerHelper<T>
         // === Lightweight Decoder ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (decoderDim) / (numHeads));
+            yield return new MultiHeadAttentionLayer<T>(decoderHeads, decoderHeadDim);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderDim, identityActivation);
