@@ -1939,7 +1939,25 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             _numHeads,
             _numFrames,
             _frameRate,
-            _temporalAggregation);
+            _temporalAggregation,
+            // Carry the configured tokenizer and loss function into the clone. Without them the
+            // clone falls back to the constructor defaults — most critically
+            // lossFunction => CrossEntropyWithLogitsLoss, which is wrong for a unit-norm embedding
+            // output: it routes the embedding through softmax and computes class-CE against a
+            // continuous target, plateauing at a ~136 baseline regardless of training. A clone must
+            // be functionally identical to its source, so a paper-faithful CosineSimilarityLoss +
+            // Adam(5e-5, β=0.9/0.98) configuration would otherwise be silently lost on Clone().
+            tokenizer: _tokenizer,
+            // Give the clone its OWN optimizer carrying the same configuration, NOT the source's
+            // instance: AdamOptimizer is stateful (moment/step buffers) and constructed bound to a
+            // model, so sharing it would leak optimizer state into the clone and keep the clone's
+            // optimizer pointed at the source model. Rebuild from the captured options (model-
+            // unbound) so the clone trains with the same hyperparameters but fresh state. Falls back
+            // to the constructor's default optimizer if the source's options aren't Adam-shaped.
+            optimizer: _optimizer.GetOptions() is AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> adamOptions
+                ? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(null, adamOptions)
+                : null,
+            lossFunction: _lossFunction);
     }
 
     /// <inheritdoc/>
