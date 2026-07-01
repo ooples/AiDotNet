@@ -100,6 +100,20 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     public IFullModel<T, TInput, TOutput>? Model { get; set; }
 
     /// <summary>
+    /// Gets or sets the fitted text vectorizer used to turn raw text into model features.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Set when the model was trained on text through <c>ConfigureTextVectorizer(...)</c>. The result keeps the
+    /// fitted vectorizer so callers can predict directly from strings via <c>PredictText(...)</c>.
+    /// </para>
+    /// <para><b>For Beginners:</b> A text vectorizer turns sentences into numbers the model can learn from. Keeping
+    /// the same fitted vectorizer means new text is converted exactly the same way at prediction time.
+    /// </para>
+    /// </remarks>
+    public ITextVectorizer<T>? TextVectorizer { get; set; }
+
+    /// <summary>
     /// Gets or sets the results of the optimization process that created the model.
     /// </summary>
     /// <remarks>

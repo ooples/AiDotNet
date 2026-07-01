@@ -261,7 +261,7 @@ public class Upsample3DLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         _originalInputShape = input._shape;
         int rank = input.Rank;
 
@@ -357,7 +357,7 @@ public class Upsample3DLayer<T> : LayerBase<T>
         _addedBatchDimension = addedBatch;
 
         // Store _lastInput for backward pass
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
         var output = gpuEngine.NearestNeighborUpsample3DGpu<T>(input5D, ScaleDepth, ScaleHeight, ScaleWidth);
 

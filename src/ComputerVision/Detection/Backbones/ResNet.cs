@@ -148,6 +148,40 @@ public class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     public IReadOnlyList<Tensor<T>> GetFeatureMaps(Tensor<T> input) => ExtractFeatures(input);
 
     /// <summary>
+    /// Returns the per-layer activations produced by a forward pass, keyed by a
+    /// human-readable name. ResNet organizes its layers as a stem convolution
+    /// plus residual stages (the <see cref="IDetectionBackbone{T}"/> feature
+    /// pyramid) rather than the flat base <c>Layers</c> collection, so the base
+    /// <see cref="NeuralNetworkBase{T}.GetNamedLayerActivations"/> — which iterates
+    /// <c>Layers</c> — would return an empty map. Mirror <see cref="ExtractFeatures"/>'s
+    /// forward path exactly and expose the stem output plus each residual stage's
+    /// output (the C2..C5 pyramid), so interpretability/activation consumers get
+    /// the network's real intermediate features.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        // Promote a single [C,H,W] image to [1,C,H,W] exactly as ExtractFeatures does.
+        if (input.Shape.Length == 3)
+            input = input.Reshape(new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
+        else if (input.Shape.Length != 4)
+            throw new ArgumentException(
+                $"ResNet expects a [C,H,W] or [N,C,H,W] image tensor, but got rank-{input.Shape.Length} " +
+                $"[{string.Join(",", input.Shape.ToArray())}].", nameof(input));
+
+        var activations = new Dictionary<string, Tensor<T>>();
+        var x = _conv1.Forward(input);
+        x = _activation.Activate(x);
+        x = BackboneOps<T>.MaxPool2D(x, kernelSize: 3, stride: 2, padding: 1);
+        activations["Stem"] = x.Clone();
+        for (int i = 0; i < _stages.Count; i++)
+        {
+            x = _stages[i].Forward(x);
+            activations[$"Stage{i + 1}_C{i + 2}"] = x.Clone(); // C2..C5
+        }
+        return activations;
+    }
+
+    /// <summary>
     /// Sum across the stem conv plus every residual stage. Inherited
     /// <c>NeuralNetworkBase&lt;T&gt;.GetParameterCount()</c> already delegates to
     /// this virtual property, so the <see cref="IDetectionBackbone{T}"/>

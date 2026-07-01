@@ -31,13 +31,19 @@ internal static class Program
             return 2;
         }
 
-        string modelName = args[0];
-        int trainIters = ArgInt(args, "--train-iters", 5);
-        bool doPredict = ArgInt(args, "--predict", 1) != 0;
-
         // Pin the CPU engine + disable GPU so the profile reflects the CPU path the
         // CI shard runs (AIDOTNET_DISABLE_GPU=1 is also set by the test harness).
         AiDotNetEngine.Current = new CpuEngine();
+
+        // P0 (#642): isolate the SD-UNet forward and time it at a chosen degree of
+        // parallelism so the 1-vs-N speedup curve = parallel efficiency = utilization.
+        if (args[0] == "--unet") return RunUNetParallelProbe(args);
+
+        string modelName = args[0];
+        int trainIters = ArgInt(args, "--train-iters", 5);
+        bool doPredict = ArgInt(args, "--predict", 1) != 0;
+        bool correctness = args.Contains("--correctness");
+        bool allocIsolate = args.Contains("--alloc-isolate");
 
         var model = Construct(modelName);
         if (model is null) return 1;
@@ -53,13 +59,174 @@ internal static class Program
             Console.WriteLine($"=== DiffusionTraceProbe: {modelName} ===");
             Console.WriteLine($".NET {Environment.Version}  ParameterCount={SafeParamCount(full)}");
 
+            // In-process correctness A/B: same model instance + same input, gate forced OFF then ON.
+            // The DiT weights are randomly initialized per process (seed: null), so only a same-process
+            // comparison can prove the *Into path is bit-identical to the allocating path.
+            if (correctness)
+            {
+                int t = Math.Max(1, diff.Scheduler.TrainTimesteps / 2);
+                var probeInput = RandomTensor(new[] { 1, 4, 64, 64 }, new Random(1234));
+                // Force lazy init + warm so the first measured forward isn't paying init cost,
+                // then measure a fresh forward each side for the per-forward allocation delta.
+                // Allocation is deterministic (immune to this box's 2x timing swings), so it is
+                // the primary proof the *Into / resident-scratch path removed the churn (#1672).
+                AiDotNet.Helpers.ForwardScratchGate.Override = false;
+                var warmOff = diff.PredictNoise(probeInput, t);
+                long offA0 = GC.GetTotalAllocatedBytes(true);
+                var offOut = diff.PredictNoise(probeInput, t);
+                long offAlloc = GC.GetTotalAllocatedBytes(true) - offA0;
+
+                AiDotNet.Helpers.ForwardScratchGate.Override = true;
+                var warmOn = diff.PredictNoise(probeInput, t);
+                long onA0 = GC.GetTotalAllocatedBytes(true);
+                var onOut = diff.PredictNoise(probeInput, t);
+                long onAlloc = GC.GetTotalAllocatedBytes(true) - onA0;
+                AiDotNet.Helpers.ForwardScratchGate.Override = null;
+
+                double mb = 1024.0 * 1024.0;
+                double reductionPct = offAlloc > 0 ? (offAlloc - onAlloc) * 100.0 / offAlloc : 0.0;
+                Console.WriteLine(
+                    $"[ALLOC/forward] OFF={offAlloc / mb:F1} MB  ON={onAlloc / mb:F1} MB  " +
+                    $"reduction={reductionPct:F1}%  saved={(offAlloc - onAlloc) / mb:F1} MB");
+
+                double maxAbs = 0.0, maxRel = 0.0, refMax = 0.0;
+                int n = Math.Min(offOut.Length, onOut.Length);
+                for (int i = 0; i < n; i++)
+                {
+                    double a = Convert.ToDouble(offOut[i]);
+                    double b = Convert.ToDouble(onOut[i]);
+                    double diffAbs = Math.Abs(a - b);
+                    if (diffAbs > maxAbs) maxAbs = diffAbs;
+                    double denom = Math.Abs(a);
+                    if (denom > 1e-8 && diffAbs / denom > maxRel) maxRel = diffAbs / denom;
+                    if (Math.Abs(a) > refMax) refMax = Math.Abs(a);
+                }
+                Console.WriteLine(
+                    $"[CORRECTNESS] len={n} maxAbs={maxAbs:R} maxRel={maxRel:R} refMax={refMax:R} " +
+                    $"identical={(maxAbs == 0.0)}");
+                Console.WriteLine("=== done ===");
+                return 0;
+            }
+
+            // Steady-state per-forward GC-allocation isolation. Unlike --correctness (which
+            // uses ForwardScratchGate.Override + GC.GetTotalAllocatedBytes(true), where the
+            // forced GC reclaim makes the ON number swing wildly / negative on this box), this
+            // mode honors the ENV gate settings (no Override) and measures the steady-state GC
+            // allocation per forward WITHOUT a forced GC, averaged over many forwards so the
+            // transient pool churn settles. Run it twice across two processes — once with
+            // AIDOTNET_FWD_SCRATCH_FUSEDLINEAR=1 and once =0 (both with SDPA+ADALN on) — to
+            // isolate the FusedLinear sub-gate's allocation contribution.
+            if (allocIsolate)
+            {
+                int tt = Math.Max(1, diff.Scheduler.TrainTimesteps / 2);
+                var ai = RandomTensor(new[] { 1, 4, 64, 64 }, new Random(1234));
+                // Warm thoroughly so lazy init + JIT + scratch sizing are paid before measuring.
+                for (int w = 0; w < 5; w++) { var _ = diff.PredictNoise(ai, tt); }
+                const int reps = 20;
+                long a0 = GC.GetTotalAllocatedBytes(false);
+                for (int r = 0; r < reps; r++) { var _ = diff.PredictNoise(ai, tt); }
+                long aN = GC.GetTotalAllocatedBytes(false);
+                double mbI = 1024.0 * 1024.0;
+                Console.WriteLine(
+                    $"[ALLOC-ISOLATE] FWD_SCRATCH={AiDotNet.Helpers.ForwardScratchGate.Enabled} " +
+                    $"FUSEDLINEAR={AiDotNet.Helpers.ForwardScratchGate.FusedLinear} " +
+                    $"SDPA={AiDotNet.Helpers.ForwardScratchGate.Sdpa} ADALN={AiDotNet.Helpers.ForwardScratchGate.AdaLn} " +
+                    $"perForward={(aN - a0) / mbI / reps:F1} MB  (reps={reps})");
+                Console.WriteLine("=== done ===");
+                return 0;
+            }
+
+            // DEFINITIVE interleaved in-process A/B: toggle ForwardScratchGate.Override OFF/ON
+            // per-forward within ONE process so both conditions see identical box/thermal/GC
+            // drift (cross-process launches differ ±36% even on the warm MIN harness — too noisy
+            // for small deltas). Alternating per-forward cancels slow drift; MIN-of-N each side
+            // is then a true apples-to-apples comparison of the FULL *Into gate vs the original
+            // allocating path. NOTE: Override forces ALL sub-gates together, so this measures the
+            // cumulative *Into win (rounds 4-6 + fused-QKV), not one sub-gate in isolation.
+            if (args.Contains("--time-ab"))
+            {
+                int tt = Math.Max(1, diff.Scheduler.TrainTimesteps / 2);
+                var ti = RandomTensor(new[] { 1, 4, 64, 64 }, new Random(1234));
+                // Warm both paths.
+                AiDotNet.Helpers.ForwardScratchGate.Override = false;
+                for (int w = 0; w < 4; w++) { var _ = diff.PredictNoise(ti, tt); }
+                AiDotNet.Helpers.ForwardScratchGate.Override = true;
+                for (int w = 0; w < 4; w++) { var _ = diff.PredictNoise(ti, tt); }
+                int reps = ArgInt(args, "--reps", 15);
+                var off = new double[reps];
+                var on = new double[reps];
+                for (int r = 0; r < reps; r++)
+                {
+                    AiDotNet.Helpers.ForwardScratchGate.Override = false;
+                    var s1 = Stopwatch.StartNew(); var _o = diff.PredictNoise(ti, tt); s1.Stop();
+                    off[r] = s1.Elapsed.TotalMilliseconds;
+                    AiDotNet.Helpers.ForwardScratchGate.Override = true;
+                    var s2 = Stopwatch.StartNew(); var _n = diff.PredictNoise(ti, tt); s2.Stop();
+                    on[r] = s2.Elapsed.TotalMilliseconds;
+                }
+                AiDotNet.Helpers.ForwardScratchGate.Override = null;
+                Array.Sort(off); Array.Sort(on);
+                double offMin = off[0], onMin = on[0];
+                double offMed = off[reps / 2], onMed = on[reps / 2];
+                Console.WriteLine(
+                    $"[TIME-AB] OFF min={offMin:F1} median={offMed:F1} ms | ON min={onMin:F1} median={onMed:F1} ms | " +
+                    $"MIN {offMin / onMin:F2}x ({100 * (offMin - onMin) / offMin:F1}%)  " +
+                    $"MED {offMed / onMed:F2}x ({100 * (offMed - onMed) / offMed:F1}%)  (reps={reps}, interleaved)");
+                Console.WriteLine("=== done ===");
+                return 0;
+            }
+
+            // Reliable in-process per-forward TIMING (the cross-process full-Predict A/B is
+            // unusable on a load-noisy box — swings 85-160s). Warm thoroughly, then time each
+            // of N forwards on the SAME process with the cores already hot; report MIN (the
+            // user's MIN-of-many) + median + p90 so noise is visible. Honors the ENV gate (no
+            // Override) so OFF vs ON is a clean same-binary toggle. PredictNoise = ONE forward
+            // (the unit the profiler analyzed); full Predict ~= 10x this (DDIM loop).
+            if (args.Contains("--time-forward"))
+            {
+                int tt = Math.Max(1, diff.Scheduler.TrainTimesteps / 2);
+                var ti = RandomTensor(new[] { 1, 4, 64, 64 }, new Random(1234));
+                for (int w = 0; w < 8; w++) { var _ = diff.PredictNoise(ti, tt); }
+                int reps = ArgInt(args, "--reps", 30);
+                var ms = new double[reps];
+                for (int r = 0; r < reps; r++)
+                {
+                    var sw2 = Stopwatch.StartNew();
+                    var _ = diff.PredictNoise(ti, tt);
+                    sw2.Stop();
+                    ms[r] = sw2.Elapsed.TotalMilliseconds;
+                }
+                Array.Sort(ms);
+                double median = ms[reps / 2];
+                double p90 = ms[(int)(reps * 0.9)];
+                Console.WriteLine(
+                    $"[TIME-FWD] FWD_SCRATCH={AiDotNet.Helpers.ForwardScratchGate.Enabled} " +
+                    $"FUSEDLINEAR={AiDotNet.Helpers.ForwardScratchGate.FusedLinear} " +
+                    $"SDPA={AiDotNet.Helpers.ForwardScratchGate.Sdpa} ADALN={AiDotNet.Helpers.ForwardScratchGate.AdaLn} " +
+                    $"min={ms[0]:F1} ms  median={median:F1} ms  p90={p90:F1} ms  (reps={reps})");
+                Console.WriteLine("=== done ===");
+                return 0;
+            }
+
             // Phase 1: warm-up noise-prediction probe (the test's errBefore measurement).
             int probeT = Math.Max(1, diff.Scheduler.TrainTimesteps / 2);
             var noisy = RandomTensor(new[] { 1, 4, 64, 64 }, rng);
             var sw = Stopwatch.StartNew();
-            _ = diff.PredictNoise(noisy, probeT);
+            var noisePred = diff.PredictNoise(noisy, probeT);
             sw.Stop();
             Console.WriteLine($"[PredictNoise warm-up]      {sw.Elapsed.TotalSeconds,8:F2} s");
+            {
+                double psum = 0.0, psumSq = 0.0;
+                for (int i = 0; i < noisePred.Length; i++)
+                {
+                    double vv = Convert.ToDouble(noisePred[i]);
+                    psum += vv; psumSq += vv * vv;
+                }
+                float pf = noisePred.Length > 0 ? Convert.ToSingle(noisePred[0]) : 0f;
+                float pl = noisePred.Length > 0 ? Convert.ToSingle(noisePred[noisePred.Length - 1]) : 0f;
+                Console.WriteLine(
+                    $"[NOISE_CHECKSUM] len={noisePred.Length} sum={psum:R} sumSq={psumSq:R} first={pf:R} last={pl:R}");
+            }
 
             // Phase 2: training loop (forward + backward) — the timeout test runs 5-10 iters.
             sw.Restart();
@@ -78,6 +245,19 @@ internal static class Program
                 var output = full.Predict(input);
                 sw.Stop();
                 Console.WriteLine($"[Predict (sampling loop)]   {sw.Elapsed.TotalSeconds,8:F2} s  (out len {output.Length})");
+
+                // Output fingerprint for the flag-OFF vs flag-ON bit-identicality A/B (#1672).
+                double sum = 0.0, sumSq = 0.0;
+                float first = output.Length > 0 ? Convert.ToSingle(output[0]) : 0f;
+                float last = output.Length > 0 ? Convert.ToSingle(output[output.Length - 1]) : 0f;
+                for (int i = 0; i < output.Length; i++)
+                {
+                    double vv = Convert.ToDouble(output[i]);
+                    sum += vv;
+                    sumSq += vv * vv;
+                }
+                Console.WriteLine(
+                    $"[CHECKSUM] sum={sum:R} sumSq={sumSq:R} first={first:R} last={last:R}");
             }
 
             Console.WriteLine("=== done ===");
@@ -86,6 +266,80 @@ internal static class Program
         finally
         {
             if (model is IDisposable d) d.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// P0 #642: build a runnable SD-UNet noise predictor and time a single PredictNoise
+    /// forward at a chosen MaxDegreeOfParallelism. Sweeping maxdop=1..N gives the speedup
+    /// curve; speedup/N = parallel efficiency = effective core utilization for this op mix.
+    /// Eager by default (--compile 0) so we measure per-op parallelism without the
+    /// compiled-plan decision confound; this is also the path Train() uses.
+    /// </summary>
+    private static int RunUNetParallelProbe(string[] args)
+    {
+        int baseCh = ArgInt(args, "--base", 128);
+        int maxdop = ArgInt(args, "--maxdop", Environment.ProcessorCount);
+        int reps = ArgInt(args, "--reps", 3);
+        int height = ArgInt(args, "--height", 64);
+        bool attn = ArgInt(args, "--attn", 1) != 0;
+        bool compile = ArgInt(args, "--compile", 0) != 0;
+
+        // Fail fast on a non-positive rep count before allocating buffers / constructing the predictor:
+        // --reps 0 would index an empty times[] (IndexOutOfRange), and a negative value throws on the
+        // `new double[reps]` allocation — neither gives the user an actionable message.
+        if (reps <= 0)
+        {
+            Console.Error.WriteLine($"--reps must be a positive integer (got {reps}).");
+            return 1;
+        }
+
+        AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism = maxdop;
+        AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation = compile;
+
+        var predictor = new AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<float>(
+            inputChannels: 4, outputChannels: 4, baseChannels: baseCh,
+            channelMultipliers: new[] { 1, 2, 4, 4 }, numResBlocks: 2,
+            attentionResolutions: attn ? new[] { 4, 2, 1 } : Array.Empty<int>(),
+            contextDim: 768, numHeads: 8, inputHeight: height, seed: 42);
+
+        // Dispose the predictor on every exit path: if PredictNoise / ParameterCount / output
+        // formatting throws, the model and its backing buffers would otherwise leak for the rest
+        // of the process.
+        try
+        {
+            var rng = new Random(42);
+            var input = RandomTensor(new[] { 1, 4, height, height }, rng);
+            var cond = attn ? RandomTensor(new[] { 1, 77, 768 }, rng) : null;
+            const int t = 500;
+
+            // Warm-up: lazy weight allocation + (if enabled) first-forward trace/compile.
+            // Excluded from timing so steady-state per-op cost is what we measure.
+            var sww = Stopwatch.StartNew();
+            _ = predictor.PredictNoise(input, t, cond);
+            sww.Stop();
+
+            var times = new double[reps];
+            for (int i = 0; i < reps; i++)
+            {
+                var sw = Stopwatch.StartNew();
+                _ = predictor.PredictNoise(input, t, cond);
+                sw.Stop();
+                times[i] = sw.Elapsed.TotalMilliseconds;
+            }
+            Array.Sort(times);
+            double median = times[reps / 2];
+            long pc = -1;
+            try { pc = predictor.ParameterCount; } catch { }
+            Console.WriteLine(
+                $"UNET base={baseCh} attn={attn} h={height} compile={compile} " +
+                $"maxdop={maxdop} procs={Environment.ProcessorCount} params={pc} " +
+                $"warmup_ms={sww.Elapsed.TotalMilliseconds:F0} median_ms={median:F1} min_ms={times[0]:F1}");
+            return 0;
+        }
+        finally
+        {
+            if (predictor is IDisposable d) d.Dispose();
         }
     }
 

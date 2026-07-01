@@ -656,7 +656,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         }
 
         // Cache input for backward pass
-        _lastInput = input2D;
+        _lastInput = ShouldCacheForBackward ? input2D : null; // #1668: skip in inference (arena safety)
 
         // Step 1: Compute routing scores
         var routingLogits = _router.Forward(input2D);
@@ -2037,7 +2037,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         }
 
         // Cache for backward pass (only in training mode - download to CPU)
-        if (IsTrainingMode)
+        if (IsTrainingMode && !InferenceMode.IsActive) // #1668: skip caches inside an InferenceMode scope
         {
             _lastInput = input;
             _lastRoutingLogits = routingLogitsGpu;

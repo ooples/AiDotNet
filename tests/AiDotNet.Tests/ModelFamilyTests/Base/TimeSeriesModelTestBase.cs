@@ -487,38 +487,137 @@ public abstract class TimeSeriesModelTestBase : System.IDisposable
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
+        var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng);
         var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(trainX, trainY);
 
         var result = new AiDotNet.AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureDataLoader(loader)
-            .ConfigureModel(CreateModel())
+            .ConfigureModel(model)
             .BuildAsync()
             .GetAwaiter()
             .GetResult();
 
-        // Builder uses a 70/15/15 train/val/test split, so only evaluate on the training portion.
-        // For TS models, predictions beyond the training range are extrapolations.
-        int evalLen = (int)(TrainLength * 0.7);
-        var evalX = new Matrix<double>(evalLen, trainX.Columns);
-        var evalY = new Vector<double>(evalLen);
-        for (int i = 0; i < evalLen; i++)
+        // The unified facade forecasts AHEAD of the model's training window (result.Predict
+        // routes a time-series model to model.Forecast over the trained series). So this is
+        // industry-standard OUT-OF-SAMPLE evaluation: score the forecast against the held-out
+        // future actuals, not in-sample training data. The training window is the builder's
+        // 70/15/15 split, read back from the result so the held-out slice aligns exactly.
+        int trainLen = result.OptimizationResult?.TrainingResult?.Y is Vector<double> trainedY
+            ? trainedY.Length
+            : (int)(TrainLength * 0.7);
+        int horizon = TrainLength - trainLen;
+        if (horizon < 2) return; // not enough held-out future to score a forecast
+
+        Vector<double> predictions;
+        Vector<double> actual;
+
+        if (model is IMultivariateForecastModel<double> multivariate && multivariate.VariableCount > 1)
         {
-            for (int j = 0; j < trainX.Columns; j++)
-                evalX[i, j] = trainX[i, j];
-            evalY[i] = trainY[i];
+            // Genuinely multivariate models forecast the multivariate series they were trained on;
+            // compare the flattened forecast against the flattened held-out future of that series
+            // (the facade flattens [horizon x variables] row-major).
+            predictions = result.Predict(new Matrix<double>(horizon, multivariate.VariableCount));
+            int cols = Math.Min(multivariate.VariableCount, trainX.Columns);
+            actual = new Vector<double>(horizon * cols);
+            int k = 0;
+            for (int i = 0; i < horizon; i++)
+                for (int j = 0; j < cols; j++)
+                    actual[k++] = trainX[trainLen + i, j];
+        }
+        else if (model is IExogenousForecastModel<double>)
+        {
+            // Exogenous models (ARIMAX, dynamic regression) forecast the target from FUTURE
+            // exogenous regressors: feed the actual held-out exogenous rows and compare against
+            // the held-out target.
+            var futureExogenous = new Matrix<double>(horizon, trainX.Columns);
+            for (int i = 0; i < horizon; i++)
+                for (int j = 0; j < trainX.Columns; j++)
+                    futureExogenous[i, j] = trainX[trainLen + i, j];
+            predictions = result.Predict(futureExogenous);
+            actual = SliceForecastTarget(trainY, trainLen, horizon);
+        }
+        else
+        {
+            // Univariate models forecast the target series `horizon` steps ahead (the input
+            // matrix only carries the horizon as its row count).
+            predictions = result.Predict(new Matrix<double>(horizon, trainX.Columns));
+            actual = SliceForecastTarget(trainY, trainLen, horizon);
         }
 
-        var predictions = result.Predict(evalX);
-        if (ModelTestHelpers.AllFinite(predictions) && predictions.Length == evalLen)
+        if (ModelTestHelpers.AllFinite(predictions) && predictions.Length == actual.Length)
         {
-            double r2 = ModelTestHelpers.CalculateR2(evalY, predictions);
-            // Builder uses 70/15/15 split + preprocessing. For TS models, the
-            // AiModelResult may apply feature selection/normalization that can
-            // affect predictions. Use a loose threshold that just ensures the
-            // pipeline doesn't produce completely garbage results.
-            Assert.True(r2 > -10.0,
-                $"Builder pipeline R² = {r2:F4} — predictions are catastrophically wrong.");
+            // Out-of-sample forecast evaluation with Theil's U2 statistic (Theil, 1966): the model's
+            // forecast RMSE relative to the same-horizon naive/persistence forecast. U2 < 1 beats
+            // naive, U2 ~ 1 matches it, U2 >> 1 is a diverging or broken forecast. The breadth of the
+            // time-series family here spans models that legitimately cannot extrapolate a
+            // deterministic trend out-of-sample (stationary AR/MA/ARMA/ETS/GARCH mean-revert) and
+            // lightly-trained neural models, so this is a robust SANITY bar — the original test's
+            // "not catastrophically wrong" intent — rather than a skill bar. It still fails the actual
+            // regressions: NaN/Inf (excluded above), explosions, and sign/scale blow-ups.
+            var naive = BuildNaiveBaseline(model, trainX, trainY, trainLen, horizon, actual.Length);
+            double rmseModel = Math.Sqrt(MeanSquaredError(predictions, actual));
+            double rmseNaive = Math.Sqrt(MeanSquaredError(naive, actual));
+            double theilU = rmseNaive > 0.0 ? rmseModel / rmseNaive : 0.0;
+            Assert.True(rmseNaive <= 0.0 || theilU < MaxForecastTheilU,
+                $"Out-of-sample forecast Theil's U2 = {theilU:F2} (RMSE {rmseModel:F4} vs naive {rmseNaive:F4}) "
+                + $"on the held-out future (horizon={horizon}) exceeds the divergence sanity threshold "
+                + $"{MaxForecastTheilU} — the forecast is diverging, not merely inaccurate.");
         }
+    }
+
+    /// <summary>
+    /// Upper bound on Theil's U2 (forecast RMSE / naive RMSE) for <see cref="Builder_R2ShouldBePositive"/>.
+    /// A sanity threshold that fails diverging/broken forecasts while tolerating the legitimate
+    /// inability of many model types to out-forecast a deterministic trend. Override per model only
+    /// when a documented, model-specific reason requires it.
+    /// </summary>
+    protected virtual double MaxForecastTheilU => 10.0;
+
+    private static Vector<double> SliceForecastTarget(Vector<double> series, int start, int length)
+    {
+        var slice = new Vector<double>(length);
+        for (int i = 0; i < length; i++)
+            slice[i] = series[start + i];
+        return slice;
+    }
+
+    /// <summary>
+    /// Builds the naive persistence forecast (last observed value carried forward) the model
+    /// must beat: the last trained target value for univariate/exogenous models, or the last
+    /// trained value of each variable (row-major) for multivariate models.
+    /// </summary>
+    private static Vector<double> BuildNaiveBaseline(
+        IFullModel<double, Matrix<double>, Vector<double>> model,
+        Matrix<double> trainX, Vector<double> trainY, int trainLen, int horizon, int length)
+    {
+        var naive = new Vector<double>(length);
+        if (model is IMultivariateForecastModel<double> multivariate && multivariate.VariableCount > 1)
+        {
+            int cols = Math.Min(multivariate.VariableCount, trainX.Columns);
+            int k = 0;
+            for (int i = 0; i < horizon; i++)
+                for (int j = 0; j < cols; j++)
+                    naive[k++] = trainX[trainLen - 1, j];
+        }
+        else
+        {
+            double last = trainY[trainLen - 1];
+            for (int i = 0; i < length; i++)
+                naive[i] = last;
+        }
+        return naive;
+    }
+
+    private static double MeanSquaredError(Vector<double> a, Vector<double> b)
+    {
+        if (a.Length == 0) return 0.0;
+        double sum = 0.0;
+        for (int i = 0; i < a.Length; i++)
+        {
+            double d = a[i] - b[i];
+            sum += d * d;
+        }
+        return sum / a.Length;
     }
 }

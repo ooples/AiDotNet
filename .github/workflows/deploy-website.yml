@@ -3,6 +3,10 @@ name: Deploy Marketing Website
 on:
   push:
     branches: [master]
+    # NOTE: intentionally NOT triggering on src/** — this workflow runs Supabase migrations and
+    # a Vercel prod deploy, so it must not fire on every library change. The wiki is regenerated
+    # here from the current src at deploy time; a pure-src doc-comment change refreshes the live
+    # wiki on the next website deploy (or via workflow_dispatch).
     paths: ['website/**', '.github/workflows/deploy-website.yml']
   workflow_dispatch:
 
@@ -84,10 +88,25 @@ jobs:
           : "${PUBLIC_STRIPE_ENTERPRISE_MONTHLY_LINK:?Missing PUBLIC_STRIPE_ENTERPRISE_MONTHLY_LINK GitHub secret}"
           : "${PUBLIC_STRIPE_ENTERPRISE_YEARLY_LINK:?Missing PUBLIC_STRIPE_ENTERPRISE_YEARLY_LINK GitHub secret}"
 
+      # The API reference wiki is generated (not committed) from the library's XML docs.
+      - name: Setup .NET 10.0
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Generate API reference wiki
+        working-directory: ${{ github.workspace }}
+        run: |
+          dotnet build src/AiDotNet.csproj -c Debug -f net8.0
+          dotnet run --project tools/WikiGenerator -c Debug -- src/bin/Debug/net8.0/AiDotNet.xml website/src/content/docs/reference/wiki
+
       - name: Build website
-        run: npx astro build
+        run: npm run build   # astro build + pagefind index (postbuild)
         env:
           VERCEL: '1'
+          # The API reference wiki adds ~10.7K content pages; raise the V8 heap so the
+          # static build doesn't OOM on the runner.
+          NODE_OPTIONS: '--max-old-space-size=6144'
           # Astro bakes import.meta.env.PUBLIC_* values at build time. Without these
           # the client-side Supabase client throws "Missing Supabase environment
           # variables" at page load, which in turn means every script that imports

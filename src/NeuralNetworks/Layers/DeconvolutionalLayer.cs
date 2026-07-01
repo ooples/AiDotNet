@@ -508,7 +508,7 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
         if (IsInferringShapes) return ShapeInferenceOutput(input);
 
         EnsureInitializedFromInput(input);
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
         // Get the fused activation type for optimal GPU/CPU performance
         var fusedActivation = GetFusedActivationType();

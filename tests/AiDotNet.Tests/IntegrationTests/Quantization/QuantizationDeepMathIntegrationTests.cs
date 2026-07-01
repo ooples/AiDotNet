@@ -20,10 +20,16 @@ public class QuantizationDeepMathIntegrationTests
     // ============================
 
     [Fact(Timeout = 120000)]
-    public async Task QuantizationMode_HasSixValues()
+    public async Task QuantizationMode_HasSevenValues()
     {
-        var values = (((QuantizationMode[])Enum.GetValues(typeof(QuantizationMode))));
-        Assert.Equal(6, values.Length);
+        await Task.Yield();
+        var values = (QuantizationMode[])Enum.GetValues(typeof(QuantizationMode));
+        // None, Int8, Int4, Float16, Float32, Dynamic, Mixed. Int4 (QLoRA-style
+        // 4-bit base weights) was added with the Int4 quantizer in #1685, so the
+        // expected member count is 7. Assert the specific new value too, so a
+        // future addition is a deliberate test update rather than a bare count bump.
+        Assert.Equal(7, values.Length);
+        Assert.Contains(QuantizationMode.Int4, values);
     }
 
     [Theory]

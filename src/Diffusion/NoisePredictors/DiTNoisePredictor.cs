@@ -211,6 +211,42 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T>? _lastInput;
 
+    // ──────────────────────────────────────────────────────────────────────────
+    // #1672 destination-buffer scratch for the AdaLN / gate broadcasts.
+    //
+    // Each DiT block runs strictly sequentially, and within a block the AdaLN
+    // attn-branch output is fully consumed (by the attention projection) before the
+    // mlp-branch AdaLN runs. The AddWithGate `gated` intermediate is consumed by the
+    // immediately-following residual add. So a single predictor-level buffer per role,
+    // reused across all blocks and the final layer, never aliases a still-live tensor.
+    // Reallocated whenever the [B, seq, hidden] shape changes. Used only on the no-tape
+    // inference forward (ForwardScratchGate.Enabled). Bit-identical to the allocating path.
+    // ──────────────────────────────────────────────────────────────────────────
+    private Tensor<T>? _adaLnScaledScratch;   // TensorBroadcastMultiply(x, 1+scale)
+    private Tensor<T>? _adaLnOutScratch;       // TensorBroadcastAdd(scaled, shift)
+    private Tensor<T>? _gateScratch;           // TensorBroadcastMultiply(residual, gate)
+
+    /// <summary>Element-wise shape-array equality for the #1672 scratch-reuse decision.</summary>
+    private static bool ShapeMatches(int[] a, int[] b)
+    {
+        if (a.Length != b.Length) return false;
+        for (int i = 0; i < a.Length; i++)
+            if (a[i] != b[i]) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// True when the #1672 scratch gate is ON and no gradient tape is recording (inference).
+    /// The scratch reuse is safe only on the eager no-tape forward.
+    /// </summary>
+    private static bool UseForwardScratch()
+    {
+        if (!AiDotNet.Helpers.ForwardScratchGate.AdaLn) return false;
+        bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+        return !tapeActive;
+    }
+
     /// <inheritdoc />
     public override int InputChannels => _inputChannels;
 
@@ -751,7 +787,10 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> CreatePositionEmbedding(int numPatches)
     {
-        var posEmbed = TensorAllocator.Rent<T>(new[] { 1, numPatches, _hiddenSize });
+        // GC-owned (NOT TensorAllocator.Rent): _posEmbed is cached across forwards and must survive the
+        // diffusion denoise loop's per-step arena Reset(), which recycles arena-rented scratch. Renting it
+        // aliased recycled scratch -> the cached posEmbed corrupted between steps -> non-deterministic Predict.
+        var posEmbed = new Tensor<T>(new[] { 1, numPatches, _hiddenSize });
         var span = posEmbed.AsWritableSpan();
 
         for (int pos = 0; pos < numPatches; pos++)
@@ -859,6 +898,25 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     private Tensor<T> ApplyAdaLN(Tensor<T> x, Tensor<T> scaleView, Tensor<T> shiftView)
     {
         var scalePlusOne = Engine.TensorAddScalar<T>(scaleView, NumOps.One);
+
+        // #1672 destination-buffer path: reuse per-predictor scratch for the two big
+        // [B, seq, hidden] broadcasts instead of allocating each step. Same SIMD trailing-
+        // repeat kernel → bit-identical. The `scaled` buffer is consumed by the very next
+        // broadcast-add; the output buffer is consumed by the caller (attention / MLP /
+        // final projection) before the next AdaLN call. See scratch field comments.
+        if (UseForwardScratch())
+        {
+            var needShape = x._shape;
+            if (_adaLnScaledScratch == null || !ShapeMatches(_adaLnScaledScratch._shape, needShape))
+                _adaLnScaledScratch = new Tensor<T>((int[])needShape.Clone());
+            if (_adaLnOutScratch == null || !ShapeMatches(_adaLnOutScratch._shape, needShape))
+                _adaLnOutScratch = new Tensor<T>((int[])needShape.Clone());
+
+            Engine.TensorBroadcastMultiplyInto<T>(_adaLnScaledScratch, x, scalePlusOne);
+            Engine.TensorBroadcastAddInto<T>(_adaLnOutScratch, _adaLnScaledScratch, shiftView);
+            return _adaLnOutScratch;
+        }
+
         var scaled = Engine.TensorBroadcastMultiply<T>(x, scalePlusOne);
         return Engine.TensorBroadcastAdd<T>(scaled, shiftView);
     }
@@ -973,6 +1031,18 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> AddWithGate(Tensor<T> x, Tensor<T> residual, Tensor<T> gateView)
     {
+        // #1672: reuse scratch for the `gated` intermediate (consumed immediately by the
+        // following add). The RESULT is the persistent residual stream, so it stays a fresh
+        // allocation — never scratch. Same SIMD kernel → bit-identical.
+        if (UseForwardScratch())
+        {
+            var needShape = residual._shape;
+            if (_gateScratch == null || !ShapeMatches(_gateScratch._shape, needShape))
+                _gateScratch = new Tensor<T>((int[])needShape.Clone());
+            Engine.TensorBroadcastMultiplyInto<T>(_gateScratch, residual, gateView);
+            return Engine.TensorAdd<T>(x, _gateScratch);
+        }
+
         var gated = Engine.TensorBroadcastMultiply<T>(residual, gateView);
         return Engine.TensorAdd<T>(x, gated);
     }
@@ -1362,38 +1432,48 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             mlpRatio: _mlpRatio,
             latentSpatialSize: _latentSpatialSize);
 
-        // Preserve trained/materialized weights without forcing a foundation-scale default
-        // constructor to allocate and copy billions of random parameters (HasMaterializedParameters
-        // gates the copy to a source that genuinely has allocated weights).
-        //
-        // The DiT's projection layers are LazyDense — they only ALLOCATE their weight tensors on
-        // the first forward, not in EnsureLayersInitialized. A fresh clone therefore has the layer
-        // STRUCTURE but unallocated weights, so CopyParametersFrom alone has nothing to copy INTO;
-        // the clone would re-initialize those tensors with a fresh RNG on its first real forward
-        // and diverge from the source (observed: ~50k fewer materialized params, divergent Predict).
-        // Run one throwaway forward at the canonical input shape to materialize EVERY weight tensor
-        // on the clone first (weight dims are fixed by config, so the probe's spatial size is
-        // irrelevant), then copy the source's trained values. The probe must materialize exactly the
-        // paths the source has materialized so CopyParametersFrom finds a target for every source
-        // weight. A null-conditioned probe only touches the unconditional path, so if the source was
-        // used WITH conditioning its class-embedding (_labelEmbed) and/or cross-attention K/V/Out
-        // projections are materialized — leaving the clone's equivalents lazy would let them re-init
-        // with fresh RNG on the first conditioned forward and diverge from the source.
-        // BuildProbeConditioning returns representative conditioning whenever a conditioned path is
-        // materialized on the source (and null otherwise, keeping those layers lazy on both).
-        if (HasMaterializedParameters())
-        {
-            var probe = new Tensor<T>(new[] { 1, _inputChannels, _latentSpatialSize, _latentSpatialSize });
-            clone.PredictNoise(probe, timestep: 0, conditioning: BuildProbeConditioning());
-            clone.CopyParametersFrom(this);
-            // The probe forward traced a compiled plan over the clone's random init; drop it so
-            // the next real forward re-traces against the copied weights.
-            clone.InvalidateCompiledPlans();
-        }
-        // else: source has no materialized weights — nothing to copy. The clone shares the same
-        // config and initializes lazily on first use; calling GetParameters() here would allocate
-        // the full (foundation-scale) parameter vector for nothing.
+        ProbeMaterializeAndCopyInto(clone);
         return clone;
+    }
+
+    /// <summary>
+    /// Materializes <paramref name="clone"/> through the FORWARD path and copies this predictor's
+    /// trained weights into it. Shared by <see cref="Clone"/> and every derived predictor's
+    /// <c>Clone</c> (e.g. <c>SiTPredictor</c>) so they all get the correct clone semantics.
+    /// </summary>
+    /// <remarks>
+    /// Preserve trained/materialized weights without forcing a foundation-scale default
+    /// constructor to allocate and copy billions of random parameters (HasMaterializedParameters
+    /// gates the copy to a source that genuinely has allocated weights).
+    /// <para>
+    /// The DiT's projection layers are LazyDense — they only ALLOCATE their weight tensors on
+    /// the first forward, not in EnsureLayersInitialized. A fresh clone therefore has the layer
+    /// STRUCTURE but unallocated weights, so CopyParametersFrom alone has nothing to copy INTO;
+    /// the clone would re-initialize those tensors with a fresh RNG on its first real forward
+    /// and diverge from the source (observed: ~50k fewer materialized params, divergent Predict).
+    /// Run one throwaway forward at the canonical input shape to materialize EVERY weight tensor
+    /// on the clone first (weight dims are fixed by config, so the probe's spatial size is
+    /// irrelevant), then copy the source's trained values. The probe must materialize exactly the
+    /// paths the source has materialized so CopyParametersFrom finds a target for every source
+    /// weight. A null-conditioned probe only touches the unconditional path, so if the source was
+    /// used WITH conditioning its class-embedding (_labelEmbed) and/or cross-attention K/V/Out
+    /// projections are materialized — leaving the clone's equivalents lazy would let them re-init
+    /// with fresh RNG on the first conditioned forward and diverge from the source.
+    /// BuildProbeConditioning returns representative conditioning whenever a conditioned path is
+    /// materialized on the source (and null otherwise, keeping those layers lazy on both).
+    /// </para>
+    /// </remarks>
+    protected void ProbeMaterializeAndCopyInto(DiTNoisePredictor<T> clone)
+    {
+        Guard.NotNull(clone);
+        if (!HasMaterializedParameters()) return;
+
+        var probe = new Tensor<T>(new[] { 1, _inputChannels, _latentSpatialSize, _latentSpatialSize });
+        clone.PredictNoise(probe, timestep: 0, conditioning: BuildProbeConditioning());
+        clone.CopyParametersFrom(this);
+        // The probe forward traced a compiled plan over the clone's random init; drop it so
+        // the next real forward re-traces against the copied weights.
+        clone.InvalidateCompiledPlans();
     }
 
     /// <summary>

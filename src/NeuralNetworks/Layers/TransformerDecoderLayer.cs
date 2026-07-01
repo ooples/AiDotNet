@@ -796,7 +796,7 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 nameof(encoderOutput));
         }
 
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         _lastEncoderOutput = encoderOutput;
 
         _lastSelfAttentionOutput = _selfAttention.Forward(input);

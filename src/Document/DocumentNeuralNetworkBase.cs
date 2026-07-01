@@ -327,6 +327,15 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
                 hasPassedConvLayer = true;
             }
 
+            // PatchEmbeddingLayer performs the spatial→sequence flatten itself, and does it
+            // tape-compatibly — so the training path (which replays the Layers through the
+            // autodiff tape and never calls this inference Forward) gets the SAME flatten.
+            // Mark the transition done so the inference-only auto-reshape below never fires
+            // before OR after it; otherwise it would double-flatten the [C,H,W] map (handing
+            // PatchEmbeddingLayer a rank-2 tensor it rejects, then re-mangling its output).
+            if (layer is PatchEmbeddingLayer<T>)
+                hasReshapedToSequence = true;
+
             // Auto-reshape once when transitioning from spatial (CNN) to non-spatial layers
             // Only reshape if we actually went through conv layers (not raw image input)
             // CNN outputs [B, C, H, W] or [C, H, W]; non-spatial layers expect [SeqLen, EmbDim]

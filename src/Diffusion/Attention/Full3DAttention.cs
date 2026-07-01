@@ -104,7 +104,8 @@ public class Full3DAttention<T> : LayerBase<T>
     /// </summary>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
+        // #1668: skip the backward-activation cache in inference (denoise-loop arena safety).
+        _lastInput = ShouldCacheForBackward ? input : null;
         return _fullAttention.Forward(input);
     }
 

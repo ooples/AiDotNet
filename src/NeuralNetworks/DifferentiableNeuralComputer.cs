@@ -929,6 +929,17 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
 #pragma warning restore CS0169
 
+    /// <summary>
+    /// The DNC's forward is dynamic and stateful — an external memory matrix
+    /// read/written through content addressing, allocation weighting, and
+    /// temporal link tracking across an internal recurrence (<see cref="ProcessInput"/>).
+    /// That is not a static op graph, so it opts out of the compile-once/replay-many
+    /// fused compiled training path and trains on the eager autograd tape (which
+    /// re-runs the true dynamic forward every step). See the same override on
+    /// <see cref="NeuralTuringMachine{T}"/> for the full rationale (#1643).
+    /// </summary>
+    protected override bool SupportsFusedCompiledTraining => false;
+
     /// <inheritdoc/>
     /// <remarks>
     /// DNC overrides ForwardForTraining because its forward pass includes memory

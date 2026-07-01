@@ -956,23 +956,12 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
         double[] means = [0.485, 0.456, 0.406];
         double[] stds = [0.229, 0.224, 0.225];
 
-        double minValue = double.PositiveInfinity;
-        double maxValue = double.NegativeInfinity;
-        for (int i = 0; i < image.Data.Length; i++)
-        {
-            double value = NumOps.ToDouble(image.Data.Span[i]);
-            if (value < minValue) minValue = value;
-            if (value > maxValue) maxValue = value;
-        }
-
-        const double epsilon = 1e-6;
-        if (minValue < -epsilon || maxValue > 1.0 + epsilon)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(rawImage),
-                $"TableTransformer expects input values in [0,1] before COCO/ImageNet normalization. Got range [{minValue:F4}, {maxValue:F4}].");
-        }
-
+        // Pixel intensities are expected in [0,1]; clamp out-of-range values
+        // (over/under-exposed pixels, or callers passing un-normalized data) rather
+        // than rejecting them, so the model is robust to arbitrary inputs. Clamping
+        // — not min-max rescaling — is intentional: it keeps distinct-brightness
+        // inputs distinct after preprocessing (a 2× image still differs from the 1×),
+        // which the ScaledInput/LargerInput invariants depend on.
         for (int b = 0; b < batchSize; b++)
         {
             for (int c = 0; c < channels; c++)
@@ -986,6 +975,7 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
                     {
                         int idx = b * channels * height * width + c * height * width + h * width + w;
                         double value = NumOps.ToDouble(image.Data.Span[idx]);
+                        value = Math.Max(0.0, Math.Min(1.0, value));
                         normalized.Data.Span[idx] = NumOps.FromDouble((value - mean) / std);
                     }
                 }
@@ -1179,11 +1169,22 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
         }
 
         SetTrainingMode(true);
-
-        TrainWithTape(input, expectedOutput);
-        var paramGradients = CollectParameterGradients();
-        UpdateParameters(paramGradients);
-        SetTrainingMode(false);}
+        try
+        {
+            // TrainWithTape runs forward + backward + the optimizer update (the same
+            // tape path the base Train uses). The previous code followed it with a
+            // manual CollectParameterGradients()/UpdateParameters() — a SECOND,
+            // redundant update whose flat per-parameter gradient vector length did
+            // not match GetParameters() (a layer's gradient count differs from its
+            // ParameterCount), throwing in Engine.Subtract once the forward stopped
+            // crashing. TrainWithTape owns the whole step.
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
 
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> gradients)

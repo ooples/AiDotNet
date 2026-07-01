@@ -138,7 +138,7 @@ public class EBranchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) { if (MelSpec is not null) return MelSpec.Forward(rawAudio); return rawAudio; }
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
-    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "EBranchformer-Native" : "EBranchformer-ONNX", Description = "E-Branchformer: Enhanced Merging (Kim et al., 2022)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers };
+    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "EBranchformer-Native" : "EBranchformer-ONNX", Description = "E-Branchformer: Enhanced Merging (Kim et al., 2022)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     protected override void SerializeNetworkSpecificData(BinaryWriter w)
     {

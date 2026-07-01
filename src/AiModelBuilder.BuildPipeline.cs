@@ -397,6 +397,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         var options = new AiModelResultOptions<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
+            TextVectorizer = _configuredTextVectorizer,
             PreprocessingInfo = (_preprocessingPipeline is not null && pipelineFitted) || _targetPipeline is not null
                 ? new PreprocessingInfo<T, TInput, TOutput>
                 {
@@ -2425,6 +2426,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         var options = new AiModelResultOptions<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
+            TextVectorizer = _configuredTextVectorizer,
             PreprocessingInfo = preprocessingInfo,
             PostprocessingPipeline = _postprocessingPipeline,
             KnowledgeDistillationOptions = _knowledgeDistillationOptions,

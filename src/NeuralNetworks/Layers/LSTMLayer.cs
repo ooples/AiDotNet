@@ -1116,7 +1116,11 @@ public partial class LSTMLayer<T> : LayerBase<T>
             input3D = Engine.Reshape(input, [flatBatch, timeSteps, _inputSize]);
         }
 
-        _lastInput = input3D;
+        // #1668: _lastInput is a manual-backward cache; gate it (and the per-timestep BPTT
+        // caches below) on ShouldCacheForBackward so inference/tape/eval keeps no arena-backed
+        // activation alive across a TensorArena.Reset().
+        bool cacheBwd = ShouldCacheForBackward;
+        _lastInput = cacheBwd ? input3D : null;
 
         // AIsEval inference fast path: route the entire sequence through
         // AiDotNet.Tensors.Engines.CpuEngine.LstmSequenceForward<T> — the
@@ -1202,8 +1206,11 @@ public partial class LSTMLayer<T> : LayerBase<T>
         // non-CpuEngine, or an active autograd tape).
         var hiddenStatesList = new System.Collections.Generic.List<Tensor<T>>(timeSteps);
 
-        _cachedHiddenStates = TensorAllocator.Rent<T>(new int[] { batchSize, timeSteps, _hiddenSize });
-        _cachedCellStates = TensorAllocator.Rent<T>(new int[] { batchSize, timeSteps, _hiddenSize });
+        // #1668: the per-timestep BPTT caches are read only by the manual Backward; skip
+        // renting+populating them when no eager Backward will run (cacheBwd computed above),
+        // so an arena loop holds no per-step references across a Reset.
+        _cachedHiddenStates = cacheBwd ? TensorAllocator.Rent<T>(new int[] { batchSize, timeSteps, _hiddenSize }) : null;
+        _cachedCellStates = cacheBwd ? TensorAllocator.Rent<T>(new int[] { batchSize, timeSteps, _hiddenSize }) : null;
 
         var currentH = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
         var currentC = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
@@ -1278,8 +1285,8 @@ public partial class LSTMLayer<T> : LayerBase<T>
             // Collect the hidden state for the tape-connected output concat below.
             hiddenStatesList.Add(Engine.Reshape(currentH, new[] { batchSize, 1, _hiddenSize }));
             // Caches for the manual backward path (not on the tape).
-            _cachedHiddenStates.SetSlice(1, t, currentH);
-            _cachedCellStates.SetSlice(1, t, currentC);
+            _cachedHiddenStates?.SetSlice(1, t, currentH);
+            _cachedCellStates?.SetSlice(1, t, currentC);
         }
 
         // Assemble the [batch, timeSteps, hiddenSize] output on the tape so gradients

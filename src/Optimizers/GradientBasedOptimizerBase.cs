@@ -323,7 +323,9 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 // as the eager LinearWarmupScheduler — batch 1 = warmupInitLr, batch n
                 // = max(endLr, ComputeLearningRate(n-1)). Without this case the warmup
                 // recipe fell through to `default` → eager tape → no CUDA-graph capture
-                // (a 14–23× slowdown on the GPU-captured training path).
+                // (a 14–23× slowdown on the GPU-captured training path). Requires the
+                // general LrSchedule.LinearWarmup + WarmupDecayMode API published in
+                // AiDotNet.Tensors 0.106.1.
                 schedule = Tensors.Engines.Compilation.LrSchedule.LinearWarmup(
                     warmup.BaseLearningRate,
                     warmup.WarmupSteps,

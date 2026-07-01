@@ -140,7 +140,7 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
             throw new ArgumentException("Input must have at least 3 dimensions (channels, height, width).");
 
         EnsureInitializedFromInput(input);
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         _lastInputShape = input._shape;
 
         // Handle any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like

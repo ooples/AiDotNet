@@ -237,7 +237,7 @@ public partial class MeshPoolLayer<T> : LayerBase<T>
                 "Edge adjacency must be set via SetEdgeAdjacency before calling Forward.");
         }
 
-        _lastInput = input;
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
         int numEdges = input.Shape[0];
         int numToKeep = Math.Min(TargetEdges, numEdges);
