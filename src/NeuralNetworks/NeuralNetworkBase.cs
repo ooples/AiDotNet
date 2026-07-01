@@ -4160,6 +4160,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         string.Equals(Environment.GetEnvironmentVariable("AIDOTNET_ENABLE_AUTO_COMPILE"), "1", StringComparison.Ordinal);
 
     /// <summary>
+    /// Opt-in: drop the GPU activation cache at the end of EVERY tape training step. Off by default —
+    /// for stable-shape training the cache's buffers are reused across steps, so unconditionally
+    /// dropping them forces a re-allocation (and extra driver traffic) each step, a measurable GPU
+    /// throughput regression. The fused-plan failure path
+    /// (<see cref="ReclaimGpuTransientsAfterFusedFailure"/>) already drops the cache when it is actually
+    /// stale, so per-step dropping is only useful as an aggressive memory-reclaim knob for
+    /// GPU-memory-constrained training; enable it via <c>AIDOTNET_DROP_GPU_ACT_CACHE_PER_STEP=1</c>.
+    /// </summary>
+    private static readonly bool s_dropGpuActivationCachePerStep =
+        string.Equals(Environment.GetEnvironmentVariable("AIDOTNET_DROP_GPU_ACT_CACHE_PER_STEP"), "1", StringComparison.Ordinal);
+
+    /// <summary>
     /// Test/diagnostic hook: overrides the process-wide compiled-inference opt-in
     /// (<see cref="s_autoCompiledInferenceEnabled"/>) in-process, since the env var is read once at type
     /// load. Returns the previous value so a test can restore it in teardown. Lets the verify-then-trust
@@ -7671,7 +7683,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
             allGrads.Clear();
             grads.Clear();
-            GpuEngine?.DropActivationCache();
+            // Keep the GPU activation cache across steps by default (its buffers are reused for the next
+            // stable-shape step); only drop per-step when the aggressive memory-reclaim knob is opted in.
+            // Genuinely-stale caches are already dropped by the fused-plan failure recovery path.
+            if (s_dropGpuActivationCachePerStep)
+                GpuEngine?.DropActivationCache();
         }
         finally
         {
