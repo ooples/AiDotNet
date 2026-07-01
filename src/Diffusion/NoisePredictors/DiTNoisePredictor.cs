@@ -1545,7 +1545,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         // DiT predictors (e.g. SiT) route their weight allocation through the streaming pool (bounded
         // resident set + lossless write-back) instead of accumulating the full set via RentPinned → OOM.
         // No-op below the param-count/memory threshold; full-precision so the round-trip is exact.
-        MaybeEngageWeightStreaming(fullPrecisionStore: true);
+        MaybeEngageWeightStreaming();
         EnsureLayersInitialized();
 
         foreach (var layer in EnumerateAllLayers())
@@ -1566,7 +1566,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
     {
         if (chunks is null) throw new ArgumentNullException(nameof(chunks));
-        MaybeEngageWeightStreaming(fullPrecisionStore: true);
+        MaybeEngageWeightStreaming();
         EnsureLayersInitialized();
 
         using var e = chunks.GetEnumerator();

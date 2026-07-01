@@ -497,7 +497,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         // flags the layers so AllocateLazyWeight routes to WeightRegistry.AllocateStreaming, which
         // pre-evicts competing weights to disk and keeps the resident set bounded. No-op below the
         // param-count/memory threshold, so tractable predictors stay fully resident.
-        MaybeEngageWeightStreaming(fullPrecisionStore: true);
+        MaybeEngageWeightStreaming();
 
         // Default: single chunk wrapping GetParameters(). Concrete predictors
         // with tractable per-block weight stores SHOULD override to yield
@@ -527,7 +527,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         if (chunks is null) throw new ArgumentNullException(nameof(chunks));
 
         // Foundation-scale (#1715): engage streaming before materializing weights — see GetParameterChunks.
-        MaybeEngageWeightStreaming(fullPrecisionStore: true);
+        MaybeEngageWeightStreaming();
 
         var buffered = new List<Tensor<T>>();
         long total = 0;
@@ -696,7 +696,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     /// empty registry.
     /// </para>
     /// </summary>
-    protected void MaybeEngageWeightStreaming(bool fullPrecisionStore = false)
+    protected void MaybeEngageWeightStreaming()
     {
         if (System.Threading.Volatile.Read(ref _streamingEngaged) != 0) return;
 
@@ -738,16 +738,17 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         {
             StreamingPoolMaxResidentBytes = StreamingResidentCapOverride ?? ComputeResidentCapBytes(),
             TransparentAutoEviction = true,
-            // #1715/#1719: the store must be lossless full-precision. The parameter-IO path
-            // (GetParameters round-trip / Clone) MUTATES rehydrated weights and reads them back, so a
-            // bf16 store would round-trip lossily and its eviction write-back (native-only) would skip,
-            // losing the mutation. We deliberately use FullPrecision REGARDLESS of fullPrecisionStore:
-            // streaming engages once and returns early on subsequent calls (and an already-occupied
-            // registry cannot be safely reconfigured — see the RegisteredEntryCount guard above), so a
-            // bf16 engagement from an earlier forward could never be upgraded when a later Clone /
-            // GetParameters needs full precision — parameter IO would be silently lossy depending on
-            // call order. Every noise predictor supports parameter round-trips, so full precision is the
-            // correct order-independent default; resident memory is still bounded by the resident cap.
+            // #1715/#1719: the store must be lossless full-precision — this is unconditional, which is
+            // why there is no store-dtype parameter (a misleading one that was always ignored has been
+            // removed). The parameter-IO path (GetParameters round-trip / Clone) MUTATES rehydrated
+            // weights and reads them back, so a bf16 store would round-trip lossily and its eviction
+            // write-back (native-only) would skip, losing the mutation. Streaming also engages once and
+            // returns early on subsequent calls (and an already-occupied registry cannot be safely
+            // reconfigured — see the RegisteredEntryCount guard above), so a bf16 engagement from an
+            // earlier forward could never be upgraded when a later Clone / GetParameters needs full
+            // precision — parameter IO would be silently lossy depending on call order. Every noise
+            // predictor supports parameter round-trips, so full precision is the correct order-independent
+            // behavior; resident memory is still bounded by the resident cap.
             StreamingStoreDtype = AiDotNet.Tensors.LinearAlgebra.StreamingStoreDtype.FullPrecision,
         };
         try

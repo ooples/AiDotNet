@@ -1211,7 +1211,7 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         // TensorAllocator.RentPinned and accumulates the full ~25 GB weight set in the pinned heap → OOM.
         // Streaming flags the layers so AllocateLazyWeight pre-evicts to disk (bounded resident set).
         // No-op below the param-count/memory threshold, so smaller MMDiT predictors stay resident.
-        MaybeEngageWeightStreaming(fullPrecisionStore: true);
+        MaybeEngageWeightStreaming();
 
         // #1624 zero-copy: materialize each layer's lazy weights, then yield its resident trainable
         // tensors BY REFERENCE — one chunk per tensor, in canonical MMDiTLayerSequence × GetTrainable
@@ -1231,7 +1231,7 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
     public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
     {
         // Foundation-scale (#1715): engage streaming before materializing weights — see GetParameterChunks.
-        MaybeEngageWeightStreaming(fullPrecisionStore: true);
+        MaybeEngageWeightStreaming();
 
         using var e = chunks.GetEnumerator();
         foreach (var layer in MMDiTLayerSequence())

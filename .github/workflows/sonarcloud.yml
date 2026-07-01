@@ -67,7 +67,12 @@ concurrency:
   # leaves the 49-shard matrix with no completed signal to verify a PR against
   # (observed repeatedly on #1719: DQNAgent / FastConformer "failures" that pass
   # locally were cancellation artifacts). GitHub still supersedes only PENDING runs in
-  # the group, so at most one run is queued per PR — bounded, no matrix pile-up.
+  # the group, so at most one run is queued per PR — bounded (≤1 in-progress + ≤1 pending),
+  # no matrix pile-up, so the extra runner time per PR is capped, not unbounded. The
+  # obvious alternative — keep cancel-in-progress: true but treat cancelled jobs as
+  # neutral in required checks — does not fit here: GitHub reports a cancelled required
+  # check as FAILING (not neutral), which is exactly the false-red branch-protection
+  # signal this setting exists to avoid.
   cancel-in-progress: ${{ github.event_name != 'pull_request' }}
 
 env:
