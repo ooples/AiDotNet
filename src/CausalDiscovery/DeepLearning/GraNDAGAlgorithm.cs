@@ -51,6 +51,33 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
         int h = HiddenUnits;
         if (n < 3 || d < 2) return new Matrix<T>(d, d);
 
+        // Standardize each variable to zero mean / unit variance before fitting — GraN-DAG's
+        // preprocessing (Lachapelle 2020, experimental setup). The per-variable Gaussian-NLL score and
+        // the path-norm adjacency are scale-sensitive, so without this a uniform rescaling of the data
+        // (x -> 10x) changes the discovered edge set. Standardizing makes discovery invariant to input
+        // scaling (DiscoverStructure_IsInvariantToDataScaling); a constant column is left at zero. Every
+        // downstream computation (the MLP fit below and the covariance) then runs on the standardized data.
+        {
+            var standardized = new Matrix<T>(n, d);
+            for (int col = 0; col < d; col++)
+            {
+                double mean = 0.0;
+                for (int r = 0; r < n; r++) mean += NumOps.ToDouble(data[r, col]);
+                mean /= n;
+                double variance = 0.0;
+                for (int r = 0; r < n; r++)
+                {
+                    double centered = NumOps.ToDouble(data[r, col]) - mean;
+                    variance += centered * centered;
+                }
+                double sd = Math.Sqrt(variance / n);
+                double invSd = sd > 1e-12 ? 1.0 / sd : 0.0;
+                for (int r = 0; r < n; r++)
+                    standardized[r, col] = NumOps.FromDouble((NumOps.ToDouble(data[r, col]) - mean) * invSd);
+            }
+            data = standardized;
+        }
+
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         T scale = NumOps.FromDouble(Math.Sqrt(2.0 / d));
 
@@ -234,7 +261,12 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
                     learnedP[i, j] = NumOps.ToDouble(rawAdj[i, j]) / maxNorm;
 
         var cov = ComputeCovarianceMatrix(data);
-        return BuildFinalAdjacency(learnedP, cov, d);
+        // Guarantee an acyclic output. BuildFinalAdjacency's direction tie-break only rules out
+        // 2-cycles; a 3+-node cycle (A->B->C->A) can still survive raw thresholding — exactly the
+        // DiscoverStructure_OutputIsAcyclic failure (topological sort visited 0/4 nodes). ProjectToDag
+        // imposes a strict source-score topological order and keeps only forward edges, so the result
+        // is a DAG by construction. Mirrors the sibling DAGGNNAlgorithm, which already routes through it.
+        return BuildFinalAdjacency(ProjectToDag(learnedP, d), cov, d);
     }
 
     private Matrix<T> ExtractAdjacency(Matrix<T>[] W1, int d, int h)
