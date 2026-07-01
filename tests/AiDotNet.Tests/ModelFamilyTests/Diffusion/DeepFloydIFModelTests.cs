@@ -9,7 +9,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 /// for the FP32 rationale. DeepFloyd IF at paper defaults OOMs in fresh-process
 /// probes at FP64 on the 16 GB CI host.
 /// </summary>
-// HeavyTimeout (#1706): after the input-channel shape fix above, DeepFloyd IF still cleanly OOMs —
+// HeavyTimeout (#1706): after the input-channel shape fix below, DeepFloyd IF still cleanly OOMs —
 // verified System.OutOfMemoryException under a 16 GB DOTNET_GCHeapHardLimit reproducing the CI ceiling
 // (foundation-scale pixel-space cascaded diffusion; the summary above notes it OOMs at paper defaults on
 // the 16 GB host). So it OS-OOM-kills the Diffusion D-I shard. Runs in the nightly heavy lane; the shape
