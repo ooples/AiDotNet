@@ -16797,9 +16797,13 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(numFactors, (IActivationFunction<T>)new TanhActivation<T>());
         yield return new BatchNormalizationLayer<T>();
 
-        // Alpha predictor
+        // Alpha predictor. The final layer predicts per-asset alpha (excess return),
+        // a signed real value — the head MUST be linear. DenseLayer(n, null) falls back
+        // to ReLU in its ctor, which clips alpha to >= 0 and dead-ReLUs (once a neuron's
+        // pre-activation goes negative it is frozen at 0 with zero gradient), collapsing
+        // the output to a constant. Pass an explicit IdentityActivation to stay linear.
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new DenseLayer<T>(numAssets, (IActivationFunction<T>?)null);
+        yield return new DenseLayer<T>(numAssets, (IActivationFunction<T>)new IdentityActivation<T>());
     }
 
     /// <summary>
@@ -16835,19 +16839,27 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
         yield return new BatchNormalizationLayer<T>();
 
-        // Latent space (mean and log-variance)
-        yield return new DenseLayer<T>(latentDimension * 2, (IActivationFunction<T>?)null);
+        // Latent space (mean and log-variance). This head MUST be linear: the
+        // log-variance is a signed quantity (negative for sub-unit variance) and
+        // the mean is unbounded. DenseLayer(n, null) falls back to ReLU in its ctor,
+        // which would clip both mean and log-variance to >= 0 — corrupting the VAE
+        // latent distribution. Pass an explicit IdentityActivation.
+        yield return new DenseLayer<T>(latentDimension * 2, (IActivationFunction<T>)new IdentityActivation<T>());
 
         // Factor discriminator for disentanglement
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new LeakyReLUActivation<T>());
-        yield return new DenseLayer<T>(numFactors, (IActivationFunction<T>?)null);
+        yield return new DenseLayer<T>(numFactors, (IActivationFunction<T>)new IdentityActivation<T>());
 
-        // Decoder
+        // Decoder. The final layer reconstructs the input features, which are signed
+        // real values — the reconstruction head MUST be linear. DenseLayer(n, null)
+        // falls back to ReLU, which clips the reconstruction to >= 0 and dead-ReLUs
+        // (frozen-at-0 neurons with zero gradient), collapsing training output to a
+        // constant. Pass an explicit IdentityActivation to stay linear.
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
         yield return new BatchNormalizationLayer<T>();
 
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new DenseLayer<T>(numFeatures, (IActivationFunction<T>?)null);
+        yield return new DenseLayer<T>(numFeatures, (IActivationFunction<T>)new IdentityActivation<T>());
     }
 
     /// <summary>
