@@ -89,13 +89,6 @@ public class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
     private int _numExperts;
     private int _numActiveExperts;
 
-    // Reusable scratch tensors for DenormalizeForecast's broadcast of per-instance std/mean across the
-    // forecast horizon. Reallocated only when the forecast shape changes; refilled every forward. Safe
-    // under the standard forward -> backward -> step ordering (the tape reads them within the same step's
-    // backward before the next forward overwrites them).
-    private Tensor<T>? _denormStdScratch;
-    private Tensor<T>? _denormMeanScratch;
-
     #endregion
 
     #region Properties
@@ -549,16 +542,12 @@ public class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
         // Broadcast the per-instance statistics to the forecast shape as constant
         // (non-trainable) leaf tensors, then apply out = out * std + mean via the
         // tape-tracked engine ops so gradients still flow back into the forecast
-        // head during training. The two broadcast tensors are cached scratch buffers
-        // (reallocated only when the forecast shape changes) so a stable-shape
-        // forecast loop does not allocate two full-size tensors every forward.
-        if (_denormStdScratch is null || !_denormStdScratch._shape.SequenceEqual(forecast._shape))
-        {
-            _denormStdScratch = new Tensor<T>(forecast._shape);
-            _denormMeanScratch = new Tensor<T>(forecast._shape);
-        }
-        var stdTensor = _denormStdScratch;
-        var meanTensor = _denormMeanScratch!;
+        // head during training. These are allocated fresh PER FORWARD (not cached on
+        // the instance): the tape captures them as leaves, so gradient accumulation
+        // (multiple forwards before one backward) and any concurrent forward would be
+        // corrupted by a shared, in-place-rewritten buffer.
+        var stdTensor = new Tensor<T>(forecast._shape);
+        var meanTensor = new Tensor<T>(forecast._shape);
         for (int b = 0; b < batchSize; b++)
         {
             T mean = b < means.Length ? means[b] : NumOps.Zero;
