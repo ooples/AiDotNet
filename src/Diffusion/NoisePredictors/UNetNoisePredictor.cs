@@ -490,7 +490,10 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     // denoising step — collapsing the UNet's hundreds of kernel launches into one
     // cuGraphLaunch. Per-instance; lazily created on first GPU forward.
     private AiDotNet.Tensors.Engines.Gpu.ResidentInferenceGraph? _residentGraph;
-    private static readonly bool s_diffusionCudaGraph =
+    // Read live each call (expression-bodied property), NOT cached at type-load — mirrors
+    // DiffusionModelBase.PredictorStreamCapture so a test/harness that sets AIDOTNET_DIFFUSION_CUDA_GRAPH
+    // after startup isn't stuck with a stale mutual-exclusion decision. A per-call env read is negligible.
+    private static bool DiffusionCudaGraphEnabled =>
         System.Environment.GetEnvironmentVariable("AIDOTNET_DIFFUSION_CUDA_GRAPH") == "1";
 
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
@@ -526,7 +529,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         // ForwardUNet on its own STABLE input copies (capture-address-stable across steps), captures
         // the kernel stream once, then replays via cuGraphLaunch. Any non-capturable op disables it
         // and falls back to eager, so correctness is never affected.
-        var captureEngine = s_diffusionCudaGraph
+        var captureEngine = DiffusionCudaGraphEnabled
             ? AiDotNet.Tensors.Engines.AiDotNetEngine.Current as AiDotNet.Tensors.Engines.DirectGpuTensorEngine
             : null;
         if (captureEngine is not null && captureEngine.SupportsInferenceGraphCapture)

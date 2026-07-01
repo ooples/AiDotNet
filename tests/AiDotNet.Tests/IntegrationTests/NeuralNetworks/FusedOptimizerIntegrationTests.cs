@@ -101,6 +101,10 @@ public class FusedOptimizerIntegrationTests
     {
         var ex = new InvalidOperationException("cuMemAllocAsync failed: Out of memory");
 
+        // The OOM string matches BOTH classifiers, which is exactly why recovery routing must consult
+        // IsGpuOutOfMemoryFailure FIRST (streaming-OOM recovery) before IsGpuTransientFailure (plain
+        // retry) — this test pins that both predicates fire; TryTrainWithFusedOptimizer's ordering is
+        // what turns that into streaming-OOM recovery rather than a transient retry.
         Assert.True(FusedTrainingTestNetwork.IsGpuOutOfMemoryForTest(ex));
         Assert.True(FusedTrainingTestNetwork.IsGpuTransientForTest(ex));
     }
