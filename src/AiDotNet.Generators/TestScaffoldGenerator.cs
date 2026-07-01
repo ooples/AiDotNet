@@ -289,6 +289,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // warm-up forward exceeds 120s on CPU — verified: Metadata_ShouldExist times out at 120000ms).
         // Runs in the nightly heavy lane, matching its KOSMOS2 sibling.
         "KOSMOS1",
+        // MIAVSR: video super-resolution. Its default stack (CreateDefaultVideoSuperResolutionLayers)
+        // is a 30 residual-block CNN with 4x pixel-shuffle upsampling, run over a multi-frame video
+        // clip — genuine heavy conv compute (NOT an O(n^2)-attention pathology: the factory is
+        // conv-only), so a 10-iteration Training_ShouldReduceLoss exceeds the 120s per-test budget on
+        // CPU (verified: it, MoreData and Metadata all time out at 120000ms). Same class as the
+        // already-tagged video models (MGLDVSR / InternVideo2 / LLaVAVideo) — runs in the nightly heavy
+        // lane. (A separate fidelity follow-up tracks wiring the paper's masked inter/intra-frame
+        // attention, which the default factory does not yet build.)
+        "MIAVSR",
     };
 
     private static readonly System.Collections.Generic.HashSet<string> Fp32TestClassNames =
