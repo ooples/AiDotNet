@@ -523,12 +523,23 @@ jobs:
           # Auto-generated layer tests from TestScaffoldGenerator (~1670 methods),
           # split A-M / N-Z by generated model-class first letter to halve per-shard
           # model instantiations (OOM mitigation).
-          - name: ModelFamily - Generated Layers A-M
+          # A-M was a single serial $heavyShard whose ~835 default-gate methods ran
+          # the full 45-min job timeout and got CANCELLED before finishing —
+          # perpetually red, like Integration C / NeuralNetworks A-L before their
+          # splits. Split A-M → A-F + G-M so each serial half finishes under the
+          # timeout. Gap-free + non-overlapping: union == the old A-M set.
+          - name: ModelFamily - Generated Layers A-F
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.A|FullyQualifiedName~Generated.B|FullyQualifiedName~Generated.C|FullyQualifiedName~Generated.D|FullyQualifiedName~Generated.E|FullyQualifiedName~Generated.F|FullyQualifiedName~Generated.G|FullyQualifiedName~Generated.H|FullyQualifiedName~Generated.I|FullyQualifiedName~Generated.J|FullyQualifiedName~Generated.K|FullyQualifiedName~Generated.L|FullyQualifiedName~Generated.M)
+              (FullyQualifiedName~Generated.A|FullyQualifiedName~Generated.B|FullyQualifiedName~Generated.C|FullyQualifiedName~Generated.D|FullyQualifiedName~Generated.E|FullyQualifiedName~Generated.F)
+          - name: ModelFamily - Generated Layers G-M
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.G|FullyQualifiedName~Generated.H|FullyQualifiedName~Generated.I|FullyQualifiedName~Generated.J|FullyQualifiedName~Generated.K|FullyQualifiedName~Generated.L|FullyQualifiedName~Generated.M)
           - name: ModelFamily - Generated Layers N-Z
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -745,7 +756,8 @@ jobs:
             'ModelFamily - Diffusion Stable',
             'ModelFamily - Diffusion Step-Sync',
             'ModelFamily - Diffusion T-Z',
-            'ModelFamily - Generated Layers A-M',
+            'ModelFamily - Generated Layers A-F',
+            'ModelFamily - Generated Layers G-M',
             'ModelFamily - Generated Layers N-Z',
             'ModelFamily - NeuralNetworks A-L',
             'ModelFamily - NeuralNetworks M-N',
