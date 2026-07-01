@@ -164,4 +164,37 @@ public class ModelBasedAndMultiAgentTrainingTests
         Assert.True(ParametersChangedAndFinite(before, after),
             "MuZeroAgent parameters did not change after training — Train() builds gradients but never applies them.");
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task MuZero_MultiStepUnroll_UpdatesParametersAcrossEpisodeBoundaries()
+    {
+        await Task.Yield();
+        // Paper-faithful K-step unroll (#1756): Train() must unroll the learned model K>1 steps and
+        // backprop one joint loss through the recurrence — updating all three networks — without
+        // throwing, including when the sampled trajectory window crosses an episode boundary (Done).
+        const int obs = 4, actionDim = 2, batch = 8;
+        var agent = new MuZeroAgent<double>(new MuZeroOptions<double>
+        {
+            ObservationSize = obs,
+            ActionSize = actionDim,
+            LatentStateSize = 12,
+            BatchSize = batch,
+            UnrollSteps = 4,   // K = 4 recurrent unroll
+            TDSteps = 3,
+        });
+        var rng = RandomHelper.CreateSeededRandom(7);
+        for (int t = 0; t < batch * 4; t++)
+        {
+            var a = new Vector<double>(actionDim);
+            a[rng.Next(actionDim)] = 1.0; // one-hot action
+            agent.StoreExperience(Rand(rng, obs), a, rng.NextDouble(), Rand(rng, obs), done: t % 11 == 10);
+        }
+
+        var before = agent.GetParameters();
+        for (int step = 0; step < 5; step++) agent.Train(); // K=4 unroll must not throw
+        var after = agent.GetParameters();
+
+        Assert.True(ParametersChangedAndFinite(before, after),
+            "MuZero K=4 unrolled training did not update parameters — the joint recurrent unroll backprop is not flowing.");
+    }
 }
