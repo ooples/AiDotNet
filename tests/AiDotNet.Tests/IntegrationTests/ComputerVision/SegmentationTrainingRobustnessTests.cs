@@ -26,6 +26,15 @@ namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
 /// Tests training robustness: multi-step training, predict-after-train consistency,
 /// backward pass gradient flow, and training with unbatched inputs.
 /// </summary>
+// #1754/#1706: this class constructs and TRAINS 70 foundation-scale SAM/ViT/Swin-family segmentation
+// models one per test. As the class docstring below notes, committed memory accumulates across the
+// class's tests (InferenceWeightCache + un-compacted LOH + the process-global WeightRegistry streaming
+// pool, AiDotNet.Tensors #714) until the runner OOMs mid-shard and dies with a shutdown signal — so the
+// whole "Integration C - ComputerVision" shard never completes and is perpetually red. This is genuine
+// foundation-scale TRAINING cost, not a per-test bug, so route the class to the HeavyTimeout nightly
+// lane: the default PR gate filters `&Category!=HeavyTimeout` and completes on the fast forward/shape
+// robustness CV tests, while these run nightly. Durable fix is Tensors #714 (weak-refs / pressure-evict).
+[Xunit.Trait("Category", "HeavyTimeout")]
 public class SegmentationTrainingRobustnessTests : IDisposable
 {
     // These tests construct and TRAIN heavy SAM/ViT-family segmentation models one per test. Two
