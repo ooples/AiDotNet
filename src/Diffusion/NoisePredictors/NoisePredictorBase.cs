@@ -738,14 +738,17 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         {
             StreamingPoolMaxResidentBytes = StreamingResidentCapOverride ?? ComputeResidentCapBytes(),
             TransparentAutoEviction = true,
-            // #1715: the parameter-IO path (GetParameters round-trip / Clone) MUTATES rehydrated weights
-            // and reads them back, so the store must be lossless full-precision — bf16 (the inference
-            // default) would round-trip lossily and the eviction write-back (native-only) would skip,
-            // losing the mutation. The forward path leaves this Auto (bf16 in inference is fine; weights
-            // are read-only there).
-            StreamingStoreDtype = fullPrecisionStore
-                ? AiDotNet.Tensors.LinearAlgebra.StreamingStoreDtype.FullPrecision
-                : AiDotNet.Tensors.LinearAlgebra.StreamingStoreDtype.Auto,
+            // #1715/#1719: the store must be lossless full-precision. The parameter-IO path
+            // (GetParameters round-trip / Clone) MUTATES rehydrated weights and reads them back, so a
+            // bf16 store would round-trip lossily and its eviction write-back (native-only) would skip,
+            // losing the mutation. We deliberately use FullPrecision REGARDLESS of fullPrecisionStore:
+            // streaming engages once and returns early on subsequent calls (and an already-occupied
+            // registry cannot be safely reconfigured — see the RegisteredEntryCount guard above), so a
+            // bf16 engagement from an earlier forward could never be upgraded when a later Clone /
+            // GetParameters needs full precision — parameter IO would be silently lossy depending on
+            // call order. Every noise predictor supports parameter round-trips, so full precision is the
+            // correct order-independent default; resident memory is still bounded by the resident cap.
+            StreamingStoreDtype = AiDotNet.Tensors.LinearAlgebra.StreamingStoreDtype.FullPrecision,
         };
         try
         {

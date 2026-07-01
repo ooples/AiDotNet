@@ -706,7 +706,17 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
         // (edge scores) and the binary-cross-entropy loss on the tape, compute real gradients for every
         // trainable parameter, then drive the update through the model's configured optimizer
         // (default Adam) so the loss actually converges.
-        var tapeLoss = _lossFunction as LossFunctionBase<T> ?? new BinaryCrossEntropyLoss<T>();
+        // Tape-based training requires a tape-differentiable loss — a LossFunctionBase<T>, which
+        // exposes ComputeTapeLoss. Silently substituting BinaryCrossEntropyLoss for a
+        // non-LossFunctionBase<T> would train a DIFFERENT objective than the caller configured (a
+        // surprising correctness trap), so fail fast with a clear message instead. The default loss
+        // (BinaryCrossEntropyLoss, set in the ctor) is a LossFunctionBase<T>, so the default path is
+        // unaffected — this only rejects a custom non-tape loss.
+        if (_lossFunction is not LossFunctionBase<T> tapeLoss)
+            throw new InvalidOperationException(
+                $"LinkPredictionModel tape-based training requires a LossFunctionBase<T> (one that "
+                + $"implements ComputeTapeLoss); the configured loss '{_lossFunction.GetType().Name}' is "
+                + "not tape-differentiable. Supply a LossFunctionBase<T>-derived loss such as BinaryCrossEntropyLoss.");
         using (var tape = new GradientTape<T>())
         {
             var predictions = Forward(input);
