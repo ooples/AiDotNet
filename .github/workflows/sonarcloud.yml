@@ -520,12 +520,23 @@ jobs:
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
               (FullyQualifiedName~Generated.A|FullyQualifiedName~Generated.B|FullyQualifiedName~Generated.C|FullyQualifiedName~Generated.D|FullyQualifiedName~Generated.E|FullyQualifiedName~Generated.F|FullyQualifiedName~Generated.G|FullyQualifiedName~Generated.H|FullyQualifiedName~Generated.I|FullyQualifiedName~Generated.J|FullyQualifiedName~Generated.K|FullyQualifiedName~Generated.L|FullyQualifiedName~Generated.M)
-          - name: ModelFamily - Generated Layers N-Z
+          # N-Z was a single serial $heavyShard whose ~835 default-gate scaffold
+          # methods ran the full 45-min job timeout and got CANCELLED before
+          # finishing — perpetually red, like Integration C / NeuralNetworks A-L
+          # before their splits. Split N-Z → N-S + T-Z so each serial half
+          # finishes under the timeout. Gap-free + non-overlapping: union == N-Z.
+          - name: ModelFamily - Generated Layers N-S
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.N|FullyQualifiedName~Generated.O|FullyQualifiedName~Generated.P|FullyQualifiedName~Generated.Q|FullyQualifiedName~Generated.R|FullyQualifiedName~Generated.S|FullyQualifiedName~Generated.T|FullyQualifiedName~Generated.U|FullyQualifiedName~Generated.V|FullyQualifiedName~Generated.W|FullyQualifiedName~Generated.X|FullyQualifiedName~Generated.Y|FullyQualifiedName~Generated.Z)
+              (FullyQualifiedName~Generated.N|FullyQualifiedName~Generated.O|FullyQualifiedName~Generated.P|FullyQualifiedName~Generated.Q|FullyQualifiedName~Generated.R|FullyQualifiedName~Generated.S)
+          - name: ModelFamily - Generated Layers T-Z
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.T|FullyQualifiedName~Generated.U|FullyQualifiedName~Generated.V|FullyQualifiedName~Generated.W|FullyQualifiedName~Generated.X|FullyQualifiedName~Generated.Y|FullyQualifiedName~Generated.Z)
           # Previously-uncovered model families (NO shard ran these): CodeModel
           # (CodeBERT), Forecasting (MGTSD), Segmentation (SwinUNETR), Survival
           # (RandomSurvivalForest). Small (1 model each) — one combined shard.
@@ -737,7 +748,8 @@ jobs:
             'ModelFamily - Diffusion Step-Sync',
             'ModelFamily - Diffusion T-Z',
             'ModelFamily - Generated Layers A-M',
-            'ModelFamily - Generated Layers N-Z',
+            'ModelFamily - Generated Layers N-S',
+            'ModelFamily - Generated Layers T-Z',
             'ModelFamily - NeuralNetworks A-L',
             'ModelFamily - NeuralNetworks M-N',
             'ModelFamily - NeuralNetworks O-R',
