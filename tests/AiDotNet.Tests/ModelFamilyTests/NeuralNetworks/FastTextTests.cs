@@ -18,6 +18,15 @@ public class FastTextTests : NeuralNetworkModelTestBase<float>
     protected override int MoreDataShortIterations => 1;
     protected override int MoreDataLongIterations => 2;
 
+    // Same compute-bound reason as MoreData above: at ~200M parameters every Train() step is
+    // O(200M), so the base MemorizationTaskIterations default of 100 steps cannot finish inside the
+    // LossStrictlyDecreasesOnMemorizationTask timeout (it timed out at 180000ms on the A-L shard).
+    // Memorizing a single (input, one-hot target) pair through the 10000-way softmax drives the loss
+    // down within a handful of steps, so a much smaller step count still exercises the "loss strictly
+    // decreases" invariant at full model fidelity — only the iteration depth is reduced to a runnable
+    // value, matching how the paper-scale model-family tests cap their iteration budgets. #1706.
+    protected override int MemorizationTaskIterations => 15;
+
     protected override INeuralNetworkModel<float> CreateNetwork()
         => new FastText<float>();
 
