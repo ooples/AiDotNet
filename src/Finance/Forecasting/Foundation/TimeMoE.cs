@@ -463,6 +463,16 @@ public class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
         // straight sequential dispatch. Causal masking for the decoder-only
         // semantics is applied by the attention block's own mask config, not
         // at this orchestration layer.
+        //
+        // RevIN (reversible instance normalization): Time-MoE normalizes each
+        // series to zero mean / unit variance, forecasts in that normalized
+        // space, then REVERSES the normalization on the forecast so it returns
+        // to the input series' original level and scale. Without the reverse
+        // step two constant series at different levels (e.g. all-0.1 vs all-0.9)
+        // both normalize to ~0 and produce an identical forecast — a degenerate
+        // uniform-output collapse. Capture the per-instance statistics BEFORE
+        // normalizing so the forecast can be de-normalized below.
+        ComputeInstanceStats(input, out var instanceMeans, out var instanceStds);
         var current = ApplyInstanceNormalization(input);
         bool addedBatchDim = false;
         if (current.Rank == 1)
@@ -477,7 +487,118 @@ public class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = Engine.Reshape(current, new[] { current.Shape[1] });
 
-        return current;
+        return DenormalizeForecast(current, instanceMeans, instanceStds);
+    }
+
+    /// <summary>
+    /// Computes the per-instance mean and standard deviation of the context
+    /// series, matching <see cref="ApplyInstanceNormalization"/>'s statistics, so
+    /// <see cref="DenormalizeForecast"/> can reverse the normalization (RevIN).
+    /// </summary>
+    private void ComputeInstanceStats(Tensor<T> input, out T[] means, out T[] stds)
+    {
+        int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
+        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
+        means = new T[batchSize];
+        stds = new T[batchSize];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            T mean = NumOps.Zero;
+            for (int t = 0; t < seqLen; t++)
+            {
+                int idx = b * seqLen + t;
+                if (idx < input.Length)
+                    mean = NumOps.Add(mean, input[idx]);
+            }
+            mean = NumOps.Divide(mean, NumOps.FromDouble(seqLen));
+
+            T variance = NumOps.Zero;
+            for (int t = 0; t < seqLen; t++)
+            {
+                int idx = b * seqLen + t;
+                if (idx < input.Length)
+                {
+                    var diff = NumOps.Subtract(input[idx], mean);
+                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
+                }
+            }
+            variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen));
+
+            means[b] = mean;
+            stds[b] = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
+        }
+    }
+
+    /// <summary>
+    /// Reverses the instance normalization on the forecast: for each instance,
+    /// <c>forecast[h] = forecast[h] * std + mean</c>. <see cref="ForwardNative"/>
+    /// is on BOTH the training and the inference forward, so the affine is applied
+    /// through the autograd engine (the per-instance std/mean are constant leaf
+    /// tensors) — a raw element-wise write would sever the tape and zero the
+    /// training gradient.
+    /// </summary>
+    private Tensor<T> DenormalizeForecast(Tensor<T> forecast, T[] means, T[] stds)
+    {
+        int batchSize = forecast.Rank > 1 ? forecast.Shape[0] : 1;
+        int horizon = forecast.Rank > 1 ? forecast.Shape[1] : forecast.Length;
+
+        // Broadcast the per-instance statistics to the forecast shape as constant
+        // (non-trainable) leaf tensors, then apply out = out * std + mean via the
+        // tape-tracked engine ops so gradients still flow back into the forecast
+        // head during training.
+        var stdTensor = new Tensor<T>(forecast._shape);
+        var meanTensor = new Tensor<T>(forecast._shape);
+        for (int b = 0; b < batchSize; b++)
+        {
+            T mean = b < means.Length ? means[b] : NumOps.Zero;
+            T std = b < stds.Length ? stds[b] : NumOps.One;
+            for (int h = 0; h < horizon; h++)
+            {
+                int idx = b * horizon + h;
+                if (idx < stdTensor.Length)
+                {
+                    stdTensor.Data.Span[idx] = std;
+                    meanTensor.Data.Span[idx] = mean;
+                }
+            }
+        }
+
+        return Engine.TensorAdd(Engine.TensorMultiply(forecast, stdTensor), meanTensor);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The default <see cref="NeuralNetworkBase{T}.GetNamedLayerActivations"/>
+    /// feeds the raw input straight into <c>Layers[0]</c>, but TimeMoE's first
+    /// layer is a <see cref="ReshapeLayer{T}"/> that expects the
+    /// instance-normalized <c>[batch, contextLength]</c> tensor
+    /// <see cref="ForwardNative"/> produces. A raw rank-1 <c>[contextLength]</c>
+    /// input makes that ReshapeLayer read a per-sample element count of 1 against
+    /// its contextLength-wide output and throw. Mirror ForwardNative's input
+    /// preparation (instance normalization + rank-1 → <c>[1, contextLength]</c>
+    /// batch axis) before running the layer stack so the captured activations are
+    /// the ones the model actually computes. ONNX mode has no native
+    /// <c>Layers</c>, so it defers to the base (empty) behavior.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            return base.GetNamedLayerActivations(input);
+
+        SetTrainingMode(false);
+        var activations = new Dictionary<string, Tensor<T>>();
+        var current = ApplyInstanceNormalization(input);
+        if (current.Rank == 1)
+            current = current.Reshape(new[] { 1, current.Length });
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
     }
 
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)
