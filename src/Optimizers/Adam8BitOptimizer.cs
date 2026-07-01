@@ -1520,16 +1520,23 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
 
     private void WriteTapeState(BinaryWriter writer, QuantizedTapeState state)
     {
-        // The GPU 8-bit step updates GpuMQ/GpuVQ (and the device scale buffers) in place and never
-        // writes back to the host MQuantized/VQuantized/scale fields this method serializes. Persisting
-        // a GPU-resident state here would therefore checkpoint STALE host moments (silent corruption).
-        // There is no device->host readback path yet, so fail fast rather than write wrong data.
+        // The GPU 8-bit step (AIDOTNET_GPU_ADAM=1) updates GpuMQ/GpuVQ (and the device scale buffers) in
+        // place and never writes back to the host MQuantized/VQuantized/scale fields this method serializes.
+        // Persisting a GPU-resident state here would therefore checkpoint STALE host moments — silent
+        // corruption that resumes with wrong optimizer state. The device->host readback belongs in the
+        // Tensors GpuOptimizer layer (which owns the device buffers) and has to be validated on real GPU
+        // hardware, so it is a tracked enhancement rather than something this diffusion-training PR ships
+        // unvalidated. Until then we fail fast with actionable guidance instead of writing wrong data:
+        // to checkpoint an 8-bit Adam run, train with AIDOTNET_GPU_ADAM unset (or CompressBothMoments off)
+        // so the moments stay host-resident and serialize correctly. Higher-level checkpoint code may catch
+        // this to degrade to a model-only save with a clear status.
         if (state.GpuResident)
         {
             throw new InvalidOperationException(
-                "Adam8BitOptimizer: cannot serialize a GPU-resident tape state — the device moment buffers " +
-                "have not been synced back to the host fields being written. Sync/download the GPU moments to " +
-                "host before Serialize.");
+                "Adam8BitOptimizer: cannot serialize a GPU-resident 8-bit tape state — the device moment " +
+                "buffers have no host-readback path yet, so persisting would checkpoint stale host moments. " +
+                "To checkpoint, run without AIDOTNET_GPU_ADAM (host-resident moments serialize normally), or " +
+                "handle this exception at the checkpoint layer to save model-only.");
         }
 
         writer.Write(state.Length);
@@ -1767,7 +1774,25 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             {
                 throw new InvalidOperationException($"Adam8BitOptimizer: invalid tensor dimension {shape[i]} at axis {i}.");
             }
-            declaredElements *= shape[i];
+            // checked: an unchecked long product can silently overflow/wrap for a malicious shape,
+            // producing a small count that bypasses the byte-remaining guard and forces a huge alloc.
+            try
+            {
+                declaredElements = checked(declaredElements * shape[i]);
+            }
+            catch (OverflowException)
+            {
+                throw new InvalidOperationException(
+                    $"Adam8BitOptimizer: tensor shape overflows its element count at axis {i}. Checkpoint is corrupted or malicious.");
+            }
+        }
+
+        // A single in-memory tensor cannot exceed int.MaxValue elements (Tensor.Length is Int32); reject
+        // an out-of-range count so a wrapped/absurd shape can't slip past the byte-bound check.
+        if (declaredElements > int.MaxValue)
+        {
+            throw new InvalidOperationException(
+                $"Adam8BitOptimizer: tensor shape declares {declaredElements} elements, exceeding the maximum supported tensor size.");
         }
 
         // Bound the element count (each element is an 8-byte double on the wire) against the bytes that

@@ -109,6 +109,10 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
     private readonly object _tapeStateSync = new();
 
+    // The context.Parameters.Count the tape index map was last rebuilt for. Used with an endpoint
+    // reference check to skip the O(#params) rebuild in steady-state training. -1 = never built.
+    private int _tapeIndexedParameterCount = -1;
+
     /// <summary>
     /// A cache for storing and retrieving gradients to improve performance.
     /// </summary>
@@ -2102,12 +2106,34 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
         lock (_tapeStateSync)
         {
-            // Rebuild the index from the CURRENT parameters each step. Without clearing, tensors that
-            // are no longer part of the active model (e.g. after a parameter set is replaced, or an
-            // optimizer is reused across models without a full Reset) would linger as stale references
-            // and could be serialized as state for parameters that no longer exist.
+            int count = context.Parameters.Count;
+
+            // Steady-state fast path: when there is no pending deserialized state to rebind AND the
+            // current parameter set is the one we already indexed, the existing map is still correct,
+            // so skip the O(#params) clear+repopulate that otherwise ran under the lock every Step().
+            // "Same set" = same count with identical FIRST and LAST tensor references (parameter tensors
+            // are stable objects across training steps; the map uses a reference comparer). A replaced
+            // parameter set or an optimizer reused on another model yields different endpoint references
+            // (or a different count) and correctly falls through to the full rebuild below — preserving
+            // the stale-reference safety the rebuild guarantees.
+            if (_pendingTapeTensorStates.Count == 0 && count == _tapeIndexedParameterCount && count > 0)
+            {
+                var firstParam = context.Parameters[0];
+                var lastParam = context.Parameters[count - 1];
+                if (firstParam is not null && lastParam is not null
+                    && _tapeParameterIndices.TryGetValue(firstParam, out int firstIndex) && firstIndex == 0
+                    && _tapeParameterIndices.TryGetValue(lastParam, out int lastIndex) && lastIndex == count - 1)
+                {
+                    return;
+                }
+            }
+
+            // Rebuild the index from the CURRENT parameters. Without clearing, tensors that are no longer
+            // part of the active model (e.g. after a parameter set is replaced, or an optimizer is reused
+            // across models without a full Reset) would linger as stale references and could be serialized
+            // as state for parameters that no longer exist.
             _tapeParameterIndices.Clear();
-            for (int parameterIndex = 0; parameterIndex < context.Parameters.Count; parameterIndex++)
+            for (int parameterIndex = 0; parameterIndex < count; parameterIndex++)
             {
                 var parameter = context.Parameters[parameterIndex];
                 if (parameter is null) continue;
@@ -2115,6 +2141,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 _tapeParameterIndices[parameter] = parameterIndex;
                 RestorePendingTapeTensorStates(parameterIndex, parameter);
             }
+            _tapeIndexedParameterCount = count;
         }
     }
 
@@ -2137,6 +2164,20 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         var tapeStepFields = EnumerateOptimizerFields()
             .Where(field => field.Name == "_tapeStep" && field.FieldType == typeof(int))
             .ToList();
+
+        // Guard against field shadowing: if a derived optimizer also declared `_tapeStep`, the hierarchy
+        // walk yields multiple same-named fields. DeserializeExtensionData resolves by name only, so it
+        // would repeatedly bind the first match and silently restore the WRONG step counter. No optimizer
+        // shadows it today (all derive directly from this base); fail fast with a clear message if one
+        // ever does, rather than corrupt the restored state. This keeps the on-wire count <= 1, which in
+        // turn makes the name-only resolve on the deserialize side unambiguous.
+        if (tapeStepFields.Count > 1)
+        {
+            throw new InvalidOperationException(
+                $"{GetType().Name} declares multiple '_tapeStep' fields across its type hierarchy " +
+                $"({string.Join(", ", tapeStepFields.Select(f => f.DeclaringType?.Name))}). Tape-state " +
+                $"serialization requires a single '_tapeStep'; rename the shadowing field.");
+        }
 
         writer.Write(tapeStepFields.Count);
         foreach (var field in tapeStepFields)
@@ -2276,7 +2317,26 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             {
                 throw new InvalidOperationException($"Invalid optimizer tensor dimension {shape[i]} at axis {i}.");
             }
-            declaredElements *= shape[i];
+            // checked: an unchecked long product can silently overflow/wrap for a malicious shape,
+            // yielding a small (or negative) count that slips past the byte-remaining guard below and
+            // triggers an oversized allocation. Overflow => corrupt/hostile checkpoint => fail fast.
+            try
+            {
+                declaredElements = checked(declaredElements * shape[i]);
+            }
+            catch (OverflowException)
+            {
+                throw new InvalidOperationException(
+                    $"Optimizer tensor shape overflows its element count at axis {i}. Checkpoint is corrupted or malicious.");
+            }
+        }
+
+        // A single in-memory tensor cannot exceed int.MaxValue elements (Tensor.Length is Int32); reject
+        // an out-of-range count here so a wrapped/absurd shape can't slip past the byte-bound check.
+        if (declaredElements > int.MaxValue)
+        {
+            throw new InvalidOperationException(
+                $"Optimizer tensor shape declares {declaredElements} elements, exceeding the maximum supported tensor size.");
         }
 
         // Bound the element count (8-byte doubles on the wire) against the remaining bytes BEFORE
@@ -2355,6 +2415,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         lock (_tapeStateSync)
         {
             _tapeParameterIndices.Clear();
+            _tapeIndexedParameterCount = -1;
             _pendingTapeTensorStates.Clear();
 
             foreach (var field in EnumerateTapeTensorStateFields())

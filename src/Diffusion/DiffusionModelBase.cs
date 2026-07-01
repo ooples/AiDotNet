@@ -1129,14 +1129,22 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         // 2020 — Adam, NOT AdamW: β1=0.9, β2=0.999, ε=1e-8, no weight decay), reusing the shared
         // optimizer infrastructure so nothing is hardcoded and the update runs on its vectorized (SIMD)
         // Engine path. The non-paper extras (adaptive betas, adaptive LR, AMSGrad) are disabled so the
-        // default reproduces the paper exactly. Built lazily so a never-trained model pays nothing and
-        // LearningRate (which subclasses may set post-construction) is read at first use. The caller can
-        // substitute ANY optimizer via DiffusionModelOptions.OptimizerFactory (bring-your-own).
+        // default reproduces the paper exactly (DDPM uses a FIXED learning rate — no schedule/warmup).
+        //
+        // LR contract: the model's LearningRate is captured ONCE here, at the lazy first-Train build, and
+        // is thereafter fixed for the default optimizer (matching the paper's constant LR). Set
+        // LearningRate before the first Train to choose it. To vary LR during training (warmup, decay,
+        // schedules), supply an optimizer that owns its own scheduler via DiffusionModelOptions
+        // .OptimizerFactory — that optimizer's LR then drives training and this constant-LR default is
+        // bypassed entirely. Mutating the model's LearningRate after the first Train does NOT retroactively
+        // change the already-built default optimizer, by design.
         _trainingOptimizer ??= _options.OptimizerFactory?.Invoke() ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             model: null,
             options: new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = Convert.ToDouble(LearningRate),
+                // NumOps.ToDouble (not Convert.ToDouble) — the project's numeric abstraction converts any T
+                // consistently, whereas Convert.ToDouble only works for IConvertible T and boxes.
+                InitialLearningRate = NumOps.ToDouble(LearningRate),
                 Beta1 = 0.9,
                 Beta2 = 0.999,
                 Epsilon = 1e-8,
