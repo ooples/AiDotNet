@@ -4,11 +4,9 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-// HeavyTimeout (#1706): instantiated at full default (paper) scale — a single model's construct +
-// forward/train probe peak exceeds the 16 GB PR runner, which SIGTERM-cancelled the SA-SD shard.
-// Runs in the nightly HeavyTimeout lane; the default gate filters Category!=HeavyTimeout. Drop once
-// it fits the per-test budget (e.g. via a tiny same-architecture injection like SDXLTurbo).
 [Xunit.Collection("FoundationScaleSerial")]
+// HeavyTimeout: foundation-scale diffusion (video / paper-scale); correct but a single
+// forward x N-step Generate exceeds the 120 s per-test gate. Runs in the nightly lane.
 [Xunit.Trait("Category", "HeavyTimeout")]
 public class SANAModelTests : DiffusionModelTestBase<float>
 {
