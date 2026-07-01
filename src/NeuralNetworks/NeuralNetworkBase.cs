@@ -7437,6 +7437,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     }
                 }
             }
+
+            allGrads.Clear();
+            grads.Clear();
+            GpuEngine?.DropActivationCache();
         }
         finally
         {
