@@ -610,6 +610,40 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
         return current;
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The default <see cref="NeuralNetworkBase{T}.GetNamedLayerActivations"/>
+    /// feeds the raw input straight into <c>Layers[0]</c>, but TimeMAE's first
+    /// layer is a <see cref="ReshapeLayer{T}"/> that expects the
+    /// instance-normalized <c>[batch, contextLength]</c> tensor
+    /// <see cref="ForwardNative"/> produces. A raw rank-1 <c>[contextLength]</c>
+    /// input makes that ReshapeLayer read a per-sample element count of 1 against
+    /// its contextLength-wide output and throw. Mirror ForwardNative's input
+    /// preparation (instance normalization + rank-1 → <c>[1, contextLength]</c>
+    /// batch axis) before running the layer stack so the captured activations are
+    /// the ones the model actually computes on the forward path. ONNX mode has no
+    /// native <c>Layers</c>, so it defers to the base (empty) behavior.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            return base.GetNamedLayerActivations(input);
+
+        SetTrainingMode(false);
+        var activations = new Dictionary<string, Tensor<T>>();
+        var current = ApplyInstanceNormalization(input);
+        if (current.Rank == 1)
+            current = current.Reshape(new[] { 1, current.Length });
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
+    }
+
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
         if (OnnxSession == null)

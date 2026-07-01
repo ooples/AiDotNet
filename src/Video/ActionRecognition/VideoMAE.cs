@@ -85,6 +85,7 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
     private readonly int _patchSize;
     private readonly int _tubeletSize;
     private double _maskRatio;
+    private bool _videoMaeShapesResolved;
     private bool _useNativeMode;
     private string? _onnxModelPath;
     private InferenceSession? _onnxSession;
@@ -367,6 +368,22 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
+        // EncodeVideo/PatchEmbed operate on batched clips [B, T, C, H, W] and
+        // index the frame/channel/spatial axes positionally. Every inference
+        // path (ClassifyAction, ExtractFeatures, PretrainMAE) normalizes a
+        // single unbatched clip [T, C, H, W] to rank 5 before encoding; the
+        // training forward must do the same or PatchEmbed reads a missing axis
+        // (IndexOutOfRange) on the rank-4 input the harness feeds. The batch
+        // dim is prepended on the raw leaf input, so no gradient flows back
+        // through the copy and the tape is unaffected. The output is left
+        // batched ([1, NumClasses]); TrainWithTape reshapes the target to a
+        // matching leading-1 batch, so no tape-severing RemoveBatchDimension
+        // is needed on the logits.
+        if (input.Rank != 5)
+        {
+            input = AddBatchDimension5D(input);
+        }
+
         // Train on raw logits, not the post-softmax probabilities ClassifyAction
         // returns: this model is wired with CrossEntropyWithLogitsLoss<T>, which
         // applies softmax internally. Feeding probabilities into the loss would
@@ -374,6 +391,43 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
         // Inference (ClassifyAction) keeps the softmax; training drops it.
         var features = EncodeVideo(input);
         return ClassificationForward(features);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// VideoMAE's <c>Layers</c> are NOT a plain sequential chain over the raw
+    /// <c>[C, H, W]</c> architecture input: <see cref="PatchEmbed"/> folds
+    /// <c>tubeletSize</c> consecutive frames into <c>Layers[0]</c>'s channel
+    /// axis, so the tubelet convolution consumes <c>channels * tubeletSize</c>
+    /// input, not <c>channels</c>. The base <see cref="NeuralNetworkBase{T}.ResolveLazyLayerShapes"/>
+    /// walk feeds the raw (channels-wide) architecture input and resolves the
+    /// tubelet conv to <c>InputDepth = channels</c>; the first real forward then
+    /// feeds <c>channels * tubeletSize</c> and throws
+    /// "Expected input depth {channels}, but got {channels*tubeletSize}". Resolve
+    /// the lazy layers through the model's OWN forward on a dummy single-tubelet
+    /// clip so every layer materializes at the shape it actually sees on the
+    /// classification forward path (the reconstruction/decoder tail is exercised
+    /// only by pretraining and resolves lazily there).
+    /// </remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_videoMaeShapesResolved)
+        {
+            return;
+        }
+        _videoMaeShapesResolved = true;
+
+        if (!_useNativeMode || Layers is null || Layers.Count == 0)
+        {
+            return;
+        }
+
+        // [1, tubeletSize, channels, H, W]: PatchEmbed folds the tubelet axis
+        // into channels*tubeletSize, resolving Layers[0]; the encoder loop and
+        // classification head then resolve on the pooled features.
+        var probe = new Tensor<T>([1, _tubeletSize, _channels, _height, _width]);
+        var features = EncodeVideo(probe);
+        ClassificationForward(features);
     }
 
     /// <inheritdoc/>

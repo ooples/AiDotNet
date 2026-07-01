@@ -1952,6 +1952,29 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumLLMLayers = 1, NumHeads = 4, VocabSize = 64, MaxTextLength = 8, " +
                     "DropoutRate = 0.0, LearningRate = 1e-3, WeightDecay = 0.0 })";
             }
+            else if (model.ClassName == "WorldModelsAgent" && model.TypeParameterCount == 1)
+            {
+                // WorldModels (Ha & Schmidhuber 2018) defaults to a 64x64x3 =
+                // 12,288-wide image observation (VAE -> MDN-RNN -> controller).
+                // The generic RL invariant base (ReinforcementLearningTestBase)
+                // feeds StateDim (=4) observations plus a StateDim-wide supervised
+                // target, and its Train(state,target) helper decodes that target
+                // into a one-hot action of length StateDim. So the parameterless
+                // agent (obs=12,288, ActionSize=2) rejects every transition at the
+                // StoreExperience input guard ("Observation length must be 12288,
+                // got 4" / "Action length must be 2, got 4"). Instantiate the agent
+                // with a flattened observation whose size equals StateDim and an
+                // ActionSize equal to StateDim so the transition is accepted. The
+                // dense VAE (flattened observation -> DenseLayer stack) imposes no
+                // spatial minimum, so a 4x1x1 observation is legal. BatchSize=1 lets
+                // the single stored transition trigger a real VAE+RNN update, so
+                // Training_ShouldChangeParameters observes moved weights.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.Models.Options.WorldModelsOptions<double> {{ " +
+                    "ObservationWidth = 4, ObservationHeight = 1, ObservationChannels = 1, " +
+                    "ActionSize = 4, LatentSize = 4, RNNHiddenSize = 8, BatchSize = 1, " +
+                    "VAEEncoderChannels = new System.Collections.Generic.List<int> { 8 }, " +
+                    "ControllerLayers = new System.Collections.Generic.List<int> { 8 } })";
+            }
             else if (model.HasParameterlessConstructor)
             {
                 // Zero-arg constructor: simple instantiation
@@ -3437,9 +3460,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             //   DP; returns default action for unobserved states.
             // - A2C: actor-critic; at random init with no training data, the
             //   actor's policy is essentially uniform across actions.
+            // - WatkinsQLambda: Watkins 1989 — tabular Q(λ). Its Q-table is
+            //   keyed by the discretized state string; EnsureStateExists
+            //   zero-initializes the Q-row of any unseen state, so the greedy
+            //   policy (GetGreedyAction → ArgMax over an all-zero row) returns
+            //   action 0 for every state not visited during training. The two
+            //   states the invariant probes are never visited by the single
+            //   preceding train step, so identical greedy actions are the
+            //   correct tabular behavior, not a degenerate policy.
             if (model.ClassName == "UCBBanditAgent"
                 || model.ClassName == "ModifiedPolicyIterationAgent"
-                || model.ClassName == "A2CAgent")
+                || model.ClassName == "A2CAgent"
+                || model.ClassName == "WatkinsQLambdaAgent")
             {
                 sb.AppendLine("    protected override bool IsStateConditional => false;");
             }
