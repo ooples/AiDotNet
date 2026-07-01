@@ -18,7 +18,15 @@ namespace AiDotNet.Optimizers.Fused;
 /// <param name="UseBf16Moments">
 /// When true, request bfloat16 storage for the fused Adam/AdamW moment buffers
 /// (#1745) — half the optimizer-state footprint, same fp32 update math. Honored
-/// only by the CPU float Adam/AdamW fused kernel; a safe no-op otherwise.
+/// by the float Adam/AdamW fused kernels; a safe no-op otherwise.
+/// </param>
+/// <param name="UseInt8Moments">
+/// When true, request 8-bit block-quantized moment storage for fused Adam. This
+/// is only valid for deterministic max-abs block quantization of both moments;
+/// unsupported Adam8Bit configurations must return false and use the eager tape.
+/// </param>
+/// <param name="Int8MomentBlockSize">
+/// Block size for 8-bit fused moment quantization.
 /// </param>
 internal readonly record struct FusedOptimizerConfig(
     OptimizerType Type,
@@ -28,7 +36,9 @@ internal readonly record struct FusedOptimizerConfig(
     float Epsilon,
     float WeightDecay,
     LrSchedule? Schedule,
-    bool UseBf16Moments = false);
+    bool UseBf16Moments = false,
+    bool UseInt8Moments = false,
+    int Int8MomentBlockSize = 2048);
 
 /// <summary>
 /// Implemented by optimizers that have a compiled fused-kernel equivalent, so the

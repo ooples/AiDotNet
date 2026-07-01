@@ -51,32 +51,53 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// <inheritdoc/>
     /// <remarks>
     /// #1745: in BFloat16 moment-storage mode the optimizer state is plain Adam
-    /// with bf16 m/v — which the fused CPU kernel now supports directly via
+    /// with bf16 m/v — which the fused kernels now support directly via
     /// <c>ICompiledTrainingPlan.RequestBf16MomentStorage</c>. So this optimizer
     /// keeps the fused fast path AND the halved moment footprint, instead of
-    /// falling back to the eager tape. The true 8-bit block-quantized mode
-    /// (UseBFloat16MomentStorage == false) has no fused kernel yet and stays on
-    /// the eager tape (returns false). Adaptive LR / AMSGrad — which the bf16
-    /// Adam/AdamW kernels don't model — also fall back.
+    /// falling back to the eager tape. The deterministic true 8-bit block-quant
+    /// mode now maps to the fused Adam int8 kernel when its options match the
+    /// kernel exactly; percentile clipping, stochastic rounding, partial moment
+    /// compression, static quantization, full-precision refreshes, Adaptive LR,
+    /// and AMSGrad still fall back.
     /// </remarks>
     bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
     {
         config = default;
-        // Only BF16 moment storage maps to a fused kernel today; the int8
-        // block-quant path changes the update enough to need its own kernel.
-        if (!_options.UseBFloat16MomentStorage) return false;
         // Adaptive LR mutates the rate between steps and AMSGrad needs the
-        // max-second-moment variant — neither is modeled by the bf16 Adam/AdamW
-        // kernels, so fall back to eager for those.
+        // max-second-moment variant; neither is modeled by the fused Adam
+        // moment-storage kernels, so fall back to eager for those.
         if (_options.UseAdaptiveLearningRate || _options.UseAMSGrad) return false;
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
+
+        if (_options.UseBFloat16MomentStorage)
+        {
+            config = new Fused.FusedOptimizerConfig(
+                Tensors.Engines.Compilation.OptimizerType.Adam,
+                (float)GetCurrentLearningRate(),
+                (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon,
+                0f, schedule, UseBf16Moments: true);
+            return true;
+        }
+
+        if (!CanUseFusedInt8BlockQuantizedMoments()) return false;
+
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.Adam,
             (float)GetCurrentLearningRate(),
             (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon,
-            0f, schedule, UseBf16Moments: true);
+            0f, schedule,
+            UseInt8Moments: true,
+            Int8MomentBlockSize: _options.BlockSize);
         return true;
     }
+
+    private bool CanUseFusedInt8BlockQuantizedMoments()
+        => _options.UseDynamicQuantization
+           && _options.CompressBothMoments
+           && _options.QuantizationPercentile >= 100.0
+           && !_options.UseStochasticRounding
+           && _options.FullPrecisionUpdateFrequency == 0
+           && _options.BlockSize > 0;
 
     /// <summary>
     /// Magic header for the v2 checkpoint format ("A8B1" in ASCII LE).

@@ -8018,7 +8018,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         if (!TryMapToFusedOptimizerConfig(
                 resolvedOptimizer, out var fusedType, out float lr, out float b1, out float b2, out float eps, out float wd,
-                out AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSched, out bool useBf16Moments))
+                out AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSched, out bool useBf16Moments,
+                out bool useInt8Moments, out int int8MomentBlockSize))
             return EmitFusedMissAndFallback($"optimizer {resolvedOptimizer.GetType().Name} not compatible with fused kernel");
 
         // Use the existing recursive trainable-layer collector instead of the
@@ -8106,6 +8107,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 maxGradNorm: MaxGradNormValue,
                 lrSchedule: lrSched,
                 useBf16Moments: useBf16Moments,
+                useInt8Moments: useInt8Moments,
+                int8MomentBlockSize: int8MomentBlockSize,
                 // Lets the compiled FP16-activation path (AIDOTNET_FP16_ACTIVATIONS=1) cover
                 // fused optimizers beyond the inline Adam/SGD fast paths by applying this
                 // optimizer's own master update to the FP16-computed FP32 gradients.
@@ -8300,7 +8303,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         out float epsilon,
         out float weightDecay,
         out AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule,
-        out bool useBf16Moments)
+        out bool useBf16Moments,
+        out bool useInt8Moments,
+        out int int8MomentBlockSize)
     {
         // Open/closed-compliant dispatch: the optimizer self-describes its fused
         // config (incl. selecting the AMSGrad kernel variant when it opts in, and
@@ -8318,6 +8323,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         weightDecay = 0f;
         lrSchedule = null;
         useBf16Moments = false;
+        useInt8Moments = false;
+        int8MomentBlockSize = 2048;
 
         if (optimizer is not Optimizers.Fused.IFusedOptimizerSpec spec
             || !spec.TryGetFusedOptimizerConfig(out var cfg))
@@ -8331,6 +8338,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         weightDecay = cfg.WeightDecay;
         lrSchedule = cfg.Schedule;
         useBf16Moments = cfg.UseBf16Moments;
+        useInt8Moments = cfg.UseInt8Moments;
+        int8MomentBlockSize = cfg.Int8MomentBlockSize;
         return true;
     }
 
@@ -8563,7 +8572,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // this the fp32 state is small enough that the pack/unpack overhead isn't worth it.
         //
         // #1745: BF16-Adam now KEEPS the fused fast path. The Adam8BitOptimizer's BF16 moment mode
-        // implements IFusedOptimizerSpec (UseBf16Moments) and the fused CPU Adam/AdamW kernel stores its
+        // implements IFusedOptimizerSpec (UseBf16Moments) and the fused Adam/AdamW kernel stores its
         // m/v as bfloat16 directly (Tensors PR #713, RequestBf16MomentStorage). So selecting BF16 no longer
         // drops the model onto the eager tape — it gets BOTH the fused speed AND the halved moment
         // footprint. The earlier "gate proactive BF16 on memory pressure" guard existed only to avoid

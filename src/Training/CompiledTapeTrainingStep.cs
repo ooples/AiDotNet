@@ -106,7 +106,8 @@ public static class CompiledTapeTrainingStep<T>
     /// also return <c>false</c>.
     /// </summary>
     [ThreadStatic]
-    private static (int OptType, float Lr, float B1, float B2, float Eps, float Wd)? _configuredOptimizerConfig;
+    private static (int OptType, float Lr, float B1, float B2, float Eps, float Wd,
+        bool UseBf16Moments, bool UseInt8Moments, int Int8MomentBlockSize)? _configuredOptimizerConfig;
 
     /// <summary>
     /// Counter of successful fused-step executions on this thread. Exposed
@@ -433,6 +434,8 @@ public static class CompiledTapeTrainingStep<T>
         double maxGradNorm = 0.0,
         AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule = null,
         bool useBf16Moments = false,
+        bool useInt8Moments = false,
+        int int8MomentBlockSize = 2048,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? eagerOptimizer = null)
     {
         lossValue = MathHelper.GetNumericOperations<T>().Zero;
@@ -483,6 +486,11 @@ public static class CompiledTapeTrainingStep<T>
         // warn, turning a one-time capability gap into per-step exception/log churn.
         if (_fusedUnavailableTypes is not null && _fusedUnavailableTypes.Contains(optimizerType))
             { Fd($"optimizerType {optimizerType} latched-unavailable"); return false; }
+
+        if (useBf16Moments && useInt8Moments)
+            { Fd("both bf16 and int8 moment storage requested"); return false; }
+        if (useInt8Moments && int8MomentBlockSize <= 0)
+            { Fd($"invalid int8 moment block size {int8MomentBlockSize}"); return false; }
 
         try
         {
@@ -772,14 +780,16 @@ public static class CompiledTapeTrainingStep<T>
             //
             // Drift on the SAME plan (LR or beta change between steps) also
             // returns false — reconfiguring would reset m/v.
-            var currentConfig = ((int)optimizerType, learningRate, beta1, beta2, epsilon, weightDecay);
+            var currentConfig = ((int)optimizerType, learningRate, beta1, beta2, epsilon, weightDecay,
+                useBf16Moments, useInt8Moments, int8MomentBlockSize);
 
             if (_configuredPlan is null)
             {
-                // #1745: request bf16 moment storage BEFORE ConfigureOptimizer so the
-                // plan allocates the half-size m/v buffers. Honored only for the CPU
-                // float Adam/AdamW kernel; a safe no-op for every other configuration.
-                if (useBf16Moments)
+                // #1745: request compressed moment storage BEFORE ConfigureOptimizer so
+                // the plan allocates the reduced-size m/v buffers.
+                if (useInt8Moments)
+                    plan.RequestInt8MomentStorage(true, int8MomentBlockSize);
+                else if (useBf16Moments)
                     plan.RequestBf16MomentStorage(true);
 
                 // First fused call on this thread. Configure the plan and
