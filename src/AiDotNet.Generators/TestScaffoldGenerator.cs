@@ -282,6 +282,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // on CPU. Genuine foundation-scale compute, same class as IDEFICS/LLaVAVideo — runs in the nightly
         // heavy lane rather than the default PR shard.
         "KOSMOS2",
+        // KOSMOS1: same paper-scale stack as KOSMOS2 (Peng 2023) — VisionDim=1024/24-layer CLIP-ViT-L
+        // vision encoder + 2048-dim/24-layer causal decoder (~300M params). Its whole-class crash (a
+        // missing vision input projection in CreateDefaultCausalMultimodalLayers) is fixed at the source
+        // in this PR; what remains is the same genuine foundation-scale timeout as KOSMOS2 (a single
+        // warm-up forward exceeds 120s on CPU — verified: Metadata_ShouldExist times out at 120000ms).
+        // Runs in the nightly heavy lane, matching its KOSMOS2 sibling.
+        "KOSMOS1",
     };
 
     private static readonly System.Collections.Generic.HashSet<string> Fp32TestClassNames =
