@@ -16899,10 +16899,14 @@ public static class LayerHelper<T>
             yield return new MultiHeadAttentionLayer<T>(headCount, (hiddenDimension) / (headCount));
             yield return new LayerNormalizationLayer<T>();
 
-            // Feed-forward network
+            // Feed-forward network. Per Vaswani et al. 2017 (eq. 2) the FFN is
+            // Linear(GELU(Linear(x))) — the SECOND projection is linear (no activation).
+            // DenseLayer(size, null) falls back to ReLU in its ctor, so the output
+            // projection must pass an explicit IdentityActivation to stay linear;
+            // a null here would silently make the FFN output non-negative.
             yield return new DenseLayer<T>(hiddenDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
             yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-            yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>?)null);
+            yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new IdentityActivation<T>());
             yield return new LayerNormalizationLayer<T>();
         }
 
@@ -16910,9 +16914,17 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
         yield return new DenseLayer<T>(numFactors, (IActivationFunction<T>)new TanhActivation<T>());
 
-        // Alpha prediction head
+        // Alpha prediction head. The final layer predicts expected asset returns,
+        // which are signed real numbers — the head MUST be linear. DenseLayer(1, null)
+        // falls back to ReLU in its ctor (activationFunction ?? new ReLUActivation),
+        // which (a) clips the regression output to >= 0 and (b) dead-ReLUs: once the
+        // single output neuron's pre-activation goes negative after the first gradient
+        // step, ReLU'(x)=0 freezes it at 0 forever — the model output collapses to a
+        // constant 0 and the loss freezes at target^2 (the #1719 training-collapse:
+        // LossStrictlyDecreasesOnMemorizationTask + DifferentInputs_AfterTraining).
+        // Pass an explicit IdentityActivation so the head stays linear.
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new DenseLayer<T>(1, (IActivationFunction<T>?)null);
+        yield return new DenseLayer<T>(1, (IActivationFunction<T>)new IdentityActivation<T>());
     }
 
     #endregion
