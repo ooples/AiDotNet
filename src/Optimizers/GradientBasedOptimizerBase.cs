@@ -2102,6 +2102,11 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
         lock (_tapeStateSync)
         {
+            // Rebuild the index from the CURRENT parameters each step. Without clearing, tensors that
+            // are no longer part of the active model (e.g. after a parameter set is replaced, or an
+            // optimizer is reused across models without a full Reset) would linger as stale references
+            // and could be serialized as state for parameters that no longer exist.
+            _tapeParameterIndices.Clear();
             for (int parameterIndex = 0; parameterIndex < context.Parameters.Count; parameterIndex++)
             {
                 var parameter = context.Parameters[parameterIndex];
@@ -2251,13 +2256,19 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
     private Tensor<T> ReadTapeTensor(BinaryReader reader)
     {
+        var stream = reader.BaseStream;
+        long Remaining() => stream.CanSeek ? stream.Length - stream.Position : long.MaxValue;
+
         int rank = reader.ReadInt32();
-        if (rank < 0)
+        // Each rank dimension is a 4-byte int on the wire; reject a negative/absurd rank against the
+        // bytes physically remaining before allocating the shape array (untrusted checkpoint data).
+        if (rank < 0 || (long)rank * sizeof(int) > Remaining())
         {
             throw new InvalidOperationException($"Invalid optimizer tensor rank {rank}.");
         }
 
         var shape = new int[rank];
+        long declaredElements = rank == 0 ? 0 : 1;
         for (int i = 0; i < rank; i++)
         {
             shape[i] = reader.ReadInt32();
@@ -2265,6 +2276,15 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             {
                 throw new InvalidOperationException($"Invalid optimizer tensor dimension {shape[i]} at axis {i}.");
             }
+            declaredElements *= shape[i];
+        }
+
+        // Bound the element count (8-byte doubles on the wire) against the remaining bytes BEFORE
+        // allocating the tensor, so a malformed shape can't force a huge allocation / OOM on restore.
+        if (declaredElements * sizeof(double) > Remaining())
+        {
+            throw new InvalidOperationException(
+                $"Optimizer tensor shape declares {declaredElements} elements but only {Remaining()} bytes remain in the checkpoint stream.");
         }
 
         int length = reader.ReadInt32();

@@ -1171,8 +1171,11 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
                 Engine.ReduceSum(sq2, null),
                 NumOps.FromDouble(1.0 / sq2.Length));
         }
+        // paramTensors is already a Tensor<T>[] (which implements IReadOnlyList<Tensor<T>>, the ctor's
+        // parameter type), so pass it directly instead of allocating a fresh List every Train call —
+        // keeping the tape-step path allocation-free as intended for the hot training loop.
         var stepContext = new TapeStepContext<T>(
-            paramTensors.ToList(), grads, lossValue,
+            paramTensors, grads, lossValue,
             noisySampleTensor, noiseTensor,
             RecomputeForward, RecomputeLoss);
         _trainingOptimizer.Step(stepContext);

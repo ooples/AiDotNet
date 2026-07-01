@@ -473,6 +473,9 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         foreach (var param in context.Parameters)
         {
             parameterIndex++;
+            // Mirror PrepareTapeState: tolerate null parameter slots — skip restoring/updating their
+            // tape state but keep advancing parameterIndex so the stable parameter ordering is preserved.
+            if (param is null) continue;
             RestorePendingTapeState(parameterIndex, param);
 
             // True sparse scatter Adam8Bit: dequant + Adam + requant only on the
