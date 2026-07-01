@@ -166,7 +166,7 @@ public class ModelBasedAndMultiAgentTrainingTests
     }
 
     [Fact(Timeout = 60000)]
-    public async Task MuZero_MultiStepUnroll_UpdatesParametersAcrossEpisodeBoundaries()
+    public async Task MuZero_MultiStepUnroll_UpdatesParametersWhenWindowContainsTerminal()
     {
         await Task.Yield();
         // Paper-faithful K-step unroll (#1756): Train() must unroll the learned model K>1 steps and

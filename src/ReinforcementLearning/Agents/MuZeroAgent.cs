@@ -471,6 +471,13 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
             // NStepValueTarget, so no transition near an episode end is silently dropped from the loss.
             int steps = Math.Min(unroll, seq.Count);
 
+            // Cache bootstrap V(s) per unique bootstrap index within THIS sequence: NStepValueTarget is
+            // called once per unrolled step k and each call runs a detached representation+prediction pass
+            // for its bootstrap state. Different k's often resolve to the same bootstrap index (e.g. every
+            // step past the last non-terminal transition bootstraps off the same terminal NextState), so
+            // memoizing avoids repeating that inference batchSize×unrollSteps times.
+            var bootValueCache = new System.Collections.Generic.Dictionary<int, T>();
+
             // h_0 = f_representation(o_0). Outputs stay rank-1 (FromVector -> [n], Dense preserves rank),
             // so no Reshape is used in the unroll — Engine.Reshape deliberately does NOT attach an
             // autodiff GradFn (it's sidestepped for view caching), which would sever the tape.
@@ -484,7 +491,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
                 var pred = predNet.ForwardForTraining(h);
                 var policyPred = Engine.TensorSlice(pred, new[] { 0 }, new[] { actionDim });
                 var valuePred = Engine.TensorSlice(pred, new[] { actionDim }, new[] { 1 });
-                residuals.Add(Engine.TensorSubtract(valuePred, ScalarTensor(NStepValueTarget(seq, k, nStep, gamma))));
+                residuals.Add(Engine.TensorSubtract(valuePred, ScalarTensor(NStepValueTarget(seq, k, nStep, gamma, bootValueCache))));
                 residuals.Add(Engine.TensorSubtract(policyPred, ActionTensor(exp.Action, actionDim)));
 
                 // Dynamics: (h_{k+1}, r_k) = g(h_k, a_k).
@@ -550,7 +557,8 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// Σ_{j=0}^{n-1} γ^j·r_{k+j} + γ^n·V(s_{k+n}), truncated at a terminal. Computed DETACHED (via
     /// Predict, off-tape) — MuZero value targets carry no gradient into the online networks.
     /// </summary>
-    private T NStepValueTarget(System.Collections.Generic.List<Experience<T, Vector<T>, Vector<T>>> seq, int k, int nStep, T gamma)
+    private T NStepValueTarget(System.Collections.Generic.List<Experience<T, Vector<T>, Vector<T>>> seq, int k, int nStep, T gamma,
+        System.Collections.Generic.Dictionary<int, T> bootValueCache)
     {
         T ret = NumOps.Zero;
         T disc = NumOps.One;
@@ -561,10 +569,21 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
             disc = NumOps.Multiply(disc, gamma);
             if (seq[k + j].Done) return ret; // terminal: no bootstrap beyond the episode end
         }
-        var bootstrapState = (k + j < seq.Count) ? seq[k + j].State : seq[seq.Count - 1].NextState;
-        var hB = _representationNetwork.Predict(Tensor<T>.FromVector(bootstrapState)).ToVector();
-        var predB = _predictionNetwork.Predict(Tensor<T>.FromVector(hB)).ToVector();
-        return NumOps.Add(ret, NumOps.Multiply(disc, ExtractValue(predB)));
+
+        // Resolve the bootstrap index; index seq.Count is the sentinel for the tail NextState (window ran
+        // off the end without a terminal). Memoize V(s) per resolved index so repeated bootstrap targets
+        // within this sequence reuse a single detached representation+prediction pass.
+        bool withinSeq = k + j < seq.Count;
+        int bootIndex = withinSeq ? k + j : seq.Count;
+        if (!bootValueCache.TryGetValue(bootIndex, out var bootValue))
+        {
+            var bootstrapState = withinSeq ? seq[k + j].State : seq[seq.Count - 1].NextState;
+            var hB = _representationNetwork.Predict(Tensor<T>.FromVector(bootstrapState)).ToVector();
+            var predB = _predictionNetwork.Predict(Tensor<T>.FromVector(hB)).ToVector();
+            bootValue = ExtractValue(predB);
+            bootValueCache[bootIndex] = bootValue;
+        }
+        return NumOps.Add(ret, NumOps.Multiply(disc, bootValue));
     }
 
     /// <summary>
@@ -591,7 +610,11 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
             if (grads.TryGetValue(t, out var g) && g is not null)
             {
                 var gs = g.AsSpan();
-                for (int i = 0; i < t.Length && offset + i < total; i++) flatGrad[offset + i] = Convert.ToDouble(gs[i]);
+                // Bound by the gradient length too: g is not guaranteed to match t.Length (a partial
+                // gradient would otherwise read past gs and throw IndexOutOfRange). Copy the overlapping
+                // prefix; any remaining slots in this tensor's block stay zero (unaffected by the update).
+                int limit = Math.Min(Math.Min(t.Length, gs.Length), total - offset);
+                for (int i = 0; i < limit; i++) flatGrad[offset + i] = Convert.ToDouble(gs[i]);
             }
             offset += t.Length;
         }
