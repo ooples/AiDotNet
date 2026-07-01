@@ -1588,6 +1588,15 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
                 src.Data.Span.CopyTo(dst.Data.Span); // in place — no rebinding, no flat aggregate
             }
         }
+
+        // Symmetric with the "fewer chunks" guard above: every parameter tensor has now been filled,
+        // so any remaining chunk means the caller supplied more than the predictor consumes. Reject it
+        // instead of silently dropping it — an over-long chunk stream is a caller bug, and the base
+        // implementation likewise consumes exactly one chunk per parameter tensor.
+        if (e.MoveNext())
+            throw new System.ArgumentException(
+                "SetParameterChunks received more chunks than the predictor has parameter tensors.",
+                nameof(chunks));
     }
 
     private static IEnumerable<Tensor<T>> EnumerateMaterializedParameters(ILayer<T>? layer)

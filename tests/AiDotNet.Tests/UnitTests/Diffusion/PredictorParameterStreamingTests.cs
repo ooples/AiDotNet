@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -63,7 +62,14 @@ public class PredictorParameterStreamingTests
     [Fact] public void SiT_Chunks_IndexIdentical() => AssertIndexIdentical(SiT(7));
     [Fact] public void SiT_SetChunks_RoundTrips() => AssertRoundTrips(SiT(1), SiT(2));
 
+    // HeavyTimeout: EMMDiT has FIXED foundation-scale dims (~540 M params, no size override), so even at
+    // FP32 the round-trip's two instances + flat vectors sit near the 16 GB runner ceiling and runtime.
+    // Keep the true-scale coverage but route it to the nightly HeavyTimeout lane so the default PR gate
+    // (Category!=HeavyTimeout) stays fast and stable; the tiny FlagDiT/AsymmDiT/SiT/MMDiT(X) fixtures
+    // already exercise the same chunk-framing code paths on every PR run.
+    [Trait("Category", "HeavyTimeout")]
     [Fact] public void EMMDiT_Chunks_IndexIdentical() => AssertIndexIdentical(EMMDiT(7));
+    [Trait("Category", "HeavyTimeout")]
     [Fact] public void EMMDiT_SetChunks_RoundTrips() => AssertRoundTrips(EMMDiT(1), EMMDiT(2));
 
     [Fact] public void MMDiTX_Chunks_IndexIdentical() => AssertIndexIdentical(MMDiTX(7));
@@ -130,19 +136,27 @@ public class PredictorParameterStreamingTests
     {
         var flat = predictor.GetParameters();
 
+        // Stream each chunk's Data.Span directly against `flat` with a running offset instead of
+        // buffering a second full copy (a List<T> + per-chunk ToVector()). For the ~540 M-parameter
+        // EMMDiT that second copy is another multi-GB allocation on the 16 GB runner; comparing
+        // in-place keeps the peak at one flat vector + one resident chunk.
         long sum = 0;
-        var rebuilt = new List<T>();
+        int offset = 0;
         foreach (var chunk in predictor.GetParameterChunks())
         {
-            var v = chunk.ToVector();
-            for (int i = 0; i < v.Length; i++) rebuilt.Add(v[i]);
+            var span = chunk.Data.Span;
+            for (int i = 0; i < span.Length; i++)
+            {
+                Assert.True(offset < flat.Length,
+                    "GetParameterChunks streamed more elements than GetParameters exposes.");
+                Assert.Equal(Convert.ToDouble((object)flat[offset]), Convert.ToDouble((object)span[i]), 12);
+                offset++;
+            }
             sum += chunk.Length;
         }
 
         Assert.Equal(predictor.ParameterCount, sum);
-        Assert.Equal(flat.Length, rebuilt.Count);
-        for (int i = 0; i < flat.Length; i++)
-            Assert.Equal(Convert.ToDouble((object)flat[i]), Convert.ToDouble((object)rebuilt[i]), 12);
+        Assert.Equal(flat.Length, offset);
     }
 
     private static void AssertRoundTrips<T>(NoisePredictorBase<T> source, NoisePredictorBase<T> dest) where T : struct
