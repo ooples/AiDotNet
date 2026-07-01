@@ -432,8 +432,8 @@ public static class CompiledTapeTrainingStep<T>
         out T lossValue,
         double maxGradNorm = 0.0,
         AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule = null,
-        bool useBf16Moments = false,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? eagerOptimizer = null)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? eagerOptimizer = null,
+        bool useBf16Moments = false)
     {
         lossValue = MathHelper.GetNumericOperations<T>().Zero;
         // AiDotNet#1395: clear the previous-call's exception buffer so the

@@ -15,11 +15,6 @@ namespace AiDotNet.Optimizers.Fused;
 /// <param name="Epsilon">Denominator epsilon (0 for SGD).</param>
 /// <param name="WeightDecay">Decoupled weight decay (AdamW); 0 otherwise.</param>
 /// <param name="Schedule">Optional fused-side LR schedule, or null for constant LR.</param>
-/// <param name="UseBf16Moments">
-/// When true, request bfloat16 storage for the fused Adam/AdamW moment buffers
-/// (#1745) — half the optimizer-state footprint, same fp32 update math. Honored
-/// only by the CPU float Adam/AdamW fused kernel; a safe no-op otherwise.
-/// </param>
 internal readonly record struct FusedOptimizerConfig(
     OptimizerType Type,
     float LearningRate,
@@ -27,8 +22,22 @@ internal readonly record struct FusedOptimizerConfig(
     float Beta2,
     float Epsilon,
     float WeightDecay,
-    LrSchedule? Schedule,
-    bool UseBf16Moments = false);
+    LrSchedule? Schedule)
+{
+    /// <summary>
+    /// When true, request bfloat16 storage for the fused Adam/AdamW moment buffers
+    /// (#1745) — half the optimizer-state footprint, same fp32 update math. Honored
+    /// only by the CPU float Adam/AdamW fused kernel; a safe no-op otherwise.
+    /// <para>
+    /// Init-only property rather than a primary-constructor component so adding it did NOT change the
+    /// record's <c>Deconstruct(...)</c> arity or force existing positional construction sites to add an
+    /// argument (only the one call that sets it uses object-initializer syntax). It still participates in
+    /// the record's value equality/hash, which is correct — two configs differing only in moment storage
+    /// are genuinely distinct.
+    /// </para>
+    /// </summary>
+    public bool UseBf16Moments { get; init; }
+}
 
 /// <summary>
 /// Implemented by optimizers that have a compiled fused-kernel equivalent, so the
