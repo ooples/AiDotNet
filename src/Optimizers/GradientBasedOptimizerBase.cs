@@ -2125,7 +2125,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     public abstract void Step(TapeStepContext<T> context);
 
     /// <inheritdoc />
-    protected override void SerializeExtensionData(BinaryWriter writer)
+    private protected override void SerializeExtensionData(BinaryWriter writer)
     {
         writer.Write(TapeStateExtensionMarker);
 
@@ -2150,7 +2150,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     }
 
     /// <inheritdoc />
-    protected override void DeserializeExtensionData(BinaryReader reader)
+    private protected override void DeserializeExtensionData(BinaryReader reader)
     {
         if (reader.BaseStream.Position >= reader.BaseStream.Length)
         {
@@ -2286,6 +2286,15 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
     private void RestorePendingTapeTensorStates(int parameterIndex, Tensor<T> parameter)
     {
+        // Fast path: pending tape-tensor state only exists transiently after a checkpoint Deserialize
+        // and is consumed as parameters are rebound. In steady-state training the dictionary is empty,
+        // so bail before the EnumerateTapeTensorStateFields() reflection walk (Type.GetFields over the
+        // hierarchy) that would otherwise run once per parameter on every Step().
+        if (_pendingTapeTensorStates.Count == 0)
+        {
+            return;
+        }
+
         foreach (var field in EnumerateTapeTensorStateFields())
         {
             if (!_pendingTapeTensorStates.TryGetValue(field.Name, out var pendingEntries) ||

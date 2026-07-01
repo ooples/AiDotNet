@@ -181,6 +181,27 @@ public class Checkpoint<T, TInput, TOutput>
         if (OptimizerData == null || OptimizerData.Length == 0)
             return false;
 
+        // Guard against feeding a checkpoint's bytes to a different optimizer type, which would
+        // silently restore incompatible state. OptimizerTypeName was captured (AssemblyQualifiedName)
+        // at save time; reject a mismatch before Deserialize. Resolve the stored type when possible and
+        // allow the supplied optimizer to be that type or a subclass; fall back to a string compare if
+        // the stored type can't be resolved (e.g. its assembly moved).
+        if (!string.IsNullOrEmpty(OptimizerTypeName))
+        {
+            var expectedType = Type.GetType(OptimizerTypeName);
+            bool compatible = expectedType != null
+                ? expectedType.IsInstanceOfType(optimizer)
+                : string.Equals(OptimizerTypeName, optimizer.GetType().AssemblyQualifiedName, StringComparison.Ordinal);
+
+            if (!compatible)
+            {
+                throw new InvalidOperationException(
+                    $"Checkpoint '{CheckpointId}' was saved from optimizer type '{OptimizerTypeName}', but the " +
+                    $"supplied optimizer is '{optimizer.GetType().AssemblyQualifiedName}'. Restoring mismatched " +
+                    "optimizer state is unsafe.");
+            }
+        }
+
         optimizer.Deserialize(OptimizerData);
         return true;
     }

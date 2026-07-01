@@ -69,7 +69,22 @@ public class TapeOptimizerSerializationTests
 
         Assert.Null(exception);
         var parameters = CreateParameters();
+        var before = CloneParameters(parameters);
         Step(restored, parameters, CreateFirstGradients(parameters));
+
+        // The cold-started tape state must drive a real parameter update — otherwise this test would
+        // pass even if Deserialize left the optimizer in a state where Step is a silent no-op.
+        bool anyChanged = false;
+        for (int p = 0; p < parameters.Length && !anyChanged; p++)
+        {
+            var after = parameters[p].AsSpan();
+            var prior = before[p].AsSpan();
+            for (int i = 0; i < after.Length; i++)
+            {
+                if (after[i] != prior[i]) { anyChanged = true; break; }
+            }
+        }
+        Assert.True(anyChanged, "Cold-started tape state must update parameters on Step, not no-op.");
     }
 
     [Fact]

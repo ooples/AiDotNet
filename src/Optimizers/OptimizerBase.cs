@@ -1729,7 +1729,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// so framework-level optimizer infrastructure can append versioned data without
     /// changing every optimizer-specific serialization layout.
     /// </remarks>
-    protected virtual void SerializeExtensionData(BinaryWriter writer)
+    private protected virtual void SerializeExtensionData(BinaryWriter writer)
     {
         // Base implementation does nothing.
     }
@@ -1766,7 +1766,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// <remarks>
     /// Implementations must tolerate older payloads where no extension data was present.
     /// </remarks>
-    protected virtual void DeserializeExtensionData(BinaryReader reader)
+    private protected virtual void DeserializeExtensionData(BinaryReader reader)
     {
         // Base implementation does nothing.
     }

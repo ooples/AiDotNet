@@ -175,6 +175,10 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           CHANGED_FILES: ${{ github.event.pull_request.changed_files || 0 }}
         run: |
+          # 250-changed-files heuristic: very large PRs produce SARIF that repeatedly hits GitHub's
+          # code-scanning upload size/rate limits (and the upload adds little signal on a sweeping
+          # change), so skip the upload on those and keep it on for normal-sized PRs. Not a hard API
+          # constant — tune if GitHub's limits change.
           if [[ "$EVENT_NAME" == "pull_request" && "$CHANGED_FILES" -gt 250 ]]; then
             echo "mode=never" >> "$GITHUB_OUTPUT"
           else
