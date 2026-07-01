@@ -23757,6 +23757,13 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder (CLIP ViT) ===
+        // Input feature projection (the ViT patch/feature embedding): map the incoming embedding to
+        // visionDim so the vision blocks — built at visionDim — receive a correctly-sized input.
+        // Without it the first vision MultiHeadAttention (weights [visionDim, visionDim]) throws on any
+        // input whose last dim != visionDim, which is the KOSMOS1/KOSMOS2 whole-class crash
+        // "Input embedding dimension (N) does not match weight dimension (visionDim)". Mirrors the
+        // leading Dense projection in CreateDefaultProprietaryAPILayers.
+        yield return new DenseLayer<T>(visionDim, identityActivation);
         yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
