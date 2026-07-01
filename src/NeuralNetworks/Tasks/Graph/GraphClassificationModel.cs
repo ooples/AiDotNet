@@ -724,20 +724,30 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
         // (default Adam) — NOT a hardcoded SGD step — so the loss actually converges on a memorization
         // task. The loss takes raw logits (it applies LogSoftmax internally) and aligns the target
         // shape itself, so there is no explicit Softmax (which would double-apply it) and no reshape.
-        var tapeLoss = _lossFunction as LossFunctionBase<T> ?? new CrossEntropyWithLogitsLoss<T>();
+        // Match LinkPredictionModel: require a tape-differentiable loss rather than silently swapping a
+        // caller-supplied non-tape loss for CrossEntropyWithLogitsLoss (which would train a different
+        // objective than configured). The default loss is already a LossFunctionBase<T>, so this only
+        // fires when a caller passes a non-tape ILossFunction<T>.
+        if (_lossFunction is not LossFunctionBase<T> tapeLoss)
+            throw new InvalidOperationException(
+                $"GraphClassificationModel tape-based training requires a LossFunctionBase<T> (one that "
+                + $"implements ComputeTapeLoss); the configured loss '{_lossFunction.GetType().Name}' is "
+                + "not tape-differentiable. Supply a LossFunctionBase<T>-derived loss such as CrossEntropyWithLogitsLoss.");
         using (var tape = new GradientTape<T>())
         {
             var logits = Forward(input);
             var lossTensor = tapeLoss.ComputeTapeLoss(logits, expectedOutput);
+            // Always record the loss that was computed, even when there are no trainable parameters to
+            // step — LastLoss must reflect the most recent Train call for consistent telemetry.
+            T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
             var trainableParameters = Training.TapeTrainingStep<T>.CollectParameters(Layers, LayerStructureVersion);
             if (trainableParameters.Count > 0)
             {
                 var gradients = tape.ComputeGradients(lossTensor, trainableParameters);
-                T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
                 var context = new TapeStepContext<T>(trainableParameters, gradients, lossValue);
                 _optimizer.Step(context);
-                LastLoss = lossValue;
             }
+            LastLoss = lossValue;
         }
     }
 

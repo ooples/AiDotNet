@@ -1906,7 +1906,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// shape-mismatch this contract prevents.
     /// </summary>
     private static bool IsTokenConsumingVisionLanguageModel(string className)
-        => className is "GPT4Point" or "Helix" or "Octo" or "SigLIP2" or "ViLT" or "Florence2" or "KOSMOS2";
+        => className is "GPT4Point" or "Helix" or "Octo" or "SigLIP2" or "ViLT" or "Florence2" or "KOSMOS1" or "KOSMOS2";
 
     /// <summary>
     /// The post-patch-embedding vision_dim for a <see cref="IsTokenConsumingVisionLanguageModel"/>
@@ -1919,7 +1919,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "GPT4Point" => 512,
             "Helix" => 1024,
             "Octo" => 384,
-            "KOSMOS2" => 1024, // KOSMOS2Options.VisionDim
+            "KOSMOS1" or "KOSMOS2" => 1024, // KOSMOS1Options / KOSMOS2Options VisionDim
             _ => 768, // SigLIP2, ViLT, Florence2
         };
 

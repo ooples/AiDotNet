@@ -721,15 +721,17 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
         {
             var predictions = Forward(input);
             var lossTensor = tapeLoss.ComputeTapeLoss(predictions, expectedOutput);
+            // Always record the loss that was computed, even when there are no trainable parameters to
+            // step — LastLoss must reflect the most recent Train call for consistent telemetry.
+            T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
             var trainableParameters = Training.TapeTrainingStep<T>.CollectParameters(Layers, LayerStructureVersion);
             if (trainableParameters.Count > 0)
             {
                 var gradients = tape.ComputeGradients(lossTensor, trainableParameters);
-                T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
                 var context = new TapeStepContext<T>(trainableParameters, gradients, lossValue);
                 _optimizer.Step(context);
-                LastLoss = lossValue;
             }
+            LastLoss = lossValue;
         }
     }
 
