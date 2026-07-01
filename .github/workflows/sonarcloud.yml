@@ -187,6 +187,23 @@ jobs:
         with:
           fetch-depth: 0
 
+      # The full-solution Release build spans three target frameworks
+      # (net471/net8.0/net10.0) across ~20 projects and overflows the hosted
+      # runner's ~14 GB free space — the runner worker dies with
+      # "No space left on device" mid-build (not a compile error). Reclaim
+      # ~25 GB by deleting preinstalled toolchains this .NET build never uses.
+      # We deliberately do NOT touch /usr/share/dotnet (the SDK the build needs).
+      - name: Free up disk space
+        run: |
+          echo "Disk before cleanup:"; df -h /
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /opt/ghc /usr/local/.ghcup || true
+          sudo rm -rf /opt/hostedtoolcache/CodeQL || true
+          sudo rm -rf /usr/share/swift /usr/local/share/boost || true
+          sudo rm -rf /usr/local/share/powershell /usr/local/share/chromium || true
+          sudo docker image prune --all --force || true
+          echo "Disk after cleanup:"; df -h /
+
       - name: Setup .NET 10.0
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
