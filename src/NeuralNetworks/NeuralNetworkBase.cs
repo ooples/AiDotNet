@@ -5447,24 +5447,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
-    /// Whether the process-global WeightRegistry currently holds any registered streaming weights —
-    /// i.e. some foundation-scale model engaged weight streaming and has not been cleaned up. Used by
-    /// the model-family test harness to decide whether a between-tests
-    /// <see cref="ResetWeightStreamingForTests"/> is needed, so the reset only fires after a test
-    /// that actually streamed (never disturbing the common non-streaming case). Returns false if the
-    /// registry is unconfigured or its report is unavailable.
-    /// </summary>
-    internal static bool HasRegisteredStreamingWeightsForTests()
-    {
-        try
-        {
-            return WeightRegistry.GetStreamingReport().RegisteredEntryCount > 0;
-        }
-        catch (ObjectDisposedException) { return false; }
-        catch (InvalidOperationException) { return false; }
-    }
-
-    /// <summary>
     /// Auto-enables weight streaming if this model's total parameter count
     /// crosses the threshold AND the user hasn't already opted in or out
     /// explicitly. Idempotent: subsequent calls are no-ops once the flag

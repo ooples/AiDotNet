@@ -235,7 +235,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
         // deep sigmoid stack into noise, and long-run loss diverges above
         // short-run loss (the failure mode the MoreData_ShouldNotDegrade
         // invariant catches). Use a fine-tuning learning rate of 0.01 (the
-        // value documented on the learningRate parameter): the lr~0.1 used for
+        // rate set on the MomentumOptimizerOptions below): the lr~0.1 used for
         // CD-1 up-down pre-training (see PreTrain) is too aggressive for plain
         // backprop fine-tuning of the pre-trained stack — at lr=0.1 the β=0.9
         // momentum term overshoots the post-pretrain minimum and the supervised

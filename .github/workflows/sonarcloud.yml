@@ -320,13 +320,13 @@ jobs:
             framework: net10.0
             filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.NeuralNetworks&(FullyQualifiedName~LoRAAdapterTests|FullyQualifiedName~LoRALayerTests|FullyQualifiedName~VBLoRAAdapterTests|FullyQualifiedName~AdvancedAlgebraNetworkTests|FullyQualifiedName~MixtureOfExpertsNeuralNetworkTests)'
           # 'Unit - 08e NN-Remaining (catch-all)' removed: it was a duplicate
-          # of `ModelFamily - NeuralNetworks A-F` + `G-L` + `M-Z` (same
-          # ModelFamilyTests.NeuralNetworks scope, only excluding 5 unit-test
-          # classes already covered by their dedicated 08a-08d shards). Running
-          # ~800 paper-scale NN model tests a SECOND time inside an already-
-          # OOMing process is what was actually triggering the catch-all
-          # failures — the model family A-F / G-L / M-Z shards above provide
-          # complete, non-redundant coverage of the same scope.
+          # of the ModelFamily NeuralNetworks shards (`A-F` + `G-L` + `M-N` +
+          # `O-R` + `S` + `T-Z`, same ModelFamilyTests.NeuralNetworks scope,
+          # only excluding 5 unit-test classes already covered by their
+          # dedicated 08a-08d shards). Running ~800 paper-scale NN model tests
+          # a SECOND time inside an already-OOMing process is what was actually
+          # triggering the catch-all failures — the model family shards above
+          # provide complete, non-redundant coverage of the same scope.
           - name: Unit - 09 Optimizers/RAG
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0

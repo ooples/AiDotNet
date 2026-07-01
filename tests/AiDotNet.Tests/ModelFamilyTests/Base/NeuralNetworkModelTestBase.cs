@@ -51,17 +51,25 @@ internal static class ModelFamilyTestGcGate
         // model-family base already calls — after every test. This is the
         // generic cross-test fix for all foundation-scale streaming models (Phi3Vision, SmolVLM,
         // GrokVision, …) across every shard, replacing per-model opt-ins. It is unconditional so a
-        // broken registry state cannot make the readable-report pre-check fail closed; safe because
-        // streaming-scale models run in serialized shards (no concurrent streaming forward to alias
-        // the pool). Best-effort — a reset failure must not mask the test's own result.
-        try
-        {
-            NeuralNetworkBase<float>.ResetWeightStreamingForTests();
-        }
-        catch { /* contaminated registry surfaces on the next streaming ctor; never fail teardown here */ }
-
+        // broken registry state cannot make the readable-report pre-check fail closed.
         lock (LohCompaction)
         {
+            // Reset the process-global WeightRegistry singleton under the SAME lock as the LOH
+            // compaction: with parallel test collections enabled (xunit.runner.json), light-model
+            // teardowns run concurrently and would otherwise race on this global reset. Best-effort —
+            // a reset failure must not mask the test's own result (the contaminated registry surfaces
+            // on the next streaming ctor), but log it rather than swallowing silently so a genuine
+            // pool error is diagnosable.
+            try
+            {
+                NeuralNetworkBase<float>.ResetWeightStreamingForTests();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"ReclaimBetweenTests: ResetWeightStreamingForTests failed: {ex}");
+                System.Console.Error.WriteLine($"[ReclaimBetweenTests] ResetWeightStreamingForTests failed: {ex.Message}");
+            }
+
             // First pass: compacting Gen-2 + LOH reclaims everything unreachable, including the
             // just-disposed model's weight tensors.
             System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
