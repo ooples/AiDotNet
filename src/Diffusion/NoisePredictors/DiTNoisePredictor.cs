@@ -1321,11 +1321,15 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
 
     private IEnumerable<ILayer<T>?> EnumerateAllLayers()
     {
+        // ORDER IS LOAD-BEARING: GetParameterChunks/SetParameterChunks walk this sequence, so it MUST
+        // match GetParameters/SetParameters element-for-element (PredictorParameterStreamingTests'
+        // *_Chunks_IndexIdentical contract). The model-level _adaln_modulation is serialized near the
+        // END (after _finalNorm, before _outputProj) by GetParameters/SetParameters — emit it there,
+        // NOT after _labelEmbed, or the chunk concatenation desyncs from the flat vector.
         yield return _patchEmbed;
         yield return _timeEmbed1;
         yield return _timeEmbed2;
         yield return _labelEmbed;
-        yield return _adaln_modulation;
         foreach (var block in _blocks)
         {
             yield return block.Norm1;
@@ -1341,6 +1345,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             yield return block.CrossAttnOut;
         }
         yield return _finalNorm;
+        yield return _adaln_modulation;
         yield return _outputProj;
     }
 
@@ -1536,6 +1541,11 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     public override IEnumerable<Tensor<T>> GetParameterChunks()
     {
+        // #1715: engage full-precision weight streaming before initializing/iterating so foundation-scale
+        // DiT predictors (e.g. SiT) route their weight allocation through the streaming pool (bounded
+        // resident set + lossless write-back) instead of accumulating the full set via RentPinned → OOM.
+        // No-op below the param-count/memory threshold; full-precision so the round-trip is exact.
+        MaybeEngageWeightStreaming();
         EnsureLayersInitialized();
 
         foreach (var layer in EnumerateAllLayers())
@@ -1543,6 +1553,50 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             foreach (var parameter in EnumerateMaterializedParameters(layer))
                 yield return parameter;
         }
+    }
+
+    /// <summary>
+    /// #1715: per-tensor counterpart to <see cref="GetParameterChunks"/> — copies each incoming chunk
+    /// IN PLACE into the corresponding resident weight, in the same EnumerateAllLayers ×
+    /// EnumerateMaterializedParameters order, instead of the base implementation that buffers every
+    /// chunk into one flat list + Vector (which re-materializes the whole foundation-scale weight set
+    /// at once → OOM). Engages full-precision streaming first so the writes round-trip losslessly and
+    /// the resident set stays bounded.
+    /// </summary>
+    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
+        MaybeEngageWeightStreaming();
+        EnsureLayersInitialized();
+
+        using var e = chunks.GetEnumerator();
+        foreach (var layer in EnumerateAllLayers())
+        {
+            foreach (var dst in EnumerateMaterializedParameters(layer))
+            {
+                if (!e.MoveNext())
+                    throw new System.ArgumentException(
+                        "SetParameterChunks received fewer chunks than the predictor has parameter tensors.",
+                        nameof(chunks));
+                var src = e.Current;
+                if (src is null)
+                    throw new System.ArgumentException("SetParameterChunks received a null chunk.", nameof(chunks));
+                if (src.Length != dst.Length)
+                    throw new System.ArgumentException(
+                        $"SetParameterChunks chunk length {src.Length} does not match parameter length {dst.Length}.",
+                        nameof(chunks));
+                src.Data.Span.CopyTo(dst.Data.Span); // in place — no rebinding, no flat aggregate
+            }
+        }
+
+        // Symmetric with the "fewer chunks" guard above: every parameter tensor has now been filled,
+        // so any remaining chunk means the caller supplied more than the predictor consumes. Reject it
+        // instead of silently dropping it — an over-long chunk stream is a caller bug, and the base
+        // implementation likewise consumes exactly one chunk per parameter tensor.
+        if (e.MoveNext())
+            throw new System.ArgumentException(
+                "SetParameterChunks received more chunks than the predictor has parameter tensors.",
+                nameof(chunks));
     }
 
     private static IEnumerable<Tensor<T>> EnumerateMaterializedParameters(ILayer<T>? layer)

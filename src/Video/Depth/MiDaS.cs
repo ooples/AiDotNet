@@ -296,6 +296,17 @@ public class MiDaS<T> : NeuralNetworkBase<T>
 
     #region Layer Initialization
 
+    /// <summary>
+    /// MiDaS builds its ViT patch-embedding + transformer encoder + multi-scale fusion decoder from
+    /// <b>lazy</b> convolutions (input channels unspecified — resolved on first forward). The architecture's
+    /// declared input shape is a generic regression default that does not describe the 3-channel image the
+    /// convs actually consume, so pre-resolving the lazy shapes against it bakes the first conv at the wrong
+    /// input depth and the real forward then throws "Expected input depth 1, but got 3". Returning null
+    /// defers resolution to the first <see cref="Forward"/>, where each conv bakes its true input depth from
+    /// the real image tensor — the same approach used by the Video.Motion / FrameInterpolation models.
+    /// </summary>
+    protected override int[]? TryGetArchitectureInputShape() => null;
+
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) { ClearLayers(); return; }

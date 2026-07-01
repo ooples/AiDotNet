@@ -408,5 +408,31 @@ public class KaplanMeierEstimator<T> : SurvivalModelBase<T>
         return new KaplanMeierEstimator<T>();
     }
 
+    /// <summary>
+    /// Clones the fitted estimator, carrying over the non-parametric fitted state.
+    /// </summary>
+    /// <remarks>
+    /// The base <see cref="SurvivalModelBase{T}.DeepCopy"/> serializes only NumFeatures /
+    /// IsFitted, so a cloned Kaplan–Meier estimator would lose its fitted curve and predict
+    /// differently from the original (Clone_ShouldProduceSamePredictions). Kaplan–Meier is a
+    /// non-parametric estimator: its "model" is the step function defined by the event times and
+    /// their cumulative survival probabilities, plus the at-risk / event counts. Carry all of that
+    /// onto the clone. Sharing the (immutable-after-fit) vectors is safe because Train reassigns
+    /// these fields to fresh vectors rather than mutating them in place.
+    /// </remarks>
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
+    {
+        var copy = base.DeepCopy();
+        if (copy is KaplanMeierEstimator<T> km)
+        {
+            km.TrainedEventTimes = TrainedEventTimes;
+            km._survivalProbabilities = _survivalProbabilities;
+            km._numberAtRisk = _numberAtRisk;
+            km._numberEvents = _numberEvents;
+            km.BaselineSurvivalFunction = _survivalProbabilities;
+        }
+        return copy;
+    }
+
     #endregion
 }

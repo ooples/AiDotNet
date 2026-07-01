@@ -113,7 +113,10 @@ public class ThreeDMF<T> : VideoStabilizationBase<T>
             int ch = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
             int h = Architecture.InputHeight > 0 ? Architecture.InputHeight : 128;
             int w = Architecture.InputWidth > 0 ? Architecture.InputWidth : 128;
-            Layers.AddRange(LayerHelper<T>.CreateDefaultVideoStabilizationLayers(
+            // 3D multi-frame fusion is a synthesis-paradigm stabilizer: it fuses frames into a
+            // stabilized frame of the same dimensions as the input, so use the length-preserving
+            // encoder-decoder rather than the 6-affine-param regressor.
+            Layers.AddRange(LayerHelper<T>.CreateSynthesisVideoStabilizationLayers(
                 inputChannels: ch, inputHeight: h, inputWidth: w));
         }
     }

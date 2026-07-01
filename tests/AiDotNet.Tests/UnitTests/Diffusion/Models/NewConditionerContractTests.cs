@@ -119,6 +119,15 @@ public class NewConditionerContractTests : DiffusionUnitTestBase
     // chunk API (#1624) yields the resident weight tensors by reference — a flat GetParameters() instead
     // builds a List<T> that exceeds the max array element count ("Array dimensions exceeded supported
     // range") at >2.1B parameters.
+    //
+    // HeavyTimeout (#1715): MMDiT-X defaults to SD3.5-Medium (hidden 2048 / 24 joint blocks ≈ 2.4 B
+    // params / ~9.6 GB fp32). On the 16 GB runner the resident weight set exceeds the streaming engage
+    // threshold's half-available-RAM headroom, so GetParameterChunks pages weights to a disk backing
+    // file (bounded resident set + lossless write-back — verified memory-safe and round-trip-correct).
+    // The OOM is fixed, but a ~9.6 GB disk round-trip's runtime sits near the per-test budget, so this
+    // belongs in the nightly HeavyTimeout lane alongside the other foundation-scale predictors. Below
+    // the half-RAM headroom (e.g. a roomier runner) it stays fully resident and runs fast.
+    [Trait("Category", "HeavyTimeout")]
     [Fact(Timeout = 600000)]
     public async Task MMDiTXNoisePredictor_GetSetParameters_RoundTrips()
     {
@@ -127,6 +136,13 @@ public class NewConditionerContractTests : DiffusionUnitTestBase
         AssertParameterChunksRoundTrip(predictor.GetParameterChunks, predictor.SetParameterChunks);
     }
 
+    // HeavyTimeout (#1715): foundation-scale FLUX double-stream predictor (~billions of params). The
+    // OOM is fixed — the chunked param IO now streams to disk with a bounded resident set + lossless
+    // write-back (Tensors weight-streaming + the GetParameterChunks engagement) — but round-tripping
+    // tens of GB across disk inherently exceeds the per-test budget on the 16 GB runner. Excluded from
+    // the default gate and tracked in the nightly HeavyTimeout lane; graduates back when streaming IO
+    // is fast enough. (Memory-safety verified; this is the orthogonal inherent-runtime bucket.)
+    [Trait("Category", "HeavyTimeout")]
     [Fact(Timeout = 600000)]
     public async Task FluxDoubleStreamPredictor_GetSetParameters_RoundTrips()
     {
@@ -135,6 +151,12 @@ public class NewConditionerContractTests : DiffusionUnitTestBase
         AssertParameterChunksRoundTrip(predictor.GetParameterChunks, predictor.SetParameterChunks);
     }
 
+    // HeavyTimeout (#1715): SiTPredictor<double> at paper scale. This test exercises the FLAT
+    // GetParameters()/SetParameters() contract (one contiguous Vector<double> over every parameter),
+    // which is all-resident by definition — chunked streaming can't bound a single flat aggregate, and
+    // at foundation scale in fp64 that vector alone exceeds the 16 GB runner. Excluded from the default
+    // gate (foundation-scale footprint that streaming can't reduce) and tracked in the nightly lane.
+    [Trait("Category", "HeavyTimeout")]
     [Fact(Timeout = 120000)]
     public async Task SiTPredictor_GetSetParameters_RoundTrips()
     {

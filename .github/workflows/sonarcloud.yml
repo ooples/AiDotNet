@@ -31,8 +31,9 @@ on:
     - cron: '0 8 * * 1'
 
 concurrency:
-  # For PR events: group by PR number, cancel-in-progress=true so a rapid
-  # synchronize / reopen cancels the previous run for the same PR.
+  # For PR events: group by PR number; cancel-in-progress is FALSE (see the
+  # cancel-in-progress note below) so an in-progress test-shard run completes
+  # rather than being cancelled mid-matrix by a rapid synchronize / reopen.
   #
   # For push events (master / main): group by ref ONLY (no SHA suffix) AND
   # cancel-in-progress=true so a newer master commit supersedes the prior
@@ -59,7 +60,20 @@ concurrency:
   # downstream check (branch-protection, PR mergeability, release tagging)
   # actually consumes. The intermediate-SHA loss is acceptable.
   group: build-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # cancel-in-progress is TRUE for push/master events (a newer master tip supersedes
+  # the prior in-flight run — only the latest tip needs a green signal, saves ~45min)
+  # but FALSE for pull_request events: a rapid synchronize must NOT kill an in-progress
+  # test-shard run, because cancelling mid-shard marks in-flight tests as FAILED and
+  # leaves the 49-shard matrix with no completed signal to verify a PR against
+  # (observed repeatedly on #1719: DQNAgent / FastConformer "failures" that pass
+  # locally were cancellation artifacts). GitHub still supersedes only PENDING runs in
+  # the group, so at most one run is queued per PR — bounded (≤1 in-progress + ≤1 pending),
+  # no matrix pile-up, so the extra runner time per PR is capped, not unbounded. The
+  # obvious alternative — keep cancel-in-progress: true but treat cancelled jobs as
+  # neutral in required checks — does not fit here: GitHub reports a cancelled required
+  # check as FAILING (not neutral), which is exactly the false-red branch-protection
+  # signal this setting exists to avoid.
+  cancel-in-progress: ${{ github.event_name != 'pull_request' }}
 
 env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
@@ -177,6 +191,23 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v4
         with:
           fetch-depth: 0
+
+      # The full-solution Release build spans three target frameworks
+      # (net471/net8.0/net10.0) across ~20 projects and overflows the hosted
+      # runner's ~14 GB free space — the runner worker dies with
+      # "No space left on device" mid-build (not a compile error). Reclaim
+      # ~25 GB by deleting preinstalled toolchains this .NET build never uses.
+      # We deliberately do NOT touch /usr/share/dotnet (the SDK the build needs).
+      - name: Free up disk space
+        run: |
+          echo "Disk before cleanup:"; df -h /
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /opt/ghc /usr/local/.ghcup || true
+          sudo rm -rf /opt/hostedtoolcache/CodeQL || true
+          sudo rm -rf /usr/share/swift /usr/local/share/boost || true
+          sudo rm -rf /usr/local/share/powershell /usr/local/share/chromium || true
+          sudo docker image prune --all --force || true
+          echo "Disk after cleanup:"; df -h /
 
       - name: Setup .NET 10.0
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
@@ -514,12 +545,23 @@ jobs:
           # Auto-generated layer tests from TestScaffoldGenerator (~1670 methods),
           # split A-M / N-Z by generated model-class first letter to halve per-shard
           # model instantiations (OOM mitigation).
-          - name: ModelFamily - Generated Layers A-M
+          # A-M was a single serial $heavyShard whose ~835 default-gate methods ran
+          # the full 45-min job timeout and got CANCELLED before finishing —
+          # perpetually red, like Integration C / NeuralNetworks A-L before their
+          # splits. Split A-M → A-F + G-M so each serial half finishes under the
+          # timeout. Gap-free + non-overlapping: union == the old A-M set.
+          - name: ModelFamily - Generated Layers A-F
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.A|FullyQualifiedName~Generated.B|FullyQualifiedName~Generated.C|FullyQualifiedName~Generated.D|FullyQualifiedName~Generated.E|FullyQualifiedName~Generated.F|FullyQualifiedName~Generated.G|FullyQualifiedName~Generated.H|FullyQualifiedName~Generated.I|FullyQualifiedName~Generated.J|FullyQualifiedName~Generated.K|FullyQualifiedName~Generated.L|FullyQualifiedName~Generated.M)
+              (FullyQualifiedName~Generated.A|FullyQualifiedName~Generated.B|FullyQualifiedName~Generated.C|FullyQualifiedName~Generated.D|FullyQualifiedName~Generated.E|FullyQualifiedName~Generated.F)
+          - name: ModelFamily - Generated Layers G-M
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.G|FullyQualifiedName~Generated.H|FullyQualifiedName~Generated.I|FullyQualifiedName~Generated.J|FullyQualifiedName~Generated.K|FullyQualifiedName~Generated.L|FullyQualifiedName~Generated.M)
           - name: ModelFamily - Generated Layers N-Z
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -736,7 +778,8 @@ jobs:
             'ModelFamily - Diffusion Stable',
             'ModelFamily - Diffusion Step-Sync',
             'ModelFamily - Diffusion T-Z',
-            'ModelFamily - Generated Layers A-M',
+            'ModelFamily - Generated Layers A-F',
+            'ModelFamily - Generated Layers G-M',
             'ModelFamily - Generated Layers N-Z',
             'ModelFamily - NeuralNetworks A-L',
             'ModelFamily - NeuralNetworks M-N',

@@ -121,6 +121,42 @@ public class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     public IReadOnlyList<Tensor<T>> GetFeatureMaps(Tensor<T> input) => ExtractFeatures(input);
 
     /// <summary>
+    /// Returns the per-layer activations produced by a forward pass, keyed by a
+    /// human-readable name. CSPDarknet organizes its layers as a stem convolution
+    /// plus CSP stages (the <see cref="IDetectionBackbone{T}"/> feature pyramid)
+    /// rather than the flat base <c>Layers</c> collection, so the base
+    /// <see cref="NeuralNetworkBase{T}.GetNamedLayerActivations"/> — which iterates
+    /// <c>Layers</c> — would return an empty map. Mirror <see cref="ExtractFeatures"/>'s
+    /// forward path exactly and expose the activated stem output plus each CSP
+    /// stage's output, so interpretability/activation consumers get the network's
+    /// real intermediate features instead of nothing.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        // Promote a single [C,H,W] image to [1,C,H,W] exactly as the forward path expects.
+        if (input.Shape.Length == 3)
+            input = input.Reshape(new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
+        else if (input.Shape.Length != 4)
+            throw new ArgumentException(
+                $"CSPDarknet expects a [C,H,W] or [N,C,H,W] image tensor, but got rank-{input.Shape.Length} " +
+                $"[{string.Join(",", input.Shape.ToArray())}].", nameof(input));
+
+        // Keys are prefixed with a zero-padded forward-depth index so a consumer that sorts by key
+        // (AiModelResult treats the lexicographically-highest key as the final/deepest activation)
+        // reads the deepest CSP stage, not the stem. Plain "Stem"/"Stage{i}" sorted "Stem" last.
+        var activations = new Dictionary<string, Tensor<T>>();
+        var x = _stem.Forward(input);
+        x = _activation.Activate(x);
+        activations["Layer_00_Stem"] = x.Clone();
+        for (int i = 0; i < _stages.Count; i++)
+        {
+            x = _stages[i].Forward(x);
+            activations[$"Layer_{i + 1:D2}_Stage{i + 1}"] = x.Clone();
+        }
+        return activations;
+    }
+
+    /// <summary>
     /// Sum across stem + every CSP stage. Inherited
     /// <c>NeuralNetworkBase&lt;T&gt;.GetParameterCount()</c> delegates to this
     /// virtual property, satisfying the <see cref="IDetectionBackbone{T}"/> contract.

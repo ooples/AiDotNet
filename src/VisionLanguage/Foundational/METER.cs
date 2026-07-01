@@ -1,3 +1,4 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -253,6 +254,13 @@ public class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
             _options.NumHeads,
             _options.DropoutRate
         );
+
+        // Vision input projection: the dual-stream vision encoder's MultiHeadAttention is built for VisionDim,
+        // but the preprocessed image features arrive at their native width (e.g. raw pixels), so they must be
+        // embedded to VisionDim before the first attention block. Without this, the first vision attention
+        // received the raw feature width and threw "Input embedding dimension (W) does not match weight
+        // dimension (VisionDim)". This linear patch-embedding runs first in the vision stream.
+        Layers.Add(new DenseLayer<T>(_options.VisionDim, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         int idx = 0;
         foreach (var layer in allLayers)

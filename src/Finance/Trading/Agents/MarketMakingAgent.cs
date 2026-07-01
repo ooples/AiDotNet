@@ -202,6 +202,49 @@ public class MarketMakingAgent<T> : TradingAgentBase<T>
 
     #region Training
 
+    /// <summary>
+    /// Performs a one-shot supervised update for the training/test harness.
+    /// </summary>
+    /// <remarks>
+    /// The shared base adapter decodes <paramref name="target"/> into a discrete one-hot action sized
+    /// to the target length, which is incompatible with the market-making policy's continuous,
+    /// ActionSize-wide output — the policy-regression loss in <see cref="Train()"/> compares the policy
+    /// output against the stored action and would mismatch in length. We therefore build a desired
+    /// action of the agent's own ActionSize from the supervised target, store the transition, and run
+    /// the policy update.
+    /// </remarks>
+    public override void Train(Vector<T> state, Vector<T> target)
+    {
+        if (state is null) throw new ArgumentNullException(nameof(state));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        if (target.Length == 0)
+            throw new ArgumentException("target must contain at least one element.", nameof(target));
+
+        // Desired continuous action of the agent's own ActionSize, derived from the supervised target.
+        int actionSize = TradingOptions.ActionSize;
+        var desiredAction = new Vector<T>(actionSize);
+        for (int i = 0; i < actionSize; i++)
+            desiredAction[i] = target[i % target.Length];
+
+        // Bounded scalar reward signal from the supervised target (mean is dimension-agnostic).
+        T reward = NumOps.Zero;
+        for (int i = 0; i < target.Length; i++)
+            reward = NumOps.Add(reward, target[i]);
+        reward = NumOps.Divide(reward, NumOps.FromDouble(target.Length));
+
+        StoreExperience(state, desiredAction, reward, state, done: true);
+
+        SupervisedUpdateRequested = true;
+        try
+        {
+            Train();
+        }
+        finally
+        {
+            SupervisedUpdateRequested = false;
+        }
+    }
+
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
@@ -210,9 +253,16 @@ public class MarketMakingAgent<T> : TradingAgentBase<T>
     /// </remarks>
     public override T Train()
     {
-        if (ReplayBuffer.Count < TradingOptions.BatchSize) return NumOps.Zero;
+        // A supervised one-shot Train(state, target) call bypasses the autonomous-exploration batch
+        // gate and trains on the samples gathered so far (clamped to the buffer); autonomous stepping
+        // still requires a full minibatch before updating.
+        int effectiveBatchSize = SupervisedUpdateRequested
+            ? System.Math.Min(TradingOptions.BatchSize, ReplayBuffer.Count)
+            : TradingOptions.BatchSize;
+        if (effectiveBatchSize <= 0 || ReplayBuffer.Count < effectiveBatchSize) return NumOps.Zero;
 
-        var batch = ReplayBuffer.Sample(TradingOptions.BatchSize);
+        var batch = ReplayBuffer.Sample(effectiveBatchSize);
+        if (batch.Count == 0) return NumOps.Zero;
         T totalLoss = NumOps.Zero;
 
         foreach (var exp in batch)
@@ -225,7 +275,7 @@ public class MarketMakingAgent<T> : TradingAgentBase<T>
             totalLoss = NumOps.Add(totalLoss, loss);
         }
 
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(TradingOptions.BatchSize));
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
     }
 
     #endregion

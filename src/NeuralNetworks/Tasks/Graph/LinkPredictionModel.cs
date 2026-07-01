@@ -7,6 +7,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks.Tasks.Graph;
@@ -76,6 +77,11 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
+// LinkPredictionModel IS a graph neural network (it requires an adjacency matrix), so it must carry the
+// GraphNetwork category like its siblings GraphClassificationModel / NodeClassificationModel. Without it the
+// test scaffold classified it as a generic NN and exercised it through the non-graph test base, which never
+// enables the implicit-identity adjacency — so every Predict/Train threw "Adjacency matrix must be set".
+[ModelCategory(ModelCategory.GraphNetwork)]
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
@@ -680,10 +686,17 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Trains the network on a single batch of data.
+    /// Trains the network on a single batch under the generic node-feature contract, consistent with
+    /// <see cref="PredictCore"/> (both operate on node EMBEDDINGS, not decoded edge scores).
     /// </summary>
     /// <param name="input">The input node features.</param>
-    /// <param name="expectedOutput">The expected output (edge scores).</param>
+    /// <param name="expectedOutput">
+    /// The target in node-embedding space (this generic overload trains the GNN encoder directly).
+    /// NOTE: this is NOT edge-level link-prediction training — actual edge scoring is a separate
+    /// decode step (<see cref="PredictEdges"/> via <see cref="ComputeEdgeScore"/>), and end-to-end
+    /// link-prediction training with real edge pairs + labels goes through the edge-aware graph path.
+    /// This overload exists for the generic model-family training contract.
+    /// </param>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         EnsureDefaultAdjacencyForInput(input);
@@ -693,27 +706,41 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
             layer.SetTrainingMode(true);
         }
 
-        var predictions = Forward(input);
-
-        var flattenedPredictions = predictions.ToVector();
-        var flattenedExpected = expectedOutput.ToVector();
-
-        LastLoss = _lossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
-
-        var outputGradients = _lossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
-        var gradOutput = Tensor<T>.FromVector(outputGradients);
-
-        if (gradOutput.Shape.Length == 1 && predictions.Shape.Length > 1)
+        // ILayer.Backward was removed in favour of GradientTape autodiff. The previous code computed a
+        // loss derivative but NEVER ran a backward pass — it read GetParameterGradients() (stale zeros)
+        // straight away — so the optimizer applied a zero step and training was a silent no-op ("No
+        // parameters changed after training — gradients may all be zero"). Record the GNN forward
+        // (node embeddings — this generic contract's output, see PredictCore; edge scoring is the
+        // separate PredictEdges decode) and the loss on the tape, compute real gradients for every
+        // trainable parameter, then drive the update through the model's configured optimizer
+        // (default Adam) so the loss actually converges.
+        // Tape-based training requires a tape-differentiable loss — a LossFunctionBase<T>, which
+        // exposes ComputeTapeLoss. Silently substituting BinaryCrossEntropyLoss for a
+        // non-LossFunctionBase<T> would train a DIFFERENT objective than the caller configured (a
+        // surprising correctness trap), so fail fast with a clear message instead. The default loss
+        // (BinaryCrossEntropyLoss, set in the ctor) is a LossFunctionBase<T>, so the default path is
+        // unaffected — this only rejects a custom non-tape loss.
+        if (_lossFunction is not LossFunctionBase<T> tapeLoss)
+            throw new InvalidOperationException(
+                $"LinkPredictionModel tape-based training requires a LossFunctionBase<T> (one that "
+                + $"implements ComputeTapeLoss); the configured loss '{_lossFunction.GetType().Name}' is "
+                + "not tape-differentiable. Supply a LossFunctionBase<T>-derived loss such as BinaryCrossEntropyLoss.");
+        using (var tape = new GradientTape<T>())
         {
-            gradOutput = gradOutput.Reshape(predictions._shape);
+            var predictions = Forward(input);
+            var lossTensor = tapeLoss.ComputeTapeLoss(predictions, expectedOutput);
+            // Always record the loss that was computed, even when there are no trainable parameters to
+            // step — LastLoss must reflect the most recent Train call for consistent telemetry.
+            T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+            var trainableParameters = Training.TapeTrainingStep<T>.CollectParameters(Layers, LayerStructureVersion);
+            if (trainableParameters.Count > 0)
+            {
+                var gradients = tape.ComputeGradients(lossTensor, trainableParameters);
+                var context = new TapeStepContext<T>(trainableParameters, gradients, lossValue);
+                _optimizer.Step(context);
+            }
+            LastLoss = lossValue;
         }
-
-
-        Vector<T> parameterGradients = GetParameterGradients();
-        Vector<T> currentParameters = GetParameters();
-        Vector<T> updatedParameters = _optimizer.UpdateParameters(currentParameters, parameterGradients);
-
-        UpdateParameters(updatedParameters);
     }
 
     /// <summary>
