@@ -629,19 +629,30 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
         if (!_useNativeMode)
             return base.GetNamedLayerActivations(input);
 
+        // Snapshot and restore the training mode: this is an introspection helper that must not leave
+        // the model flipped to inference mode for a caller that was mid-training (which would silently
+        // change Dropout/BatchNorm and streaming-pool behavior on the next forward).
+        bool wasTraining = IsTrainingMode;
         SetTrainingMode(false);
-        var activations = new Dictionary<string, Tensor<T>>();
-        var current = ApplyInstanceNormalization(input);
-        if (current.Rank == 1)
-            current = current.Reshape(new[] { 1, current.Length });
-
-        for (int i = 0; i < Layers.Count; i++)
+        try
         {
-            current = Layers[i].Forward(current);
-            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
-        }
+            var activations = new Dictionary<string, Tensor<T>>();
+            var current = ApplyInstanceNormalization(input);
+            if (current.Rank == 1)
+                current = current.Reshape(new[] { 1, current.Length });
 
-        return activations;
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                current = Layers[i].Forward(current);
+                activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+            }
+
+            return activations;
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
     }
 
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)
