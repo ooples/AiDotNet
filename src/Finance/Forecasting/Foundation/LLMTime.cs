@@ -243,6 +243,27 @@ public class LLMTime<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// LLMTime's real forward (<see cref="ForwardNative"/>) instance-normalizes the series and
+    /// promotes a rank-1 [context] input to a rank-2 [1, context] batch before running the layer
+    /// stack, whose leading ReshapeLayer expects a per-sample element count of <c>context</c>. The
+    /// base layer-by-layer walk skips that preprocessing, so a rank-1 probe input reaches the
+    /// ReshapeLayer as [context] (read as <c>context</c> samples of 1 element) and throws an
+    /// element-count mismatch. Apply the same preprocessing here so the activations reflect the
+    /// real forward path.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            return base.GetNamedLayerActivations(input);
+
+        var current = ApplyInstanceNormalization(input);
+        if (current.Rank == 1)
+            current = current.Reshape(new[] { 1, current.Length });
+        return base.GetNamedLayerActivations(current);
+    }
+
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

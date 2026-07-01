@@ -218,7 +218,10 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
             inputType,
             generatorOptimizer,
             discriminatorOptimizer,
-            lossFunction)
+            lossFunction,
+            options: null,
+            defaultGeneratorOptimizerOptions: CreateAdamOptimizerOptions(),
+            defaultDiscriminatorOptimizerOptions: CreateAdamOptimizerOptions())
     {
         _options = options ?? new ConditionalGANOptions();
         Options = _options;

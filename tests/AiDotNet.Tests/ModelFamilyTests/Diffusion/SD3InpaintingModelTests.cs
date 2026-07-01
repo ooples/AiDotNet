@@ -4,6 +4,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
+[Xunit.Collection("FoundationScaleSerial")]
 // HeavyTimeout (#1706): foundation-scale SD3 MM-DiT — verified OOM (System.OutOfMemoryException at
 // CONSTRUCTION under a 16 GB DOTNET_GCHeapHardLimit reproducing the CI ceiling; Metadata_ShouldExist
 // alone OOMs), OS-OOM-kills its Diffusion shard. Nightly heavy lane; drop once streaming fits it.

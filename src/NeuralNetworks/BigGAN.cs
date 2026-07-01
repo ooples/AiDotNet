@@ -115,7 +115,10 @@ public class BigGAN<T> : GenerativeAdversarialNetwork<T>
             InputType.ThreeDimensional,
             generatorOptimizer: null,
             discriminatorOptimizer: null,
-            lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>())
+            lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>(),
+            options: null,
+            defaultGeneratorOptimizerOptions: CreateAdamOptimizerOptions(0.0001, 0.0, 0.999),
+            defaultDiscriminatorOptimizerOptions: CreateAdamOptimizerOptions(0.0004, 0.0, 0.999))
     {
         if (latentSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(latentSize), latentSize, "Latent size must be positive.");
