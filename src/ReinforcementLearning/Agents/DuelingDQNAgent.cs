@@ -151,7 +151,7 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IAction
     }
 
     /// <inheritdoc/>
-    public Vector<T> GetActionValues(Vector<T> state) => _qNetwork.Forward(state);
+    Vector<T> IActionValueProvider<T>.GetActionValues(Vector<T> state) => _qNetwork.Forward(state);
 
     /// <inheritdoc/>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)

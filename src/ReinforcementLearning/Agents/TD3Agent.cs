@@ -243,7 +243,10 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
             reward = NumOps.Add(reward, target[i]);
         reward = NumOps.Divide(reward, NumOps.FromDouble(target.Length));
 
-        StoreExperience(state, action, reward, state, done: false);
+        // Treat this one-shot supervised transition as terminal: nextState is fabricated as `state`, so
+        // done: false would add a TD3 bootstrap term from the target critics and optimize against an
+        // invented transition. done: true makes the critic target just the supplied reward.
+        StoreExperience(state, action, reward, state, done: true);
 
         SupervisedUpdateRequested = true;
         try

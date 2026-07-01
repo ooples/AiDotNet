@@ -191,7 +191,7 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValuePr
     }
 
     /// <inheritdoc/>
-    public Vector<T> GetActionValues(Vector<T> state)
+    Vector<T> IActionValueProvider<T>.GetActionValues(Vector<T> state)
         => _qNetwork.Predict(Tensor<T>.FromVector(state)).ToVector();
 
     /// <inheritdoc/>

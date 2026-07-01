@@ -20,8 +20,13 @@ namespace AiDotNet.Interfaces;
 /// raw scores, which always respond to the input state, making it possible to verify the policy is
 /// actually paying attention to the state rather than blindly returning one fixed action.
 /// </para>
+/// <para>
+/// Internal: this is a test/introspection hook (the generated RL invariant tests use it via
+/// InternalsVisibleTo) — it is deliberately NOT part of the public agent API, so callers go through
+/// the facade (SelectAction/Predict) rather than the raw Q-values.
+/// </para>
 /// </remarks>
-public interface IActionValueProvider<T>
+internal interface IActionValueProvider<T>
 {
     /// <summary>
     /// Returns the estimated value of each available action for the given state.

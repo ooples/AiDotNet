@@ -535,7 +535,7 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IAction
     }
 
     /// <inheritdoc/>
-    public Vector<T> GetActionValues(Vector<T> state) => ComputeQValuesFromNetwork(_onlineNetwork, state);
+    Vector<T> IActionValueProvider<T>.GetActionValues(Vector<T> state) => ComputeQValuesFromNetwork(_onlineNetwork, state);
 
     private Vector<T> ComputeQValuesFromNetwork(INeuralNetwork<T> network, Vector<T> state)
     {

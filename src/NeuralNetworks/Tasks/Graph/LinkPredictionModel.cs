@@ -686,10 +686,17 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Trains the network on a single batch of data.
+    /// Trains the network on a single batch under the generic node-feature contract, consistent with
+    /// <see cref="PredictCore"/> (both operate on node EMBEDDINGS, not decoded edge scores).
     /// </summary>
     /// <param name="input">The input node features.</param>
-    /// <param name="expectedOutput">The expected output (edge scores).</param>
+    /// <param name="expectedOutput">
+    /// The target in node-embedding space (this generic overload trains the GNN encoder directly).
+    /// NOTE: this is NOT edge-level link-prediction training — actual edge scoring is a separate
+    /// decode step (<see cref="PredictEdges"/> via <see cref="ComputeEdgeScore"/>), and end-to-end
+    /// link-prediction training with real edge pairs + labels goes through the edge-aware graph path.
+    /// This overload exists for the generic model-family training contract.
+    /// </param>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         EnsureDefaultAdjacencyForInput(input);
@@ -703,7 +710,8 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
         // loss derivative but NEVER ran a backward pass — it read GetParameterGradients() (stale zeros)
         // straight away — so the optimizer applied a zero step and training was a silent no-op ("No
         // parameters changed after training — gradients may all be zero"). Record the GNN forward
-        // (edge scores) and the binary-cross-entropy loss on the tape, compute real gradients for every
+        // (node embeddings — this generic contract's output, see PredictCore; edge scoring is the
+        // separate PredictEdges decode) and the loss on the tape, compute real gradients for every
         // trainable parameter, then drive the update through the model's configured optimizer
         // (default Adam) so the loss actually converges.
         // Tape-based training requires a tape-differentiable loss — a LossFunctionBase<T>, which

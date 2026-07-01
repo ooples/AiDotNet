@@ -239,7 +239,10 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             reward = NumOps.Add(reward, target[i]);
         reward = NumOps.Divide(reward, NumOps.FromDouble(target.Length));
 
-        StoreExperience(state, action, reward, state, done: false);
+        // Treat this one-shot supervised transition as terminal: nextState is fabricated as `state`, so
+        // done: false would inject a γQ'(s, μ'(s)) bootstrap and optimize against an invented target.
+        // done: true makes the critic target just the supplied reward.
+        StoreExperience(state, action, reward, state, done: true);
 
         SupervisedUpdateRequested = true;
         try
