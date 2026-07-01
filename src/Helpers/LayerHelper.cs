@@ -16882,7 +16882,14 @@ public static class LayerHelper<T>
         // Input embedding
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
 
-        // Positional encoding is handled inside transformer, add layer norm
+        // Positional encoding. A transformer needs explicit position information (Vaswani et al. 2017;
+        // factor-investing transformers per Duan et al. 2022 encode the temporal axis). It was missing
+        // here — the previous comment claimed it was "handled inside transformer", but MultiHeadAttention
+        // adds none. Without it the scale-invariant LayerNorm below collapses scalar-multiple inputs to
+        // identical outputs (the model was input-invariant and its gradients vanished — the
+        // DifferentInputs / GradientFlow / Training failures). The position-dependent offset makes the
+        // embedding no longer a pure scalar multiple of the input, restoring input sensitivity + gradient flow.
+        yield return new PositionalEncodingLayer<T>(sequenceLength, hiddenDimension);
         yield return new LayerNormalizationLayer<T>();
 
         // Transformer encoder layers
