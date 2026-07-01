@@ -102,6 +102,16 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
     /// noiseVar do — so caching these lets <see cref="ComputeLogPosterior"/> (evaluated ~10^6 times by
     /// slice sampling) skip rebuilding the kernel from the generic <see cref="IKernelFunction{T}"/> and
     /// converting every element through <see cref="INumericOperations{T}"/> on each call.
+    /// <para>
+    /// Cache-validity invariant: these caches never go stale because everything they derive from is
+    /// immutable after <see cref="Fit"/>. <c>_kernel</c> is <c>readonly</c> (assigned only in the
+    /// constructor), <see cref="UpdateKernel"/> throws <see cref="NotSupportedException"/> (the kernel is
+    /// fixed for the model's lifetime), and the training data (<c>_X</c>/<c>_y</c>) is set only inside
+    /// <see cref="Fit"/> — which rebuilds ALL of these caches together in the same call. There is thus no
+    /// code path that mutates the kernel or training state without rebuilding the caches, so no explicit
+    /// invalidation hook is required. If a future change makes the kernel or training data mutable, that
+    /// change MUST rebuild (or null) these caches.
+    /// </para>
     /// </summary>
     private double[,]? _baseKernelDouble;
     private double[]? _centeredYDouble;
@@ -546,9 +556,17 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
             || _choleskyWork is null || _alphaWork is null || _betaWork is null)
             return double.NegativeInfinity;
 
-        // logParams[0] (lengthscale) is intentionally not applied to the kernel here — this mirrors
-        // BuildKernelMatrix, where the base kernel supplies the correlation structure and only
-        // outputVar/noiseVar are MCMC-sampled. It is still used by the prior below.
+        // logParams[0] (lengthscale) is intentionally not applied to the kernel matrix here, and this is
+        // NOT a regression from the cached-kernel optimization: on master BOTH BuildKernelMatrix(lengthscale,
+        // …) and ComputeCrossCovariance(x, lengthscale, …) accepted a lengthscale argument but never used it
+        // — each called the generic _kernel.Calculate(…), whose lengthscale is fixed at kernel construction.
+        // So the sampled lengthscale has always been vestigial for a generic IKernelFunction: it feeds only
+        // the prior below (and is reported by GetPosteriorStatistics), never the training kernel or the
+        // predictive cross-covariance. Caching _baseKernelDouble therefore reproduces the previous posterior
+        // bit-for-bit. Making lengthscale a LIVE kernel hyperparameter would require a re-parameterizable
+        // kernel (one that recomputes k(·,·) per sampled lengthscale) — which for a generic kernel means
+        // rebuilding the matrix every evaluation, defeating this timeout fix — so it is a separate modeling
+        // change, deliberately not bundled into this perf PR. It is still used by the prior below.
         double outputVar = Math.Exp(logParams[1]);
         double noiseVar = Math.Exp(logParams[2]);
         int n = _centeredYDouble.Length;
