@@ -69,6 +69,9 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     }
 
     [Fact(Timeout = 120000)]
+    // HeavyTimeout (#1706): Flux backbone (~12B params ~= 48 GB fp32) — constructing it alone exceeds
+    // the 16 GB PR runner, which SIGTERM-cancelled the 03b shard. Runs in the nightly HeavyTimeout lane.
+    [Trait("Category", "HeavyTimeout")]
     public async Task ControlNetFluxModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new ControlNetFluxModel<float>();
@@ -80,6 +83,9 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     }
 
     [Fact(Timeout = 120000)]
+    // HeavyTimeout (#1706): SD3 MMDiT backbone (billions of params) — constructing it alone exceeds the
+    // 16 GB PR runner, which SIGTERM-cancelled the 03b shard. Runs in the nightly HeavyTimeout lane.
+    [Trait("Category", "HeavyTimeout")]
     public async Task ControlNetSD3Model_DefaultConstructor_CreatesValidModel()
     {
         var model = new ControlNetSD3Model<float>();
@@ -212,6 +218,9 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     }
 
     [Fact(Timeout = 120000)]
+    // HeavyTimeout (#1706): Flux backbone (~12B params ~= 48 GB fp32) — constructing it alone exceeds
+    // the 16 GB PR runner, which SIGTERM-cancelled the 03b shard. Runs in the nightly HeavyTimeout lane.
+    [Trait("Category", "HeavyTimeout")]
     public async Task ControlNetPlusPlusFluxModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new ControlNetPlusPlusFluxModel<float>();
@@ -238,6 +247,9 @@ public class ControlModelContractTests : DiffusionUnitTestBase
     }
 
     [Fact(Timeout = 120000)]
+    // HeavyTimeout (#1706): Clone constructs a second ~12B-param Flux model — exceeds the 16 GB PR
+    // runner, which SIGTERM-cancelled the 03b shard. Runs in the nightly HeavyTimeout lane.
+    [Trait("Category", "HeavyTimeout")]
     public async Task ControlNetFluxModel_Clone_CreatesIndependentCopy()
     {
         var model = new ControlNetFluxModel<float>();
