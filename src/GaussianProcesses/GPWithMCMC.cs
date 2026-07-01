@@ -107,6 +107,16 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
     private double[]? _centeredYDouble;
 
     /// <summary>
+    /// Reusable per-instance work buffers for the <see cref="ComputeLogPosterior"/> Cholesky + solves,
+    /// sized once in <see cref="Fit"/>. Since that method is evaluated ~10^6 times by slice sampling,
+    /// reusing these avoids allocating a fresh Cholesky factor + two solve vectors on every call (they
+    /// are fully overwritten each evaluation; MCMC runs single-threaded per instance inside Fit).
+    /// </summary>
+    private double[,]? _choleskyWork;
+    private double[]? _alphaWork;
+    private double[]? _betaWork;
+
+    /// <summary>
     /// Prior mean for log-lengthscale.
     /// </summary>
     private readonly double _logLengthscalePriorMean;
@@ -321,6 +331,12 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
             }
         }
 
+        // Size the ComputeLogPosterior work buffers once so the ~10^6 slice-sampling evaluations reuse
+        // them instead of allocating a Cholesky factor + two solve vectors on every call.
+        _choleskyWork = new double[n, n];
+        _alphaWork = new double[n];
+        _betaWork = new double[n];
+
         // Initialize hyperparameters in log-space
         double[] logParams = new double[3];
         logParams[0] = _logLengthscalePriorMean; // log-lengthscale
@@ -526,7 +542,8 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
     /// </summary>
     private double ComputeLogPosterior(double[] logParams)
     {
-        if (_baseKernelDouble is null || _centeredYDouble is null)
+        if (_baseKernelDouble is null || _centeredYDouble is null
+            || _choleskyWork is null || _alphaWork is null || _betaWork is null)
             return double.NegativeInfinity;
 
         // logParams[0] (lengthscale) is intentionally not applied to the kernel here — this mirrors
@@ -536,11 +553,16 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
         double noiseVar = Math.Exp(logParams[2]);
         int n = _centeredYDouble.Length;
 
+        // Reuse the per-instance work buffers (sized in Fit). L's upper triangle is never read and
+        // alpha/beta are fully overwritten below, so reusing them is bit-identical to fresh allocations.
+        double[,] L = _choleskyWork;
+        double[] alpha = _alphaWork;
+        double[] beta = _betaWork;
+
         // Cholesky of K = base·outputVar + noiseVar·I, computed directly in double. Same triple loop
         // and accumulation order as CholeskyDecomposition, so the result is bit-identical to the
         // generic path (which already did all arithmetic in double via ToDouble) — the MCMC sample
         // sequence is unchanged, only the per-eval boxing/allocation is removed.
-        var L = new double[n, n];
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j <= i; j++)
@@ -568,7 +590,6 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
 
         // Solve L·alpha = y (forward) then Lᵀ·beta = alpha (backward), matching SolveLowerTriangular /
         // SolveUpperTriangular's accumulate-then-subtract order exactly.
-        var alpha = new double[n];
         for (int i = 0; i < n; i++)
         {
             double sum = 0;
@@ -577,7 +598,6 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
             alpha[i] = (_centeredYDouble[i] - sum) / L[i, i];
         }
 
-        var beta = new double[n];
         for (int i = n - 1; i >= 0; i--)
         {
             double sum = 0;
