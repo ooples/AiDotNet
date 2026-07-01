@@ -3,10 +3,8 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
-using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
-using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
