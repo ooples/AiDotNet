@@ -124,6 +124,7 @@ public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
     // Number of recurrent unroll steps K used to build training targets (Schrittwieser et al. 2020
     // use K=5). MuZeroAgent.Train unrolls the learned model K steps from a real trajectory window and
     // backpropagates one joint loss through the recurrence (#1756), so the paper default is honored.
+    // (Supersedes the interim K=1 default from #1755, which existed only while K>1 was unimplemented.)
     public int UnrollSteps { get; init; } = 5;
     public int TDSteps { get; init; } = 10;
     public double PriorityAlpha { get; init; } = 1.0;
