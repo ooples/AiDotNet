@@ -2109,20 +2109,33 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             int count = context.Parameters.Count;
 
             // Steady-state fast path: when there is no pending deserialized state to rebind AND the
-            // current parameter set is the one we already indexed, the existing map is still correct,
-            // so skip the O(#params) clear+repopulate that otherwise ran under the lock every Step().
-            // "Same set" = same count with identical FIRST and LAST tensor references (parameter tensors
-            // are stable objects across training steps; the map uses a reference comparer). A replaced
-            // parameter set or an optimizer reused on another model yields different endpoint references
-            // (or a different count) and correctly falls through to the full rebuild below — preserving
-            // the stale-reference safety the rebuild guarantees.
+            // current parameter set is EXACTLY the one we already indexed, the existing map is still
+            // correct, so skip the clear+repopulate (and the per-parameter RestorePendingTapeTensorStates
+            // work) that otherwise ran under the lock every Step(). We fully verify the map here rather
+            // than trusting endpoints only: an interior slot changing (or a null→tensor transition) while
+            // the first/last references stay the same would otherwise return a STALE map and corrupt
+            // checkpoint indexing. This verification is still cheaper than the rebuild — plain dictionary
+            // lookups, with no clear, no re-inserts, and no restore-state calls — and the counts guard
+            // catches a replaced parameter set (different count) or added/removed null slots.
             if (_pendingTapeTensorStates.Count == 0 && count == _tapeIndexedParameterCount && count > 0)
             {
-                var firstParam = context.Parameters[0];
-                var lastParam = context.Parameters[count - 1];
-                if (firstParam is not null && lastParam is not null
-                    && _tapeParameterIndices.TryGetValue(firstParam, out int firstIndex) && firstIndex == 0
-                    && _tapeParameterIndices.TryGetValue(lastParam, out int lastIndex) && lastIndex == count - 1)
+                int nonNullParameterCount = 0;
+                bool mapMatchesCurrentParameters = true;
+                for (int parameterIndex = 0; parameterIndex < count; parameterIndex++)
+                {
+                    var parameter = context.Parameters[parameterIndex];
+                    if (parameter is null) continue;
+
+                    nonNullParameterCount++;
+                    if (!_tapeParameterIndices.TryGetValue(parameter, out int indexedParameter)
+                        || indexedParameter != parameterIndex)
+                    {
+                        mapMatchesCurrentParameters = false;
+                        break;
+                    }
+                }
+
+                if (mapMatchesCurrentParameters && _tapeParameterIndices.Count == nonNullParameterCount)
                 {
                     return;
                 }

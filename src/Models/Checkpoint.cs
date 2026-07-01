@@ -189,9 +189,17 @@ public class Checkpoint<T, TInput, TOutput>
         if (!string.IsNullOrEmpty(OptimizerTypeName))
         {
             var expectedType = Type.GetType(OptimizerTypeName);
+            var actualType = optimizer.GetType();
+            // The saved name is assembly-qualified ("Ns.Type, Assembly, Version=..."); the part before the
+            // first comma is the type FullName. When Type.GetType can't resolve the saved type (the
+            // assembly was renamed or its version changed), fall back to comparing the assembly-qualified
+            // string AND the bare FullName, so a checkpoint from a since-renamed/versioned assembly whose
+            // concrete optimizer type is otherwise identical still restores instead of being rejected.
+            string expectedFullName = OptimizerTypeName.Split(',')[0].Trim();
             bool compatible = expectedType != null
                 ? expectedType.IsInstanceOfType(optimizer)
-                : string.Equals(OptimizerTypeName, optimizer.GetType().AssemblyQualifiedName, StringComparison.Ordinal);
+                : string.Equals(OptimizerTypeName, actualType.AssemblyQualifiedName, StringComparison.Ordinal)
+                  || string.Equals(expectedFullName, actualType.FullName, StringComparison.Ordinal);
 
             if (!compatible)
             {
