@@ -8833,8 +8833,13 @@ public static class LayerHelper<T>
         // First reduce features, then pool to 1x1, then classify
         yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new GlobalPoolingLayer<T>(PoolingType.Average);
-        // After global pooling, shape is [numFeatures, 1, 1] - use DenseLayer for final classification
-        yield return new DenseLayer<T>(numClasses, new SoftmaxActivation<T>() as IActivationFunction<T>);
+        // Final classification head. Emit RAW LOGITS (identity activation), not
+        // softmax probabilities: VideoMAE trains with CrossEntropyWithLogitsLoss
+        // (which applies softmax internally) and ClassifyAction applies softmax on
+        // top for inference — a Softmax here would double-normalize training and
+        // inference. The DenseLayer projects the [numFeatures] embedding to
+        // numClasses class logits.
+        yield return new DenseLayer<T>(numClasses, new IdentityActivation<T>() as IActivationFunction<T>);
 
         // Decoder blocks for reconstruction (4 blocks) - these operate at featH x featW resolution
         // Note: In a real VideoMAE implementation, the decoder would receive encoder features

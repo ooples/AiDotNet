@@ -1978,6 +1978,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "HiddenDimension = 32, NumLayers = 2, NumHeads = 2, IntermediateSize = 64, " +
                     "NumExperts = 2, NumActiveExperts = 1, DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "VideoMAE" && model.TypeParameterCount == 1)
+            {
+                // VideoMAE (Tong et al. 2022) defaults to ViT-Base scale
+                // (numFeatures=768, 12 encoder blocks, numClasses=400) ≈ 65M
+                // params. On the tiny 4-frame 32x32 smoke clip that both crosses
+                // the weight-streaming threshold and buries the input signal under
+                // a 768-wide, 12-deep conv stack, so the network trains slowly and
+                // its output barely moves with the input. Build the SAME
+                // tubelet-embed -> residual encoder -> pooled classification head
+                // at CI-smoke width/depth (mirrors the TimeSformer special-case),
+                // keeping numFrames in lockstep with the temporal-video InputShape
+                // ([4, 3, 32, 32]) and numClasses with OutputShape ([4]).
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputFrames: 4, inputDepth: 3, inputHeight: 32, inputWidth: 32, outputSize: 4), " +
+                    "numClasses: 4, numFrames: 4, numFeatures: 32)";
+            }
             else if (model.ClassName == "WorldModelsAgent" && model.TypeParameterCount == 1)
             {
                 // WorldModels (Ha & Schmidhuber 2018) defaults to a 64x64x3 =

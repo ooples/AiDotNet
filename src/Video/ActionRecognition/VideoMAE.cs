@@ -467,13 +467,22 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
         // axis into the leading dim, producing [batchSize * numTubelets, ...].
         var patchEmbedded = PatchEmbed(video);
 
-        // Apply encoder blocks
+        // Apply encoder blocks. Each Layers[i] is a shape-preserving
+        // Conv(numFeatures, 3, 1, 1) whose built-in ReLU records on the autodiff
+        // tape, so a straight sequential dispatch keeps the gradient path intact.
+        // The previous code applied a SECOND, Transform-based GELU on top of the
+        // layer's own activation, which had no GradFn and severed the tape, so
+        // gradients never reached any encoder or embedding weight (frozen
+        // training). A residual skip was NOT added here on purpose: with
+        // ReLU-activated blocks (output >= 0) an additive skip makes the feature
+        // magnitude grow monotonically across the 12-block stack, blowing up the
+        // classification logits and saturating the softmax so the output stops
+        // responding to input changes.
         var features = patchEmbedded;
         int encoderLayerCount = Math.Min(13, Layers.Count);
         for (int i = 1; i < encoderLayerCount; i++)
         {
             features = Layers[i].Forward(features);
-            features = ApplyGELU(features);
         }
 
         // Spatial global average pool: [B * numTubelets, C, 1, 1].
@@ -569,11 +578,23 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
     private Tensor<T> ClassificationForward(Tensor<T> features)
     {
         // Classification head layers are at indices 13 and 14
-        if (_useNativeMode && Layers.Count > 14)
+        if (_useNativeMode && Layers.Count > 15)
         {
-            var classHead = Layers[13].Forward(features);
-            classHead = ApplyGELU(classHead);
-            return Layers[14].Forward(classHead);
+            // features: [B, C, 1, 1] pooled per-video embedding from EncodeVideo.
+            // Apply the 1x1 feature-reduce conv (Layers[13], Conv+ReLU on the
+            // autodiff tape), flatten to [B, C], and project to numClasses raw
+            // logits with the final Dense (Layers[15]). The previous code returned
+            // the SECOND global-pooling layer (Layers[14]) output, which reduced
+            // the whole embedding to a single scalar — softmax over one element is
+            // 1.0 for EVERY input, so the classifier could neither distinguish
+            // inputs nor train (constant output, zero gradient). Layers[15] emits
+            // logits (identity activation); ClassifyAction softmaxes for inference
+            // and training uses CrossEntropyWithLogitsLoss.
+            var reduced = Layers[13].Forward(features);
+            int batch = reduced.Shape[0];
+            int channels = reduced.Shape[1];
+            var flat = Engine.Reshape(reduced, new[] { batch, channels });
+            return Layers[15].Forward(flat);
         }
 
         // In ONNX mode, this is handled by RunOnnxInference
@@ -664,13 +685,22 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
             }
         }
 
-        // Apply encoder blocks
+        // Apply encoder blocks. Each Layers[i] is a shape-preserving
+        // Conv(numFeatures, 3, 1, 1) whose built-in ReLU records on the autodiff
+        // tape, so a straight sequential dispatch keeps the gradient path intact.
+        // The previous code applied a SECOND, Transform-based GELU on top of the
+        // layer's own activation, which had no GradFn and severed the tape, so
+        // gradients never reached any encoder or embedding weight (frozen
+        // training). A residual skip was NOT added here on purpose: with
+        // ReLU-activated blocks (output >= 0) an additive skip makes the feature
+        // magnitude grow monotonically across the 12-block stack, blowing up the
+        // classification logits and saturating the softmax so the output stops
+        // responding to input changes.
         var features = patchEmbedded;
         int encoderLayerCount = Math.Min(13, Layers.Count);
         for (int i = 1; i < encoderLayerCount; i++)
         {
             features = Layers[i].Forward(features);
-            features = ApplyGELU(features);
         }
 
         return features;
@@ -776,25 +806,15 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
         int height = input.Shape[2];
         int width = input.Shape[3];
 
-        var output = new Tensor<T>([batchSize, channels, 1, 1]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                T sum = NumOps.Zero;
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        sum = NumOps.Add(sum, input[b, c, h, w]);
-                    }
-                }
-                output[b, c, 0, 0] = NumOps.Divide(sum, NumOps.FromDouble(height * width));
-            }
-        }
-
-        return output;
+        // Tape-safe spatial mean expressed as engine ops (mirrors PoolTubelets):
+        // reshape [B, C, H, W] -> [B, C, H*W], reduce-mean over the spatial axis,
+        // restore [B, C, 1, 1]. The previous scalar sum/write loop built a fresh
+        // tensor element by element, which has no GradFn and severed the autodiff
+        // tape between the classifier head and the encoder/tubelet-embedding
+        // weights — the whole video encoder stayed frozen across training.
+        var reshaped = Engine.Reshape(input, new[] { batchSize, channels, height * width });
+        var meanBC = Engine.ReduceMean(reshaped, new[] { 2 }, keepDims: false);  // [B, C]
+        return Engine.Reshape(meanBC, new[] { batchSize, channels, 1, 1 });
     }
 
     private Tensor<T> ApplyGELU(Tensor<T> input)
