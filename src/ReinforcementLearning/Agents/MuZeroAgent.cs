@@ -414,8 +414,11 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override T Train()
     {
-        // Need at least one real transition (o_0, a_0, r_0, o_1) to unroll from.
-        if (_replayBuffer.Count < 2)
+        // Need at least one real transition (o_0, a_0, r_0, o_1) to unroll from. A single Experience
+        // already carries both o_0 and its NextState (o_1), which is enough for a 1-step unroll whose
+        // value target bootstraps off NextState (see NStepValueTarget), so training can start as soon
+        // as the buffer holds one transition.
+        if (_replayBuffer.Count < 1)
         {
             return NumOps.Zero;
         }
@@ -460,8 +463,13 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         {
             // Trajectory window of up to K+1 consecutive transitions (truncated at an episode boundary).
             var seq = _replayBuffer.SampleSequence(unroll + 1);
-            if (seq.Count < 2) continue;
-            int steps = Math.Min(unroll, seq.Count - 1);
+            if (seq.Count < 1) continue;
+            // Train one unroll step per transition in the window (capped at K). On a FULL K+1 window this
+            // is K steps and seq[K] serves only as the final bootstrap state (unchanged). On a window
+            // TRUNCATED at an episode boundary (or a 1-transition buffer) this also trains the last /
+            // terminal transition's heads — its value target bootstraps off seq[last].NextState via
+            // NStepValueTarget, so no transition near an episode end is silently dropped from the loss.
+            int steps = Math.Min(unroll, seq.Count);
 
             // h_0 = f_representation(o_0). Outputs stay rank-1 (FromVector -> [n], Dense preserves rank),
             // so no Reshape is used in the unroll — Engine.Reshape deliberately does NOT attach an
@@ -560,7 +568,8 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <summary>
-    /// Applies one Adam step (β1=0.9, β2=0.999, ε=1e-8, lr = Options.LearningRate) to a single network,
+    /// Applies one Adam step (β1=0.9, β2=0.999, ε=1e-8, lr = the agent's resolved <see cref="LearningRate"/>
+    /// — the base-class value with its non-zero fallback, NOT the nullable <c>Options.LearningRate</c>) to a single network,
     /// mapping the joint tape gradients into the network's canonical <c>GetParameters()</c> flat layout
     /// (layer order, the same order <see cref="TapeTrainingStep{T}.CollectParameters"/> walks) and
     /// writing back via <c>UpdateParameters</c> — the only path guaranteed to persist and be read back

@@ -171,7 +171,9 @@ public class ModelBasedAndMultiAgentTrainingTests
         await Task.Yield();
         // Paper-faithful K-step unroll (#1756): Train() must unroll the learned model K>1 steps and
         // backprop one joint loss through the recurrence — updating all three networks — without
-        // throwing, including when the sampled trajectory window crosses an episode boundary (Done).
+        // throwing, including when the sampled trajectory window CONTAINS an episode boundary. Note
+        // SampleSequence truncates at the first Done, so the window ends at the terminal transition
+        // rather than spanning across it into the next episode.
         const int obs = 4, actionDim = 2, batch = 8;
         var agent = new MuZeroAgent<double>(new MuZeroOptions<double>
         {
