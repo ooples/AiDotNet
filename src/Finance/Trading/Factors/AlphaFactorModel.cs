@@ -595,6 +595,29 @@ public class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T>
     }
 
     /// <summary>
+    /// Training-mode forward pass. Runs the native layer stack directly on the live gradient tape.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The default <see cref="FinancialModelBase{T}.ForwardNativeForTraining"/> delegates to
+    /// <see cref="Forecast"/>, which here calls <see cref="NeuralNetworks.NeuralNetworkBase{T}.Predict"/>
+    /// — the INFERENCE path. Predict runs inside a <c>TensorArena</c> inference scope that detaches its
+    /// output from the gradient tape, so during <c>TrainWithTape</c> the backward pass reaches no
+    /// parameters and every training step is a silent no-op (the GradientFlow_ShouldBeNonZeroAndFinite,
+    /// Training_ShouldChangeParameters and LossStrictlyDecreasesOnMemorizationTask failures). Route
+    /// training through <see cref="PredictNative"/>, which walks the raw layer stack so the forward is
+    /// recorded on the tape and gradients flow to every layer's parameters. PredictNative also runs the
+    /// encoder BatchNorm in inference mode (running stats) — required so a batch-of-one training step
+    /// does not normalize every feature to its own mean and collapse the output. Mirrors the NTM #1670 /
+    /// FactorTransformer tape-severance fix.
+    /// </para>
+    /// </remarks>
+    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
+    {
+        return PredictNative(input);
+    }
+
+    /// <summary>
     /// Gets financial metrics for the model.
     /// </summary>
     /// <returns>Dictionary of financial metrics.</returns>

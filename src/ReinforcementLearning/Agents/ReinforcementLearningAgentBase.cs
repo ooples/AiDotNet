@@ -70,6 +70,16 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     protected int Episodes;
 
     /// <summary>
+    /// Set by the supervised <see cref="Train(Vector{T}, Vector{T})"/> entry point to signal an
+    /// explicit one-shot supervised update. Replay-based agents (the DQN family) honour this by
+    /// bypassing their autonomous-exploration warmup and training on the samples gathered so far,
+    /// so that a handful of supervised Train(state, target) calls actually update the network
+    /// (the documented "applies one update" contract). Autonomous stepping leaves this false and
+    /// still respects warmup.
+    /// </summary>
+    protected bool SupervisedUpdateRequested;
+
+    /// <summary>
     /// History of losses during training.
     /// </summary>
     protected readonly List<T> LossHistory;
@@ -271,7 +281,16 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
         // exactly the one-shot supervised semantics callers expect. The abstract
         // <see cref="Train()"/> consumes the stored experience and applies one update.
         StoreExperience(state, actionVec, bestValue, state, done: true);
-        Train();
+        // Flag the one-shot supervised update so replay agents bypass warmup and train now.
+        SupervisedUpdateRequested = true;
+        try
+        {
+            Train();
+        }
+        finally
+        {
+            SupervisedUpdateRequested = false;
+        }
     }
 
     /// <summary>

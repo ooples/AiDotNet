@@ -192,12 +192,22 @@
          AIDOTNET_GEMM_SINGLE_REGION=0; ~1.3-2x on transformer/training GEMM shapes) + the net471
          PackAOnly non-4x4 scalar-tail bugfix. 0.102.3 is a linear superset of 0.102.2, so the #632 /
          Phase C deps above are retained. -->
-    <!-- 0.106.0 is the published release that makes this PR's diffusion CUDA-graph capture +
-         all-backend FP16 conv/activations (Tensors #671) and the fused LrSchedule warmup mapping
-         public — superseding the local 0.104.x-capture branch this PR previously pinned. It also
-         carries the fused bf16 Adam moment kernel (#713) and the WeightRegistry dead-owner sweep
-         (#716, the foundation-scale CV/diffusion shard OOM fix). Native packages coreleased in
-         lockstep at 0.106.0. -->
+    <!-- 0.104.6 supersedes 0.104.5/0.104.0/0.103.1. 0.104.5 added the single-launch fused
+         grouped/depthwise deformable (DCNv3) kernel — fused FORWARD (#691) + GPU/CPU single-pass
+         BACKWARD (#693), what InternImage's DeformableConvolutionalLayer needs — plus the bounded
+         large-array pool for conv-backward K-concat stacks (#694, ~8x less GC). 0.104.6 adds
+         AiDotNet.Tensors #704: stop the compilation topo-sort from dropping in-place op chains, which
+         left BatchNorm running-stat updates stale (the fix PR #1704 depends on; fixes WebRTCVad and
+         TableTransformer Clone_AfterTraining). Carries forward 0.103.x weight-streaming ReleaseToPool
+         soft-defer (#692), conv implicit-GEMM (#690), diffusion CUDA-graph + FP16 (#671/#680), the
+         0.104.x GEMM JIT/routing/pinning wins (#700), and parallel SSM/linear-attention scans (#703).
+         Ships lib/net8.0 + net10.0 + net471; native packages coreleased in lockstep at 0.104.6.
+
+         Bumped 0.104.6 -> 0.106.0: brings AiDotNet.Tensors #713 — the fused bfloat16 Adam/AdamW moment
+         kernel this PR's FusedOptimizerConfig.UseBf16Moments path dispatches to (half the optimizer-state
+         footprint at fp32 update precision on the CPU float fused kernel). Superset of 0.104.6, so all
+         deps above are retained. NOTE: 0.106.0 (and the lockstep native packages below) is already
+         PUBLISHED to NuGet, so this bump does not gate CI on an unreleased dependency. -->
     <PackageVersion Include="AiDotNet.Tensors" Version="0.106.1" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.106.1" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.106.1" />

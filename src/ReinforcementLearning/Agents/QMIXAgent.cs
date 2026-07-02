@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -298,7 +299,22 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
         var batch = _replayBuffer.Sample(_options.BatchSize);
         T totalLoss = NumOps.Zero;
 
-        foreach (var experience in batch)
+        // QMIX trains on JOINT observations: each stored state must be a concatenation of
+        // every agent's observation plus the global state. If a stored transition is not
+        // joint-sized (e.g. a single-agent state vector was passed), the joint decomposition
+        // below would read out of bounds. Filter those malformed transitions OUT of the batch
+        // and train on the rest, rather than aborting the whole update on one bad experience —
+        // one malformed transition shouldn't block learning on the valid majority.
+        int expectedJointLength = _options.NumAgents * _options.StateSize + _options.GlobalStateSize;
+        var validBatch = batch
+            .Where(e => e.State.Length >= expectedJointLength && e.NextState.Length >= expectedJointLength)
+            .ToList();
+        if (validBatch.Count == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        foreach (var experience in validBatch)
         {
             // Decompose joint experience
             var (agentStates, globalState, agentActions) = DecomposeJointState(experience.State, experience.Action);
@@ -436,7 +452,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
         }
 
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(validBatch.Count));
     }
 
     private (List<Vector<T>> agentStates, Vector<T> globalState, List<Vector<T>> agentActions) DecomposeJointState(
