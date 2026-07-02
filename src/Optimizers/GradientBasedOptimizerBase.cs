@@ -14,6 +14,8 @@ using LocalMixedPrecisionConfig = AiDotNet.MixedPrecision.MixedPrecisionConfig;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
+using System.Collections.Concurrent;
+using System.Reflection;
 
 namespace AiDotNet.Optimizers;
 
@@ -96,6 +98,23 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// Returns Vector&lt;T&gt;.Empty() if no gradients have been computed yet.
     /// </remarks>
     protected Vector<T> _lastComputedGradients;
+
+    private const string TapeStateExtensionMarker = "AiDotNet.GradientTapeOptimizerState.v1";
+
+    private readonly ConcurrentDictionary<Tensor<T>, int> _tapeParameterIndices =
+        new(TensorReferenceComparer<Tensor<T>>.Instance);
+
+    private readonly Dictionary<string, Dictionary<int, Tensor<T>>> _pendingTapeTensorStates =
+        new(StringComparer.Ordinal);
+
+    private readonly object _tapeStateSync = new();
+
+    // The context.Parameters.Count the tape index map was last rebuilt for, plus the identity of the
+    // parameter-collection instance it was built from. Together they drive the steady-state fast paths in
+    // PrepareTapeState: same collection instance + same count => skip even the verification scan. -1/null
+    // = never built.
+    private int _tapeIndexedParameterCount = -1;
+    private object? _tapeIndexedParametersRef;
 
     /// <summary>
     /// A cache for storing and retrieving gradients to improve performance.
@@ -1851,6 +1870,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     {
         base.Reset();
         GradientCache.ClearCache();
+        ClearSerializedTapeState();
 
         // Reset learning rate scheduler state
         _learningRateScheduler?.Reset();
@@ -2078,8 +2098,402 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         return NumOps.FromDouble(_currentLearningRate);
     }
 
+    /// <summary>
+    /// Rebinds optimizer tape state loaded from a checkpoint to the current
+    /// parameter tensors and records the current parameter order for future
+    /// serialization.
+    /// </summary>
+    protected void PrepareTapeState(TapeStepContext<T> context)
+    {
+        Guard.NotNull(context);
+
+        lock (_tapeStateSync)
+        {
+            var parameters = context.Parameters;
+            int count = parameters.Count;
+
+            // O(1) fast path: the same parameter-collection INSTANCE passed again (with no pending
+            // deserialized state to rebind) means nothing to re-index — skip even the verification scan.
+            // This is the common steady-state signal; a model/parameter replacement hands over a different
+            // collection instance (or a different count), which misses here and falls through to verify +
+            // rebuild. Reference identity is the accepted "unchanged" signal — parameter lists in this
+            // codebase are not mutated in place across steps (a change produces new tensors/a new list).
+            if (_pendingTapeTensorStates.Count == 0
+                && count == _tapeIndexedParameterCount
+                && ReferenceEquals(parameters, _tapeIndexedParametersRef))
+            {
+                return;
+            }
+
+            // Steady-state fast path: when there is no pending deserialized state to rebind AND the
+            // current parameter set is EXACTLY the one we already indexed, the existing map is still
+            // correct, so skip the clear+repopulate (and the per-parameter RestorePendingTapeTensorStates
+            // work) that otherwise ran under the lock every Step(). We fully verify the map here rather
+            // than trusting endpoints only: an interior slot changing (or a null→tensor transition) while
+            // the first/last references stay the same would otherwise return a STALE map and corrupt
+            // checkpoint indexing. This verification is still cheaper than the rebuild — plain dictionary
+            // lookups, with no clear, no re-inserts, and no restore-state calls — and the counts guard
+            // catches a replaced parameter set (different count) or added/removed null slots.
+            if (_pendingTapeTensorStates.Count == 0 && count == _tapeIndexedParameterCount && count > 0)
+            {
+                int nonNullParameterCount = 0;
+                bool mapMatchesCurrentParameters = true;
+                for (int parameterIndex = 0; parameterIndex < count; parameterIndex++)
+                {
+                    var parameter = parameters[parameterIndex];
+                    if (parameter is null) continue;
+
+                    nonNullParameterCount++;
+                    if (!_tapeParameterIndices.TryGetValue(parameter, out int indexedParameter)
+                        || indexedParameter != parameterIndex)
+                    {
+                        mapMatchesCurrentParameters = false;
+                        break;
+                    }
+                }
+
+                if (mapMatchesCurrentParameters && _tapeParameterIndices.Count == nonNullParameterCount)
+                {
+                    // Remember this instance so a subsequent call with the same collection hits the O(1)
+                    // reference fast path above instead of re-scanning.
+                    _tapeIndexedParametersRef = parameters;
+                    return;
+                }
+            }
+
+            // Rebuild the index from the CURRENT parameters. Without clearing, tensors that are no longer
+            // part of the active model (e.g. after a parameter set is replaced, or an optimizer is reused
+            // across models without a full Reset) would linger as stale references and could be serialized
+            // as state for parameters that no longer exist.
+            _tapeParameterIndices.Clear();
+            for (int parameterIndex = 0; parameterIndex < count; parameterIndex++)
+            {
+                var parameter = parameters[parameterIndex];
+                if (parameter is null) continue;
+
+                _tapeParameterIndices[parameter] = parameterIndex;
+                RestorePendingTapeTensorStates(parameterIndex, parameter);
+            }
+            _tapeIndexedParameterCount = count;
+            _tapeIndexedParametersRef = parameters;
+        }
+    }
+
+    /// <summary>
+    /// Gets the stable parameter-order index recorded from the latest tape step.
+    /// </summary>
+    protected bool TryGetTapeParameterIndex(Tensor<T> parameter, out int parameterIndex)
+    {
+        return _tapeParameterIndices.TryGetValue(parameter, out parameterIndex);
+    }
+
     /// <inheritdoc />
     public abstract void Step(TapeStepContext<T> context);
+
+    /// <inheritdoc />
+    private protected override void SerializeExtensionData(BinaryWriter writer)
+    {
+        writer.Write(TapeStateExtensionMarker);
+
+        var tapeStepFields = EnumerateOptimizerFields()
+            .Where(field => field.Name == "_tapeStep" && field.FieldType == typeof(int))
+            .ToList();
+
+        // Guard against field shadowing: if a derived optimizer also declared `_tapeStep`, the hierarchy
+        // walk yields multiple same-named fields. DeserializeExtensionData resolves by name only, so it
+        // would repeatedly bind the first match and silently restore the WRONG step counter. No optimizer
+        // shadows it today (all derive directly from this base); fail fast with a clear message if one
+        // ever does, rather than corrupt the restored state. This keeps the on-wire count <= 1, which in
+        // turn makes the name-only resolve on the deserialize side unambiguous.
+        if (tapeStepFields.Count > 1)
+        {
+            throw new InvalidOperationException(
+                $"{GetType().Name} declares multiple '_tapeStep' fields across its type hierarchy " +
+                $"({string.Join(", ", tapeStepFields.Select(f => f.DeclaringType?.Name))}). Tape-state " +
+                $"serialization requires a single '_tapeStep'; rename the shadowing field.");
+        }
+
+        writer.Write(tapeStepFields.Count);
+        foreach (var field in tapeStepFields)
+        {
+            writer.Write(field.Name);
+            writer.Write((int)(field.GetValue(this) ?? 0));
+        }
+
+        var tensorStateFields = EnumerateTapeTensorStateFields().ToList();
+        writer.Write(tensorStateFields.Count);
+        foreach (var field in tensorStateFields)
+        {
+            writer.Write(field.Name);
+            WriteTapeTensorStateDictionary(writer, field);
+        }
+    }
+
+    /// <inheritdoc />
+    private protected override void DeserializeExtensionData(BinaryReader reader)
+    {
+        if (reader.BaseStream.Position >= reader.BaseStream.Length)
+        {
+            return;
+        }
+
+        // Checkpoints can be untrusted or partially written; a truncated payload makes ReadString/
+        // ReadInt32 throw a low-level EndOfStream/IO exception mid-parse. Translate those into a
+        // deterministic "corrupt optimizer checkpoint" error so callers get a clear, catchable failure
+        // instead of a leaked stream exception. (The marker-mismatch InvalidOperationException below is
+        // NOT an IO exception, so the filter lets it propagate unchanged.)
+        try
+        {
+            string marker = reader.ReadString();
+            if (!string.Equals(marker, TapeStateExtensionMarker, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException($"Unknown optimizer extension payload '{marker}'.");
+            }
+
+            ClearSerializedTapeState();
+
+            int tapeStepFieldCount = reader.ReadInt32();
+            for (int i = 0; i < tapeStepFieldCount; i++)
+            {
+                string fieldName = reader.ReadString();
+                int value = reader.ReadInt32();
+                var field = EnumerateOptimizerFields()
+                    .FirstOrDefault(candidate => candidate.Name == fieldName && candidate.FieldType == typeof(int));
+                field?.SetValue(this, value);
+            }
+
+            int tensorStateFieldCount = reader.ReadInt32();
+            lock (_tapeStateSync)
+            {
+                for (int i = 0; i < tensorStateFieldCount; i++)
+                {
+                    string fieldName = reader.ReadString();
+                    _pendingTapeTensorStates[fieldName] = ReadTapeTensorStateDictionary(reader);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is System.IO.EndOfStreamException or System.IO.IOException)
+        {
+            throw new InvalidOperationException(
+                "Optimizer tape-state extension payload is truncated or corrupted (unexpected end of the " +
+                "checkpoint stream while reading optimizer state).", ex);
+        }
+    }
+
+    private void WriteTapeTensorStateDictionary(BinaryWriter writer, FieldInfo field)
+    {
+        var entries = new SortedDictionary<int, Tensor<T>>();
+
+        lock (_tapeStateSync)
+        {
+            if (_pendingTapeTensorStates.TryGetValue(field.Name, out var pendingEntries))
+            {
+                foreach (var entry in pendingEntries)
+                {
+                    entries[entry.Key] = entry.Value;
+                }
+            }
+
+            if (field.GetValue(this) is ConcurrentDictionary<Tensor<T>, Tensor<T>> activeEntries)
+            {
+                foreach (var entry in activeEntries)
+                {
+                    if (_tapeParameterIndices.TryGetValue(entry.Key, out int parameterIndex))
+                    {
+                        entries[parameterIndex] = entry.Value;
+                    }
+                }
+            }
+        }
+
+        writer.Write(entries.Count);
+        foreach (var entry in entries)
+        {
+            writer.Write(entry.Key);
+            WriteTapeTensor(writer, entry.Value);
+        }
+    }
+
+    private Dictionary<int, Tensor<T>> ReadTapeTensorStateDictionary(BinaryReader reader)
+    {
+        int count = reader.ReadInt32();
+        var entries = new Dictionary<int, Tensor<T>>(count);
+        for (int i = 0; i < count; i++)
+        {
+            int parameterIndex = reader.ReadInt32();
+            entries[parameterIndex] = ReadTapeTensor(reader);
+        }
+
+        return entries;
+    }
+
+    private void WriteTapeTensor(BinaryWriter writer, Tensor<T> tensor)
+    {
+        writer.Write(tensor._shape.Length);
+        foreach (int dimension in tensor._shape)
+        {
+            writer.Write(dimension);
+        }
+
+        var span = tensor.AsSpan();
+        writer.Write(span.Length);
+        for (int i = 0; i < span.Length; i++)
+        {
+            writer.Write(NumOps.ToDouble(span[i]));
+        }
+    }
+
+    private Tensor<T> ReadTapeTensor(BinaryReader reader)
+    {
+        var stream = reader.BaseStream;
+        long Remaining() => stream.CanSeek ? stream.Length - stream.Position : long.MaxValue;
+
+        int rank = reader.ReadInt32();
+        // Each rank dimension is a 4-byte int on the wire; reject a negative/absurd rank against the
+        // bytes physically remaining before allocating the shape array (untrusted checkpoint data).
+        if (rank < 0 || (long)rank * sizeof(int) > Remaining())
+        {
+            throw new InvalidOperationException($"Invalid optimizer tensor rank {rank}.");
+        }
+
+        var shape = new int[rank];
+        long declaredElements = rank == 0 ? 0 : 1;
+        for (int i = 0; i < rank; i++)
+        {
+            shape[i] = reader.ReadInt32();
+            if (shape[i] < 0)
+            {
+                throw new InvalidOperationException($"Invalid optimizer tensor dimension {shape[i]} at axis {i}.");
+            }
+            // checked: an unchecked long product can silently overflow/wrap for a malicious shape,
+            // yielding a small (or negative) count that slips past the byte-remaining guard below and
+            // triggers an oversized allocation. Overflow => corrupt/hostile checkpoint => fail fast.
+            try
+            {
+                declaredElements = checked(declaredElements * shape[i]);
+            }
+            catch (OverflowException)
+            {
+                throw new InvalidOperationException(
+                    $"Optimizer tensor shape overflows its element count at axis {i}. Checkpoint is corrupted or malicious.");
+            }
+        }
+
+        // A single in-memory tensor cannot exceed int.MaxValue elements (Tensor.Length is Int32); reject
+        // an out-of-range count here so a wrapped/absurd shape can't slip past the byte-bound check.
+        if (declaredElements > int.MaxValue)
+        {
+            throw new InvalidOperationException(
+                $"Optimizer tensor shape declares {declaredElements} elements, exceeding the maximum supported tensor size.");
+        }
+
+        // Bound the element count (8-byte doubles on the wire) against the remaining bytes BEFORE
+        // allocating the tensor, so a malformed shape can't force a huge allocation / OOM on restore.
+        if (declaredElements * sizeof(double) > Remaining())
+        {
+            throw new InvalidOperationException(
+                $"Optimizer tensor shape declares {declaredElements} elements but only {Remaining()} bytes remain in the checkpoint stream.");
+        }
+
+        int length = reader.ReadInt32();
+        var tensor = new Tensor<T>(shape);
+        if (tensor.Length != length)
+        {
+            throw new InvalidOperationException(
+                $"Serialized optimizer tensor length {length} does not match shape length {tensor.Length}.");
+        }
+
+        var span = tensor.AsWritableSpan();
+        for (int i = 0; i < length; i++)
+        {
+            span[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+
+        return tensor;
+    }
+
+    private void RestorePendingTapeTensorStates(int parameterIndex, Tensor<T> parameter)
+    {
+        // Fast path: pending tape-tensor state only exists transiently after a checkpoint Deserialize
+        // and is consumed as parameters are rebound. In steady-state training the dictionary is empty,
+        // so bail before the EnumerateTapeTensorStateFields() reflection walk (Type.GetFields over the
+        // hierarchy) that would otherwise run once per parameter on every Step().
+        if (_pendingTapeTensorStates.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var field in EnumerateTapeTensorStateFields())
+        {
+            if (!_pendingTapeTensorStates.TryGetValue(field.Name, out var pendingEntries) ||
+                !pendingEntries.TryGetValue(parameterIndex, out var restoredState))
+            {
+                continue;
+            }
+
+            if (restoredState.Length != parameter.Length)
+            {
+                throw new InvalidOperationException(
+                    $"Checkpoint optimizer state for {GetType().Name}.{field.Name}[{parameterIndex}] has length " +
+                    $"{restoredState.Length}, but the current parameter has length {parameter.Length}.");
+            }
+
+            if (!restoredState._shape.SequenceEqual(parameter._shape))
+            {
+                var reshapedState = new Tensor<T>(parameter._shape);
+                restoredState.AsSpan().CopyTo(reshapedState.AsWritableSpan());
+                restoredState = reshapedState;
+            }
+
+            if (field.GetValue(this) is ConcurrentDictionary<Tensor<T>, Tensor<T>> activeState)
+            {
+                activeState[parameter] = restoredState;
+            }
+
+            pendingEntries.Remove(parameterIndex);
+            if (pendingEntries.Count == 0)
+            {
+                _pendingTapeTensorStates.Remove(field.Name);
+            }
+        }
+    }
+
+    private void ClearSerializedTapeState()
+    {
+        lock (_tapeStateSync)
+        {
+            _tapeParameterIndices.Clear();
+            _tapeIndexedParameterCount = -1;
+            _tapeIndexedParametersRef = null;
+            _pendingTapeTensorStates.Clear();
+
+            foreach (var field in EnumerateTapeTensorStateFields())
+            {
+                if (field.GetValue(this) is ConcurrentDictionary<Tensor<T>, Tensor<T>> activeState)
+                {
+                    activeState.Clear();
+                }
+            }
+        }
+    }
+
+    private IEnumerable<FieldInfo> EnumerateTapeTensorStateFields()
+    {
+        return EnumerateOptimizerFields()
+            .Where(field => field.Name.StartsWith("_tape", StringComparison.Ordinal) &&
+                            field.FieldType == typeof(ConcurrentDictionary<Tensor<T>, Tensor<T>>));
+    }
+
+    private IEnumerable<FieldInfo> EnumerateOptimizerFields()
+    {
+        for (var type = GetType(); type is not null && type != typeof(object); type = type.BaseType)
+        {
+            foreach (var field in type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
+            {
+                yield return field;
+            }
+        }
+    }
 
     /// <summary>
     /// Applies PyTorch-style global-norm gradient clipping across every gradient

@@ -12,6 +12,7 @@ using AiDotNet.Diffusion.VAE;
 using AiDotNet.Diffusion.Video;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
+using AiDotNet.Optimizers;
 using Xunit;
 using System.Threading.Tasks;
 
@@ -53,6 +54,32 @@ public class DiffusionExtendedIntegrationTests
         Assert.Equal(0.001, opts.BetaStart);
         Assert.Equal(0.02, opts.BetaEnd);
         Assert.Equal(BetaSchedule.SquaredCosine, opts.BetaSchedule);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DiffusionModelOptions_Copy_PreservesOptimizerFactoryWithoutSharingOptimizerInstance()
+    {
+        await Task.Yield();
+
+        int created = 0;
+        var opts = new DiffusionModelOptions<double>
+        {
+            OptimizerFactory = () =>
+            {
+                created++;
+                return new AdamOptimizer<double, Tensor<double>, Tensor<double>>(
+                    null,
+                    new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>());
+            }
+        };
+
+        var copy = new DiffusionModelOptions<double>(opts);
+
+        Assert.NotNull(copy.OptimizerFactory);
+        var first = opts.OptimizerFactory!();
+        var second = copy.OptimizerFactory!();
+        Assert.NotSame(first, second);
+        Assert.Equal(2, created);
     }
 
     #endregion
