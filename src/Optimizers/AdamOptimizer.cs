@@ -879,83 +879,26 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 if (paramArr is not null && gradArr is not null && mArr is not null && vArr is not null
                     && (!useAmsgrad || vMaxArr is not null))
                 {
-                    for (int i = 0; i < n; i++)
-                    {
-                        double g = gradArr[i];
-                        double mNew = b1 * mArr[i] + oneMinusB1 * g;
-                        double vNew = b2 * vArr[i] + oneMinusB2 * g * g;
-                        mArr[i] = mNew;
-                        vArr[i] = vNew;
-                        double mHat = mNew / bc1;
-                        double vHatEff;
-                        if (useAmsgrad)
-                        {
-                            // AMSGrad: track running max of v̂ across all steps.
-                            double vHatNow = vNew / bc2;
-                            double vMaxPrev = vMaxArr![i];
-                            double vMaxNew = vHatNow > vMaxPrev ? vHatNow : vMaxPrev;
-                            vMaxArr[i] = vMaxNew;
-                            vHatEff = vMaxNew;
-                        }
-                        else
-                        {
-                            vHatEff = vNew / bc2;
-                        }
-                        paramArr[i] -= lr * mHat / (Math.Sqrt(vHatEff) + eps);
-                    }
+                    System.Span<double> vMaxSpan = default;
+                    if (useAmsgrad && vMaxArr is not null) vMaxSpan = vMaxArr.AsSpan(0, n);
+                    AdamMomentSimd.Step(
+                        paramArr.AsSpan(0, n), gradArr.AsSpan(0, n), mArr.AsSpan(0, n), vArr.AsSpan(0, n),
+                        vMaxSpan, b1, b2, oneMinusB1, oneMinusB2, bc1, bc2, lr, eps, useAmsgrad);
                 }
                 else
                 {
-                    // Buffer-aliased view path. Use ref-T arithmetic via
-                    // MemoryMarshal + Unsafe.Add to avoid Span<T>'s
-                    // per-iteration bounds check while still slicing into
-                    // the real backing storage at the right offset (so
-                    // mutations land on the buffer).
+                    // Buffer-aliased view path: slice into the real backing storage at the right offset
+                    // (so mutations land on the buffer) and run the same vectorized kernel.
                     var paramD = (Tensor<double>)(object)param;
                     var gradD = (Tensor<double>)(object)grad;
                     var mD = (Tensor<double>)(object)m;
                     var vD = (Tensor<double>)(object)v;
-                    System.Span<double> paramSpan = paramD.AsWritableSpan();
-                    System.ReadOnlySpan<double> gradSpan = gradD.AsSpan();
-                    System.Span<double> mSpan = mD.AsWritableSpan();
-                    System.Span<double> vSpan = vD.AsWritableSpan();
-                    ref double paramR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(paramSpan);
-                    ref double gradR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(gradSpan);
-                    ref double mR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(mSpan);
-                    ref double vR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(vSpan);
-                    ref double vMaxR = ref System.Runtime.CompilerServices.Unsafe.NullRef<double>();
-                    if (useAmsgrad)
-                    {
-                        var vMaxD = (Tensor<double>)(object)vMax!;
-                        System.Span<double> vMaxSpan = vMaxD.AsWritableSpan();
-                        vMaxR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(vMaxSpan);
-                    }
-                    for (int i = 0; i < n; i++)
-                    {
-                        double g = System.Runtime.CompilerServices.Unsafe.Add(ref gradR, i);
-                        double mPrev = System.Runtime.CompilerServices.Unsafe.Add(ref mR, i);
-                        double vPrev = System.Runtime.CompilerServices.Unsafe.Add(ref vR, i);
-                        double mNew = b1 * mPrev + oneMinusB1 * g;
-                        double vNew = b2 * vPrev + oneMinusB2 * g * g;
-                        System.Runtime.CompilerServices.Unsafe.Add(ref mR, i) = mNew;
-                        System.Runtime.CompilerServices.Unsafe.Add(ref vR, i) = vNew;
-                        double mHat = mNew / bc1;
-                        double vHatEff;
-                        if (useAmsgrad)
-                        {
-                            double vHatNow = vNew / bc2;
-                            double vMaxPrev = System.Runtime.CompilerServices.Unsafe.Add(ref vMaxR, i);
-                            double vMaxNew = vHatNow > vMaxPrev ? vHatNow : vMaxPrev;
-                            System.Runtime.CompilerServices.Unsafe.Add(ref vMaxR, i) = vMaxNew;
-                            vHatEff = vMaxNew;
-                        }
-                        else
-                        {
-                            vHatEff = vNew / bc2;
-                        }
-                        System.Runtime.CompilerServices.Unsafe.Add(ref paramR, i) -=
-                            lr * mHat / (Math.Sqrt(vHatEff) + eps);
-                    }
+                    System.Span<double> vMaxSpan = default;
+                    if (useAmsgrad && vMax is not null) vMaxSpan = ((Tensor<double>)(object)vMax).AsWritableSpan().Slice(0, n);
+                    AdamMomentSimd.Step(
+                        paramD.AsWritableSpan().Slice(0, n), gradD.AsSpan().Slice(0, n),
+                        mD.AsWritableSpan().Slice(0, n), vD.AsWritableSpan().Slice(0, n),
+                        vMaxSpan, b1, b2, oneMinusB1, oneMinusB2, bc1, bc2, lr, eps, useAmsgrad);
                 }
             }
             else if (isFloat)
@@ -972,29 +915,11 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 if (paramArr is not null && gradArr is not null && mArr is not null && vArr is not null
                     && (!useAmsgrad || vMaxArr is not null))
                 {
-                    for (int i = 0; i < n; i++)
-                    {
-                        float g = gradArr[i];
-                        float mNew = fb1 * mArr[i] + f1mb1 * g;
-                        float vNew = fb2 * vArr[i] + f1mb2 * g * g;
-                        mArr[i] = mNew;
-                        vArr[i] = vNew;
-                        float mHat = mNew / fbc1;
-                        float vHatEff;
-                        if (useAmsgrad)
-                        {
-                            float vHatNow = vNew / fbc2;
-                            float vMaxPrev = vMaxArr![i];
-                            float vMaxNew = vHatNow > vMaxPrev ? vHatNow : vMaxPrev;
-                            vMaxArr[i] = vMaxNew;
-                            vHatEff = vMaxNew;
-                        }
-                        else
-                        {
-                            vHatEff = vNew / fbc2;
-                        }
-                        paramArr[i] -= flr * mHat / ((float)Math.Sqrt(vHatEff) + feps);
-                    }
+                    System.Span<float> vMaxSpan = default;
+                    if (useAmsgrad && vMaxArr is not null) vMaxSpan = vMaxArr.AsSpan(0, n);
+                    AdamMomentSimd.Step(
+                        paramArr.AsSpan(0, n), gradArr.AsSpan(0, n), mArr.AsSpan(0, n), vArr.AsSpan(0, n),
+                        vMaxSpan, fb1, fb2, f1mb1, f1mb2, fbc1, fbc2, flr, feps, useAmsgrad);
                 }
                 else
                 {
@@ -1002,47 +927,12 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                     var gradF = (Tensor<float>)(object)grad;
                     var mF = (Tensor<float>)(object)m;
                     var vF = (Tensor<float>)(object)v;
-                    System.Span<float> paramSpan = paramF.AsWritableSpan();
-                    System.ReadOnlySpan<float> gradSpan = gradF.AsSpan();
-                    System.Span<float> mSpan = mF.AsWritableSpan();
-                    System.Span<float> vSpan = vF.AsWritableSpan();
-                    ref float paramR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(paramSpan);
-                    ref float gradR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(gradSpan);
-                    ref float mR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(mSpan);
-                    ref float vR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(vSpan);
-                    ref float vMaxR = ref System.Runtime.CompilerServices.Unsafe.NullRef<float>();
-                    if (useAmsgrad)
-                    {
-                        var vMaxF = (Tensor<float>)(object)vMax!;
-                        System.Span<float> vMaxSpan = vMaxF.AsWritableSpan();
-                        vMaxR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(vMaxSpan);
-                    }
-                    for (int i = 0; i < n; i++)
-                    {
-                        float g = System.Runtime.CompilerServices.Unsafe.Add(ref gradR, i);
-                        float mPrev = System.Runtime.CompilerServices.Unsafe.Add(ref mR, i);
-                        float vPrev = System.Runtime.CompilerServices.Unsafe.Add(ref vR, i);
-                        float mNew = fb1 * mPrev + f1mb1 * g;
-                        float vNew = fb2 * vPrev + f1mb2 * g * g;
-                        System.Runtime.CompilerServices.Unsafe.Add(ref mR, i) = mNew;
-                        System.Runtime.CompilerServices.Unsafe.Add(ref vR, i) = vNew;
-                        float mHat = mNew / fbc1;
-                        float vHatEff;
-                        if (useAmsgrad)
-                        {
-                            float vHatNow = vNew / fbc2;
-                            float vMaxPrev = System.Runtime.CompilerServices.Unsafe.Add(ref vMaxR, i);
-                            float vMaxNew = vHatNow > vMaxPrev ? vHatNow : vMaxPrev;
-                            System.Runtime.CompilerServices.Unsafe.Add(ref vMaxR, i) = vMaxNew;
-                            vHatEff = vMaxNew;
-                        }
-                        else
-                        {
-                            vHatEff = vNew / fbc2;
-                        }
-                        System.Runtime.CompilerServices.Unsafe.Add(ref paramR, i) -=
-                            flr * mHat / ((float)Math.Sqrt(vHatEff) + feps);
-                    }
+                    System.Span<float> vMaxSpan = default;
+                    if (useAmsgrad && vMax is not null) vMaxSpan = ((Tensor<float>)(object)vMax).AsWritableSpan().Slice(0, n);
+                    AdamMomentSimd.Step(
+                        paramF.AsWritableSpan().Slice(0, n), gradF.AsSpan().Slice(0, n),
+                        mF.AsWritableSpan().Slice(0, n), vF.AsWritableSpan().Slice(0, n),
+                        vMaxSpan, fb1, fb2, f1mb1, f1mb2, fbc1, fbc2, flr, feps, useAmsgrad);
                 }
             }
             else
