@@ -18,7 +18,15 @@ public class TransformerTTSOptions : AcousticModelOptions
         PositionalEncodingDim = other.PositionalEncodingDim;
     }
 
-    public TransformerTTSOptions() { EncoderDim = 256; DecoderDim = 80; HiddenDim = 256; NumEncoderLayers = 6; NumDecoderLayers = 6; NumHeads = 4; }
+    public TransformerTTSOptions()
+    {
+        EncoderDim = 256;
+        DecoderDim = 80;
+        HiddenDim = 256;
+        NumEncoderLayers = 6;
+        NumDecoderLayers = 6;
+        NumHeads = 4;
+    }
 
     /// <summary>Gets or sets the feedforward dimension in transformer blocks.</summary>
     public int FeedForwardDim { get; set; } = 1024;

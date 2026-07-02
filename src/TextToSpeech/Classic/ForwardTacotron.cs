@@ -6,9 +6,9 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
-using AiDotNet.TextToSpeech.Interfaces;
 
 namespace AiDotNet.TextToSpeech.Classic;
 
@@ -42,7 +42,12 @@ namespace AiDotNet.TextToSpeech.Classic;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Non-Attentive Tacotron: Robust and Controllable Neural TTS Synthesis Including Unsupervised Duration Modeling", "https://arxiv.org/abs/2010.04301", Year = 2021, Authors = "Shen et al.")]
+[ResearchPaper(
+    "Non-Attentive Tacotron: Robust and Controllable Neural TTS Synthesis Including Unsupervised Duration Modeling",
+    "https://arxiv.org/abs/2010.04301",
+    Year = 2021,
+    Authors = "Shen et al."
+)]
 public class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly ForwardTacotronOptions _options;
@@ -57,7 +62,9 @@ public class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
     public ForwardTacotron(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        ForwardTacotronOptions? options = null) : base(architecture)
+        ForwardTacotronOptions? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new ForwardTacotronOptions();
         _useNativeMode = false;
@@ -78,7 +85,9 @@ public class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
     public ForwardTacotron(
         NeuralNetworkArchitecture<T> architecture,
         ForwardTacotronOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new ForwardTacotronOptions();
         _useNativeMode = true;
@@ -124,8 +133,10 @@ public class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         {
             double val = Math.Abs(NumOps.ToDouble(encoded[i % encoded.Length]));
             // Conv layer: local context from neighboring phonemes
-            double prev = i > 0 ? Math.Abs(NumOps.ToDouble(encoded[(i - 1) % encoded.Length])) : val;
-            double next = i < seqLen - 1 ? Math.Abs(NumOps.ToDouble(encoded[(i + 1) % encoded.Length])) : val;
+            double prev =
+                i > 0 ? Math.Abs(NumOps.ToDouble(encoded[(i - 1) % encoded.Length])) : val;
+            double next =
+                i < seqLen - 1 ? Math.Abs(NumOps.ToDouble(encoded[(i + 1) % encoded.Length])) : val;
             double conv = Math.Max(0, prev * 0.2 + val * 0.6 + next * 0.2);
             durations[i] = Math.Max(1.0, 1.0 + conv * _options.DurationScale);
             totalFrames += (int)Math.Round(durations[i]);
@@ -161,7 +172,8 @@ public class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
@@ -169,10 +181,17 @@ public class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         }
         else
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultAcousticModelLayers(
-                _options.EncoderDim, _options.DecoderDim, _options.HiddenDim,
-                _options.NumEncoderLayers, _options.NumDecoderLayers,
-                _options.NumHeads, _options.DropoutRate));
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultAcousticModelLayers(
+                    _options.EncoderDim,
+                    _options.DecoderDim,
+                    _options.HiddenDim,
+                    _options.NumEncoderLayers,
+                    _options.NumDecoderLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate
+                )
+            );
             ComputeEncoderDecoderBoundary();
         }
     }
@@ -202,7 +221,8 @@ public class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        SetTrainingMode(false); var c = input;
+        SetTrainingMode(false);
+        var c = input;
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
@@ -215,7 +235,7 @@ public class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         SetTrainingMode(true);
         try
         {
-        TrainWithTape(input, expected);
+            TrainWithTape(input, expected);
         }
         finally
         {
@@ -241,9 +261,10 @@ public class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         var m = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "ForwardTacotron-Native" : "ForwardTacotron-ONNX",
-            Description = "Forward Tacotron: Non-Autoregressive Alternative to Tacotron (Elias et al., 2021)",
+            Description =
+                "Forward Tacotron: Non-Autoregressive Alternative to Tacotron (Elias et al., 2021)",
             FeatureCount = _options.HiddenDim,
-            Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers
+            Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers,
         };
         m.AdditionalInfo["Architecture"] = "ForwardTacotron";
         return m;
@@ -294,7 +315,8 @@ public class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
 
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         base.Dispose(disposing);
     }

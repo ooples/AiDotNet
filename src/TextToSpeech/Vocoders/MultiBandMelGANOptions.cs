@@ -1,4 +1,5 @@
 namespace AiDotNet.TextToSpeech.Vocoders;
+
 /// <summary>Options for Multi-band MelGAN (multi-band signal decomposition for faster vocoding).</summary>
 /// <remarks>
 /// <para><b>For Beginners:</b> These options configure the MultiBandMelGAN model. Default values follow the original paper settings.</para>

@@ -8874,8 +8874,13 @@ public static class LayerHelper<T>
         // First reduce features, then pool to 1x1, then classify
         yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new GlobalPoolingLayer<T>(PoolingType.Average);
-        // After global pooling, shape is [numFeatures, 1, 1] - use DenseLayer for final classification
-        yield return new DenseLayer<T>(numClasses, new SoftmaxActivation<T>() as IActivationFunction<T>);
+        // Final classification head. Emit RAW LOGITS (identity activation), not
+        // softmax probabilities: VideoMAE trains with CrossEntropyWithLogitsLoss
+        // (which applies softmax internally) and ClassifyAction applies softmax on
+        // top for inference — a Softmax here would double-normalize training and
+        // inference. The DenseLayer projects the [numFeatures] embedding to
+        // numClasses class logits.
+        yield return new DenseLayer<T>(numClasses, new IdentityActivation<T>() as IActivationFunction<T>);
 
         // Decoder blocks for reconstruction (4 blocks) - these operate at featH x featW resolution
         // Note: In a real VideoMAE implementation, the decoder would receive encoder features
@@ -24824,12 +24829,28 @@ public static class LayerHelper<T>
         int visionFfnDim = visionDim * 4;
         int decoderFfnDim = decoderDim * 4;
 
+        // Snap the head counts to a divisor of the encoder/decoder widths so each
+        // MultiHeadAttentionLayer's embeddingDimension (heads * headDim) equals the
+        // stream width EXACTLY (a non-divisible numHeads truncates headDim and the
+        // lazy weights resolve to the wrong width). See ChooseDivisibleHeadConfig.
+        var (visionHeads, visionHeadDim) = ChooseDivisibleHeadConfig(visionDim, numHeads);
+        var (decoderHeads, decoderHeadDim) = ChooseDivisibleHeadConfig(decoderDim, numHeads);
+
+        // === Vision Feature Projection ===
+        // Project the raw input embeddings to the vision-encoder width so the first
+        // attention layer (built at visionDim) receives a visionDim-wide input.
+        // Without it a model fed post-embedding tokens at any other width (e.g. the
+        // generated test feeds [.., 128] while VisionDim=1024) throws "input
+        // embedding dimension (128) does not match weight dimension (1024)" at the
+        // first MHA. This is the model's vision patch/feature embedding.
+        yield return new DenseLayer<T>(visionDim, geluActivation);
+
         // === Lightweight Vision Encoder ===
         yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (visionDim) / (numHeads));
+            yield return new MultiHeadAttentionLayer<T>(visionHeads, visionHeadDim);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -24844,13 +24865,37 @@ public static class LayerHelper<T>
         // === Lightweight Decoder ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (decoderDim) / (numHeads));
+            yield return new MultiHeadAttentionLayer<T>(decoderHeads, decoderHeadDim);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderDim, identityActivation);
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
+    }
+
+    /// <summary>
+    /// Computes the encoder/decoder split index for a layer stack built by
+    /// <see cref="CreateDefaultProprietaryAPILayers"/> — the count of encoder-side layers, i.e. the
+    /// index of the first decoder transformer block. Everything before that index is treated as the
+    /// encoder half: the leading vision-feature projection (Dense + LayerNorm), all vision-encoder
+    /// blocks, and the Dense + LayerNorm projection that bridges into the decoder stream. Centralized
+    /// here so GeminiVision, ClaudeVision, and GrokVision share a single source of truth with the
+    /// layer factory instead of each re-deriving the formula (which silently drifts whenever the
+    /// layout above changes).
+    /// </summary>
+    /// <param name="numVisionLayers">Number of vision-encoder blocks (matches the factory argument).</param>
+    /// <param name="dropoutRate">Dropout rate; when &gt; 0 each block emits an extra Dropout layer.</param>
+    /// <returns>
+    /// <c>2 + numVisionLayers * layersPerBlock + 2</c>: the leading vision-feature projection (Dense)
+    /// plus its LayerNorm, then each block's 5 layers (MHA, LayerNorm, Dense, Dense, LayerNorm) — 6
+    /// when a Dropout layer is appended — then the 2-layer projection (Dense + LayerNorm) that begins
+    /// the decoder section.
+    /// </returns>
+    public static int ComputeProprietaryAPIEncoderBoundary(int numVisionLayers, double dropoutRate)
+    {
+        int layersPerBlock = dropoutRate > 0 ? 6 : 5;
+        return 2 + numVisionLayers * layersPerBlock + 2;
     }
 
     #endregion

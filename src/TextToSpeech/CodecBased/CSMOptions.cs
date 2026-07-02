@@ -1,4 +1,5 @@
 namespace AiDotNet.TextToSpeech.CodecBased;
+
 /// <summary>Options for CSM (Conversational Speech Model).</summary>
 /// <remarks>
 /// <para><b>For Beginners:</b> These options configure the CSM model. Default values follow the original paper settings.</para>

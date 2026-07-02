@@ -1,4 +1,5 @@
 namespace AiDotNet.TextToSpeech.Vocoders;
+
 /// <summary>Options for iSTFTNet (inverse STFT-based vocoder that outputs STFT coefficients then iSTFT).</summary>
 /// <remarks>
 /// <para><b>For Beginners:</b> These options configure the ISTFTNet model. Default values follow the original paper settings.</para>

@@ -50,7 +50,12 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Conditional Variational Autoencoder with Adversarial Learning for End-to-End Text-to-Speech", "https://arxiv.org/abs/2106.06103", Year = 2021, Authors = "Kim et al.")]
+[ResearchPaper(
+    "Conditional Variational Autoencoder with Adversarial Learning for End-to-End Text-to-Speech",
+    "https://arxiv.org/abs/2106.06103",
+    Year = 2021,
+    Authors = "Kim et al."
+)]
 public class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly VITSOptions _options;
@@ -69,7 +74,9 @@ public class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
     public VITS(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        VITSOptions? options = null) : base(architecture)
+        VITSOptions? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new VITSOptions();
         _useNativeMode = false;
@@ -95,7 +102,9 @@ public class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
     public VITS(
         NeuralNetworkArchitecture<T> architecture,
         VITSOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new VITSOptions();
         _useNativeMode = true;
@@ -165,15 +174,24 @@ public class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// <inheritdoc />
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
             Layers.AddRange(Architecture.Layers);
         else
-            Layers.AddRange(LayerHelper<T>.CreateDefaultVITSLayers(
-                _options.HiddenDim, _options.InterChannels, _options.FilterChannels,
-                _options.NumEncoderLayers, _options.NumFlowSteps,
-                _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate,
-                inputFeatures: _options.MelChannels));
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultVITSLayers(
+                    _options.HiddenDim,
+                    _options.InterChannels,
+                    _options.FilterChannels,
+                    _options.NumEncoderLayers,
+                    _options.NumFlowSteps,
+                    _options.NumDecoderLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate,
+                    inputFeatures: _options.MelChannels
+                )
+            );
     }
 
     /// <inheritdoc />
@@ -182,7 +200,8 @@ public class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        SetTrainingMode(false); var c = input;
+        SetTrainingMode(false);
+        var c = input;
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
@@ -196,7 +215,7 @@ public class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
         SetTrainingMode(true);
         try
         {
-        TrainWithTape(input, expected);
+            TrainWithTape(input, expected);
         }
         finally
         {
@@ -224,9 +243,14 @@ public class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
         return new ModelMetadata<T>
         {
             Name = _useNativeMode ? "VITS-Native" : "VITS-ONNX",
-            Description = "VITS: Conditional VAE with Adversarial Learning for End-to-End TTS (Kim et al., 2021)",
+            Description =
+                "VITS: Conditional VAE with Adversarial Learning for End-to-End TTS (Kim et al., 2021)",
             FeatureCount = _options.HiddenDim,
-            AdditionalInfo = new Dictionary<string, object> { ["HiddenDim"] = _options.HiddenDim, ["Mode"] = _useNativeMode ? "Native" : "ONNX" }
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                ["HiddenDim"] = _options.HiddenDim,
+                ["Mode"] = _useNativeMode ? "Native" : "ONNX",
+            },
         };
     }
 
@@ -291,7 +315,8 @@ public class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         base.Dispose(disposing);
     }

@@ -44,7 +44,12 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("NaturalSpeech 2: Latent Diffusion Models are Natural and Zero-Shot Speech and Singing Synthesizers", "https://arxiv.org/abs/2304.09116", Year = 2023, Authors = "Shen et al.")]
+[ResearchPaper(
+    "NaturalSpeech 2: Latent Diffusion Models are Natural and Zero-Shot Speech and Singing Synthesizers",
+    "https://arxiv.org/abs/2304.09116",
+    Year = 2023,
+    Authors = "Shen et al."
+)]
 public class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly NaturalSpeech2Options _options;
@@ -63,7 +68,9 @@ public class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
     public NaturalSpeech2(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        NaturalSpeech2Options? options = null) : base(architecture)
+        NaturalSpeech2Options? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new NaturalSpeech2Options();
         _useNativeMode = false;
@@ -89,7 +96,9 @@ public class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
     public NaturalSpeech2(
         NeuralNetworkArchitecture<T> architecture,
         NaturalSpeech2Options? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new NaturalSpeech2Options();
         _useNativeMode = true;
@@ -156,15 +165,23 @@ public class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// <inheritdoc />
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
             Layers.AddRange(Architecture.Layers);
         else
-            Layers.AddRange(LayerHelper<T>.CreateDefaultFlowMatchingTTSLayers(
-                _options.HiddenDim, _options.DiffusionDim, _options.MelChannels,
-                _options.NumEncoderLayers, _options.NumDiffusionSteps,
-                _options.NumHeads, _options.DropoutRate,
-                inputFeatures: _options.MelChannels));
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultFlowMatchingTTSLayers(
+                    _options.HiddenDim,
+                    _options.DiffusionDim,
+                    _options.MelChannels,
+                    _options.NumEncoderLayers,
+                    _options.NumDiffusionSteps,
+                    _options.NumHeads,
+                    _options.DropoutRate,
+                    inputFeatures: _options.MelChannels
+                )
+            );
     }
 
     /// <inheritdoc />
@@ -173,23 +190,25 @@ public class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        SetTrainingMode(false); var c = input;
+        SetTrainingMode(false);
+        var c = input;
         int hiddenDim = _options.HiddenDim;
         int lastDim = c.Shape[^1];
         if (lastDim != hiddenDim)
         {
             if (lastDim > hiddenDim)
                 throw new ArgumentException(
-                    $"Input feature dimension ({lastDim}) exceeds model hidden dimension ({hiddenDim}). " +
-                    "Provide input with the correct feature size or adjust HiddenDim.",
-                    nameof(input));
+                    $"Input feature dimension ({lastDim}) exceeds model hidden dimension ({hiddenDim}). "
+                        + "Provide input with the correct feature size or adjust HiddenDim.",
+                    nameof(input)
+                );
 
             // Zero-pad input to hiddenDim (for inputs smaller than expected, e.g., short text)
             int batch = Math.Max(1, c.Length / lastDim);
             var projected = new Tensor<T>([batch, hiddenDim]);
             for (int b = 0; b < batch; b++)
-                for (int j = 0; j < lastDim; j++)
-                    projected[b * hiddenDim + j] = c[b * lastDim + j];
+            for (int j = 0; j < lastDim; j++)
+                projected[b * hiddenDim + j] = c[b * lastDim + j];
             c = projected;
         }
         foreach (var l in Layers)
@@ -232,12 +251,19 @@ public class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>
+        var m = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "NaturalSpeech2-Native" : "NaturalSpeech2-ONNX",
             Description = "NaturalSpeech 2: Latent Diffusion TTS (Shen et al., 2023)",
-            FeatureCount = _options.HiddenDim
+            FeatureCount = _options.HiddenDim,
         };
+        m.AdditionalInfo["Architecture"] = "NaturalSpeech2";
+        m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
+        m.AdditionalInfo["HiddenDim"] = base.HiddenDim;
+        m.AdditionalInfo["SampleRate"] = base.SampleRate;
+        m.AdditionalInfo["MelChannels"] = base.MelChannels;
+        m.AdditionalInfo["HopSize"] = base.HopSize;
+        return m;
     }
 
     /// <inheritdoc />
@@ -299,7 +325,8 @@ public class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         base.Dispose(disposing);
     }

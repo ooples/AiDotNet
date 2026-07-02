@@ -68,7 +68,9 @@ public class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     public MeloTTS(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        MeloTTSOptions? options = null) : base(architecture)
+        MeloTTSOptions? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new MeloTTSOptions();
         _useNativeMode = false;
@@ -94,7 +96,9 @@ public class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     public MeloTTS(
         NeuralNetworkArchitecture<T> architecture,
         MeloTTSOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new MeloTTSOptions();
         _useNativeMode = true;
@@ -161,15 +165,24 @@ public class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// <inheritdoc />
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
             Layers.AddRange(Architecture.Layers);
         else
-            Layers.AddRange(LayerHelper<T>.CreateDefaultVITSLayers(
-                _options.HiddenDim, _options.InterChannels, _options.FilterChannels,
-                _options.NumEncoderLayers, _options.NumFlowSteps,
-                _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate,
-                inputFeatures: _options.MelChannels));
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultVITSLayers(
+                    _options.HiddenDim,
+                    _options.InterChannels,
+                    _options.FilterChannels,
+                    _options.NumEncoderLayers,
+                    _options.NumFlowSteps,
+                    _options.NumDecoderLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate,
+                    inputFeatures: _options.MelChannels
+                )
+            );
     }
 
     /// <inheritdoc />
@@ -178,7 +191,8 @@ public class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        SetTrainingMode(false); var c = input;
+        SetTrainingMode(false);
+        var c = input;
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
@@ -193,7 +207,7 @@ public class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         SetTrainingMode(true);
         try
         {
-        TrainWithTape(input, expected);
+            TrainWithTape(input, expected);
         }
         finally
         {
@@ -224,7 +238,11 @@ public class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
             Name = _useNativeMode ? "MeloTTS-Native" : "MeloTTS-ONNX",
             Description = "MeloTTS: High-quality Multilingual TTS (MyShell, 2024)",
             FeatureCount = _options.HiddenDim,
-            AdditionalInfo = new Dictionary<string, object> { ["HiddenDim"] = _options.HiddenDim, ["Mode"] = _useNativeMode ? "Native" : "ONNX" }
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                ["HiddenDim"] = _options.HiddenDim,
+                ["Mode"] = _useNativeMode ? "Native" : "ONNX",
+            },
         };
     }
 
@@ -273,7 +291,10 @@ public class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
         {
             if (!File.Exists(p))
-                throw new FileNotFoundException($"ONNX model not found during deserialization: {p}", p);
+                throw new FileNotFoundException(
+                    $"ONNX model not found during deserialization: {p}",
+                    p
+                );
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
         }
     }
@@ -295,7 +316,8 @@ public class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         base.Dispose(disposing);
     }

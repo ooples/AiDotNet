@@ -43,7 +43,12 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Neural Codec Language Models are Zero-Shot Text to Speech Synthesizers", "https://arxiv.org/abs/2301.02111", Year = 2023, Authors = "Wang et al.")]
+[ResearchPaper(
+    "Neural Codec Language Models are Zero-Shot Text to Speech Synthesizers",
+    "https://arxiv.org/abs/2301.02111",
+    Year = 2023,
+    Authors = "Wang et al."
+)]
 public class VALLE<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly VALLEOptions _options;
@@ -63,7 +68,9 @@ public class VALLE<T> : TtsModelBase<T>, ICodecTts<T>
     public VALLE(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        VALLEOptions? options = null) : base(architecture)
+        VALLEOptions? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new VALLEOptions();
         _useNativeMode = false;
@@ -89,7 +96,9 @@ public class VALLE<T> : TtsModelBase<T>, ICodecTts<T>
     public VALLE(
         NeuralNetworkArchitecture<T> architecture,
         VALLEOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new VALLEOptions();
         _useNativeMode = true;
@@ -153,8 +162,7 @@ public class VALLE<T> : TtsModelBase<T>, ICodecTts<T>
             for (int f = 0; f < codecFrames; f++)
             {
                 double cond = allCodebooks[0, f];
-                allCodebooks[q, f] = cond * (1.0 - q * 0.1)
-                    + Math.Sin(f * 0.05 * (q + 1)) * 0.2;
+                allCodebooks[q, f] = cond * (1.0 - q * 0.1) + Math.Sin(f * 0.05 * (q + 1)) * 0.2;
             }
         }
 
@@ -223,23 +231,33 @@ public class VALLE<T> : TtsModelBase<T>, ICodecTts<T>
     /// <inheritdoc />
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
             Layers.AddRange(Architecture.Layers);
         else
-            Layers.AddRange(LayerHelper<T>.CreateDefaultCodecLMLayers(
-                _options.TextEncoderDim, _options.LLMDim,
-                _options.NumCodebooks * _options.CodebookSize,
-                _options.NumEncoderLayers, _options.NumLLMLayers,
-                _options.NumHeads, _options.DropoutRate,
-                _options.VocabSize));
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultCodecLMLayers(
+                    _options.TextEncoderDim,
+                    _options.LLMDim,
+                    _options.NumCodebooks * _options.CodebookSize,
+                    _options.NumEncoderLayers,
+                    _options.NumLLMLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate,
+                    _options.VocabSize
+                )
+            );
         ComputeEncoderDecoderBoundary();
     }
 
     private void ComputeEncoderDecoderBoundary()
     {
         int total = Layers.Count;
-        _encoderLayerEnd = total > 4 ? total / 3 : total > 0 ? 1 : 0;
+        _encoderLayerEnd =
+            total > 4 ? total / 3
+            : total > 0 ? 1
+            : 0;
     }
 
     /// <inheritdoc />
@@ -248,7 +266,8 @@ public class VALLE<T> : TtsModelBase<T>, ICodecTts<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        SetTrainingMode(false); var c = input;
+        SetTrainingMode(false);
+        var c = input;
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
@@ -308,9 +327,9 @@ public class VALLE<T> : TtsModelBase<T>, ICodecTts<T>
                 ["NumLLMLayers"] = _options.NumLLMLayers,
                 ["NumHeads"] = _options.NumHeads,
                 ["MaxTextLength"] = _options.MaxTextLength,
-                ["LayerCount"] = Layers.Count
+                ["LayerCount"] = Layers.Count,
             },
-            ModelData = SerializeForMetadata()
+            ModelData = SerializeForMetadata(),
         };
     }
 
@@ -368,18 +387,22 @@ public class VALLE<T> : TtsModelBase<T>, ICodecTts<T>
             throw new ObjectDisposedException(GetType().FullName ?? nameof(VALLE<T>));
     }
 
-    private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
-        => new(this, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-        {
-            InitialLearningRate = _options.LearningRate,
-            WeightDecay = _options.WeightDecay,
-            UseAdaptiveLearningRate = false
-        });
+    private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer() =>
+        new(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                UseAdaptiveLearningRate = false,
+            }
+        );
 
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         base.Dispose(disposing);
     }

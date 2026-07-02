@@ -1,4 +1,5 @@
 namespace AiDotNet.TextToSpeech.CodecBased;
+
 /// <summary>Options for CosyVoice.</summary>
 /// <remarks>
 /// <para><b>For Beginners:</b> These options configure the CosyVoice model. Default values follow the original paper settings.</para>

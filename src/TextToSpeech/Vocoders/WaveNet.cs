@@ -9,6 +9,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.TextToSpeech.Interfaces;
 
 namespace AiDotNet.TextToSpeech.Vocoders;
+
 /// <summary>
 /// WaveNet: autoregressive generative model using dilated causal convolutions for raw audio generation.
 /// </summary>
@@ -37,17 +38,62 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("WaveNet: A Generative Model for Raw Audio", "https://arxiv.org/abs/1609.03499", Year = 2016, Authors = "van den Oord et al.")]
+[ResearchPaper(
+    "WaveNet: A Generative Model for Raw Audio",
+    "https://arxiv.org/abs/1609.03499",
+    Year = 2016,
+    Authors = "van den Oord et al."
+)]
 public class WaveNet<T> : TtsModelBase<T>, IVocoder<T>
 {
-    private readonly WaveNetOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly WaveNetOptions _options;
+
+    public override ModelOptions GetOptions() => _options;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode; private bool _disposed;
+    private bool _useNativeMode;
+    private bool _disposed;
 
-    public WaveNet(NeuralNetworkArchitecture<T> architecture, string modelPath, WaveNetOptions? options = null) : base(architecture) { _options = options ?? new WaveNetOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); InitializeLayers(); }
-    public WaveNet(NeuralNetworkArchitecture<T> architecture, WaveNetOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new WaveNetOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; InitializeLayers(); }
+    public WaveNet(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        WaveNetOptions? options = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new WaveNetOptions();
+        _useNativeMode = false;
+        base.SampleRate = _options.SampleRate;
+        base.MelChannels = _options.MelChannels;
+        base.HopSize = _options.HopSize;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path required.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        InitializeLayers();
+    }
 
-    int IVocoder<T>.SampleRate => _options.SampleRate; int IVocoder<T>.MelChannels => _options.MelChannels; public int UpsampleFactor => _options.HopSize;
+    public WaveNet(
+        NeuralNetworkArchitecture<T> architecture,
+        WaveNetOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new WaveNetOptions();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.SampleRate = _options.SampleRate;
+        base.MelChannels = _options.MelChannels;
+        base.HopSize = _options.HopSize;
+        InitializeLayers();
+    }
+
+    int IVocoder<T>.SampleRate => _options.SampleRate;
+    int IVocoder<T>.MelChannels => _options.MelChannels;
+    public int UpsampleFactor => _options.HopSize;
 
     /// <summary>
     /// Converts mel-spectrogram to waveform using WaveNet's autoregressive sample-by-sample generation.
@@ -61,7 +107,8 @@ public class WaveNet<T> : TtsModelBase<T>, IVocoder<T>
     public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(melSpectrogram);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(melSpectrogram);
 
         int melLen = melSpectrogram.Length;
         int waveLen = melLen * _options.HopSize;
@@ -98,16 +145,128 @@ public class WaveNet<T> : TtsModelBase<T>, IVocoder<T>
         return waveform;
     }
 
-    protected override Tensor<T> PreprocessText(string text) { var t = new Tensor<T>([1]); t[0] = NumOps.FromDouble(0.0); return t; }
+    protected override Tensor<T> PreprocessText(string text)
+    {
+        var t = new Tensor<T>([1]);
+        t[0] = NumOps.FromDouble(0.0);
+        return t;
+    }
+
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultAutoRegressiveVocoderLayers(_options.MelChannels, _options.ResidualChannels, _options.NumDilatedLayers, _options.DropoutRate)); }
-    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); SetTrainingMode(false); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "WaveNet-Native" : "WaveNet-ONNX", Description = "WaveNet: A Generative Model for Raw Audio (van den Oord et al., 2016)", FeatureCount = _options.MelChannels, Complexity = _options.NumDilatedLayers }; m.AdditionalInfo["Architecture"] = "WaveNet"; return m; }
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.SampleRate); writer.Write(_options.MelChannels); writer.Write(_options.HopSize); writer.Write(_options.NumDilatedLayers); writer.Write(_options.ResidualChannels); writer.Write(_options.DropoutRate); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = reader.ReadInt32(); _options.MelChannels = reader.ReadInt32(); _options.HopSize = reader.ReadInt32(); _options.NumDilatedLayers = reader.ReadInt32(); _options.ResidualChannels = reader.ReadInt32();  _options.DropoutRate = reader.ReadDouble();  base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new WaveNet<T>(Architecture, mp, _options); return new WaveNet<T>(Architecture, _options); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(WaveNet<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
+
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode)
+            return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+            Layers.AddRange(Architecture.Layers);
+        else
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultAutoRegressiveVocoderLayers(
+                    _options.MelChannels,
+                    _options.ResidualChannels,
+                    _options.NumDilatedLayers,
+                    _options.DropoutRate
+                )
+            );
+    }
+
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
+        SetTrainingMode(false);
+        var c = input;
+        foreach (var l in Layers)
+            c = l.Forward(c);
+        return c;
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training not supported in ONNX mode.");
+        SetTrainingMode(true);
+        TrainWithTape(input, expected);
+        SetTrainingMode(false);
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "WaveNet-Native" : "WaveNet-ONNX",
+            Description = "WaveNet: A Generative Model for Raw Audio (van den Oord et al., 2016)",
+            FeatureCount = _options.MelChannels,
+            Complexity = _options.NumDilatedLayers,
+        };
+        m.AdditionalInfo["Architecture"] = "WaveNet";
+        return m;
+    }
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_useNativeMode);
+        writer.Write(_options.ModelPath ?? string.Empty);
+        writer.Write(_options.SampleRate);
+        writer.Write(_options.MelChannels);
+        writer.Write(_options.HopSize);
+        writer.Write(_options.NumDilatedLayers);
+        writer.Write(_options.ResidualChannels);
+        writer.Write(_options.DropoutRate);
+    }
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _useNativeMode = reader.ReadBoolean();
+        string mp = reader.ReadString();
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
+        _options.SampleRate = reader.ReadInt32();
+        _options.MelChannels = reader.ReadInt32();
+        _options.HopSize = reader.ReadInt32();
+        _options.NumDilatedLayers = reader.ReadInt32();
+        _options.ResidualChannels = reader.ReadInt32();
+        _options.DropoutRate = reader.ReadDouble();
+        base.SampleRate = _options.SampleRate;
+        base.MelChannels = _options.MelChannels;
+        base.HopSize = _options.HopSize;
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new WaveNet<T>(Architecture, mp, _options);
+        return new WaveNet<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(WaveNet<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
 }
