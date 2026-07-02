@@ -15,11 +15,17 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 /// </summary>
 public class DCGANTests : GANModelTestBase<float>
 {
-    // DCGAN parameterless defaults: latentSize=100, imageChannels=3,
-    // imageHeight=64, imageWidth=64 (Radford et al. 2015 §3, NCHW).
+    // DCGAN (Radford et al. 2015 §3, NCHW). The paper default is 64x64, but the
+    // smoke-test fixture uses 32x32: MoreData_ShouldNotDegrade runs 50 + 200 = 250
+    // training iterations, and at 64x64 the (native-GEMM-bound) convolution stack
+    // costs ~235 ms/iter, overrunning the 120s per-test budget on the slower CI
+    // runner. Convolution cost scales ~quadratically with spatial size, so 32x32 is
+    // ~4x cheaper (~60 ms/iter) and the FULL 250-iteration invariant fits the budget
+    // — the transposed-conv generator / strided-conv discriminator architecture stays
+    // paper-faithful; only the smoke-test resolution shrinks.
     protected override int[] InputShape => [100];
-    protected override int[] OutputShape => [3, 64, 64];
+    protected override int[] OutputShape => [3, 32, 32];
 
     protected override INeuralNetworkModel<float> CreateNetwork()
-        => new DCGAN<float>(latentSize: 100, imageChannels: 3, imageHeight: 64, imageWidth: 64);
+        => new DCGAN<float>(latentSize: 100, imageChannels: 3, imageHeight: 32, imageWidth: 32);
 }
