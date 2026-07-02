@@ -298,6 +298,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // lane. (A separate fidelity follow-up tracks wiring the paper's masked inter/intra-frame
         // attention, which the default factory does not yet build.)
         "MIAVSR",
+        // ParaformerLarge: foundation-scale CIF ASR (Alibaba 2023). Its default
+        // ParaformerLargeOptions build a genuinely huge stack — a warm-up forward reports
+        // ~661M trainable parameters (GetParameters().Length = 661,219,029; ~2.6 GB as float),
+        // with a large-vocab CTC/CIF head. A 100-iteration LossStrictlyDecreasesOnMemorizationTask
+        // (and the 10-iter DifferentInputs/Clone/Training/MoreData tests) cannot complete inside the
+        // 120-180s per-test budget on a CPU runner — verified locally: every training test times out
+        // at 120000/180000 ms before finishing. At that scale the auto-selected BF16 8-bit optimizer
+        // path also surfaces a separate "Source array was not long enough" error in CI (tracked as a
+        // follow-up issue; not reproducible locally because training times out first). Runs in the
+        // nightly heavy lane, matching the other foundation-scale models here.
+        "ParaformerLarge",
     };
 
     private static readonly System.Collections.Generic.HashSet<string> Fp32TestClassNames =
