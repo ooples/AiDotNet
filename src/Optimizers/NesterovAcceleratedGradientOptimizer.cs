@@ -313,6 +313,8 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
     {
+        PrepareTapeState(context);
+
         // NOTE: this CPU "NAG" applies plain momentum (velocity = momentum*velocity
         // + lr*grad; param -= velocity), whereas the CUDA nag_update kernel applies
         // the true Nesterov look-ahead — they differ (parity harness ~9e-4 at step 1,

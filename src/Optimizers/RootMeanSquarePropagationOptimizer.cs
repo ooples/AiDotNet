@@ -311,6 +311,8 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
     {
+        PrepareTapeState(context);
+
         T decay = NumOps.FromDouble(_options.Decay);
         T oneMinusDecay = NumOps.FromDouble(1 - _options.Decay);
         T epsilon = NumOps.FromDouble(_options.Epsilon);
