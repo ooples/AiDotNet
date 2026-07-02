@@ -617,6 +617,8 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
     {
+        PrepareTapeState(context);
+
         // PyTorch GradScaler-style anomaly guard runs BEFORE advancing the
         // step counter or any other state. Otherwise a skipped step would
         // still bump _tapeStep, which advances bc1/bc2 on the NEXT real step
