@@ -1198,14 +1198,24 @@ public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        return new MVDreamModel<T>(
-            options: null,
-            scheduler: null,
-            multiViewUNet: null,
-            imageVAE: null,
+        // Clone the ACTUAL multi-view UNet / image VAE (see InstaFlowModel/MultiDiffusionModel):
+        // passing null rebuilt InitializeLayers' DEFAULT-sized, lazily-unresolved sub-models, so once the
+        // source resolved its lazy layers via a forward pass the clone reconstructed a different-valued
+        // (and, after resolution, mismatched) network and diverged. Cloning the resolved sub-models makes
+        // the clone structurally and observationally identical.
+        var clone = new MVDreamModel<T>(
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            multiViewUNet: _multiViewUNet.Clone(),
+            imageVAE: (StandardVAE<T>)_imageVAE.Clone(),
             textConditioner: _textConditioner,
             imageConditioner: _imageConditioner,
             config: _config);
+        // The camera-embedding block is rebuilt fresh by the ctor (it is not a ctor param), so copy the
+        // full parameter set across. With the multi-view U-Net and VAE already resolved clones, the two
+        // graphs line up 1:1 and the copy-on-write share also transfers the camera embedding's weights.
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
+        return clone;
     }
 
     #endregion
@@ -1254,9 +1264,17 @@ public class MVDreamConfig
 public class MultiViewUNet<T>
 {
     private readonly INumericOperations<T> _numOps;
-    private readonly UNetNoisePredictor<T> _baseUNet;
+    private UNetNoisePredictor<T> _baseUNet;
     private readonly int _numViews;
-    private readonly MultiViewAttention<T> _mvAttention;
+    private MultiViewAttention<T> _mvAttention;
+    // Retained construction config so Clone() can rebuild an identically-shaped instance before
+    // transferring the resolved sub-module weights (the base U-Net is lazily materialized on first
+    // forward, so a plain re-construction would be a different-valued and, after resolution, mismatched
+    // network — see MVDreamModel.Clone).
+    private readonly int _inputChannels;
+    private readonly int _outputChannels;
+    private readonly int _baseChannels;
+    private readonly int _contextDim;
 
     /// <summary>
     /// Gets whether classifier-free guidance is supported.
@@ -1281,6 +1299,10 @@ public class MultiViewUNet<T>
     {
         _numOps = MathHelper.GetNumericOperations<T>();
         _numViews = numViews;
+        _inputChannels = inputChannels;
+        _outputChannels = outputChannels;
+        _baseChannels = baseChannels;
+        _contextDim = contextDim;
 
         _baseUNet = new UNetNoisePredictor<T>(
             inputChannels: inputChannels,
@@ -1296,6 +1318,26 @@ public class MultiViewUNet<T>
             channels: baseChannels * 4, // At bottleneck
             numViews: numViews,
             seed: seed);
+    }
+
+    /// <summary>
+    /// Deep-copies this multi-view U-Net, preserving trained weights. The base U-Net is cloned via its
+    /// own <c>Clone()</c> (which resolves and copies its lazy layers), and the multi-view attention block
+    /// is rebuilt at the same shape and its parameters copied — so the result is structurally and
+    /// observationally identical to this instance.
+    /// </summary>
+    public MultiViewUNet<T> Clone()
+    {
+        var clone = new MultiViewUNet<T>(
+            inputChannels: _inputChannels,
+            outputChannels: _outputChannels,
+            baseChannels: _baseChannels,
+            numViews: _numViews,
+            contextDim: _contextDim);
+        clone._baseUNet = (UNetNoisePredictor<T>)_baseUNet.Clone();
+        clone._mvAttention = new MultiViewAttention<T>(channels: _baseChannels * 4, numViews: _numViews);
+        clone._mvAttention.SetParameters(_mvAttention.GetParameters());
+        return clone;
     }
 
     /// <summary>

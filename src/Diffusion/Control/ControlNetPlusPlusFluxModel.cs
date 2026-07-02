@@ -135,7 +135,17 @@ public class ControlNetPlusPlusFluxModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
+        // Clone the ACTUAL predictor and VAE (see InstaFlowModel/MultiDiffusionModel): passing only
+        // controlType/conditioner/rewardWeight/seed rebuilt InitializeLayers' DEFAULT-sized, lazily-
+        // unresolved Flux predictor/VAE, so after the source resolved its lazy layers the copy-on-write
+        // share no longer lined up 1:1 and the clone diverged. Cloning the resolved predictor/VAE makes
+        // the clone structurally identical (the control encoder is then transferred by the share below).
         var clone = new ControlNetPlusPlusFluxModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            predictor: (FluxDoubleStreamPredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             controlType: _controlType, conditioner: _conditioner, rewardWeight: _rewardWeight, seed: RandomGenerator.Next());
         // #1624: O(1)-until-write copy-on-write parameter share (avoids the full-model flatten copy that
         // OOMs the 16 GB runner). Falls back to the flat copy if the structure doesn't match 1:1.

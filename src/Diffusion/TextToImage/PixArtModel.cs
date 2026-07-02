@@ -252,6 +252,8 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
         PixArtVariant modelSize = DefaultVariant,
         IConditioningModule<T>? conditioner = null,
         INoiseScheduler<T>? scheduler = null,
+        DiTNoisePredictor<T>? dit = null,
+        StandardVAE<T>? vae = null,
         int? seed = null)
         : base(CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler(seed), architecture)
     {
@@ -265,8 +267,10 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
         _numLayers = numLayers;
         _defaultResolution = resolution;
 
-        // Initialize mutable neural network layers
-        InitializeLayers(seed);
+        // Initialize mutable neural network layers (reusing caller-supplied resolved sub-models when
+        // provided — the Clone path passes the source's cloned DiT/VAE so the clone is structurally
+        // identical and ShareWeightsFrom lines up 1:1 instead of throwing on a lazy-vs-resolved mismatch).
+        InitializeLayers(seed, dit, vae);
     }
 
     #endregion
@@ -278,10 +282,10 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     [MemberNotNull(nameof(_dit), nameof(_vae))]
-    private void InitializeLayers(int? seed)
+    private void InitializeLayers(int? seed, DiTNoisePredictor<T>? dit = null, StandardVAE<T>? vae = null)
     {
-        // Create VAE
-        _vae = new StandardVAE<T>(
+        // Create VAE (or reuse a caller-supplied resolved one — see Clone).
+        _vae = vae ?? new StandardVAE<T>(
             inputChannels: 3,
             latentChannels: PIXART_LATENT_CHANNELS,
             baseChannels: 128,
@@ -289,8 +293,8 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
             numResBlocksPerLevel: 2,
             seed: seed);
 
-        // Create DiT noise predictor with PixArt-specific configuration
-        _dit = CreateDiTPredictor(seed);
+        // Create DiT noise predictor with PixArt-specific configuration (or reuse a caller-supplied one).
+        _dit = dit ?? CreateDiTPredictor(seed);
     }
 
     #endregion
@@ -604,9 +608,18 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
+        // Clone the ACTUAL DiT/VAE (see InstaFlowModel/MultiDiffusionModel): passing only modelSize/
+        // conditioner/seed rebuilt InitializeLayers' DEFAULT-sized, lazily-unresolved DiT/VAE, so once the
+        // source resolved its lazy layers via a forward pass ShareWeightsFrom threw on the layer-count/
+        // shape mismatch (or the clone diverged). Passing the resolved DiT/VAE makes the clone
+        // structurally identical so the copy-on-write share below lines up 1:1.
         var clone = new PixArtModel<T>(
+            architecture: Architecture,
             modelSize: _modelSize,
             conditioner: _conditioner,
+            scheduler: Scheduler,
+            dit: (DiTNoisePredictor<T>)_dit.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             seed: RandomGenerator.Next());
 
         // Copy-on-write: share this model's weight tensors with the clone instead of deep-copying all

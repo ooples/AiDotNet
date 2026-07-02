@@ -180,15 +180,21 @@ public class ControlNetFluxModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
+        // Clone the ACTUAL predictor and VAE (see InstaFlowModel/MultiDiffusionModel): passing only
+        // controlType/conditioner/seed rebuilt InitializeLayers' DEFAULT-sized, lazily-unresolved Flux
+        // predictor/VAE, so the field-by-field SetParameters below copied a resolved source predictor
+        // into the clone's still-lazy one and threw / mis-shaped. Cloning the resolved predictor/VAE
+        // makes those two structurally identical up front; the control encoder isn't a ctor param, so its
+        // (config-driven, matching-shape) weights are copied field-by-field afterward.
         var clone = new ControlNetFluxModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            predictor: (FluxDoubleStreamPredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             controlType: _controlType,
             conditioner: _conditioner,
             seed: RandomGenerator.Next());
-        // Field-by-field SetParameters avoids the giant single flat
-        // Vector<T> that GetParameters + SetParameters round-trip would
-        // produce — keeps peak memory at ~2× per-component weights
-        // instead of ~3×.
-        clone._predictor.SetParameters(_predictor.GetParameters());
         clone._controlEncoder.SetParameters(_controlEncoder.GetParameters());
         return clone;
     }
