@@ -208,8 +208,10 @@ public class PerVFI<T> : FrameInterpolationBase<T>
         _options.DropoutRate = r.ReadDouble();
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-        if (_useNativeMode)
-            InitializeLayers();
+        // Do NOT call InitializeLayers() here (matches the working AMT sibling): the layers are already
+        // built by CreateNewInstance -> ctor -> InitializeLayers before the base loads parameters, and
+        // InitializeLayers does not ClearLayers first, so a second call double-adds fresh untrained
+        // layers and corrupts the loaded weights (Clone_ShouldProduceIdenticalOutput divergence).
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
