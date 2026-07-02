@@ -315,6 +315,32 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 schedule = Tensors.Engines.Compilation.LrSchedule.Noam(
                     noam.ModelDimension, noam.WarmupSteps, noam.Factor);
                 return true;
+            case LearningRateSchedulers.LinearWarmupScheduler warmup:
+                // Linear warmup → Constant/Linear/Cosine decay (Vaswani/most modern
+                // foundation-model recipes start with a warmup ramp). The fused
+                // kernel evaluates GetLr(step) per optimizer step, so the warmup
+                // ramp runs on the fused fast path with the SAME per-step LR sequence
+                // as the eager LinearWarmupScheduler — batch 1 = warmupInitLr, batch n
+                // = max(endLr, ComputeLearningRate(n-1)). Without this case the warmup
+                // recipe fell through to `default` → eager tape → no CUDA-graph capture
+                // (a 14–23× slowdown on the GPU-captured training path). Requires the
+                // general LrSchedule.LinearWarmup + WarmupDecayMode API published in
+                // AiDotNet.Tensors 0.106.1.
+                schedule = Tensors.Engines.Compilation.LrSchedule.LinearWarmup(
+                    warmup.BaseLearningRate,
+                    warmup.WarmupSteps,
+                    warmup.TotalSteps,
+                    warmup.WarmupInitLr,
+                    warmup.CurrentDecayMode switch
+                    {
+                        LearningRateSchedulers.LinearWarmupScheduler.DecayMode.Linear
+                            => Tensors.Engines.Compilation.WarmupDecayMode.Linear,
+                        LearningRateSchedulers.LinearWarmupScheduler.DecayMode.Cosine
+                            => Tensors.Engines.Compilation.WarmupDecayMode.Cosine,
+                        _ => Tensors.Engines.Compilation.WarmupDecayMode.Constant,
+                    },
+                    warmup.EndLr);
+                return true;
             case LearningRateSchedulers.StepLRScheduler stepLr:
                 // lr0 · gamma^decayCount. The Tensors StepLr's max(0, step-1)/stepSize
                 // exactly matches the eager (N-1)/stepSize decay count on batch N.

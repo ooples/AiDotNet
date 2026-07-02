@@ -109,6 +109,16 @@ public class LinearWarmupScheduler : LearningRateSchedulerBase
     /// </summary>
     public DecayMode CurrentDecayMode => _decayMode;
 
+    /// <summary>
+    /// Gets the learning rate at the start of warmup (warmup-init LR).
+    /// </summary>
+    public double WarmupInitLr => _warmupInitLr;
+
+    /// <summary>
+    /// Gets the final learning rate reached after the decay phase.
+    /// </summary>
+    public double EndLr => _endLr;
+
     /// <inheritdoc/>
     protected override double ComputeLearningRate(int step)
     {
