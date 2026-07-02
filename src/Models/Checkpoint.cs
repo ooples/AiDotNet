@@ -186,9 +186,17 @@ public class Checkpoint<T, TInput, TOutput>
         // at save time; reject a mismatch before Deserialize. Resolve the stored type when possible and
         // allow the supplied optimizer to be that type or a subclass; fall back to a string compare if
         // the stored type can't be resolved (e.g. its assembly moved).
-        if (!string.IsNullOrEmpty(OptimizerTypeName))
+        // Capture into a local and narrow with a property pattern rather than
+        // gating on string.IsNullOrEmpty(OptimizerTypeName): net471's nullable
+        // flow analysis does NOT honour the IsNullOrEmpty guard (its BCL
+        // reference lacks the [NotNullWhen] annotation) and would treat
+        // OptimizerTypeName as possibly-null at the ExtractTypeFullName(string)
+        // call. A local narrowed by `is { Length: > 0 }` stays non-null across the
+        // block on every target framework, so no null-forgiving operator is needed.
+        string? optimizerTypeName = OptimizerTypeName;
+        if (optimizerTypeName is { Length: > 0 })
         {
-            var expectedType = Type.GetType(OptimizerTypeName);
+            var expectedType = Type.GetType(optimizerTypeName);
             var actualType = optimizer.GetType();
             // The saved name is assembly-qualified ("Ns.Type, Assembly, Version=..."); the FullName is the
             // part before the first TOP-LEVEL comma. When Type.GetType can't resolve the saved type (the
@@ -198,16 +206,16 @@ public class Checkpoint<T, TInput, TOutput>
             // NOTE: a naive Split(',')[0] is WRONG for generic types — a closed generic's assembly-
             // qualified name embeds its type arguments' own AQNs inside "[[...]]", which contain commas;
             // ExtractTypeFullName below skips commas nested in brackets so the FullName isn't truncated.
-            string expectedFullName = ExtractTypeFullName(OptimizerTypeName);
+            string expectedFullName = ExtractTypeFullName(optimizerTypeName);
             bool compatible = expectedType != null
                 ? expectedType.IsInstanceOfType(optimizer)
-                : string.Equals(OptimizerTypeName, actualType.AssemblyQualifiedName, StringComparison.Ordinal)
+                : string.Equals(optimizerTypeName, actualType.AssemblyQualifiedName, StringComparison.Ordinal)
                   || string.Equals(expectedFullName, actualType.FullName, StringComparison.Ordinal);
 
             if (!compatible)
             {
                 throw new InvalidOperationException(
-                    $"Checkpoint '{CheckpointId}' was saved from optimizer type '{OptimizerTypeName}', but the " +
+                    $"Checkpoint '{CheckpointId}' was saved from optimizer type '{optimizerTypeName}', but the " +
                     $"supplied optimizer is '{optimizer.GetType().AssemblyQualifiedName}'. Restoring mismatched " +
                     "optimizer state is unsafe.");
             }
