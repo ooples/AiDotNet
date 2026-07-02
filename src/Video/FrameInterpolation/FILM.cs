@@ -358,32 +358,23 @@ public class FILM<T> : FrameInterpolationBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // Expects concatenated frame pair [B, C*2, H, W]
-        // Split into two frames and interpolate at t=0.5
-        int batchSize = input.Shape[0];
-        int channels = input.Shape[1] / 2;
-        int height = input.Shape[2];
-        int width = input.Shape[3];
+        // Concatenated frame pair along the channel axis: rank-4 [B, C*2, H, W] or, as the ModelFamily
+        // harness feeds, rank-3 [C*2, H, W] (unbatched). Split into the two frames with the tape-aware
+        // Engine slice (no scalar per-element copy) and interpolate at t=0.5. Interpolate is rank-flexible
+        // (hasBatch = frame1.Rank == 4).
+        int rank = input.Rank;
+        int channelAxis = rank == 4 ? 1 : 0;
+        int channels = input.Shape[channelAxis] / 2;
 
-        var frame1 = new Tensor<T>([batchSize, channels, height, width]);
-        var frame2 = new Tensor<T>([batchSize, channels, height, width]);
+        var begin1 = new int[rank];
+        var begin2 = new int[rank];
+        var size = new int[rank];
+        for (int i = 0; i < rank; i++) size[i] = input.Shape[i];
+        size[channelAxis] = channels;
+        begin2[channelAxis] = channels;
 
-        // Split channels
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        frame1[b, c, h, w] = input[b, c, h, w];
-                        frame2[b, c, h, w] = input[b, channels + c, h, w];
-                    }
-                }
-            }
-        }
-
+        var frame1 = Engine.TensorSlice(input, begin1, size);
+        var frame2 = Engine.TensorSlice(input, begin2, size);
         return Interpolate(frame1, frame2, 0.5);
     }
 
