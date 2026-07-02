@@ -146,20 +146,10 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     private QuantizationConfiguration? _qatConfig;
 
     /// <summary>
-    /// Explicit QAT override: <c>null</c> = auto (engage by the parameter-count threshold),
-    /// <c>true</c>/<c>false</c> = forced on/off.
+    /// Explicit QAT selection: <c>null</c> = off (opt-in default), <c>true</c>/<c>false</c> = forced on/off
+    /// via <see cref="EnableQuantizationAwareTraining"/> / <see cref="DisableQuantizationAwareTraining"/>.
     /// </summary>
     private bool? _qatExplicit;
-
-    /// <summary>
-    /// Parameter-count threshold at/above which QAT engages by DEFAULT (G5, #1624). Foundation-scale
-    /// diffusion models are the int8-deployment targets, so they train quantization-aware by default;
-    /// smaller models stay full-precision unless QAT is requested explicitly.
-    /// </summary>
-    private const long DefaultQatThresholdParams = 500_000_000L;
-
-    /// <summary>Test/diagnostic override for <see cref="DefaultQatThresholdParams"/>. Process-global.</summary>
-    internal static long? QatThresholdOverride { get; set; }
 
     /// <summary>
     /// The learning rate converted to type T for training computations.
@@ -973,9 +963,9 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// forward pass uses fake-quantized weights (quantize→dequantize, simulating int8 inference
     /// precision) while keeping full-precision shadow weights that the optimizer updates (a
     /// straight-through estimator), so the model learns weights that survive post-training int8
-    /// quantization. Foundation-scale models already engage this <b>by default</b> (above
-    /// <see cref="DefaultQatThresholdParams"/>); call this to force it on a smaller model or to override
-    /// the config. QAT is lossy — it changes the training trajectory. Pass a
+    /// quantization. QAT is opt-in and OFF by default at every model size — call this to engage it
+    /// (foundation-scale models that target int8 deployment opt in here). QAT is lossy — it changes the
+    /// training trajectory. Pass a
     /// <see cref="QuantizationConfiguration"/> to tune bit width / symmetry; default is symmetric int8.
     /// </summary>
     public void EnableQuantizationAwareTraining(QuantizationConfiguration? config = null)
@@ -985,7 +975,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         _qatHook = null; // rebuilt lazily in Train with the new config
     }
 
-    /// <summary>Forces quantization-aware training OFF, overriding the parameter-count default.</summary>
+    /// <summary>Forces quantization-aware training OFF (the default); use after an explicit enable.</summary>
     public void DisableQuantizationAwareTraining()
     {
         _qatExplicit = false;
@@ -993,10 +983,9 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     }
 
     /// <summary>
-    /// Whether quantization-aware training is engaged for <see cref="Train"/> (G5, #1624). Defaults to ON
-    /// for foundation-scale models (<see cref="ParameterCount"/> ≥ <see cref="DefaultQatThresholdParams"/>)
-    /// and OFF for smaller ones, unless overridden via <see cref="EnableQuantizationAwareTraining"/> /
-    /// <see cref="DisableQuantizationAwareTraining"/>.
+    /// Whether quantization-aware training is engaged for <see cref="Train"/> (G5, #1624). Opt-in and OFF
+    /// by default at every model size; turn it on/off explicitly via
+    /// <see cref="EnableQuantizationAwareTraining"/> / <see cref="DisableQuantizationAwareTraining"/>.
     /// </summary>
     public bool IsQuantizationAwareTrainingEnabled =>
         // Opt-in, default OFF — matching the Train() contract comment, the project's
