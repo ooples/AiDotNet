@@ -207,10 +207,10 @@
          work in this PR depends on (a streaming session orphaned by a disposed model no longer blocks the
          next model from engaging). Superset of 0.104.6, so all deps above are retained; native packages
          (OneDNN/OpenBLAS/CLBlast) coreleased in lockstep at 0.106.0. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.106.0" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.106.0" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.106.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.106.0" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.106.1" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.106.1" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.106.1" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.106.1" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.9" />
