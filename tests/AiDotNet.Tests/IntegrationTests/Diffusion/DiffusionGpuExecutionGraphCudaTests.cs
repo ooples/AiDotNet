@@ -65,16 +65,19 @@ public class DiffusionGpuExecutionGraphCudaTests
         DirectGpuTensorEngine? gpu = null;
         try { gpu = new DirectGpuTensorEngine(); }
         catch { /* no CUDA backend */ }
-        Skip.If(gpu is null || !gpu.SupportsGpu || !gpu.IsGpuAvailable,
-            "No CUDA DirectGpuTensorEngine available on this machine.");
-        Skip.IfNot(TensorsDeferredGraphFixed,
-            "Blocked on a Tensors deferred-execution-graph (#642/#652) correctness bug: the deferred " +
-            "DDPM UNet denoise diverges ~100% from the eager-GPU forward (proven on a GTX 1660 Ti). " +
-            "Set AIDOTNET_TEST_DEFERRED_GRAPH=1 to run this once consuming a fixed Tensors build.");
-
         var previous = AiDotNetEngine.Current;
         try
         {
+            // Skip checks INSIDE the try so a skip (Skip.If/IfNot throw) still runs the finally that
+            // disposes the GPU engine constructed above — otherwise a successful ctor followed by a skip
+            // would leak the DirectGpuTensorEngine.
+            Skip.If(gpu is null || !gpu.SupportsGpu || !gpu.IsGpuAvailable,
+                "No CUDA DirectGpuTensorEngine available on this machine.");
+            Skip.IfNot(TensorsDeferredGraphFixed,
+                "Blocked on a Tensors deferred-execution-graph (#642/#652) correctness bug: the deferred " +
+                "DDPM UNet denoise diverges ~100% from the eager-GPU forward (proven on a GTX 1660 Ti). " +
+                "Set AIDOTNET_TEST_DEFERRED_GRAPH=1 to run this once consuming a fixed Tensors build.");
+
             AiDotNetEngine.Current = gpu!;
             _output.WriteLine($"engine={gpu!.Name}");
 
