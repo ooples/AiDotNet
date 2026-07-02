@@ -7991,6 +7991,47 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Creates a length-preserving conv encoder-decoder for SYNTHESIS-based video stabilization
+    /// (full-frame neural rendering / multi-frame fusion — e.g. FuSta, 3D multi-frame fusion).
+    /// Unlike the affine-parameter regressor in <see cref="CreateDefaultVideoStabilizationLayers"/>
+    /// (which global-pools to a 6-vector), this directly synthesises a stabilized frame of the SAME
+    /// spatial dimensions as the input, so Stabilize returns a full stabilized video rather than a
+    /// bare transform vector. Mirrors the DIFRINT decoder topology (the proven length-preserving
+    /// reference).
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
+    /// <param name="inputHeight">Input frame height.</param>
+    /// <param name="inputWidth">Input frame width.</param>
+    /// <param name="numFeatures">Base feature width (default: 64).</param>
+    /// <returns>A length-preserving encoder-decoder layer stack.</returns>
+    public static IEnumerable<ILayer<T>> CreateSynthesisVideoStabilizationLayers(
+        int inputChannels = 3,
+        int inputHeight = 128,
+        int inputWidth = 128,
+        int numFeatures = 64)
+    {
+        // Encoder: three stride-2 convolutions (8x spatial downsample).
+        yield return new ConvolutionalLayer<T>(numFeatures, 7, 2, 3, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 2, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 2, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+
+        // Bottleneck refinement.
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+
+        // Decoder: symmetric upsample back to the input resolution (8x).
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>(2);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>(2);
+        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new LeakyReLUActivation<T>() as IActivationFunction<T>);
+        yield return new UpsamplingLayer<T>(2);
+
+        // Output a stabilized frame with the same channel count as the input.
+        yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1);
+    }
+
+    /// <summary>
     /// Creates layers for an InternVideo2-style video understanding model.
     /// </summary>
     /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
@@ -16761,9 +16802,13 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(numFactors, (IActivationFunction<T>)new TanhActivation<T>());
         yield return new BatchNormalizationLayer<T>();
 
-        // Alpha predictor
+        // Alpha predictor. The final layer predicts per-asset alpha (excess return),
+        // a signed real value — the head MUST be linear. DenseLayer(n, null) falls back
+        // to ReLU in its ctor, which clips alpha to >= 0 and dead-ReLUs (once a neuron's
+        // pre-activation goes negative it is frozen at 0 with zero gradient), collapsing
+        // the output to a constant. Pass an explicit IdentityActivation to stay linear.
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new DenseLayer<T>(numAssets, (IActivationFunction<T>?)null);
+        yield return new DenseLayer<T>(numAssets, (IActivationFunction<T>)new IdentityActivation<T>());
     }
 
     /// <summary>
@@ -16799,19 +16844,27 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
         yield return new BatchNormalizationLayer<T>();
 
-        // Latent space (mean and log-variance)
-        yield return new DenseLayer<T>(latentDimension * 2, (IActivationFunction<T>?)null);
+        // Latent space (mean and log-variance). This head MUST be linear: the
+        // log-variance is a signed quantity (negative for sub-unit variance) and
+        // the mean is unbounded. DenseLayer(n, null) falls back to ReLU in its ctor,
+        // which would clip both mean and log-variance to >= 0 — corrupting the VAE
+        // latent distribution. Pass an explicit IdentityActivation.
+        yield return new DenseLayer<T>(latentDimension * 2, (IActivationFunction<T>)new IdentityActivation<T>());
 
         // Factor discriminator for disentanglement
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new LeakyReLUActivation<T>());
-        yield return new DenseLayer<T>(numFactors, (IActivationFunction<T>?)null);
+        yield return new DenseLayer<T>(numFactors, (IActivationFunction<T>)new IdentityActivation<T>());
 
-        // Decoder
+        // Decoder. The final layer reconstructs the input features, which are signed
+        // real values — the reconstruction head MUST be linear. DenseLayer(n, null)
+        // falls back to ReLU, which clips the reconstruction to >= 0 and dead-ReLUs
+        // (frozen-at-0 neurons with zero gradient), collapsing training output to a
+        // constant. Pass an explicit IdentityActivation to stay linear.
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
         yield return new BatchNormalizationLayer<T>();
 
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new DenseLayer<T>(numFeatures, (IActivationFunction<T>?)null);
+        yield return new DenseLayer<T>(numFeatures, (IActivationFunction<T>)new IdentityActivation<T>());
     }
 
     /// <summary>
@@ -16846,7 +16899,14 @@ public static class LayerHelper<T>
         // Input embedding
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
 
-        // Positional encoding is handled inside transformer, add layer norm
+        // Positional encoding. A transformer needs explicit position information (Vaswani et al. 2017;
+        // factor-investing transformers per Duan et al. 2022 encode the temporal axis). It was missing
+        // here — the previous comment claimed it was "handled inside transformer", but MultiHeadAttention
+        // adds none. Without it the scale-invariant LayerNorm below collapses scalar-multiple inputs to
+        // identical outputs (the model was input-invariant and its gradients vanished — the
+        // DifferentInputs / GradientFlow / Training failures). The position-dependent offset makes the
+        // embedding no longer a pure scalar multiple of the input, restoring input sensitivity + gradient flow.
+        yield return new PositionalEncodingLayer<T>(sequenceLength, hiddenDimension);
         yield return new LayerNormalizationLayer<T>();
 
         // Transformer encoder layers
@@ -16856,10 +16916,14 @@ public static class LayerHelper<T>
             yield return new MultiHeadAttentionLayer<T>(headCount, (hiddenDimension) / (headCount));
             yield return new LayerNormalizationLayer<T>();
 
-            // Feed-forward network
+            // Feed-forward network. Per Vaswani et al. 2017 (eq. 2) the FFN is
+            // Linear(GELU(Linear(x))) — the SECOND projection is linear (no activation).
+            // DenseLayer(size, null) falls back to ReLU in its ctor, so the output
+            // projection must pass an explicit IdentityActivation to stay linear;
+            // a null here would silently make the FFN output non-negative.
             yield return new DenseLayer<T>(hiddenDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
             yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-            yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>?)null);
+            yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new IdentityActivation<T>());
             yield return new LayerNormalizationLayer<T>();
         }
 
@@ -16867,9 +16931,17 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
         yield return new DenseLayer<T>(numFactors, (IActivationFunction<T>)new TanhActivation<T>());
 
-        // Alpha prediction head
+        // Alpha prediction head. The final layer predicts expected asset returns,
+        // which are signed real numbers — the head MUST be linear. DenseLayer(1, null)
+        // falls back to ReLU in its ctor (activationFunction ?? new ReLUActivation),
+        // which (a) clips the regression output to >= 0 and (b) dead-ReLUs: once the
+        // single output neuron's pre-activation goes negative after the first gradient
+        // step, ReLU'(x)=0 freezes it at 0 forever — the model output collapses to a
+        // constant 0 and the loss freezes at target^2 (the #1719 training-collapse:
+        // LossStrictlyDecreasesOnMemorizationTask + DifferentInputs_AfterTraining).
+        // Pass an explicit IdentityActivation so the head stays linear.
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new DenseLayer<T>(1, (IActivationFunction<T>?)null);
+        yield return new DenseLayer<T>(1, (IActivationFunction<T>)new IdentityActivation<T>());
     }
 
     #endregion
@@ -23714,6 +23786,13 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder (CLIP ViT) ===
+        // Input feature projection (the ViT patch/feature embedding): map the incoming embedding to
+        // visionDim so the vision blocks — built at visionDim — receive a correctly-sized input.
+        // Without it the first vision MultiHeadAttention (weights [visionDim, visionDim]) throws on any
+        // input whose last dim != visionDim, which is the KOSMOS1/KOSMOS2 whole-class crash
+        // "Input embedding dimension (N) does not match weight dimension (visionDim)". Mirrors the
+        // leading Dense projection in CreateDefaultProprietaryAPILayers.
+        yield return new DenseLayer<T>(visionDim, identityActivation);
         yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)

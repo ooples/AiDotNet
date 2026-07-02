@@ -60,7 +60,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.Rainbow;
     "https://arxiv.org/abs/1710.02298",
     Year = 2018,
     Authors = "Hessel, M., Modayil, J., van Hasselt, H., Schaul, T., Ostrovski, G., Dabney, W., Horgan, D., Piot, B., Azar, M., & Silver, D.")]
-public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
+public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActionValueProvider<T>
 {
     private RainbowDQNOptions<T> _options;
 
@@ -533,6 +533,9 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
     }
+
+    /// <inheritdoc/>
+    Vector<T> IActionValueProvider<T>.GetActionValues(Vector<T> state) => ComputeQValuesFromNetwork(_onlineNetwork, state);
 
     private Vector<T> ComputeQValuesFromNetwork(INeuralNetwork<T> network, Vector<T> state)
     {

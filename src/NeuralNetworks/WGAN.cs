@@ -3,6 +3,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
@@ -57,6 +58,12 @@ public class WGAN<T> : NeuralNetworkBase<T>
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
+
+    private static RootMeanSquarePropagationOptimizerOptions<T, Tensor<T>, Tensor<T>> CreateWganRmsPropOptions()
+        => new()
+        {
+            InitialLearningRate = 0.00005,
+        };
 
     private readonly List<T> _criticLosses = new List<T>();
     private readonly List<T> _generatorLosses = new List<T>();
@@ -290,9 +297,9 @@ public class WGAN<T> : NeuralNetworkBase<T>
         Critic = CreateNetworkForInputType(criticArchitecture, inputType);
         _lossFunction = lossFunction ?? new WassersteinLoss<T>();
 
-        // Initialize optimizers (RMSprop is the recommended default for WGAN per the original paper)
-        _generatorOptimizer = generatorOptimizer ?? new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(Generator);
-        _criticOptimizer = criticOptimizer ?? new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(Critic);
+        // Initialize optimizers (RMSProp with lr=0.00005 is the WGAN paper default).
+        _generatorOptimizer = generatorOptimizer ?? new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(Generator, CreateWganRmsPropOptions());
+        _criticOptimizer = criticOptimizer ?? new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(Critic, CreateWganRmsPropOptions());
 
         InitializeLayers();
     }
