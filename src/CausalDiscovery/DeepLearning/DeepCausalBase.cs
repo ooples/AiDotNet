@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.Enums;
 
 namespace AiDotNet.CausalDiscovery.DeepLearning;
@@ -120,6 +121,72 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
                 throw new ArgumentException("MaxPenalty must be a positive finite value.");
             MaxPenaltyValue = options.MaxPenalty.Value;
         }
+    }
+
+    /// <summary>
+    /// Z-scores each column (zero mean, unit variance) so causal discovery is invariant to per-variable
+    /// scaling — multiplying any column by a constant leaves the standardized data (and therefore the
+    /// discovered structure) unchanged — and so the optimizer sees a consistent unit-variance signal
+    /// instead of one dominated by whichever variable happens to have the largest raw magnitude. Columns
+    /// with ~zero variance are centered with a unit divisor to avoid division by zero.
+    /// </summary>
+    protected Matrix<T> StandardizeColumns(Matrix<T> data)
+    {
+        int n = data.Rows, d = data.Columns;
+        var result = new Matrix<T>(n, d);
+        for (int j = 0; j < d; j++)
+        {
+            double mean = 0;
+            for (int i = 0; i < n; i++) mean += NumOps.ToDouble(data[i, j]);
+            mean /= Math.Max(1, n);
+            double variance = 0;
+            for (int i = 0; i < n; i++) { double c = NumOps.ToDouble(data[i, j]) - mean; variance += c * c; }
+            variance /= Math.Max(1, n - 1);
+            double std = Math.Sqrt(variance);
+            double inv = std > 1e-10 ? 1.0 / std : 1.0;
+            for (int i = 0; i < n; i++)
+                result[i, j] = NumOps.FromDouble((NumOps.ToDouble(data[i, j]) - mean) * inv);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Projects a learned (possibly cyclic) edge-probability matrix onto a DAG by zeroing every edge that
+    /// disagrees with a node ordering. Nodes are ordered by net out-flow (Σ_j P[i,j] − P[j,i]) — the most
+    /// "source-like" first — and an edge i→j is kept only when i precedes j in that order, which guarantees
+    /// the retained edges admit a topological order (i.e. are acyclic). Retained probabilities are unchanged.
+    /// Algorithms that already produce a symmetric probability matrix get acyclicity for free from
+    /// <see cref="BuildFinalAdjacency"/>'s direction tie-break and do not need this; it is for the
+    /// asymmetric-probability learners (e.g. DAG-GNN) where longer directed cycles can otherwise survive.
+    /// </summary>
+    protected static double[,] ProjectToDag(double[,] p, int d)
+    {
+        // Default source score: net out-flow Σ_j P[i,j] − P[j,i] (most edges pointing OUT ⇒ source-like).
+        var score = new double[d];
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
+                if (i != j) score[i] += p[i, j] - p[j, i];
+        return ProjectToDag(p, d, score);
+    }
+
+    /// <summary>
+    /// DAG projection with an explicit per-node source score (higher ⇒ earlier in the topological order, i.e.
+    /// more cause-like). Lets a learner that cannot identify edge orientation from a symmetric signal supply a
+    /// scale-invariant orientation cue — e.g. raw-data variance, which ranks an exogenous root above its
+    /// attenuated descendants and is preserved (in ratio) under uniform data scaling.
+    /// </summary>
+    protected static double[,] ProjectToDag(double[,] p, int d, double[] sourceScore)
+    {
+        // Stable order: highest score first; ties broken by index for determinism.
+        var order = Enumerable.Range(0, d).OrderByDescending(i => sourceScore[i]).ThenBy(i => i).ToArray();
+        var position = new int[d];
+        for (int r = 0; r < d; r++) position[order[r]] = r;
+
+        var result = new double[d, d];
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
+                if (i != j && position[i] < position[j]) result[i, j] = p[i, j];
+        return result;
     }
 
     /// <summary>

@@ -57,7 +57,12 @@ public class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
     /// Initializes a new instance with default settings.
     /// </summary>
     public LSTDAgent()
-        : this(new LSTDOptions<T> { ActionSize = 2 })
+        // FeatureSize must match the length of the state vectors fed in (LSTD uses raw-state
+        // features, phi(s) = s). The previous parameterless default left FeatureSize at 0, so the
+        // weight matrix was [ActionSize x 0] — empty parameters, all-zero Q-values, and no learning.
+        // Default to 4 features, matching the documented StateSize = 4 example; callers with a
+        // different state dimension set FeatureSize explicitly.
+        : this(new LSTDOptions<T> { ActionSize = 2, FeatureSize = 4 })
     {
     }
 

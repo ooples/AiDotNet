@@ -51,7 +51,17 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
     /// <inheritdoc/>
     public override bool SupportsNonlinear => true;
 
-    public AVICIAlgorithm(CausalDiscoveryOptions? options = null) { ApplyDeepOptions(options); }
+    public AVICIAlgorithm(CausalDiscoveryOptions? options = null)
+    {
+        // The base defaults (lr 1e-3, 100 epochs) are far too small for the attention weights to move:
+        // lr × the 1/(d(d-1)) gradient normalization over 100 epochs leaves edge probabilities essentially
+        // at their initialization, so strong linear edges never cross the detection threshold. Use a larger
+        // step and more epochs so the data fit actually converges P toward the correlations (still
+        // overridable via options).
+        LearningRate = 0.05;
+        MaxEpochs = 400;
+        ApplyDeepOptions(options);
+    }
 
     /// <inheritdoc/>
     protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
@@ -60,6 +70,10 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
         int d = data.Columns;
         int headDim = HiddenUnits;
         if (n < 3 || d < 2) return new Matrix<T>(d, d);
+
+        // Standardize columns so the discovered structure is invariant to per-variable scaling and the
+        // covariance/variance features below are on a consistent unit scale (cov becomes correlation).
+        data = StandardizeColumns(data);
 
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var cov = ComputeCovarianceMatrix(data);
@@ -88,8 +102,12 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
             Wo[k, 0] = NumOps.Multiply(initScale, NumOps.FromDouble(rng.NextDouble() - 0.5));
 
         T lr = NumOps.FromDouble(LearningRate);
-        T alpha = NumOps.Zero;
-        T rho = NumOps.One;
+        // Acyclicity warm-up: start with NO NOTEARS penalty (rho = 0). The first half of training is a
+        // pure data fit so edge probabilities can converge toward the (standardized) correlation signal;
+        // the augmented-Lagrangian penalty is only switched on for the second half (see the rho update at
+        // end of epoch). Starting at rho = 1 and ramping ×10 on the initial near-complete graph made the
+        // penalty dominate immediately and saturate every edge — including the true ones — to 0.
+        T rho = NumOps.Zero;
 
         // Precompute features per variable pair
         int numPairs = d * d;
@@ -104,7 +122,6 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
                 features[idx, 3] = cov[j, j];
             }
 
-        double prevHW = 0; // Initial h(W) = 0 (no edges yet = acyclic)
         for (int epoch = 0; epoch < MaxEpochs; epoch++)
         {
             // Compute Q, K, V for each pair
@@ -208,7 +225,9 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
             for (int i = 0; i < d; i++)
                 hCurrent = NumOps.Add(hCurrent, expPSq[i, i]);
             hCurrent = NumOps.Subtract(hCurrent, NumOps.FromDouble(d));
-            T augCoeff = NumOps.Add(alpha, NumOps.Multiply(rho, hCurrent));
+            // Bounded NOTEARS penalty coefficient: rho*h (no augmented-Lagrangian alpha term — this
+            // schedule uses a fixed rho, not the alpha-accumulating dual ascent that collapsed edges).
+            T augCoeff = NumOps.Multiply(rho, hCurrent);
 
             // Compute gradients: data fit + NOTEARS acyclicity
             var gWo = new Matrix<T>(headDim, 1);
@@ -224,7 +243,7 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
                     T pij = P[i, j];
                     T absCorr = NumOps.Abs(corr[i, j]);
                     T dataGrad = NumOps.Subtract(pij, absCorr);
-                    // NOTEARS gradient: (alpha + rho*h) * exp(P²)^T[j,i] * 2 * P[i,j]
+                    // NOTEARS gradient: augCoeff (= rho*h) * exp(P²)^T[j,i] * 2 * P[i,j]
                     T acycGrad = NumOps.Multiply(augCoeff,
                         NumOps.Multiply(expPSq[j, i], NumOps.Multiply(NumOps.FromDouble(2), pij)));
                     T totalGrad = NumOps.Add(dataGrad, acycGrad);
@@ -267,12 +286,12 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
                     T pij = P[i, j];
                     T absCorr2 = NumOps.Abs(corr[i, j]);
                     T dataGrad2 = NumOps.Subtract(pij, absCorr2);
-                    // NOTEARS acyclicity gradient: (α + ρ·h(W)) · ∂h/∂W_ij
+                    // NOTEARS acyclicity gradient: ρ·h(W) · ∂h/∂W_ij
                     // where ∂h/∂W_ij = 2·W_ij·[e^{W⊙W}]_ji (Zheng et al. 2018)
-                    // Approximation: use 2·pij as proxy for ∂h/∂W_ij (ignores matrix exponential)
-                    // Use consistent acyclicity formula: (alpha + rho * pij) * 2 * pij
-                    // (matches the main path at line 213, not prevHW)
-                    T acycGrad2 = NumOps.Multiply(NumOps.Add(alpha, NumOps.Multiply(rho, pij)),
+                    // Approximation: use 2·pij as proxy for ∂h/∂W_ij (ignores matrix exponential).
+                    // Consistent with the main path's bounded penalty: (rho * pij) * 2 * pij
+                    // (fixed rho, no augmented-Lagrangian alpha term).
+                    T acycGrad2 = NumOps.Multiply(NumOps.Multiply(rho, pij),
                         NumOps.Multiply(NumOps.FromDouble(2), pij));
                     T totalGrad2 = NumOps.Add(dataGrad2, acycGrad2);
                     T sigDeriv2 = NumOps.Multiply(pij, NumOps.Subtract(NumOps.One, pij));
@@ -318,17 +337,15 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
                     Wk[f, k] = NumOps.Subtract(Wk[f, k], NumOps.Multiply(lr, gWk[f, k]));
                 }
 
-            // Reuse hCurrent computed during gradient calculation above
-            double hDouble = NumOps.ToDouble(hCurrent);
-            alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hCurrent));
-            // Increase rho only when h is not decreasing fast enough (per NOTEARS augmented Lagrangian)
-            if (hDouble > 0.25 * Math.Max(prevHW, 1.0))
-            {
-                T newRho = NumOps.Multiply(rho, NumOps.FromDouble(10));
-                T rhoMax = NumOps.FromDouble(MaxPenaltyValue);
-                rho = NumOps.GreaterThan(newRho, rhoMax) ? rhoMax : newRho;
-            }
-            prevHW = hDouble;
+            // Apply only a BOUNDED acyclicity penalty in the second half of training (warm-up; see the rho
+            // initialization). The original schedule grew rho ×10 toward MaxPenaltyValue (1e16) AND
+            // accumulated alpha every epoch — on the near-complete graph produced by strongly correlated
+            // data that made the augmented-Lagrangian term dominate the data fit and drove EVERY edge
+            // logit below -20, i.e. it collapsed the output to the empty graph (trivially acyclic) and
+            // recovered no edges. A fixed, modest rho (no ×10 ramp, no alpha runaway) breaks ties toward a
+            // DAG without overwhelming the data fit; the final orientation is resolved by BuildFinalAdjacency.
+            if (epoch >= MaxEpochs / 2)
+                rho = NumOps.FromDouble(1.0);
         }
 
         // Final inference using trained parameters

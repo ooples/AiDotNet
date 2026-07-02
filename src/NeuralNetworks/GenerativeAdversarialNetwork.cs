@@ -1,5 +1,6 @@
 ﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Engines.Autodiff;
 
@@ -50,6 +51,10 @@ namespace AiDotNet.NeuralNetworks;
 [ResearchPaper("Generative Adversarial Nets", "https://arxiv.org/abs/1406.2661", Year = 2014, Authors = "Ian J. Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron Courville, Yoshua Bengio")]
 public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
+    private const double DefaultGanAdamLearningRate = 0.0002;
+    private const double DefaultGanAdamBeta1 = 0.5;
+    private const double DefaultGanAdamBeta2 = 0.999;
+
     private readonly GenerativeAdversarialNetworkOptions _options;
 
     /// <inheritdoc/>
@@ -381,6 +386,26 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? discriminatorOptimizer = null,
         ILossFunction<T>? lossFunction = null,
         GenerativeAdversarialNetworkOptions? options = null)
+        : this(generatorArchitecture, discriminatorArchitecture, inputType, generatorOptimizer,
+            discriminatorOptimizer, lossFunction, options,
+            defaultGeneratorOptimizerOptions: null,
+            defaultDiscriminatorOptimizerOptions: null)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GenerativeAdversarialNetwork{T}"/> class,
+    /// optionally overriding the default Adam optimizer settings used by derived GAN types.
+    /// </summary>
+    protected GenerativeAdversarialNetwork(NeuralNetworkArchitecture<T> generatorArchitecture,
+        NeuralNetworkArchitecture<T> discriminatorArchitecture,
+        InputType inputType,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? generatorOptimizer,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? discriminatorOptimizer,
+        ILossFunction<T>? lossFunction,
+        GenerativeAdversarialNetworkOptions? options,
+        AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>? defaultGeneratorOptimizerOptions,
+        AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>? defaultDiscriminatorOptimizerOptions)
         : base(CreateGANArchitecture(generatorArchitecture, discriminatorArchitecture, inputType),
             lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
     {
@@ -424,11 +449,42 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
             discriminatorArchitecture.InputType, lossFunction: lossFunction);
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType);
 
-        // Initialize optimizers (default to Adam if not provided)
-        _generatorOptimizer = generatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Generator);
-        _discriminatorOptimizer = discriminatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Discriminator);
+        // Initialize optimizers (default to GAN-standard Adam if not provided). Derived GANs can
+        // pass separate paper-faithful settings for generator/discriminator without relying on
+        // virtual dispatch from this base constructor.
+        _generatorOptimizer = generatorOptimizer ?? CreateDefaultOptimizer(Generator, defaultGeneratorOptimizerOptions);
+        _discriminatorOptimizer = discriminatorOptimizer ?? CreateDefaultOptimizer(Discriminator, defaultDiscriminatorOptimizerOptions);
 
         InitializeLayers();
+    }
+
+    /// <summary>
+    /// Creates Adam options for GAN-family defaults.
+    /// </summary>
+    protected static AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> CreateAdamOptimizerOptions(
+        double initialLearningRate = DefaultGanAdamLearningRate,
+        double beta1 = DefaultGanAdamBeta1,
+        double beta2 = DefaultGanAdamBeta2)
+        => new()
+        {
+            InitialLearningRate = initialLearningRate,
+            Beta1 = beta1,
+            Beta2 = beta2,
+        };
+
+    /// <summary>
+    /// Creates the default per-network optimizer used when the caller does not supply one.
+    /// The fallback is the common stable GAN Adam setting lr=0.0002, beta1=0.5, beta2=0.999.
+    /// </summary>
+    private static IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer(
+        NeuralNetworkBase<T> network,
+        AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>? options)
+    {
+        var optimizerOptions = options is null
+            ? CreateAdamOptimizerOptions()
+            : new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>(options);
+
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(network, optimizerOptions);
     }
 
     /// <summary>
