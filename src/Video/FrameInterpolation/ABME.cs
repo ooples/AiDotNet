@@ -181,9 +181,11 @@ public class ABME<T> : FrameInterpolationBase<T>
         }
     }
 
-    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
+    // Identity: tape training runs the raw layer stack (no NormalizeFrames) and the sigmoid
+    // synthesis head emits [0,1] frames, so /255+*255 only on inference was a train/eval mismatch.
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => rawFrames;
 
-    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => modelOutput;
 
     public override ModelMetadata<T> GetModelMetadata()
     {
