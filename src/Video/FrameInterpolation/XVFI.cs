@@ -150,10 +150,14 @@ public class XVFI<T> : FrameInterpolationBase<T>
     }
 
     /// <inheritdoc/>
-    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
+    // Identity pre/post-processing: the network trains on the raw layer stack (the tape path
+    // does not call NormalizeFrames), and its sigmoid synthesis head already emits [0,1] frames.
+    // Applying /255 + *255 only on the inference path was a train/eval scale mismatch that left
+    // the evaluation loss huge and non-monotonic (MoreData_ShouldNotDegrade). Keep both identity.
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => rawFrames;
 
     /// <inheritdoc/>
-    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => modelOutput;
 
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expected)
