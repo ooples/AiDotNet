@@ -96,6 +96,19 @@ public class FusedOptimizerIntegrationTests
         }
     }
 
+    [Fact]
+    public void CudaAllocationOom_IsClassifiedAsStreamingOom()
+    {
+        var ex = new InvalidOperationException("cuMemAllocAsync failed: Out of memory");
+
+        // The OOM string matches BOTH classifiers, which is exactly why recovery routing must consult
+        // IsGpuOutOfMemoryFailure FIRST (streaming-OOM recovery) before IsGpuTransientFailure (plain
+        // retry) — this test pins that both predicates fire; TryTrainWithFusedOptimizer's ordering is
+        // what turns that into streaming-OOM recovery rather than a transient retry.
+        Assert.True(FusedTrainingTestNetwork.IsGpuOutOfMemoryForTest(ex));
+        Assert.True(FusedTrainingTestNetwork.IsGpuTransientForTest(ex));
+    }
+
     /// <summary>
     /// #1662 lever #1 (§5a) bit-identical gate: single-pass full-precision fused
     /// optimizer-in-backward (<see cref="StreamingTrainingMode.ForceOn"/>, unclipped, Adam) must
@@ -771,6 +784,12 @@ public class FusedOptimizerIntegrationTests
         }
 
         public float LastLossPublic => Convert.ToSingle(LastLoss);
+
+        public static bool IsGpuOutOfMemoryForTest(Exception? exception)
+            => IsGpuOutOfMemoryFailure(exception);
+
+        public static bool IsGpuTransientForTest(Exception? exception)
+            => IsGpuTransientFailure(exception);
 
         protected override void InitializeLayers() { }
 

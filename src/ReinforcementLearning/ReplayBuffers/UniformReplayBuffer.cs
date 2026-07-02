@@ -148,6 +148,38 @@ public class UniformReplayBuffer<T, TState, TAction> : IReplayBuffer<T, TState, 
         return (sampled, sampledIndices);
     }
 
+    /// <summary>
+    /// Samples up to <paramref name="length"/> TEMPORALLY-CONSECUTIVE experiences starting at a random
+    /// valid position — the trajectory window MuZero's K-step unroll needs (not independent
+    /// transitions). The window is truncated at the first terminal (Done) transition so the unroll
+    /// never crosses an episode boundary. Returns fewer than <paramref name="length"/> when the buffer
+    /// is smaller than the window or a terminal is hit early.
+    /// </summary>
+    public List<Experience<T, TState, TAction>> SampleSequence(int length)
+    {
+        if (length < 1)
+            throw new ArgumentOutOfRangeException(nameof(length), "Sequence length must be positive.");
+
+        int count = _buffer.Count;
+        var seq = new List<Experience<T, TState, TAction>>();
+        if (count == 0) return seq;
+
+        // Pick a random start over the logical (temporal) timeline. When the circular buffer has
+        // wrapped (full), the oldest experience is at _position, so logical index l maps to physical
+        // (_position + l) % Capacity; otherwise _position == 0 and logical == physical.
+        int windowStarts = Math.Max(1, count - length + 1);
+        int logicalStart = _random.Next(windowStarts);
+        bool wrapped = count >= Capacity;
+        for (int l = 0; l < length && logicalStart + l < count; l++)
+        {
+            int phys = wrapped ? ((_position + logicalStart + l) % Capacity) : (logicalStart + l);
+            var exp = _buffer[phys];
+            seq.Add(exp);
+            if (exp.Done) break; // stop at the episode boundary — do not unroll across it
+        }
+        return seq;
+    }
+
     /// <inheritdoc/>
     public bool CanSample(int batchSize)
     {
