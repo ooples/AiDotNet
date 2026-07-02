@@ -91,7 +91,10 @@ public class RIFE<T> : FrameInterpolationBase<T>
     private readonly List<ConvolutionalLayer<T>> _flowBlocks;
 
     private const int DefaultNumFeatures = 64;
-    private const int DefaultNumFlowBlocks = 8;
+    // RIFE (Huang et al., ECCV 2022, "Real-Time Intermediate Flow Estimation") uses a 3-block coarse-to-
+    // fine IFNet; it is a REAL-TIME/lightweight model. The previous default of 8 refinement blocks was
+    // well beyond the paper and ~2.7x the per-forward refinement compute (which timed MoreData out).
+    private const int DefaultNumFlowBlocks = 3;
 
     // Activation cache for backward pass
     private Tensor<T>? _cachedConcatenatedFrames;
@@ -358,6 +361,14 @@ public class RIFE<T> : FrameInterpolationBase<T>
 
     private Tensor<T> ProcessInterpolation(Tensor<T> concatenatedFrames, double timestep)
     {
+        // The ModelFamily harness feeds a rank-3 [2*C, H, W] unbatched pair, but the warp/encode pipeline
+        // (WarpImage reads Shape[2]/[3]) needs rank-4 [B, 2*C, H, W]. Promote here (tape-aware reshape)
+        // and squeeze the batch dim back off the output below.
+        bool addedBatch = concatenatedFrames.Rank == 3;
+        if (addedBatch)
+            concatenatedFrames = Engine.Reshape(concatenatedFrames,
+                [1, concatenatedFrames.Shape[0], concatenatedFrames.Shape[1], concatenatedFrames.Shape[2]]);
+
         // Clear and cache input for backward pass
         ClearActivationCache();
         _cachedConcatenatedFrames = concatenatedFrames;
@@ -431,7 +442,10 @@ public class RIFE<T> : FrameInterpolationBase<T>
         }
 
         var rifeOutputConv = _outputConv ?? throw new InvalidOperationException("Output convolution has not been initialized.");
-        return rifeOutputConv.Forward(fused);
+        var rifeOutput = rifeOutputConv.Forward(fused);
+        return addedBatch
+            ? Engine.Reshape(rifeOutput, [rifeOutput.Shape[1], rifeOutput.Shape[2], rifeOutput.Shape[3]])
+            : rifeOutput;
     }
 
     /// <summary>
