@@ -91,28 +91,6 @@ public class FILM<T> : FrameInterpolationBase<T>
     // Occlusion estimator
     private readonly ConvolutionalLayer<T> _occlusionEstimator;
 
-    // Cached intermediate activations for backward pass
-    private Tensor<T>? _cachedFrame1;
-    private Tensor<T>? _cachedFrame2;
-    private Tensor<T>? _cachedFeatures1;
-    private Tensor<T>? _cachedFeatures2;
-    private Tensor<T>? _cachedFlow1to2;
-    private Tensor<T>? _cachedFlow2to1;
-    private Tensor<T>? _cachedFlowToT1;
-    private Tensor<T>? _cachedFlowToT2;
-    private Tensor<T>? _cachedOcc1;
-    private Tensor<T>? _cachedOcc2;
-    private Tensor<T>? _cachedWarped1;
-    private Tensor<T>? _cachedWarped2;
-    private Tensor<T>? _cachedFused;
-    private Tensor<T>? _cachedFlowConcat;
-    private Tensor<T>? _cachedOccConcat;
-    private List<Tensor<T>>? _cachedFeatureExtractor1Activations;
-    private List<Tensor<T>>? _cachedFeatureExtractor2Activations;
-    private List<Tensor<T>>? _cachedFlowEstimatorActivations;
-    private List<Tensor<T>>? _cachedFusionActivations;
-    private double _cachedTimestep;
-
     #endregion
 
     #region Properties
@@ -247,50 +225,26 @@ public class FILM<T> : FrameInterpolationBase<T>
             frame2 = AddBatchDimension(frame2);
         }
 
-        // Cache inputs for backward pass
-        _cachedFrame1 = frame1;
-        _cachedFrame2 = frame2;
-        _cachedTimestep = timestep;
+        // Fully tape-connected forward (autodiff handles the backward pass — no manual backprop / no
+        // cached activations). Every op below is a trainable layer or a tape-aware Engine op, so
+        // TrainWithTape's ComputeGradients reaches every parameter.
+        var features1 = ExtractFeatures(frame1);
+        var features2 = ExtractFeatures(frame2);
 
-        // Extract multi-scale features for both frames (with activation caching)
-        _cachedFeatureExtractor1Activations = [];
-        var features1 = ExtractFeaturesWithCache(frame1, _cachedFeatureExtractor1Activations);
-        _cachedFeatureExtractor2Activations = [];
-        var features2 = ExtractFeaturesWithCache(frame2, _cachedFeatureExtractor2Activations);
-        _cachedFeatures1 = features1;
-        _cachedFeatures2 = features2;
+        var (flow1to2, flow2to1) = EstimateFlow(features1, features2);
 
-        // Estimate bi-directional flow (with activation caching)
-        _cachedFlowEstimatorActivations = [];
-        var (flow1to2, flow2to1, flowConcat) = EstimateFlowWithCache(features1, features2, _cachedFlowEstimatorActivations);
-        _cachedFlow1to2 = flow1to2;
-        _cachedFlow2to1 = flow2to1;
-        _cachedFlowConcat = flowConcat;
-
-        // Scale flows by timestep
+        // Scale flows by timestep.
         var flowToT1 = ScaleFlow(flow2to1, timestep);
         var flowToT2 = ScaleFlow(flow1to2, 1.0 - timestep);
-        _cachedFlowToT1 = flowToT1;
-        _cachedFlowToT2 = flowToT2;
 
-        // Estimate occlusion masks (with activation caching)
-        var (occ1, occ2, occConcat) = EstimateOcclusionWithCache(features1, features2, flow1to2, flow2to1);
-        _cachedOcc1 = occ1;
-        _cachedOcc2 = occ2;
-        _cachedOccConcat = occConcat;
+        var (occ1, occ2) = EstimateOcclusion(features1, features2, flow1to2, flow2to1);
 
-        // Warp features using flows
+        // Backward-warp features by the timestep-scaled flows.
         var warped1 = WarpFeatures(features1, flowToT1);
         var warped2 = WarpFeatures(features2, flowToT2);
-        _cachedWarped1 = warped1;
-        _cachedWarped2 = warped2;
 
-        // Fuse features with occlusion-aware blending (with activation caching)
-        _cachedFusionActivations = [];
-        var fused = FuseFeaturesWithCache(warped1, warped2, occ1, occ2, flowToT1, flowToT2, timestep, _cachedFusionActivations);
-        _cachedFused = fused;
-
-        // Synthesize output frame
+        // Occlusion-aware fusion + synthesis.
+        var fused = FuseFeatures(warped1, warped2, occ1, occ2, flowToT1, flowToT2, timestep);
         var output = SynthesizeFrame(fused);
 
         if (!hasBatch)
@@ -356,12 +310,22 @@ public class FILM<T> : FrameInterpolationBase<T>
     }
 
     /// <inheritdoc/>
-    protected override Tensor<T> PredictCore(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input) => InterpolatePair(input);
+
+    /// <inheritdoc/>
+    // Training forward must run the SAME custom forward as inference (split the concatenated pair, then
+    // Interpolate). Without this override the base tape-training runs the flat Layers list on the raw
+    // 2-frame input, feeding the 3-channel feature conv a 6-channel tensor ("Expected input depth 3, got
+    // 6"). The forward is fully tape-connected, so ComputeGradients reaches every parameter.
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => InterpolatePair(input);
+
+    /// <summary>
+    /// Splits a concatenated frame pair (rank-4 [B, C*2, H, W] or, as the ModelFamily harness feeds,
+    /// rank-3 [C*2, H, W]) along the channel axis with the tape-aware Engine slice, then interpolates at
+    /// t=0.5. Interpolate is rank-flexible (hasBatch = frame1.Rank == 4).
+    /// </summary>
+    private Tensor<T> InterpolatePair(Tensor<T> input)
     {
-        // Concatenated frame pair along the channel axis: rank-4 [B, C*2, H, W] or, as the ModelFamily
-        // harness feeds, rank-3 [C*2, H, W] (unbatched). Split into the two frames with the tape-aware
-        // Engine slice (no scalar per-element copy) and interpolate at t=0.5. Interpolate is rank-flexible
-        // (hasBatch = frame1.Rank == 4).
         int rank = input.Rank;
         int channelAxis = rank == 4 ? 1 : 0;
         int channels = input.Shape[channelAxis] / 2;
@@ -425,28 +389,13 @@ public class FILM<T> : FrameInterpolationBase<T>
             }
         }
 
-        // Split into two flows
-        int batchSize = flowFeatures.Shape[0];
-        int height = flowFeatures.Shape[2];
-        int width = flowFeatures.Shape[3];
-
-        var flow1to2 = new Tensor<T>([batchSize, 2, height, width]);
-        var flow2to1 = new Tensor<T>([batchSize, 2, height, width]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    flow1to2[b, 0, h, w] = flowFeatures[b, 0, h, w];
-                    flow1to2[b, 1, h, w] = flowFeatures[b, 1, h, w];
-                    flow2to1[b, 0, h, w] = flowFeatures[b, 2, h, w];
-                    flow2to1[b, 1, h, w] = flowFeatures[b, 3, h, w];
-                }
-            }
-        }
-
+        // Split the 4-channel head output into two 2-channel flows via the tape-aware Engine slice
+        // (was a scalar per-pixel copy that detached the tape).
+        int b = flowFeatures.Shape[0];
+        int h = flowFeatures.Shape[2];
+        int w = flowFeatures.Shape[3];
+        var flow1to2 = Engine.TensorSlice(flowFeatures, [0, 0, 0, 0], [b, 2, h, w]);
+        var flow2to1 = Engine.TensorSlice(flowFeatures, [0, 2, 0, 0], [b, 2, h, w]);
         return (flow1to2, flow2to1);
     }
 
@@ -469,90 +418,49 @@ public class FILM<T> : FrameInterpolationBase<T>
         occFeatures = ApplySigmoid(occFeatures);
 
         // Split into two masks
-        int batchSize = occFeatures.Shape[0];
-        int height = occFeatures.Shape[2];
-        int width = occFeatures.Shape[3];
-
-        var occ1 = new Tensor<T>([batchSize, 1, height, width]);
-        var occ2 = new Tensor<T>([batchSize, 1, height, width]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    occ1[b, 0, h, w] = occFeatures[b, 0, h, w];
-                    occ2[b, 0, h, w] = occFeatures[b, 1, h, w];
-                }
-            }
-        }
-
+        // Split the 2-channel sigmoid output into two 1-channel occlusion masks via the tape-aware
+        // Engine slice (was a scalar per-pixel copy that detached the tape).
+        int b = occFeatures.Shape[0];
+        int h = occFeatures.Shape[2];
+        int w = occFeatures.Shape[3];
+        var occ1 = Engine.TensorSlice(occFeatures, [0, 0, 0, 0], [b, 1, h, w]);
+        var occ2 = Engine.TensorSlice(occFeatures, [0, 1, 0, 0], [b, 1, h, w]);
         return (occ1, occ2);
     }
 
+    // Backward-warp features by optical flow via the tape-aware Engine.GridSample (identity affine grid
+    // + normalized flow offset) so gradients flow back into BOTH features and flow — the standard
+    // differentiable warp (cf. RIFE.WarpImage). Was a scalar per-pixel bilinear loop that detached the
+    // tape. flow: [B, 2, H, W] in pixel units (channel 0 = dx, 1 = dy).
     private Tensor<T> WarpFeatures(Tensor<T> features, Tensor<T> flow)
     {
-        int batchSize = features.Shape[0];
-        int channels = features.Shape[1];
-        int height = features.Shape[2];
-        int width = features.Shape[3];
+        int b = features.Shape[0];
+        int h = features.Shape[2];
+        int w = features.Shape[3];
 
-        var warped = new Tensor<T>(features._shape);
-
-        for (int b = 0; b < batchSize; b++)
+        var identityTheta = new Tensor<T>([b, 2, 3]);
+        for (int bi = 0; bi < b; bi++)
         {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    double flowX = Convert.ToDouble(flow[b, 0, h, w]);
-                    double flowY = Convert.ToDouble(flow[b, 1, h, w]);
-
-                    double srcX = w + flowX;
-                    double srcY = h + flowY;
-
-                    // Bilinear sampling
-                    for (int c = 0; c < channels; c++)
-                    {
-                        warped[b, c, h, w] = BilinearSample(features, b, c, srcY, srcX);
-                    }
-                }
-            }
+            identityTheta[bi, 0, 0] = NumOps.One; // x scale
+            identityTheta[bi, 1, 1] = NumOps.One; // y scale
         }
+        var baseGrid = Engine.AffineGrid(identityTheta, h, w);
 
-        return warped;
-    }
+        var flowNHWC = Engine.TensorPermute(flow, [0, 2, 3, 1]); // [B, h, w, 2]
+        double sx = w > 1 ? 2.0 / (w - 1) : 0.0;
+        double sy = h > 1 ? 2.0 / (h - 1) : 0.0;
+        var scale = new Tensor<T>([b, h, w, 2]);
+        var scaleSpan = scale.Data.Span;
+        for (int idx = 0; idx + 1 < scaleSpan.Length; idx += 2)
+        {
+            scaleSpan[idx] = NumOps.FromDouble(sx);
+            scaleSpan[idx + 1] = NumOps.FromDouble(sy);
+        }
+        var grid = Engine.TensorAdd(baseGrid, Engine.TensorMultiply(flowNHWC, scale));
 
-    private T BilinearSample(Tensor<T> tensor, int batch, int channel, double y, double x)
-    {
-        int height = tensor.Shape[2];
-        int width = tensor.Shape[3];
-
-        int x0 = (int)Math.Floor(x);
-        int y0 = (int)Math.Floor(y);
-        int x1 = x0 + 1;
-        int y1 = y0 + 1;
-
-        x0 = Math.Max(0, Math.Min(x0, width - 1));
-        x1 = Math.Max(0, Math.Min(x1, width - 1));
-        y0 = Math.Max(0, Math.Min(y0, height - 1));
-        y1 = Math.Max(0, Math.Min(y1, height - 1));
-
-        double dx = x - Math.Floor(x);
-        double dy = y - Math.Floor(y);
-
-        double v00 = Convert.ToDouble(tensor[batch, channel, y0, x0]);
-        double v01 = Convert.ToDouble(tensor[batch, channel, y0, x1]);
-        double v10 = Convert.ToDouble(tensor[batch, channel, y1, x0]);
-        double v11 = Convert.ToDouble(tensor[batch, channel, y1, x1]);
-
-        double value = v00 * (1 - dx) * (1 - dy) +
-                       v01 * dx * (1 - dy) +
-                       v10 * (1 - dx) * dy +
-                       v11 * dx * dy;
-
-        return NumOps.FromDouble(value);
+        var featNHWC = Engine.TensorPermute(features, [0, 2, 3, 1]);
+        var warpedNHWC = Engine.GridSample(featNHWC, grid);
+        return Engine.TensorPermute(warpedNHWC, [0, 3, 1, 2]);
     }
 
     private Tensor<T> FuseFeatures(
@@ -596,535 +504,30 @@ public class FILM<T> : FrameInterpolationBase<T>
         return Engine.TensorConcatenate([a, b], axis: 1);
     }
 
+    // Nearest-neighbour 2x upsample via the tape-aware Engine op (was a scalar per-pixel loop that
+    // detached the autodiff tape).
     private Tensor<T> Upsample2x(Tensor<T> input)
-    {
-        int batchSize = input.Shape[0];
-        int channels = input.Shape[1];
-        int height = input.Shape[2];
-        int width = input.Shape[3];
+        => Engine.Upsample(input, 2, 2);
 
-        var output = new Tensor<T>([batchSize, channels, height * 2, width * 2]);
-
-        for (int b = 0; b < batchSize; b++)
-            for (int c = 0; c < channels; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                    {
-                        T val = input[b, c, h, w];
-                        output[b, c, h * 2, w * 2] = val;
-                        output[b, c, h * 2, w * 2 + 1] = val;
-                        output[b, c, h * 2 + 1, w * 2] = val;
-                        output[b, c, h * 2 + 1, w * 2 + 1] = val;
-                    }
-
-        return output;
-    }
-
+    // Tape-aware LeakyReLU (was a .Transform closure that detaches the tape).
     private Tensor<T> ApplyLeakyReLU(Tensor<T> input, double negativeSlope)
-    {
-        return input.Transform((v, _) =>
-        {
-            double x = Convert.ToDouble(v);
-            return NumOps.FromDouble(x > 0 ? x : x * negativeSlope);
-        });
-    }
+        => Engine.LeakyReLU(input, NumOps.FromDouble(negativeSlope));
 
     private Tensor<T> ApplySigmoid(Tensor<T> input)
-    {
-        return Engine.Sigmoid(input);
-    }
+        => Engine.Sigmoid(input);
 
+    // Batch-dim add/remove via Engine.Reshape (tape-aware; a raw span-copy detached the tape at the
+    // output boundary, so the loss gradient never reached the network on the unbatched path).
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    {
-        int c = tensor.Shape[0];
-        int h = tensor.Shape[1];
-        int w = tensor.Shape[2];
-        var result = new Tensor<T>([1, c, h, w]);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
-    }
+        => Engine.Reshape(tensor, [1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
 
     private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
     {
-        int[] newShape = new int[tensor.Shape.Length - 1];
-        for (int i = 0; i < newShape.Length; i++)
-            newShape[i] = tensor.Shape[i + 1];
-        var result = new Tensor<T>(newShape);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
+        var newShape = new int[tensor.Shape.Length - 1];
+        for (int i = 0; i < newShape.Length; i++) newShape[i] = tensor.Shape[i + 1];
+        return Engine.Reshape(tensor, newShape);
     }
 
-    private Tensor<T> ExtractFeaturesWithCache(Tensor<T> frame, List<Tensor<T>> activationCache)
-    {
-        var features = frame;
-        activationCache.Add(features); // Cache input
-        foreach (var layer in _featureExtractor)
-        {
-            features = layer.Forward(features);
-            activationCache.Add(features); // Cache pre-activation
-            features = ApplyLeakyReLU(features, 0.2);
-            activationCache.Add(features); // Cache post-activation
-        }
-        return features;
-    }
-
-    private (Tensor<T> flow1to2, Tensor<T> flow2to1, Tensor<T> concat) EstimateFlowWithCache(
-        Tensor<T> features1, Tensor<T> features2, List<Tensor<T>> activationCache)
-    {
-        var concat = ConcatenateChannels(features1, features2);
-        activationCache.Add(concat); // Cache concatenated input
-
-        var flowFeatures = concat;
-        for (int i = 0; i < _flowEstimator.Count; i++)
-        {
-            flowFeatures = _flowEstimator[i].Forward(flowFeatures);
-            activationCache.Add(flowFeatures); // Cache layer output
-            if (i < _flowEstimator.Count - 1)
-            {
-                flowFeatures = ApplyLeakyReLU(flowFeatures, 0.2);
-                activationCache.Add(flowFeatures); // Cache post-activation
-            }
-        }
-
-        // Split into two flows
-        int batchSize = flowFeatures.Shape[0];
-        int height = flowFeatures.Shape[2];
-        int width = flowFeatures.Shape[3];
-
-        var flow1to2 = new Tensor<T>([batchSize, 2, height, width]);
-        var flow2to1 = new Tensor<T>([batchSize, 2, height, width]);
-
-        for (int b = 0; b < batchSize; b++)
-            for (int h = 0; h < height; h++)
-                for (int w = 0; w < width; w++)
-                {
-                    flow1to2[b, 0, h, w] = flowFeatures[b, 0, h, w];
-                    flow1to2[b, 1, h, w] = flowFeatures[b, 1, h, w];
-                    flow2to1[b, 0, h, w] = flowFeatures[b, 2, h, w];
-                    flow2to1[b, 1, h, w] = flowFeatures[b, 3, h, w];
-                }
-
-        return (flow1to2, flow2to1, concat);
-    }
-
-    private (Tensor<T> occ1, Tensor<T> occ2, Tensor<T> concat) EstimateOcclusionWithCache(
-        Tensor<T> features1, Tensor<T> features2,
-        Tensor<T> flow1to2, Tensor<T> flow2to1)
-    {
-        var concat = ConcatenateChannels(features1, features2);
-        concat = ConcatenateChannels(concat, flow1to2);
-        concat = ConcatenateChannels(concat, flow2to1);
-
-        var occFeatures = _occlusionEstimator.Forward(concat);
-        var occPreSigmoid = occFeatures; // Cache for gradient
-        occFeatures = ApplySigmoid(occFeatures);
-
-        int batchSize = occFeatures.Shape[0];
-        int height = occFeatures.Shape[2];
-        int width = occFeatures.Shape[3];
-
-        var occ1 = new Tensor<T>([batchSize, 1, height, width]);
-        var occ2 = new Tensor<T>([batchSize, 1, height, width]);
-
-        for (int b = 0; b < batchSize; b++)
-            for (int h = 0; h < height; h++)
-                for (int w = 0; w < width; w++)
-                {
-                    occ1[b, 0, h, w] = occFeatures[b, 0, h, w];
-                    occ2[b, 0, h, w] = occFeatures[b, 1, h, w];
-                }
-
-        return (occ1, occ2, concat);
-    }
-
-    private Tensor<T> FuseFeaturesWithCache(
-        Tensor<T> warped1, Tensor<T> warped2,
-        Tensor<T> occ1, Tensor<T> occ2,
-        Tensor<T> flowToT1, Tensor<T> flowToT2,
-        double timestep, List<Tensor<T>> activationCache)
-    {
-        // Weighted blending based on occlusion and timestep
-        T t = NumOps.FromDouble(timestep);
-        T oneMinusT = NumOps.FromDouble(1.0 - timestep);
-
-        var blended = warped1.Transform((v, idx) =>
-        {
-            int batchSize = warped1.Shape[0];
-            int channels = warped1.Shape[1];
-            int height = warped1.Shape[2];
-            int width = warped1.Shape[3];
-
-            int totalPerBatch = channels * height * width;
-            int b = idx / totalPerBatch;
-            int remaining = idx % totalPerBatch;
-            int c = remaining / (height * width);
-            remaining = remaining % (height * width);
-            int h = remaining / width;
-            int w = remaining % width;
-
-            double o1 = Convert.ToDouble(occ1[b, 0, h, w]);
-            double o2 = Convert.ToDouble(occ2[b, 0, h, w]);
-            double w1Val = Convert.ToDouble(warped1[b, c, h, w]);
-            double w2Val = Convert.ToDouble(warped2[b, c, h, w]);
-
-            double weight1 = (1.0 - timestep) * (1.0 - o1);
-            double weight2 = timestep * (1.0 - o2);
-            double totalWeight = weight1 + weight2 + 1e-8;
-
-            return NumOps.FromDouble((weight1 * w1Val + weight2 * w2Val) / totalWeight);
-        });
-
-        activationCache.Add(blended);
-
-        // Pass through fusion layers
-        var fused = blended;
-        foreach (var layer in _fusionLayers)
-        {
-            fused = layer.Forward(fused);
-            activationCache.Add(fused);
-            fused = ApplyLeakyReLU(fused, 0.2);
-            activationCache.Add(fused);
-        }
-
-        return fused;
-    }
-
-    private (Tensor<T> gradWarped1, Tensor<T> gradWarped2, Tensor<T> gradOcc1, Tensor<T> gradOcc2)
-        ComputeFusionGradients(Tensor<T> gradOutput, Tensor<T> warped1, Tensor<T> warped2,
-            Tensor<T> occ1, Tensor<T> occ2, double timestep)
-    {
-        var gradWarped1 = new Tensor<T>(warped1._shape);
-        var gradWarped2 = new Tensor<T>(warped2._shape);
-        var gradOcc1 = new Tensor<T>(occ1._shape);
-        var gradOcc2 = new Tensor<T>(occ2._shape);
-
-        int batchSize = warped1.Shape[0];
-        int channels = warped1.Shape[1];
-        int height = warped1.Shape[2];
-        int width = warped1.Shape[3];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    double o1 = Convert.ToDouble(occ1[b, 0, h, w]);
-                    double o2 = Convert.ToDouble(occ2[b, 0, h, w]);
-                    double weight1 = (1.0 - timestep) * (1.0 - o1);
-                    double weight2 = timestep * (1.0 - o2);
-                    double totalWeight = weight1 + weight2 + 1e-8;
-
-                    double dOcc1Sum = 0, dOcc2Sum = 0;
-
-                    for (int c = 0; c < channels; c++)
-                    {
-                        double grad = Convert.ToDouble(gradOutput[b, c, h, w]);
-                        double w1Val = Convert.ToDouble(warped1[b, c, h, w]);
-                        double w2Val = Convert.ToDouble(warped2[b, c, h, w]);
-
-                        // Gradient w.r.t. warped values
-                        gradWarped1.Data.Span[(b * channels + c) * height * width + h * width + w] =
-                            NumOps.FromDouble(grad * weight1 / totalWeight);
-                        gradWarped2.Data.Span[(b * channels + c) * height * width + h * width + w] =
-                            NumOps.FromDouble(grad * weight2 / totalWeight);
-
-                        // Gradient w.r.t. occlusion (accumulated over channels)
-                        double blendedVal = (weight1 * w1Val + weight2 * w2Val) / totalWeight;
-                        double dWeight1 = (w1Val - blendedVal) / totalWeight;
-                        double dWeight2 = (w2Val - blendedVal) / totalWeight;
-
-                        dOcc1Sum += grad * dWeight1 * (-(1.0 - timestep));
-                        dOcc2Sum += grad * dWeight2 * (-timestep);
-                    }
-
-                    gradOcc1[b, 0, h, w] = NumOps.FromDouble(dOcc1Sum);
-                    gradOcc2[b, 0, h, w] = NumOps.FromDouble(dOcc2Sum);
-                }
-            }
-        }
-
-        return (gradWarped1, gradWarped2, gradOcc1, gradOcc2);
-    }
-
-    private (Tensor<T> gradFeatures, Tensor<T> gradFlow) WarpFeaturesBackward(
-        Tensor<T> gradOutput, Tensor<T> features, Tensor<T> flow)
-    {
-        var gradFeatures = new Tensor<T>(features._shape);
-        var gradFlow = new Tensor<T>(flow._shape);
-
-        int batchSize = features.Shape[0];
-        int channels = features.Shape[1];
-        int height = features.Shape[2];
-        int width = features.Shape[3];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    double flowX = Convert.ToDouble(flow[b, 0, h, w]);
-                    double flowY = Convert.ToDouble(flow[b, 1, h, w]);
-
-                    double srcX = w + flowX;
-                    double srcY = h + flowY;
-
-                    int x0 = (int)Math.Floor(srcX);
-                    int y0 = (int)Math.Floor(srcY);
-                    int x1 = x0 + 1;
-                    int y1 = y0 + 1;
-
-                    double dx = srcX - x0;
-                    double dy = srcY - y0;
-
-                    double dFlowX = 0, dFlowY = 0;
-
-                    for (int c = 0; c < channels; c++)
-                    {
-                        double grad = Convert.ToDouble(gradOutput[b, c, h, w]);
-
-                        // Bilinear interpolation weights
-                        double w00 = (1 - dx) * (1 - dy);
-                        double w01 = dx * (1 - dy);
-                        double w10 = (1 - dx) * dy;
-                        double w11 = dx * dy;
-
-                        // Gradient w.r.t. source pixels (features)
-                        if (x0 >= 0 && x0 < width && y0 >= 0 && y0 < height)
-                        {
-                            int idx = (b * channels + c) * height * width + y0 * width + x0;
-                            gradFeatures.Data.Span[idx] = NumOps.Add(gradFeatures.Data.Span[idx],
-                                NumOps.FromDouble(grad * w00));
-                        }
-                        if (x1 >= 0 && x1 < width && y0 >= 0 && y0 < height)
-                        {
-                            int idx = (b * channels + c) * height * width + y0 * width + x1;
-                            gradFeatures.Data.Span[idx] = NumOps.Add(gradFeatures.Data.Span[idx],
-                                NumOps.FromDouble(grad * w01));
-                        }
-                        if (x0 >= 0 && x0 < width && y1 >= 0 && y1 < height)
-                        {
-                            int idx = (b * channels + c) * height * width + y1 * width + x0;
-                            gradFeatures.Data.Span[idx] = NumOps.Add(gradFeatures.Data.Span[idx],
-                                NumOps.FromDouble(grad * w10));
-                        }
-                        if (x1 >= 0 && x1 < width && y1 >= 0 && y1 < height)
-                        {
-                            int idx = (b * channels + c) * height * width + y1 * width + x1;
-                            gradFeatures.Data.Span[idx] = NumOps.Add(gradFeatures.Data.Span[idx],
-                                NumOps.FromDouble(grad * w11));
-                        }
-
-                        // Gradient w.r.t. flow (through bilinear weights)
-                        double v00 = GetPixelSafe(features, b, c, y0, x0, height, width);
-                        double v01 = GetPixelSafe(features, b, c, y0, x1, height, width);
-                        double v10 = GetPixelSafe(features, b, c, y1, x0, height, width);
-                        double v11 = GetPixelSafe(features, b, c, y1, x1, height, width);
-
-                        // d/dFlowX = d/dSrcX
-                        dFlowX += grad * ((1 - dy) * (v01 - v00) + dy * (v11 - v10));
-                        // d/dFlowY = d/dSrcY
-                        dFlowY += grad * ((1 - dx) * (v10 - v00) + dx * (v11 - v01));
-                    }
-
-                    gradFlow[b, 0, h, w] = NumOps.FromDouble(dFlowX);
-                    gradFlow[b, 1, h, w] = NumOps.FromDouble(dFlowY);
-                }
-            }
-        }
-
-        return (gradFeatures, gradFlow);
-    }
-
-    private double GetPixelSafe(Tensor<T> tensor, int b, int c, int h, int w, int height, int width)
-    {
-        if (h < 0 || h >= height || w < 0 || w >= width)
-            return 0.0;
-        return Convert.ToDouble(tensor[b, c, h, w]);
-    }
-
-    private Tensor<T> ApplyLeakyReLUGradient(Tensor<T> gradOutput, Tensor<T> input, double negativeSlope)
-    {
-        return gradOutput.Transform((g, idx) =>
-        {
-            double x = Convert.ToDouble(input.Data.Span[idx]);
-            double grad = Convert.ToDouble(g);
-            return NumOps.FromDouble(x > 0 ? grad : grad * negativeSlope);
-        });
-    }
-
-    private Tensor<T> ApplySigmoidGradient(Tensor<T> gradOutput, Tensor<T> occ1, Tensor<T> occ2)
-    {
-        // Sigmoid gradient: sig(x) * (1 - sig(x))
-        int batchSize = gradOutput.Shape[0];
-        int height = gradOutput.Shape[2];
-        int width = gradOutput.Shape[3];
-
-        var result = new Tensor<T>(gradOutput._shape);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    double sig1 = Convert.ToDouble(occ1[b, 0, h, w]);
-                    double sig2 = Convert.ToDouble(occ2[b, 0, h, w]);
-                    double grad1 = Convert.ToDouble(gradOutput[b, 0, h, w]);
-                    double grad2 = Convert.ToDouble(gradOutput[b, 1, h, w]);
-
-                    result[b, 0, h, w] = NumOps.FromDouble(grad1 * sig1 * (1 - sig1));
-                    result[b, 1, h, w] = NumOps.FromDouble(grad2 * sig2 * (1 - sig2));
-                }
-            }
-        }
-        return result;
-    }
-
-    private Tensor<T> CombineOcclusionGradients(Tensor<T> gradOcc1, Tensor<T> gradOcc2,
-        Tensor<T> occ1, Tensor<T> occ2)
-    {
-        int batchSize = gradOcc1.Shape[0];
-        int height = gradOcc1.Shape[2];
-        int width = gradOcc1.Shape[3];
-
-        var combined = new Tensor<T>([batchSize, 2, height, width]);
-        for (int b = 0; b < batchSize; b++)
-            for (int h = 0; h < height; h++)
-                for (int w = 0; w < width; w++)
-                {
-                    combined[b, 0, h, w] = gradOcc1[b, 0, h, w];
-                    combined[b, 1, h, w] = gradOcc2[b, 0, h, w];
-                }
-        return combined;
-    }
-
-    private Tensor<T> CombineFlowGradients(Tensor<T> gradFlow1to2, Tensor<T> gradFlow2to1)
-    {
-        int batchSize = gradFlow1to2.Shape[0];
-        int height = gradFlow1to2.Shape[2];
-        int width = gradFlow1to2.Shape[3];
-
-        var combined = new Tensor<T>([batchSize, 4, height, width]);
-        for (int b = 0; b < batchSize; b++)
-            for (int h = 0; h < height; h++)
-                for (int w = 0; w < width; w++)
-                {
-                    combined[b, 0, h, w] = gradFlow1to2[b, 0, h, w];
-                    combined[b, 1, h, w] = gradFlow1to2[b, 1, h, w];
-                    combined[b, 2, h, w] = gradFlow2to1[b, 0, h, w];
-                    combined[b, 3, h, w] = gradFlow2to1[b, 1, h, w];
-                }
-        return combined;
-    }
-
-    private (Tensor<T> grad1, Tensor<T> grad2) SplitConcatenatedGradient(
-        Tensor<T> gradient, int channels1, int channels2)
-    {
-        int batchSize = gradient.Shape[0];
-        int height = gradient.Shape[2];
-        int width = gradient.Shape[3];
-
-        var grad1 = new Tensor<T>([batchSize, channels1, height, width]);
-        var grad2 = new Tensor<T>([batchSize, channels2, height, width]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels1; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                        grad1[b, c, h, w] = gradient[b, c, h, w];
-
-            for (int c = 0; c < channels2; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                        grad2[b, c, h, w] = gradient[b, channels1 + c, h, w];
-        }
-
-        return (grad1, grad2);
-    }
-
-    private (Tensor<T> gradFeat1, Tensor<T> gradFeat2, Tensor<T> gradFlow1, Tensor<T> gradFlow2)
-        SplitOcclusionGradient(Tensor<T> gradient, int feat1Channels, int feat2Channels)
-    {
-        int batchSize = gradient.Shape[0];
-        int totalChannels = gradient.Shape[1];
-        int height = gradient.Shape[2];
-        int width = gradient.Shape[3];
-
-        int flowChannels = 2;
-
-        var gradFeat1 = new Tensor<T>([batchSize, feat1Channels, height, width]);
-        var gradFeat2 = new Tensor<T>([batchSize, feat2Channels, height, width]);
-        var gradFlow1 = new Tensor<T>([batchSize, flowChannels, height, width]);
-        var gradFlow2 = new Tensor<T>([batchSize, flowChannels, height, width]);
-
-        int offset = 0;
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < feat1Channels; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                        gradFeat1[b, c, h, w] = gradient[b, offset + c, h, w];
-        }
-        offset += feat1Channels;
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < feat2Channels; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                        gradFeat2[b, c, h, w] = gradient[b, offset + c, h, w];
-        }
-        offset += feat2Channels;
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < flowChannels; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                        gradFlow1[b, c, h, w] = gradient[b, offset + c, h, w];
-        }
-        offset += flowChannels;
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < flowChannels; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                        gradFlow2[b, c, h, w] = gradient[b, offset + c, h, w];
-        }
-
-        return (gradFeat1, gradFeat2, gradFlow1, gradFlow2);
-    }
-
-    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
-    {
-        return Engine.TensorAdd(a, b);
-    }
-
-    private void ClearActivationCache()
-    {
-        _cachedFrame1 = null;
-        _cachedFrame2 = null;
-        _cachedFeatures1 = null;
-        _cachedFeatures2 = null;
-        _cachedFlow1to2 = null;
-        _cachedFlow2to1 = null;
-        _cachedFlowToT1 = null;
-        _cachedFlowToT2 = null;
-        _cachedOcc1 = null;
-        _cachedOcc2 = null;
-        _cachedWarped1 = null;
-        _cachedWarped2 = null;
-        _cachedFused = null;
-        _cachedFlowConcat = null;
-        _cachedOccConcat = null;
-        _cachedFeatureExtractor1Activations = null;
-        _cachedFeatureExtractor2Activations = null;
-        _cachedFlowEstimatorActivations = null;
-        _cachedFusionActivations = null;
-    }
 
     #endregion
 
