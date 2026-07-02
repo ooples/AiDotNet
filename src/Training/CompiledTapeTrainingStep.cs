@@ -432,7 +432,8 @@ public static class CompiledTapeTrainingStep<T>
         out T lossValue,
         double maxGradNorm = 0.0,
         AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? eagerOptimizer = null)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? eagerOptimizer = null,
+        bool useBf16Moments = false)
     {
         lossValue = MathHelper.GetNumericOperations<T>().Zero;
         // AiDotNet#1395: clear the previous-call's exception buffer so the
@@ -775,6 +776,12 @@ public static class CompiledTapeTrainingStep<T>
 
             if (_configuredPlan is null)
             {
+                // #1745: request bf16 moment storage BEFORE ConfigureOptimizer so the
+                // plan allocates the half-size m/v buffers. Honored only for the CPU
+                // float Adam/AdamW kernel; a safe no-op for every other configuration.
+                if (useBf16Moments)
+                    plan.RequestBf16MomentStorage(true);
+
                 // First fused call on this thread. Configure the plan and
                 // commit to single-plan semantics from here on. When the
                 // caller passed an lrSchedule, use the LrSchedule overload

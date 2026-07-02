@@ -206,7 +206,10 @@ jobs:
           sudo rm -rf /opt/hostedtoolcache/CodeQL || true
           sudo rm -rf /usr/share/swift /usr/local/share/boost || true
           sudo rm -rf /usr/local/share/powershell /usr/local/share/chromium || true
-          sudo docker image prune --all --force || true
+          # The toolchain deletions above reclaim ~25 GB, leaving ~39 GB free — ample for this .NET
+          # build — so we skip `docker image prune --all` here: on a fresh runner the preloaded images
+          # aren't dangling (so a dangling-only prune reclaims ~nothing), and a full --all prune is a
+          # slow, variable step that can contend with any concurrent Docker use on the runner.
           echo "Disk after cleanup:"; df -h /
 
       - name: Setup .NET 10.0
