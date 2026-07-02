@@ -96,6 +96,37 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
     private readonly int _thinning;
 
     /// <summary>
+    /// The invariant base kernel matrix (raw <c>k(xi, xj)</c>, before the MCMC-sampled outputVar
+    /// scaling and noise) plus the centered targets, cached as <see cref="double"/> once in
+    /// <see cref="Fit"/>. The training data never changes across MCMC iterations — only outputVar and
+    /// noiseVar do — so caching these lets <see cref="ComputeLogPosterior"/> (evaluated ~10^6 times by
+    /// slice sampling) skip rebuilding the kernel from the generic <see cref="IKernelFunction{T}"/> and
+    /// converting every element through <see cref="INumericOperations{T}"/> on each call.
+    /// <para>
+    /// Cache-validity invariant: these caches never go stale because everything they derive from is
+    /// immutable after <see cref="Fit"/>. <c>_kernel</c> is <c>readonly</c> (assigned only in the
+    /// constructor), <see cref="UpdateKernel"/> throws <see cref="NotSupportedException"/> (the kernel is
+    /// fixed for the model's lifetime), and the training data (<c>_X</c>/<c>_y</c>) is set only inside
+    /// <see cref="Fit"/> — which rebuilds ALL of these caches together in the same call. There is thus no
+    /// code path that mutates the kernel or training state without rebuilding the caches, so no explicit
+    /// invalidation hook is required. If a future change makes the kernel or training data mutable, that
+    /// change MUST rebuild (or null) these caches.
+    /// </para>
+    /// </summary>
+    private double[,]? _baseKernelDouble;
+    private double[]? _centeredYDouble;
+
+    /// <summary>
+    /// Reusable per-instance work buffers for the <see cref="ComputeLogPosterior"/> Cholesky + solves,
+    /// sized once in <see cref="Fit"/>. Since that method is evaluated ~10^6 times by slice sampling,
+    /// reusing these avoids allocating a fresh Cholesky factor + two solve vectors on every call (they
+    /// are fully overwritten each evaluation; MCMC runs single-threaded per instance inside Fit).
+    /// </summary>
+    private double[,]? _choleskyWork;
+    private double[]? _alphaWork;
+    private double[]? _betaWork;
+
+    /// <summary>
     /// Prior mean for log-lengthscale.
     /// </summary>
     private readonly double _logLengthscalePriorMean;
@@ -288,6 +319,33 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
         for (int i = 0; i < n; i++)
             centeredY[i] = _numOps.FromDouble((_numOps.ToDouble(y[i]) - _yMean) / _yStd);
         _y = centeredY;
+
+        // Precompute the invariant base kernel structure + centered targets in double for the MCMC
+        // hot loop. k(xi, xj) does not depend on the sampled outputVar/noiseVar (BuildKernelMatrix
+        // scales by outputVar and adds noiseVar to the diagonal), so it is constant across every
+        // ComputeLogPosterior evaluation — computing it once here removes ~n^2/2 generic kernel calls
+        // and all per-element boxing from each of the ~10^6 slice-sampling evaluations.
+        _centeredYDouble = new double[n];
+        for (int i = 0; i < n; i++)
+            _centeredYDouble[i] = _numOps.ToDouble(_y[i]);
+
+        _baseKernelDouble = new double[n, n];
+        for (int i = 0; i < n; i++)
+        {
+            var xi = GetRow(FittedX, i);
+            for (int j = i; j < n; j++)
+            {
+                double kval = _numOps.ToDouble(_kernel.Calculate(xi, GetRow(FittedX, j)));
+                _baseKernelDouble[i, j] = kval;
+                _baseKernelDouble[j, i] = kval;
+            }
+        }
+
+        // Size the ComputeLogPosterior work buffers once so the ~10^6 slice-sampling evaluations reuse
+        // them instead of allocating a Cholesky factor + two solve vectors on every call.
+        _choleskyWork = new double[n, n];
+        _alphaWork = new double[n];
+        _betaWork = new double[n];
 
         // Initialize hyperparameters in log-space
         double[] logParams = new double[3];
@@ -494,45 +552,86 @@ public class GPWithMCMC<T> : GaussianProcessBase<T>
     /// </summary>
     private double ComputeLogPosterior(double[] logParams)
     {
-        if (_X is null || _y is null)
+        if (_baseKernelDouble is null || _centeredYDouble is null
+            || _choleskyWork is null || _alphaWork is null || _betaWork is null)
             return double.NegativeInfinity;
 
-        double lengthscale = Math.Exp(logParams[0]);
+        // logParams[0] (lengthscale) is intentionally not applied to the kernel matrix here, and this is
+        // NOT a regression from the cached-kernel optimization: on master BOTH BuildKernelMatrix(lengthscale,
+        // …) and ComputeCrossCovariance(x, lengthscale, …) accepted a lengthscale argument but never used it
+        // — each called the generic _kernel.Calculate(…), whose lengthscale is fixed at kernel construction.
+        // So the sampled lengthscale has always been vestigial for a generic IKernelFunction: it feeds only
+        // the prior below (and is reported by GetPosteriorStatistics), never the training kernel or the
+        // predictive cross-covariance. Caching _baseKernelDouble therefore reproduces the previous posterior
+        // bit-for-bit. Making lengthscale a LIVE kernel hyperparameter would require a re-parameterizable
+        // kernel (one that recomputes k(·,·) per sampled lengthscale) — which for a generic kernel means
+        // rebuilding the matrix every evaluation, defeating this timeout fix — so it is a separate modeling
+        // change, deliberately not bundled into this perf PR. It is still used by the prior below.
         double outputVar = Math.Exp(logParams[1]);
         double noiseVar = Math.Exp(logParams[2]);
+        int n = _centeredYDouble.Length;
 
-        int n = FittedX.Rows;
+        // Reuse the per-instance work buffers (sized in Fit). L's upper triangle is never read and
+        // alpha/beta are fully overwritten below, so reusing them is bit-identical to fresh allocations.
+        double[,] L = _choleskyWork;
+        double[] alpha = _alphaWork;
+        double[] beta = _betaWork;
 
-        // Build kernel matrix
-        var K = BuildKernelMatrix(lengthscale, outputVar, noiseVar);
-
-        // Cholesky decomposition
-        Matrix<T> L;
-        try
+        // Cholesky of K = base·outputVar + noiseVar·I, computed directly in double. Same triple loop
+        // and accumulation order as CholeskyDecomposition, so the result is bit-identical to the
+        // generic path (which already did all arithmetic in double via ToDouble) — the MCMC sample
+        // sequence is unchanged, only the per-eval boxing/allocation is removed.
+        for (int i = 0; i < n; i++)
         {
-            L = CholeskyDecomposition(K);
-        }
-        catch
-        {
-            return double.NegativeInfinity; // Invalid parameters
+            for (int j = 0; j <= i; j++)
+            {
+                double aij = _baseKernelDouble[i, j] * outputVar;
+                if (i == j) aij += noiseVar;
+
+                double sum = 0;
+                for (int k = 0; k < j; k++)
+                    sum += L[i, k] * L[j, k];
+
+                if (i == j)
+                {
+                    double diag = aij - sum;
+                    if (diag <= 0)
+                        return double.NegativeInfinity; // not positive definite → invalid parameters
+                    L[i, j] = Math.Sqrt(diag);
+                }
+                else
+                {
+                    L[i, j] = (aij - sum) / L[j, j];
+                }
+            }
         }
 
-        // Solve L · alpha = y for alpha (then L' · beta = alpha for beta, but we use K^-1·y directly)
-        var alpha = SolveLowerTriangular(L, _y);
-        var beta = SolveUpperTriangular(L, alpha);
+        // Solve L·alpha = y (forward) then Lᵀ·beta = alpha (backward), matching SolveLowerTriangular /
+        // SolveUpperTriangular's accumulate-then-subtract order exactly.
+        for (int i = 0; i < n; i++)
+        {
+            double sum = 0;
+            for (int j = 0; j < i; j++)
+                sum += L[i, j] * alpha[j];
+            alpha[i] = (_centeredYDouble[i] - sum) / L[i, i];
+        }
+
+        for (int i = n - 1; i >= 0; i--)
+        {
+            double sum = 0;
+            for (int j = i + 1; j < n; j++)
+                sum += L[j, i] * beta[j];
+            beta[i] = (alpha[i] - sum) / L[i, i];
+        }
 
         // Log likelihood: -0.5 · (y' · K^-1 · y + log|K| + n·log(2π))
         double yKinvY = 0;
         for (int i = 0; i < n; i++)
-        {
-            yKinvY += _numOps.ToDouble(_y[i]) * _numOps.ToDouble(beta[i]);
-        }
+            yKinvY += _centeredYDouble[i] * beta[i];
 
         double logDetK = 0;
         for (int i = 0; i < n; i++)
-        {
-            logDetK += Math.Log(_numOps.ToDouble(L[i, i]));
-        }
+            logDetK += Math.Log(L[i, i]);
         logDetK *= 2; // log|K| = 2·sum(log(diag(L)))
 
         double logLik = -0.5 * (yKinvY + logDetK + n * Math.Log(2 * Math.PI));
