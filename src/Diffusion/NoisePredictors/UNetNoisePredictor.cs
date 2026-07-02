@@ -560,6 +560,22 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     /// <summary>
+    /// Releases the lazily-created resident GPU execution graph (which holds device allocations / capture
+    /// buffers) before delegating to the base cleanup. The base only disposes <see cref="ILayer{T}"/>
+    /// members, so without this the graph's GPU resources would leak until finalization (or indefinitely
+    /// for a long-lived predictor). Null-out makes a second Dispose a no-op.
+    /// </summary>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _residentGraph?.Dispose();
+            _residentGraph = null;
+        }
+        base.Dispose(disposing);
+    }
+
+    /// <summary>
     /// Sets the training/eval mode on every layer in the UNet (input/output convs, time
     /// MLPs, and every encoder/middle/decoder block sublayer). NoisePredictorBase is not a
     /// LayerBase, so there is no inherited recursive SetTrainingMode — this walks the same

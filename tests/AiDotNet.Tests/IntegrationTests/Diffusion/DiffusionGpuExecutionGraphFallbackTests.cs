@@ -25,6 +25,7 @@ namespace AiDotNet.Tests.IntegrationTests.Diffusion;
 /// every non-CUDA consumer: the option is inert unless a CUDA engine is active.
 /// </para>
 /// </remarks>
+[Collection("DiffusionGpuCuda")]
 public class DiffusionGpuExecutionGraphFallbackTests
 {
     private static DiffusionModelOptions<float> Options(bool useGpuExecutionGraph) => new()
