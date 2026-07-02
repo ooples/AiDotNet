@@ -76,20 +76,26 @@ public class FILM<T> : FrameInterpolationBase<T>
     private int _numScales;
     private int _numFeatures;
 
-    // Multi-scale feature extractor
+    // Multi-scale feature extractor. NOTE: these per-role references are re-derived from Layers each
+    // forward (SyncLayerReferences) — NOT readonly — because the base's deserialize/clone replaces the
+    // Layers list with freshly-loaded layers, and stale ctor references would make a clone run untrained
+    // convs (Clone_AfterTraining).
     private readonly List<ConvolutionalLayer<T>> _featureExtractor;
     private readonly List<ConvolutionalLayer<T>> _pyramidLayers;
 
     // Bi-directional flow estimator
     private readonly List<ConvolutionalLayer<T>> _flowEstimator;
-    private readonly ConvolutionalLayer<T> _flowRefinement;
+    private ConvolutionalLayer<T> _flowRefinement;
 
     // Feature fusion and synthesis
     private readonly List<ConvolutionalLayer<T>> _fusionLayers;
-    private readonly ConvolutionalLayer<T> _synthesisHead;
+    private ConvolutionalLayer<T> _synthesisHead;
 
     // Occlusion estimator
-    private readonly ConvolutionalLayer<T> _occlusionEstimator;
+    private ConvolutionalLayer<T> _occlusionEstimator;
+
+    // Number of pyramid layers (computed from dims in the ctor); needed to re-index Layers.
+    private int _pyramidCount;
 
     #endregion
 
@@ -183,6 +189,8 @@ public class FILM<T> : FrameInterpolationBase<T>
             }
         }
 
+        _pyramidCount = pyramidCount;
+
         // Distribute layers to sub-lists for forward pass
         int idx = 0;
         // Feature extractor (3 layers)
@@ -218,6 +226,11 @@ public class FILM<T> : FrameInterpolationBase<T>
     /// <returns>Interpolated frame at the specified timestep.</returns>
     public override Tensor<T> Interpolate(Tensor<T> frame1, Tensor<T> frame2, double timestep = 0.5)
     {
+        // Re-sync per-role layer refs to the current Layers (a clone/deserialize replaces Layers with the
+        // loaded trained layers after construction; without this the forward would run the ctor's
+        // untrained layers).
+        SyncLayerReferences();
+
         bool hasBatch = frame1.Rank == 4;
         if (!hasBatch)
         {
@@ -537,32 +550,62 @@ public class FILM<T> : FrameInterpolationBase<T>
     {
         ClearLayers();
 
+        // MUST match the constructor's layer-distribution order (the order CreateFILMLayers emits them:
+        // featureExtractor, pyramid, flowEstimator, flowRefinement, occlusionEstimator, fusion,
+        // synthesisHead). InitializeLayers rebuilds Layers on deserialize; if this order differs from the
+        // order the parameters were serialized in, UpdateParameters loads each layer's weights into the
+        // WRONG layer, so a clone/round-trip predicts with mismatched weights (Clone_AfterTraining).
         foreach (var layer in _featureExtractor) Layers.Add(layer);
         foreach (var layer in _pyramidLayers) Layers.Add(layer);
         foreach (var layer in _flowEstimator) Layers.Add(layer);
         Layers.Add(_flowRefinement);
+        Layers.Add(_occlusionEstimator);
         foreach (var layer in _fusionLayers) Layers.Add(layer);
         Layers.Add(_synthesisHead);
-        Layers.Add(_occlusionEstimator);
+    }
+
+    /// <summary>
+    /// Re-derives the per-role layer references (_featureExtractor / _pyramidLayers / _flowEstimator /
+    /// _flowRefinement / _occlusionEstimator / _fusionLayers / _synthesisHead) from the CURRENT Layers
+    /// list, by the constructor's distribution layout. Run before every forward: the base's
+    /// deserialize/clone repopulates Layers with freshly-loaded (trained) layers, so without re-syncing
+    /// the forward keeps running the constructor's untrained layer objects and a clone of a trained model
+    /// reproduces the untrained output (Clone_AfterTraining). Mirrors RIFE/UPRNet.ExtractLayerReferences.
+    /// </summary>
+    private void SyncLayerReferences()
+    {
+        int total = 11 + _pyramidCount; // 3 FE + pyramid + 3 flow + flowRefine + occlusion + 2 fusion + synth
+        if (Layers.Count < total) return; // not fully built yet
+
+        _featureExtractor.Clear();
+        _pyramidLayers.Clear();
+        _flowEstimator.Clear();
+        _fusionLayers.Clear();
+
+        int idx = 0;
+        for (int i = 0; i < 3; i++) _featureExtractor.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        for (int i = 0; i < _pyramidCount; i++) _pyramidLayers.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        for (int i = 0; i < 3; i++) _flowEstimator.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        _flowRefinement = (ConvolutionalLayer<T>)Layers[idx++];
+        _occlusionEstimator = (ConvolutionalLayer<T>)Layers[idx++];
+        for (int i = 0; i < 2; i++) _fusionLayers.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        _synthesisHead = (ConvolutionalLayer<T>)Layers[idx++];
     }
 
     public override void UpdateParameters(Vector<T> parameters)
     {
-        int offset = 0;
+        // Use layer.ParameterCount + layer.UpdateParameters and ALWAYS advance the offset (the proven
+        // AMT pattern). The previous version keyed off GetParameters().Length and called SetParameters,
+        // then SKIPPED a layer whose count read as 0 (an unresolved/lazy layer post-deserialize) WITHOUT
+        // advancing the offset — so every subsequent layer read its weights from the wrong slice and a
+        // clone/round-trip predicted with mismatched weights (Clone_AfterTraining, issue #1221 class).
+        int idx = 0;
         foreach (var layer in Layers)
         {
-            var layerParams = layer.GetParameters();
-            int paramCount = layerParams.Length;
-            if (paramCount > 0 && offset + paramCount <= parameters.Length)
-            {
-                var slice = new Vector<T>(paramCount);
-                for (int i = 0; i < paramCount; i++)
-                {
-                    slice[i] = parameters[offset + i];
-                }
-                layer.SetParameters(slice);
-                offset += paramCount;
-            }
+            int count = checked((int)layer.ParameterCount);
+            if (count == 0) continue;
+            layer.UpdateParameters(parameters.Slice(idx, count));
+            idx += count;
         }
     }
 
