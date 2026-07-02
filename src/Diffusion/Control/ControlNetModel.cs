@@ -686,7 +686,17 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
+        // Clone the ACTUAL baseUNet/VAE (see InstaFlowModel/MultiDiffusionModel): passing only
+        // controlType/conditioner/seed rebuilt InitializeLayers' DEFAULT-sized, lazily-unresolved
+        // sub-models, so once the source resolved its lazy layers via a forward pass the trainable-layer
+        // shapes no longer lined up 1:1 and Clone diverged. Cloning the resolved baseUNet/VAE (+ same
+        // architecture/options/scheduler) makes the clone structurally identical.
         var clone = new ControlNetModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            baseUNet: (UNetNoisePredictor<T>)_baseUNet.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             controlType: _controlType,
             conditioner: _conditioner,
             seed: RandomGenerator.Next());
