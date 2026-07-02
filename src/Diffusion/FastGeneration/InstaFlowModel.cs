@@ -143,7 +143,20 @@ public class InstaFlowModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new InstaFlowModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
+        // Clone the ACTUAL predictor and VAE (mirrors MultiDiffusionModel/SpotDiffusionModel):
+        // the previous code passed only conditioner/seed, so the clone rebuilt InitializeLayers'
+        // DEFAULT-sized UNet/VAE while this model may hold a custom-sized predictor/vae. GetParameters()
+        // then returned the source's larger count and clone.SetParameters threw "Expected X, got Y".
+        // Passing the cloned predictor/VAE (+ same architecture/options/scheduler) makes the clone
+        // structurally identical to the source.
+        var clone = new InstaFlowModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner,
+            seed: RandomGenerator.Next());
         if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
         return clone;
     }
