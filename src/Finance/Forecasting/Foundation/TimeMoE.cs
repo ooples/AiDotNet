@@ -537,33 +537,30 @@ public class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
     private Tensor<T> DenormalizeForecast(Tensor<T> forecast, T[] means, T[] stds)
     {
         int batchSize = forecast.Rank > 1 ? forecast.Shape[0] : 1;
-        int horizon = forecast.Rank > 1 ? forecast.Shape[1] : forecast.Length;
+        if (batchSize <= 0 || forecast.Length % batchSize != 0)
+            return forecast;
 
-        // Broadcast the per-instance statistics to the forecast shape as constant
-        // (non-trainable) leaf tensors, then apply out = out * std + mean via the
-        // tape-tracked engine ops so gradients still flow back into the forecast
-        // head during training. These are allocated fresh PER FORWARD (not cached on
-        // the instance): the tape captures them as leaves, so gradient accumulation
-        // (multiple forwards before one backward) and any concurrent forward would be
-        // corrupted by a shared, in-place-rewritten buffer.
-        var stdTensor = new Tensor<T>(forecast._shape);
-        var meanTensor = new Tensor<T>(forecast._shape);
+        // Broadcast the per-instance std/mean across the horizon with small [batch, 1] leaf tensors and
+        // the tape-tracked broadcast engine ops (out = out*std + mean), instead of materializing two full
+        // [batch, horizon] tensors + O(batch*horizon) host writes every forward. The [batch, 1] leaves are
+        // allocated fresh per forward, so gradients flow back into the forecast head and gradient
+        // accumulation / concurrent forwards stay correct (no shared, in-place-rewritten buffer). Mirrors
+        // the sibling RevIN forecasters (FlowState / Kronos / LagLlama / TFC / TimeGPT).
+        var stdT = new Tensor<T>(new[] { batchSize, 1 });
+        var meanT = new Tensor<T>(new[] { batchSize, 1 });
         for (int b = 0; b < batchSize; b++)
         {
-            T mean = b < means.Length ? means[b] : NumOps.Zero;
-            T std = b < stds.Length ? stds[b] : NumOps.One;
-            for (int h = 0; h < horizon; h++)
-            {
-                int idx = b * horizon + h;
-                if (idx < stdTensor.Length)
-                {
-                    stdTensor.Data.Span[idx] = std;
-                    meanTensor.Data.Span[idx] = mean;
-                }
-            }
+            meanT.Data.Span[b] = b < means.Length ? means[b] : NumOps.Zero;
+            stdT.Data.Span[b] = b < stds.Length ? stds[b] : NumOps.One;
         }
 
-        return Engine.TensorAdd(Engine.TensorMultiply(forecast, stdTensor), meanTensor);
+        // Engine.Reshape has no autodiff GradFn (view-only), so only reshape when the forecast isn't
+        // already [batch, horizon]; the batched training path is rank-2 and keeps the tape intact.
+        bool reshaped = forecast.Rank != 2;
+        var work = reshaped ? Engine.Reshape(forecast, new[] { batchSize, forecast.Length / batchSize }) : forecast;
+        var scaled = Engine.TensorBroadcastMultiply(work, stdT);
+        var shifted = Engine.TensorBroadcastAdd(scaled, meanT);
+        return reshaped ? Engine.Reshape(shifted, forecast._shape) : shifted;
     }
 
     /// <inheritdoc/>
