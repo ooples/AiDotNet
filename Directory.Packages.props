@@ -203,10 +203,11 @@
          0.104.x GEMM JIT/routing/pinning wins (#700), and parallel SSM/linear-attention scans (#703).
          Ships lib/net8.0 + net10.0 + net471; native packages coreleased in lockstep at 0.104.6.
 
-         Bumped 0.104.6 -> 0.106.1: brings the WeightRegistry dead-owner sweep the diffusion-shard OOM/hang
-         work in this PR depends on (a streaming session orphaned by a disposed model no longer blocks the
-         next model from engaging), plus the 0.106.1 follow-up patch. Superset of 0.104.6, so all deps
-         above are retained; native packages (OneDNN/OpenBLAS/CLBlast) coreleased in lockstep at 0.106.1. -->
+         Bumped 0.104.6 -> 0.106.0: brings AiDotNet.Tensors #713 — the fused bfloat16 Adam/AdamW moment
+         kernel this PR's FusedOptimizerConfig.UseBf16Moments path dispatches to (half the optimizer-state
+         footprint at fp32 update precision on the CPU float fused kernel). Superset of 0.104.6, so all
+         deps above are retained. NOTE: 0.106.0 (and the lockstep native packages below) is already
+         PUBLISHED to NuGet, so this bump does not gate CI on an unreleased dependency. -->
     <PackageVersion Include="AiDotNet.Tensors" Version="0.106.1" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.106.1" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.106.1" />
