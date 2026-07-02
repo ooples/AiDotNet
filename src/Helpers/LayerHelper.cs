@@ -7795,49 +7795,47 @@ public static class LayerHelper<T>
         int inputWidth = 128,
         int numFeatures = 64)
     {
-        int h = inputHeight;
-        int w = inputWidth;
+        // Resolution-preserving encoder–decoder (UNet-style) frame-synthesis backbone.
+        // Two frames are concatenated channel-wise (inputChannels*2) into the first conv.
+        // The encoder downsamples 8x through three stride-2 levels to aggregate large-motion
+        // context; the decoder upsamples 8x back via transposed convolutions so the output is
+        // at the ORIGINAL input resolution — the interpolated frame [inputChannels, H, W].
+        //
+        // The previous factory stopped at a downsampled (H/8) flow head and never upsampled, so
+        // a model that runs these layers sequentially emitted an H/8 x W/8 tensor that could
+        // neither match the target frame (shape-mismatch in the loss) nor train stably. Restoring
+        // the decoder makes the backbone produce a full-resolution frame and train without the
+        // divergence the truncated stack caused.
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
 
-        // Feature pyramid network (two frames concatenated = inputChannels * 2)
-        // Level 1
-        yield return new ConvolutionalLayer<T>(32, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(32, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
+        // --- Encoder: downsample 8x, 2C -> 32 -> 64 -> 96 ---
+        yield return new ConvolutionalLayer<T>(32, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(32, 3, 2, 1, relu);   // H/2
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(64, 3, 2, 1, relu);   // H/4
+        yield return new ConvolutionalLayer<T>(96, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(96, 3, 2, 1, relu);   // H/8
 
-        // Level 2
-        yield return new ConvolutionalLayer<T>(64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(64, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
+        // --- Bottleneck ---
+        yield return new ConvolutionalLayer<T>(96, 3, 1, 1, relu);
 
-        // Level 3
-        yield return new ConvolutionalLayer<T>(96, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(96, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
+        // --- Decoder: upsample 8x back to full resolution. Uses parameter-free
+        // UpsamplingLayer + conv (not transposed convs): frame-interpolation models run
+        // the layer stack on a rank-3 [2C, H, W] pair-concat, and UpsamplingLayer +
+        // ConvolutionalLayer both accept rank-3 (ConvTranspose2D requires rank-4). ---
+        yield return new UpsamplingLayer<T>(2);                       // H/4
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1, relu);
+        yield return new UpsamplingLayer<T>(2);                       // H/2
+        yield return new ConvolutionalLayer<T>(32, 3, 1, 1, relu);
+        yield return new UpsamplingLayer<T>(2);                       // H (full res)
+        yield return new ConvolutionalLayer<T>(32, 3, 1, 1, relu);
 
-        // Flow estimation head (outputs at downsampled resolution: h/8 x w/8)
-        yield return new ConvolutionalLayer<T>(64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(4, 3, 1, 1);  // 4 = 2 flows * 2 directions
-
-        // NOTE: The synthesis network below expects input at the ORIGINAL resolution.
-        // Higher-level models (FILM, FLAVR, etc.) should:
-        // 1. Run the feature pyramid layers (indices 0-7) to get downsampled flow
-        // 2. Upsample the flow to original resolution
-        // 3. Concatenate original frames with upsampled flow
-        // 4. Run the synthesis network layers (indices 8+) on that concatenation
-        // The layer shapes below are defined for the concatenated input at original resolution.
-
-        // Synthesis network (expects original resolution: inputHeight x inputWidth)
-        // Input: [frames_concat (C*2), upsampled_flow (4)] = C*2 + 4 channels
-        int synthH = inputHeight;
-        int synthW = inputWidth;
-        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-
-        for (int i = 0; i < 4; i++)
-        {
-            yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        }
-
-        yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1);
+        // --- Output head: interpolated frame at full resolution. Sigmoid — frames are
+        // normalized to [0,1] (NormalizeFrames divides by 255), so a sigmoid head produces a
+        // valid, BOUNDED frame. Bounding the output keeps the training loss bounded (an
+        // unbounded Identity head let the deep stack's output — and the MSE — explode), and
+        // unlike ReLU, sigmoid has no dead-neuron/zero-gradient failure mode. ---
+        yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1, new SigmoidActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>
