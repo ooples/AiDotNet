@@ -340,191 +340,100 @@ public class UPRNet<T> : FrameInterpolationBase<T>
     /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
 
-    /// <summary>Slices a contiguous range of channels from an NCHW tensor.</summary>
+    /// <summary>Slices a contiguous channel range from an NCHW tensor via the tape-aware Engine slice.</summary>
     private Tensor<T> SliceChannels(Tensor<T> nchw, int start, int count)
     {
         int b = nchw.Shape[0];
-        int c = nchw.Shape[1];
         int h = nchw.Shape[2];
         int w = nchw.Shape[3];
-        var sliced = new Tensor<T>(new[] { b, count, h, w });
-        var src = nchw.AsSpan();
-        var dst = sliced.AsWritableSpan();
-        int hw = h * w;
-        for (int bi = 0; bi < b; bi++)
-        {
-            int srcBatchOff = bi * c * hw;
-            int dstBatchOff = bi * count * hw;
-            for (int ci = 0; ci < count; ci++)
-            {
-                int srcOff = srcBatchOff + (start + ci) * hw;
-                int dstOff = dstBatchOff + ci * hw;
-                src.Slice(srcOff, hw).CopyTo(dst.Slice(dstOff, hw));
-            }
-        }
-        return sliced;
+        // Engine.TensorSlice records on the autodiff tape (a manual span copy would detach it), so the
+        // gradient flows back into the sliced tensor — matching how the rest of the library slices channels.
+        return Engine.TensorSlice(nchw, new[] { 0, start, 0, 0 }, new[] { b, count, h, w });
     }
 
-    /// <summary>Concatenates a sequence of NCHW tensors along the channel axis.</summary>
+    /// <summary>Concatenates NCHW tensors along the channel axis via the tape-aware Engine concat.</summary>
     private Tensor<T> ConcatChannels(Tensor<T>[] tensors)
-    {
-        int b = tensors[0].Shape[0];
-        int h = tensors[0].Shape[2];
-        int w = tensors[0].Shape[3];
-        int totalC = 0;
-        foreach (var t in tensors) totalC += t.Shape[1];
-        var output = new Tensor<T>(new[] { b, totalC, h, w });
-        var dst = output.AsWritableSpan();
-        int hw = h * w;
-        int destChannelOff = 0;
-        foreach (var t in tensors)
-        {
-            int tc = t.Shape[1];
-            var src = t.AsSpan();
-            for (int bi = 0; bi < b; bi++)
-            {
-                int srcBatchOff = bi * tc * hw;
-                int dstBatchOff = bi * totalC * hw + destChannelOff * hw;
-                src.Slice(srcBatchOff, tc * hw).CopyTo(dst.Slice(dstBatchOff, tc * hw));
-            }
-            destChannelOff += tc;
-        }
-        return output;
-    }
+        => Engine.TensorConcatenate(tensors, axis: 1);
 
     /// <summary>
-    /// Bilinear backward-warp of an NCHW feature tensor by an NCHW flow field.
-    /// For a target pixel (i, j) the source location is (j + flow_x, i + flow_y).
-    /// Out-of-bounds samples are clamped to the edge per the standard
-    /// PyTorch <c>grid_sample(padding_mode='border')</c> convention.
+    /// Bilinear backward-warp of an NCHW feature tensor by an NCHW flow field using the tape-aware
+    /// <c>Engine.GridSample</c> (identity affine grid + normalized flow offset), so gradients flow back
+    /// into BOTH the sampled features and the flow — the standard differentiable warp every VFI model in
+    /// the library uses (cf. <see cref="RIFE{T}"/>.WarpImage). A manual per-pixel bilinear copy detaches
+    /// the autodiff tape and starves the flow decoder / feature encoder of gradient. <paramref name="flow"/>
+    /// is [B, 4, h, w] = (u_fwd, v_fwd, u_bwd, v_bwd) in pixel units (channel 0 = dx, 1 = dy);
+    /// <paramref name="forwardFlow"/> selects the (u_fwd, v_fwd) pair.
     /// </summary>
     private Tensor<T> BilinearWarp(Tensor<T> features, Tensor<T> flow, bool forwardFlow)
     {
         int b = features.Shape[0];
-        int c = features.Shape[1];
         int h = features.Shape[2];
         int w = features.Shape[3];
         int flowChStart = forwardFlow ? 0 : 2;
-        var output = new Tensor<T>(new[] { b, c, h, w });
-        var fSpan = features.AsSpan();
-        var flSpan = flow.AsSpan();
-        var oSpan = output.AsWritableSpan();
-        int hw = h * w;
-        int flowHw = flow.Shape[2] * flow.Shape[3];
-        int flowH = flow.Shape[2];
-        int flowW = flow.Shape[3];
 
-        // Resample flow to feature resolution if they differ (during pyramid).
-        // For simplicity assume they match — the caller upsamples flow to match.
-        if (flowH != h || flowW != w)
-        {
-            flow = BilinearUpsample(flow, h, w, scaleMagnitude: false);
-            flSpan = flow.AsSpan();
-            flowH = h;
-            flowW = w;
-            flowHw = h * w;
-        }
+        // Extract the 2-channel sub-flow (dx, dy) for the requested direction, resampled to the feature
+        // resolution if the pyramid level differs (flow magnitudes scale with the resize).
+        var subFlow = Engine.TensorSlice(flow, new[] { 0, flowChStart, 0, 0 },
+            new[] { b, 2, flow.Shape[2], flow.Shape[3] });
+        if (flow.Shape[2] != h || flow.Shape[3] != w)
+            subFlow = BilinearUpsample(subFlow, h, w, scaleMagnitude: true);
 
+        // Identity affine grid -> per-pixel base sampling positions in normalized [-1,1] coords
+        // ([B, h, w, 2], last dim = (x, y)). theta/scale are constant leaves (tiny), so filling them with
+        // a loop does not touch the data gradient path (which runs through the Engine ops below).
+        var identityTheta = new Tensor<T>(new[] { b, 2, 3 });
         for (int bi = 0; bi < b; bi++)
         {
-            for (int i = 0; i < h; i++)
-            {
-                for (int j = 0; j < w; j++)
-                {
-                    // Read flow at this position.
-                    int flowOff = bi * 4 * flowHw + flowChStart * flowHw + i * flowW + j;
-                    double fx = NumOps.ToDouble(flSpan[flowOff]);
-                    double fy = NumOps.ToDouble(flSpan[flowOff + flowHw]);
-                    double srcX = j + fx;
-                    double srcY = i + fy;
-                    int x0 = (int)Math.Floor(srcX);
-                    int y0 = (int)Math.Floor(srcY);
-                    int x1 = x0 + 1;
-                    int y1 = y0 + 1;
-                    double dx = srcX - x0;
-                    double dy = srcY - y0;
-                    // MathHelper.Clamp is the net471-compatible clamp helper —
-                    // System.Math.Clamp doesn't exist on net471, but the
-                    // codebase's MathHelper polyfill works on every TFM.
-                    int x0c = MathHelper.Clamp(x0, 0, w - 1);
-                    int x1c = MathHelper.Clamp(x1, 0, w - 1);
-                    int y0c = MathHelper.Clamp(y0, 0, h - 1);
-                    int y1c = MathHelper.Clamp(y1, 0, h - 1);
-                    for (int ci = 0; ci < c; ci++)
-                    {
-                        int chOff = bi * c * hw + ci * hw;
-                        double v00 = NumOps.ToDouble(fSpan[chOff + y0c * w + x0c]);
-                        double v01 = NumOps.ToDouble(fSpan[chOff + y0c * w + x1c]);
-                        double v10 = NumOps.ToDouble(fSpan[chOff + y1c * w + x0c]);
-                        double v11 = NumOps.ToDouble(fSpan[chOff + y1c * w + x1c]);
-                        double v = (1 - dy) * ((1 - dx) * v00 + dx * v01) + dy * ((1 - dx) * v10 + dx * v11);
-                        oSpan[chOff + i * w + j] = NumOps.FromDouble(v);
-                    }
-                }
-            }
+            identityTheta[bi, 0, 0] = NumOps.One; // x scale
+            identityTheta[bi, 1, 1] = NumOps.One; // y scale
         }
-        return output;
+        var baseGrid = Engine.AffineGrid(identityTheta, h, w);
+
+        // Pixel-unit flow [B, 2, h, w] -> normalized offset [B, h, w, 2]: a dx-pixel shift is
+        // 2*dx/(w-1) in normalized coords.
+        var flowNHWC = Engine.TensorPermute(subFlow, new[] { 0, 2, 3, 1 });
+        double sx = w > 1 ? 2.0 / (w - 1) : 0.0;
+        double sy = h > 1 ? 2.0 / (h - 1) : 0.0;
+        var scale = new Tensor<T>(new[] { b, h, w, 2 });
+        var scaleSpan = scale.Data.Span;
+        for (int idx = 0; idx + 1 < scaleSpan.Length; idx += 2)
+        {
+            scaleSpan[idx] = NumOps.FromDouble(sx);
+            scaleSpan[idx + 1] = NumOps.FromDouble(sy);
+        }
+        var grid = Engine.TensorAdd(baseGrid, Engine.TensorMultiply(flowNHWC, scale));
+
+        var featNHWC = Engine.TensorPermute(features, new[] { 0, 2, 3, 1 }); // [B, h, w, C]
+        var warpedNHWC = Engine.GridSample(featNHWC, grid);                  // [B, h, w, C]
+        return Engine.TensorPermute(warpedNHWC, new[] { 0, 3, 1, 2 });       // [B, C, h, w]
     }
 
     /// <summary>
-    /// Bilinear upsample of an NCHW tensor to a target spatial resolution.
-    /// When <paramref name="scaleMagnitude"/> is true the output values are
-    /// multiplied by (newH/oldH) on the y component and (newW/oldW) on the x
-    /// component — used for flow fields, where doubling the spatial resolution
-    /// also doubles the magnitudes (Jin et al. §3.3).
+    /// Bilinear upsample of an NCHW tensor to a target resolution via the tape-aware <c>Engine.Upsample</c>.
+    /// When <paramref name="scaleMagnitude"/> is true the values are also scaled by the resize ratio (flow
+    /// fields: doubling resolution doubles displacement magnitudes, Jin et al. §3.3). The UPR-Net pyramid
+    /// upsamples by an integer factor (stride-2 levels => x2); any integer-factor overshoot is cropped to
+    /// the exact target so downstream channel-concat sees matching spatial dims.
     /// </summary>
     private Tensor<T> BilinearUpsample(Tensor<T> input, int newH, int newW, bool scaleMagnitude)
     {
-        int b = input.Shape[0];
-        int c = input.Shape[1];
         int oldH = input.Shape[2];
         int oldW = input.Shape[3];
-        var output = new Tensor<T>(new[] { b, c, newH, newW });
-        var src = input.AsSpan();
-        var dst = output.AsWritableSpan();
-        double sy = (double)oldH / newH;
-        double sx = (double)oldW / newW;
-        double scaleY = scaleMagnitude ? (double)newH / oldH : 1.0;
-        double scaleX = scaleMagnitude ? (double)newW / oldW : 1.0;
-        int oldHw = oldH * oldW;
-        int newHw = newH * newW;
-        for (int bi = 0; bi < b; bi++)
+        if (oldH == newH && oldW == newW) return input;
+
+        int factorH = System.Math.Max(1, (newH + oldH - 1) / oldH);
+        int factorW = System.Math.Max(1, (newW + oldW - 1) / oldW);
+        var up = Engine.Upsample(input, factorH, factorW);
+        if (up.Shape[2] != newH || up.Shape[3] != newW)
+            up = Engine.TensorSlice(up, new[] { 0, 0, 0, 0 }, new[] { up.Shape[0], up.Shape[1], newH, newW });
+
+        if (scaleMagnitude)
         {
-            for (int ci = 0; ci < c; ci++)
-            {
-                int chSrcOff = bi * c * oldHw + ci * oldHw;
-                int chDstOff = bi * c * newHw + ci * newHw;
-                // For flow fields, even (x-component) channels scale by scaleX,
-                // odd (y-component) channels scale by scaleY. For non-flow
-                // tensors both scales are 1.
-                double scale = scaleMagnitude ? (ci % 2 == 0 ? scaleX : scaleY) : 1.0;
-                for (int i = 0; i < newH; i++)
-                {
-                    double srcY = (i + 0.5) * sy - 0.5;
-                    int y0 = (int)Math.Floor(srcY);
-                    int y1 = y0 + 1;
-                    double dy = srcY - y0;
-                    int y0c = MathHelper.Clamp(y0, 0, oldH - 1);
-                    int y1c = MathHelper.Clamp(y1, 0, oldH - 1);
-                    for (int j = 0; j < newW; j++)
-                    {
-                        double srcX = (j + 0.5) * sx - 0.5;
-                        int x0 = (int)Math.Floor(srcX);
-                        int x1 = x0 + 1;
-                        double dx = srcX - x0;
-                        int x0c = MathHelper.Clamp(x0, 0, oldW - 1);
-                        int x1c = MathHelper.Clamp(x1, 0, oldW - 1);
-                        double v00 = NumOps.ToDouble(src[chSrcOff + y0c * oldW + x0c]);
-                        double v01 = NumOps.ToDouble(src[chSrcOff + y0c * oldW + x1c]);
-                        double v10 = NumOps.ToDouble(src[chSrcOff + y1c * oldW + x0c]);
-                        double v11 = NumOps.ToDouble(src[chSrcOff + y1c * oldW + x1c]);
-                        double v = (1 - dy) * ((1 - dx) * v00 + dx * v01) + dy * ((1 - dx) * v10 + dx * v11);
-                        dst[chDstOff + i * newW + j] = NumOps.FromDouble(v * scale);
-                    }
-                }
-            }
+            // Flow magnitudes scale with resolution. UPR-Net's feature maps are square in the pyramid, so
+            // the single ratio newH/oldH is exact for both the x and y displacement components.
+            up = Engine.TensorMultiplyScalar(up, NumOps.FromDouble((double)newH / oldH));
         }
-        return output;
+        return up;
     }
 
     /// <inheritdoc/>
