@@ -131,13 +131,16 @@ public class ICEditModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new ICEditModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
-        // Field-by-field clone — bypasses the int-bounded flat
-        // Vector<T> that GetParameters/SetParameters round-trip would
-        // require.
-        clone._predictor.SetParameters(_predictor.GetParameters());
-        clone._vae.SetParameters(_vae.GetParameters());
-        return clone;
+        // Delegate to the predictor's and VAE's own Clone(), which correctly handle the DiT LazyDense
+        // weights (thread the seed + probe-forward materialize + copy). A naive new-predictor +
+        // SetParameters(GetParameters()) does NOT capture lazy weights that only resolve on the forward
+        // path, so the clone re-RNG-initializes on its first forward and diverges from the source — the
+        // exact trap SiTPredictor.Clone (#1711) documents and Clone_ShouldProduceIdenticalOutput caught.
+        return new ICEditModel<T>(
+            predictor: (SiTPredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner,
+            seed: RandomGenerator.Next());
     }
 
     /// <inheritdoc />
