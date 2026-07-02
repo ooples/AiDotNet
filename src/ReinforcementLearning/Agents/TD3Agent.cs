@@ -219,14 +219,62 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
         _stepCount++;
     }
 
+    /// <summary>
+    /// Performs a one-shot supervised update for the training/test harness.
+    /// </summary>
+    /// <remarks>
+    /// The shared base adapter decodes <paramref name="target"/> into a discrete one-hot action sized
+    /// to the target length, which is incompatible with TD3's continuous critic input
+    /// (StateSize + ActionSize). We act in the state to obtain an action of the agent's own ActionSize,
+    /// derive a bounded scalar reward from the supervised target, store the transition, and run a TD3
+    /// update.
+    /// </remarks>
+    public override void Train(Vector<T> state, Vector<T> target)
+    {
+        if (state is null) throw new ArgumentNullException(nameof(state));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        if (target.Length == 0)
+            throw new ArgumentException("target must contain at least one element.", nameof(target));
+
+        var action = SelectAction(state, training: true);
+
+        T reward = NumOps.Zero;
+        for (int i = 0; i < target.Length; i++)
+            reward = NumOps.Add(reward, target[i]);
+        reward = NumOps.Divide(reward, NumOps.FromDouble(target.Length));
+
+        // Treat this one-shot supervised transition as terminal: nextState is fabricated as `state`, so
+        // done: false would add a TD3 bootstrap term from the target critics and optimize against an
+        // invented transition. done: true makes the critic target just the supplied reward.
+        StoreExperience(state, action, reward, state, done: true);
+
+        SupervisedUpdateRequested = true;
+        try
+        {
+            Train();
+        }
+        finally
+        {
+            SupervisedUpdateRequested = false;
+        }
+    }
+
     public override T Train()
     {
-        if (_replayBuffer.Count < _options.WarmupSteps || _replayBuffer.Count < _options.BatchSize)
+        // A supervised one-shot Train(state, target) call bypasses the autonomous-exploration warmup
+        // and trains on the samples gathered so far (clamped to the buffer); autonomous stepping still
+        // respects warmup.
+        int effectiveBatchSize = SupervisedUpdateRequested
+            ? System.Math.Min(_options.BatchSize, _replayBuffer.Count)
+            : _options.BatchSize;
+        if ((!SupervisedUpdateRequested && _replayBuffer.Count < _options.WarmupSteps)
+            || effectiveBatchSize <= 0
+            || _replayBuffer.Count < effectiveBatchSize)
         {
             return _numOps.Zero;
         }
 
-        var batch = _replayBuffer.Sample(_options.BatchSize);
+        var batch = _replayBuffer.Sample(effectiveBatchSize);
         int n = batch.Count;
         if (n == 0) return _numOps.Zero;
 

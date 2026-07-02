@@ -2,6 +2,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -75,6 +76,14 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
+
+    private static AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> CreateStandardGanAdamOptions()
+        => new()
+        {
+            InitialLearningRate = 0.0002,
+            Beta1 = 0.5,
+            Beta2 = 0.999,
+        };
 
     /// <summary>
     /// The optimizer used for training the generator network.
@@ -361,10 +370,10 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         Discriminator = CreateBackboneForArchitecture(discriminatorArchitecture);
         QNetwork = CreateBackboneForArchitecture(qNetworkArchitecture);
 
-        // Initialize optimizers - use provided optimizers or create default Adam optimizers
-        _generatorOptimizer = generatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Generator);
-        _discriminatorOptimizer = discriminatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Discriminator);
-        _qNetworkOptimizer = qNetworkOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(QNetwork);
+        // Initialize optimizers - use provided optimizers or create default GAN-standard Adam optimizers.
+        _generatorOptimizer = generatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Generator, CreateStandardGanAdamOptions());
+        _discriminatorOptimizer = discriminatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Discriminator, CreateStandardGanAdamOptions());
+        _qNetworkOptimizer = qNetworkOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(QNetwork, CreateStandardGanAdamOptions());
 
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType);
 

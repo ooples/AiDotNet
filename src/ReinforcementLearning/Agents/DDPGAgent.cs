@@ -215,18 +215,66 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         _replayBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(state, action, reward, nextState, done));
     }
 
+    /// <summary>
+    /// Performs a one-shot supervised update for the training/test harness.
+    /// </summary>
+    /// <remarks>
+    /// The shared base adapter decodes <paramref name="target"/> into a discrete one-hot action sized
+    /// to the target length, which is incompatible with DDPG's continuous critic input
+    /// (StateSize + ActionSize) — the stored experience would have the wrong action dimensionality.
+    /// We act in the state to obtain an action of the agent's own ActionSize, derive a bounded scalar
+    /// reward from the supervised target, store the transition, and run a DDPG update.
+    /// </remarks>
+    public override void Train(Vector<T> state, Vector<T> target)
+    {
+        if (state is null) throw new ArgumentNullException(nameof(state));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        if (target.Length == 0)
+            throw new ArgumentException("target must contain at least one element.", nameof(target));
+
+        var action = SelectAction(state, training: true);
+
+        T reward = NumOps.Zero;
+        for (int i = 0; i < target.Length; i++)
+            reward = NumOps.Add(reward, target[i]);
+        reward = NumOps.Divide(reward, NumOps.FromDouble(target.Length));
+
+        // Treat this one-shot supervised transition as terminal: nextState is fabricated as `state`, so
+        // done: false would inject a γQ'(s, μ'(s)) bootstrap and optimize against an invented target.
+        // done: true makes the critic target just the supplied reward.
+        StoreExperience(state, action, reward, state, done: true);
+
+        SupervisedUpdateRequested = true;
+        try
+        {
+            Train();
+        }
+        finally
+        {
+            SupervisedUpdateRequested = false;
+        }
+    }
+
     /// <inheritdoc/>
     public override T Train()
     {
         _steps++;
         TrainingSteps++;
 
-        if (_steps < _options.WarmupSteps || !_replayBuffer.CanSample(_options.BatchSize))
+        // A supervised one-shot Train(state, target) call bypasses the autonomous-exploration warmup
+        // and trains on the samples gathered so far (clamped to the buffer); autonomous stepping still
+        // respects warmup.
+        int effectiveBatchSize = SupervisedUpdateRequested
+            ? System.Math.Min(_options.BatchSize, _replayBuffer.Count)
+            : _options.BatchSize;
+        if ((!SupervisedUpdateRequested && _steps < _options.WarmupSteps)
+            || effectiveBatchSize <= 0
+            || !_replayBuffer.CanSample(effectiveBatchSize))
         {
             return NumOps.Zero;
         }
 
-        var batch = _replayBuffer.Sample(_options.BatchSize);
+        var batch = _replayBuffer.Sample(effectiveBatchSize);
         int n = batch.Count;
         if (n == 0) return NumOps.Zero;
 
