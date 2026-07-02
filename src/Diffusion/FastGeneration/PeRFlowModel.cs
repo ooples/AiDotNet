@@ -152,7 +152,7 @@ public class PeRFlowModel<T> : LatentDiffusionModelBase<T>
     {
         var clone = new PeRFlowModel<T>(
             conditioner: _conditioner, numSegments: _numSegments, seed: RandomGenerator.Next());
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
         return clone;
     }
 

@@ -184,12 +184,16 @@ public class ControlNetFluxModel<T> : LatentDiffusionModelBase<T>
             controlType: _controlType,
             conditioner: _conditioner,
             seed: RandomGenerator.Next());
-        // Field-by-field SetParameters avoids the giant single flat
-        // Vector<T> that GetParameters + SetParameters round-trip would
-        // produce — keeps peak memory at ~2× per-component weights
-        // instead of ~3×.
-        clone._predictor.SetParameters(_predictor.GetParameters());
-        clone._controlEncoder.SetParameters(_controlEncoder.GetParameters());
+        // COW-share first: O(1) copy-on-write of the whole stack's trainable tensors — the fast path
+        // for EMA / frequent cloning. Only when sharing can't apply (unresolved lazy or shape-mismatched
+        // weights) fall back to the per-component copy: the ~12B FLUX-scale FluxDoubleStream/MMDiT
+        // predictor via its FLAT-FREE per-tensor chunk stream (never a flat Vector<T> — int-overflow /
+        // OOM), and the plain (non-IParameterizable) control encoder — tractable — via its flat copy.
+        if (!clone.TryShareParametersFrom(this))
+        {
+            clone._predictor.SetParameterChunks(_predictor.GetParameterChunks());
+            clone._controlEncoder.SetParameters(_controlEncoder.GetParameters());
+        }
         return clone;
     }
 

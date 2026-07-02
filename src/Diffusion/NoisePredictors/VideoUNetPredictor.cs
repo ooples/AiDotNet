@@ -1326,6 +1326,66 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         yield return block.Upsample;
     }
 
+    /// <summary>
+    /// Flat-free per-layer chunked parameter read (#1715). VideoUNetPredictor extends
+    /// <see cref="NoisePredictorBase"/> directly, so without this override it would fall to the base
+    /// default that materialises the WHOLE flat <see cref="GetParameters"/> aggregate — which OOMs at
+    /// foundation video-diffusion scale. Here each layer's parameters are yielded as one bounded chunk
+    /// in the SAME canonical order as <see cref="GetParameters"/> / <see cref="Clone"/>
+    /// (<see cref="EnumerateLayersInParameterOrder"/>), so the peak is one layer, never the model.
+    /// </summary>
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        // Engage weight streaming first (no-op below the size/memory threshold) so materialising each
+        // layer's lazy weights here routes through the bounded streaming pool rather than accumulating
+        // the full weight set — mirrors DiT/MMDiT/UNet.
+        MaybeEngageWeightStreaming();
+
+        foreach (var layer in EnumerateLayersInParameterOrder())
+        {
+            if (layer is null) continue; // null slots (disabled attention / non-sampling block) hold no params
+            var p = layer.GetParameters();
+            if (p.Length == 0) continue;  // parameterless layers (e.g. some Down/Upsample) — skip in BOTH Get and Set
+            yield return new Tensor<T>(new[] { p.Length }, p);
+        }
+    }
+
+    /// <summary>
+    /// Flat-free per-layer counterpart to <see cref="GetParameterChunks"/> (#1715): consumes one chunk
+    /// per parameterised layer in the same canonical order and assigns it in place, without buffering a
+    /// flat aggregate. Rejects a chunk stream that is too short or too long (a caller framing bug) and a
+    /// per-layer length mismatch, so a scrambled round-trip fails loudly instead of silently corrupting.
+    /// </summary>
+    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
+        MaybeEngageWeightStreaming();
+
+        using var e = chunks.GetEnumerator();
+        foreach (var layer in EnumerateLayersInParameterOrder())
+        {
+            if (layer is null) continue;
+            var current = layer.GetParameters();
+            if (current.Length == 0) continue; // must skip the SAME layers GetParameterChunks skips
+            if (!e.MoveNext())
+                throw new ArgumentException(
+                    "SetParameterChunks received fewer chunks than Video U-Net has parameterised layers.",
+                    nameof(chunks));
+            var src = e.Current;
+            if (src is null)
+                throw new ArgumentException("SetParameterChunks received a null chunk.", nameof(chunks));
+            if (src.Length != current.Length)
+                throw new ArgumentException(
+                    $"SetParameterChunks chunk length {src.Length} does not match layer parameter length {current.Length}.",
+                    nameof(chunks));
+            layer.SetParameters(src.ToVector());
+        }
+        if (e.MoveNext())
+            throw new ArgumentException(
+                "SetParameterChunks received more chunks than Video U-Net has parameterised layers.",
+                nameof(chunks));
+    }
+
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {

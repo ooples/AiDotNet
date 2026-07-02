@@ -308,14 +308,22 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
 
     /// <summary>
     /// Streams the diffusion stack's trainable weight tensors per-tensor.
-    /// Default implementation is empty; concrete subclasses (latent
-    /// diffusion, cascade, dual-encoder) override to yield from their
-    /// noise predictor / VAE / conditioner sub-models. Foundation-scale
-    /// stacks overflow <see cref="int.MaxValue"/> in the aggregate
-    /// <see cref="ParameterCount"/>, so callers walking these chunks
-    /// accumulate length into a <see cref="long"/>.
+    /// Concrete subclasses (latent diffusion, cascade, dual-encoder) override
+    /// to yield from their noise predictor / VAE / conditioner sub-models,
+    /// staying flat-free at foundation scale. The default here yields the flat
+    /// <see cref="GetParameters"/> as a SINGLE chunk (not empty) so a
+    /// <c>SetParameterChunks(GetParameterChunks())</c> round-trip on a
+    /// non-overriding stack is correct rather than a silent no-op; it is not
+    /// flat-free, so a foundation-scale stack SHOULD override. Callers walking
+    /// these chunks accumulate length into a <see cref="long"/> (the aggregate
+    /// <see cref="ParameterCount"/> can overflow <see cref="int.MaxValue"/>).
     /// </summary>
-    public virtual IEnumerable<Tensor<T>> GetParameterChunks() => System.Linq.Enumerable.Empty<Tensor<T>>();
+    public virtual IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        var p = GetParameters();
+        if (p.Length == 0) return System.Linq.Enumerable.Empty<Tensor<T>>();
+        return new[] { new Tensor<T>(new[] { p.Length }, p) };
+    }
 
     /// <summary>
     /// Streaming counterpart to <see cref="SetParameters"/>: assigns weights from per-tensor

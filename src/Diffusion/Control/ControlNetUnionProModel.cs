@@ -197,7 +197,7 @@ public class ControlNetUnionProModel<T> : LatentDiffusionModelBase<T>
             conditioner: _conditioner,
             supportedTypes: _supportedTypes,
             seed: RandomGenerator.Next());
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
         return clone;
     }
 

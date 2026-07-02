@@ -169,7 +169,7 @@ public class ControlNetSD3Model<T> : LatentDiffusionModelBase<T>
             controlType: _controlType,
             conditioner: _conditioner,
             seed: RandomGenerator.Next());
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
         return clone;
     }
 

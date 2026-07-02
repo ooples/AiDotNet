@@ -154,6 +154,39 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
         yield return new Tensor<T>(new[] { p.Length }, p);
     }
 
+    /// <summary>
+    /// Streaming counterpart to <see cref="SetParameters"/>: assigns the VAE's weights from per-tensor
+    /// chunks supplied in the SAME order <see cref="GetParameterChunks"/> yields them. Default buffers
+    /// the chunks into one flat <see cref="Vector{T}"/> and delegates to <see cref="SetParameters"/> —
+    /// correct and back-compatible; a VAE is individually tractable (its weights fit a flat vector), so
+    /// this bounded buffer is not the foundation-scale OOM path (that is the billion-parameter noise
+    /// predictor, which streams per-tensor). Subclasses with separable encoder/decoder stores may
+    /// override to stay fully flat-free on the write side too.
+    /// </summary>
+    public virtual void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
+        var buffered = new List<Tensor<T>>();
+        long total = 0;
+        foreach (var chunk in chunks)
+        {
+            if (chunk is null)
+                throw new ArgumentException("Chunk sequence contains a null tensor.", nameof(chunks));
+            buffered.Add(chunk);
+            total += chunk.Length;
+        }
+
+        var flat = new Vector<T>(checked((int)total));
+        int offset = 0;
+        foreach (var chunk in buffered)
+        {
+            var v = chunk.ToVector();
+            for (int i = 0; i < v.Length; i++) flat[offset++] = v[i];
+        }
+
+        SetParameters(flat);
+    }
+
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;
     /// <inheritdoc/>

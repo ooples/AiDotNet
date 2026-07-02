@@ -657,7 +657,7 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
         // without this the clone keeps its own RNG-drawn positional embedding and diverges from the
         // source. Copy-on-write share it (O(1) until either side writes).
         if (_posEmbed is not null) clone._posEmbed = (Tensor<T>)_posEmbed.CloneShared();
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
         return clone;
     }
 

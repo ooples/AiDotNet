@@ -139,7 +139,7 @@ public class ControlNetPlusPlusFluxModel<T> : LatentDiffusionModelBase<T>
             controlType: _controlType, conditioner: _conditioner, rewardWeight: _rewardWeight, seed: RandomGenerator.Next());
         // #1624: O(1)-until-write copy-on-write parameter share (avoids the full-model flatten copy that
         // OOMs the 16 GB runner). Falls back to the flat copy if the structure doesn't match 1:1.
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
         return clone;
     }
 

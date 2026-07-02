@@ -158,7 +158,7 @@ public class ControlARModel<T> : LatentDiffusionModelBase<T>
         var clone = new ControlARModel<T>(controlType: _controlType, conditioner: _conditioner, seed: RandomGenerator.Next());
         // Copy-on-write: share weight tensors with the clone (O(1)-until-write) via the global helper;
         // fall back to the eager flat copy only if the trainable-layer structure doesn't line up 1:1.
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
         return clone;
     }
 

@@ -174,7 +174,7 @@ public class IPAdapterPlusModel<T> : LatentDiffusionModelBase<T>
             conditioner: _conditioner,
             ipAdapterScale: _ipAdapterScale,
             seed: RandomGenerator.Next());
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
         return clone;
     }
 
