@@ -74,8 +74,15 @@ public class UPRNetOptions : NeuralNetworkOptions
     /// </summary>
     public int NumPyramidLevels { get; set; } = 3;
 
-    /// <summary>Gets or sets the number of recurrent refinement iterations per level.</summary>
-    public int NumRecurrentIters { get; set; } = 3;
+    /// <summary>
+    /// Gets or sets the number of recurrent refinement passes PER pyramid level. Default 1 to match
+    /// UPR-Net (Jin et al., CVPR 2023): each pyramid level performs a SINGLE bi-directional flow
+    /// estimation + frame synthesis, and the "recurrent"/iterative refinement happens ACROSS levels
+    /// (the coarse-to-fine pyramid traversal with weight sharing), not by repeating the module within a
+    /// level. Values &gt; 1 add extra per-level passes beyond the paper's design (more compute, not more
+    /// fidelity). Total refinement passes = NumPyramidLevels x NumRecurrentIters.
+    /// </summary>
+    public int NumRecurrentIters { get; set; } = 1;
 
     /// <summary>Gets or sets the number of residual blocks per pyramid level.</summary>
     public int NumResBlocks { get; set; } = 2;
