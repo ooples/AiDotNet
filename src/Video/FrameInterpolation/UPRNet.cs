@@ -218,6 +218,33 @@ public class UPRNet<T> : FrameInterpolationBase<T>
         _builtChannels = channels;
         _builtHeight = height;
         _builtWidth = width;
+
+        ExtractLayerReferences();
+    }
+
+    /// <summary>
+    /// Re-derives the per-role sub-module references (<see cref="_encoderConvs"/>,
+    /// <see cref="_refineConvs"/>, <see cref="_flowHeads"/>, <see cref="_synthHeads"/>) from the
+    /// canonical <see cref="NeuralNetworks.NeuralNetworkBase{T}.Layers"/> list by their build
+    /// layout: L encoder convs, then (refine, flowHead, synthHead) per level. Must run whenever
+    /// Layers is (re)populated — including after Clone/deserialize replaces Layers with the loaded
+    /// weights — otherwise Forward keeps running the constructor's fresh-init convs while the loaded
+    /// weights sit unused in Layers, so a clone of a trained model reproduces the untrained output
+    /// (Clone_AfterTraining_ShouldPreserveLearnedWeights). Mirrors RIFE.ExtractLayerReferences.
+    /// </summary>
+    private void ExtractLayerReferences()
+    {
+        int L = Math.Max(1, _options.NumPyramidLevels);
+        if (Layers.Count < L + 3 * L) return; // not fully built yet
+        _encoderConvs.Clear(); _refineConvs.Clear(); _flowHeads.Clear(); _synthHeads.Clear();
+        for (int l = 0; l < L; l++)
+            _encoderConvs.Add((ConvolutionalLayer<T>)Layers[l]);
+        for (int l = 0; l < L; l++)
+        {
+            _refineConvs.Add((ConvolutionalLayer<T>)Layers[L + 3 * l]);
+            _flowHeads.Add((ConvolutionalLayer<T>)Layers[L + 3 * l + 1]);
+            _synthHeads.Add((ConvolutionalLayer<T>)Layers[L + 3 * l + 2]);
+        }
     }
 
     /// <summary>
@@ -237,6 +264,9 @@ public class UPRNet<T> : FrameInterpolationBase<T>
         int C = twoC / 2;
 
         EnsureArchitectureBuilt(C, H, W);
+        // Re-sync sub-module refs to the current Layers (a clone/deserialize may have replaced
+        // Layers after the eager build without EnsureArchitectureBuilt rebuilding).
+        ExtractLayerReferences();
 
         var f0 = SliceChannels(x, 0, C);
         var f1 = SliceChannels(x, C, C);
