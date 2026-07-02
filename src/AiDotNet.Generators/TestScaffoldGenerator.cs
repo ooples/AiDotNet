@@ -2523,23 +2523,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    }");
             }
         }
-        else if (model.ClassName == "VFIT")
+        else if (IsFrameInterpolationModel(model))
         {
-            // VFIT (Shi et al. 2022) uses the shared FrameInterpolationBase.Predict,
-            // whose disambiguation treats ANY rank-4 input as a frame *sequence*
-            // [N, C, H, W] and explicitly rejects a batched pair-concat
-            // [1, 2C, H, W] (leading dim 1). The two-frame branch below emits
-            // exactly that rejected shape. A rank-3 [2C, H, W] is the
-            // base's pair-concat contract (even leading channel dim → split
-            // into two frames), so emit [6, 64, 64] = two RGB frames stacked.
+            // Frame-interpolation models (VFIformer, RIFE, FILM, IFRNet, VFIT, ...)
+            // use the shared FrameInterpolationBase.Predict, whose disambiguation
+            // treats ANY rank-4 input as a frame *sequence* [N, C, H, W] and
+            // explicitly rejects a batched pair-concat [1, 2C, H, W] (leading dim 1).
+            // The optical-flow two-frame branch below emits exactly that rejected
+            // shape. A rank-3 [2C, H, W] is the base's pair-concat contract (even
+            // leading channel dim → split into two frames), so emit [6, 64, 64] =
+            // two RGB frames stacked. (Previously only VFIT was special-cased here;
+            // every other frame-interp model fell through to the rank-4 branch and
+            // its whole test class failed at Predict with the rejection error.)
             sb.AppendLine("    protected override int[] InputShape => new[] { 6, 64, 64 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 3, 64, 64 };");
         }
         else if (isTwoFrameModel)
         {
-            // Two-frame models (frame-interpolation + optical-flow) take a
-            // pair of RGB frames concatenated channel-wise. The
-            // OpticalFlowBase.Predict contract is rank-4
+            // Optical-flow two-frame models take a pair of RGB frames concatenated
+            // channel-wise. The OpticalFlowBase.Predict contract is rank-4
             // [batch, 2*channels, height, width] — the rank check fires
             // before the channel-parity check, so a rank-3 [6, 64, 64]
             // would crash with "Input must be rank 4" instead of running
