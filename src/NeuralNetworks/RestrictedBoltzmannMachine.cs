@@ -271,6 +271,23 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     private int _cdSteps;
 
     /// <summary>
+    /// Deterministic RNG for the Contrastive-Divergence Gibbs sampling (Hinton 2006 §3.3).
+    /// CD is stochastic by design, but the sampling MUST be reproducible: the previous code
+    /// called <c>RandomHelper.CreateSecureRandom()</c> (a fresh, non-seeded cryptographic RNG)
+    /// on every <see cref="SampleBinaryStates"/> call, so two runs of the same seeded input
+    /// trained to different weights and the invariant tests (MoreData_ShouldNotDegrade,
+    /// Training_ShouldReduceLoss) were flaky. Seed from the architecture so training is
+    /// deterministic under a fixed seed yet still user-configurable via
+    /// <see cref="NeuralNetworkArchitecture{T}.RandomSeed"/>.
+    /// </summary>
+    private readonly Random _samplingRandom;
+
+    /// <summary>Default Gibbs-sampling seed when the architecture specifies none. Matches the
+    /// weight-init seed convention (<see cref="InitializeHintonWeights"/>) so a zero-config RBM
+    /// is fully reproducible.</summary>
+    private const int DefaultSamplingSeed = 1;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="RestrictedBoltzmannMachine{T}"/> class with the specified architecture, sizes, and scalar activation function.
     /// </summary>
     /// <param name="architecture">The neural network architecture to use for the RBM.</param>
@@ -330,6 +347,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
         _scalarActivation = scalarActivation ?? new SigmoidActivation<T>();
         _learningRate = NumOps.FromDouble(learningRate);
         _cdSteps = cdSteps;
+        _samplingRandom = RandomHelper.CreateSeededRandom(architecture.RandomSeed ?? DefaultSamplingSeed);
     }
 
     /// <summary>
@@ -377,6 +395,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
         _vectorActivation = vectorActivation ?? new SigmoidActivation<T>();
         _learningRate = NumOps.FromDouble(learningRate);
         _cdSteps = cdSteps;
+        _samplingRandom = RandomHelper.CreateSeededRandom(architecture.RandomSeed ?? DefaultSamplingSeed);
     }
 
     /// <summary>
@@ -773,7 +792,11 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     private Tensor<T> SampleBinaryStates(Tensor<T> activations)
     {
         var result = TensorAllocator.Rent<T>(activations._shape);
-        var random = RandomHelper.CreateSecureRandom();
+        // Draw from the model's seeded, shared Gibbs RNG so Contrastive-Divergence
+        // training is reproducible (see _samplingRandom). The old code created a fresh
+        // non-seeded RandomHelper.CreateSecureRandom() on every call, making training
+        // non-deterministic and the invariant tests flaky.
+        var random = _samplingRandom;
 
         for (int i = 0; i < activations.Length; i++)
         {
@@ -1092,7 +1115,9 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     public Tensor<T> GenerateSamples(int numSamples, int numSteps = 1000)
     {
         var samples = new Tensor<T>(new[] { numSamples, VisibleSize });
-        var random = RandomHelper.CreateSecureRandom();
+        // Use the model's seeded Gibbs RNG so generation is reproducible under a fixed
+        // architecture seed (was a fresh non-seeded CreateSecureRandom()).
+        var random = _samplingRandom;
 
         for (int s = 0; s < numSamples; s++)
         {
