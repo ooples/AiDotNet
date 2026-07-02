@@ -1300,9 +1300,15 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         // a fresh Reset() leaves stale per-parameter moments + bias-
         // correction step counter in place — the next training run
         // would resume from old state instead of cold-starting.
-        _tapeStates.Clear();
+        // Clear BOTH maps under _pendingTapeStatesLock so this reset is atomic
+        // with RestorePendingTapeState (which does its pending lookup and the
+        // matching _tapeStates insert under the same lock). Otherwise a restore
+        // running concurrently could read a pending entry, we clear both maps,
+        // and the restore then writes a stale checkpoint moment back into the
+        // freshly-reset optimizer.
         lock (_pendingTapeStatesLock)
         {
+            _tapeStates.Clear();
             _pendingTapeStatesByParameterIndex.Clear();
         }
         _tapeStep = 0;
@@ -1658,32 +1664,33 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
 
     private void RestorePendingTapeState(int parameterIndex, Tensor<T> parameter)
     {
-        QuantizedTapeState? state;
+        // Do the pending lookup, the _tapeStates insert, and the pending remove
+        // all under _pendingTapeStatesLock (and Reset() clears both maps under the
+        // same lock). Releasing the lock between the lookup and the insert let a
+        // concurrent Reset() clear both maps in the gap, after which this method
+        // wrote a stale checkpoint moment back into the freshly-reset optimizer.
         lock (_pendingTapeStatesLock)
         {
-            if (!_pendingTapeStatesByParameterIndex.TryGetValue(parameterIndex, out state))
+            if (!_pendingTapeStatesByParameterIndex.TryGetValue(parameterIndex, out var state))
             {
                 return;
             }
-        }
 
-        if (state.Length != parameter.Length)
-        {
-            throw new InvalidOperationException(
-                $"Adam8BitOptimizer checkpoint tape state for parameter {parameterIndex} has length " +
-                $"{state.Length}, but the current parameter has length {parameter.Length}.");
-        }
+            if (state.Length != parameter.Length)
+            {
+                throw new InvalidOperationException(
+                    $"Adam8BitOptimizer checkpoint tape state for parameter {parameterIndex} has length " +
+                    $"{state.Length}, but the current parameter has length {parameter.Length}.");
+            }
 
-        if (state.MFullPrecision is not null && !state.MFullPrecision._shape.SequenceEqual(parameter._shape))
-        {
-            var reshaped = new Tensor<T>(parameter._shape);
-            state.MFullPrecision.AsSpan().CopyTo(reshaped.AsWritableSpan());
-            state.MFullPrecision = reshaped;
-        }
+            if (state.MFullPrecision is not null && !state.MFullPrecision._shape.SequenceEqual(parameter._shape))
+            {
+                var reshaped = new Tensor<T>(parameter._shape);
+                state.MFullPrecision.AsSpan().CopyTo(reshaped.AsWritableSpan());
+                state.MFullPrecision = reshaped;
+            }
 
-        _tapeStates[parameter] = state;
-        lock (_pendingTapeStatesLock)
-        {
+            _tapeStates[parameter] = state;
             _pendingTapeStatesByParameterIndex.Remove(parameterIndex);
         }
     }

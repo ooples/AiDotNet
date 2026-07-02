@@ -2252,7 +2252,19 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
             ClearSerializedTapeState();
 
+            // Validate the declared table sizes against what the writer can
+            // legally emit BEFORE looping/allocating, so a truncated or hostile
+            // checkpoint is rejected up front rather than driving a huge/negative
+            // loop count or a bad allocation. The writer emits at most one
+            // '_tapeStep' field (it throws on field shadowing), and a non-negative
+            // number of tensor-state fields.
             int tapeStepFieldCount = reader.ReadInt32();
+            if (tapeStepFieldCount < 0 || tapeStepFieldCount > 1)
+            {
+                throw new InvalidOperationException(
+                    $"Optimizer checkpoint declares an invalid tape-step field count {tapeStepFieldCount} " +
+                    "(expected 0 or 1).");
+            }
             for (int i = 0; i < tapeStepFieldCount; i++)
             {
                 string fieldName = reader.ReadString();
@@ -2263,6 +2275,11 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             }
 
             int tensorStateFieldCount = reader.ReadInt32();
+            if (tensorStateFieldCount < 0)
+            {
+                throw new InvalidOperationException(
+                    $"Optimizer checkpoint declares a negative tensor-state field count {tensorStateFieldCount}.");
+            }
             lock (_tapeStateSync)
             {
                 for (int i = 0; i < tensorStateFieldCount; i++)
@@ -2317,10 +2334,42 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     private Dictionary<int, Tensor<T>> ReadTapeTensorStateDictionary(BinaryReader reader)
     {
         int count = reader.ReadInt32();
+        if (count < 0)
+        {
+            throw new InvalidOperationException(
+                $"Optimizer checkpoint declares a negative tape-tensor entry count {count}.");
+        }
+
+        // Reject a count that cannot possibly fit in the remaining stream before
+        // pre-sizing the dictionary: every entry writes at least a parameter index
+        // (4B) plus the tensor's rank (4B) and element count (4B) = 12B, so a count
+        // larger than remaining/12 can only come from a corrupt/hostile checkpoint
+        // and would otherwise reserve a huge dictionary capacity from a bad length.
+        if (reader.BaseStream.CanSeek)
+        {
+            long remaining = reader.BaseStream.Length - reader.BaseStream.Position;
+            if ((long)count * 12L > remaining)
+            {
+                throw new InvalidOperationException(
+                    $"Optimizer checkpoint declares {count} tape-tensor entries, which exceeds the " +
+                    $"{remaining} bytes remaining in the stream.");
+            }
+        }
+
         var entries = new Dictionary<int, Tensor<T>>(count);
         for (int i = 0; i < count; i++)
         {
             int parameterIndex = reader.ReadInt32();
+            if (parameterIndex < 0)
+            {
+                throw new InvalidOperationException(
+                    $"Optimizer checkpoint contains a negative tape-tensor parameter index {parameterIndex}.");
+            }
+            if (entries.ContainsKey(parameterIndex))
+            {
+                throw new InvalidOperationException(
+                    $"Optimizer checkpoint contains a duplicate tape-tensor parameter index {parameterIndex}.");
+            }
             entries[parameterIndex] = ReadTapeTensor(reader);
         }
 
