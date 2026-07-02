@@ -6,6 +6,10 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
+// HeavyTimeout (#1706): foundation-scale SUPIR restoration diffusion — verified OOM
+// (System.OutOfMemoryException at CONSTRUCTION under a 16 GB DOTNET_GCHeapHardLimit reproducing the CI
+// ceiling; Metadata_ShouldExist alone OOMs), OS-OOM-kills the Diffusion Step-Sync shard. Nightly heavy lane.
+[Xunit.Trait("Category", "HeavyTimeout")]
 public class SUPIRModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 4, 16, 16];

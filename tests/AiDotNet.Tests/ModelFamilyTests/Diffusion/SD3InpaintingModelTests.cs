@@ -4,10 +4,10 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-// HeavyTimeout (#1706): SD3 MMDiT instantiated at full default (paper) scale — a single model's peak
-// exceeds the 16 GB PR runner, which SIGTERM-cancelled the SA-SD shard. Runs in the nightly
-// HeavyTimeout lane; the default gate filters Category!=HeavyTimeout. Drop once it fits the budget.
 [Xunit.Collection("FoundationScaleSerial")]
+// HeavyTimeout (#1706): foundation-scale SD3 MM-DiT — verified OOM (System.OutOfMemoryException at
+// CONSTRUCTION under a 16 GB DOTNET_GCHeapHardLimit reproducing the CI ceiling; Metadata_ShouldExist
+// alone OOMs), OS-OOM-kills its Diffusion shard. Nightly heavy lane; drop once streaming fits it.
 [Xunit.Trait("Category", "HeavyTimeout")]
 public class SD3InpaintingModelTests : DiffusionModelTestBase<float>
 {

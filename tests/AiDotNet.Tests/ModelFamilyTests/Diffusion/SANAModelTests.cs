@@ -5,8 +5,9 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
 [Xunit.Collection("FoundationScaleSerial")]
-// HeavyTimeout: foundation-scale diffusion (video / paper-scale); correct but a single
-// forward x N-step Generate exceeds the 120 s per-test gate. Runs in the nightly lane.
+// HeavyTimeout (#1706): foundation-scale diffusion — verified OOM (System.OutOfMemoryException at
+// CONSTRUCTION under a 16 GB DOTNET_GCHeapHardLimit reproducing the CI ceiling; Metadata_ShouldExist
+// alone OOMs), OS-OOM-kills the Diffusion SA-SD shard. Nightly heavy lane; drop once streaming fits it.
 [Xunit.Trait("Category", "HeavyTimeout")]
 public class SANAModelTests : DiffusionModelTestBase<float>
 {

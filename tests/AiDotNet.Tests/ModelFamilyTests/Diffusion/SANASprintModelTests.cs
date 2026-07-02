@@ -4,11 +4,10 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-// HeavyTimeout (#1706): instantiated at full default (paper) scale — a single model's construct +
-// forward/train probe peak exceeds the 16 GB PR runner, which SIGTERM-cancelled the SA-SD shard.
-// Runs in the nightly HeavyTimeout lane; the default gate filters Category!=HeavyTimeout. Drop once
-// it fits the per-test budget (e.g. via a tiny same-architecture injection like SDXLTurbo).
 [Xunit.Collection("FoundationScaleSerial")]
+// HeavyTimeout (#1706): foundation-scale diffusion — verified OOM (System.OutOfMemoryException at
+// CONSTRUCTION under a 16 GB DOTNET_GCHeapHardLimit reproducing the CI ceiling; Metadata_ShouldExist
+// alone OOMs), OS-OOM-kills the Diffusion SA-SD shard. Nightly heavy lane; drop once streaming fits it.
 [Xunit.Trait("Category", "HeavyTimeout")]
 public class SANASprintModelTests : DiffusionModelTestBase<float>
 {
