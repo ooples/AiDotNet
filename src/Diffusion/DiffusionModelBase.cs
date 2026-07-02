@@ -340,25 +340,10 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         // could corrupt a sibling clone. Same guard Train() applies.
         EnsureOwnWeights();
 
-        var buffered = new List<Tensor<T>>();
-        long total = 0;
-        foreach (var chunk in chunks)
-        {
-            if (chunk is null)
-                throw new ArgumentException("Chunk sequence contains a null tensor.", nameof(chunks));
-            buffered.Add(chunk);
-            total += chunk.Length;
-        }
-
-        var flat = new Vector<T>(checked((int)total));
-        int offset = 0;
-        foreach (var chunk in buffered)
-        {
-            var v = chunk.ToVector();
-            for (int i = 0; i < v.Length; i++) flat[offset++] = v[i];
-        }
-
-        SetParameters(flat);
+        // Buffer the chunk stream into one flat vector and delegate to SetParameters. Shared with
+        // VAEModelBase, NoisePredictorBase's legacy fallback, and the composite latent-diffusion models
+        // via DiffusionParameterChunkHelper (single source of truth for the framing/validation rules).
+        SetParameters(DiffusionParameterChunkHelper.BufferToFlatVector(chunks));
     }
 
     /// <inheritdoc/>

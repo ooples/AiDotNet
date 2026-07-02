@@ -1362,6 +1362,12 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         MaybeEngageWeightStreaming();
 
         using var e = chunks.GetEnumerator();
+        // Validate the ENTIRE stream (count, null, per-layer length) into a layer/chunk pair list
+        // BEFORE mutating any layer, so a scrambled or mis-framed chunk stream fails atomically
+        // instead of leaving earlier layers already overwritten with later ones untouched. The list
+        // holds only layer + tensor REFERENCES (no flat aggregate), so this stays flat-free — matching
+        // the fix applied to NoisePredictorBase.SetParameterChunks.
+        var pairs = new List<(ILayer<T> Layer, Tensor<T> Src)>();
         foreach (var layer in EnumerateLayersInParameterOrder())
         {
             if (layer is null) continue;
@@ -1378,12 +1384,16 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
                 throw new ArgumentException(
                     $"SetParameterChunks chunk length {src.Length} does not match layer parameter length {current.Length}.",
                     nameof(chunks));
-            layer.SetParameters(src.ToVector());
+            pairs.Add((layer, src));
         }
         if (e.MoveNext())
             throw new ArgumentException(
                 "SetParameterChunks received more chunks than Video U-Net has parameterised layers.",
                 nameof(chunks));
+        // All chunks validated — now apply. No exception can surface past this point, so the predictor
+        // is never left with a mix of old and new layer weights.
+        foreach (var (layer, src) in pairs)
+            layer.SetParameters(src.ToVector());
     }
 
     /// <inheritdoc />

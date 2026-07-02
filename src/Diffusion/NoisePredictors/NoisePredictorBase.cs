@@ -568,6 +568,13 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         if (TryCollectReflectedParameterTensors(out var tensors))
         {
             using var e = chunks.GetEnumerator();
+            // Validate the ENTIRE stream (count, null, per-tensor length) into a src/dst pair list
+            // BEFORE mutating any weights, so a scrambled or mis-framed chunk stream fails atomically
+            // instead of leaving the predictor holding a mix of old and new tensors. The list holds
+            // only tensor REFERENCES (no flat aggregate / no per-tensor data copy), so this stays
+            // flat-free — matching the buffer-then-single-SetParameters atomicity of the legacy branch
+            // and VAEModelBase/DiffusionModelBase without reintroducing the flat-vector OOM.
+            var pairs = new List<(Tensor<T> Src, Tensor<T> Dst)>(tensors.Count);
             foreach (var dst in tensors)
             {
                 if (!e.MoveNext())
@@ -581,36 +588,24 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
                     throw new ArgumentException(
                         $"SetParameterChunks chunk length {src.Length} does not match parameter length {dst.Length}.",
                         nameof(chunks));
-                src.Data.Span.CopyTo(dst.Data.Span); // in place — no rebinding, no flat aggregate
+                pairs.Add((src, dst));
             }
             if (e.MoveNext())
                 throw new ArgumentException(
                     "SetParameterChunks received more chunks than the predictor has parameter tensors.",
                     nameof(chunks));
+            // All chunks validated — now copy in place. No exception can surface past this point, so
+            // the predictor is never left in a partially-written state.
+            foreach (var (src, dst) in pairs)
+                src.Data.Span.CopyTo(dst.Data.Span); // in place — no rebinding, no flat aggregate
             InvalidateCompiledPlans();
             return;
         }
 
         // Legacy fallback (reflection incomplete): buffer the chunks into one flat vector and delegate.
-        var buffered = new List<Tensor<T>>();
-        long total = 0;
-        foreach (var chunk in chunks)
-        {
-            if (chunk is null)
-                throw new ArgumentException("Chunk sequence contains a null tensor.", nameof(chunks));
-            buffered.Add(chunk);
-            total += chunk.Length;
-        }
-
-        var flat = new Vector<T>(checked((int)total));
-        int offset = 0;
-        foreach (var chunk in buffered)
-        {
-            var v = chunk.ToVector();
-            for (int i = 0; i < v.Length; i++) flat[offset++] = v[i];
-        }
-
-        SetParameters(flat);
+        // Shared with DiffusionModelBase/VAEModelBase and the composite latent-diffusion models via
+        // DiffusionParameterChunkHelper (single source of truth for the framing/validation rules).
+        SetParameters(DiffusionParameterChunkHelper.BufferToFlatVector(chunks));
         // Weights changed — drop any plan captured against the old graph so the next compiled
         // forward re-traces (mirrors every other in-place weight-update path).
         InvalidateCompiledPlans();

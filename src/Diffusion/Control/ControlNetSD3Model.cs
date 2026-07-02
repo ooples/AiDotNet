@@ -160,14 +160,53 @@ public class ControlNetSD3Model<T> : LatentDiffusionModelBase<T>
     }
 
     /// <inheritdoc />
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        // Stream this model's ACTUAL trainable sub-modules in GetParameters() order (the MMDiT-X
+        // predictor + controlEncoder — the VAE is intentionally excluded from this model's parameter
+        // surface). The inherited LatentDiffusionModelBase path streams NoisePredictor + VAE +
+        // Conditioner, so it would enumerate the wrong tensors here. The large predictor streams
+        // per-tensor (flat-free, #1624); the smaller control encoder is wrapped as a single trailing
+        // chunk. Concrete virtual calls (not the IParameterizable default-interface surface the base
+        // gates off on net471), so the read side streams on every target framework.
+        foreach (var c in _predictor.GetParameterChunks()) yield return c;
+        var enc = _controlEncoder.GetParameters();
+        if (enc.Length > 0) yield return new Tensor<T>(new[] { enc.Length }, enc);
+    }
+
+    /// <inheritdoc />
+    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
+        // Buffer the streamed chunks into one flat vector and delegate to this model's SetParameters,
+        // which distributes to predictor + controlEncoder in the matching GetParameterChunks order.
+        // The inherited LatentDiffusionModelBase override routes chunks to NoisePredictor + VAE +
+        // Conditioner instead and would mis-assign this model's control-encoder parameters.
+        // EnsureOwnWeights detaches any copy-on-write-shared tensors before the in-place writes.
+        EnsureOwnWeights();
+        SetParameters(DiffusionParameterChunkHelper.BufferToFlatVector(chunks));
+    }
+
+    /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
+        // Clone the ACTUAL predictor and VAE (mirrors InstaFlowModel/MultiDiffusionModel): passing only
+        // controlType/conditioner/seed rebuilt InitializeLayers' DEFAULT-sized, lazily-unresolved MMDiT-X
+        // predictor and VAE, so once the source resolved its lazy layers via a forward pass the
+        // trainable-layer shapes no longer lined up 1:1 — TryShareParametersFrom bailed and the chunk
+        // fallback ran. Cloning the resolved predictor/VAE makes the clone structurally identical so the
+        // copy-on-write share succeeds (which also transfers the control encoder, walked by reflection).
         var clone = new ControlNetSD3Model<T>(
-            controlType: _controlType,
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            predictor: (MMDiTXNoisePredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
+            controlType: _controlType,
             seed: RandomGenerator.Next());
         if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
         return clone;

@@ -188,12 +188,55 @@ public class ControlNetUnionProModel<T> : LatentDiffusionModelBase<T>
     }
 
     /// <inheritdoc />
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        // Stream this model's ACTUAL trainable sub-modules in GetParameters() order: the base U-Net
+        // followed by each control encoder in ascending ControlType key order (matching GetParameters'
+        // OrderBy). The inherited LatentDiffusionModelBase path streams NoisePredictor + VAE +
+        // Conditioner, so it would enumerate the wrong tensors here (the per-modality encoder cache is
+        // this model's real conditioning surface, not the base Conditioner). The large base U-Net
+        // streams per-tensor (flat-free, #1624); each smaller encoder is wrapped as a single chunk.
+        // Concrete virtual calls (not the IParameterizable default-interface surface the base gates off
+        // on net471), so the read side streams on every target framework.
+        foreach (var c in _baseUNet.GetParameterChunks()) yield return c;
+        foreach (var kvp in _encoderCache.OrderBy(kv => kv.Key))
+        {
+            var enc = kvp.Value.GetParameters();
+            if (enc.Length > 0) yield return new Tensor<T>(new[] { enc.Length }, enc);
+        }
+    }
+
+    /// <inheritdoc />
+    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
+        // Buffer the streamed chunks into one flat vector and delegate to this model's SetParameters,
+        // which distributes to baseUNet + the ordered encoder cache in the matching GetParameterChunks
+        // order. The inherited LatentDiffusionModelBase override routes chunks to NoisePredictor + VAE
+        // + Conditioner instead and would mis-assign this model's per-modality encoder parameters.
+        // EnsureOwnWeights detaches any copy-on-write-shared tensors before the in-place writes.
+        EnsureOwnWeights();
+        SetParameters(DiffusionParameterChunkHelper.BufferToFlatVector(chunks));
+    }
+
+    /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
+        // Clone the ACTUAL baseUNet and VAE (mirrors InstaFlowModel/MultiDiffusionModel): passing only
+        // conditioner/supportedTypes/seed rebuilt InitializeLayers' DEFAULT-sized, lazily-unresolved
+        // sub-models, so once the source resolved its lazy layers via a forward pass the trainable-layer
+        // shapes no longer lined up 1:1 — TryShareParametersFrom bailed and the chunk fallback ran.
+        // Cloning the resolved baseUNet/VAE makes the clone structurally identical so the copy-on-write
+        // share succeeds (which also transfers the per-modality encoder cache, walked by reflection).
         var clone = new ControlNetUnionProModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            baseUNet: (UNetNoisePredictor<T>)_baseUNet.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
             supportedTypes: _supportedTypes,
             seed: RandomGenerator.Next());
