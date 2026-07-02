@@ -157,10 +157,15 @@ public class UPRNet<T> : FrameInterpolationBase<T>
             Layers.AddRange(Architecture.Layers);
             return;
         }
-        // Per-level encoder/refinement components are created lazily on first
-        // forward when concrete spatial dims are known. The base Layers list
-        // holds the union of all per-level layers so GetParameters/Train see
-        // every weight via the standard NeuralNetworkBase walks.
+        // Eagerly build the per-level pyramid at the architecture's declared dims so
+        // GetParameters()/Clone see the weights BEFORE the first Forward. Without this the
+        // Layers list is empty until a forward runs, so Parameters_ShouldBeNonEmpty,
+        // NamedLayerActivations_ShouldBeNonEmpty and both Clone_* invariants fail. The lazy
+        // rebuild in EnsureArchitectureBuilt still adapts if a differently-shaped input arrives.
+        int c = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
+        int h = Architecture.InputHeight > 0 ? Architecture.InputHeight : 64;
+        int w = Architecture.InputWidth > 0 ? Architecture.InputWidth : 64;
+        EnsureArchitectureBuilt(c, h, w);
     }
 
     private void EnsureArchitectureBuilt(int channels, int height, int width)
@@ -493,10 +498,14 @@ public class UPRNet<T> : FrameInterpolationBase<T>
     }
 
     /// <inheritdoc/>
-    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
+    // Identity pre/post-processing: ForwardForTraining runs the raw pyramid graph without
+    // NormalizeFrames, and the synthesis heads emit [0,1] frames, so applying /255 + *255 only
+    // on the inference path was a train/eval mismatch that made the eval loss huge and
+    // non-monotonic (MoreData_ShouldNotDegrade). Keep both identity.
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => rawFrames;
 
     /// <inheritdoc/>
-    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => modelOutput;
 
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expected)
