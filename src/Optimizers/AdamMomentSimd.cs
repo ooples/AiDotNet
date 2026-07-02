@@ -29,8 +29,11 @@ internal static class AdamMomentSimd
         double bc1, double bc2, double lr, double eps, bool useAmsgrad)
     {
         int n = param.Length;
-        int width = System.Numerics.Vector<double>.Count;
         int i = 0;
+#if NET5_0_OR_GREATER
+        // The Span-based Vector<T> ctor + Vector.Widen/Narrow are .NET-Core-3+ API; net471's
+        // System.Numerics.Vectors lacks them, so net471 runs the scalar tail below over the whole span.
+        int width = System.Numerics.Vector<double>.Count;
         if (SnVec.IsHardwareAccelerated && n >= width)
         {
             var vb1 = new System.Numerics.Vector<double>(b1);
@@ -67,6 +70,7 @@ internal static class AdamMomentSimd
                 pv.CopyTo(param.Slice(i, width));
             }
         }
+#endif
         for (; i < n; i++)
         {
             double g = grad[i];
@@ -99,8 +103,9 @@ internal static class AdamMomentSimd
         float bc1, float bc2, float lr, float eps, bool useAmsgrad)
     {
         int n = param.Length;
-        int width = System.Numerics.Vector<float>.Count;
         int i = 0;
+#if NET5_0_OR_GREATER
+        int width = System.Numerics.Vector<float>.Count;
         if (SnVec.IsHardwareAccelerated && n >= width)
         {
             var vb1 = new System.Numerics.Vector<float>(b1);
@@ -140,6 +145,7 @@ internal static class AdamMomentSimd
                 pv.CopyTo(param.Slice(i, width));
             }
         }
+#endif
         for (; i < n; i++)
         {
             float g = grad[i];
