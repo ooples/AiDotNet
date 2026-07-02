@@ -109,9 +109,12 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
     private readonly object _tapeStateSync = new();
 
-    // The context.Parameters.Count the tape index map was last rebuilt for. Used with an endpoint
-    // reference check to skip the O(#params) rebuild in steady-state training. -1 = never built.
+    // The context.Parameters.Count the tape index map was last rebuilt for, plus the identity of the
+    // parameter-collection instance it was built from. Together they drive the steady-state fast paths in
+    // PrepareTapeState: same collection instance + same count => skip even the verification scan. -1/null
+    // = never built.
     private int _tapeIndexedParameterCount = -1;
+    private object? _tapeIndexedParametersRef;
 
     /// <summary>
     /// A cache for storing and retrieving gradients to improve performance.
@@ -2106,7 +2109,21 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
         lock (_tapeStateSync)
         {
-            int count = context.Parameters.Count;
+            var parameters = context.Parameters;
+            int count = parameters.Count;
+
+            // O(1) fast path: the same parameter-collection INSTANCE passed again (with no pending
+            // deserialized state to rebind) means nothing to re-index — skip even the verification scan.
+            // This is the common steady-state signal; a model/parameter replacement hands over a different
+            // collection instance (or a different count), which misses here and falls through to verify +
+            // rebuild. Reference identity is the accepted "unchanged" signal — parameter lists in this
+            // codebase are not mutated in place across steps (a change produces new tensors/a new list).
+            if (_pendingTapeTensorStates.Count == 0
+                && count == _tapeIndexedParameterCount
+                && ReferenceEquals(parameters, _tapeIndexedParametersRef))
+            {
+                return;
+            }
 
             // Steady-state fast path: when there is no pending deserialized state to rebind AND the
             // current parameter set is EXACTLY the one we already indexed, the existing map is still
@@ -2123,7 +2140,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 bool mapMatchesCurrentParameters = true;
                 for (int parameterIndex = 0; parameterIndex < count; parameterIndex++)
                 {
-                    var parameter = context.Parameters[parameterIndex];
+                    var parameter = parameters[parameterIndex];
                     if (parameter is null) continue;
 
                     nonNullParameterCount++;
@@ -2137,6 +2154,9 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
                 if (mapMatchesCurrentParameters && _tapeParameterIndices.Count == nonNullParameterCount)
                 {
+                    // Remember this instance so a subsequent call with the same collection hits the O(1)
+                    // reference fast path above instead of re-scanning.
+                    _tapeIndexedParametersRef = parameters;
                     return;
                 }
             }
@@ -2148,13 +2168,14 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             _tapeParameterIndices.Clear();
             for (int parameterIndex = 0; parameterIndex < count; parameterIndex++)
             {
-                var parameter = context.Parameters[parameterIndex];
+                var parameter = parameters[parameterIndex];
                 if (parameter is null) continue;
 
                 _tapeParameterIndices[parameter] = parameterIndex;
                 RestorePendingTapeTensorStates(parameterIndex, parameter);
             }
             _tapeIndexedParameterCount = count;
+            _tapeIndexedParametersRef = parameters;
         }
     }
 
@@ -2216,32 +2237,46 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             return;
         }
 
-        string marker = reader.ReadString();
-        if (!string.Equals(marker, TapeStateExtensionMarker, StringComparison.Ordinal))
+        // Checkpoints can be untrusted or partially written; a truncated payload makes ReadString/
+        // ReadInt32 throw a low-level EndOfStream/IO exception mid-parse. Translate those into a
+        // deterministic "corrupt optimizer checkpoint" error so callers get a clear, catchable failure
+        // instead of a leaked stream exception. (The marker-mismatch InvalidOperationException below is
+        // NOT an IO exception, so the filter lets it propagate unchanged.)
+        try
         {
-            throw new InvalidOperationException($"Unknown optimizer extension payload '{marker}'.");
-        }
+            string marker = reader.ReadString();
+            if (!string.Equals(marker, TapeStateExtensionMarker, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException($"Unknown optimizer extension payload '{marker}'.");
+            }
 
-        ClearSerializedTapeState();
+            ClearSerializedTapeState();
 
-        int tapeStepFieldCount = reader.ReadInt32();
-        for (int i = 0; i < tapeStepFieldCount; i++)
-        {
-            string fieldName = reader.ReadString();
-            int value = reader.ReadInt32();
-            var field = EnumerateOptimizerFields()
-                .FirstOrDefault(candidate => candidate.Name == fieldName && candidate.FieldType == typeof(int));
-            field?.SetValue(this, value);
-        }
-
-        int tensorStateFieldCount = reader.ReadInt32();
-        lock (_tapeStateSync)
-        {
-            for (int i = 0; i < tensorStateFieldCount; i++)
+            int tapeStepFieldCount = reader.ReadInt32();
+            for (int i = 0; i < tapeStepFieldCount; i++)
             {
                 string fieldName = reader.ReadString();
-                _pendingTapeTensorStates[fieldName] = ReadTapeTensorStateDictionary(reader);
+                int value = reader.ReadInt32();
+                var field = EnumerateOptimizerFields()
+                    .FirstOrDefault(candidate => candidate.Name == fieldName && candidate.FieldType == typeof(int));
+                field?.SetValue(this, value);
             }
+
+            int tensorStateFieldCount = reader.ReadInt32();
+            lock (_tapeStateSync)
+            {
+                for (int i = 0; i < tensorStateFieldCount; i++)
+                {
+                    string fieldName = reader.ReadString();
+                    _pendingTapeTensorStates[fieldName] = ReadTapeTensorStateDictionary(reader);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is System.IO.EndOfStreamException or System.IO.IOException)
+        {
+            throw new InvalidOperationException(
+                "Optimizer tape-state extension payload is truncated or corrupted (unexpected end of the " +
+                "checkpoint stream while reading optimizer state).", ex);
         }
     }
 
@@ -2429,6 +2464,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         {
             _tapeParameterIndices.Clear();
             _tapeIndexedParameterCount = -1;
+            _tapeIndexedParametersRef = null;
             _pendingTapeTensorStates.Clear();
 
             foreach (var field in EnumerateTapeTensorStateFields())

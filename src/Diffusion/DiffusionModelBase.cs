@@ -1180,8 +1180,12 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
                 NumOps.FromDouble(1.0 / sq2.Length));
         }
         // paramTensors is already a Tensor<T>[] (which implements IReadOnlyList<Tensor<T>>, the ctor's
-        // parameter type), so pass it directly instead of allocating a fresh List every Train call —
-        // keeping the tape-step path allocation-free as intended for the hot training loop.
+        // parameter type), so pass it directly instead of allocating a fresh List every Train call. The
+        // only remaining per-step allocation on this path is the two objective-re-evaluation delegates
+        // (RecomputeForward / RecomputeLoss) — they capture `timestep`/`this`, so they can't be cached
+        // statically. They are part of the TapeStepContext contract and are consulted ONLY by optimizers
+        // that re-evaluate the objective (e.g. line search); the default Adam ignores them entirely. Two
+        // small closures per step is negligible next to the tape's per-op tensor traffic.
         var stepContext = new TapeStepContext<T>(
             paramTensors, grads, lossValue,
             noisySampleTensor, noiseTensor,

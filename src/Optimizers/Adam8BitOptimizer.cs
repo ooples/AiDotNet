@@ -439,6 +439,11 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     private readonly ConcurrentDictionary<Tensor<T>, QuantizedTapeState> _tapeStates =
         new(TensorReferenceComparer<Tensor<T>>.Instance);
     private readonly Dictionary<int, QuantizedTapeState> _pendingTapeStatesByParameterIndex = new();
+    // Guards _pendingTapeStatesByParameterIndex (a plain, non-concurrent Dictionary): Serialize's
+    // WriteTapeStates enumerates it while Deserialize/restore/Reset mutate it, so without this lock a
+    // checkpoint taken concurrently with training could throw "collection was modified" or snapshot a
+    // torn state.
+    private readonly object _pendingTapeStatesLock = new();
     private int _tapeStep;
 
     /// <inheritdoc />
@@ -1296,7 +1301,10 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         // correction step counter in place — the next training run
         // would resume from old state instead of cold-starting.
         _tapeStates.Clear();
-        _pendingTapeStatesByParameterIndex.Clear();
+        lock (_pendingTapeStatesLock)
+        {
+            _pendingTapeStatesByParameterIndex.Clear();
+        }
         _tapeStep = 0;
     }
 
@@ -1469,9 +1477,14 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     {
         var entries = new SortedDictionary<int, QuantizedTapeState>();
 
-        foreach (var entry in _pendingTapeStatesByParameterIndex)
+        // Snapshot the pending map under the lock so a concurrent Deserialize/restore/Reset can't mutate
+        // it mid-enumeration (see _pendingTapeStatesLock).
+        lock (_pendingTapeStatesLock)
         {
-            entries[entry.Key] = entry.Value;
+            foreach (var entry in _pendingTapeStatesByParameterIndex)
+            {
+                entries[entry.Key] = entry.Value;
+            }
         }
 
         foreach (var entry in _tapeStates)
@@ -1492,7 +1505,10 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
 
     private void ReadTapeStates(BinaryReader reader)
     {
-        _pendingTapeStatesByParameterIndex.Clear();
+        // Parse into a LOCAL map first so the stream I/O runs outside _pendingTapeStatesLock, then swap the
+        // contents in atomically under the lock (WriteTapeStates snapshots the shared map under the same
+        // lock, so a concurrent Serialize sees either the old or the new full state, never a torn one).
+        var pending = new Dictionary<int, QuantizedTapeState>();
 
         int count = reader.ReadInt32();
         // Each entry is at minimum a 4-byte parameter index, so a valid count can't exceed the bytes
@@ -1509,12 +1525,19 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             }
             // ContainsKey (not Dictionary.TryAdd, which is unavailable on net471) before reading the
             // state, so a duplicate index throws instead of silently overwriting an earlier entry.
-            if (_pendingTapeStatesByParameterIndex.ContainsKey(parameterIndex))
+            if (pending.ContainsKey(parameterIndex))
             {
                 throw new InvalidOperationException(
                     $"Adam8BitOptimizer: duplicate tape-state parameter index {parameterIndex} in checkpoint.");
             }
-            _pendingTapeStatesByParameterIndex[parameterIndex] = ReadTapeState(reader);
+            pending[parameterIndex] = ReadTapeState(reader);
+        }
+
+        lock (_pendingTapeStatesLock)
+        {
+            _pendingTapeStatesByParameterIndex.Clear();
+            foreach (var entry in pending)
+                _pendingTapeStatesByParameterIndex[entry.Key] = entry.Value;
         }
     }
 
@@ -1635,9 +1658,13 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
 
     private void RestorePendingTapeState(int parameterIndex, Tensor<T> parameter)
     {
-        if (!_pendingTapeStatesByParameterIndex.TryGetValue(parameterIndex, out var state))
+        QuantizedTapeState? state;
+        lock (_pendingTapeStatesLock)
         {
-            return;
+            if (!_pendingTapeStatesByParameterIndex.TryGetValue(parameterIndex, out state))
+            {
+                return;
+            }
         }
 
         if (state.Length != parameter.Length)
@@ -1655,7 +1682,10 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         }
 
         _tapeStates[parameter] = state;
-        _pendingTapeStatesByParameterIndex.Remove(parameterIndex);
+        lock (_pendingTapeStatesLock)
+        {
+            _pendingTapeStatesByParameterIndex.Remove(parameterIndex);
+        }
     }
 
     private static void WriteByteVector(BinaryWriter writer, Vector<byte>? vector)
@@ -2224,7 +2254,10 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             // v2 payloads ended before any tape-step data existed; those
             // remain readable and resume with cold-started tape moments.
             _tapeStates.Clear();
-            _pendingTapeStatesByParameterIndex.Clear();
+            lock (_pendingTapeStatesLock)
+            {
+                _pendingTapeStatesByParameterIndex.Clear();
+            }
             long tapePayloadBytes = reader.BaseStream.Length - reader.BaseStream.Position;
             if (tapePayloadBytes == 0)
             {

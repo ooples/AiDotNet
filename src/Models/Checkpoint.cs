@@ -190,12 +190,15 @@ public class Checkpoint<T, TInput, TOutput>
         {
             var expectedType = Type.GetType(OptimizerTypeName);
             var actualType = optimizer.GetType();
-            // The saved name is assembly-qualified ("Ns.Type, Assembly, Version=..."); the part before the
-            // first comma is the type FullName. When Type.GetType can't resolve the saved type (the
+            // The saved name is assembly-qualified ("Ns.Type, Assembly, Version=..."); the FullName is the
+            // part before the first TOP-LEVEL comma. When Type.GetType can't resolve the saved type (the
             // assembly was renamed or its version changed), fall back to comparing the assembly-qualified
             // string AND the bare FullName, so a checkpoint from a since-renamed/versioned assembly whose
             // concrete optimizer type is otherwise identical still restores instead of being rejected.
-            string expectedFullName = OptimizerTypeName.Split(',')[0].Trim();
+            // NOTE: a naive Split(',')[0] is WRONG for generic types — a closed generic's assembly-
+            // qualified name embeds its type arguments' own AQNs inside "[[...]]", which contain commas;
+            // ExtractTypeFullName below skips commas nested in brackets so the FullName isn't truncated.
+            string expectedFullName = ExtractTypeFullName(OptimizerTypeName);
             bool compatible = expectedType != null
                 ? expectedType.IsInstanceOfType(optimizer)
                 : string.Equals(OptimizerTypeName, actualType.AssemblyQualifiedName, StringComparison.Ordinal)
@@ -212,6 +215,25 @@ public class Checkpoint<T, TInput, TOutput>
 
         optimizer.Deserialize(OptimizerData);
         return true;
+    }
+
+    /// <summary>
+    /// Extracts the type <c>FullName</c> from an assembly-qualified type name by returning the substring
+    /// before the first comma that is NOT nested inside brackets. Correct for closed generic types, whose
+    /// assembly-qualified name embeds each type argument's own assembly-qualified name inside <c>[[...]]</c>
+    /// (which contain commas) — a naive <c>Split(',')</c> would truncate at the first inner comma.
+    /// </summary>
+    internal static string ExtractTypeFullName(string assemblyQualifiedName)
+    {
+        int depth = 0;
+        for (int i = 0; i < assemblyQualifiedName.Length; i++)
+        {
+            char c = assemblyQualifiedName[i];
+            if (c == '[') depth++;
+            else if (c == ']') depth--;
+            else if (c == ',' && depth == 0) return assemblyQualifiedName.Substring(0, i).Trim();
+        }
+        return assemblyQualifiedName.Trim();
     }
 
     /// <summary>
