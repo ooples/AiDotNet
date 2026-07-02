@@ -183,7 +183,9 @@ public class Bucket11_HijackPathTests : ConfigureMethodTestBase
         {
             await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
                 .ConfigureDataLoader(loader)
-                .ConfigureAutoML(autoMLMock.Object)
+                // An IAutoMLModel is an IFullModel, so it's configured through the generic
+                // ConfigureModel; the builder capability-routes it to the AutoML search path.
+                .ConfigureModel(autoMLMock.Object)
                 .BuildAsync();
         }
         catch (System.NullReferenceException ex)

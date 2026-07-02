@@ -19,8 +19,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private ILossFunction<T>? _configuredLossFunction;
     private IActivationFunction<T>? _configuredActivationFunction;
     private IKernelFunction<T>? _configuredKernelFunction;
-    private IRegression<T>? _configuredRegression;
-    private IClassifier<T>? _configuredClassifier;
     private IClustering<T>? _configuredClustering;
     private ILayer<T>? _configuredLayer;
     private IAnomalyDetector<T>? _configuredAnomalyDetector;
@@ -78,38 +76,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureKernelFunction(IKernelFunction<T> kernelFunction)
     {
         _configuredKernelFunction = kernelFunction;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures a regression algorithm for predicting continuous numeric values.
-    /// </summary>
-    /// <param name="regression">The regression implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Regression predicts numeric values (e.g., house prices, temperature).
-    /// Available algorithms include Linear Regression, Ridge, Lasso, Polynomial Regression,
-    /// and many more specialized methods.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureRegression(IRegression<T> regression)
-    {
-        _configuredRegression = regression;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures a classification algorithm for categorizing data into discrete classes.
-    /// </summary>
-    /// <param name="classifier">The classifier implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Classification assigns data points to categories (e.g., spam/not-spam,
-    /// cat/dog/bird). Available algorithms include Logistic Regression, SVM, Decision Trees,
-    /// Random Forest, and many more.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureClassifier(IClassifier<T> classifier)
-    {
-        _configuredClassifier = classifier;
         return this;
     }
 

@@ -1145,6 +1145,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             return result;
         }
 
+        // SELF-SUPERVISED / GENERATIVE TRAINING PATH - the model owns its objective
+        // (e.g. diffusion noise prediction), so the supervised optimizer path (which fits
+        // Predict(X) ≈ Y) cannot train it. Route it to a per-sample epoch loop that calls
+        // the model's own Train. Detected by capability (ISelfSupervisedModel), not by type.
+        if (_model is Interfaces.ISelfSupervisedModel)
+        {
+            result = await BuildSelfSupervisedInternalAsync(cancellationToken);
+            await RunBenchmarksIfConfiguredAsync(result).ConfigureAwait(false);
+            return result;
+        }
+
         // DATA LOADER PATH - check if data loader is configured and provides input/output data
         if (_dataLoader is IInputOutputDataLoader<T, TInput, TOutput> inputOutputLoader)
         {
@@ -1687,6 +1698,103 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <param name="verbose">Whether to print training progress.</param>
     /// <returns>A task that represents the asynchronous operation, containing the trained RL agent result.</returns>
 #pragma warning disable CS1998
+    // ── SELF-SUPERVISED / GENERATIVE TRAINING ────────────────────────────────
+    // Trains a model that owns its objective (ISelfSupervisedModel, e.g. diffusion).
+    // Runs epochs over the data calling model.Train(sample, sample) per sample — the model
+    // turns each sample into its own learning signal (diffusion: add noise at a random
+    // timestep, learn to predict it). Epochs come from the configured optimizer's
+    // MaxIterations, else a sensible default.
+    private async Task<AiModelResult<T, TInput, TOutput>> BuildSelfSupervisedInternalAsync(
+        CancellationToken cancellationToken)
+    {
+        if (_model is not IFullModel<T, TInput, TOutput> model)
+        {
+            throw new InvalidOperationException(
+                "Self-supervised training requires a model configured via ConfigureModel(...).");
+        }
+
+        var samples = await GatherSelfSupervisedSamplesAsync(cancellationToken);
+        if (samples.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Self-supervised training has no data. Provide samples via ConfigureDataLoader(...).");
+        }
+
+        int epochs = _optimizer is not null
+            ? Math.Max(1, _optimizer.GetOptions().MaxIterations)
+            : 100;
+
+        var rng = _allowNondeterminism ? new Random() : new Random(42);
+        for (int epoch = 0; epoch < epochs; epoch++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var sample in samples.OrderBy(_ => rng.Next()))
+            {
+                if (sample is null) continue;
+                // Self-supervised: the target is ignored — the model derives its own objective
+                // from the input (e.g. diffusion adds noise and predicts it). Self-supervised
+                // models use the same type for input and output (Tensor→Tensor), so the input
+                // doubles as the (unused) expected-output argument.
+                var target = (TOutput)(object)sample;
+                model.Train(sample, target);
+            }
+        }
+
+        var result = AttachDiagnostics(new AiModelResult<T, TInput, TOutput>());
+        result.Model = model;
+        if (_knowledgeGraph != null || _graphStore != null || _hybridGraphRetriever != null)
+        {
+            result.AttachGraphComponents(_knowledgeGraph, _graphStore, _hybridGraphRetriever);
+        }
+        if (_tokenizer != null)
+        {
+            result.AttachTokenizer(_tokenizer, _tokenizationConfig);
+        }
+        return result;
+    }
+
+    // Materialize per-sample inputs from the configured data loader for self-supervised
+    // training, splitting a batched tensor along its leading (batch) dimension.
+    private async Task<List<TInput>> GatherSelfSupervisedSamplesAsync(CancellationToken cancellationToken)
+    {
+        var samples = new List<TInput>();
+        if (_dataLoader is IInputOutputDataLoader<T, TInput, TOutput> loader)
+        {
+            if (!_dataLoader.IsLoaded)
+            {
+                await _dataLoader.LoadAsync(cancellationToken);
+            }
+            SplitBatchedSamples(loader.Features, samples);
+        }
+        return samples;
+    }
+
+    // Split a batched TInput into per-sample TInputs: Tensor<T> [N, …] → N × [1, …];
+    // otherwise treat the value as a single sample.
+    private static void SplitBatchedSamples(TInput features, List<TInput> into)
+    {
+        if (features is Tensor<T> t && t.Shape.Length >= 2 && t.Shape[0] > 0)
+        {
+            int n = t.Shape[0];
+            int stride = 1;
+            for (int d = 1; d < t.Shape.Length; d++) stride *= t.Shape[d];
+            var data = t.ToVector();
+            var sampleShape = new int[t.Shape.Length];
+            sampleShape[0] = 1;
+            for (int d = 1; d < t.Shape.Length; d++) sampleShape[d] = t.Shape[d];
+            for (int k = 0; k < n; k++)
+            {
+                var v = new Vector<T>(stride);
+                for (int j = 0; j < stride; j++) v[j] = data[k * stride + j];
+                if (new Tensor<T>(sampleShape, v) is TInput ti) into.Add(ti);
+            }
+        }
+        else if (features is not null)
+        {
+            into.Add(features);
+        }
+    }
+
     private async Task<AiModelResult<T, TInput, TOutput>> BuildRLInternalAsync(int episodes, bool verbose)
     {
         // RL TRAINING PATH

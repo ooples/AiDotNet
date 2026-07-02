@@ -21,15 +21,9 @@ namespace AiDotNet;
 public partial class AiModelBuilder<T, TInput, TOutput>
 {
     private IAudioEffect<T>? _configuredAudioEffect;
-    private ISpeechRecognizer<T>? _configuredSpeechRecognizer;
-    private ITextToSpeech<T>? _configuredTextToSpeech;
-    private IDiffusionModel<T>? _configuredDiffusionModel;
     private IActiveLearningStrategy<T>? _configuredActiveLearningStrategy;
     private IContinualLearner<T, TInput, TOutput>? _configuredContinualLearner;
-    private IOnlineLearningModel<T>? _configuredOnlineLearningModel;
-    private ICausalModel<T>? _configuredCausalModel;
     private AiDotNet.DriftDetection.IDriftDetector<T>? _configuredDriftDetector;
-    private ISurvivalModel<T>? _configuredSurvivalModel;
     private IVideoModel<T>? _configuredVideoModel;
     private IPointCloudModel<T>? _configuredPointCloudModel;
     private IDocumentModel<T>? _configuredDocumentModel;
@@ -39,7 +33,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private IEmbeddingModel<T>? _configuredEmbeddingModel;
     private IScoringRule<T>? _configuredScoringRule;
     private IModelExplainer<T>? _configuredModelExplainer;
-    private IRLAgent<T>? _configuredRLAgent;
 
     /// <summary>
     /// Configures an audio effect for audio signal processing pipelines.
@@ -54,54 +47,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureAudioEffect(IAudioEffect<T> audioEffect)
     {
         _configuredAudioEffect = audioEffect;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures a speech recognition model for converting spoken audio to text.
-    /// </summary>
-    /// <param name="recognizer">The speech recognizer implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Speech recognition (ASR) converts spoken words into written text.
-    /// This enables voice assistants, transcription services, and voice-controlled applications.
-    /// Available models range from simple HMM-based to modern transformer architectures.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureSpeechRecognizer(ISpeechRecognizer<T> recognizer)
-    {
-        _configuredSpeechRecognizer = recognizer;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures a text-to-speech model for converting written text to spoken audio.
-    /// </summary>
-    /// <param name="tts">The text-to-speech implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Text-to-speech (TTS) generates natural-sounding audio from text.
-    /// Modern TTS systems can produce highly realistic speech with controllable voice characteristics,
-    /// useful for accessibility, virtual assistants, and content creation.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureTextToSpeech(ITextToSpeech<T> tts)
-    {
-        _configuredTextToSpeech = tts;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures a diffusion model for generative tasks (image/audio/video generation).
-    /// </summary>
-    /// <param name="diffusionModel">The diffusion model implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Diffusion models generate new data (images, audio, etc.) by
-    /// learning to gradually remove noise from random data. They power tools like DALL-E and
-    /// Stable Diffusion for image generation and can be applied to audio and video as well.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureDiffusionModel(IDiffusionModel<T> diffusionModel)
-    {
-        _configuredDiffusionModel = diffusionModel;
         return this;
     }
 
@@ -139,39 +84,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
-    /// Configures an online learning model that updates incrementally with new data.
-    /// </summary>
-    /// <param name="learner">The online learning model implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Online learning updates the model one sample at a time (or in
-    /// small batches) as new data arrives, rather than retraining from scratch. This is essential
-    /// for streaming data, real-time systems, and scenarios where data is too large to store.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureOnlineLearning(IOnlineLearningModel<T> learner)
-    {
-        _configuredOnlineLearningModel = learner;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures a causal inference model for understanding cause-and-effect relationships.
-    /// </summary>
-    /// <param name="causalModel">The causal model implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Causal inference goes beyond prediction to understand why things
-    /// happen. While regular ML finds correlations ("ice cream sales and drownings both increase"),
-    /// causal models identify actual causes ("summer causes both"). This is crucial for
-    /// decision-making, policy evaluation, and understanding treatment effects.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureCausalInference(ICausalModel<T> causalModel)
-    {
-        _configuredCausalModel = causalModel;
-        return this;
-    }
-
-    /// <summary>
     /// Configures a drift detector for monitoring changes in data distribution over time.
     /// </summary>
     /// <param name="driftDetector">The drift detector implementation to use.</param>
@@ -185,23 +97,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureDriftDetection(AiDotNet.DriftDetection.IDriftDetector<T> driftDetector)
     {
         _configuredDriftDetector = driftDetector;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures a survival analysis model for time-to-event prediction.
-    /// </summary>
-    /// <param name="survivalModel">The survival model implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Survival analysis predicts how long until an event occurs,
-    /// such as customer churn, equipment failure, or patient outcomes. Unlike regular regression,
-    /// it handles censored data (when the event hasn't occurred yet for some subjects).
-    /// Common models include Cox Proportional Hazards and Kaplan-Meier.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureSurvivalAnalysis(ISurvivalModel<T> survivalModel)
-    {
-        _configuredSurvivalModel = survivalModel;
         return this;
     }
 
@@ -352,19 +247,4 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return this;
     }
 
-    /// <summary>
-    /// Configures a reinforcement learning agent for learning through interaction with an environment.
-    /// </summary>
-    /// <param name="agent">The RL agent implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> RL agents learn by trial and error, receiving rewards or penalties
-    /// for their actions in an environment. They're used for game playing, robotics, recommendation
-    /// systems, and resource optimization. Available agents include DQN, PPO, SAC, and A2C.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureRLAgent(IRLAgent<T> agent)
-    {
-        _configuredRLAgent = agent;
-        return this;
-    }
 }

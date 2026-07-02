@@ -49,6 +49,14 @@ public class AutoMLOptions<T, TInput, TOutput>
     public AutoMLSearchStrategy SearchStrategy { get; set; } = AutoMLSearchStrategy.RandomSearch;
 
     /// <summary>
+    /// Gets or sets the search space — which model types AutoML tries and the hyperparameter
+    /// ranges it explores. Null (the default) uses the beginner-friendly, task-appropriate
+    /// candidate set and per-model default ranges; set it for expert control (include/exclude
+    /// candidate models, hand-tune hyperparameter ranges). See <see cref="AutoMLSearchSpace{T, TInput, TOutput}"/>.
+    /// </summary>
+    public AutoMLSearchSpace<T, TInput, TOutput>? SearchSpace { get; set; }
+
+    /// <summary>
     /// Gets or sets multi-fidelity options used when <see cref="SearchStrategy"/> is <see cref="AutoMLSearchStrategy.MultiFidelity"/>.
     /// </summary>
     /// <remarks>

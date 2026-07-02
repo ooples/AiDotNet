@@ -48,7 +48,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private ICertifiedDefense<T, TInput, TOutput>? _configuredCertifiedDefense;
     private ActiveLearning.Interfaces.IQueryStrategy<T, TInput, TOutput>? _configuredQueryStrategy;
     private IAudioEnhancer<T>? _configuredAudioEnhancer;
-    private IAudioGenerator<T>? _configuredAudioGenerator;
     private RetrievalAugmentedGeneration.VectorSearch.ISimilarityMetric<T>? _configuredSimilarityMetric;
 
     /// <summary>
@@ -483,22 +482,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureAudioEnhancer(IAudioEnhancer<T> enhancer)
     {
         _configuredAudioEnhancer = enhancer;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures an audio generator for creating audio from various inputs.
-    /// </summary>
-    /// <param name="generator">The audio generator implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Audio generators create audio content from text descriptions,
-    /// musical notation, or other inputs. They power text-to-speech, music generation,
-    /// sound effect synthesis, and audio style transfer applications.</para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureAudioGenerator(IAudioGenerator<T> generator)
-    {
-        _configuredAudioGenerator = generator;
         return this;
     }
 

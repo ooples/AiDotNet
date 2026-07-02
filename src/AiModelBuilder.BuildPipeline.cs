@@ -687,10 +687,31 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // AUTOML SEARCH (if configured and no model explicitly set)
         // AutoML finds the best model type and hyperparameters automatically
         AutoMLRunSummary? autoMLSummary = null;
-        if (_autoMLModel != null && _model == null)
+        // AutoML is the DEFAULT whenever the user hasn't pinned a concrete trainable model:
+        // either they configured no model at all, or they passed an IAutoMLModel via
+        // ConfigureModel (an AutoML engine IS an IFullModel — no dedicated Configure needed).
+        // Engine resolves to: the one from ConfigureAutoML(options), else the model if it's an
+        // IAutoMLModel, else a built-in RandomSearch default.
+        bool concreteModelPinned = _model != null && _model is not IAutoMLModel<T, TInput, TOutput>;
+        if (!concreteModelPinned)
         {
+            _autoMLModel ??= (_model as IAutoMLModel<T, TInput, TOutput>)
+                ?? CreateBuiltInAutoMLModel(_autoMLOptions?.SearchStrategy ?? AutoMLSearchStrategy.RandomSearch);
             Console.WriteLine("AutoML configured - starting model search...");
             var searchStartedUtc = DateTimeOffset.UtcNow;
+
+            // Expert search-space controls (all optional; null → task-family defaults).
+            // Hyperparameter ranges and an explicit candidate list apply regardless of task family;
+            // exclude-from-defaults is applied in the task-family block below.
+            var searchSpace = _autoMLOptions?.SearchSpace;
+            if (searchSpace?.HyperparameterSpace is { Count: > 0 } hpSpace)
+            {
+                _autoMLModel.SetSearchSpace(hpSpace);
+            }
+            if (searchSpace?.CandidateModels is { Count: > 0 })
+            {
+                _autoMLModel.SetCandidateModels(searchSpace.ResolveCandidates(searchSpace.CandidateModels));
+            }
 
             // Step 1: Split data FIRST to prevent data leakage
             TInput autoMLPreparedX = x;
@@ -735,9 +756,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             {
                 int featureCount = InputHelper<T, TInput>.GetInputSize(autoMLXTrain);
                 var candidates = AutoMLDefaultCandidateModelsPolicy.GetDefaultCandidates(taskFamilyOverride, featureCount, _autoMLOptions.Budget.Preset);
-                if (candidates.Count > 0)
+                // Apply expert include/exclude overrides to the task-family defaults, if any.
+                var effectiveCandidates = searchSpace?.ResolveCandidates(candidates.ToList()) ?? candidates.ToList();
+                if (effectiveCandidates.Count > 0)
                 {
-                    _autoMLModel.SetCandidateModels(candidates.ToList());
+                    _autoMLModel.SetCandidateModels(effectiveCandidates);
                 }
 
                 if (!_autoMLOptions.OptimizationMetricOverride.HasValue)

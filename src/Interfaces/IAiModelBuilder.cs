@@ -875,40 +875,6 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureCrossValidation(ICrossValidator<T, TInput, TOutput> crossValidator);
 
-    /// <summary>
-    /// Configures an AutoML model for automatic machine learning optimization.
-    /// </summary>
-    /// <param name="autoMLModel">The AutoML model instance to use for hyperparameter search and model selection.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> AutoML (Automated Machine Learning) automatically searches for the best
-    /// model and hyperparameters for your problem. Instead of manually trying different models and settings,
-    /// AutoML does this for you.
-    /// </para>
-    /// <para>
-    /// When you configure an AutoML model:
-    /// - The Build() method will run the AutoML search process
-    /// - AutoML will try different models and hyperparameters
-    /// - The best model found will be returned as your trained model
-    /// - You can configure search time limits, candidate models, and optimization metrics
-    /// </para>
-    /// <para>
-    /// Example:
-    /// <code>
-    /// // Advanced usage: plug in your own AutoML implementation.
-    /// // Most users should prefer the ConfigureAutoML(AutoMLOptions&lt;...&gt;) overload instead.
-    /// var autoML = new RandomSearchAutoML&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
-    /// autoML.SetTimeLimit(TimeSpan.FromMinutes(30));
-    /// autoML.SetCandidateModels(new List&lt;ModelType&gt; { ModelType.RandomForest, ModelType.GradientBoosting });
-    ///
-    /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigureAutoML(autoML)
-    ///     .Build(trainingData, trainingLabels);
-    /// </code>
-    /// </para>
-    /// </remarks>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureAutoML(IAutoMLModel<T, TInput, TOutput> autoMLModel);
 
     /// <summary>
     /// Configures AutoML using facade-style options (recommended for most users).
@@ -1945,30 +1911,6 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureKernelFunction(IKernelFunction<T> kernelFunction);
 
     /// <summary>
-    /// Configures a regression algorithm for predicting continuous numeric values.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Regression predicts numeric values (e.g., house prices, temperature).
-    /// Available algorithms include Linear Regression, Ridge, Lasso, Polynomial Regression,
-    /// and many more specialized methods.</para>
-    /// </remarks>
-    /// <param name="regression">The regression implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureRegression(IRegression<T> regression);
-
-    /// <summary>
-    /// Configures a classification algorithm for categorizing data into discrete classes.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Classification assigns data points to categories (e.g., spam/not-spam,
-    /// cat/dog/bird). Available algorithms include Logistic Regression, SVM, Decision Trees,
-    /// Random Forest, and many more.</para>
-    /// </remarks>
-    /// <param name="classifier">The classifier implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureClassifier(IClassifier<T> classifier);
-
-    /// <summary>
     /// Configures a clustering algorithm for grouping similar data points together.
     /// </summary>
     /// <remarks>
@@ -2119,42 +2061,6 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureAudioEffect(IAudioEffect<T> audioEffect);
 
     /// <summary>
-    /// Configures a speech recognition model for converting spoken audio to text.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Speech recognition (ASR) converts spoken words into written text.
-    /// This enables voice assistants, transcription services, and voice-controlled applications.
-    /// Available models range from simple HMM-based to modern transformer architectures.</para>
-    /// </remarks>
-    /// <param name="recognizer">The speech recognizer implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureSpeechRecognizer(ISpeechRecognizer<T> recognizer);
-
-    /// <summary>
-    /// Configures a text-to-speech model for converting written text to spoken audio.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Text-to-speech (TTS) generates natural-sounding audio from text.
-    /// Modern TTS systems can produce highly realistic speech with controllable voice characteristics,
-    /// useful for accessibility, virtual assistants, and content creation.</para>
-    /// </remarks>
-    /// <param name="tts">The text-to-speech implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureTextToSpeech(ITextToSpeech<T> tts);
-
-    /// <summary>
-    /// Configures a diffusion model for generative tasks (image/audio/video generation).
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Diffusion models generate new data (images, audio, etc.) by
-    /// learning to gradually remove noise from random data. They power tools like DALL-E and
-    /// Stable Diffusion for image generation and can be applied to audio and video as well.</para>
-    /// </remarks>
-    /// <param name="diffusionModel">The diffusion model implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureDiffusionModel(IDiffusionModel<T> diffusionModel);
-
-    /// <summary>
     /// Configures an active learning strategy for intelligently selecting training samples.
     /// </summary>
     /// <remarks>
@@ -2180,30 +2086,6 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureContinualLearning(ContinualLearning.Interfaces.IContinualLearner<T, TInput, TOutput> learner);
 
     /// <summary>
-    /// Configures an online learning model that updates incrementally with new data.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Online learning updates the model one sample at a time (or in
-    /// small batches) as new data arrives, rather than retraining from scratch. This is essential
-    /// for streaming data, real-time systems, and scenarios where data is too large to store.</para>
-    /// </remarks>
-    /// <param name="learner">The online learning model implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureOnlineLearning(IOnlineLearningModel<T> learner);
-
-    /// <summary>
-    /// Configures a causal inference model for understanding cause-and-effect relationships.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Causal inference goes beyond prediction to understand why things
-    /// happen. While regular ML finds correlations, causal models identify actual causes. This is
-    /// crucial for decision-making, policy evaluation, and understanding treatment effects.</para>
-    /// </remarks>
-    /// <param name="causalModel">The causal model implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureCausalInference(ICausalModel<T> causalModel);
-
-    /// <summary>
     /// Configures a drift detector for monitoring changes in data distribution over time.
     /// </summary>
     /// <remarks>
@@ -2215,19 +2097,6 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <param name="driftDetector">The drift detector implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureDriftDetection(DriftDetection.IDriftDetector<T> driftDetector);
-
-    /// <summary>
-    /// Configures a survival analysis model for time-to-event prediction.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Survival analysis predicts how long until an event occurs,
-    /// such as customer churn, equipment failure, or patient outcomes. Unlike regular regression,
-    /// it handles censored data (when the event hasn't occurred yet for some subjects).
-    /// Common models include Cox Proportional Hazards and Kaplan-Meier.</para>
-    /// </remarks>
-    /// <param name="survivalModel">The survival model implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureSurvivalAnalysis(ISurvivalModel<T> survivalModel);
 
     /// <summary>
     /// Configures a video model for video understanding and generation tasks.
@@ -2339,18 +2208,6 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <param name="explainer">The model explainer implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureModelExplainer(IModelExplainer<T> explainer);
-
-    /// <summary>
-    /// Configures a reinforcement learning agent for learning through interaction with an environment.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> RL agents learn by trial and error, receiving rewards or penalties
-    /// for their actions in an environment. They're used for game playing, robotics, recommendation
-    /// systems, and resource optimization. Available agents include DQN, PPO, SAC, and A2C.</para>
-    /// </remarks>
-    /// <param name="agent">The RL agent implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureRLAgent(IRLAgent<T> agent);
 
     // ── Extended Coverage: Model Options, Data Transformers, Splitting, Metrics, Vectorization, Storage ──
 
@@ -2544,12 +2401,6 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureAudioEnhancer(IAudioEnhancer<T> enhancer);
 
-    /// <summary>
-    /// Configures an audio generator for creating audio from various inputs.
-    /// </summary>
-    /// <param name="generator">The audio generator implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureAudioGenerator(IAudioGenerator<T> generator);
 
     /// <summary>
     /// Configures a similarity metric for vector similarity search operations.
