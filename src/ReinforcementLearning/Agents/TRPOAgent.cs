@@ -681,7 +681,12 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
-        return new TRPOAgent<T>(_options, _optimizer);
+        // Preserve the learned policy: a fresh TRPOAgent re-initialises its policy and
+        // value networks with new random weights, so without copying the trained
+        // parameters the clone would implement a different policy than the original.
+        var clone = new TRPOAgent<T>(_options, _optimizer);
+        clone.SetParameters(GetParameters());
+        return clone;
     }
 
     public override Vector<T> ComputeGradients(

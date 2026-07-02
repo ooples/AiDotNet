@@ -26,7 +26,7 @@ namespace AiDotNet.LossFunctions;
 /// </remarks>
 [LossCategory(LossCategory.Regression)]
 [LossTask(LossTask.Regression)]
-[LossProperty(IsNonNegative = true, ZeroForIdentical = false, IsSymmetric = false, ExpectedOutput = OutputType.Continuous)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, IsSymmetric = false, HasStandardGradientSign = false, ExpectedOutput = OutputType.Continuous)]
 public class BornRuleMseLoss<T> : LossFunctionBase<T>
 {
     /// <inheritdoc />

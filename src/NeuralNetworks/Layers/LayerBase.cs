@@ -500,6 +500,15 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         if (!IsInitialized && IsShapeResolved)
         {
             EnsureInitialized();
+            // #1715: register the just-materialized streaming weights with the pool so transparent
+            // auto-eviction can page them out — the forward path does this via
+            // EnsureInitializedFromInput → RegisterStreamingWeightsWithPool, but the
+            // parameter-materialization path (GetParameterChunks on foundation-scale predictors)
+            // reaches EnsureInitialized directly. Without registration, AllocateStreaming's
+            // ReserveBytes finds nothing to evict and the full (~25 GB for FLUX) weight set
+            // accumulates on the GC heap → OOM. No-op when streaming is inactive
+            // (UseStreamingAllocator false) or the weights aren't streaming-backed (idempotent).
+            RegisterStreamingWeightsWithPool();
         }
     }
 
