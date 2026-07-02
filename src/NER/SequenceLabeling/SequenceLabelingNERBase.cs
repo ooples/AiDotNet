@@ -199,6 +199,22 @@ public abstract class SequenceLabelingNERBase<T> : NERNeuralNetworkBase<T>
     protected abstract Tensor<T> ComputeEmissionScores(Tensor<T> tokenEmbeddings);
 
     /// <summary>
+    /// Returns the raw per-token emission scores (shape [sequenceLength, numLabels], or batched
+    /// [batch, sequenceLength, numLabels]) produced by the encoder BEFORE CRF/Viterbi decoding.
+    /// </summary>
+    /// <remarks>
+    /// Unlike <see cref="PredictLabels"/>, whose CRF-decoded path is dominated by the learned
+    /// transition matrix (and is therefore insensitive to input magnitude — and, for an untrained
+    /// model, frequently constant across different inputs), the emission scores are produced
+    /// directly by the CNN / BiLSTM encoder and reflect the input. Exposed for confidence inspection
+    /// and for verifying input sensitivity of the encoder independently of the transition-dominated
+    /// decode.
+    /// </remarks>
+    /// <param name="tokenEmbeddings">The pre-embedded token features.</param>
+    /// <returns>The emission score tensor.</returns>
+    public Tensor<T> PredictEmissions(Tensor<T> tokenEmbeddings) => ComputeEmissionScores(tokenEmbeddings);
+
+    /// <summary>
     /// Performs independent argmax decoding on emission scores to get label predictions.
     /// Supports both single-sequence (2D) and batched (3D) inputs.
     /// </summary>

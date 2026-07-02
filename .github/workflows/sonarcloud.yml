@@ -31,8 +31,9 @@ on:
     - cron: '0 8 * * 1'
 
 concurrency:
-  # For PR events: group by PR number, cancel-in-progress=true so a rapid
-  # synchronize / reopen cancels the previous run for the same PR.
+  # For PR events: group by PR number; cancel-in-progress is FALSE (see the
+  # cancel-in-progress note below) so an in-progress test-shard run completes
+  # rather than being cancelled mid-matrix by a rapid synchronize / reopen.
   #
   # For push events (master / main): group by ref ONLY (no SHA suffix) AND
   # cancel-in-progress=true so a newer master commit supersedes the prior
@@ -59,7 +60,20 @@ concurrency:
   # downstream check (branch-protection, PR mergeability, release tagging)
   # actually consumes. The intermediate-SHA loss is acceptable.
   group: build-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # cancel-in-progress is TRUE for push/master events (a newer master tip supersedes
+  # the prior in-flight run — only the latest tip needs a green signal, saves ~45min)
+  # but FALSE for pull_request events: a rapid synchronize must NOT kill an in-progress
+  # test-shard run, because cancelling mid-shard marks in-flight tests as FAILED and
+  # leaves the 49-shard matrix with no completed signal to verify a PR against
+  # (observed repeatedly on #1719: DQNAgent / FastConformer "failures" that pass
+  # locally were cancellation artifacts). GitHub still supersedes only PENDING runs in
+  # the group, so at most one run is queued per PR — bounded (≤1 in-progress + ≤1 pending),
+  # no matrix pile-up, so the extra runner time per PR is capped, not unbounded. The
+  # obvious alternative — keep cancel-in-progress: true but treat cancelled jobs as
+  # neutral in required checks — does not fit here: GitHub reports a cancelled required
+  # check as FAILING (not neutral), which is exactly the false-red branch-protection
+  # signal this setting exists to avoid.
+  cancel-in-progress: ${{ github.event_name != 'pull_request' }}
 
 env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
@@ -192,10 +206,7 @@ jobs:
           sudo rm -rf /opt/hostedtoolcache/CodeQL || true
           sudo rm -rf /usr/share/swift /usr/local/share/boost || true
           sudo rm -rf /usr/local/share/powershell /usr/local/share/chromium || true
-          # The toolchain deletions above reclaim ~25 GB, leaving ~39 GB free — ample for this .NET
-          # build — so we skip `docker image prune --all` here: on a fresh runner the preloaded images
-          # aren't dangling (so a dangling-only prune reclaims ~nothing), and a full --all prune is a
-          # slow, variable step that can contend with any concurrent Docker use on the runner.
+          sudo docker image prune --all --force || true
           echo "Disk after cleanup:"; df -h /
 
       - name: Setup .NET 10.0
@@ -340,13 +351,13 @@ jobs:
             framework: net10.0
             filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~UnitTests.NeuralNetworks&(FullyQualifiedName~LoRAAdapterTests|FullyQualifiedName~LoRALayerTests|FullyQualifiedName~VBLoRAAdapterTests|FullyQualifiedName~AdvancedAlgebraNetworkTests|FullyQualifiedName~MixtureOfExpertsNeuralNetworkTests)'
           # 'Unit - 08e NN-Remaining (catch-all)' removed: it was a duplicate
-          # of `ModelFamily - NeuralNetworks A-L` + `M-Z` (same
-          # ModelFamilyTests.NeuralNetworks scope, only excluding 5 unit-test
-          # classes already covered by their dedicated 08a-08d shards). Running
-          # ~800 paper-scale NN model tests a SECOND time inside an already-
-          # OOMing process is what was actually triggering the catch-all
-          # failures — the model family A-L / M-Z shards above provide
-          # complete, non-redundant coverage of the same scope.
+          # of the ModelFamily NeuralNetworks shards (`A-F` + `G-L` + `M-N` +
+          # `O-R` + `S` + `T-Z`, same ModelFamilyTests.NeuralNetworks scope,
+          # only excluding 5 unit-test classes already covered by their
+          # dedicated 08a-08d shards). Running ~800 paper-scale NN model tests
+          # a SECOND time inside an already-OOMing process is what was actually
+          # triggering the catch-all failures — the model family shards above
+          # provide complete, non-redundant coverage of the same scope.
           - name: Unit - 09 Optimizers/RAG
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -437,12 +448,23 @@ jobs:
           # NeuralNetworks (85 model classes) split by model-class first letter.
           # These instantiate ResNet/VGG/DenseNet/transformer-scale models
           # (multi-GB each) and OOM'd as larger shards even serialized.
-          - name: ModelFamily - NeuralNetworks A-L
+          # A-L was a single serial $heavyShard that ran the full 45-min job
+          # timeout (983 tests × serial) and got cancelled before finishing —
+          # perpetually red, exactly like Integration C before its split. Split
+          # A-L → A-F + G-L so each serial half finishes well under the timeout.
+          # Gap-free + non-overlapping: the two filters' union is the old A-L set.
+          - name: ModelFamily - NeuralNetworks A-F
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.NeuralNetworks&
-              (FullyQualifiedName~NeuralNetworks.A|FullyQualifiedName~NeuralNetworks.B|FullyQualifiedName~NeuralNetworks.C|FullyQualifiedName~NeuralNetworks.D|FullyQualifiedName~NeuralNetworks.E|FullyQualifiedName~NeuralNetworks.F|FullyQualifiedName~NeuralNetworks.G|FullyQualifiedName~NeuralNetworks.H|FullyQualifiedName~NeuralNetworks.I|FullyQualifiedName~NeuralNetworks.J|FullyQualifiedName~NeuralNetworks.K|FullyQualifiedName~NeuralNetworks.L)
+              (FullyQualifiedName~NeuralNetworks.A|FullyQualifiedName~NeuralNetworks.B|FullyQualifiedName~NeuralNetworks.C|FullyQualifiedName~NeuralNetworks.D|FullyQualifiedName~NeuralNetworks.E|FullyQualifiedName~NeuralNetworks.F)
+          - name: ModelFamily - NeuralNetworks G-L
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.NeuralNetworks&
+              (FullyQualifiedName~NeuralNetworks.G|FullyQualifiedName~NeuralNetworks.H|FullyQualifiedName~NeuralNetworks.I|FullyQualifiedName~NeuralNetworks.J|FullyQualifiedName~NeuralNetworks.K|FullyQualifiedName~NeuralNetworks.L)
           - name: ModelFamily - NeuralNetworks M-N
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -534,12 +556,23 @@ jobs:
           # Auto-generated layer tests from TestScaffoldGenerator (~1670 methods),
           # split A-M / N-Z by generated model-class first letter to halve per-shard
           # model instantiations (OOM mitigation).
-          - name: ModelFamily - Generated Layers A-M
+          # A-M was a single serial $heavyShard whose ~835 default-gate methods ran
+          # the full 45-min job timeout and got CANCELLED before finishing —
+          # perpetually red, like Integration C / NeuralNetworks A-L before their
+          # splits. Split A-M → A-F + G-M so each serial half finishes under the
+          # timeout. Gap-free + non-overlapping: union == the old A-M set.
+          - name: ModelFamily - Generated Layers A-F
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.A|FullyQualifiedName~Generated.B|FullyQualifiedName~Generated.C|FullyQualifiedName~Generated.D|FullyQualifiedName~Generated.E|FullyQualifiedName~Generated.F|FullyQualifiedName~Generated.G|FullyQualifiedName~Generated.H|FullyQualifiedName~Generated.I|FullyQualifiedName~Generated.J|FullyQualifiedName~Generated.K|FullyQualifiedName~Generated.L|FullyQualifiedName~Generated.M)
+              (FullyQualifiedName~Generated.A|FullyQualifiedName~Generated.B|FullyQualifiedName~Generated.C|FullyQualifiedName~Generated.D|FullyQualifiedName~Generated.E|FullyQualifiedName~Generated.F)
+          - name: ModelFamily - Generated Layers G-M
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Generated&
+              (FullyQualifiedName~Generated.G|FullyQualifiedName~Generated.H|FullyQualifiedName~Generated.I|FullyQualifiedName~Generated.J|FullyQualifiedName~Generated.K|FullyQualifiedName~Generated.L|FullyQualifiedName~Generated.M)
           - name: ModelFamily - Generated Layers N-Z
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -756,9 +789,11 @@ jobs:
             'ModelFamily - Diffusion Stable',
             'ModelFamily - Diffusion Step-Sync',
             'ModelFamily - Diffusion T-Z',
-            'ModelFamily - Generated Layers A-M',
+            'ModelFamily - Generated Layers A-F',
+            'ModelFamily - Generated Layers G-M',
             'ModelFamily - Generated Layers N-Z',
-            'ModelFamily - NeuralNetworks A-L',
+            'ModelFamily - NeuralNetworks A-F',
+            'ModelFamily - NeuralNetworks G-L',
             'ModelFamily - NeuralNetworks M-N',
             'ModelFamily - NeuralNetworks O-R',
             'ModelFamily - NeuralNetworks S',

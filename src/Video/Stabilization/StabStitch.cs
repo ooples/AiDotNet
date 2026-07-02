@@ -113,7 +113,10 @@ public class StabStitch<T> : VideoStabilizationBase<T>
             int ch = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
             int h = Architecture.InputHeight > 0 ? Architecture.InputHeight : 128;
             int w = Architecture.InputWidth > 0 ? Architecture.InputWidth : 128;
-            Layers.AddRange(LayerHelper<T>.CreateDefaultVideoStabilizationLayers(
+            // StabStitch stabilizes by warping and stitching frames into a full output frame of the
+            // same dimensions as the input (a synthesis-style result), so use the length-preserving
+            // conv encoder-decoder rather than the global 6-affine-param regressor.
+            Layers.AddRange(LayerHelper<T>.CreateSynthesisVideoStabilizationLayers(
                 inputChannels: ch, inputHeight: h, inputWidth: w));
         }
     }

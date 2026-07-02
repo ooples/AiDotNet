@@ -152,7 +152,10 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
             // parameters changed after training" cluster the per-step
             // invariants caught. Callers can still pass an explicit loss
             // function to override this.
-            lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>())
+            lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>(),
+            options: null,
+            defaultGeneratorOptimizerOptions: CreateAdamOptimizerOptions(0.0002, 0.5),
+            defaultDiscriminatorOptimizerOptions: CreateAdamOptimizerOptions(0.0002, 0.5))
     {
         _options = options ?? new DCGANOptions();
         Options = _options;

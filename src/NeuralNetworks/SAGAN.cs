@@ -126,7 +126,10 @@ public class SAGAN<T> : GenerativeAdversarialNetwork<T>
             // sigmoid+BCE clamps predictions to [1e-7, 1-1e-7] and zeroes the gradient
             // the moment the deep Conv/BN/LeakyReLU stack saturates the sigmoid — the
             // "parameters did not change after training" failure mode.
-            lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>())
+            lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>(),
+            options: null,
+            defaultGeneratorOptimizerOptions: CreateAdamOptimizerOptions(0.0001, 0.0, 0.9),
+            defaultDiscriminatorOptimizerOptions: CreateAdamOptimizerOptions(0.0004, 0.0, 0.9))
     {
         _options = options ?? new SAGANOptions();
         Options = _options;

@@ -209,8 +209,11 @@ public class KOSMOS1<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageM
         //   [pre-norm + N×vision-block + (optional projection), M×decoder-block]
         // Block size = 5 (or 6 with dropout).
         int blockSize = _options.DropoutRate > 0 ? 6 : 5;
+        // Vision-side leading layers = input-projection Dense + LayerNorm (2). The factory now emits an
+        // input feature projection before the vision LayerNorm (see CreateDefaultCausalMultimodalLayers),
+        // so the split index accounts for both, not just the LayerNorm.
         int visionLayerEnd =
-            1
+            2
             + _options.NumVisionLayers * blockSize
             + (_options.VisionDim != _options.DecoderDim ? 1 : 0);
 

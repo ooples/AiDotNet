@@ -43,8 +43,33 @@ internal static class ModelFamilyTestGcGate
         // Drop process-wide weight-derived caches that pin the disposed model's tensors.
         AiDotNet.Tensors.Engines.InferenceWeightCache.InvalidateAll();
 
+        // #1706: foundation-scale models auto-enable weight streaming, registering their weights with
+        // the process-global WeightRegistry singleton, which is NOT cleared when the model is
+        // disposed. The next streaming model's ctor then throws "WeightRegistry.Configure: existing
+        // streaming pool has N registered entries" (and a timed-out streaming test leaves a partial
+        // registration behind too). Reset the registry here — in the between-tests hook EVERY
+        // model-family base already calls — after every test. This is the
+        // generic cross-test fix for all foundation-scale streaming models (Phi3Vision, SmolVLM,
+        // GrokVision, …) across every shard, replacing per-model opt-ins. It is unconditional so a
+        // broken registry state cannot make the readable-report pre-check fail closed.
         lock (LohCompaction)
         {
+            // Reset the process-global WeightRegistry singleton under the SAME lock as the LOH
+            // compaction: with parallel test collections enabled (xunit.runner.json), light-model
+            // teardowns run concurrently and would otherwise race on this global reset. Best-effort —
+            // a reset failure must not mask the test's own result (the contaminated registry surfaces
+            // on the next streaming ctor), but log it rather than swallowing silently so a genuine
+            // pool error is diagnosable.
+            try
+            {
+                NeuralNetworkBase<float>.ResetWeightStreamingForTests();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"ReclaimBetweenTests: ResetWeightStreamingForTests failed: {ex}");
+                System.Console.Error.WriteLine($"[ReclaimBetweenTests] ResetWeightStreamingForTests failed: {ex.Message}");
+            }
+
             // First pass: compacting Gen-2 + LOH reclaims everything unreachable, including the
             // just-disposed model's weight tensors.
             System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;

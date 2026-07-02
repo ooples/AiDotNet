@@ -148,6 +148,7 @@ public class ModelBasedAndMultiAgentTrainingTests
             ActionSize = actionDim,
             LatentStateSize = 16,
             BatchSize = batch,
+            UnrollSteps = 1,
         });
         var rng = RandomHelper.CreateSeededRandom(13);
         for (int t = 0; t < batch * 2; t++)

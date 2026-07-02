@@ -311,15 +311,72 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         _stepCount++;
     }
 
+    /// <summary>
+    /// Performs a one-shot supervised update for the training/test harness.
+    /// </summary>
+    /// <remarks>
+    /// MADDPG trains on JOINT transitions across all agents (centralized critic over the concatenated
+    /// per-agent states and actions), so the shared single-transition adapter — which supplies one
+    /// agent's state and a one-hot action — cannot drive it. We synthesize a valid joint transition:
+    /// use this state for every agent, take each agent's own continuous action, derive a bounded scalar
+    /// reward from the supervised target, store it via <see cref="StoreMultiAgentExperience"/>, and run
+    /// a MADDPG update.
+    /// </remarks>
+    public override void Train(Vector<T> state, Vector<T> target)
+    {
+        if (state is null) throw new ArgumentNullException(nameof(state));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        if (target.Length == 0)
+            throw new ArgumentException("target must contain at least one element.", nameof(target));
+
+        T reward = NumOps.Zero;
+        for (int i = 0; i < target.Length; i++)
+            reward = NumOps.Add(reward, target[i]);
+        reward = NumOps.Divide(reward, NumOps.FromDouble(target.Length));
+
+        int numAgents = _options.NumAgents;
+        var states = new List<Vector<T>>(numAgents);
+        var actions = new List<Vector<T>>(numAgents);
+        var rewards = new List<T>(numAgents);
+        var nextStates = new List<Vector<T>>(numAgents);
+        for (int a = 0; a < numAgents; a++)
+        {
+            states.Add(state);
+            actions.Add(SelectActionForAgent(a, state, training: true));
+            rewards.Add(reward);
+            nextStates.Add(state);
+        }
+
+        StoreMultiAgentExperience(states, actions, rewards, nextStates, done: false);
+
+        SupervisedUpdateRequested = true;
+        try
+        {
+            Train();
+        }
+        finally
+        {
+            SupervisedUpdateRequested = false;
+        }
+    }
+
     public override T Train()
     {
-        if (_replayBuffer.Count < _options.WarmupSteps || _replayBuffer.Count < _options.BatchSize)
+        // A supervised one-shot Train(state, target) call bypasses the autonomous-exploration warmup
+        // and trains on the samples gathered so far (clamped to the buffer); autonomous stepping still
+        // respects warmup.
+        int effectiveBatchSize = SupervisedUpdateRequested
+            ? System.Math.Min(_options.BatchSize, _replayBuffer.Count)
+            : _options.BatchSize;
+        if ((!SupervisedUpdateRequested && _replayBuffer.Count < _options.WarmupSteps)
+            || effectiveBatchSize <= 0
+            || _replayBuffer.Count < effectiveBatchSize)
         {
             return NumOps.Zero;
         }
 
         // Sample batch with indices to retrieve per-agent rewards
-        var (batch, indices) = _replayBuffer.SampleWithIndices(_options.BatchSize);
+        var (batch, indices) = _replayBuffer.SampleWithIndices(effectiveBatchSize);
         int n = batch.Count;
         int numAgents = _options.NumAgents;
         int sd = _options.StateSize;
