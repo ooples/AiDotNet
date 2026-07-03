@@ -23653,7 +23653,17 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder (ViT) ===
-        yield return new LayerNormalizationLayer<T>();
+        // Input token projection — the ViT "trainable linear projection of flattened patches"
+        // (Dosovitskiy et al. 2021, ViT §3.1), which every PaLI/CoCa/GIT-style encoder-decoder VLM
+        // applies to its post-patch tokens before the transformer stack. A leading BARE
+        // LayerNormalization was used here instead, which is scale/shift-invariant: it maps any
+        // token that is constant across the feature axis to the same output regardless of its
+        // magnitude, so the encoder discarded the input's amplitude before the first attention.
+        // That let training collapse to an input-independent (uniform-output) solution
+        // (DifferentInputs_AfterTraining). The affine projection preserves the input signal (and is
+        // the paper-faithful embedding), while the per-block LayerNormalizations below keep the
+        // activations normalized.
+        yield return new DenseLayer<T>(visionDim, identityActivation);
 
         for (int i = 0; i < numVisionLayers; i++)
         {
