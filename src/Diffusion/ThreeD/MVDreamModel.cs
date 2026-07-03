@@ -1268,10 +1268,8 @@ public class MultiViewUNet<T>
     private UNetNoisePredictor<T> _baseUNet;
     private readonly int _numViews;
     private MultiViewAttention<T> _mvAttention;
-    // Retained construction config so Clone() can rebuild an identically-shaped instance before
-    // transferring the resolved sub-module weights (the base U-Net is lazily materialized on first
-    // forward, so a plain re-construction would be a different-valued and, after resolution, mismatched
-    // network — see MVDreamModel.Clone).
+    // Retained construction config so Clone() can create an identically-shaped instance around the
+    // already-cloned resolved sub-modules (see MVDreamModel.Clone).
     private readonly int _inputChannels;
     private readonly int _outputChannels;
     private readonly int _baseChannels;
@@ -1321,24 +1319,44 @@ public class MultiViewUNet<T>
             seed: seed);
     }
 
+    private MultiViewUNet(
+        int inputChannels,
+        int outputChannels,
+        int baseChannels,
+        int numViews,
+        int contextDim,
+        UNetNoisePredictor<T> baseUNet,
+        MultiViewAttention<T> mvAttention)
+    {
+        _numOps = MathHelper.GetNumericOperations<T>();
+        _numViews = numViews;
+        _inputChannels = inputChannels;
+        _outputChannels = outputChannels;
+        _baseChannels = baseChannels;
+        _contextDim = contextDim;
+        _baseUNet = baseUNet;
+        _mvAttention = mvAttention;
+    }
+
     /// <summary>
     /// Deep-copies this multi-view U-Net, preserving trained weights. The base U-Net is cloned via its
     /// own <c>Clone()</c> (which resolves and copies its lazy layers), and the multi-view attention block
-    /// is rebuilt at the same shape and its parameters copied — so the result is structurally and
-    /// observationally identical to this instance.
+    /// is rebuilt at the same shape and its parameters copied into the private clone constructor — so the
+    /// result is structurally and observationally identical to this instance.
     /// </summary>
     public MultiViewUNet<T> Clone()
     {
-        var clone = new MultiViewUNet<T>(
-            inputChannels: _inputChannels,
-            outputChannels: _outputChannels,
-            baseChannels: _baseChannels,
-            numViews: _numViews,
-            contextDim: _contextDim);
-        clone._baseUNet = (UNetNoisePredictor<T>)_baseUNet.Clone();
-        clone._mvAttention = new MultiViewAttention<T>(channels: _baseChannels * 4, numViews: _numViews);
-        clone._mvAttention.SetParameters(_mvAttention.GetParameters());
-        return clone;
+        var clonedAttention = new MultiViewAttention<T>(channels: _baseChannels * 4, numViews: _numViews);
+        clonedAttention.SetParameters(_mvAttention.GetParameters());
+
+        return new MultiViewUNet<T>(
+            _inputChannels,
+            _outputChannels,
+            _baseChannels,
+            _numViews,
+            _contextDim,
+            (UNetNoisePredictor<T>)_baseUNet.Clone(),
+            clonedAttention);
     }
 
     /// <summary>
