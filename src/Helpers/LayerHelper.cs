@@ -7061,7 +7061,6 @@ public static class LayerHelper<T>
         int maxSequenceLength = 600,
         double dropoutRate = 0.0)
     {
-        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         // AudioMAE fine-tunes on AudioSet, a MULTI-LABEL task, so the classification head emits
         // per-class SIGMOID probabilities (Huang et al. 2022 §4.1) — the same transform the model's
@@ -7087,9 +7086,11 @@ public static class LayerHelper<T>
             yield return new TransformerEncoderLayer<T>(numAttentionHeads, feedForwardDim);
         }
 
-        // Classification head: final LayerNorm + MLP -> per-class sigmoid probabilities (multi-label).
+        // Encoder final LayerNorm. The model then AVERAGE-POOLS over the patch tokens and applies a
+        // SINGLE linear classifier (Huang et al. 2022 §3: "average pooling layer followed by a linear
+        // layer"), with per-class sigmoid for the multi-label AudioSet objective (BCE). The pooling is
+        // done in AudioMAE's forward (over the token axis) — it is not expressible as a flat layer here.
         yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(embeddingDim, reluActivation);
         yield return new DenseLayer<T>(numClasses, sigmoidActivation);
     }
 

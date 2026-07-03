@@ -2279,7 +2279,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
                     "new AiDotNet.Audio.Classification.AudioMAEOptions { EncoderEmbeddingDim = 64, " +
-                    "NumEncoderLayers = 2, NumEncoderHeads = 4 })";
+                    "NumEncoderLayers = 2, NumEncoderHeads = 4, " +
+                    "CustomLabels = new[] { \"a\", \"b\", \"c\", \"d\" } })";
             }
             else if (model.ClassName == "AudioSuperResolution" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
