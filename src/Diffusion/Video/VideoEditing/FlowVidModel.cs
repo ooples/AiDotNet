@@ -115,13 +115,18 @@ public class FlowVidModel<T> : VideoDiffusionModelBase<T>
         TemporalVAE<T>? temporalVAE,
         int? seed)
     {
+        // Thread the seed through to BOTH sub-models instead of dropping it — a prerequisite for
+        // reproducible construction. (NOTE: the shared diffusion weight-init path still draws from a
+        // process-global RNG, so seeded construction is not yet fully deterministic library-wide; that is
+        // a separate systemic fix. Passing the seed here is correct and required for that fix to take.)
         _predictor = predictor ?? new VideoUNetPredictor<T>(
             inputChannels: LATENT_CHANNELS,
             baseChannels: 320,
             channelMultipliers: new[] { 1, 2, 4, 4 },
             numResBlocks: 2,
             numHeads: 8,
-            contextDim: CONTEXT_DIM);
+            contextDim: CONTEXT_DIM,
+            seed: seed);
 
         _temporalVAE = temporalVAE ?? new TemporalVAE<T>(
             inputChannels: 3,
@@ -131,7 +136,8 @@ public class FlowVidModel<T> : VideoDiffusionModelBase<T>
             numTemporalLayers: 3,
             temporalKernelSize: 3,
             causalMode: false,
-            latentScaleFactor: 0.18215);
+            latentScaleFactor: 0.18215,
+            seed: seed);
     }
 
     protected override Tensor<T> PredictVideoNoise(
