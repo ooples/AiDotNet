@@ -1204,6 +1204,7 @@ public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
         // (and, after resolution, mismatched) network and diverged. Cloning the resolved sub-models makes
         // the clone structurally and observationally identical.
         var clone = new MVDreamModel<T>(
+            architecture: Architecture,
             options: Options as DiffusionModelOptions<T>,
             scheduler: Scheduler,
             multiViewUNet: _multiViewUNet.Clone(),
