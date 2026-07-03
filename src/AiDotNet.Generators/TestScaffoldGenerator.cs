@@ -2061,6 +2061,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumLLMLayers = 1, NumHeads = 4, VocabSize = 64, MaxTextLength = 8, " +
                     "DropoutRate = 0.0, LearningRate = 1e-3, WeightDecay = 0.0 })";
             }
+            else if (model.ClassName == "CSM" && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
+            {
+                // CSM (Sesame Conversational Speech Model) is a neural codec language model: text/codec
+                // tokens -> transformer LM -> codec logits whose width is NumCodebooks x CodebookSize.
+                // Its paper defaults (LLMDim=2048, 24 LLM layers, 32 codebooks x 2048 = a 65536-way
+                // output head) allocate multiple GB and threw OutOfMemoryException on construction for
+                // every generated invariant. Build the identical codec-LM architecture (text encoder ->
+                // LLM transformer stack -> per-codebook logits) at CI-smoke scale, mirroring the VALL-E
+                // codec-LM reduction above (1 codebook x 16 = 16-way head, 32-wide, 1 encoder + 1 LLM
+                // layer, 4 heads).
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
+                    "inputSize: 4, outputSize: 16), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.CSMOptions { SampleRate = 24000, NumCodebooks = 1, " +
+                    "CodebookSize = 16, TextEncoderDim = 32, LLMDim = 32, NumEncoderLayers = 1, " +
+                    "NumLLMLayers = 1, NumHeads = 4, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "TimeMoE" && model.TypeParameterCount == 1)
             {
                 // Time-MoE (Shi et al. 2024, ICLR 2025) defaults to a 113M-param
@@ -3139,6 +3159,37 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine();
                 sb.AppendLine("    protected override int MoreDataShortIterations => 3;");
                 sb.AppendLine("    protected override int MoreDataLongIterations => 10;");
+                sb.AppendLine();
+                // The base ScaledInput_ShouldChangeOutput multiplies the input by 10 — meaningless for
+                // DISCRETE token IDs and it drives the indices past the embedding vocabulary
+                // (ArgumentOutOfRange in the embedding lookup). Perturb with a legal in-vocab token
+                // SHIFT instead (same invariant: a different token sequence must change the output),
+                // mirroring the text-to-mel TTS branch below.
+                sb.AppendLine("    [Xunit.Fact(Timeout = 120000)]");
+                sb.AppendLine("    public override async System.Threading.Tasks.Task ScaledInput_ShouldChangeOutput()");
+                sb.AppendLine("    {");
+                sb.AppendLine("        await System.Threading.Tasks.Task.Yield();");
+                sb.AppendLine("        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Create();");
+                sb.AppendLine("        var rng = AiDotNet.Tests.ModelFamilyTests.Base.ModelTestHelpers.CreateSeededRandom();");
+                sb.AppendLine("        using var network = CreateNetwork();");
+                sb.AppendLine("        var input = CreateRandomTensor(InputShape, rng);");
+                sb.AppendLine("        var shiftedInput = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(InputShape);");
+                sb.AppendLine("        for (int i = 0; i < input.Length; i++)");
+                sb.AppendLine($"            shiftedInput[i] = ((int)input[i] + 17) % {tokenVocab};");
+                sb.AppendLine("        var output1 = network.Predict(input);");
+                sb.AppendLine("        var output2 = network.Predict(shiftedInput);");
+                sb.AppendLine("        double sumSquared = 0;");
+                sb.AppendLine("        int minLen = System.Math.Min(output1.Length, output2.Length);");
+                sb.AppendLine("        for (int i = 0; i < minLen; i++)");
+                sb.AppendLine("        {");
+                sb.AppendLine("            double d = output1[i] - output2[i];");
+                sb.AppendLine("            sumSquared += d * d;");
+                sb.AppendLine("        }");
+                sb.AppendLine("        double l2 = System.Math.Sqrt(sumSquared);");
+                sb.AppendLine("        Xunit.Assert.True(l2 > 1e-9,");
+                sb.AppendLine("            $\"Codec-LM produced identical output for distinct legal token IDs: L2 distance = {l2:E3}. \" +");
+                sb.AppendLine("            \"Token embedding lookup or downstream conditioning may be broken.\");");
+                sb.AppendLine("    }");
                 // Deep embedding-first AR codec LM: pin a deterministic init so the
                 // training invariants are order-independent across xUnit workers.
                 pinInitSeed = true;
@@ -5959,7 +6010,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         int tickIdx = className.IndexOf('`');
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
-        return className is "GPTSoVITS" || IsValleCodecLMModel(className);
+        return className is "GPTSoVITS" or "CSM" || IsValleCodecLMModel(className);
     }
 
     /// <summary>
