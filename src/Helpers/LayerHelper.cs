@@ -21601,49 +21601,47 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates default layers for the Audio Super-Resolution model.
-    /// Architecture: Residual blocks with optional self-attention for bandwidth extension.
+    /// Creates the 1-D convolutional U-Net blocks for the Audio Super-Resolution model of
+    /// Kuleshov, Enam &amp; Ermon (2017), "Audio Super-Resolution using Neural Networks".
     /// </summary>
+    /// <remarks>
+    /// Paper architecture: <c>numBlocks</c> downsampling blocks (Conv1D stride-2, LeakyReLU), a
+    /// bottleneck, then <c>numBlocks</c> upsampling blocks (Conv1D, ReLU, then a <b>sub-pixel</b>
+    /// dimension-shuffle ×2 and a <b>stacking (concatenation) skip connection</b> from the symmetric
+    /// downsampling block), and a final conv whose sub-pixel output is added to the input via an
+    /// <b>additive residual</b> (the net learns <c>y − x</c>). This helper emits ONLY the conv layers
+    /// in that order — [down×numBlocks, bottleneck, up×numBlocks, final] — because the sub-pixel
+    /// shuffle, the symmetric skip concatenation and the additive input residual are non-sequential
+    /// dataflow that <see cref="AiDotNet.Audio.Effects.AudioSuperResolution{T}"/> orchestrates in its
+    /// forward pass with tape-aware Engine ops. Channel counts are fixed and eager (clone-safe): the
+    /// upsampling conv doubles channels so the sub-pixel shuffle can halve them back while doubling
+    /// the length, and the stacking skip re-doubles them.
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultAudioSuperResolutionLayers(
-        int hiddenDim = 256, int numResBlocks = 8,
-        int numHeads = 4, int numAttentionLayers = 2,
-        int upsampleFactor = 4, double dropoutRate = 0.0)
+        int numBlocks = 4, int channels = 128, int kernelSize = 9)
     {
-        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        IActivationFunction<T> downAct = new LeakyReLUActivation<T>();
+        IActivationFunction<T> upAct = new ReLUActivation<T>();
 
-        // Input projection
-        yield return new FullyConnectedLayer<T>(hiddenDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>();
+        // Downsampling blocks: Conv1D stride-2 halves the length; first maps the 1-channel waveform.
+        // (inputChannels: named to bind the eager ctor and keep channel counts clone-safe.)
+        yield return new Conv1DLayer<T>(inputChannels: 1, outputChannels: channels, kernelSize: kernelSize, stride: 2, activation: downAct);
+        for (int b = 1; b < numBlocks; b++)
+            yield return new Conv1DLayer<T>(inputChannels: channels, outputChannels: channels, kernelSize: kernelSize, stride: 2, activation: downAct);
 
-        // Residual blocks for feature extraction. Kuleshov et al. 2017 ("Audio Super Resolution
-        // using Neural Networks") builds its deep bottleneck from RESIDUAL blocks (out = x + F(x));
-        // the previous code stacked FullyConnected layers with NO skip connection, so gradients
-        // through the deep stack vanished and the model could not reduce loss / collapsed to an
-        // input-independent output (Training_ShouldReduceLoss, LossStrictlyDecreases,
-        // DifferentInputs_AfterTraining). Wrap each block's FC transform in a ResidualLayer so the
-        // identity skip carries the signal and the gradient through the whole stack.
-        for (int i = 0; i < numResBlocks; i++)
-        {
-            yield return new ResidualLayer<T>(new FullyConnectedLayer<T>(hiddenDim, geluActivation));
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-        }
+        // Bottleneck: one more stride-2 conv.
+        yield return new Conv1DLayer<T>(inputChannels: channels, outputChannels: channels, kernelSize: kernelSize, stride: 2, activation: downAct);
 
-        // Global-context layers. Also residual: a bare FullyConnected + LayerNorm here (no skip)
-        // re-strips the input signal the residual blocks above just preserved, re-introducing the
-        // input-independent collapse. Keep the identity skip so the signal reaches the upsampler.
-        for (int i = 0; i < numAttentionLayers; i++)
-        {
-            yield return new ResidualLayer<T>(new FullyConnectedLayer<T>(hiddenDim, geluActivation));
-            yield return new LayerNormalizationLayer<T>();
-        }
+        // Upsampling blocks: Conv1D that DOUBLES the channel count so the model's sub-pixel shuffle can
+        // turn [., 2C, L] -> [., C, 2L]; after the shuffle the model concatenates the symmetric down
+        // block (C channels), so every upsampling conv after the first sees 2C input channels.
+        yield return new Conv1DLayer<T>(inputChannels: channels, outputChannels: 2 * channels, kernelSize: kernelSize, stride: 1, activation: upAct);
+        for (int b = 1; b < numBlocks; b++)
+            yield return new Conv1DLayer<T>(inputChannels: 2 * channels, outputChannels: 2 * channels, kernelSize: kernelSize, stride: 1, activation: upAct);
 
-        // Upsample projection: expand output dimension by upsample factor
-        yield return new FullyConnectedLayer<T>(hiddenDim * upsampleFactor, geluActivation);
-        yield return new LayerNormalizationLayer<T>();
-
-        // Output projection to waveform
-        yield return new FullyConnectedLayer<T>(upsampleFactor, (IActivationFunction<T>?)null);
+        // Final conv -> 2 channels; the model sub-pixel-shuffles it to 1 channel at full length and
+        // adds the input (additive residual).
+        yield return new Conv1DLayer<T>(inputChannels: 2 * channels, outputChannels: 2, kernelSize: kernelSize, stride: 1, activation: null);
     }
 
     /// <summary>

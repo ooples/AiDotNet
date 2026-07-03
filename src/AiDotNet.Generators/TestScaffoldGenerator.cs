@@ -2281,6 +2281,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.Audio.Classification.AudioMAEOptions { EncoderEmbeddingDim = 64, " +
                     "NumEncoderLayers = 2, NumEncoderHeads = 4 })";
             }
+            else if (model.ClassName == "AudioSuperResolution" && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.Audio.Effects.", System.StringComparison.Ordinal))
+            {
+                // AudioSuperResolution (Kuleshov et al. 2017) is a 1-D conv U-Net. Its paper default is
+                // a deep, wide net; build the same U-Net architecture (downsampling conv blocks ->
+                // bottleneck -> upsampling blocks with sub-pixel shuffle + symmetric skips -> additive
+                // input residual) at CI-smoke scale: 2 blocks, 16 channels. The InputShape length (64)
+                // must be divisible by 2^(numBlocks+1) = 8 so the symmetric down/up path realigns.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 64, outputSize: 64), " +
+                    "new AiDotNet.Audio.Effects.AudioSuperResolutionOptions { HiddenDim = 16, NumResBlocks = 2 })";
+            }
             else if (model.ClassName == "DocBank" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
                          "AiDotNet.Document.Analysis.PageSegmentation.", System.StringComparison.Ordinal))
@@ -2846,6 +2861,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // (imageSize 64, numClasses 4 -> 64/32 = 2).
             sb.AppendLine("    protected override int[] InputShape => new[] { 3, 64, 64 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 2, 2 };");
+        }
+        else if (model.ClassName == "AudioSuperResolution")
+        {
+            // 1-channel waveform of length 64 (divisible by 2^(numBlocks+1)=8 so the conv U-Net's
+            // symmetric down/up path realigns). The net learns an additive residual, so the output is
+            // the same 1×64 waveform.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 64 };");
         }
         else if (isVisionModel &&
                  (model.ClassName.StartsWith("LayoutLM", System.StringComparison.Ordinal)

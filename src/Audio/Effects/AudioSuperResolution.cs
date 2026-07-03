@@ -63,6 +63,15 @@ public class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
     private bool _useNativeMode;
     private bool _disposed;
 
+    // Conv-U-Net block references (Kuleshov et al. 2017), re-derived from Layers each forward so
+    // they survive clone/deserialize. Null when Layers came from a custom Architecture.Layers list,
+    // in which case the forward falls back to a plain sequential pass.
+    private int _numBlocks;
+    private ILayer<T>[]? _downBlocks;
+    private ILayer<T>? _bottleneck;
+    private ILayer<T>[]? _upBlocks;
+    private ILayer<T>? _finalConv;
+
     #endregion
 
     #region IAudioEnhancer Properties
@@ -160,18 +169,135 @@ public class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
+        _numBlocks = _options.NumResBlocks;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers);
         else Layers.AddRange(LayerHelper<T>.CreateDefaultAudioSuperResolutionLayers(
-            hiddenDim: _options.HiddenDim, numResBlocks: _options.NumResBlocks,
-            numHeads: _options.NumHeads, numAttentionLayers: _options.NumAttentionLayers,
-            upsampleFactor: _options.UpsampleFactor, dropoutRate: _options.DropoutRate));
+            numBlocks: _options.NumResBlocks, channels: _options.HiddenDim, kernelSize: 9));
+        ExtractLayerReferences();
+    }
+
+    /// <summary>
+    /// Groups the flat <see cref="NeuralNetworkBase{T}.Layers"/> list into the conv-U-Net's
+    /// downsampling / bottleneck / upsampling / final blocks so the forward pass can wire the
+    /// symmetric skip connections and additive residual. Re-derived from Layers (not cached at
+    /// construction) so it stays valid after clone/deserialize repopulate the layer list.
+    /// </summary>
+    private void ExtractLayerReferences()
+    {
+        // Helper layout: [down × numBlocks, bottleneck, up × numBlocks, final] = 2*numBlocks + 2.
+        if (_numBlocks <= 0 || Layers.Count != 2 * _numBlocks + 2)
+        {
+            _downBlocks = null; _upBlocks = null; _bottleneck = null; _finalConv = null;
+            return;
+        }
+        _downBlocks = new ILayer<T>[_numBlocks];
+        _upBlocks = new ILayer<T>[_numBlocks];
+        for (int b = 0; b < _numBlocks; b++) _downBlocks[b] = Layers[b];
+        _bottleneck = Layers[_numBlocks];
+        for (int b = 0; b < _numBlocks; b++) _upBlocks[b] = Layers[_numBlocks + 1 + b];
+        _finalConv = Layers[2 * _numBlocks + 1];
+    }
+
+    /// <summary>
+    /// 1-D sub-pixel (dimension-shuffle) upsampling: <c>[b, 2C, L] → [b, C, 2L]</c>, doubling the
+    /// temporal resolution while halving the channels (Kuleshov et al. 2017 §2). Built from
+    /// tape-aware <see cref="NeuralNetworkBase{T}.Engine"/> reshape/permute so gradients flow.
+    /// </summary>
+    private Tensor<T> SubPixelShuffle1D(Tensor<T> x)
+    {
+        int batch = x.Shape[0], twoC = x.Shape[1], len = x.Shape[2];
+        int c = twoC / 2;
+        var r = Engine.Reshape(x, new[] { batch, c, 2, len });   // split channels into (C, 2)
+        r = Engine.TensorPermute(r, new[] { 0, 1, 3, 2 });        // -> [b, C, L, 2]
+        return Engine.Reshape(r, new[] { batch, c, len * 2 });    // interleave -> [b, C, 2L]
     }
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+        return RunUNet(input);
+    }
+
+    /// <summary>
+    /// Runs the Kuleshov et al. 2017 conv U-Net: downsampling conv blocks (storing features for the
+    /// skip connections), a bottleneck, upsampling blocks (each: conv → sub-pixel ×2 → concatenate
+    /// the symmetric downsampling features), a final conv sub-pixelled to one channel, and an
+    /// ADDITIVE residual with the input so the network learns <c>y − x</c>. All non-conv steps use
+    /// tape-aware Engine ops so the same path serves inference and training.
+    /// </summary>
+    private Tensor<T> RunUNet(Tensor<T> input)
+    {
+        ExtractLayerReferences();
+        // Custom / non-default layer list (Architecture.Layers supplied): no U-Net structure to
+        // wire — run the provided layers sequentially, as before.
+        if (_downBlocks is null || _upBlocks is null || _bottleneck is null || _finalConv is null)
+        {
+            var seq = input;
+            foreach (var l in Layers) seq = l.Forward(seq);
+            return seq;
+        }
+
+        int len = input.Shape[^1];
+        var x = Engine.Reshape(input, new[] { 1, 1, len });    // [batch=1, channels=1, L]
+        var skips = new Tensor<T>[_numBlocks];
+
+        var h = x;
+        for (int b = 0; b < _numBlocks; b++) { h = _downBlocks[b].Forward(h); skips[b] = h; }
+        h = _bottleneck.Forward(h);
+        for (int b = 0; b < _numBlocks; b++)
+        {
+            h = _upBlocks[b].Forward(h);                 // conv -> 2C channels
+            h = SubPixelShuffle1D(h);                    // -> C channels, 2× length
+            // Stacking (concatenation) skip with the symmetric downsampling block, on the channel axis.
+            h = Engine.TensorConcatenate(new[] { h, skips[_numBlocks - 1 - b] }, axis: 1);
+        }
+        h = _finalConv.Forward(h);                       // conv -> 2 channels
+        h = SubPixelShuffle1D(h);                        // -> 1 channel, full length L
+        h = Engine.TensorAdd(h, x);                      // additive input residual (learn y - x)
+        return Engine.Reshape(h, input._shape);
+    }
+
+    /// <summary>Training forward — the same tape-aware U-Net path as inference.</summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => RunUNet(input);
+
+    /// <summary>
+    /// Collects per-block activations along the actual U-Net dataflow. The base implementation runs
+    /// <see cref="NeuralNetworkBase{T}.Layers"/> as a flat sequence, which is invalid here (the
+    /// conv blocks need a [1, 1, L] tensor and the up/skip/sub-pixel steps are non-sequential), so it
+    /// is overridden to walk the same path as <see cref="RunUNet"/>.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        ExtractLayerReferences();
+        if (_downBlocks is null || _upBlocks is null || _bottleneck is null || _finalConv is null)
+            return base.GetNamedLayerActivations(input);
+
+        var acts = new Dictionary<string, Tensor<T>>();
+        int len = input.Shape[^1];
+        var x = Engine.Reshape(input, new[] { 1, 1, len });
+        var skips = new Tensor<T>[_numBlocks];
+        var h = x;
+        for (int b = 0; b < _numBlocks; b++)
+        {
+            h = _downBlocks[b].Forward(h);
+            skips[b] = h;
+            acts[$"Down_{b}_{_downBlocks[b].GetType().Name}"] = h.Clone();
+        }
+        h = _bottleneck.Forward(h);
+        acts[$"Bottleneck_{_bottleneck.GetType().Name}"] = h.Clone();
+        for (int b = 0; b < _numBlocks; b++)
+        {
+            h = _upBlocks[b].Forward(h);
+            h = SubPixelShuffle1D(h);
+            h = Engine.TensorConcatenate(new[] { h, skips[_numBlocks - 1 - b] }, axis: 1);
+            acts[$"Up_{b}_{_upBlocks[b].GetType().Name}"] = h.Clone();
+        }
+        h = _finalConv.Forward(h);
+        h = SubPixelShuffle1D(h);
+        acts[$"Final_{_finalConv.GetType().Name}"] = Engine.TensorAdd(h, x).Clone();
+        return acts;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -225,7 +351,7 @@ public class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
         _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
         _options.InputSampleRate = r.ReadInt32(); _options.OutputSampleRate = r.ReadInt32();
         _options.UpsampleFactor = r.ReadInt32(); _options.Variant = r.ReadString();
-        _options.HiddenDim = r.ReadInt32(); _options.NumResBlocks = r.ReadInt32();
+        _options.HiddenDim = r.ReadInt32(); _options.NumResBlocks = r.ReadInt32(); _numBlocks = _options.NumResBlocks;
         _options.NumHeads = r.ReadInt32(); _options.NumAttentionLayers = r.ReadInt32();
         _options.DropoutRate = r.ReadDouble();
         _options.LearningRate = r.ReadDouble();
