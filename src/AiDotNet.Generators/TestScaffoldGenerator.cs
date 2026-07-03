@@ -2856,10 +2856,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         {
             // DocBank (Li et al. 2020) is a page-layout SEGMENTER over an RGB page image, not a
             // token-ID document model: its native conv backbone (CreateDefaultDocBankLayers) takes
-            // [3, H, W] pixels and downsamples /32 through five stride-2 stages, ending in a
-            // 1x1 conv to numClasses. Feed a small RGB page and expect the coarse [numClasses, H/32,
-            // W/32] segmentation logits. Kept in lockstep with the CI-smoke constructor branch above
-            // (imageSize 64, numClasses 4 -> 64/32 = 2).
+            // [3, H, W] pixels and downsamples /32 to per-pixel class logits [numClasses, H/32, W/32].
             sb.AppendLine("    protected override int[] InputShape => new[] { 3, 64, 64 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 2, 2 };");
         }

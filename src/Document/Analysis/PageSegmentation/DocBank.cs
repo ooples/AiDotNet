@@ -656,39 +656,34 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
         }
 
         SetTrainingMode(true);
-
+        // TrainWithTape runs the full tape-based forward/backward AND the optimizer's parameter
+        // update. The previous code then ran a SECOND, manual SGD step (CollectParameterGradients +
+        // a hand-rolled params -= grads*lr in UpdateParameters), double-updating the weights with
+        // inconsistent gradients — the cause of the training divergence (loss exploding to ~4e7).
+        // Tape-based training with the registered optimizer is the industry-standard path.
         TrainWithTape(input, expectedOutput);
-        var paramGradients = CollectParameterGradients();
-        UpdateParameters(paramGradients);
-        SetTrainingMode(false);}
+        SetTrainingMode(false);
+    }
 
     /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
+    public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode)
         {
             throw new NotSupportedException("Parameter updates are not supported in ONNX inference mode.");
         }
 
-        var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.0001);
-
-        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
-
-        SetParameters(currentParams);
-    }
-
-    private Vector<T> CollectParameterGradients()
-    {
-        var gradients = new List<T>();
-
+        // Standard contract: distribute the flat parameter vector back into the layers (SET, not a
+        // gradient step). Framework clone/DeepCopy relies on this — the old override treated the
+        // argument as gradients and SUBTRACTED them, corrupting any copy.
+        int idx = 0;
         foreach (var layer in Layers)
         {
-            var layerGradients = layer.GetParameterGradients();
-            gradients.AddRange(layerGradients);
+            int count = checked((int)layer.ParameterCount);
+            if (count == 0) continue;
+            layer.UpdateParameters(parameters.Slice(idx, count));
+            idx += count;
         }
-
-        return new Vector<T>([.. gradients]);
     }
 
     #endregion

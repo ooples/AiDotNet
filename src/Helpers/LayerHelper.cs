@@ -9974,12 +9974,16 @@ public static class LayerHelper<T>
         int numClasses = 13,
         int hiddenDim = 256)
     {
-        // ResNet-101 style backbone (simplified to ResNet-50-like)
+        // DocBank (Li et al. 2020) evaluates a Faster R-CNN detector with a ResNeXt-101 backbone; this
+        // simplified page segmenter approximates the convolutional backbone. NOTE: the paper's
+        // residual (ResNet/ResNeXt) topology is the faithful design, but wrapping these conv layers in
+        // ResidualLayer/BottleneckBlock currently mismatches the conv output layout (skip [C,H*W] vs
+        // conv [C,H,W,1]) — a framework-level layout gap tracked separately. Backbone below is the
+        // strided conv stack; the final conv emits per-pixel class LOGITS (identity activation).
         yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
         yield return new BatchNormalizationLayer<T>();
         yield return new MaxPoolingLayer<T>(3, 2);
 
-        // Residual blocks (simplified as conv layers)
         yield return new ConvolutionalLayer<T>(256, 3, 1, 1);
         yield return new BatchNormalizationLayer<T>();
         yield return new ConvolutionalLayer<T>(512, 3, 2, 1);
@@ -9989,14 +9993,11 @@ public static class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(backboneChannels, 3, 2, 1);
         yield return new BatchNormalizationLayer<T>();
 
-        // FPN lateral connections
         yield return new ConvolutionalLayer<T>(hiddenDim, 1, 1, 0);
 
-        // Segmentation head
         yield return new ConvolutionalLayer<T>(hiddenDim, 3, 1, 1);
         yield return new BatchNormalizationLayer<T>();
 
-        // Output layer (class predictions per pixel)
         yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0);
     }
 
