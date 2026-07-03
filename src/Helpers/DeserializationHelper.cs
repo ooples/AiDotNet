@@ -661,6 +661,10 @@ public static class DeserializationHelper
         {
             instance = CreateMultiHeadAttentionLayer<T>(type, inputShape, additionalParams);
         }
+        else if (genericDef == typeof(CrossAttentionLayer<>))
+        {
+            instance = CreateCrossAttentionLayer<T>(type, inputShape, additionalParams);
+        }
         else if (genericDef == typeof(TransformerEncoderLayer<>))
         {
             // The current TransformerEncoderLayer<T> constructor is (numHeads, feedForwardDim);
@@ -2824,6 +2828,38 @@ public static class DeserializationHelper
 
         object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
         return ctor.Invoke(new object?[] { headCount, headDimension, activation, null });
+    }
+
+    private static object CreateCrossAttentionLayer<T>(Type type, int[] inputShape, Dictionary<string, object>? additionalParams)
+    {
+        // CrossAttentionLayer(int queryDim, int contextDim, int headCount, int sequenceLength = 64).
+        // Its declared input shape is [sequenceLength, queryDim] — the SEQUENCE axis is FIRST, so
+        // queryDim is the LAST axis (NOT inputShape[0], which is the sequence length). contextDim and
+        // headCount are not encoded in the shape, so they come from the metadata written by
+        // CrossAttentionLayer.GetMetadata (ContextDim / HeadCount); fall back to queryDim / a
+        // shape-derived head count for any layer serialized before that metadata existed.
+        if (inputShape.Length < 2)
+        {
+            throw new InvalidOperationException("CrossAttentionLayer requires input shape [sequenceLength, queryDim].");
+        }
+
+        int queryDim = inputShape[^1];
+        int sequenceLength = inputShape[0];
+        int contextDim = TryGetInt(additionalParams, "ContextDim") ?? queryDim;
+        int headCount = TryGetInt(additionalParams, "HeadCount") ?? ResolveDefaultHeadCount(queryDim);
+        if (headCount <= 0 || queryDim % headCount != 0)
+        {
+            throw new InvalidOperationException(
+                $"CrossAttentionLayer deserialization: queryDim {queryDim} is not divisible by headCount {headCount}.");
+        }
+
+        var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int) });
+        if (ctor is null)
+        {
+            throw new MissingLayerCtorException("Cannot find CrossAttentionLayer constructor with (int, int, int, int).");
+        }
+
+        return ctor.Invoke(new object?[] { queryDim, contextDim, headCount, sequenceLength });
     }
 
     private static object CreateFlashAttentionLayer<T>(Type type, int[] inputShape, Dictionary<string, object>? additionalParams)
