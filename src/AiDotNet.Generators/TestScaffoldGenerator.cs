@@ -2241,6 +2241,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.VisionLanguage.Medical.MedFlamingoOptions { VisionDim = 128, DecoderDim = 128, " +
                     "NumVisionLayers = 2, NumDecoderLayers = 2, NumHeads = 4, DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "AudioMAE"
+                     && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.Audio.Classification.", System.StringComparison.Ordinal))
+            {
+                // AudioMAE (Huang et al. 2022, "Masked Autoencoders that Listen") defaults to ViT-Base
+                // scale: 768-dim, 12 residual transformer encoder layers, 527 AudioSet classes. A single
+                // forward is cheap (~2 s), but the invariant training loops (forward+backward through 12
+                // residual ViT blocks x many iterations) overflow the CI timeout. Build the identical MAE
+                // architecture (patch embed -> N residual encoder blocks -> classifier head) at CI-smoke
+                // width/depth (64-dim, 2 layers, 4 heads). Keep the same 2D audio architecture the generic
+                // audio path emits so the InputShape override stays consistent; CustomLabels/NumClasses
+                // stay at their defaults so the output contract is unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.Audio.Classification.AudioMAEOptions { EncoderEmbeddingDim = 64, " +
+                    "NumEncoderLayers = 2, NumEncoderHeads = 4 })";
+            }
             else if (model.HasParameterlessConstructor)
             {
                 // Zero-arg constructor: simple instantiation

@@ -7063,23 +7063,34 @@ public static class LayerHelper<T>
     {
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        // AudioMAE fine-tunes on AudioSet, a MULTI-LABEL task, so the classification head emits
+        // per-class SIGMOID probabilities (Huang et al. 2022 §4.1) — the same transform the model's
+        // PostprocessOutput applies. The head previously used identity, returning raw logits that
+        // Predict surfaced directly (ClassOutput_ShouldBeNonNegative).
+        IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
 
+        // Patch embedding (linear projection of flattened patches) + LayerNorm + fixed positional
+        // encoding — the ViT/MAE input stem (Huang et al. 2022, "Masked Autoencoders that Listen").
         yield return new DenseLayer<T>(embeddingDim, identityActivation);
         yield return new LayerNormalizationLayer<T>();
         yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDim);
 
+        // Transformer encoder blocks. The paper (MAE = ViT encoder, Vaswani-style blocks) uses
+        // RESIDUAL connections: x = x + Attn(LN(x)); x = x + FFN(LN(x)). The previous hand-rolled
+        // MHA -> LN -> FFN -> LN sequence had NO residual connections, so it discarded the input
+        // signal across the stack and let training collapse to an input-independent (uniform-output)
+        // solution (DifferentInputs_AfterTraining). TransformerEncoderLayer is exactly that residual
+        // pre-norm block (self-attention + residual + LayerNorm, feed-forward + residual + LayerNorm),
+        // matching the paper.
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (embeddingDim) / (numAttentionHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(feedForwardDim, reluActivation);
-            yield return new DenseLayer<T>(embeddingDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numAttentionHeads, feedForwardDim);
         }
 
+        // Classification head: final LayerNorm + MLP -> per-class sigmoid probabilities (multi-label).
         yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(embeddingDim, reluActivation);
-        yield return new DenseLayer<T>(numClasses, identityActivation);
+        yield return new DenseLayer<T>(numClasses, sigmoidActivation);
     }
 
     /// <summary>
