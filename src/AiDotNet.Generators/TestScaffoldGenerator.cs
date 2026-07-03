@@ -1935,7 +1935,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // built from the same CreateDefaultPerceiverResamplerLayers stack (mPLUG-Owl's visual
             // abstractor / Qwen-VL's resampler). Same token-consuming contract.
             or "MPLUGOwl" or "MPLUGOwl2" or "MPLUGOwl3"
-            or "QwenVL" or "Qwen2VL" or "Qwen25VL" or "Qwen3VL";
+            or "QwenVL" or "Qwen2VL" or "Qwen25VL" or "Qwen3VL"
+            // MedFlamingo (Moor et al. 2023, AiDotNet.VisionLanguage.Medical) — same perceiver stack.
+            or "MedFlamingo";
 
     /// <summary>
     /// The post-patch-embedding vision_dim for a <see cref="IsTokenConsumingVisionLanguageModel"/>
@@ -1958,6 +1960,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "OpenFlamingo" or "IDEFICS" or "IDEFICS2" or "IDEFICS3" => 128,
             "MPLUGOwl" or "MPLUGOwl2" or "MPLUGOwl3"
                 or "QwenVL" or "Qwen2VL" or "Qwen25VL" or "Qwen3VL" => 128,
+            "MedFlamingo" => 128,
             _ => 768, // SigLIP2, ViLT, Florence2
         };
 
@@ -2218,6 +2221,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     $"new {vlmOptionsType} {{ VisionDim = 128, ResamplerDim = 128, DecoderDim = 128, " +
                     "NumVisionLayers = 2, NumResamplerLayers = 1, NumDecoderLayers = 2, " +
                     "MaxVisualTokens = 4, NumHeads = 4, NumResamplerHeads = 4, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "MedFlamingo"
+                     && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.VisionLanguage.Medical.", System.StringComparison.Ordinal))
+            {
+                // MedFlamingo (Moor et al. 2023) wraps the same CreateDefaultPerceiverResamplerLayers
+                // stack but hardcodes the resampler depth/latents/heads (6 / 64 / 16) — only VisionDim,
+                // DecoderDim, layer counts, head count and dropout come from options. numLatents is a
+                // dead helper parameter (the flat forward self-attends, so the token count follows the
+                // input), so the [1,4,128] token contract holds. Build at CI-smoke width: VisionDim ==
+                // DecoderDim == 128 (the hardcoded 16 resampler heads divide 128), 2 vision + 2 decoder
+                // blocks, 4 heads, no dropout.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 128, outputSize: 4), " +
+                    "new AiDotNet.VisionLanguage.Medical.MedFlamingoOptions { VisionDim = 128, DecoderDim = 128, " +
+                    "NumVisionLayers = 2, NumDecoderLayers = 2, NumHeads = 4, DropoutRate = 0.0 })";
             }
             else if (model.HasParameterlessConstructor)
             {
