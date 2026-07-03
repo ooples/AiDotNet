@@ -1930,7 +1930,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // CreateDefaultPerceiverResamplerLayers: a CLIP-ViT encoder (LayerNormalization + vision
             // MultiHeadAttention(VisionDim) blocks) -> perceiver resampler -> gated cross-attention
             // decoder. Same leading vision-attention-over-VisionDim contract, so also token-consuming.
-            or "OpenFlamingo" or "IDEFICS" or "IDEFICS2" or "IDEFICS3";
+            or "OpenFlamingo" or "IDEFICS" or "IDEFICS2" or "IDEFICS3"
+            // Instruction-tuned perceiver/abstractor VLMs (AiDotNet.VisionLanguage.InstructionTuned.*)
+            // built from the same CreateDefaultPerceiverResamplerLayers stack (mPLUG-Owl's visual
+            // abstractor / Qwen-VL's resampler). Same token-consuming contract.
+            or "MPLUGOwl" or "MPLUGOwl2" or "MPLUGOwl3"
+            or "QwenVL" or "Qwen2VL" or "Qwen25VL" or "Qwen3VL";
 
     /// <summary>
     /// The post-patch-embedding vision_dim for a <see cref="IsTokenConsumingVisionLanguageModel"/>
@@ -1951,6 +1956,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // Perceiver-resampler VLMs built at CI-smoke VisionDim=128 (see the perceiver constructor
             // branch in EmitGeneratedTestClass); their [1,4,128] token InputShape matches that width.
             "OpenFlamingo" or "IDEFICS" or "IDEFICS2" or "IDEFICS3" => 128,
+            "MPLUGOwl" or "MPLUGOwl2" or "MPLUGOwl3"
+                or "QwenVL" or "Qwen2VL" or "Qwen25VL" or "Qwen3VL" => 128,
             _ => 768, // SigLIP2, ViLT, Florence2
         };
 
@@ -2175,6 +2182,42 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // Plain string: single literal '}' closes the initializer, ')' closes the ctor.
                     "NumVisionLayers = 2, NumPerceiverLayers = 1, NumDecoderLayers = 2, " +
                     "NumLatents = 4, NumHeads = 4, NumPerceiverHeads = 4, DropoutRate = 0.0 })";
+            }
+            else if ((model.ClassName is "MPLUGOwl" or "MPLUGOwl2" or "MPLUGOwl3")
+                     && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.VisionLanguage.InstructionTuned.", System.StringComparison.Ordinal))
+            {
+                // mPLUG-Owl / mPLUG-Owl2 / mPLUG-Owl3 (Ye et al. 2023-2024) build the same
+                // CreateDefaultPerceiverResamplerLayers stack, but their visual "abstractor" params use
+                // Abstractor-named option fields. Same CI-smoke reduction as the perceiver family above
+                // (all dims 128 so projections collapse to identity and the first vision attention
+                // matches the [1,4,128] tokens; MaxVisualTokens=4 so the abstractor emits 4 tokens).
+                string vlmOptionsType = $"AiDotNet.VisionLanguage.InstructionTuned.{model.ClassName}Options";
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 128, outputSize: 4), " +
+                    $"new {vlmOptionsType} {{ VisionDim = 128, AbstractorDim = 128, DecoderDim = 128, " +
+                    "NumVisionLayers = 2, NumAbstractorLayers = 1, NumDecoderLayers = 2, " +
+                    "MaxVisualTokens = 4, NumHeads = 4, NumAbstractorHeads = 4, DropoutRate = 0.0 })";
+            }
+            else if ((model.ClassName is "QwenVL" or "Qwen2VL" or "Qwen25VL" or "Qwen3VL")
+                     && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.VisionLanguage.InstructionTuned.", System.StringComparison.Ordinal))
+            {
+                // Qwen-VL / Qwen2-VL / Qwen2.5-VL / Qwen3-VL (Bai et al. 2023-2024) build the same
+                // stack with Resampler-named option fields. Same CI-smoke reduction (all dims 128;
+                // MaxVisualTokens=4 so the resampler emits the [1,4,128] the OutputShape expects).
+                string vlmOptionsType = $"AiDotNet.VisionLanguage.InstructionTuned.{model.ClassName}Options";
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 128, outputSize: 4), " +
+                    $"new {vlmOptionsType} {{ VisionDim = 128, ResamplerDim = 128, DecoderDim = 128, " +
+                    "NumVisionLayers = 2, NumResamplerLayers = 1, NumDecoderLayers = 2, " +
+                    "MaxVisualTokens = 4, NumHeads = 4, NumResamplerHeads = 4, DropoutRate = 0.0 })";
             }
             else if (model.HasParameterlessConstructor)
             {
