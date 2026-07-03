@@ -1917,7 +1917,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// shape-mismatch this contract prevents.
     /// </summary>
     private static bool IsTokenConsumingVisionLanguageModel(string className)
-        => className is "GPT4Point" or "Helix" or "Octo" or "SigLIP2" or "ViLT" or "Florence2" or "KOSMOS1" or "KOSMOS2";
+        => className is "GPT4Point" or "Helix" or "Octo" or "SigLIP2" or "ViLT" or "Florence2" or "KOSMOS1" or "KOSMOS2"
+            // Encoder-decoder VLM family (AiDotNet.VisionLanguage.Generative.*) built from
+            // CreateDefaultEncoderDecoderVLMLayers: a ViT encoder (LayerNormalization + vision
+            // MultiHeadAttention(VisionDim) blocks) -> projection -> autoregressive decoder. Like
+            // the models above, this stack begins with a vision attention over VisionDim and so
+            // consumes post-patch-embedding token tensors [batch, num_tokens, VisionDim] — never
+            // raw [3, spatial, spatial] pixels. See the matching constructor branch in
+            // EmitGeneratedTestClass (built at CI-smoke VisionDim=128) and GetTokenConsumingVlmVisionDim.
+            or "PaLIX" or "PaLI" or "PaLI3" or "CoCa" or "GIT";
 
     /// <summary>
     /// The post-patch-embedding vision_dim for a <see cref="IsTokenConsumingVisionLanguageModel"/>
@@ -1931,6 +1939,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "Helix" => 1024,
             "Octo" => 384,
             "KOSMOS1" or "KOSMOS2" => 1024, // KOSMOS1Options / KOSMOS2Options VisionDim
+            // Encoder-decoder VLMs (PaLI/PaLI-X/PaLI-3/CoCa/GIT) are built at CI-smoke width
+            // VisionDim=128 (their paper defaults are 768-4096, PaLI-X = 55B params, OOM on
+            // construction). Keep the [1,4,128] token InputShape in lockstep with that config.
+            "PaLIX" or "PaLI" or "PaLI3" or "CoCa" or "GIT" => 128,
             _ => 768, // SigLIP2, ViLT, Florence2
         };
 
@@ -2097,6 +2109,37 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "ActionSize = 4, LatentSize = 4, RNNHiddenSize = 8, BatchSize = 1, " +
                     "VAEEncoderChannels = new System.Collections.Generic.List<int> { 8 }, " +
                     "ControllerLayers = new System.Collections.Generic.List<int> { 8 } })";
+            }
+            else if ((model.ClassName is "PaLIX" or "PaLI" or "PaLI3" or "CoCa" or "GIT")
+                     && model.TypeParameterCount == 1
+                     // typeName is already global::-stripped (StripGenericSuffix); FullyQualifiedName
+                     // is emitted with the global:: prefix, so match on typeName here.
+                     && typeName.StartsWith(
+                         "AiDotNet.VisionLanguage.Generative.", System.StringComparison.Ordinal))
+            {
+                // PaLI (Chen et al. 2022), PaLI-X (Chen et al. 2023), PaLI-3 (Chen et al. 2023),
+                // CoCa (Yu et al. 2022) and GIT (Wang et al. 2022) build their native layer stack
+                // from CreateDefaultEncoderDecoderVLMLayers: a ViT encoder (LayerNormalization +
+                // vision MultiHeadAttention(VisionDim) blocks) -> linear projection -> an
+                // autoregressive decoder (causal self-attention + cross-attention + FFN blocks).
+                // Their production defaults are paper-scale — PaLI-X is 4096-wide with 48 vision +
+                // 32 decoder layers (55B params) and OOMs the CI runner on construction alone. Build
+                // the identical encoder-decoder architecture family at CI-smoke width and depth:
+                // VisionDim == DecoderDim == 128 so the helper's vision->decoder projection collapses
+                // to identity and the first vision attention matches the [1, 4, 128] post-patch token
+                // InputShape (IsTokenConsumingVisionLanguageModel / GetTokenConsumingVlmVisionDim);
+                // 2 vision + 2 decoder blocks; 4 heads -> 32-d head; dropout 0 for a deterministic
+                // Clone. The paper architecture PATTERN is preserved — only width/depth are reduced.
+                string vlmOptionsType = $"AiDotNet.VisionLanguage.Generative.{model.ClassName}Options";
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 128, outputSize: 4), " +
+                    $"new {vlmOptionsType} {{ VisionDim = 128, DecoderDim = 128, " +
+                    // Plain (non-interpolated) string: a single literal '}' closes the object
+                    // initializer, then ')' closes the model constructor. (Only the interpolated
+                    // fragment above needs the doubled '{{' to emit one literal '{'.)
+                    "NumVisionLayers = 2, NumDecoderLayers = 2, NumHeads = 4, DropoutRate = 0.0 })";
             }
             else if (model.HasParameterlessConstructor)
             {
