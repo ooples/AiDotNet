@@ -1925,7 +1925,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // consumes post-patch-embedding token tensors [batch, num_tokens, VisionDim] — never
             // raw [3, spatial, spatial] pixels. See the matching constructor branch in
             // EmitGeneratedTestClass (built at CI-smoke VisionDim=128) and GetTokenConsumingVlmVisionDim.
-            or "PaLIX" or "PaLI" or "PaLI3" or "CoCa" or "GIT";
+            or "PaLIX" or "PaLI" or "PaLI3" or "CoCa" or "GIT"
+            // Perceiver-resampler VLM family (AiDotNet.VisionLanguage.Generative.*) built from
+            // CreateDefaultPerceiverResamplerLayers: a CLIP-ViT encoder (LayerNormalization + vision
+            // MultiHeadAttention(VisionDim) blocks) -> perceiver resampler -> gated cross-attention
+            // decoder. Same leading vision-attention-over-VisionDim contract, so also token-consuming.
+            or "OpenFlamingo" or "IDEFICS" or "IDEFICS2" or "IDEFICS3";
 
     /// <summary>
     /// The post-patch-embedding vision_dim for a <see cref="IsTokenConsumingVisionLanguageModel"/>
@@ -1943,6 +1948,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // VisionDim=128 (their paper defaults are 768-4096, PaLI-X = 55B params, OOM on
             // construction). Keep the [1,4,128] token InputShape in lockstep with that config.
             "PaLIX" or "PaLI" or "PaLI3" or "CoCa" or "GIT" => 128,
+            // Perceiver-resampler VLMs built at CI-smoke VisionDim=128 (see the perceiver constructor
+            // branch in EmitGeneratedTestClass); their [1,4,128] token InputShape matches that width.
+            "OpenFlamingo" or "IDEFICS" or "IDEFICS2" or "IDEFICS3" => 128,
             _ => 768, // SigLIP2, ViLT, Florence2
         };
 
@@ -2140,6 +2148,33 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // initializer, then ')' closes the model constructor. (Only the interpolated
                     // fragment above needs the doubled '{{' to emit one literal '{'.)
                     "NumVisionLayers = 2, NumDecoderLayers = 2, NumHeads = 4, DropoutRate = 0.0 })";
+            }
+            else if ((model.ClassName is "OpenFlamingo" or "IDEFICS" or "IDEFICS2" or "IDEFICS3")
+                     && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.VisionLanguage.Generative.", System.StringComparison.Ordinal))
+            {
+                // OpenFlamingo (Awadalla et al. 2023), IDEFICS / IDEFICS2 / IDEFICS3 (Laurençon et al.
+                // 2023-2024) build their native stack from CreateDefaultPerceiverResamplerLayers: a
+                // CLIP-ViT encoder (LayerNormalization + vision MultiHeadAttention(VisionDim) blocks) ->
+                // perceiver resampler (NumLatents latent queries cross-attending to vision tokens) ->
+                // gated cross-attention LLM decoder. Their production defaults are paper-scale
+                // (VisionDim 1024, DecoderDim 4096, 24 vision + 32 decoder layers) and OOM the CI runner
+                // on construction. Build the identical perceiver architecture family at CI-smoke width
+                // and depth: VisionDim == PerceiverDim == DecoderDim == 128 so the helper's projections
+                // collapse to identity and the first vision attention matches the [1, 4, 128] token
+                // InputShape; NumLatents == 4 so the resampler emits the [1, 4, 128] the token-consuming
+                // OutputShape expects; 2 vision + 1 perceiver + 2 decoder blocks; 4 heads -> 32-d head;
+                // dropout 0 for a deterministic Clone. Paper architecture PATTERN preserved.
+                string vlmOptionsType = $"AiDotNet.VisionLanguage.Generative.{model.ClassName}Options";
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 128, outputSize: 4), " +
+                    $"new {vlmOptionsType} {{ VisionDim = 128, PerceiverDim = 128, DecoderDim = 128, " +
+                    // Plain string: single literal '}' closes the initializer, ')' closes the ctor.
+                    "NumVisionLayers = 2, NumPerceiverLayers = 1, NumDecoderLayers = 2, " +
+                    "NumLatents = 4, NumHeads = 4, NumPerceiverHeads = 4, DropoutRate = 0.0 })";
             }
             else if (model.HasParameterlessConstructor)
             {

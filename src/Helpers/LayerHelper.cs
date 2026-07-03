@@ -23721,7 +23721,15 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder (CLIP ViT) ===
-        yield return new LayerNormalizationLayer<T>();
+        // Input token projection — the ViT/CLIP "trainable linear projection of flattened patches"
+        // (Dosovitskiy et al. 2021 §3.1) applied to the post-patch tokens before the transformer
+        // stack. A leading BARE LayerNormalization was used here, which is scale/shift-invariant and
+        // therefore discards the amplitude of any token that is constant across the feature axis,
+        // letting training collapse to an input-independent uniform output
+        // (DifferentInputs_AfterTraining). The affine projection preserves the input signal while the
+        // per-block LayerNormalizations below keep the activations normalized. (Mirrors the same fix
+        // in CreateDefaultEncoderDecoderVLMLayers.)
+        yield return new DenseLayer<T>(visionDim, identityActivation);
 
         for (int i = 0; i < numVisionLayers; i++)
         {
