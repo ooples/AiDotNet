@@ -21615,19 +21615,26 @@ public static class LayerHelper<T>
         yield return new FullyConnectedLayer<T>(hiddenDim, geluActivation);
         yield return new LayerNormalizationLayer<T>();
 
-        // Residual blocks for feature extraction
+        // Residual blocks for feature extraction. Kuleshov et al. 2017 ("Audio Super Resolution
+        // using Neural Networks") builds its deep bottleneck from RESIDUAL blocks (out = x + F(x));
+        // the previous code stacked FullyConnected layers with NO skip connection, so gradients
+        // through the deep stack vanished and the model could not reduce loss / collapsed to an
+        // input-independent output (Training_ShouldReduceLoss, LossStrictlyDecreases,
+        // DifferentInputs_AfterTraining). Wrap each block's FC transform in a ResidualLayer so the
+        // identity skip carries the signal and the gradient through the whole stack.
         for (int i = 0; i < numResBlocks; i++)
         {
-            yield return new FullyConnectedLayer<T>(hiddenDim * 2, geluActivation);
-            yield return new FullyConnectedLayer<T>(hiddenDim, geluActivation);
+            yield return new ResidualLayer<T>(new FullyConnectedLayer<T>(hiddenDim, geluActivation));
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
-        // Self-attention layers for global context
+        // Global-context layers. Also residual: a bare FullyConnected + LayerNorm here (no skip)
+        // re-strips the input signal the residual blocks above just preserved, re-introducing the
+        // input-independent collapse. Keep the identity skip so the signal reaches the upsampler.
         for (int i = 0; i < numAttentionLayers; i++)
         {
-            yield return new FullyConnectedLayer<T>(hiddenDim, geluActivation);
+            yield return new ResidualLayer<T>(new FullyConnectedLayer<T>(hiddenDim, geluActivation));
             yield return new LayerNormalizationLayer<T>();
         }
 
