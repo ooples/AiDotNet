@@ -2281,6 +2281,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.Audio.Classification.AudioMAEOptions { EncoderEmbeddingDim = 64, " +
                     "NumEncoderLayers = 2, NumEncoderHeads = 4 })";
             }
+            else if (model.ClassName == "DocBank" && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.Document.Analysis.PageSegmentation.", System.StringComparison.Ordinal))
+            {
+                // DocBank (Li et al. 2020) is a page-layout SEGMENTER: its native stack
+                // (CreateDefaultDocBankLayers) is a ResNet-style convolutional backbone over an RGB
+                // page image [3, H, W] with five stride-2 stages (/32 total). Its paper default
+                // imageSize is 1024, so a [3, 1024, 1024] forward through the 64->256->512->1024-channel
+                // backbone allocates gigabytes. Build the identical conv-backbone architecture at
+                // CI-smoke resolution (64x64 -> 2x2 feature map, 4 classes) so the image code path runs
+                // cheaply. Matches the [3, 64, 64] InputShape emitted for DocBank below.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 4), " +
+                    "imageSize: 64, backboneChannels: 32, numClasses: 4, hiddenDim: 16)";
+            }
             else if (model.HasParameterlessConstructor)
             {
                 // Zero-arg constructor: simple instantiation
@@ -2819,12 +2836,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] InputShape => new[] { 4, 6 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 4 };");
         }
+        else if (model.ClassName == "DocBank")
+        {
+            // DocBank (Li et al. 2020) is a page-layout SEGMENTER over an RGB page image, not a
+            // token-ID document model: its native conv backbone (CreateDefaultDocBankLayers) takes
+            // [3, H, W] pixels and downsamples /32 through five stride-2 stages, ending in a
+            // 1x1 conv to numClasses. Feed a small RGB page and expect the coarse [numClasses, H/32,
+            // W/32] segmentation logits. Kept in lockstep with the CI-smoke constructor branch above
+            // (imageSize 64, numClasses 4 -> 64/32 = 2).
+            sb.AppendLine("    protected override int[] InputShape => new[] { 3, 64, 64 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 2, 2 };");
+        }
         else if (isVisionModel &&
                  (model.ClassName.StartsWith("LayoutLM", System.StringComparison.Ordinal)
                   || model.ClassName.StartsWith("LayoutXLM", System.StringComparison.Ordinal)
                   || model.ClassName.StartsWith("LiLT", System.StringComparison.Ordinal)
                   || model.ClassName.StartsWith("DocFormer", System.StringComparison.Ordinal)
-                  || model.ClassName.StartsWith("DocBank", System.StringComparison.Ordinal)
+                  // NOTE: DocBank is NOT here — it is a page-IMAGE layout segmenter (ResNet-style
+                  // conv backbone over [3, H, W] pixels, CreateDefaultDocBankLayers), not a token-ID
+                  // LayoutLM model. It has its own image-input branch below.
                   || model.ClassName.StartsWith("DocGCN", System.StringComparison.Ordinal)
                   || model.ClassName.StartsWith("PICK", System.StringComparison.Ordinal)
                   || model.ClassName.StartsWith("TRIE", System.StringComparison.Ordinal)
