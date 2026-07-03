@@ -17,15 +17,12 @@ namespace AiDotNet.Configuration;
 /// domain, you can narrow it (only try these models), widen it (add candidates), rule some out
 /// (exclude these), or hand-tune the ranges it searches — without giving up defaults for the rest.</para>
 /// </remarks>
-/// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <typeparam name="TInput">The input data type.</typeparam>
-/// <typeparam name="TOutput">The output data type.</typeparam>
-public class AutoMLSearchSpace<T, TInput, TOutput>
+public class AutoMLSearchSpace
 {
     /// <summary>
     /// Model types AutoML should search over. When null or empty, AutoML uses the default
-    /// candidate set for the resolved task family. Each type must implement
-    /// <see cref="Interfaces.IFullModel{T, TInput, TOutput}"/>.
+    /// candidate set for the resolved task family. Each type must implement the model
+    /// interface expected by the owning <c>AutoMLOptions&lt;T, TInput, TOutput&gt;</c>.
     /// </summary>
     public List<Type>? CandidateModels { get; set; }
 

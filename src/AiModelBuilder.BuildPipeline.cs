@@ -700,17 +700,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             Console.WriteLine("AutoML configured - starting model search...");
             var searchStartedUtc = DateTimeOffset.UtcNow;
 
-            // Expert search-space controls (all optional; null → task-family defaults).
-            // Hyperparameter ranges and an explicit candidate list apply regardless of task family;
-            // exclude-from-defaults is applied in the task-family block below.
+            // Expert search-space controls (all optional; null uses task-family defaults).
+            // Candidate include/exclude rules are applied after the training split, where
+            // we have the actual target data needed to infer the same default task family
+            // the built-in AutoML engine would infer.
             var searchSpace = _autoMLOptions?.SearchSpace;
             if (searchSpace?.HyperparameterSpace is { Count: > 0 } hpSpace)
             {
                 _autoMLModel.SetSearchSpace(hpSpace);
-            }
-            if (searchSpace?.CandidateModels is { Count: > 0 })
-            {
-                _autoMLModel.SetCandidateModels(searchSpace.ResolveCandidates(searchSpace.CandidateModels));
             }
 
             // Step 1: Split data FIRST to prevent data leakage
@@ -752,17 +749,26 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 autoMLXVal = _preprocessingPipeline.Transform(autoMLXVal);
             }
 
-            if (_autoMLOptions?.TaskFamilyOverride is AutoMLTaskFamily taskFamilyOverride)
+            if (searchSpace is not null || _autoMLOptions?.TaskFamilyOverride is not null)
             {
                 int featureCount = InputHelper<T, TInput>.GetInputSize(autoMLXTrain);
-                var candidates = AutoMLDefaultCandidateModelsPolicy.GetDefaultCandidates(taskFamilyOverride, featureCount, _autoMLOptions.Budget.Preset);
-                // Apply expert include/exclude overrides to the task-family defaults, if any.
-                var effectiveCandidates = searchSpace?.ResolveCandidates(candidates.ToList()) ?? candidates.ToList();
+                var resolvedTaskFamily = _autoMLOptions?.TaskFamilyOverride
+                    ?? AutoMLTaskFamilyInference.InferFromTargets<T, TOutput>(autoMLYTrain);
+                var budgetPreset = _autoMLOptions?.Budget.Preset ?? AutoMLBudgetPreset.Standard;
+                var defaultCandidates = AutoMLDefaultCandidateModelsPolicy.GetDefaultCandidates(
+                    resolvedTaskFamily,
+                    featureCount,
+                    budgetPreset);
+                var effectiveCandidates = searchSpace?.ResolveCandidates(defaultCandidates)
+                    ?? defaultCandidates.ToList();
                 if (effectiveCandidates.Count > 0)
                 {
                     _autoMLModel.SetCandidateModels(effectiveCandidates);
                 }
+            }
 
+            if (_autoMLOptions?.TaskFamilyOverride is AutoMLTaskFamily taskFamilyOverride)
+            {
                 if (!_autoMLOptions.OptimizationMetricOverride.HasValue)
                 {
                     var (metric, maximize) = AutoMLDefaultMetricPolicy.GetDefault(taskFamilyOverride);

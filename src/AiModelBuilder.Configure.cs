@@ -1707,10 +1707,22 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private async Task<AiModelResult<T, TInput, TOutput>> BuildSelfSupervisedInternalAsync(
         CancellationToken cancellationToken)
     {
+        var profilerSession = CreateProfilerSession();
+        using var _ = profilerSession?.Scope("BuildSelfSupervisedInternalAsync");
+
+        ApplyGpuConfiguration();
+        ApplyMemoryConfiguration();
+
         if (_model is not IFullModel<T, TInput, TOutput> model)
         {
             throw new InvalidOperationException(
                 "Self-supervised training requires a model configured via ConfigureModel(...).");
+        }
+        if (!typeof(TOutput).IsAssignableFrom(typeof(TInput)))
+        {
+            throw new InvalidOperationException(
+                $"Self-supervised training requires TInput to be assignable to TOutput (got {typeof(TInput).Name}/{typeof(TOutput).Name}); " +
+                "the model derives its training target from the input sample.");
         }
 
         var samples = await GatherSelfSupervisedSamplesAsync(cancellationToken);
@@ -1720,6 +1732,82 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 "Self-supervised training has no data. Provide samples via ConfigureDataLoader(...).");
         }
 
+        var firstSample = samples.FirstOrDefault(sample => sample is not null);
+        if (firstSample is null)
+        {
+            throw new InvalidOperationException(
+                "Self-supervised training data contains only null samples.");
+        }
+
+        if (_preprocessingPipeline is not null)
+        {
+            if (!_preprocessingPipeline.IsFitted)
+            {
+                if (samples.Count > 1
+                    && samples[0] is Tensor<T>
+                    && samples.All(sample => sample is Tensor<T>)
+                    && TryStackTensorBatch(samples.Cast<Tensor<T>>().ToArray(), out var batchedForFit)
+                    && batchedForFit is TInput typedBatch)
+                {
+                    _preprocessingPipeline.Fit(typedBatch);
+                }
+                else
+                {
+                    _preprocessingPipeline.Fit(firstSample);
+                }
+            }
+
+            for (int i = 0; i < samples.Count; i++)
+            {
+                if (samples[i] is null) continue;
+                samples[i] = _preprocessingPipeline.Transform(samples[i]);
+            }
+        }
+
+        var targets = new List<TOutput>(samples.Count);
+        foreach (var sample in samples)
+        {
+            if (sample is null)
+            {
+                throw new InvalidOperationException(
+                    "Self-supervised training data contains a null sample.");
+            }
+
+            targets.Add((TOutput)(object)sample);
+        }
+
+        if (_targetPipeline is not null)
+        {
+            if (!_targetPipeline.IsFitted)
+            {
+                if (targets.Count > 1
+                    && targets[0] is Tensor<T>
+                    && targets.All(target => target is Tensor<T>)
+                    && TryStackTensorBatch(targets.Cast<Tensor<T>>().ToArray(), out var batchedTargets)
+                    && batchedTargets is TOutput typedTargets)
+                {
+                    _targetPipeline.Fit(typedTargets);
+                }
+                else
+                {
+                    _targetPipeline.Fit(targets[0]);
+                }
+            }
+
+            for (int i = 0; i < targets.Count; i++)
+            {
+                targets[i] = _targetPipeline.Transform(targets[i]);
+            }
+        }
+
+        var preprocessingInfo = _preprocessingPipeline is not null || _targetPipeline is not null
+            ? new PreprocessingInfo<T, TInput, TOutput>
+            {
+                Pipeline = _preprocessingPipeline,
+                TargetPipeline = _targetPipeline,
+            }
+            : null;
+
         int epochs = _optimizer is not null
             ? Math.Max(1, _optimizer.GetOptions().MaxIterations)
             : 100;
@@ -1728,28 +1816,121 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         for (int epoch = 0; epoch < epochs; epoch++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            foreach (var sample in samples.OrderBy(_ => rng.Next()))
+            foreach (int index in Enumerable.Range(0, samples.Count).OrderBy(_ => rng.Next()))
             {
+                var sample = samples[index];
                 if (sample is null) continue;
                 // Self-supervised: the target is ignored — the model derives its own objective
                 // from the input (e.g. diffusion adds noise and predicts it). Self-supervised
-                // models use the same type for input and output (Tensor→Tensor), so the input
-                // doubles as the (unused) expected-output argument.
-                var target = (TOutput)(object)sample;
-                model.Train(sample, target);
+                // models use compatible input/output types, so the input-derived target doubles
+                // as the expected-output argument.
+                model.Train(sample, targets[index]);
             }
         }
 
-        var result = AttachDiagnostics(new AiModelResult<T, TInput, TOutput>());
-        result.Model = model;
-        if (_knowledgeGraph != null || _graphStore != null || _hybridGraphRetriever != null)
+        var optimizationResult = new OptimizationResult<T, TInput, TOutput>
         {
-            result.AttachGraphComponents(_knowledgeGraph, _graphStore, _hybridGraphRetriever);
-        }
-        if (_tokenizer != null)
+            BestSolution = model,
+            Iterations = epochs * samples.Count
+        };
+
+        QuantizationInfo? quantizationInfo = null;
+        if (_quantizationConfig != null && _quantizationConfig.Mode != QuantizationMode.None)
         {
-            result.AttachTokenizer(_tokenizer, _tokenizationConfig);
+            try
+            {
+                int calibrationSampleCount = _quantizationConfig?.CalibrationSamples ?? 100;
+                var calibrationData = samples.Take(Math.Min(calibrationSampleCount, samples.Count));
+                var (quantizedModel, quantizationInfoResult) = ApplyQuantizationIfConfigured(
+                    optimizationResult.BestSolution,
+                    _quantizationConfig,
+                    calibrationData);
+
+                if (quantizedModel != null && quantizationInfoResult != null)
+                {
+                    optimizationResult.BestSolution = quantizedModel;
+                    quantizationInfo = quantizationInfoResult;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Warning: Quantization failed: {ex.Message}. Model will use original precision.");
+            }
         }
+
+        var postprocessingTrainingInput = samples[0];
+        if (samples.Count > 1
+            && samples[0] is Tensor<T>
+            && samples.All(sample => sample is Tensor<T>)
+            && TryStackTensorBatch(samples.Cast<Tensor<T>>().ToArray(), out var batchedPostprocessingInput)
+            && batchedPostprocessingInput is TInput typedPostprocessingInput)
+        {
+            postprocessingTrainingInput = typedPostprocessingInput;
+        }
+
+        FitPostprocessingIfNeeded(
+            optimizationResult.BestSolution,
+            postprocessingTrainingInput,
+            nameof(BuildSelfSupervisedInternalAsync));
+
+        var deploymentConfig = DeploymentConfiguration.Create(
+            _quantizationConfig,
+            _cacheConfig,
+            _versioningConfig,
+            _abTestingConfig,
+            _telemetryConfig,
+            _exportConfig,
+            _gpuAccelerationConfig,
+            _compressionConfig,
+            _profilingConfig);
+
+        var options = new AiModelResultOptions<T, TInput, TOutput>
+        {
+            OptimizationResult = optimizationResult,
+            TextVectorizer = _configuredTextVectorizer,
+            PreprocessingInfo = preprocessingInfo,
+            PostprocessingPipeline = _postprocessingPipeline,
+            KnowledgeDistillationOptions = _knowledgeDistillationOptions,
+            QuantizationInfo = quantizationInfo,
+            BiasDetector = _biasDetector,
+            FairnessEvaluator = _fairnessEvaluator,
+            InterpretabilityOptions = _interpretabilityOptions,
+            RagRetriever = _ragRetriever,
+            RagReranker = _ragReranker,
+            RagGenerator = _ragGenerator,
+            QueryProcessors = _queryProcessors,
+            LoRAConfiguration = _loraConfiguration,
+            DeploymentConfiguration = deploymentConfig,
+            InferenceOptimizationConfig = _inferenceOptimizationConfig,
+            JitCompilationConfig = _jitCompilationConfig,
+            JitCompiledFunction = BuildCompiledPredictFunction(optimizationResult.BestSolution),
+            AllowNondeterminism = _allowNondeterminism,
+            AugmentationConfig = _augmentationConfig,
+            ReasoningConfig = _reasoningConfig,
+            KnowledgeGraph = _knowledgeGraph,
+            GraphStore = _graphStore,
+            HybridGraphRetriever = _hybridGraphRetriever,
+            Tokenizer = _tokenizer,
+            TokenizationConfig = _tokenizationConfig,
+            ProgramSynthesisModel = _programSynthesisModel,
+            ProgramSynthesisServingClient = _programSynthesisServingClient,
+            ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
+            PromptTemplate = null,
+            PromptOptimizer = null,
+            FewShotExampleSelector = null,
+            PromptAnalyzer = null,
+            PromptCompressor = null,
+            ProfilingReport = profilerSession?.GetReport(),
+            WeightStreamingReport = BuildWeightStreamingReport(),
+            MemoryConfig = _memoryConfig
+        };
+
+        var result = AttachDiagnostics(new AiModelResult<T, TInput, TOutput>(options));
+        result.SetUncertaintyQuantificationOptions(_uncertaintyQuantificationOptions);
+        ProcessKnowledgeGraphOptions(result);
+        AttachSafetyPipeline(result);
+        AttachAdversarialRobustness(result);
+
         return result;
     }
 
