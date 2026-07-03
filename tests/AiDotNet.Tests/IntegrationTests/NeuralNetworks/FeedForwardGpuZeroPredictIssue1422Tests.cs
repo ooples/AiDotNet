@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
@@ -24,6 +25,8 @@ namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 /// </summary>
 public class FeedForwardGpuZeroPredictIssue1422Tests
 {
+    private const int ReproSeed = 1422;
+
     private readonly ITestOutputHelper _output;
     public FeedForwardGpuZeroPredictIssue1422Tests(ITestOutputHelper output) => _output = output;
 
@@ -32,7 +35,15 @@ public class FeedForwardGpuZeroPredictIssue1422Tests
     {
         await Task.Yield();
         DirectGpuTensorEngine? gpu = null;
-        try { gpu = new DirectGpuTensorEngine(); } catch { /* no backend */ }
+        try
+        {
+            gpu = new DirectGpuTensorEngine();
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"GPU engine init failed; skipping #1422 GPU repro. {ex}");
+        }
+
         if (gpu is null || !gpu.SupportsGpu)
         {
             _output.WriteLine("No GPU backend available — skipping #1422 GPU repro.");
@@ -57,16 +68,28 @@ public class FeedForwardGpuZeroPredictIssue1422Tests
 
             var layers = new List<ILayer<double>>
             {
-                new DenseLayer<double>(outputSize: 8, activationFunction: new ReLUActivation<double>()),
-                new DenseLayer<double>(outputSize: 8, activationFunction: new ReLUActivation<double>()),
-                new DenseLayer<double>(outputSize: 1, activationFunction: new IdentityActivation<double>()),
+                new DenseLayer<double>(outputSize: 8, activationFunction: new ReLUActivation<double>())
+                {
+                    RandomSeed = ReproSeed + 1,
+                },
+                new DenseLayer<double>(outputSize: 8, activationFunction: new ReLUActivation<double>())
+                {
+                    RandomSeed = ReproSeed + 2,
+                },
+                new DenseLayer<double>(outputSize: 1, activationFunction: new IdentityActivation<double>())
+                {
+                    RandomSeed = ReproSeed + 3,
+                },
             };
             var arch = new NeuralNetworkArchitecture<double>(
                 inputType: InputType.OneDimensional,
                 taskType: NeuralNetworkTaskType.Regression,
                 complexity: NetworkComplexity.Simple,
                 inputSize: 1,
-                layers: layers);
+                layers: layers)
+            {
+                RandomSeed = ReproSeed,
+            };
             var nn = new FeedForwardNeuralNetwork<double>(arch);
 
             double firstLoss = double.NaN, lastLoss = double.NaN;
@@ -87,21 +110,41 @@ public class FeedForwardGpuZeroPredictIssue1422Tests
 
             foreach (var pred in new[] { nn.Forward(testTensor), nn.Predict(testTensor) })
             {
-                var flat = pred.ToArray();
-                bool allZero = true;
-                for (int i = 0; i < flat.Length; i++) { if (flat[i] != 0.0) { allZero = false; break; } }
-                Assert.False(allZero, "GPU inference returned all zeros after training (#1422).");
-                for (int i = 0; i < expected.Length; i++)
-                {
-                    double rel = Math.Abs(flat[i] - expected[i]) / Math.Abs(expected[i]);
-                    Assert.True(rel < 0.15, $"pred[{i}]={flat[i]:F3} vs expected {expected[i]} (rel {rel:F3}) — a converged y=3x+1.5 head must track the line.");
-                }
+                AssertNonZeroAndTracksLine(pred, expected, "direct GPU inference");
             }
+
+            var facadeResult = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
+                .ConfigureDataLoader(DataLoaders.FromTensors(featureTensor, labelTensor))
+                .ConfigureModel(nn)
+                .ConfigureGpuAcceleration()
+                .BuildAsync();
+            AssertNonZeroAndTracksLine(facadeResult.Predict(testTensor), expected, "AiModelBuilder result.Predict");
         }
         finally
         {
             AiDotNetEngine.Current = previous;
             gpu.Dispose();
+        }
+    }
+
+    private static void AssertNonZeroAndTracksLine(Tensor<double> prediction, double[] expected, string path)
+    {
+        var flat = prediction.ToArray();
+        bool allZero = true;
+        for (int i = 0; i < flat.Length; i++)
+        {
+            if (flat[i] != 0.0)
+            {
+                allZero = false;
+                break;
+            }
+        }
+
+        Assert.False(allZero, $"{path} returned all zeros after training (#1422).");
+        for (int i = 0; i < expected.Length; i++)
+        {
+            double rel = Math.Abs(flat[i] - expected[i]) / Math.Abs(expected[i]);
+            Assert.True(rel < 0.15, $"{path} pred[{i}]={flat[i]:F3} vs expected {expected[i]} (rel {rel:F3}) — a converged y=3x+1.5 head must track the line.");
         }
     }
 }
