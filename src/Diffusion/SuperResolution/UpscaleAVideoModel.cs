@@ -202,6 +202,10 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     /// Optional conditioning module for guided video super-resolution.
     /// </summary>
     private readonly IConditioningModule<T>? _conditioner;
+    // Seed for the deferred (lazy) init path: the constructor only eager-inits when an explicit
+    // predictor/VAE is passed, so without capturing the seed the lazy EnsureInitialized() built the
+    // sub-models with a null seed — dropping the requested seed and making construction non-reproducible.
+    private readonly int? _seed;
 
     #endregion
 
@@ -284,6 +288,7 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
             architecture)
     {
         _conditioner = conditioner;
+        _seed = seed;
 
         if (videoUNet is not null || temporalVAE is not null)
             InitializeLayers(videoUNet, temporalVAE, seed);
@@ -297,7 +302,7 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     private void EnsureInitialized()
     {
         if (_videoUNet is null || _temporalVAE is null)
-            InitializeLayers(null, null, null);
+            InitializeLayers(null, null, _seed);
     }
 
 
@@ -337,7 +342,8 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
             contextDim: CROSS_ATTENTION_DIM,
             numHeads: NUM_HEADS,
             numTemporalLayers: NUM_TEMPORAL_LAYERS,
-            supportsImageConditioning: true);
+            supportsImageConditioning: true,
+            seed: seed);
 
         _temporalVAE = temporalVAE ?? new TemporalVAE<T>(
             inputChannels: 3,
@@ -347,7 +353,8 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
             numTemporalLayers: 1,
             temporalKernelSize: 3,
             causalMode: false,
-            latentScaleFactor: 0.18215);
+            latentScaleFactor: 0.18215,
+            seed: seed);
     }
 
     #endregion

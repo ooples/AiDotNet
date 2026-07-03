@@ -60,6 +60,12 @@ public class FlowVidModel<T> : VideoDiffusionModelBase<T>
     private VideoUNetPredictor<T>? _predictor;
     private TemporalVAE<T>? _temporalVAE;
     private readonly IConditioningModule<T>? _conditioner;
+    // Captured seed for the DEFERRED (lazy) initialization path: the constructor only eagerly builds the
+    // sub-models when an explicit predictor/VAE is supplied, so without storing the seed the lazy
+    // EnsureInitialized() built them with a null seed — silently dropping seed:42 and giving every
+    // construction different weights (the systemic reproducibility bug). The sub-models themselves honor
+    // the seed correctly; it just was not reaching this path.
+    private readonly int? _seed;
 
     public override INoisePredictor<T> NoisePredictor { get { EnsureInitialized(); return _predictor; } }
     public override IVAEModel<T> VAE { get { EnsureInitialized(); return _temporalVAE; } }
@@ -98,6 +104,7 @@ public class FlowVidModel<T> : VideoDiffusionModelBase<T>
             architecture)
     {
         _conditioner = conditioner;
+        _seed = seed;
         if (predictor is not null || temporalVAE is not null)
             InitializeLayers(predictor, temporalVAE, seed);
     }
@@ -106,7 +113,7 @@ public class FlowVidModel<T> : VideoDiffusionModelBase<T>
     private void EnsureInitialized()
     {
         if (_predictor is null || _temporalVAE is null)
-            InitializeLayers(null, null, null);
+            InitializeLayers(null, null, _seed);
     }
 
     [MemberNotNull(nameof(_predictor), nameof(_temporalVAE))]
