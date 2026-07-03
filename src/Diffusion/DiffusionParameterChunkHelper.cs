@@ -54,10 +54,11 @@ internal static class DiffusionParameterChunkHelper
 
         var flat = new Vector<T>(checked((int)total));
         int offset = 0;
+        var destination = flat.AsWritableSpan();
         foreach (var chunk in buffered)
         {
-            var v = chunk.ToVector();
-            for (int i = 0; i < v.Length; i++) flat[offset++] = v[i];
+            chunk.AsSpan().CopyTo(destination.Slice(offset, chunk.Length));
+            offset += chunk.Length;
         }
 
         return flat;
