@@ -644,8 +644,27 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         var preprocessed = PreprocessDocument(input);
-        return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
+        if (!_useNativeMode) return RunOnnxInference(preprocessed);
+        return RunBackbone(preprocessed);
     }
+
+    /// <summary>
+    /// Runs the convolutional backbone directly over the (rank-3 [C,H,W]) page image. The base
+    /// NeuralNetworkBase.Forward normalizes/reshapes the input for its accelerated path, which mangles
+    /// the conv feature-map layout into a flattened [H*W, C] rank-2 tensor for this ResNet backbone
+    /// (residual blocks then re-throw on the rank). Driving the layers directly keeps the [C,H,W]
+    /// layout intact — the same approach the frame-interpolation / audio models use for their custom
+    /// dataflow. Every layer's Forward is tape-aware, so this serves both inference and training.
+    /// </summary>
+    private Tensor<T> RunBackbone(Tensor<T> x)
+    {
+        var c = x;
+        foreach (var layer in Layers) c = layer.Forward(c);
+        return c;
+    }
+
+    /// <summary>Training forward — the same direct backbone pass as inference (tape-aware).</summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => RunBackbone(PreprocessDocument(input));
 
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)

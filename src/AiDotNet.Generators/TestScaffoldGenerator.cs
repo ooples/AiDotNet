@@ -2855,10 +2855,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         else if (model.ClassName == "DocBank")
         {
             // DocBank (Li et al. 2020) is a page-layout SEGMENTER over an RGB page image, not a
-            // token-ID document model: its native conv backbone (CreateDefaultDocBankLayers) takes
-            // [3, H, W] pixels and downsamples /32 to per-pixel class logits [numClasses, H/32, W/32].
+            // token-ID document model: its native ResNet backbone (CreateDefaultDocBankLayers) takes
+            // [3, H, W] pixels through the stem (/2 conv, /2 maxpool: 64->32->15), residual blocks
+            // (stride 1), and a stride-2 transition (/2), giving per-pixel class logits [numClasses, 8, 8].
             sb.AppendLine("    protected override int[] InputShape => new[] { 3, 64, 64 };");
-            sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 2, 2 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 8, 8 };");
         }
         else if (model.ClassName == "AudioSuperResolution")
         {

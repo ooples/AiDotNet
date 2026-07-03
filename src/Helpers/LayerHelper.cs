@@ -9974,31 +9974,31 @@ public static class LayerHelper<T>
         int numClasses = 13,
         int hiddenDim = 256)
     {
-        // DocBank (Li et al. 2020) evaluates a Faster R-CNN detector with a ResNeXt-101 backbone; this
-        // simplified page segmenter approximates the convolutional backbone. NOTE: the paper's
-        // residual (ResNet/ResNeXt) topology is the faithful design, but wrapping these conv layers in
-        // ResidualLayer/BottleneckBlock currently mismatches the conv output layout (skip [C,H*W] vs
-        // conv [C,H,W,1]) — a framework-level layout gap tracked separately. Backbone below is the
-        // strided conv stack; the final conv emits per-pixel class LOGITS (identity activation).
+        // DocBank (Li et al. 2020) evaluates a Faster R-CNN detector with a ResNet/ResNeXt backbone
+        // (He et al. 2016 residual blocks). The previous code stacked bare Conv+BN with NO skip
+        // connections ("Residual blocks (simplified as conv layers)"), so the deep stack's logits
+        // exploded and training diverged. Use real RESIDUAL blocks — out = x + Conv3x3(x) via
+        // ResidualLayer — so the identity skip carries the signal and the gradient.
+
+        // ResNet stem: 7x7 conv /2 -> BN -> 3x3 max-pool /2.
         yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
         yield return new BatchNormalizationLayer<T>();
         yield return new MaxPoolingLayer<T>(3, 2);
 
-        yield return new ConvolutionalLayer<T>(256, 3, 1, 1);
+        // Residual stage: ResNet basic blocks (identity skip, same 64 channels, stride 1).
+        yield return new ResidualLayer<T>(new ConvolutionalLayer<T>(64, 3, 1, 1));
         yield return new BatchNormalizationLayer<T>();
-        yield return new ConvolutionalLayer<T>(512, 3, 2, 1);
+        yield return new ResidualLayer<T>(new ConvolutionalLayer<T>(64, 3, 1, 1));
         yield return new BatchNormalizationLayer<T>();
-        yield return new ConvolutionalLayer<T>(1024, 3, 2, 1);
-        yield return new BatchNormalizationLayer<T>();
+
+        // Strided transition conv to the next stage width (/2).
         yield return new ConvolutionalLayer<T>(backboneChannels, 3, 2, 1);
         yield return new BatchNormalizationLayer<T>();
 
-        yield return new ConvolutionalLayer<T>(hiddenDim, 1, 1, 0);
-
+        // Segmentation head: 3x3 conv -> BN, then a 1x1 conv to per-pixel class LOGITS (identity).
         yield return new ConvolutionalLayer<T>(hiddenDim, 3, 1, 1);
         yield return new BatchNormalizationLayer<T>();
-
-        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, (IActivationFunction<T>)new IdentityActivation<T>());
     }
 
     /// <summary>
