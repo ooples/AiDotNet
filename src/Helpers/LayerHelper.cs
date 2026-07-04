@@ -19956,33 +19956,26 @@ public static class LayerHelper<T>
 
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
-        // --- Conformer Encoder Blocks ---
-        // Each block: FF (half-step) → MHSA → Conv → FF (half-step) → LayerNorm
+        // --- Encoder Blocks (Pre-LN residual) ---
+        // Each encoder layer wraps self-attention and a position-wise FFN in Pre-LN
+        // RESIDUAL connections: x = x + Sublayer(LayerNorm(x)). The previous implementation
+        // was a flat, residual-FREE stack of Dense/LayerNorm/MHSA layers — without the skip
+        // connections a deep encoder collapses to an input-INDEPENDENT (uniform) output under
+        // training (the #1208/#1221 degeneracy: DifferentInputs_AfterTraining failed with the
+        // post-training L2 between two distinct inputs ≈ 0 on FireRedASR/FireRedASRLLM, because
+        // gradient could not reach the input-side layers and the encoder learned to ignore its
+        // input). TransformerEncoderBlock provides the residual wiring and the Pre-LN ordering
+        // (Xiong et al. 2020) that lets a deep encoder train stably without warmup. Its
+        // self-attention gives the Conformer its context mixing; the position-wise FFN replaces
+        // the previous dense-approximated "conv module" (which was never a real convolution).
         for (int i = 0; i < numLayers; i++)
         {
-            // First feed-forward module (half-step)
-            yield return new DenseLayer<T>(ffDim, geluActivation);
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-            yield return new DenseLayer<T>(encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-
-            // Multi-head self-attention module
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (encoderDim) / (numAttentionHeads));
-            yield return new LayerNormalizationLayer<T>();
-
-            // Convolution module (approximated with dense layers)
-            yield return new DenseLayer<T>(encoderDim * 2, geluActivation);
-            yield return new BatchNormalizationLayer<T>();
-            yield return new DenseLayer<T>(encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-
-            // Second feed-forward module (half-step)
-            yield return new DenseLayer<T>(ffDim, geluActivation);
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-            yield return new DenseLayer<T>(encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: encoderDim,
+                numHeads: numAttentionHeads,
+                ffnDim: ffDim,
+                dropoutRate: dropoutRate,
+                ffnActivation: geluActivation);
         }
 
         // --- CTC Output Head ---
@@ -22475,14 +22468,18 @@ public static class LayerHelper<T>
         yield return new BatchNormalizationLayer<T>();
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
+        // Residual Pre-LN encoder blocks. A residual-FREE attention/FFN stack collapses to an
+        // input-independent (uniform) output under training (#1208/#1221) — see the same fix in
+        // CreateDefaultConformerLayers. TransformerEncoderBlock wraps attention + FFN in
+        // x + Sublayer(LayerNorm(x)) skips so gradients reach the input side.
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new DenseLayer<T>(encoderDim * 4, geluActivation);
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-            yield return new DenseLayer<T>(encoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (encoderDim) / (numAttentionHeads));
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: encoderDim,
+                numHeads: numAttentionHeads,
+                ffnDim: encoderDim * 4,
+                dropoutRate: dropoutRate,
+                ffnActivation: geluActivation);
         }
         yield return new LayerNormalizationLayer<T>();
 
@@ -22496,16 +22493,17 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(llmDim, identityActivation);
         yield return new LayerNormalizationLayer<T>();
 
-        // LLM decoder (lightweight Transformer decoder)
+        // LLM decoder (lightweight Transformer decoder) — residual Pre-LN blocks, same
+        // rationale as the encoder above (a residual-free stack collapses under training).
         int llmHeads = Math.Max(1, llmDim / 128);
         for (int i = 0; i < numLLMLayers; i++)
         {
-            yield return new LayerNormalizationLayer<T>();
-            yield return new MultiHeadAttentionLayer<T>(llmHeads, (llmDim) / (llmHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(llmDim * 4, geluActivation);
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-            yield return new DenseLayer<T>(llmDim, identityActivation);
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize: llmDim,
+                numHeads: llmHeads,
+                ffnDim: llmDim * 4,
+                dropoutRate: dropoutRate,
+                ffnActivation: geluActivation);
         }
         yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(vocabSize, identityActivation);
