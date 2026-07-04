@@ -140,6 +140,11 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
     private readonly ImageProjector<T> _imageProjector;
 
     /// <summary>
+    /// The image embedding dimension used by the encoder and projector.
+    /// </summary>
+    private readonly int _embedDim;
+
+    /// <summary>
     /// Default image prompt weight.
     /// </summary>
     private double _imagePromptWeight = 1.0;
@@ -208,6 +213,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
             architecture)
     {
         _conditioner = conditioner;
+        _embedDim = embedDim;
 
         _baseUNet = baseUNet ?? new UNetNoisePredictor<T>(
             architecture: Architecture,
@@ -563,8 +569,19 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
+        // Clone the ACTUAL baseUNet/VAE (see InstaFlowModel/MultiDiffusionModel): passing only
+        // conditioner/seed rebuilt InitializeLayers' DEFAULT-sized, lazily-unresolved sub-models, so once
+        // the source resolved its lazy layers via a forward pass the trainable-layer shapes no longer
+        // lined up 1:1 and Clone diverged. Cloning the resolved baseUNet/VAE (+ same architecture/
+        // options/scheduler) makes the clone structurally identical.
         var clone = new IPAdapterModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            baseUNet: (UNetNoisePredictor<T>)_baseUNet.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
+            embedDim: _embedDim,
             seed: RandomGenerator.Next());
 
         if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());

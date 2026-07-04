@@ -135,7 +135,19 @@ public class PowerPaintModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new PowerPaintModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
+        // Clone the ACTUAL predictor/VAE (see InstaFlowModel/MultiDiffusionModel): passing only
+        // conditioner/seed rebuilt InitializeLayers' DEFAULT-sized, lazily-unresolved sub-models, so once
+        // the source resolved its lazy layers via a forward pass the trainable-layer shapes no longer
+        // lined up 1:1 and Clone diverged. Cloning the resolved predictor/VAE (+ same architecture/
+        // options/scheduler) makes the clone structurally identical.
+        var clone = new PowerPaintModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner,
+            seed: RandomGenerator.Next());
         if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         return clone;
     }
