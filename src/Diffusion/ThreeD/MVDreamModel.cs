@@ -1295,30 +1295,32 @@ public class MultiViewUNet<T>
         int numViews,
         int contextDim,
         int? seed = null)
+        : this(
+            inputChannels,
+            outputChannels,
+            baseChannels,
+            numViews,
+            contextDim,
+            new UNetNoisePredictor<T>(
+                inputChannels: inputChannels,
+                outputChannels: outputChannels,
+                baseChannels: baseChannels,
+                channelMultipliers: new[] { 1, 2, 4, 4 },
+                numResBlocks: 2,
+                attentionResolutions: new[] { 4, 2, 1 },
+                contextDim: contextDim,
+                seed: seed),
+            new MultiViewAttention<T>(
+                channels: baseChannels * 4, // At bottleneck
+                numViews: numViews,
+                seed: seed))
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
-        _numViews = numViews;
-        _inputChannels = inputChannels;
-        _outputChannels = outputChannels;
-        _baseChannels = baseChannels;
-        _contextDim = contextDim;
-
-        _baseUNet = new UNetNoisePredictor<T>(
-            inputChannels: inputChannels,
-            outputChannels: outputChannels,
-            baseChannels: baseChannels,
-            channelMultipliers: new[] { 1, 2, 4, 4 },
-            numResBlocks: 2,
-            attentionResolutions: new[] { 4, 2, 1 },
-            contextDim: contextDim,
-            seed: seed);
-
-        _mvAttention = new MultiViewAttention<T>(
-            channels: baseChannels * 4, // At bottleneck
-            numViews: numViews,
-            seed: seed);
     }
 
+    // Sole field-initialization path: the public constructor delegates here after
+    // building its base U-Net and multi-view attention, and Clone() calls it directly
+    // with the cloned sub-modules. Keeping a single constructor avoids duplicating the
+    // (readonly) scalar-field assignments across both entry points.
     private MultiViewUNet(
         int inputChannels,
         int outputChannels,

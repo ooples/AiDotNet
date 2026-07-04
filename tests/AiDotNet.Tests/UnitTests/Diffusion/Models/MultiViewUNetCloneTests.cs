@@ -21,5 +21,9 @@ public class MultiViewUNetCloneTests
         Assert.NotSame(source, clone);
         Assert.NotSame(source.BaseUNet, clone.BaseUNet);
         Assert.Equal(source.ParameterCount, clone.ParameterCount);
+        // Value equality, not just shape: a Clone() that re-initialized weights would still
+        // match on ParameterCount. Comparing the actual parameter values locks in that the
+        // trained weights are preserved — the exact class of bug this PR fixes.
+        Assert.Equal(source.GetParameters(), clone.GetParameters());
     }
 }
