@@ -304,6 +304,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
     {
         // --- #1624 training/perf-bound inventory (OOM / TIMEOUT in training/clone) ---
+        // Conformer/CTC ASR family: deep (12-18 layer) attention encoders whose <double> training
+        // footprint OOM-kills the 16 GB runner when several run back-to-back in one shard (each
+        // model's per-step activation/tape memory accumulates across the 10-30 training iterations).
+        // Same rationale as the Whisper ASR variants already floated below; <float> halves the
+        // footprint and keeps the self-relative training invariants intact.
+        "Conformer", "ConformerCTC", "Branchformer", "EBranchformer", "FastConformer",
+        "EfficientConformer", "StreamingConformer", "RobustConformer", "ConformerTransducer",
+        "ConformerFP", "InterCTC", "SelfConditionedCTC", "FunASRNano", "FireRedASR", "FireRedASRLLM",
         // Embedding family
         "BGE", "ColBERT", "InstructorEmbedding", "MatryoshkaEmbedding", "SGPT",
         "SPLADE", "SimCSE", "TransformerEmbeddingNetwork", "FastText",
