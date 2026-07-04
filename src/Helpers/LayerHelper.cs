@@ -22495,7 +22495,9 @@ public static class LayerHelper<T>
 
         // LLM decoder (lightweight Transformer decoder) — residual Pre-LN blocks, same
         // rationale as the encoder above (a residual-free stack collapses under training).
-        int llmHeads = Math.Max(1, llmDim / 128);
+        // Use ChooseDivisibleHeadConfig to ensure llmHeads evenly divides llmDim (see
+        // ChooseDivisibleHeadConfig for the snap-to-divisor rationale).
+        var (llmHeads, _) = ChooseDivisibleHeadConfig(llmDim, Math.Max(1, llmDim / 128));
         for (int i = 0; i < numLLMLayers; i++)
         {
             yield return new TransformerEncoderBlock<T>(
