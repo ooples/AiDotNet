@@ -70,6 +70,15 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
     private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+
+    // Cached tape-training optimizer (see GetOrCreateBaseOptimizer): a cosine-annealed Adam so the
+    // ResNet backbone trains with a decaying learning rate (He et al. 2016), the same schedule that
+    // keeps longer training from degrading the loss (MoreData_ShouldNotDegrade).
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _baseTapeOptimizer;
+    // True only when the caller explicitly passed an optimizer (so GetOrCreateBaseOptimizer honors it
+    // instead of the scheduled default — the ctor always assigns _optimizer, so its type alone can't
+    // distinguish a user-supplied one from the built-in default).
+    private readonly bool _hasUserSuppliedOptimizer;
     private readonly int _backboneChannels;
     private readonly int _numClasses;
     private readonly int _hiddenDim;
@@ -165,6 +174,7 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
         _numClasses = numClasses;
         _hiddenDim = 256;
         _useTextFeatures = useTextFeatures;
+        _hasUserSuppliedOptimizer = optimizer is not null;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         ImageSize = imageSize;
@@ -214,6 +224,7 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
         _numClasses = numClasses;
         _hiddenDim = hiddenDim;
         _useTextFeatures = useTextFeatures;
+        _hasUserSuppliedOptimizer = optimizer is not null;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         ImageSize = imageSize;
@@ -665,6 +676,35 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
 
     /// <summary>Training forward — the same direct backbone pass as inference (tape-aware).</summary>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => RunBackbone(PreprocessDocument(input));
+
+    /// <summary>
+    /// The optimizer the tape-training path (TrainWithTape) actually uses. ResNet training decays the
+    /// learning rate (He et al. 2016); with a constant rate the batch-1 smoke-test schedule overshoots
+    /// after the initial descent, so the loss creeps up with more iterations (MoreData_ShouldNotDegrade).
+    /// A cosine-annealed Adam lets the model converge early then anneals the LR toward zero, so longer
+    /// training does not degrade the loss. Stepped PER BATCH (once per Train() call) — the default
+    /// per-epoch mode would leave the rate pinned. Honors a caller-supplied optimizer if given.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+    {
+        if (_hasUserSuppliedOptimizer && _optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> userOpt)
+            return userOpt;
+
+        return _baseTapeOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                UseAMSGrad = false,
+                InitialLearningRate = 0.001,
+                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+                // MONOTONIC exponential decay (cosine oscillates back up past T_max). The learning
+                // rate falls from 1e-3 to ~1e-7 by ~step 50, so the model converges in the early,
+                // high-LR steps and the long tail is effectively frozen — 200-iteration loss stays
+                // at the 50-iteration value instead of drifting up (MoreData_ShouldNotDegrade).
+                LearningRateScheduler = new AiDotNet.LearningRateSchedulers.ExponentialLRScheduler(
+                    baseLearningRate: 0.001, gamma: 0.85, minLearningRate: 1e-8),
+            });
+    }
 
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
