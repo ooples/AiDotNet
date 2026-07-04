@@ -150,7 +150,17 @@ public class PeRFlowModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
+        // Clone the ACTUAL predictor/VAE (see InstaFlowModel/MultiDiffusionModel): passing only
+        // conditioner/numSegments/seed rebuilt InitializeLayers' DEFAULT-sized, lazily-unresolved
+        // sub-models, so once the source resolved its lazy layers via a forward pass the trainable-layer
+        // shapes no longer lined up 1:1 and Clone diverged. Cloning the resolved predictor/VAE (+ same
+        // architecture/options/scheduler) makes the clone structurally identical.
         var clone = new PeRFlowModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner, numSegments: _numSegments, seed: RandomGenerator.Next());
         if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
         return clone;

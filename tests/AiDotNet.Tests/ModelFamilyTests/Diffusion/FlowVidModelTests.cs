@@ -4,12 +4,10 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-// Foundation-scale video-editing diffusion. Every test fits the 120s [Fact(Timeout)] in
-// isolation (verified — heaviest is Predict ~24s, the 10-step training probe ~27s), but the
-// forward is slow enough that it trips the wall-clock envelope under parallel contention
-// (#1305). Serialize it onto dedicated cores like the other foundation-scale diffusion models
-// (#1622 L4) so it stays green in the default gate rather than excluding it to HeavyTimeout.
-[Xunit.Collection("FoundationScaleSerial")]
+// Foundation-scale-at-default: the model's full-scale default config has a Training peak (weights +
+// gradients + Adam state + activations) that OOMs the 16 GB CI runner (fits only on a larger box).
+// Moved to the HeavyTimeout nightly lane so the default PR-gate shard fits and passes (#1706/#1305).
+[Xunit.Trait("Category", "HeavyTimeout")]
 public class FlowVidModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 4, 16, 16];
