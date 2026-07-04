@@ -137,18 +137,18 @@ public class FluxInpaintingModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new FluxInpaintingModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
-        // COW-share first: O(1) copy-on-write of the whole stack's trainable tensors — the fast path
-        // for EMA / frequent cloning (no per-parameter copy at all). Only when sharing can't apply
-        // (unresolved lazy or shape-mismatched weights) fall back to the FLAT-FREE per-tensor chunk
-        // copy, so the ~12B FLUX-scale predictor still never materialises a flat Vector<T> (which
-        // overflows Vector.Length's int contract — "Array dimensions exceeded" — and OOMs). The
-        // predictor (FluxDoubleStream/MMDiT) and StandardVAE both override the chunked API flat-free.
-        if (!clone.TryShareParametersFrom(this))
-        {
-            clone._predictor.SetParameterChunks(_predictor.GetParameterChunks());
-            clone._vae.SetParameterChunks(_vae.GetParameterChunks());
-        }
+        // Clone the resolved predictor/VAE via their own Clone() (+ same architecture/options/scheduler).
+        // The sub-model Clone()s already deep-copy the ~12B FLUX-scale weights, so no field-by-field
+        // SetParameters(GetParameters()) is needed — which also avoids the int-bounded flat Vector<T>
+        // round-trip ("Array dimensions exceeded" / OOM) at that scale.
+        var clone = new FluxInpaintingModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            predictor: (FluxDoubleStreamPredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner,
+            seed: RandomGenerator.Next());
         return clone;
     }
 

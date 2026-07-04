@@ -180,20 +180,22 @@ public class ControlNetFluxModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
+        // Clone the ACTUAL predictor and VAE (see InstaFlowModel/MultiDiffusionModel): passing only
+        // controlType/conditioner/seed rebuilt InitializeLayers' DEFAULT-sized, lazily-unresolved Flux
+        // predictor/VAE, so the field-by-field SetParameters below copied a resolved source predictor
+        // into the clone's still-lazy one and threw / mis-shaped. Cloning the resolved predictor/VAE
+        // makes those two structurally identical up front; the control encoder isn't a ctor param, so its
+        // (config-driven, matching-shape) weights are copied field-by-field afterward.
         var clone = new ControlNetFluxModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            predictor: (FluxDoubleStreamPredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
             controlType: _controlType,
             conditioner: _conditioner,
             seed: RandomGenerator.Next());
-        // COW-share first: O(1) copy-on-write of the whole stack's trainable tensors — the fast path
-        // for EMA / frequent cloning. Only when sharing can't apply (unresolved lazy or shape-mismatched
-        // weights) fall back to the per-component copy: the ~12B FLUX-scale FluxDoubleStream/MMDiT
-        // predictor via its FLAT-FREE per-tensor chunk stream (never a flat Vector<T> — int-overflow /
-        // OOM), and the plain (non-IParameterizable) control encoder — tractable — via its flat copy.
-        if (!clone.TryShareParametersFrom(this))
-        {
-            clone._predictor.SetParameterChunks(_predictor.GetParameterChunks());
-            clone._controlEncoder.SetParameters(_controlEncoder.GetParameters());
-        }
+        clone._controlEncoder.SetParameters(_controlEncoder.GetParameters());
         return clone;
     }
 

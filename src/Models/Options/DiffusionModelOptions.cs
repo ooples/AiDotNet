@@ -41,6 +41,7 @@ public class DiffusionModelOptions<T> : ModelOptions
             throw new ArgumentNullException(nameof(other));
 
         LearningRate = other.LearningRate;
+        OptimizerFactory = other.OptimizerFactory;
         TrainTimesteps = other.TrainTimesteps;
         BetaStart = other.BetaStart;
         BetaEnd = other.BetaEnd;
@@ -63,6 +64,35 @@ public class DiffusionModelOptions<T> : ModelOptions
     /// The default of 0.001 is a good starting point for most diffusion models.</para>
     /// </remarks>
     public double LearningRate { get; set; } = 0.001;
+
+    /// <summary>
+    /// Gets or sets the factory used to create the gradient-based optimizer for training updates.
+    /// </summary>
+    /// <value>
+    /// A factory that creates a fresh <see cref="IGradientBasedOptimizer{T, TInput, TOutput}"/>,
+    /// or <c>null</c> (the default) to use the model's industry-standard default optimizer.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// When this is <c>null</c>, the diffusion model trains with the paper-faithful default: a plain
+    /// <b>Adam</b> optimizer (Ho et al. 2020, DDPM Algorithm 1 — Adam, <i>not</i> AdamW) configured with
+    /// the standard hyperparameters β₁ = 0.9, β₂ = 0.999, ε = 1e-8, <b>no weight decay</b>, and the
+    /// learning rate from <see cref="LearningRate"/>. The non-paper extras of the Adam implementation
+    /// (adaptive betas, adaptive learning rate, AMSGrad) are left off so the default reproduces the
+    /// paper exactly.
+    /// </para>
+    /// <para>
+    /// Set this to customize the optimizer at every level: a differently-tuned Adam (custom betas /
+    /// epsilon / AMSGrad), AdamW with decoupled weight decay, SGD with momentum, or any custom
+    /// <see cref="IGradientBasedOptimizer{T, TInput, TOutput}"/>. The factory must create a new optimizer
+    /// instance for each model so moment buffers, step counters, and checkpointed optimizer state are
+    /// never shared between copied option objects or cloned models.
+    /// </para>
+    /// <para><b>For Beginners:</b> The optimizer is the rule for turning each step's error signal into a
+    /// weight update. Leave this unset to use the proven DDPM default (Adam); set a factory only to take
+    /// full control of the optimizer yourself.</para>
+    /// </remarks>
+    public Func<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>? OptimizerFactory { get; set; }
 
     /// <summary>
     /// Gets or sets the number of timesteps used during training.

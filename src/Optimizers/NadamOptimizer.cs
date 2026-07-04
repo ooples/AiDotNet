@@ -372,6 +372,8 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
     {
+        PrepareTapeState(context);
+
         _tapeStep++;
 
         T beta1 = NumOps.FromDouble(_options.Beta1);

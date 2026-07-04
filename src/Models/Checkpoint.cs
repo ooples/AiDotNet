@@ -39,6 +39,17 @@ public class Checkpoint<T, TInput, TOutput>
     public Dictionary<string, object> OptimizerState { get; set; } = new();
 
     /// <summary>
+    /// Gets or sets the serialized optimizer payload.
+    /// </summary>
+    /// <remarks>
+    /// This stores the optimizer's full <see cref="IModelSerializer.Serialize"/>
+    /// payload, including transient state such as moment vectors, accumulators,
+    /// velocities, and scheduler counters. <see cref="OptimizerState"/> remains
+    /// as lightweight metadata for inspection and backwards compatibility.
+    /// </remarks>
+    public byte[] OptimizerData { get; set; } = Array.Empty<byte>();
+
+    /// <summary>
     /// Gets or sets the optimizer type name for reconstruction.
     /// </summary>
     public string? OptimizerTypeName { get; set; }
@@ -101,11 +112,13 @@ public class Checkpoint<T, TInput, TOutput>
         int epoch,
         int step,
         Dictionary<string, T> metrics,
-        Dictionary<string, object>? metadata = null)
+        Dictionary<string, object>? metadata = null,
+        byte[]? optimizerData = null)
         : this()
     {
         Model = model;
         OptimizerState = optimizerState ?? new Dictionary<string, object>();
+        OptimizerData = optimizerData ?? Array.Empty<byte>();
         OptimizerTypeName = optimizerTypeName;
         Epoch = epoch;
         Step = step;
@@ -133,11 +146,102 @@ public class Checkpoint<T, TInput, TOutput>
     {
         Model = model;
         OptimizerState = ExtractOptimizerState(optimizer);
+        OptimizerData = optimizer?.Serialize() ?? Array.Empty<byte>();
+        OptimizerState["SerializedStateLengthBytes"] = OptimizerData.Length;
         OptimizerTypeName = optimizer?.GetType().AssemblyQualifiedName;
         Epoch = epoch;
         Step = step;
         Metrics = metrics ?? new Dictionary<string, T>();
         Metadata = metadata ?? new Dictionary<string, object>();
+    }
+
+    /// <summary>
+    /// Restores the saved optimizer state into an existing optimizer instance.
+    /// </summary>
+    /// <param name="optimizer">The optimizer instance to restore.</param>
+    public void RestoreOptimizer(IOptimizer<T, TInput, TOutput> optimizer)
+    {
+        if (!TryRestoreOptimizer(optimizer))
+        {
+            throw new InvalidOperationException(
+                $"Checkpoint '{CheckpointId}' does not contain serialized optimizer state.");
+        }
+    }
+
+    /// <summary>
+    /// Attempts to restore the saved optimizer state into an existing optimizer instance.
+    /// </summary>
+    /// <param name="optimizer">The optimizer instance to restore.</param>
+    /// <returns><c>true</c> when optimizer state was restored; otherwise <c>false</c>.</returns>
+    public bool TryRestoreOptimizer(IOptimizer<T, TInput, TOutput> optimizer)
+    {
+        if (optimizer == null)
+            throw new ArgumentNullException(nameof(optimizer));
+
+        if (OptimizerData == null || OptimizerData.Length == 0)
+            return false;
+
+        // Guard against feeding a checkpoint's bytes to a different optimizer type, which would
+        // silently restore incompatible state. OptimizerTypeName was captured (AssemblyQualifiedName)
+        // at save time; reject a mismatch before Deserialize. Resolve the stored type when possible and
+        // allow the supplied optimizer to be that type or a subclass; fall back to a string compare if
+        // the stored type can't be resolved (e.g. its assembly moved).
+        // Capture into a local and narrow with a property pattern rather than
+        // gating on string.IsNullOrEmpty(OptimizerTypeName): net471's nullable
+        // flow analysis does NOT honour the IsNullOrEmpty guard (its BCL
+        // reference lacks the [NotNullWhen] annotation) and would treat
+        // OptimizerTypeName as possibly-null at the ExtractTypeFullName(string)
+        // call. A local narrowed by `is { Length: > 0 }` stays non-null across the
+        // block on every target framework, so no null-forgiving operator is needed.
+        string? optimizerTypeName = OptimizerTypeName;
+        if (optimizerTypeName is { Length: > 0 })
+        {
+            var expectedType = Type.GetType(optimizerTypeName);
+            var actualType = optimizer.GetType();
+            // The saved name is assembly-qualified ("Ns.Type, Assembly, Version=..."); the FullName is the
+            // part before the first TOP-LEVEL comma. When Type.GetType can't resolve the saved type (the
+            // assembly was renamed or its version changed), fall back to comparing the assembly-qualified
+            // string AND the bare FullName, so a checkpoint from a since-renamed/versioned assembly whose
+            // concrete optimizer type is otherwise identical still restores instead of being rejected.
+            // NOTE: a naive Split(',')[0] is WRONG for generic types — a closed generic's assembly-
+            // qualified name embeds its type arguments' own AQNs inside "[[...]]", which contain commas;
+            // ExtractTypeFullName below skips commas nested in brackets so the FullName isn't truncated.
+            string expectedFullName = ExtractTypeFullName(optimizerTypeName);
+            bool compatible = expectedType != null
+                ? expectedType.IsInstanceOfType(optimizer)
+                : string.Equals(optimizerTypeName, actualType.AssemblyQualifiedName, StringComparison.Ordinal)
+                  || string.Equals(expectedFullName, actualType.FullName, StringComparison.Ordinal);
+
+            if (!compatible)
+            {
+                throw new InvalidOperationException(
+                    $"Checkpoint '{CheckpointId}' was saved from optimizer type '{optimizerTypeName}', but the " +
+                    $"supplied optimizer is '{optimizer.GetType().AssemblyQualifiedName}'. Restoring mismatched " +
+                    "optimizer state is unsafe.");
+            }
+        }
+
+        optimizer.Deserialize(OptimizerData);
+        return true;
+    }
+
+    /// <summary>
+    /// Extracts the type <c>FullName</c> from an assembly-qualified type name by returning the substring
+    /// before the first comma that is NOT nested inside brackets. Correct for closed generic types, whose
+    /// assembly-qualified name embeds each type argument's own assembly-qualified name inside <c>[[...]]</c>
+    /// (which contain commas) — a naive <c>Split(',')</c> would truncate at the first inner comma.
+    /// </summary>
+    internal static string ExtractTypeFullName(string assemblyQualifiedName)
+    {
+        int depth = 0;
+        for (int i = 0; i < assemblyQualifiedName.Length; i++)
+        {
+            char c = assemblyQualifiedName[i];
+            if (c == '[') depth++;
+            else if (c == ']') depth--;
+            else if (c == ',' && depth == 0) return assemblyQualifiedName.Substring(0, i).Trim();
+        }
+        return assemblyQualifiedName.Trim();
     }
 
     /// <summary>

@@ -1198,14 +1198,25 @@ public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        return new MVDreamModel<T>(
-            options: null,
-            scheduler: null,
-            multiViewUNet: null,
-            imageVAE: null,
+        // Clone the ACTUAL multi-view UNet / image VAE (see InstaFlowModel/MultiDiffusionModel):
+        // passing null rebuilt InitializeLayers' DEFAULT-sized, lazily-unresolved sub-models, so once the
+        // source resolved its lazy layers via a forward pass the clone reconstructed a different-valued
+        // (and, after resolution, mismatched) network and diverged. Cloning the resolved sub-models makes
+        // the clone structurally and observationally identical.
+        var clone = new MVDreamModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            multiViewUNet: _multiViewUNet.Clone(),
+            imageVAE: (StandardVAE<T>)_imageVAE.Clone(),
             textConditioner: _textConditioner,
             imageConditioner: _imageConditioner,
             config: _config);
+        // The camera-embedding block is rebuilt fresh by the ctor (it is not a ctor param), so copy the
+        // full parameter set across. With the multi-view U-Net and VAE already resolved clones, the two
+        // graphs line up 1:1 and the copy-on-write share also transfers the camera embedding's weights.
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
+        return clone;
     }
 
     #endregion
@@ -1254,9 +1265,15 @@ public class MVDreamConfig
 public class MultiViewUNet<T>
 {
     private readonly INumericOperations<T> _numOps;
-    private readonly UNetNoisePredictor<T> _baseUNet;
+    private UNetNoisePredictor<T> _baseUNet;
     private readonly int _numViews;
-    private readonly MultiViewAttention<T> _mvAttention;
+    private MultiViewAttention<T> _mvAttention;
+    // Retained construction config so Clone() can create an identically-shaped instance around the
+    // already-cloned resolved sub-modules (see MVDreamModel.Clone).
+    private readonly int _inputChannels;
+    private readonly int _outputChannels;
+    private readonly int _baseChannels;
+    private readonly int _contextDim;
 
     /// <summary>
     /// Gets whether classifier-free guidance is supported.
@@ -1278,24 +1295,70 @@ public class MultiViewUNet<T>
         int numViews,
         int contextDim,
         int? seed = null)
+        : this(
+            inputChannels,
+            outputChannels,
+            baseChannels,
+            numViews,
+            contextDim,
+            new UNetNoisePredictor<T>(
+                inputChannels: inputChannels,
+                outputChannels: outputChannels,
+                baseChannels: baseChannels,
+                channelMultipliers: new[] { 1, 2, 4, 4 },
+                numResBlocks: 2,
+                attentionResolutions: new[] { 4, 2, 1 },
+                contextDim: contextDim,
+                seed: seed),
+            new MultiViewAttention<T>(
+                channels: baseChannels * 4, // At bottleneck
+                numViews: numViews,
+                seed: seed))
+    {
+    }
+
+    // Sole field-initialization path: the public constructor delegates here after
+    // building its base U-Net and multi-view attention, and Clone() calls it directly
+    // with the cloned sub-modules. Keeping a single constructor avoids duplicating the
+    // (readonly) scalar-field assignments across both entry points.
+    private MultiViewUNet(
+        int inputChannels,
+        int outputChannels,
+        int baseChannels,
+        int numViews,
+        int contextDim,
+        UNetNoisePredictor<T> baseUNet,
+        MultiViewAttention<T> mvAttention)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
         _numViews = numViews;
+        _inputChannels = inputChannels;
+        _outputChannels = outputChannels;
+        _baseChannels = baseChannels;
+        _contextDim = contextDim;
+        _baseUNet = baseUNet;
+        _mvAttention = mvAttention;
+    }
 
-        _baseUNet = new UNetNoisePredictor<T>(
-            inputChannels: inputChannels,
-            outputChannels: outputChannels,
-            baseChannels: baseChannels,
-            channelMultipliers: new[] { 1, 2, 4, 4 },
-            numResBlocks: 2,
-            attentionResolutions: new[] { 4, 2, 1 },
-            contextDim: contextDim,
-            seed: seed);
+    /// <summary>
+    /// Deep-copies this multi-view U-Net, preserving trained weights. The base U-Net is cloned via its
+    /// own <c>Clone()</c> (which resolves and copies its lazy layers), and the multi-view attention block
+    /// is rebuilt at the same shape and its parameters copied into the private clone constructor — so the
+    /// result is structurally and observationally identical to this instance.
+    /// </summary>
+    public MultiViewUNet<T> Clone()
+    {
+        var clonedAttention = new MultiViewAttention<T>(channels: _baseChannels * 4, numViews: _numViews);
+        clonedAttention.SetParameters(_mvAttention.GetParameters());
 
-        _mvAttention = new MultiViewAttention<T>(
-            channels: baseChannels * 4, // At bottleneck
-            numViews: numViews,
-            seed: seed);
+        return new MultiViewUNet<T>(
+            _inputChannels,
+            _outputChannels,
+            _baseChannels,
+            _numViews,
+            _contextDim,
+            (UNetNoisePredictor<T>)_baseUNet.Clone(),
+            clonedAttention);
     }
 
     /// <summary>

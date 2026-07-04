@@ -121,14 +121,11 @@ public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
     public double RootExplorationFraction { get; init; } = 0.25;
 
     // Training parameters
-    // Number of recurrent unroll steps K used to build training targets
-    // (Schrittwieser et al. 2020 use K=5). MuZeroAgent.Train currently implements
-    // the one-step (K=1) unrolled targets and fail-fasts for K>1 (which needs
-    // sequence replay + per-unroll-step targets — tracked in #1752). The default
-    // must therefore reflect the implemented capability so the out-of-box agent
-    // actually trains; a caller wanting the paper's K=5 sets it explicitly and
-    // gets a clear "not yet implemented" exception rather than a silent no-op.
-    public int UnrollSteps { get; init; } = 1;
+    // Number of recurrent unroll steps K used to build training targets (Schrittwieser et al. 2020
+    // use K=5). MuZeroAgent.Train unrolls the learned model K steps from a real trajectory window and
+    // backpropagates one joint loss through the recurrence (#1756), so the paper default is honored.
+    // (Supersedes the interim K=1 default from #1755, which existed only while K>1 was unimplemented.)
+    public int UnrollSteps { get; init; } = 5;
     public int TDSteps { get; init; } = 10;
     public double PriorityAlpha { get; init; } = 1.0;
 

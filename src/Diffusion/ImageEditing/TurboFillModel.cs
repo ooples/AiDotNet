@@ -131,17 +131,18 @@ public class TurboFillModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new TurboFillModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
-        // COW-share first: O(1) copy-on-write of the whole stack's trainable tensors — the fast path
-        // for EMA / frequent cloning. Only when sharing can't apply (unresolved lazy or shape-mismatched
-        // weights) fall back to the FLAT-FREE per-tensor chunk copy, so a foundation-scale predictor
-        // still never materialises the int-bounded flat Vector<T>. The predictor (UNet) and StandardVAE
-        // both override the chunked API flat-free.
-        if (!clone.TryShareParametersFrom(this))
-        {
-            clone._predictor.SetParameterChunks(_predictor.GetParameterChunks());
-            clone._vae.SetParameterChunks(_vae.GetParameterChunks());
-        }
+        // Clone the resolved predictor/VAE via their own Clone() (+ same architecture/options/scheduler).
+        // The sub-model Clone()s already deep-copy the weights, so no field-by-field
+        // SetParameters(GetParameters()) is needed — which also avoids the int-bounded flat Vector<T>
+        // round-trip that a foundation-scale predictor would overflow / OOM.
+        var clone = new TurboFillModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
+            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
+            vae: (StandardVAE<T>)_vae.Clone(),
+            conditioner: _conditioner,
+            seed: RandomGenerator.Next());
         return clone;
     }
 
