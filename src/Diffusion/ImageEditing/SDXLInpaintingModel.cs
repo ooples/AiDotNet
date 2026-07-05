@@ -156,7 +156,7 @@ public class SDXLInpaintingModel<T> : LatentDiffusionModelBase<T>
             predictor: predictorClone,
             vae: vaeClone,
             conditioner: _conditioner,
-            seed: RandomGenerator.Next());
+            seed: null);
     }
 
     /// <inheritdoc />

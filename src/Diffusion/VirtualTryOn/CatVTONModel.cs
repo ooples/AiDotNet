@@ -122,7 +122,7 @@ public class CatVTONModel<T> : LatentDiffusionModelBase<T>
         var clone = new CatVTONModel<T>(
             predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
             vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner, seed: RandomGenerator.Next());
+            conditioner: _conditioner, seed: null);
         return clone;
     }
 

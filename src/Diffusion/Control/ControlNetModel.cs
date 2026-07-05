@@ -699,7 +699,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
             vae: (StandardVAE<T>)_vae.Clone(),
             controlType: _controlType,
             conditioner: _conditioner,
-            seed: RandomGenerator.Next());
+            seed: null);
 
         // Create matching encoder cache in clone before setting parameters
         foreach (var controlType in _encoderCache.Keys.Where(ct => ct != _controlType))

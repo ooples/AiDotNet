@@ -146,7 +146,7 @@ public class ControlNetPlusPlusFluxModel<T> : LatentDiffusionModelBase<T>
             scheduler: Scheduler,
             predictor: (FluxDoubleStreamPredictor<T>)_predictor.Clone(),
             vae: (StandardVAE<T>)_vae.Clone(),
-            controlType: _controlType, conditioner: _conditioner, rewardWeight: _rewardWeight, seed: RandomGenerator.Next());
+            controlType: _controlType, conditioner: _conditioner, rewardWeight: _rewardWeight, seed: null);
         // #1624: O(1)-until-write copy-on-write parameter share (avoids the full-model flatten copy that
         // OOMs the 16 GB runner). Foundation-scale (12B FLUX) fallback when the share doesn't line up 1:1:
         // restore the base predictor/VAE through the STREAMING chunked API (never materializes a flat 12B

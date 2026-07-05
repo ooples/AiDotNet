@@ -168,7 +168,7 @@ public class ControlARModel<T> : LatentDiffusionModelBase<T>
             vae: (StandardVAE<T>)_vae.Clone(),
             controlType: _controlType,
             conditioner: _conditioner,
-            seed: RandomGenerator.Next());
+            seed: null);
         // Copy-on-write: share weight tensors with the clone (O(1)-until-write) via the global helper;
         // fall back to the eager flat copy only if the trainable-layer structure doesn't line up 1:1.
         if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters()); // flat path: inherited GetParameterChunks() omits this model's extra module(s) and is empty on net471

@@ -582,7 +582,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
             vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
             embedDim: _embedDim,
-            seed: RandomGenerator.Next());
+            seed: null);
 
         if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters()); // flat path: inherited GetParameterChunks() omits this model's extra module(s) and is empty on net471
         clone.ImagePromptWeight = _imagePromptWeight;

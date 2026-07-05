@@ -142,7 +142,7 @@ public class SD3FlashModel<T> : LatentDiffusionModelBase<T>
             conditioner: _conditioner,
             predictor: (MMDiTXNoisePredictor<T>)_predictor.Clone(),
             vae: (StandardVAE<T>)_vae.Clone(),
-            seed: RandomGenerator.Next());
+            seed: null);
         return clone;
     }
 

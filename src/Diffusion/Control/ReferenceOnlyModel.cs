@@ -165,7 +165,7 @@ public class ReferenceOnlyModel<T> : LatentDiffusionModelBase<T>
             vae: (StandardVAE<T>)_vae.Clone(),
             referenceWeight: _referenceWeight,
             conditioner: _conditioner,
-            seed: RandomGenerator.Next());
+            seed: null);
         if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
         return clone;
     }

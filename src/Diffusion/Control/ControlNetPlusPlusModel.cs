@@ -223,7 +223,7 @@ public class ControlNetPlusPlusModel<T> : LatentDiffusionModelBase<T>
             conditioner: _conditioner,
             controlType: _controlType,
             rewardWeight: _rewardWeight,
-            seed: RandomGenerator.Next());
+            seed: null);
         if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
         return clone;
     }

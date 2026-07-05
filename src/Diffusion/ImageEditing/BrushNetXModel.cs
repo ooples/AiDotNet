@@ -140,7 +140,7 @@ public class BrushNetXModel<T> : LatentDiffusionModelBase<T>
             predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
             vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
-            seed: RandomGenerator.Next());
+            seed: null);
         if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
         return clone;
     }

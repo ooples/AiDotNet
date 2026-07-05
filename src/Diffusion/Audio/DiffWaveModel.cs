@@ -391,7 +391,7 @@ public class DiffWaveModel<T> : DiffusionModelBase<T>
             dilationCycle: _dilationCycle,
             melChannels: _melChannels,
             sampleRate: SampleRate,
-            seed: RandomGenerator.Next());
+            seed: null);
 
         if (_lastInputShape is not null)
         {

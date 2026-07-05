@@ -165,7 +165,7 @@ public class HyperSDModel<T> : LatentDiffusionModelBase<T>
             scheduler: Scheduler,
             predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
             vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner, isXLVariant: _isXLVariant, seed: RandomGenerator.Next());
+            conditioner: _conditioner, isXLVariant: _isXLVariant, seed: null);
         if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
         return clone;
     }

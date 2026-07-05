@@ -620,7 +620,7 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
             scheduler: Scheduler,
             dit: (DiTNoisePredictor<T>)_dit.Clone(),
             vae: (StandardVAE<T>)_vae.Clone(),
-            seed: RandomGenerator.Next());
+            seed: null);
 
         // Copy-on-write: share this model's weight tensors with the clone instead of deep-copying all
         // parameters (PixArt-α is ~600M params / ~2.4 GB). The clone gets identical weights at O(1);
