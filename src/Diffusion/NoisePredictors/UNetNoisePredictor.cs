@@ -1215,14 +1215,64 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Emits one chunk per layer in the SAME canonical order as <see cref="GetParameters"/> /
+    /// <see cref="SetParameters"/> (EnumerateAllLayers), so the flat concatenation of the chunks is
+    /// index-identical to GetParameters() — the load-bearing per-index streaming contract (#1624) — without
+    /// ever materializing the full aggregate. The earlier per-tensor walk (GetTrainableParameters +
+    /// sub-layer recursion) produced a DIFFERENT intra-layer order than GetParameters, so a chunked clone
+    /// mis-mapped weights (#1758); this mirrors the per-layer pattern the DiT/U-ViT predictors already use.
+    /// </remarks>
     public override IEnumerable<Tensor<T>> GetParameterChunks()
     {
         EnsureLayersInitialized();
+        // Resolve shapes exactly as GetParameters does (shape-only, no weight materialization) so each
+        // layer's chunk is sized identically to its slice of the flat vector.
+        ResolveShapesViaForward();
         foreach (var layer in EnumerateAllLayers())
         {
-            foreach (var parameter in EnumerateMaterializedParameters(layer))
-                yield return parameter;
+            if (layer is null) continue;
+            var p = layer.GetParameters();
+            if (p.Length > 0) yield return new Tensor<T>(new[] { p.Length }, p);
         }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Consumes one chunk per parameterized layer in the SAME canonical order <see cref="GetParameterChunks"/>
+    /// emits them and <see cref="SetParameters"/> applies them, so a chunked round-trip restores each layer
+    /// exactly. The base <see cref="NoisePredictorBase{T}"/> SetParameterChunks walks a REFLECTION order
+    /// (ReflectInstanceLayers) that differs from this predictor's explicit layer order, which mis-mapped UNet
+    /// tensors when a clone restored from chunks (this predictor's Clone, and FluxSchnellModel's, which
+    /// round-trips the predictor's chunks directly). One chunk in flight at a time — never a flat aggregate.
+    /// </remarks>
+    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        ThrowIfDisposed();
+        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
+        EnsureLayersInitialized();
+        // Size lazy layers to their real ParameterCount first (mirrors SetParameters) so each layer's slice
+        // lands instead of being dropped into a still-zero-sized layer.
+        TriggerLazyShapeResolution();
+        // Foundation-scale (#1715): engage streaming before touching weights — see GetParameterChunks.
+        MaybeEngageWeightStreaming();
+        _preserveMaterializedParameters = true;
+
+        using var e = chunks.GetEnumerator();
+        foreach (var layer in EnumerateAllLayers())
+        {
+            if (layer is null || layer.ParameterCount == 0) continue; // skip symmetrically with GetParameterChunks
+            if (!e.MoveNext())
+                throw new ArgumentException(
+                    "SetParameterChunks received fewer chunks than the predictor has parameterized layers.",
+                    nameof(chunks));
+            layer.SetParameters(e.Current.ToVector());
+        }
+        if (e.MoveNext())
+            throw new ArgumentException(
+                "SetParameterChunks received more chunks than the predictor has parameterized layers.",
+                nameof(chunks));
+        InvalidateCompiledPlans();
     }
 
     private IEnumerable<ILayer<T>?> EnumerateAllLayers()

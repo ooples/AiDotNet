@@ -144,7 +144,7 @@ public class ICEditModel<T> : LatentDiffusionModelBase<T>
             predictor: (SiTPredictor<T>)_predictor.Clone(),
             vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
-            seed: RandomGenerator.Next());
+            seed: null); // predictor+vae are cloned & passed, so InitializeLayers ignores seed — do not advance the source RNG
     }
 
     /// <inheritdoc />

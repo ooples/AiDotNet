@@ -584,7 +584,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
             embedDim: _embedDim,
             seed: RandomGenerator.Next());
 
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters()); // flat path: inherited GetParameterChunks() omits this model's extra module(s) and is empty on net471
         clone.ImagePromptWeight = _imagePromptWeight;
 
         return clone;

@@ -148,7 +148,7 @@ public class FluxInpaintingModel<T> : LatentDiffusionModelBase<T>
             predictor: (FluxDoubleStreamPredictor<T>)_predictor.Clone(),
             vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
-            seed: RandomGenerator.Next());
+            seed: null); // predictor+vae are cloned & passed, so InitializeLayers ignores seed — do not advance the source RNG
         return clone;
     }
 
