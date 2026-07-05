@@ -81,4 +81,50 @@ public class MultiOutputRegressorFacadeTests
 
         Assert.True(distinct, "horizons collapsed to the same value — multi-output selection is broken");
     }
+
+    [Fact]
+    public async Task Facade_WithPerColumnTargetScaling_RecoversEachHorizon()
+    {
+        // Exercises the full default path: per-column target standardization (ConfigureTargetScaling) + inverse-
+        // transform on the way out. Horizons here are on deliberately DIFFERENT scales so a working per-column
+        // target scaler matters. Recovery in native units proves the inverse-transform is wired for a Matrix target.
+        var random = new Random(7);
+        const int n = 200;
+        var x = new Matrix<double>(n, 2);
+        var y = new Matrix<double>(n, 3);
+        for (var i = 0; i < n; i++)
+        {
+            var a = random.NextDouble() * 10.0;
+            var b = random.NextDouble() * 10.0;
+            x[i, 0] = a;
+            x[i, 1] = b;
+            y[i, 0] = 2.0 * a + b;             // ~O(10)
+            y[i, 1] = 100.0 * a - 50.0 * b;    // ~O(1000)
+            y[i, 2] = 0.01 * a + 0.02 * b;     // ~O(0.1)
+        }
+
+        var model = new MultiOutputRegressor<double>(() => new MultipleRegression<double>());
+        var result = await new AiModelBuilder<double, Matrix<double>, Matrix<double>>()
+            .ConfigureModel(model)
+            .ConfigureDataLoader(new InMemoryDataLoader<double, Matrix<double>, Matrix<double>>(x, y))
+            .ConfigurePreprocessing(new StandardScaler<double>())
+            .ConfigureTargetScaling()
+            .BuildAsync();
+
+        var pred = result.Predict(x);
+
+        Assert.Equal(3, pred.Columns);
+        for (var j = 0; j < 3; j++)
+        {
+            // Relative error per horizon (scales differ by 4 orders of magnitude), so a per-column scaler is essential.
+            var maxRel = 0.0;
+            for (var i = 0; i < n; i++)
+            {
+                var denom = Math.Max(1e-9, Math.Abs(y[i, j]));
+                maxRel = Math.Max(maxRel, Math.Abs(pred[i, j] - y[i, j]) / denom);
+            }
+
+            Assert.True(maxRel < 0.05, $"horizon {j} max relative error {maxRel} — target inverse-transform likely broken");
+        }
+    }
 }
