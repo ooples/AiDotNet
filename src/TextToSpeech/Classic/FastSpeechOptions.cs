@@ -20,7 +20,15 @@ public class FastSpeechOptions : AcousticModelOptions
         MaxDuration = other.MaxDuration;
     }
 
-    public FastSpeechOptions() { EncoderDim = 256; DecoderDim = 80; HiddenDim = 256; NumEncoderLayers = 6; NumDecoderLayers = 6; NumHeads = 2; }
+    public FastSpeechOptions()
+    {
+        EncoderDim = 256;
+        DecoderDim = 80;
+        HiddenDim = 256;
+        NumEncoderLayers = 6;
+        NumDecoderLayers = 6;
+        NumHeads = 2;
+    }
 
     /// <summary>Gets or sets the duration predictor filter size.</summary>
     public int DurationPredictorFilterSize { get; set; } = 256;

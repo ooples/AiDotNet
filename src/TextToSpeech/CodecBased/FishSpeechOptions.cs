@@ -1,4 +1,5 @@
 namespace AiDotNet.TextToSpeech.CodecBased;
+
 /// <summary>Options for FishSpeech (Fish Audio, 2024) dual-AR architecture with GFSQ.</summary>
 /// <remarks>
 /// <para><b>For Beginners:</b> These options configure the FishSpeech model. Default values follow the original paper settings.</para>
@@ -20,7 +21,16 @@ public class FishSpeechOptions : CodecTtsOptions
         MinReferenceSeconds = other.MinReferenceSeconds;
     }
 
-    public FishSpeechOptions() { SampleRate = 44100; NumCodebooks = 8; CodebookSize = 1024; CodecFrameRate = 42; LLMDim = 1024; NumLLMLayers = 24; LanguageModelName = "LLaMA"; }
+    public FishSpeechOptions()
+    {
+        SampleRate = 44100;
+        NumCodebooks = 8;
+        CodebookSize = 1024;
+        CodecFrameRate = 42;
+        LLMDim = 1024;
+        NumLLMLayers = 24;
+        LanguageModelName = "LLaMA";
+    }
 
     /// <summary>Gets or sets the number of GFSQ groups for grouped finite scalar quantization.</summary>
     public int NumGroups { get; set; } = 8;

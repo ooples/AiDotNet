@@ -1,5 +1,7 @@
 using AiDotNet.TextToSpeech.CodecBased;
+
 namespace AiDotNet.TextToSpeech.FlowDiffusion;
+
 /// <summary>Options for E2TTS.</summary>
 /// <remarks>
 /// <para><b>For Beginners:</b> These options configure the E2TTS model. Default values follow the original paper settings.</para>

@@ -4,9 +4,9 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-// Foundation-scale-at-default: the model's full-scale default config has a Training peak (weights +
-// gradients + Adam state + activations) that OOMs the 16 GB CI runner (fits only on a larger box).
-// Moved to the HeavyTimeout nightly lane so the default PR-gate shard fits and passes (#1706/#1305).
+[Xunit.Collection("FoundationScaleSerial")]
+// HeavyTimeout: foundation-scale diffusion (video / paper-scale); correct but a single
+// forward x N-step Generate exceeds the 120 s per-test gate. Runs in the nightly lane.
 [Xunit.Trait("Category", "HeavyTimeout")]
 public class InstructVid2VidModelTests : DiffusionModelTestBase<float>
 {

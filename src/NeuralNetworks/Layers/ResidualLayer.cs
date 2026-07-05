@@ -464,6 +464,20 @@ public class ResidualLayer<T> : LayerBase<T>
         bool cacheBwd = ShouldCacheForBackward;
         _lastInput = cacheBwd ? input : null;
         var innerOutput = _innerLayer?.Forward(input);
+
+        // A residual block's inner branch is shape-preserving by contract (out = x + F(x)), so the
+        // element count always matches the skip. But some inner layers legitimately return the same
+        // data in a different RANK/layout — e.g. ConvolutionalLayer reshapes a rank-2 [B, C] input to
+        // [B, C, 1, 1] internally and returns it rank-4, while the skip stays rank-2. Reconcile the
+        // inner output back to the skip's shape before the identity add so residual-wrapped conv (and
+        // any rank-normalizing inner layer) composes instead of throwing "shapes must match".
+        if (innerOutput is not null
+            && innerOutput.Length == input.Length
+            && !System.Linq.Enumerable.SequenceEqual(innerOutput._shape, input._shape))
+        {
+            innerOutput = Engine.Reshape(innerOutput, input._shape);
+        }
+
         _lastInnerOutput = cacheBwd ? innerOutput : null;
         var result = innerOutput == null ? input : Engine.TensorAdd(input, innerOutput);
 

@@ -19,7 +19,15 @@ public class GradTTSOptions : AcousticModelOptions
         BetaEnd = other.BetaEnd;
     }
 
-    public GradTTSOptions() { EncoderDim = 192; DecoderDim = 80; HiddenDim = 192; NumEncoderLayers = 6; NumDecoderLayers = 4; NumHeads = 2; }
+    public GradTTSOptions()
+    {
+        EncoderDim = 192;
+        DecoderDim = 80;
+        HiddenDim = 192;
+        NumEncoderLayers = 6;
+        NumDecoderLayers = 4;
+        NumHeads = 2;
+    }
 
     /// <summary>Gets or sets the number of diffusion steps at inference.</summary>
     public int NumDiffusionSteps { get; set; } = 10;

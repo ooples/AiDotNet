@@ -22,7 +22,20 @@ public class FastSpeech2Options : AcousticModelOptions
         UseEnergyPredictor = other.UseEnergyPredictor;
     }
 
-    public FastSpeech2Options() { EncoderDim = 256; DecoderDim = 80; HiddenDim = 256; NumEncoderLayers = 4; NumDecoderLayers = 4; NumHeads = 2; SampleRate = 22050; MelChannels = 80; HopSize = 256; FftSize = 1024; VocabSize = 256; }
+    public FastSpeech2Options()
+    {
+        EncoderDim = 256;
+        DecoderDim = 80;
+        HiddenDim = 256;
+        NumEncoderLayers = 4;
+        NumDecoderLayers = 4;
+        NumHeads = 2;
+        SampleRate = 22050;
+        MelChannels = 80;
+        HopSize = 256;
+        FftSize = 1024;
+        VocabSize = 256;
+    }
 
     /// <summary>Gets or sets the variance predictor filter size.</summary>
     public int VariancePredictorFilterSize { get; set; } = 256;

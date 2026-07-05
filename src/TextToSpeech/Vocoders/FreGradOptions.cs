@@ -1,4 +1,5 @@
 namespace AiDotNet.TextToSpeech.Vocoders;
+
 /// <summary>Options for FreGrad (frequency-domain diffusion vocoder with DWT sub-band processing).</summary>
 /// <remarks>
 /// <para><b>For Beginners:</b> These options configure the FreGrad model. Default values follow the original paper settings.</para>

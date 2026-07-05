@@ -20,7 +20,16 @@ public class DeepVoice3Options : AcousticModelOptions
         ConverterDim = other.ConverterDim;
     }
 
-    public DeepVoice3Options() { EncoderDim = 256; DecoderDim = 80; HiddenDim = 256; NumEncoderLayers = 7; NumDecoderLayers = 4; NumHeads = 1; OutputsPerStep = 4; }
+    public DeepVoice3Options()
+    {
+        EncoderDim = 256;
+        DecoderDim = 80;
+        HiddenDim = 256;
+        NumEncoderLayers = 7;
+        NumDecoderLayers = 4;
+        NumHeads = 1;
+        OutputsPerStep = 4;
+    }
 
     /// <summary>Gets or sets the convolution kernel size for encoder blocks.</summary>
     public int ConvKernelSize { get; set; } = 3;

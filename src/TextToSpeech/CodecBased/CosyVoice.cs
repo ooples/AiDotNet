@@ -43,7 +43,12 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("CosyVoice: A Scalable Multilingual Zero-Shot Text-to-Speech Synthesizer Based on Supervised Semantic Tokens", "https://arxiv.org/abs/2407.05407", Year = 2024, Authors = "Du et al.")]
+[ResearchPaper(
+    "CosyVoice: A Scalable Multilingual Zero-Shot Text-to-Speech Synthesizer Based on Supervised Semantic Tokens",
+    "https://arxiv.org/abs/2407.05407",
+    Year = 2024,
+    Authors = "Du et al."
+)]
 public class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly CosyVoiceOptions _options;
@@ -62,7 +67,9 @@ public class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
     public CosyVoice(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        CosyVoiceOptions? options = null) : base(architecture)
+        CosyVoiceOptions? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new CosyVoiceOptions();
         _useNativeMode = false;
@@ -88,7 +95,9 @@ public class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
     public CosyVoice(
         NeuralNetworkArchitecture<T> architecture,
         CosyVoiceOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new CosyVoiceOptions();
         _useNativeMode = true;
@@ -169,15 +178,22 @@ public class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
     /// <inheritdoc />
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
             Layers.AddRange(Architecture.Layers);
         else
-            Layers.AddRange(LayerHelper<T>.CreateDefaultCodecLMLayers(
-                _options.TextEncoderDim, _options.LLMDim,
-                _options.NumCodebooks * _options.CodebookSize,
-                _options.NumEncoderLayers, _options.NumLLMLayers,
-                _options.NumHeads, _options.DropoutRate));
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultCodecLMLayers(
+                    _options.TextEncoderDim,
+                    _options.LLMDim,
+                    _options.NumCodebooks * _options.CodebookSize,
+                    _options.NumEncoderLayers,
+                    _options.NumLLMLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate
+                )
+            );
     }
 
     /// <inheritdoc />
@@ -186,7 +202,8 @@ public class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        SetTrainingMode(false); var c = input;
+        SetTrainingMode(false);
+        var c = input;
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
@@ -200,7 +217,7 @@ public class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
         SetTrainingMode(true);
         try
         {
-        TrainWithTape(input, expected);
+            TrainWithTape(input, expected);
         }
         finally
         {
@@ -225,12 +242,20 @@ public class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>
+        var m = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "CosyVoice-Native" : "CosyVoice-ONNX",
-            Description = "CosyVoice: Multilingual TTS with Supervised Semantic Tokens (Du et al., 2024)",
-            FeatureCount = _options.LLMDim
+            Description =
+                "CosyVoice: Multilingual TTS with Supervised Semantic Tokens (Du et al., 2024)",
+            FeatureCount = _options.LLMDim,
         };
+        m.AdditionalInfo["Architecture"] = "CosyVoice";
+        m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
+        m.AdditionalInfo["HiddenDim"] = base.HiddenDim;
+        m.AdditionalInfo["SampleRate"] = base.SampleRate;
+        m.AdditionalInfo["MelChannels"] = base.MelChannels;
+        m.AdditionalInfo["HopSize"] = base.HopSize;
+        return m;
     }
 
     /// <inheritdoc />
@@ -247,6 +272,8 @@ public class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
         writer.Write(_options.NumHeads);
         writer.Write(_options.NumLLMLayers);
         writer.Write(_options.TextEncoderDim);
+        writer.Write(_options.MelChannels);
+        writer.Write(_options.HopSize);
     }
 
     /// <inheritdoc />
@@ -265,6 +292,8 @@ public class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
         _options.NumHeads = reader.ReadInt32();
         _options.NumLLMLayers = reader.ReadInt32();
         _options.TextEncoderDim = reader.ReadInt32();
+        _options.MelChannels = reader.ReadInt32();
+        _options.HopSize = reader.ReadInt32();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -290,7 +319,8 @@ public class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         base.Dispose(disposing);
     }

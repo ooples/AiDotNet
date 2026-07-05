@@ -18,7 +18,15 @@ public class ProDiffOptions : AcousticModelOptions
         UseProgressiveDistillation = other.UseProgressiveDistillation;
     }
 
-    public ProDiffOptions() { EncoderDim = 256; DecoderDim = 80; HiddenDim = 256; NumEncoderLayers = 4; NumDecoderLayers = 4; NumHeads = 2; }
+    public ProDiffOptions()
+    {
+        EncoderDim = 256;
+        DecoderDim = 80;
+        HiddenDim = 256;
+        NumEncoderLayers = 4;
+        NumDecoderLayers = 4;
+        NumHeads = 2;
+    }
 
     /// <summary>Gets or sets the number of diffusion steps at inference (progressive reduces to 2-4).</summary>
     public int NumDiffusionSteps { get; set; } = 4;

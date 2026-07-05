@@ -9,6 +9,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.TextToSpeech.Interfaces;
 
 namespace AiDotNet.TextToSpeech.Vocoders;
+
 /// <summary>WaveGrad: gradient-based conditional waveform generation using continuous noise level conditioning.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "WaveGrad: Estimating Gradients for Waveform Generation" (Chen et al., 2021)</item></list></para><para><b>For Beginners:</b> WaveGrad: gradient-based conditional waveform generation using continuous noise level conditioning.. This model converts text input into speech audio output.</para></remarks>
@@ -33,14 +34,62 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("WaveGrad: Estimating Gradients for Waveform Generation", "https://arxiv.org/abs/2009.00713", Year = 2021, Authors = "Chen et al.")]
+[ResearchPaper(
+    "WaveGrad: Estimating Gradients for Waveform Generation",
+    "https://arxiv.org/abs/2009.00713",
+    Year = 2021,
+    Authors = "Chen et al."
+)]
 public class WaveGrad<T> : TtsModelBase<T>, IVocoder<T>
 {
-    private readonly WaveGradOptions _options; public override ModelOptions GetOptions() => _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
-    public WaveGrad(NeuralNetworkArchitecture<T> architecture, string modelPath, WaveGradOptions? options = null) : base(architecture) { _options = options ?? new WaveGradOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); InitializeLayers(); }
-    public WaveGrad(NeuralNetworkArchitecture<T> architecture, WaveGradOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new WaveGradOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; InitializeLayers(); }
-    int IVocoder<T>.SampleRate => _options.SampleRate; int IVocoder<T>.MelChannels => _options.MelChannels; public int UpsampleFactor => _options.HopSize;
+    private readonly WaveGradOptions _options;
+
+    public override ModelOptions GetOptions() => _options;
+
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _useNativeMode;
+    private bool _disposed;
+
+    public WaveGrad(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        WaveGradOptions? options = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new WaveGradOptions();
+        _useNativeMode = false;
+        base.SampleRate = _options.SampleRate;
+        base.MelChannels = _options.MelChannels;
+        base.HopSize = _options.HopSize;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path required.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        InitializeLayers();
+    }
+
+    public WaveGrad(
+        NeuralNetworkArchitecture<T> architecture,
+        WaveGradOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new WaveGradOptions();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.SampleRate = _options.SampleRate;
+        base.MelChannels = _options.MelChannels;
+        base.HopSize = _options.HopSize;
+        InitializeLayers();
+    }
+
+    int IVocoder<T>.SampleRate => _options.SampleRate;
+    int IVocoder<T>.MelChannels => _options.MelChannels;
+    public int UpsampleFactor => _options.HopSize;
 
     /// <summary>
     /// Converts mel to waveform using WaveGrad's continuous noise-level score estimation.
@@ -53,13 +102,17 @@ public class WaveGrad<T> : TtsModelBase<T>, IVocoder<T>
     public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(melSpectrogram);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(melSpectrogram);
         // Run mel through learned vocoder layers for feature extraction
         var features = melSpectrogram;
-        foreach (var l in Layers) features = l.Forward(features);
-        int melLen = features.Length; int waveLen = melLen * _options.HopSize;
+        foreach (var l in Layers)
+            features = l.Forward(features);
+        int melLen = features.Length;
+        int waveLen = melLen * _options.HopSize;
         double[] x = new double[waveLen];
-        for (int i = 0; i < waveLen; i++) x[i] = Math.Cos(i * 0.21 + 0.3) * 0.7;
+        for (int i = 0; i < waveLen; i++)
+            x[i] = Math.Cos(i * 0.21 + 0.3) * 0.7;
         int steps = _options.NumDiffusionSteps;
         for (int t = steps; t > 0; t--)
         {
@@ -73,19 +126,138 @@ public class WaveGrad<T> : TtsModelBase<T>, IVocoder<T>
             }
         }
         var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++) waveform[i] = NumOps.FromDouble(Math.Tanh(x[i]));
+        for (int i = 0; i < waveLen; i++)
+            waveform[i] = NumOps.FromDouble(Math.Tanh(x[i]));
         return waveform;
     }
 
-    protected override Tensor<T> PreprocessText(string text) { var t = new Tensor<T>([1]); t[0] = NumOps.FromDouble(0.0); return t; } protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultDiffusionVocoderLayers(_options.MelChannels, 128, _options.NumDownsampleBlocks * 2, 2, _options.DropoutRate)); }
-    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); SetTrainingMode(false); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    public override ModelMetadata<T> GetModelMetadata() { return new ModelMetadata<T> { Name = _useNativeMode ? "WaveGrad-Native" : "WaveGrad-ONNX", Description = "WaveGrad: Estimating Gradients for Waveform Generation (Chen et al., 2021)", FeatureCount = _options.MelChannels, Complexity = _options.NumDiffusionSteps, AdditionalInfo = new Dictionary<string, object> { ["MelChannels"] = _options.MelChannels, ["Mode"] = _useNativeMode ? "Native" : "ONNX" } }; }
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.SampleRate); writer.Write(_options.MelChannels); writer.Write(_options.HopSize); writer.Write(_options.NumDiffusionSteps); writer.Write(_options.DropoutRate); writer.Write(_options.NumDownsampleBlocks); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = reader.ReadInt32(); _options.MelChannels = reader.ReadInt32(); _options.HopSize = reader.ReadInt32(); _options.NumDiffusionSteps = reader.ReadInt32();  _options.DropoutRate = reader.ReadDouble(); _options.NumDownsampleBlocks = reader.ReadInt32();  base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new WaveGrad<T>(Architecture, mp, _options); return new WaveGrad<T>(Architecture, _options); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(WaveGrad<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
+    protected override Tensor<T> PreprocessText(string text)
+    {
+        var t = new Tensor<T>([1]);
+        t[0] = NumOps.FromDouble(0.0);
+        return t;
+    }
+
+    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
+
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode)
+            return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+            Layers.AddRange(Architecture.Layers);
+        else
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultDiffusionVocoderLayers(
+                    _options.MelChannels,
+                    128,
+                    _options.NumDownsampleBlocks * 2,
+                    2,
+                    _options.DropoutRate
+                )
+            );
+    }
+
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
+        SetTrainingMode(false);
+        var c = input;
+        foreach (var l in Layers)
+            c = l.Forward(c);
+        return c;
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training not supported in ONNX mode.");
+        SetTrainingMode(true);
+        TrainWithTape(input, expected);
+        SetTrainingMode(false);
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "WaveGrad-Native" : "WaveGrad-ONNX",
+            Description =
+                "WaveGrad: Estimating Gradients for Waveform Generation (Chen et al., 2021)",
+            FeatureCount = _options.MelChannels,
+            Complexity = _options.NumDiffusionSteps,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                ["MelChannels"] = _options.MelChannels,
+                ["Mode"] = _useNativeMode ? "Native" : "ONNX",
+            },
+        };
+    }
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_useNativeMode);
+        writer.Write(_options.ModelPath ?? string.Empty);
+        writer.Write(_options.SampleRate);
+        writer.Write(_options.MelChannels);
+        writer.Write(_options.HopSize);
+        writer.Write(_options.NumDiffusionSteps);
+        writer.Write(_options.DropoutRate);
+        writer.Write(_options.NumDownsampleBlocks);
+    }
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _useNativeMode = reader.ReadBoolean();
+        string mp = reader.ReadString();
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
+        _options.SampleRate = reader.ReadInt32();
+        _options.MelChannels = reader.ReadInt32();
+        _options.HopSize = reader.ReadInt32();
+        _options.NumDiffusionSteps = reader.ReadInt32();
+        _options.DropoutRate = reader.ReadDouble();
+        _options.NumDownsampleBlocks = reader.ReadInt32();
+        base.SampleRate = _options.SampleRate;
+        base.MelChannels = _options.MelChannels;
+        base.HopSize = _options.HopSize;
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new WaveGrad<T>(Architecture, mp, _options);
+        return new WaveGrad<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(WaveGrad<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
 }
