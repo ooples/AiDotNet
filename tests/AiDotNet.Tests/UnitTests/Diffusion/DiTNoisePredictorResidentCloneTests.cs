@@ -52,8 +52,10 @@ public class DiTNoisePredictorResidentCloneTests
         double maxAbs = 0;
         for (int i = 0; i < o1.Length; i++)
         {
-            Assert.True(double.IsFinite((double)o1[i]), $"source output[{i}] not finite");
-            maxAbs = Math.Max(maxAbs, Math.Abs((double)o1[i]));
+            // net471 has no double.IsFinite; !IsNaN && !IsInfinity is the equivalent (both exist since .NET 2.0).
+            double v = (double)o1[i];
+            Assert.True(!double.IsNaN(v) && !double.IsInfinity(v), $"source output[{i}] not finite");
+            maxAbs = Math.Max(maxAbs, Math.Abs(v));
         }
         Assert.True(maxAbs > 1e-6, "source output is all ~zero — test would be vacuous");
 
