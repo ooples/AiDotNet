@@ -91,6 +91,10 @@ public class HunyuanDiTModel<T> : LatentDiffusionModelBase<T>
     private DiTNoisePredictor<T>? _dit;
     private StandardVAE<T>? _vae;
     private readonly IConditioningModule<T>? _conditioner;
+    // Seed for the deferred (lazy) init path: the constructor only eager-inits when an explicit
+    // predictor/VAE is passed, so without capturing the seed the lazy EnsureInitialized() built the
+    // sub-models with a null seed — dropping the requested seed and making construction non-reproducible.
+    private readonly int? _seed;
 
     #endregion
 
@@ -138,6 +142,7 @@ public class HunyuanDiTModel<T> : LatentDiffusionModelBase<T>
             architecture)
     {
         _conditioner = conditioner;
+        _seed = seed;
         if (dit is not null || vae is not null)
             InitializeLayers(dit, vae, seed);
     }
@@ -150,7 +155,7 @@ public class HunyuanDiTModel<T> : LatentDiffusionModelBase<T>
     private void EnsureInitialized()
     {
         if (_dit is null || _vae is null)
-            InitializeLayers(null, null, null);
+            InitializeLayers(null, null, _seed);
     }
 
     [MemberNotNull(nameof(_dit), nameof(_vae))]

@@ -82,6 +82,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // AutoML's actual training/trial path covers it via integration tests.
         "DiffusionAutoMLModel",
 
+        // AutoML ensemble combiner: averages a set of member IFullModels chosen by
+        // the AutoML search. It extends ModelBase directly (not SupervisedAutoMLModelBase),
+        // so the generic RegressionModelTestBase resolves it as a plain regression model and
+        // constructs it via the parameterless serialization-only ctor — yielding an EMPTY
+        // ensemble whose Train() correctly throws "Ensemble has no members". The generic
+        // scaffold has no way to supply member models, so every invariant fails. The real
+        // ensemble (populated with members) is covered by the AutoML search integration tests.
+        "AutoMLEnsembleModel",
+
         // Proprietary-API TTS wrappers (ElevenLabs, AmazonPolly, AzureNeuralTTS,
         // GoogleCloudTTS, Murf, NVIDIARivaTTS): real inference is a remote API
         // call, not a local Predict pipeline — these classes have no published
