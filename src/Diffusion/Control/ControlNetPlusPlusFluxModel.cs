@@ -146,10 +146,18 @@ public class ControlNetPlusPlusFluxModel<T> : LatentDiffusionModelBase<T>
             scheduler: Scheduler,
             predictor: (FluxDoubleStreamPredictor<T>)_predictor.Clone(),
             vae: (StandardVAE<T>)_vae.Clone(),
-            controlType: _controlType, conditioner: _conditioner, rewardWeight: _rewardWeight, seed: RandomGenerator.Next());
+            controlType: _controlType, conditioner: _conditioner, rewardWeight: _rewardWeight, seed: null);
         // #1624: O(1)-until-write copy-on-write parameter share (avoids the full-model flatten copy that
-        // OOMs the 16 GB runner). Falls back to the flat copy if the structure doesn't match 1:1.
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
+        // OOMs the 16 GB runner). Foundation-scale (12B FLUX) fallback when the share doesn't line up 1:1:
+        // restore the base predictor/VAE through the STREAMING chunked API (never materializes a flat 12B
+        // Vector<T> — that flatten is the #1624 clone OOM). The inherited GetParameterChunks() covers only
+        // predictor/VAE/conditioner, so restore the small conv control encoder via its own flat API after.
+        // (On net471 the chunked base restore no-ops — but net471 does not run a 12B FLUX predictor.)
+        if (!clone.TryShareParametersFrom(this))
+        {
+            clone.SetParameterChunks(GetParameterChunks());
+            clone._controlEncoder.SetParameters(_controlEncoder.GetParameters());
+        }
         return clone;
     }
 

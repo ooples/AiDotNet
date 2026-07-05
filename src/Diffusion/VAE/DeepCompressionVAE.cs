@@ -287,7 +287,7 @@ public class DeepCompressionVAE<T> : VAEModelBase<T>
         var clone = new DeepCompressionVAE<T>(
             _inputChannels, _latentChannels, _downsampleFactor, _baseChannels,
             LossFunction);
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
         return clone;
     }
 

@@ -6,6 +6,10 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
+// HeavyTimeout (#1706): foundation-scale diffusion — verified OOM (System.OutOfMemoryException at
+// CONSTRUCTION under a 16 GB DOTNET_GCHeapHardLimit reproducing the CI ceiling; Metadata_ShouldExist
+// alone OOMs), OS-OOM-kills the Diffusion SE-SP shard. Nightly heavy lane; drop once streaming fits it.
+[Xunit.Trait("Category", "HeavyTimeout")]
 public class SpotDiffusionModelTests : DiffusionModelTestBase<float>
 {
     // Per Ataev et al. 2024: latent diffusion with spatial tiling

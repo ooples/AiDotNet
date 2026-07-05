@@ -243,7 +243,7 @@ public class ControlModelContractTests : DiffusionUnitTestBase
 
         Assert.NotNull(clone);
         Assert.NotSame(model, clone);
-        Assert.Equal(model.ParameterCount, (int)clone.ParameterCount);
+        Assert.Equal(model.ParameterCount, clone.ParameterCount); // long==long: (int) truncated valid >2.1B (e.g. 12B FLUX) counts
     }
 
     [Fact(Timeout = 120000)]
@@ -257,7 +257,7 @@ public class ControlModelContractTests : DiffusionUnitTestBase
 
         Assert.NotNull(clone);
         Assert.NotSame(model, clone);
-        Assert.Equal(model.ParameterCount, (int)clone.ParameterCount);
+        Assert.Equal(model.ParameterCount, clone.ParameterCount); // long==long: (int) truncated valid >2.1B (e.g. 12B FLUX) counts
     }
 
     #endregion

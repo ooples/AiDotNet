@@ -4,9 +4,10 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-[Xunit.Collection("FoundationScaleSerial")]
-// HeavyTimeout: foundation-scale diffusion (video / paper-scale); correct but a single
-// forward x N-step Generate exceeds the 120 s per-test gate. Runs in the nightly lane.
+[Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4)
+// HeavyTimeout (#1706): foundation-scale flow-based video diffusion (FlowVid). Verified genuine OOM —
+// throws System.OutOfMemoryException in the training invariants under a 16 GB DOTNET_GCHeapHardLimit
+// reproducing the CI runner ceiling, OS-OOM-killing the Diffusion D-I shard. Runs in the nightly heavy lane.
 [Xunit.Trait("Category", "HeavyTimeout")]
 public class FlowVidModelTests : DiffusionModelTestBase<float>
 {

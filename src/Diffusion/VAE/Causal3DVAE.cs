@@ -181,7 +181,7 @@ public class Causal3DVAE<T> : VAEModelBase<T>
             channelMultipliers: (int[])_channelMultipliers.Clone(),
             temporalCompression: _temporalCompression,
             latentScaleFactor: _latentScaleFactor);
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
         return clone;
     }
 
@@ -252,7 +252,7 @@ public class Causal3DVAE<T> : VAEModelBase<T>
             channelMultipliers: (int[])_channelMultipliers.Clone(),
             temporalCompression: _temporalCompression,
             latentScaleFactor: _latentScaleFactor);
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
         return clone;
     }
 

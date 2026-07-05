@@ -1215,13 +1215,86 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Emits one chunk per layer in the SAME canonical order as <see cref="GetParameters"/> /
+    /// <see cref="SetParameters"/> (EnumerateAllLayers), so the flat concatenation of the chunks is
+    /// index-identical to GetParameters() — the load-bearing per-index streaming contract (#1624) — without
+    /// ever materializing the full aggregate. The earlier per-tensor walk (GetTrainableParameters +
+    /// sub-layer recursion) produced a DIFFERENT intra-layer order than GetParameters, so a chunked clone
+    /// mis-mapped weights (#1758); this mirrors the per-layer pattern the DiT/U-ViT predictors already use.
+    /// </remarks>
     public override IEnumerable<Tensor<T>> GetParameterChunks()
     {
         EnsureLayersInitialized();
+        // Resolve shapes exactly as GetParameters does (shape-only, no weight materialization) so each
+        // layer's chunk is sized identically to its slice of the flat vector.
+        ResolveShapesViaForward();
+        foreach (var (_, p) in EnumerateParameterizedLayers())
+            yield return new Tensor<T>(new[] { p.Length }, p);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Consumes one chunk per parameterized layer in the SAME canonical order <see cref="GetParameterChunks"/>
+    /// emits them and <see cref="SetParameters"/> applies them, so a chunked round-trip restores each layer
+    /// exactly. The base <see cref="NoisePredictorBase{T}"/> SetParameterChunks walks a REFLECTION order
+    /// (ReflectInstanceLayers) that differs from this predictor's explicit layer order, which mis-mapped UNet
+    /// tensors when a clone restored from chunks (this predictor's Clone, and FluxSchnellModel's, which
+    /// round-trips the predictor's chunks directly). One chunk in flight at a time — never a flat aggregate.
+    /// </remarks>
+    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        ThrowIfDisposed();
+        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
+        EnsureLayersInitialized();
+        // Size lazy layers to their real ParameterCount first (mirrors SetParameters) so each layer's slice
+        // lands instead of being dropped into a still-zero-sized layer.
+        TriggerLazyShapeResolution();
+        // Foundation-scale (#1715): engage streaming before touching weights — see GetParameterChunks.
+        MaybeEngageWeightStreaming();
+        _preserveMaterializedParameters = true;
+
+        using var e = chunks.GetEnumerator();
+        foreach (var (layer, p) in EnumerateParameterizedLayers())
+        {
+            if (!e.MoveNext())
+                throw new ArgumentException(
+                    "SetParameterChunks received fewer chunks than the predictor has parameterized layers.",
+                    nameof(chunks));
+            var incoming = e.Current.ToVector();
+            // The participation gate is shared with GetParameterChunks (same materialized
+            // GetParameters().Length source), so a well-formed round-trip lines up 1:1; verify the per-layer
+            // length as well so any future ILayer whose ParameterCount disagrees with GetParameters().Length
+            // fails loudly here instead of silently shifting every subsequent layer's restored weights.
+            if (incoming.Length != p.Length)
+                throw new ArgumentException(
+                    $"SetParameterChunks chunk length {incoming.Length} does not match layer parameter length {p.Length}.",
+                    nameof(chunks));
+            layer.SetParameters(incoming);
+        }
+        if (e.MoveNext())
+            throw new ArgumentException(
+                "SetParameterChunks received more chunks than the predictor has parameterized layers.",
+                nameof(chunks));
+        InvalidateCompiledPlans();
+    }
+
+    /// <summary>
+    /// Single source of truth for WHICH layers participate in the chunked parameter API and in WHAT order.
+    /// Both <see cref="GetParameterChunks"/> and <see cref="SetParameterChunks"/> iterate this, so their skip
+    /// predicate can never diverge: a layer participates iff its materialized <c>GetParameters().Length &gt; 0</c>
+    /// (the gate the flat GetParameters/SetParameters walk uses), NOT the <c>ParameterCount</c> property, which
+    /// an ill-behaved <see cref="ILayer{T}"/> could report inconsistently. Yields the layer with its
+    /// already-materialized vector so GetParameterChunks reuses it (no second GetParameters call); peak stays
+    /// one layer in flight, never a flat aggregate.
+    /// </summary>
+    private IEnumerable<(ILayer<T> Layer, Vector<T> Parameters)> EnumerateParameterizedLayers()
+    {
         foreach (var layer in EnumerateAllLayers())
         {
-            foreach (var parameter in EnumerateMaterializedParameters(layer))
-                yield return parameter;
+            if (layer is null) continue;
+            var p = layer.GetParameters();
+            if (p.Length > 0) yield return (layer, p);
         }
     }
 
@@ -1363,7 +1436,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         if (_preserveMaterializedParameters)
         {
             clone.TriggerLazyShapeResolution();
-            if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
+            if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
         }
         else
         {

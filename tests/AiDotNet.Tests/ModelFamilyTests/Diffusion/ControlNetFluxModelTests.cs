@@ -4,10 +4,10 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-// Compute-bound foundation-scale FLUX double-stream predictor (~12B params): a single forward
-// exceeds the 120s [Fact(Timeout)] in isolation (verified solo — Clone_ShouldProduceIdenticalOutput
-// times out), so it belongs in the HeavyTimeout nightly lane rather than the default PR gate
-// (#1706/#1305). The Clone logic is correct (clones the resolved predictor/VAE); only runtime is slow.
+// HeavyTimeout (#1706): foundation-scale ControlNet over a FLUX (~12B-param) backbone. Verified genuine
+// OOM — throws System.OutOfMemoryException during CONSTRUCTION under a 16 GB DOTNET_GCHeapHardLimit
+// reproducing the CI runner ceiling (Metadata_ShouldExist alone OOMs), OS-OOM-killing the Diffusion A-C
+// shard with no test output. Runs in the nightly heavy lane. Drop once weight streaming lets it fit.
 [Xunit.Trait("Category", "HeavyTimeout")]
 public class ControlNetFluxModelTests : DiffusionModelTestBase<float>
 {

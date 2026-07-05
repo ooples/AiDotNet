@@ -111,7 +111,7 @@ public class ConsisLoRAModel<T> : LatentDiffusionModelBase<T>
         // Fast path: O(1) copy-on-write share when the default-constructed clone is structurally
         // identical to this instance (the common, foundation-scale case the COW lever targets — no
         // flat re-materialization, no OOM).
-        var clone = new ConsisLoRAModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
+        var clone = new ConsisLoRAModel<T>(conditioner: _conditioner, seed: null);
         if (clone.TryShareParametersFrom(this)) return clone;
         // Structure mismatch ⇒ this instance was built with a custom architecture/predictor/VAE the
         // default clone doesn't reproduce. Rebuild a structurally-faithful clone from THIS instance's
@@ -124,7 +124,7 @@ public class ConsisLoRAModel<T> : LatentDiffusionModelBase<T>
             predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
             vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
-            seed: RandomGenerator.Next());
+            seed: null);
     }
 
     public override ModelMetadata<T> GetModelMetadata()

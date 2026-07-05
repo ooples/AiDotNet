@@ -4,10 +4,10 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-// Compute-bound foundation-scale model: Clone_ShouldProduceIdenticalOutput exceeds the 120s
-// [Fact(Timeout)] gate in ISOLATION (verified solo, fresh process), so it belongs in the HeavyTimeout
-// nightly lane rather than the default PR gate (#1706/#1305) - the Clone logic is correct; the model is
-// simply too large to run a forward within the envelope.
+// HeavyTimeout (#1706): foundation-scale Recraft V3 image-generation model. Verified genuine OOM — throws
+// System.OutOfMemoryException during CONSTRUCTION under a 16 GB DOTNET_GCHeapHardLimit reproducing the CI
+// runner ceiling (Metadata_ShouldExist alone OOMs), OS-OOM-killing the Diffusion N-R shard. Runs in the
+// nightly heavy lane. Drop once weight streaming lets it fit.
 [Xunit.Trait("Category", "HeavyTimeout")]
 public class RecraftV3ModelTests : DiffusionModelTestBase<float>
 {

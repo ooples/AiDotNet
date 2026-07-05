@@ -153,8 +153,8 @@ public class ControlNetTileModel<T> : LatentDiffusionModelBase<T>
             baseUNet: (UNetNoisePredictor<T>)_baseUNet.Clone(),
             vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
-            seed: RandomGenerator.Next());
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
+            seed: null);
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters()); // flat path: inherited GetParameterChunks() omits this model's extra module(s) and is empty on net471
         return clone;
     }
 

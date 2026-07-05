@@ -499,16 +499,48 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         // param-count/memory threshold, so tractable predictors stay fully resident.
         MaybeEngageWeightStreaming();
 
-        // Default: single chunk wrapping GetParameters(). Concrete predictors
-        // with tractable per-block weight stores SHOULD override to yield
-        // per-tensor chunks so foundation-scale models avoid materialising a
-        // flat aggregate that overflows Vector.Length's int contract. The
-        // single-chunk default keeps ParameterCount == sum-of-chunk-lengths
-        // exact, which is the contract test (#1237's acceptance criterion)
-        // depends on.
+        // Flat-free default: when reflection sees the FULL parameter set — every trainable weight
+        // lives in a reflectable LayerBase field and is already resolved, so the reflected lengths
+        // sum EXACTLY to ParameterCount — yield each weight tensor per-tensor, so a foundation-scale
+        // predictor that didn't override this still avoids materialising the flat aggregate that
+        // overflows Vector.Length's int contract / OOMs. When completeness can't be verified
+        // (non-LayerBase weight storage, or lazy weights not yet resolved) fall back to the legacy
+        // single flat chunk — correct (keeps ParameterCount == sum-of-chunk-lengths, the #1237
+        // contract), though not flat-free; such a predictor SHOULD override to be flat-free.
+        if (TryCollectReflectedParameterTensors(out var tensors))
+        {
+            foreach (var t in tensors) yield return t;
+            yield break;
+        }
         var p = GetParameters();
         if (p.Length == 0) yield break;
         yield return new Tensor<T>(new[] { p.Length }, p);
+    }
+
+    /// <summary>
+    /// Collects this predictor's reflectable trainable weight tensors (skipping null / empty),
+    /// summing their lengths, and reports whether that sum equals <see cref="ParameterCount"/> — i.e.
+    /// whether reflection sees the FULL parameter set. Only then is the flat-free per-tensor chunk
+    /// path (used by both <see cref="GetParameterChunks"/> and <see cref="SetParameterChunks"/>) safe;
+    /// otherwise those fall back to the legacy flat path so a predictor with non-LayerBase weight
+    /// storage (or unresolved lazy weights) round-trips correctly rather than dropping weights. Both
+    /// callers use this same walk on the same instance, so Get and Set agree on order by construction.
+    /// </summary>
+    private bool TryCollectReflectedParameterTensors(out List<Tensor<T>> tensors)
+    {
+        tensors = new List<Tensor<T>>();
+        long total = 0;
+        foreach (var layer in ReflectInstanceLayers(this))
+        {
+            if (layer is not LayerBase<T> lb) continue;
+            foreach (var tensor in lb.GetTrainableParameters())
+            {
+                if (tensor is null || tensor.Length == 0) continue;
+                tensors.Add(tensor);
+                total += tensor.Length;
+            }
+        }
+        return total > 0 && total == ParameterCount;
     }
 
     /// <summary>
@@ -529,25 +561,51 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         // Foundation-scale (#1715): engage streaming before materializing weights — see GetParameterChunks.
         MaybeEngageWeightStreaming();
 
-        var buffered = new List<Tensor<T>>();
-        long total = 0;
-        foreach (var chunk in chunks)
+        // Flat-free in-place copy, mirroring GetParameterChunks: when reflection sees the FULL
+        // parameter set (same completeness gate → same order), consume one chunk per weight tensor and
+        // copy it in place — no flat aggregate. The over/under-run + length guards make a scrambled or
+        // mis-framed chunk stream fail loudly instead of silently corrupting weights.
+        if (TryCollectReflectedParameterTensors(out var tensors))
         {
-            if (chunk is null)
-                throw new ArgumentException("Chunk sequence contains a null tensor.", nameof(chunks));
-            buffered.Add(chunk);
-            total += chunk.Length;
+            using var e = chunks.GetEnumerator();
+            // Validate the ENTIRE stream (count, null, per-tensor length) into a src/dst pair list
+            // BEFORE mutating any weights, so a scrambled or mis-framed chunk stream fails atomically
+            // instead of leaving the predictor holding a mix of old and new tensors. The list holds
+            // only tensor REFERENCES (no flat aggregate / no per-tensor data copy), so this stays
+            // flat-free — matching the buffer-then-single-SetParameters atomicity of the legacy branch
+            // and VAEModelBase/DiffusionModelBase without reintroducing the flat-vector OOM.
+            var pairs = new List<(Tensor<T> Src, Tensor<T> Dst)>(tensors.Count);
+            foreach (var dst in tensors)
+            {
+                if (!e.MoveNext())
+                    throw new ArgumentException(
+                        "SetParameterChunks received fewer chunks than the predictor has parameter tensors.",
+                        nameof(chunks));
+                var src = e.Current;
+                if (src is null)
+                    throw new ArgumentException("Chunk sequence contains a null tensor.", nameof(chunks));
+                if (src.Length != dst.Length)
+                    throw new ArgumentException(
+                        $"SetParameterChunks chunk length {src.Length} does not match parameter length {dst.Length}.",
+                        nameof(chunks));
+                pairs.Add((src, dst));
+            }
+            if (e.MoveNext())
+                throw new ArgumentException(
+                    "SetParameterChunks received more chunks than the predictor has parameter tensors.",
+                    nameof(chunks));
+            // All chunks validated — now copy in place. No exception can surface past this point, so
+            // the predictor is never left in a partially-written state.
+            foreach (var (src, dst) in pairs)
+                src.Data.Span.CopyTo(dst.Data.Span); // in place — no rebinding, no flat aggregate
+            InvalidateCompiledPlans();
+            return;
         }
 
-        var flat = new Vector<T>(checked((int)total));
-        int offset = 0;
-        foreach (var chunk in buffered)
-        {
-            var v = chunk.ToVector();
-            for (int i = 0; i < v.Length; i++) flat[offset++] = v[i];
-        }
-
-        SetParameters(flat);
+        // Legacy fallback (reflection incomplete): buffer the chunks into one flat vector and delegate.
+        // Shared with DiffusionModelBase/VAEModelBase and the composite latent-diffusion models via
+        // DiffusionParameterChunkHelper (single source of truth for the framing/validation rules).
+        SetParameters(DiffusionParameterChunkHelper.BufferToFlatVector(chunks));
         // Weights changed — drop any plan captured against the old graph so the next compiled
         // forward re-traces (mirrors every other in-place weight-update path).
         InvalidateCompiledPlans();

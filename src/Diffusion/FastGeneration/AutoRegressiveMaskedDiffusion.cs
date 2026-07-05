@@ -139,7 +139,7 @@ public class AutoRegressiveMaskedDiffusion<T> : LatentDiffusionModelBase<T>
     {
         // Fast path: O(1) copy-on-write share when the default clone is structurally identical
         // (the common foundation-scale case the COW lever targets — no re-materialization/OOM).
-        var clone = new AutoRegressiveMaskedDiffusion<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
+        var clone = new AutoRegressiveMaskedDiffusion<T>(conditioner: _conditioner, seed: null);
         if (clone.TryShareParametersFrom(this)) return clone;
         // Structure mismatch ⇒ custom architecture/predictor/VAE the default clone can't reproduce;
         // rebuild faithfully from this instance's configuration so the clone is observationally
@@ -151,7 +151,7 @@ public class AutoRegressiveMaskedDiffusion<T> : LatentDiffusionModelBase<T>
             predictor: (SiTPredictor<T>)_predictor.Clone(),
             vae: (StandardVAE<T>)_vae.Clone(),
             conditioner: _conditioner,
-            seed: RandomGenerator.Next());
+            seed: null);
     }
 
     /// <inheritdoc />

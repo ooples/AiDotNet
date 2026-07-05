@@ -149,6 +149,10 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// Latent spatial size (height = width) for computing patch count.
     /// </summary>
     private readonly int _latentSpatialSize;
+    // Seed used for weight init. Threaded into Clone so any lazy weight path the clone probe does not
+    // materialize (and which therefore re-initializes on the clone's first forward) uses the SAME RNG
+    // seed as the source and matches it deterministically — mirrors SiTPredictor._sitSeed (#1764).
+    private readonly int? _seed;
 
     /// <summary>
     /// The neural network architecture configuration, if provided.
@@ -351,6 +355,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         _contextDim = contextDim;
         _mlpRatio = mlpRatio;
         _latentSpatialSize = latentSpatialSize;
+        _seed = seed;
 
         // Class-conditional DiT is fully wired end-to-end per Peebles & Xie 2022
         // §3.2: when numClasses > 0, _labelEmbed projects one-hot class labels
@@ -1445,7 +1450,8 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             patchSize: _patchSize,
             contextDim: _contextDim,
             mlpRatio: _mlpRatio,
-            latentSpatialSize: _latentSpatialSize);
+            latentSpatialSize: _latentSpatialSize,
+            seed: _seed);
 
         // Carry the test-only resident-threshold override so the clone's probe forward takes the same
         // (fp16-resident vs fp32) path as the source — otherwise a small test clone would materialize fp32

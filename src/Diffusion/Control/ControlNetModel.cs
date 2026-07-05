@@ -699,7 +699,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
             vae: (StandardVAE<T>)_vae.Clone(),
             controlType: _controlType,
             conditioner: _conditioner,
-            seed: RandomGenerator.Next());
+            seed: null);
 
         // Create matching encoder cache in clone before setting parameters
         foreach (var controlType in _encoderCache.Keys.Where(ct => ct != _controlType))
@@ -708,7 +708,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
             clone.GetOrCreateEncoder(controlType);
         }
 
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters()); // flat path: inherited GetParameterChunks() omits this model's extra module(s) and is empty on net471
         clone.ConditioningStrength = _conditioningStrength;
 
         return clone;

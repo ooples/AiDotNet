@@ -159,8 +159,8 @@ public class ControlNetLiteModel<T> : LatentDiffusionModelBase<T>
             vae: (StandardVAE<T>)_vae.Clone(),
             controlType: _controlType,
             conditioner: _conditioner,
-            seed: RandomGenerator.Next());
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
+            seed: null);
+        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters()); // flat path: inherited GetParameterChunks() omits this model's extra module(s) and is empty on net471
         return clone;
     }
 

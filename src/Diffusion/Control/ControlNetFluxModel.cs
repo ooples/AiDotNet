@@ -194,7 +194,7 @@ public class ControlNetFluxModel<T> : LatentDiffusionModelBase<T>
             vae: (StandardVAE<T>)_vae.Clone(),
             controlType: _controlType,
             conditioner: _conditioner,
-            seed: RandomGenerator.Next());
+            seed: null);
         clone._controlEncoder.SetParameters(_controlEncoder.GetParameters());
         return clone;
     }
