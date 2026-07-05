@@ -1,6 +1,9 @@
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
 using AiDotNet.Postprocessing;
 using AiDotNet.Preprocessing;
+using AiDotNet.Deployment.Configuration;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -199,6 +202,47 @@ public class Bucket6_PrePostProcessingTests : ConfigureMethodTestBase
             $"ConfigurePostprocessing(prebuilt) wired the transformer but result.Predict never invoked it (Transform={recorder.TransformCalls}).");
     }
 
+    [Fact(Timeout = 60000)]
+    [Trait("category", "integration-configure-method")]
+    public async Task SelfSupervisedBuild_ConsumesPipelinesAndCarriesResultOptions()
+    {
+        var featureRecorder = new RecordingTensorTransformer();
+        var targetRecorder = new RecordingTensorTransformer();
+        var postRecorder = new RecordingTensorTransformer();
+        var targetPipeline = new PreprocessingPipeline<float, Tensor<float>, Tensor<float>>();
+        targetPipeline.Add(targetRecorder);
+        var (features, labels) = MakeMemorizationSet();
+        var model = new RecordingSelfSupervisedTensorModel();
+        const int cacheSentinel = 17;
+
+        var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+            .ConfigureModel(model)
+            .ConfigureDataLoader(MakeCanaryLoader(features, labels))
+            .ConfigurePreprocessing(featureRecorder)
+            .ConfigureTargetScaling(targetPipeline)
+            .ConfigurePostprocessing(postRecorder)
+            .ConfigureCaching(new CacheConfig { MaxCacheSize = cacheSentinel })
+            .BuildAsync();
+
+        Assert.True(model.TrainCalls > 0, "Self-supervised BuildAsync never called the model's Train method.");
+        Assert.True(featureRecorder.FitCalls + featureRecorder.FitTransformCalls > 0,
+            "Self-supervised BuildAsync did not fit the configured feature preprocessing pipeline.");
+        Assert.True(featureRecorder.TransformCalls > 0,
+            "Self-supervised BuildAsync did not transform samples through the feature preprocessing pipeline.");
+        Assert.True(targetRecorder.FitCalls + targetRecorder.FitTransformCalls > 0,
+            "Self-supervised BuildAsync did not fit the configured target-scaling pipeline.");
+        Assert.True(targetRecorder.TransformCalls > 0,
+            "Self-supervised BuildAsync did not transform targets through the target-scaling pipeline.");
+        Assert.True(postRecorder.FitCalls + postRecorder.FitTransformCalls > 0,
+            "Self-supervised BuildAsync did not fit the configured postprocessing pipeline.");
+        Assert.NotNull(result.PreprocessingInfo);
+        Assert.True(result.PreprocessingInfo!.IsFitted);
+        Assert.True(result.PreprocessingInfo.IsTargetFitted);
+        Assert.NotNull(result.DeploymentConfiguration);
+        Assert.Equal(cacheSentinel, result.DeploymentConfiguration!.Caching?.MaxCacheSize);
+        Assert.Same(model, result.Model);
+    }
+
     /// <summary>
     /// Identity transformer that records every Fit / Transform /
     /// FitTransform call so the test can assert the configure → build path
@@ -256,5 +300,37 @@ public class Bucket6_PrePostProcessingTests : ConfigureMethodTestBase
                 "before calling InverseTransform.");
         }
         public string[] GetFeatureNamesOut(string[]? inputFeatureNames = null) => inputFeatureNames ?? System.Array.Empty<string>();
+    }
+
+    private sealed class RecordingSelfSupervisedTensorModel : IFullModel<float, Tensor<float>, Tensor<float>>, ISelfSupervisedModel
+    {
+        public int TrainCalls { get; private set; }
+
+        public ILossFunction<float> DefaultLossFunction => new MeanSquaredErrorLoss<float>();
+
+        public Tensor<float> Predict(Tensor<float> input) => input;
+
+        public void Train(Tensor<float> input, Tensor<float> expectedOutput)
+        {
+            TrainCalls++;
+        }
+
+        public ModelMetadata<float> GetModelMetadata() => new()
+        {
+            Name = nameof(RecordingSelfSupervisedTensorModel),
+            FeatureCount = 1,
+            Complexity = 1
+        };
+
+        public byte[] Serialize() => System.Array.Empty<byte>();
+        public void Deserialize(byte[] data) { }
+        public void SaveModel(string filePath) { }
+        public void LoadModel(string filePath) { }
+        public void SaveState(System.IO.Stream stream) { }
+        public void LoadState(System.IO.Stream stream) { }
+        public System.Collections.Generic.Dictionary<string, float> GetFeatureImportance() => new();
+        public IFullModel<float, Tensor<float>, Tensor<float>> DeepCopy() => this;
+        public IFullModel<float, Tensor<float>, Tensor<float>> Clone() => this;
+        public void Dispose() { }
     }
 }

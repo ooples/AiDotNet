@@ -549,46 +549,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
-    /// Configures an AutoML model for automatic machine learning optimization.
-    /// </summary>
-    /// <param name="autoMLModel">The AutoML model instance to use for hyperparameter search and model selection.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> AutoML (Automated Machine Learning) automatically searches for the best
-    /// model and hyperparameters for your problem. Instead of manually trying different models and settings,
-    /// AutoML does this for you.
-    /// </para>
-    /// <para>
-    /// When you configure an AutoML model:
-    /// - The Build() method will run the AutoML search process
-    /// - AutoML will try different models and hyperparameters
-    /// - The best model found will be returned as your trained model
-    /// - You can configure search time limits, candidate models, and optimization metrics
-    /// </para>
-    /// <para>
-    /// Example:
-    /// <code>
-    /// // Advanced usage: plug in your own AutoML implementation.
-    /// // Most users should prefer the ConfigureAutoML(AutoMLOptions&lt;...&gt;) overload instead.
-    /// var autoML = new RandomSearchAutoML&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
-    /// autoML.SetTimeLimit(TimeSpan.FromMinutes(30));
-    /// autoML.SetCandidateModels(new List&lt;ModelType&gt; { ModelType.RandomForest, ModelType.GradientBoosting });
-    ///
-    /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigureAutoML(autoML)
-    ///     .Build(trainingData, trainingLabels);
-    /// </code>
-    /// </para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureAutoML(IAutoMLModel<T, TInput, TOutput> autoMLModel)
-    {
-        _autoMLModel = autoMLModel;
-        _autoMLOptions = null;
-        return this;
-    }
-
-    /// <summary>
     /// Configures AutoML using facade-style options (recommended for most users).
     /// </summary>
     /// <param name="options">AutoML options (budget, strategy, and optional overrides). If null, defaults are used.</param>

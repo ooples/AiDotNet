@@ -171,6 +171,10 @@ public class Mochi1Model<T> : VideoDiffusionModelBase<T>
     /// The T5-XXL text encoder conditioning module.
     /// </summary>
     private readonly IConditioningModule<T>? _conditioner;
+    // Seed for the deferred (lazy) init path: the constructor only eager-inits when an explicit
+    // predictor/VAE is passed, so without capturing the seed the lazy EnsureInitialized() built the
+    // sub-models with a null seed — dropping the requested seed and making construction non-reproducible.
+    private readonly int? _seed;
 
     #endregion
 
@@ -248,6 +252,7 @@ public class Mochi1Model<T> : VideoDiffusionModelBase<T>
             architecture)
     {
         _conditioner = conditioner;
+        _seed = seed;
 
         if (dit is not null || temporalVAE is not null)
             InitializeLayers(dit, temporalVAE, seed);
@@ -261,7 +266,7 @@ public class Mochi1Model<T> : VideoDiffusionModelBase<T>
     private void EnsureInitialized()
     {
         if (_dit is null || _temporalVAE is null)
-            InitializeLayers(null, null, null);
+            InitializeLayers(null, null, _seed);
     }
 
 
@@ -296,7 +301,8 @@ public class Mochi1Model<T> : VideoDiffusionModelBase<T>
             numLayers: NUM_LAYERS,
             numHeads: NUM_HEADS,
             patchSize: PATCH_SIZE,
-            contextDim: CONTEXT_DIM);
+            contextDim: CONTEXT_DIM,
+            seed: seed);
 
         _temporalVAE = temporalVAE ?? new TemporalVAE<T>(
             inputChannels: 3,
@@ -306,7 +312,8 @@ public class Mochi1Model<T> : VideoDiffusionModelBase<T>
             numTemporalLayers: 2,
             temporalKernelSize: 3,
             causalMode: true,
-            latentScaleFactor: 0.13025);
+            latentScaleFactor: 0.13025,
+            seed: seed);
     }
 
     #endregion
