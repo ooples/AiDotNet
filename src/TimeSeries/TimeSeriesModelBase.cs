@@ -544,6 +544,51 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     public abstract T PredictSingle(Vector<T> input);
 
     /// <summary>
+    /// Forecasts several future steps jointly from a single lookback window — the native multi-horizon output.
+    /// </summary>
+    /// <param name="lookback">The most recent history the model attends to (length = the model's lookback window).</param>
+    /// <param name="horizon">Number of future steps to forecast (must be positive).</param>
+    /// <returns>A length-<paramref name="horizon"/> vector; element h is the forecast h+1 steps ahead.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> instead of one next value, this returns a whole path of future values
+    /// (1, 2, 3, … steps ahead) from the same history — what you want for multi-horizon forecasting.</para>
+    /// <para>The base implementation is the standard RECURSIVE (iterated one-step) strategy: predict the next
+    /// value, append it to the window, drop the oldest, and repeat. Models with a native DIRECT multi-step head
+    /// (e.g. N-BEATS, DeepAR, Informer, TFT) override this to emit all steps at once, which avoids recursive error
+    /// accumulation. Overriding is optional — every time-series model gets correct multi-horizon output for free.</para>
+    /// </remarks>
+    public virtual Vector<T> ForecastMultiHorizon(Vector<T> lookback, int horizon)
+    {
+        if (horizon <= 0)
+        {
+            throw new ArgumentException("Horizon must be positive.", nameof(horizon));
+        }
+
+        var window = new Vector<T>(lookback.Length);
+        for (int i = 0; i < lookback.Length; i++)
+        {
+            window[i] = lookback[i];
+        }
+
+        var forecast = new Vector<T>(horizon);
+        for (int h = 0; h < horizon; h++)
+        {
+            T next = PredictSingle(window);
+            forecast[h] = next;
+
+            // Slide the window forward by one, appending the just-predicted value (recursive strategy).
+            for (int i = 0; i < window.Length - 1; i++)
+            {
+                window[i] = window[i + 1];
+            }
+
+            window[window.Length - 1] = next;
+        }
+
+        return forecast;
+    }
+
+    /// <summary>
     /// Evaluates the performance of the trained model on test data.
     /// </summary>
     /// <param name="xTest">The input features matrix for testing.</param>
