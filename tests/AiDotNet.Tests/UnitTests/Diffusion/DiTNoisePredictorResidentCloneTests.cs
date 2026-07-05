@@ -30,7 +30,7 @@ public class DiTNoisePredictorResidentCloneTests
     {
         var t = new Tensor<float>(shape);
         var d = t.GetCpuData();
-        var rng = new Random(seed);
+        var rng = RandomHelper.CreateSeededRandom(seed);
         for (int i = 0; i < d.Length; i++) d[i] = (float)(rng.NextDouble() * 2 - 1);
         return t;
     }
