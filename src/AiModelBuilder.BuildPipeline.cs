@@ -22,6 +22,203 @@ namespace AiDotNet;
 public partial class AiModelBuilder<T, TInput, TOutput>
 {
     /// <summary>
+    /// Adapts the optimizer's per-epoch seam (and the direct-training path's single pass) to the
+    /// facade's shared per-epoch callback/monitor logic, tracking the abort state for the result
+    /// surface. Allocated only when a monitor or training callback is configured, so the default
+    /// training path never constructs one.
+    /// </summary>
+    private sealed class EpochProgressBridge
+    {
+        private readonly AiModelBuilder<T, TInput, TOutput> _owner;
+        private readonly string? _monitorSessionId;
+        private readonly CancellationToken _cancellationToken;
+        private readonly int _totalEpochs;
+        private readonly DateTime _start;
+
+        /// <summary>Zero-based index of the last epoch observed.</summary>
+        public int LastEpoch { get; private set; }
+
+        /// <summary>Loss reported for the last epoch observed.</summary>
+        public T LastLoss { get; private set; }
+
+        /// <summary>Whether an observer requested an abort.</summary>
+        public bool EarlyStopTriggered { get; private set; }
+
+        /// <summary>Human-readable reason for an abort, or null.</summary>
+        public string? StopReason { get; private set; }
+
+        /// <summary>Wall-clock time elapsed since this bridge was created (training start).</summary>
+        public TimeSpan Elapsed => DateTime.UtcNow - _start;
+
+        public EpochProgressBridge(
+            AiModelBuilder<T, TInput, TOutput> owner,
+            string? monitorSessionId,
+            CancellationToken cancellationToken,
+            int totalEpochs,
+            T zeroLoss)
+        {
+            _owner = owner;
+            _monitorSessionId = monitorSessionId;
+            _cancellationToken = cancellationToken;
+            _totalEpochs = totalEpochs;
+            _start = DateTime.UtcNow;
+            LastLoss = zeroLoss;
+        }
+
+        /// <summary>
+        /// Drives one completed epoch. Returns true to continue, false to request an abort.
+        /// Suitable as the delegate passed to <c>OptimizerBase.SetEpochProgressCallback</c>.
+        /// </summary>
+        public bool OnEpoch(int epoch, T epochLoss)
+        {
+            LastEpoch = epoch;
+            LastLoss = epochLoss;
+            bool shouldContinue = _owner.InvokeTrainingEpoch(
+                epoch, _totalEpochs, epochLoss, _monitorSessionId, Elapsed, _cancellationToken, out var reason);
+            if (!shouldContinue)
+            {
+                EarlyStopTriggered = true;
+                StopReason ??= reason;
+            }
+            return shouldContinue;
+        }
+    }
+
+    /// <summary>
+    /// Invokes <see cref="ITrainingCallback{T}.OnTrainBegin"/> on every registered training
+    /// callback, once, before the first epoch of a supervised training run.
+    /// </summary>
+    /// <param name="totalEpochs">The number of epochs the loop plans to run (0 if unknown).</param>
+    private void InvokeTrainingCallbacksBegin(int totalEpochs)
+    {
+        if (_trainingCallbacks.Count == 0)
+        {
+            return;
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var progress = new TrainingProgress<T>(
+            epoch: 0,
+            totalEpochs: totalEpochs,
+            loss: numOps.Zero,
+            metrics: null,
+            elapsed: TimeSpan.Zero,
+            stepsPerSecond: null);
+        foreach (var callback in _trainingCallbacks)
+        {
+            callback.OnTrainBegin(progress);
+        }
+    }
+
+    /// <summary>
+    /// Invokes <see cref="ITrainingCallback{T}.OnTrainEnd"/> on every registered training
+    /// callback, once, after a supervised training run finishes (completed or aborted).
+    /// </summary>
+    private void InvokeTrainingCallbacksEnd(int lastEpoch, int totalEpochs, T lastLoss, TimeSpan elapsed)
+    {
+        if (_trainingCallbacks.Count == 0)
+        {
+            return;
+        }
+
+        var progress = new TrainingProgress<T>(
+            epoch: lastEpoch,
+            totalEpochs: totalEpochs,
+            loss: lastLoss,
+            metrics: null,
+            elapsed: elapsed,
+            stepsPerSecond: null);
+        foreach (var callback in _trainingCallbacks)
+        {
+            callback.OnTrainEnd(progress);
+        }
+    }
+
+    /// <summary>
+    /// Drives one completed training epoch across the training-observability surface: streams
+    /// the epoch's loss to the configured monitor, invokes every registered training callback,
+    /// and evaluates the abort signals (callback vetoes, cancellation, monitor issues).
+    /// </summary>
+    /// <param name="epoch">The zero-based index of the epoch that just completed.</param>
+    /// <param name="totalEpochs">The total number of epochs planned (0 if unknown).</param>
+    /// <param name="epochLoss">The aggregate loss for this epoch.</param>
+    /// <param name="monitorSessionId">The active monitor session id, or null when unmonitored.</param>
+    /// <param name="elapsed">Wall-clock time elapsed since training began.</param>
+    /// <param name="cancellationToken">The caller's cancellation token.</param>
+    /// <param name="stopReason">
+    /// On return, a human-readable reason when training should stop; otherwise null.
+    /// </param>
+    /// <returns><c>true</c> to continue training; <c>false</c> to abort.</returns>
+    private bool InvokeTrainingEpoch(
+        int epoch,
+        int totalEpochs,
+        T epochLoss,
+        string? monitorSessionId,
+        TimeSpan elapsed,
+        CancellationToken cancellationToken,
+        out string? stopReason)
+    {
+        stopReason = null;
+        double? stepsPerSecond = elapsed.TotalSeconds > 0 ? (epoch + 1) / elapsed.TotalSeconds : (double?)null;
+
+        // (a) Stream this epoch's metrics to the monitor so a dashboard sees a genuine
+        // per-epoch time-series (not just a single end-of-training snapshot).
+        if (_trainingMonitor is not null && monitorSessionId is not null)
+        {
+            _trainingMonitor.LogMetric(monitorSessionId, "loss", epochLoss, epoch);
+            if (totalEpochs > 0)
+            {
+                _trainingMonitor.UpdateProgress(monitorSessionId, epoch + 1, totalEpochs, epoch + 1, totalEpochs);
+            }
+        }
+
+        // (b) Invoke every user callback with a progress snapshot.
+        bool shouldContinue = true;
+        if (_trainingCallbacks.Count > 0)
+        {
+            var metrics = new Dictionary<string, T> { ["loss"] = epochLoss };
+            var progress = new TrainingProgress<T>(
+                epoch: epoch,
+                totalEpochs: totalEpochs,
+                loss: epochLoss,
+                metrics: metrics,
+                elapsed: elapsed,
+                stepsPerSecond: stepsPerSecond);
+
+            foreach (var callback in _trainingCallbacks)
+            {
+                if (!callback.OnEpochEnd(progress))
+                {
+                    shouldContinue = false;
+                    stopReason ??= $"training callback requested abort at epoch {epoch}";
+                }
+            }
+        }
+
+        // (c) Honor the caller's cancellation token.
+        if (cancellationToken.IsCancellationRequested)
+        {
+            shouldContinue = false;
+            stopReason ??= $"cancellation requested at epoch {epoch}";
+        }
+
+        // (c) Consult the monitor's NaN/divergence/stall detector.
+        if (_trainingMonitor is not null && monitorSessionId is not null)
+        {
+            List<string> issues;
+            try { issues = _trainingMonitor.CheckForIssues(monitorSessionId); }
+            catch { issues = new List<string>(); }
+            if (issues.Count > 0)
+            {
+                shouldContinue = false;
+                stopReason ??= $"training monitor reported issue(s) at epoch {epoch}: {string.Join("; ", issues)}";
+            }
+        }
+
+        return shouldContinue;
+    }
+
+    /// <summary>
     /// Performs true streaming supervised training without materializing all data in memory.
     /// </summary>
     /// <param name="streamingLoader">The streaming data loader to train from.</param>
@@ -38,7 +235,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     private async Task<AiModelResult<T, TInput, TOutput>> BuildStreamingSupervisedAsync(
-        IStreamingDataLoader<T, TInput, TOutput> streamingLoader)
+        IStreamingDataLoader<T, TInput, TOutput> streamingLoader,
+        CancellationToken cancellationToken = default)
     {
         // ConfigureAugmentation isn't wired into the streaming path —
         // BuildSupervisedInternalAsync's one-shot offline augmentation
@@ -105,6 +303,29 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         T totalLoss = numOps.Zero;
         int totalBatches = 0;
         bool pipelineFitted = _preprocessingPipeline?.IsFitted ?? true;
+
+        // Start a training-monitor session for this streaming run (the streaming path did not
+        // previously open one, so the configured monitor never received per-epoch metrics).
+        string? streamingMonitorSessionId = null;
+        if (_trainingMonitor is not null)
+        {
+            streamingMonitorSessionId = _trainingMonitor.StartSession(
+                sessionName: $"streaming-training-{_model.GetType().Name}",
+                metadata: new Dictionary<string, object>
+                {
+                    ["model_type"] = _model.GetType().Name,
+                    ["optimizer_type"] = _optimizer?.GetType().Name ?? "none",
+                    ["start_time"] = DateTime.UtcNow
+                });
+        }
+
+        // Per-epoch callback + abort-tracking state for the streaming loop.
+        var streamingStart = DateTime.UtcNow;
+        bool streamingEarlyStopTriggered = false;
+        string? streamingStopReason = null;
+        int streamingLastEpoch = 0;
+        T streamingLastLoss = numOps.Zero;
+        InvokeTrainingCallbacksBegin(epochs);
 
         // Train for the specified number of epochs
         for (int epoch = 0; epoch < epochs; epoch++)
@@ -345,6 +566,30 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             totalLoss = numOps.Add(totalLoss, epochLoss);
             totalBatches += epochBatches;
 
+            // Per-epoch average loss for this epoch (mean over the epoch's batches).
+            T avgEpochLoss = epochBatches > 0
+                ? numOps.Divide(epochLoss, numOps.FromDouble(epochBatches))
+                : numOps.Zero;
+            streamingLastEpoch = epoch;
+            streamingLastLoss = avgEpochLoss;
+
+            // Stream this epoch's metrics to the monitor, invoke user callbacks, and evaluate
+            // the abort signals (callback veto / cancellation / monitor issue).
+            bool continueTraining = InvokeTrainingEpoch(
+                epoch,
+                epochs,
+                avgEpochLoss,
+                streamingMonitorSessionId,
+                DateTime.UtcNow - streamingStart,
+                cancellationToken,
+                out var epochStopReason);
+            if (!continueTraining)
+            {
+                streamingEarlyStopTriggered = true;
+                streamingStopReason ??= epochStopReason;
+                break;
+            }
+
             // No facade-level learning-rate decay. The optimizer owns its
             // own LR schedule (Adam's bias correction is handled in Step;
             // any attached LearningRateScheduler advances per-step inside
@@ -356,8 +601,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             // Check for early stopping if configured
             if (_optimizer is not null && _optimizer.ShouldEarlyStop())
             {
+                streamingEarlyStopTriggered = true;
+                streamingStopReason ??= $"optimizer early-stopping criterion met at epoch {epoch}";
                 break;
             }
+        }
+
+        // Notify callbacks that training has ended and close the monitor session.
+        InvokeTrainingCallbacksEnd(streamingLastEpoch, epochs, streamingLastLoss, DateTime.UtcNow - streamingStart);
+        if (_trainingMonitor is not null && streamingMonitorSessionId is not null)
+        {
+            _trainingMonitor.EndSession(streamingMonitorSessionId);
         }
 
         // Calculate average loss
@@ -430,6 +684,16 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             HybridGraphRetriever = _hybridGraphRetriever,
             LoRAConfiguration = _loraConfiguration,
             MemoryConfig = _memoryConfig,
+            // Surface the CONFIGURED training-observability instances and abort status on the
+            // result so callers get the same visibility here as on the in-memory path.
+            CheckpointManager = _checkpointManager,
+            TrainingMonitor = _trainingMonitor,
+            EarlyStopTriggered = streamingEarlyStopTriggered,
+            StopReason = streamingStopReason,
+            MixedPrecisionEngaged = false,
+            MixedPrecisionStatus = _mixedPrecisionConfig is null
+                ? "not requested"
+                : "ignored: mixed precision is applied on the in-memory supervised path, not the streaming path",
             // Weight-streaming telemetry — set on every result-build path
             // (supervised batch, AutoML, RL) so the streaming-data-loader
             // path doesn't silently miss the report when the
@@ -459,7 +723,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         INeuralNetwork<T> neuralNetwork,
         Tensor<T> xTrain,
         Tensor<T> yTrain,
-        int epochs)
+        int epochs,
+        EpochProgressBridge? epochBridge = null)
     {
         if (_optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> gbo
             && neuralNetwork is NeuralNetworks.NeuralNetworkBase<T> neuralNetworkBase)
@@ -467,6 +732,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             neuralNetworkBase.SetBaseTrainOptimizer(gbo);
         }
 
+        var numOps = MathHelper.GetNumericOperations<T>();
         int rows = xTrain.Rank >= 1 ? xTrain.Shape[0] : 1;
         int iterations = 0;
         for (int epoch = 0; epoch < epochs; epoch++)
@@ -477,6 +743,19 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 neuralNetwork.Train(GatherRows(xTrain, rowIndex), GatherRows(yTrain, rowIndex));
                 iterations++;
             }
+
+            // Drive the per-epoch callback/monitor seam so this direct supervised loop streams
+            // metrics and honors abort/cancellation uniformly with the optimizer path. Only runs
+            // when a monitor/callback is configured (bridge is null → default path untouched).
+            if (epochBridge is not null)
+            {
+                var predictions = neuralNetwork.Predict(xTrain);
+                T epochLoss = ComputeMeanSquaredError(predictions, yTrain, numOps);
+                if (!epochBridge.OnEpoch(epoch, epochLoss))
+                {
+                    break;
+                }
+            }
         }
 
         return new OptimizationResult<T, TInput, TOutput>
@@ -484,6 +763,31 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             BestSolution = model,
             Iterations = iterations,
         };
+    }
+
+    /// <summary>
+    /// Computes the mean squared error between a prediction tensor and a target tensor over their
+    /// overlapping flattened elements. Used to surface a real per-epoch loss to the training
+    /// callback/monitor seam on the direct supervised neural training path.
+    /// </summary>
+    private static T ComputeMeanSquaredError(Tensor<T> predictions, Tensor<T> targets, INumericOperations<T> numOps)
+    {
+        var predSpan = predictions.Data.Span;
+        var targetSpan = targets.Data.Span;
+        int count = Math.Min(predSpan.Length, targetSpan.Length);
+        if (count == 0)
+        {
+            return numOps.Zero;
+        }
+
+        T sum = numOps.Zero;
+        for (int i = 0; i < count; i++)
+        {
+            T diff = numOps.Subtract(predSpan[i], targetSpan[i]);
+            sum = numOps.Add(sum, numOps.Multiply(diff, diff));
+        }
+
+        return numOps.Divide(sum, numOps.FromDouble(count));
     }
 
     /// <summary>
@@ -1133,7 +1437,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         IOptimizer<T, TInput, TOutput> finalOptimizer = optimizer;
 
         // Enable mixed-precision training BEFORE distributed training wrapping (if configured)
-        // This ensures mixed-precision is applied to the base model/optimizer before any wrapping
+        // This ensures mixed-precision is applied to the base model/optimizer before any wrapping.
+        // Track whether FP16 actually engaged (and where) so the caller can inspect it on the
+        // result surface rather than guessing whether their ConfigureMixedPrecision call took effect.
+        bool mixedPrecisionEngaged = false;
+        string mixedPrecisionStatus;
         if (_mixedPrecisionConfig != null)
         {
             // Verify T is float
@@ -1144,17 +1452,30 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     $"Use AiModelBuilder<float, ...> to enable mixed-precision training.");
             }
 
+            var mixedPrecisionTargets = new List<string>();
+
             // Enable on neural network model if applicable
             if (_model is NeuralNetworkBase<T> neuralNet)
             {
                 neuralNet.EnableMixedPrecision(_mixedPrecisionConfig);
+                mixedPrecisionTargets.Add("model");
             }
 
             // Enable on gradient-based optimizer if applicable
             if (optimizer is GradientBasedOptimizerBase<T, TInput, TOutput> gradOptimizer)
             {
                 gradOptimizer.EnableMixedPrecision(_mixedPrecisionConfig);
+                mixedPrecisionTargets.Add("optimizer");
             }
+
+            mixedPrecisionEngaged = mixedPrecisionTargets.Count > 0;
+            mixedPrecisionStatus = mixedPrecisionEngaged
+                ? $"engaged: {_mixedPrecisionConfig.PrecisionType} on {string.Join(" + ", mixedPrecisionTargets)}"
+                : "ignored: neither the model nor the optimizer supports mixed precision";
+        }
+        else
+        {
+            mixedPrecisionStatus = "not requested";
         }
 
         // Enable distributed training if backend or configuration was explicitly provided
@@ -1754,6 +2075,34 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         var optimizationInputData = OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest);
 #pragma warning restore CS8604
 
+        // ============================================================================
+        // Per-epoch training callbacks + per-epoch monitor streaming
+        // ============================================================================
+        // The in-memory supervised path delegates its epoch loop to the optimizer's
+        // Optimize(...) call, so we hook the optimizer's per-epoch seam
+        // (OptimizerBase.SetEpochProgressCallback) to (a) stream per-epoch metrics to the
+        // configured training monitor, (b) invoke every user-registered ITrainingCallback,
+        // and (c) abort when a callback returns false, the caller cancels, or the monitor
+        // reports a critical issue. The direct-training path (model.Train) fires the same
+        // driver once for its single training pass.
+        // The per-epoch observability machinery only runs when the caller configured a training
+        // monitor and/or one or more training callbacks. When neither is present the default
+        // training path is left completely untouched: no bridge allocated, no hook registered,
+        // no callbacks invoked, and no per-epoch work — so its behaviour and timing are
+        // byte-for-byte identical to a build without this feature.
+        bool trainingObservabilityEnabled = _trainingCallbacks.Count > 0 || _trainingMonitor is not null;
+        int totalPlannedEpochs = 0;
+        EpochProgressBridge? epochBridge = null;
+        if (trainingObservabilityEnabled)
+        {
+            try { totalPlannedEpochs = finalOptimizer.GetOptions().MaxIterations; } catch { /* options optional */ }
+            epochBridge = new EpochProgressBridge(
+                this, monitorSessionId, cancellationToken, totalPlannedEpochs,
+                MathHelper.GetNumericOperations<T>().Zero);
+            // Notify all callbacks that training is about to begin (once, before the loop).
+            InvokeTrainingCallbacksBegin(totalPlannedEpochs);
+        }
+
         // FEDERATED LEARNING PATH (facade-first: orchestration stays internal)
         if (_federatedLearningOptions != null)
         {
@@ -1928,6 +2277,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 NumberOfParameters = inputSize
             });
 
+            // The direct-training path runs a single training pass; drive the per-epoch
+            // callbacks/monitor once so this path still streams metrics and honors abort/
+            // cancellation signals uniformly with the optimizer path. No-op when no
+            // monitor/callback is configured (bridge is null → default path untouched).
+            epochBridge?.OnEpoch(0, trainErrorStats.MSE);
+
             // trainPredOutput is already TOutput from model.Predict
 
             optimizationResult = new OptimizationResult<T, TInput, TOutput>
@@ -2035,13 +2390,43 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 && yTrain is Tensor<T> neuralY)
             {
                 int epochs = finalOptimizer.GetOptions()?.MaxIterations ?? 100;
-                optimizationResult = TrainTensorNeuralNetworkRows(model, neuralNetwork, neuralX, neuralY, epochs);
+                optimizationResult = TrainTensorNeuralNetworkRows(model, neuralNetwork, neuralX, neuralY, epochs, epochBridge);
+            }
+            // Register the per-epoch driver so the optimizer's internal epoch loop streams
+            // metrics to the monitor and consults user callbacks. Scoped to this Optimize
+            // call only (cleared in finally) so HPO trials and reuse of the same optimizer
+            // instance are unaffected. When NO monitor/callback is configured we take the
+            // exact original code path (a bare Optimize call, no hook, no wrapper) so the
+            // default training behaviour and timing are byte-for-byte unchanged.
+            else if (epochBridge is not null && finalOptimizer is OptimizerBase<T, TInput, TOutput> epochHookOptimizer)
+            {
+                epochHookOptimizer.SetEpochProgressCallback(epochBridge.OnEpoch);
+                try
+                {
+                    optimizationResult = finalOptimizer.Optimize(optimizationInputData);
+                }
+                finally
+                {
+                    epochHookOptimizer.SetEpochProgressCallback(null);
+                }
             }
             else
             {
                 // Optimize the final model on the full training set
                 optimizationResult = finalOptimizer.Optimize(optimizationInputData);
             }
+        }
+
+        // Notify all callbacks that training has ended (whether it completed every epoch or
+        // was aborted). Always fires so callbacks can release resources acquired in OnTrainBegin.
+        // Also lift the abort state off the bridge for the result surface.
+        bool earlyStopTriggered = false;
+        string? stopReason = null;
+        if (epochBridge is not null)
+        {
+            earlyStopTriggered = epochBridge.EarlyStopTriggered;
+            stopReason = epochBridge.StopReason;
+            InvokeTrainingCallbacksEnd(epochBridge.LastEpoch, totalPlannedEpochs, epochBridge.LastLoss, epochBridge.Elapsed);
         }
 
         // ============================================================================
@@ -2502,6 +2887,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             RegisteredModelName = registeredModelName,
             CheckpointPath = checkpointPath,
             DataVersionHash = dataVersionHash,
+            // Surface the CONFIGURED training-observability instances on the result so callers
+            // can inspect learning curves / manage checkpoints post-build (previously null).
+            CheckpointManager = _checkpointManager,
+            TrainingMonitor = _trainingMonitor,
+            EarlyStopTriggered = earlyStopTriggered,
+            StopReason = stopReason,
+            MixedPrecisionEngaged = mixedPrecisionEngaged,
+            MixedPrecisionStatus = mixedPrecisionStatus,
             Hyperparameters = hyperparameters.Count > 0 ? hyperparameters : null,
             TrainingMetricsHistory = trainingMetricsHistory.Count > 0 ? trainingMetricsHistory : null,
 

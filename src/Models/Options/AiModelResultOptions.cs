@@ -1101,6 +1101,46 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     public ITrainingMonitor<T>? TrainingMonitor { get; set; }
 
     /// <summary>
+    /// Gets or sets whether training stopped before running all configured epochs.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> <c>true</c> when training ended early — because a callback asked it
+    /// to, the run was cancelled, or a health check tripped — rather than completing every
+    /// planned epoch. See <see cref="StopReason"/> for the explanation.
+    /// </remarks>
+    public bool EarlyStopTriggered { get; set; }
+
+    /// <summary>
+    /// Gets or sets a human-readable explanation of why training stopped early, or <c>null</c>
+    /// when training ran to completion.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> A short sentence such as "callback requested abort at epoch 2" that
+    /// tells you why training did not run all the way to the end.
+    /// </remarks>
+    public string? StopReason { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether mixed-precision (FP16) training actually engaged during this run.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Mixed precision can speed up training, but it only applies in
+    /// certain conditions. This is <c>true</c> only when it was requested AND took effect; see
+    /// <see cref="MixedPrecisionStatus"/> for details.
+    /// </remarks>
+    public bool MixedPrecisionEngaged { get; set; }
+
+    /// <summary>
+    /// Gets or sets a human-readable description of the mixed-precision outcome (e.g.
+    /// "not requested", "engaged: FP16", or "ignored: T is not float").
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Explains in plain words what happened with mixed precision — whether
+    /// it was off, turned on, or requested but skipped (and why).
+    /// </remarks>
+    public string? MixedPrecisionStatus { get; set; }
+
+    /// <summary>
     /// Gets or sets the hyperparameter optimization result.
     /// </summary>
     /// <remarks>

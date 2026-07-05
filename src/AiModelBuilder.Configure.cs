@@ -1189,7 +1189,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             cancellationToken.ThrowIfCancellationRequested();
 
             // True streaming training - train on batches without materializing all data
-            result = await BuildStreamingSupervisedAsync(streamingLoader);
+            result = await BuildStreamingSupervisedAsync(streamingLoader, cancellationToken);
             await RunBenchmarksIfConfiguredAsync(result).ConfigureAwait(false);
             return result;
         }
