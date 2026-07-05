@@ -1101,10 +1101,19 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     {
         // Force lazy tensors to materialize before copying their data.
         EnsureInitialized();
-        // Calculate total number of parameters using tensor shape
-        int qRows = _queryWeights.Shape[0], qCols = _queryWeights.Shape[1];
-        int kRows = _keyWeights.Shape[0], kCols = _keyWeights.Shape[1];
-        int vRows = _valueWeights.Shape[0], vCols = _valueWeights.Shape[1];
+
+        // fp16-resident (#1764): on the separate-projection resident path the fp32 _queryWeights/_keyWeights/
+        // _valueWeights are freed to [0,0] and the fp16 half masters are authoritative. Reading _queryWeights
+        // directly would return a zero-length (or stale) vector, so clone/serialize silently drops the
+        // attention weights. Read the effective full-precision weights (half master upcast when resident,
+        // fp32 tensor otherwise — the latter also covers the fused-QKV path, where the projections stay fp32).
+        Tensor<T> qEff = _queryWeightsHalf is not null ? _queryWeightsHalf.Cast<T>() : _queryWeights;
+        Tensor<T> kEff = _keyWeightsHalf is not null ? _keyWeightsHalf.Cast<T>() : _keyWeights;
+        Tensor<T> vEff = _valueWeightsHalf is not null ? _valueWeightsHalf.Cast<T>() : _valueWeights;
+
+        int qRows = qEff.Shape[0], qCols = qEff.Shape[1];
+        int kRows = kEff.Shape[0], kCols = kEff.Shape[1];
+        int vRows = vEff.Shape[0], vCols = vEff.Shape[1];
         int biasLen = _outputBias.Shape[0];
 
         int totalParams = qRows * qCols + kRows * kCols + vRows * vCols + biasLen;
@@ -1117,7 +1126,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         {
             for (int j = 0; j < qCols; j++)
             {
-                parameters[index++] = _queryWeights[i, j];
+                parameters[index++] = qEff[i, j];
             }
         }
 
@@ -1126,7 +1135,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         {
             for (int j = 0; j < kCols; j++)
             {
-                parameters[index++] = _keyWeights[i, j];
+                parameters[index++] = kEff[i, j];
             }
         }
 
@@ -1135,7 +1144,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         {
             for (int j = 0; j < vCols; j++)
             {
-                parameters[index++] = _valueWeights[i, j];
+                parameters[index++] = vEff[i, j];
             }
         }
 
@@ -1182,53 +1191,47 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         // Force lazy tensors to materialize so the shape reads below report the
         // real dimensions rather than 0.
         EnsureInitialized();
-        // Calculate total number of parameters using tensor shape
-        int qRows = _queryWeights.Shape[0], qCols = _queryWeights.Shape[1];
-        int kRows = _keyWeights.Shape[0], kCols = _keyWeights.Shape[1];
-        int vRows = _valueWeights.Shape[0], vCols = _valueWeights.Shape[1];
+
+        // fp16-resident (#1764): on the separate-projection resident path the fp32 _queryWeights/_keyWeights/
+        // _valueWeights are freed to [0,0] and the fp16 half masters are authoritative — writing into the
+        // fp32 tensors would be silently discarded on the next forward (which re-upcasts the STALE half),
+        // so a clone/deserialize keeps the resident master's old (e.g. random probe-init) values. Downcast
+        // straight into the half master when resident; write the fp32 tensor otherwise (which also covers
+        // the fused-QKV path, where the projections stay fp32). Dimensions come from whichever is live.
+        bool qResident = _queryWeightsHalf is not null;
+        bool kResident = _keyWeightsHalf is not null;
+        bool vResident = _valueWeightsHalf is not null;
+
+        int qRows, qCols, kRows, kCols, vRows, vCols;
+        (qRows, qCols) = qResident ? (_queryWeightsHalf!.Shape[0], _queryWeightsHalf!.Shape[1]) : (_queryWeights.Shape[0], _queryWeights.Shape[1]);
+        (kRows, kCols) = kResident ? (_keyWeightsHalf!.Shape[0], _keyWeightsHalf!.Shape[1]) : (_keyWeights.Shape[0], _keyWeights.Shape[1]);
+        (vRows, vCols) = vResident ? (_valueWeightsHalf!.Shape[0], _valueWeightsHalf!.Shape[1]) : (_valueWeights.Shape[0], _valueWeights.Shape[1]);
         int biasLen = _outputBias.Shape[0];
 
-        int totalParams = qRows * qCols + kRows * kCols + vRows * vCols + biasLen;
+        int qLen = qRows * qCols, kLen = kRows * kCols, vLen = vRows * vCols;
+        int totalParams = qLen + kLen + vLen + biasLen;
 
         if (parameters.Length != totalParams)
         {
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
 
-        int index = 0;
+        var span = parameters.AsSpan();
+        if (qResident) NumOps.ToHalfSpan(span.Slice(0, qLen), _queryWeightsHalf!.AsWritableSpan());
+        else span.Slice(0, qLen).CopyTo(_queryWeights.Data.Span);
 
-        // Set query weights
-        for (int i = 0; i < qRows; i++)
-        {
-            for (int j = 0; j < qCols; j++)
-            {
-                _queryWeights[i, j] = parameters[index++];
-            }
-        }
+        if (kResident) NumOps.ToHalfSpan(span.Slice(qLen, kLen), _keyWeightsHalf!.AsWritableSpan());
+        else span.Slice(qLen, kLen).CopyTo(_keyWeights.Data.Span);
 
-        // Set key weights
-        for (int i = 0; i < kRows; i++)
-        {
-            for (int j = 0; j < kCols; j++)
-            {
-                _keyWeights[i, j] = parameters[index++];
-            }
-        }
+        if (vResident) NumOps.ToHalfSpan(span.Slice(qLen + kLen, vLen), _valueWeightsHalf!.AsWritableSpan());
+        else span.Slice(qLen + kLen, vLen).CopyTo(_valueWeights.Data.Span);
 
-        // Set value weights
-        for (int i = 0; i < vRows; i++)
-        {
-            for (int j = 0; j < vCols; j++)
-            {
-                _valueWeights[i, j] = parameters[index++];
-            }
-        }
+        span.Slice(qLen + kLen + vLen, biasLen).CopyTo(_outputBias.Data.Span);
 
-        // Set output bias
-        for (int i = 0; i < biasLen; i++)
-        {
-            _outputBias[i] = parameters[index++];
-        }
+        // The cached fused-QKV weight was built from the OLD projection weights; force a rebuild so the
+        // fused path (when enabled) reflects the new values instead of a stale concatenation.
+        _fusedQkvBuilt = false;
+        _fusedQkvWeightsHalf = null;
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_queryWeights);
