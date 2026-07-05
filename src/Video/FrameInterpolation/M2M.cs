@@ -173,9 +173,11 @@ public class M2M<T> : FrameInterpolationBase<T>
         }
     }
 
-    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
+    // Identity: tape training runs the raw layer stack (no NormalizeFrames) and the sigmoid head
+    // emits [0,1] frames, so /255+*255 only on inference was a train/eval mismatch (MoreData).
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => rawFrames;
 
-    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => modelOutput;
 
     public override ModelMetadata<T> GetModelMetadata()
     {

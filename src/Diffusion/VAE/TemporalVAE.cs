@@ -301,8 +301,15 @@ public class TemporalVAE<T> : VAEModelBase<T>
             _decoderSpatialLayers.Add(allDecoderLayers[i]);
         }
 
-        // Temporal decoder layers (parallel processing path)
-        for (int level = _channelMultipliers.Length - 1; level >= 0; level--)
+        // Temporal decoder layers (parallel processing path).
+        // These run as one monolithic block (see ApplyTemporalLayers) on the post-quant output
+        // BEFORE the spatial decoder, so the LAST temporal block must emit `lastChannels`
+        // (_baseChannels * _channelMultipliers[^1]) to feed the spatial decoder's first residual
+        // block. Building low→high (ascending level) makes the block chain end at lastChannels —
+        // mirroring the encoder's temporal path. Building it high→low (descending) made the chain
+        // end at _baseChannels, so the spatial decoder's GroupNorm rejected the input with a
+        // "channels != expected" mismatch for any numTemporalLayers >= 1 (a hard decode crash).
+        for (int level = 0; level < _channelMultipliers.Length; level++)
         {
             var outChannels = _baseChannels * _channelMultipliers[level];
             for (int t = 0; t < _numTemporalLayers; t++)

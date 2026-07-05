@@ -111,7 +111,13 @@ public class VFIformer<T> : FrameInterpolationBase<T>
     {
         _options = options ?? new VFIformerOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Wire the paper's configured learning rate (VFIformerOptions.LearningRate = 2e-4,
+        // matching the paper's Adam setup) into the optimizer. Previously this constructed a
+        // bare AdamWOptimizer that used AdamW's 1e-3 default, ~5x too high for this deep
+        // encoder-decoder — training diverged (loss exploded) instead of decreasing.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate });
         SupportsArbitraryTimestep = true;
         InitializeLayers();
     }
@@ -147,10 +153,19 @@ public class VFIformer<T> : FrameInterpolationBase<T>
     }
 
     /// <inheritdoc/>
-    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
+    /// <remarks>
+    /// Identity pre/post-processing: the network operates directly in the caller's frame value
+    /// range and its sigmoid output head already produces normalized [0,1] frames. The base
+    /// NormalizeFrames(/255)/DenormalizeFrames(*255) pair must NOT be applied here — the tape-based
+    /// training path (ForwardForTraining) runs the raw layer stack WITHOUT them, so normalizing only
+    /// on the inference path made Predict see a /255-scaled input the model was never trained on and
+    /// emit a *255-scaled output, a train/eval mismatch that left the evaluation loss huge and
+    /// non-monotonic (MoreData_ShouldNotDegrade). Keeping both paths identity makes them consistent.
+    /// </remarks>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => rawFrames;
 
     /// <inheritdoc/>
-    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => modelOutput;
 
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -166,6 +181,16 @@ public class VFIformer<T> : FrameInterpolationBase<T>
             SetTrainingMode(false);
         }
     }
+
+    /// <summary>
+    /// Drives tape-based training with the model's configured optimizer (AdamW at the paper's
+    /// 2e-4 learning rate) instead of the base class's 1e-3 AdamOptimizer default. The base
+    /// <see cref="NeuralNetworks.NeuralNetworkBase{T}.TrainWithTape"/> otherwise auto-creates its
+    /// own optimizer, so <see cref="_optimizer"/> was never used for training and the deep
+    /// encoder-decoder diverged at the too-high default rate.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
 
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)

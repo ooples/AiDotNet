@@ -6,9 +6,9 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
-using AiDotNet.TextToSpeech.Interfaces;
 
 namespace AiDotNet.TextToSpeech.Classic;
 
@@ -42,7 +42,12 @@ namespace AiDotNet.TextToSpeech.Classic;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("AdaSpeech 2: Adaptive Text to Speech with Untranscribed Data", "https://arxiv.org/abs/2104.09715", Year = 2021, Authors = "Yan et al.")]
+[ResearchPaper(
+    "AdaSpeech 2: Adaptive Text to Speech with Untranscribed Data",
+    "https://arxiv.org/abs/2104.09715",
+    Year = 2021,
+    Authors = "Yan et al."
+)]
 public class AdaSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly AdaSpeech2Options _options;
@@ -57,7 +62,9 @@ public class AdaSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
     public AdaSpeech2(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        AdaSpeech2Options? options = null) : base(architecture)
+        AdaSpeech2Options? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new AdaSpeech2Options();
         _useNativeMode = false;
@@ -78,7 +85,9 @@ public class AdaSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
     public AdaSpeech2(
         NeuralNetworkArchitecture<T> architecture,
         AdaSpeech2Options? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new AdaSpeech2Options();
         _useNativeMode = true;
@@ -149,7 +158,8 @@ public class AdaSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
@@ -157,10 +167,17 @@ public class AdaSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
         }
         else
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultAcousticModelLayers(
-                _options.EncoderDim, _options.DecoderDim, _options.HiddenDim,
-                _options.NumEncoderLayers, _options.NumDecoderLayers,
-                _options.NumHeads, _options.DropoutRate));
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultAcousticModelLayers(
+                    _options.EncoderDim,
+                    _options.DecoderDim,
+                    _options.HiddenDim,
+                    _options.NumEncoderLayers,
+                    _options.NumDecoderLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate
+                )
+            );
             ComputeEncoderDecoderBoundary();
         }
     }
@@ -190,7 +207,8 @@ public class AdaSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        SetTrainingMode(false); var c = input;
+        SetTrainingMode(false);
+        var c = input;
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
@@ -203,7 +221,7 @@ public class AdaSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
         SetTrainingMode(true);
         try
         {
-        TrainWithTape(input, expected);
+            TrainWithTape(input, expected);
         }
         finally
         {
@@ -231,7 +249,7 @@ public class AdaSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
             Name = _useNativeMode ? "AdaSpeech2-Native" : "AdaSpeech2-ONNX",
             Description = "AdaSpeech 2: Adaptive TTS with Untranscribed Data (Yan et al., 2021)",
             FeatureCount = _options.HiddenDim,
-            Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers
+            Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers,
         };
         m.AdditionalInfo["Architecture"] = "AdaSpeech2";
         return m;
@@ -284,7 +302,8 @@ public class AdaSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
 
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         base.Dispose(disposing);
     }

@@ -39,8 +39,7 @@ public abstract class VocoderBase<T> : TtsModelBase<T>, IVocoder<T>
     /// <param name="lossFunction">Optional loss function override.</param>
     protected VocoderBase(
         NeuralNetworkArchitecture<T> architecture,
-        ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction)
-    {
-    }
+        ILossFunction<T>? lossFunction = null
+    )
+        : base(architecture, lossFunction) { }
 }

@@ -48,8 +48,7 @@ public abstract class AcousticModelBase<T> : TtsModelBase<T>, IAcousticModel<T>
     /// <param name="lossFunction">Optional loss function override.</param>
     protected AcousticModelBase(
         NeuralNetworkArchitecture<T> architecture,
-        ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction)
-    {
-    }
+        ILossFunction<T>? lossFunction = null
+    )
+        : base(architecture, lossFunction) { }
 }

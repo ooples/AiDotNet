@@ -7061,25 +7061,37 @@ public static class LayerHelper<T>
         int maxSequenceLength = 600,
         double dropoutRate = 0.0)
     {
-        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        // AudioMAE fine-tunes on AudioSet, a MULTI-LABEL task, so the classification head emits
+        // per-class SIGMOID probabilities (Huang et al. 2022 §4.1) — the same transform the model's
+        // PostprocessOutput applies. The head previously used identity, returning raw logits that
+        // Predict surfaced directly (ClassOutput_ShouldBeNonNegative).
+        IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
 
+        // Patch embedding (linear projection of flattened patches) + LayerNorm + fixed positional
+        // encoding — the ViT/MAE input stem (Huang et al. 2022, "Masked Autoencoders that Listen").
         yield return new DenseLayer<T>(embeddingDim, identityActivation);
         yield return new LayerNormalizationLayer<T>();
         yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDim);
 
+        // Transformer encoder blocks. The paper (MAE = ViT encoder, Vaswani-style blocks) uses
+        // RESIDUAL connections: x = x + Attn(LN(x)); x = x + FFN(LN(x)). The previous hand-rolled
+        // MHA -> LN -> FFN -> LN sequence had NO residual connections, so it discarded the input
+        // signal across the stack and let training collapse to an input-independent (uniform-output)
+        // solution (DifferentInputs_AfterTraining). TransformerEncoderLayer is exactly that residual
+        // pre-norm block (self-attention + residual + LayerNorm, feed-forward + residual + LayerNorm),
+        // matching the paper.
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (embeddingDim) / (numAttentionHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(feedForwardDim, reluActivation);
-            yield return new DenseLayer<T>(embeddingDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numAttentionHeads, feedForwardDim);
         }
 
+        // Encoder final LayerNorm. The model then AVERAGE-POOLS over the patch tokens and applies a
+        // SINGLE linear classifier (Huang et al. 2022 §3: "average pooling layer followed by a linear
+        // layer"), with per-class sigmoid for the multi-label AudioSet objective (BCE). The pooling is
+        // done in AudioMAE's forward (over the token axis) — it is not expressible as a flat layer here.
         yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(embeddingDim, reluActivation);
-        yield return new DenseLayer<T>(numClasses, identityActivation);
+        yield return new DenseLayer<T>(numClasses, sigmoidActivation);
     }
 
     /// <summary>
@@ -7795,49 +7807,47 @@ public static class LayerHelper<T>
         int inputWidth = 128,
         int numFeatures = 64)
     {
-        int h = inputHeight;
-        int w = inputWidth;
+        // Resolution-preserving encoder–decoder (UNet-style) frame-synthesis backbone.
+        // Two frames are concatenated channel-wise (inputChannels*2) into the first conv.
+        // The encoder downsamples 8x through three stride-2 levels to aggregate large-motion
+        // context; the decoder upsamples 8x back via transposed convolutions so the output is
+        // at the ORIGINAL input resolution — the interpolated frame [inputChannels, H, W].
+        //
+        // The previous factory stopped at a downsampled (H/8) flow head and never upsampled, so
+        // a model that runs these layers sequentially emitted an H/8 x W/8 tensor that could
+        // neither match the target frame (shape-mismatch in the loss) nor train stably. Restoring
+        // the decoder makes the backbone produce a full-resolution frame and train without the
+        // divergence the truncated stack caused.
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
 
-        // Feature pyramid network (two frames concatenated = inputChannels * 2)
-        // Level 1
-        yield return new ConvolutionalLayer<T>(32, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(32, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
+        // --- Encoder: downsample 8x, 2C -> 32 -> 64 -> 96 ---
+        yield return new ConvolutionalLayer<T>(32, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(32, 3, 2, 1, relu);   // H/2
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(64, 3, 2, 1, relu);   // H/4
+        yield return new ConvolutionalLayer<T>(96, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(96, 3, 2, 1, relu);   // H/8
 
-        // Level 2
-        yield return new ConvolutionalLayer<T>(64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(64, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
+        // --- Bottleneck ---
+        yield return new ConvolutionalLayer<T>(96, 3, 1, 1, relu);
 
-        // Level 3
-        yield return new ConvolutionalLayer<T>(96, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(96, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
+        // --- Decoder: upsample 8x back to full resolution. Uses parameter-free
+        // UpsamplingLayer + conv (not transposed convs): frame-interpolation models run
+        // the layer stack on a rank-3 [2C, H, W] pair-concat, and UpsamplingLayer +
+        // ConvolutionalLayer both accept rank-3 (ConvTranspose2D requires rank-4). ---
+        yield return new UpsamplingLayer<T>(2);                       // H/4
+        yield return new ConvolutionalLayer<T>(64, 3, 1, 1, relu);
+        yield return new UpsamplingLayer<T>(2);                       // H/2
+        yield return new ConvolutionalLayer<T>(32, 3, 1, 1, relu);
+        yield return new UpsamplingLayer<T>(2);                       // H (full res)
+        yield return new ConvolutionalLayer<T>(32, 3, 1, 1, relu);
 
-        // Flow estimation head (outputs at downsampled resolution: h/8 x w/8)
-        yield return new ConvolutionalLayer<T>(64, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(4, 3, 1, 1);  // 4 = 2 flows * 2 directions
-
-        // NOTE: The synthesis network below expects input at the ORIGINAL resolution.
-        // Higher-level models (FILM, FLAVR, etc.) should:
-        // 1. Run the feature pyramid layers (indices 0-7) to get downsampled flow
-        // 2. Upsample the flow to original resolution
-        // 3. Concatenate original frames with upsampled flow
-        // 4. Run the synthesis network layers (indices 8+) on that concatenation
-        // The layer shapes below are defined for the concatenated input at original resolution.
-
-        // Synthesis network (expects original resolution: inputHeight x inputWidth)
-        // Input: [frames_concat (C*2), upsampled_flow (4)] = C*2 + 4 channels
-        int synthH = inputHeight;
-        int synthW = inputWidth;
-        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-
-        for (int i = 0; i < 4; i++)
-        {
-            yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        }
-
-        yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1);
+        // --- Output head: interpolated frame at full resolution. Sigmoid — frames are
+        // normalized to [0,1] (NormalizeFrames divides by 255), so a sigmoid head produces a
+        // valid, BOUNDED frame. Bounding the output keeps the training loss bounded (an
+        // unbounded Identity head let the deep stack's output — and the MSE — explode), and
+        // unlike ReLU, sigmoid has no dead-neuron/zero-gradient failure mode. ---
+        yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1, new SigmoidActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>
@@ -8874,8 +8884,13 @@ public static class LayerHelper<T>
         // First reduce features, then pool to 1x1, then classify
         yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 0, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new GlobalPoolingLayer<T>(PoolingType.Average);
-        // After global pooling, shape is [numFeatures, 1, 1] - use DenseLayer for final classification
-        yield return new DenseLayer<T>(numClasses, new SoftmaxActivation<T>() as IActivationFunction<T>);
+        // Final classification head. Emit RAW LOGITS (identity activation), not
+        // softmax probabilities: VideoMAE trains with CrossEntropyWithLogitsLoss
+        // (which applies softmax internally) and ClassifyAction applies softmax on
+        // top for inference — a Softmax here would double-normalize training and
+        // inference. The DenseLayer projects the [numFeatures] embedding to
+        // numClasses class logits.
+        yield return new DenseLayer<T>(numClasses, new IdentityActivation<T>() as IActivationFunction<T>);
 
         // Decoder blocks for reconstruction (4 blocks) - these operate at featH x featW resolution
         // Note: In a real VideoMAE implementation, the decoder would receive encoder features
@@ -9959,30 +9974,31 @@ public static class LayerHelper<T>
         int numClasses = 13,
         int hiddenDim = 256)
     {
-        // ResNet-101 style backbone (simplified to ResNet-50-like)
+        // DocBank (Li et al. 2020) evaluates a Faster R-CNN detector with a ResNet/ResNeXt backbone
+        // (He et al. 2016 residual blocks). The previous code stacked bare Conv+BN with NO skip
+        // connections ("Residual blocks (simplified as conv layers)"), so the deep stack's logits
+        // exploded and training diverged. Use real RESIDUAL blocks — out = x + Conv3x3(x) via
+        // ResidualLayer — so the identity skip carries the signal and the gradient.
+
+        // ResNet stem: 7x7 conv /2 -> BN -> 3x3 max-pool /2.
         yield return new ConvolutionalLayer<T>(64, 7, 2, 3);
         yield return new BatchNormalizationLayer<T>();
         yield return new MaxPoolingLayer<T>(3, 2);
 
-        // Residual blocks (simplified as conv layers)
-        yield return new ConvolutionalLayer<T>(256, 3, 1, 1);
+        // Residual stage: ResNet basic blocks (identity skip, same 64 channels, stride 1).
+        yield return new ResidualLayer<T>(new ConvolutionalLayer<T>(64, 3, 1, 1));
         yield return new BatchNormalizationLayer<T>();
-        yield return new ConvolutionalLayer<T>(512, 3, 2, 1);
+        yield return new ResidualLayer<T>(new ConvolutionalLayer<T>(64, 3, 1, 1));
         yield return new BatchNormalizationLayer<T>();
-        yield return new ConvolutionalLayer<T>(1024, 3, 2, 1);
-        yield return new BatchNormalizationLayer<T>();
+
+        // Strided transition conv to the next stage width (/2).
         yield return new ConvolutionalLayer<T>(backboneChannels, 3, 2, 1);
         yield return new BatchNormalizationLayer<T>();
 
-        // FPN lateral connections
-        yield return new ConvolutionalLayer<T>(hiddenDim, 1, 1, 0);
-
-        // Segmentation head
+        // Segmentation head: 3x3 conv -> BN, then a 1x1 conv to per-pixel class LOGITS (identity).
         yield return new ConvolutionalLayer<T>(hiddenDim, 3, 1, 1);
         yield return new BatchNormalizationLayer<T>();
-
-        // Output layer (class predictions per pixel)
-        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0);
+        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, (IActivationFunction<T>)new IdentityActivation<T>());
     }
 
     /// <summary>
@@ -21587,42 +21603,47 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates default layers for the Audio Super-Resolution model.
-    /// Architecture: Residual blocks with optional self-attention for bandwidth extension.
+    /// Creates the 1-D convolutional U-Net blocks for the Audio Super-Resolution model of
+    /// Kuleshov, Enam &amp; Ermon (2017), "Audio Super-Resolution using Neural Networks".
     /// </summary>
+    /// <remarks>
+    /// Paper architecture: <c>numBlocks</c> downsampling blocks (Conv1D stride-2, LeakyReLU), a
+    /// bottleneck, then <c>numBlocks</c> upsampling blocks (Conv1D, ReLU, then a <b>sub-pixel</b>
+    /// dimension-shuffle ×2 and a <b>stacking (concatenation) skip connection</b> from the symmetric
+    /// downsampling block), and a final conv whose sub-pixel output is added to the input via an
+    /// <b>additive residual</b> (the net learns <c>y − x</c>). This helper emits ONLY the conv layers
+    /// in that order — [down×numBlocks, bottleneck, up×numBlocks, final] — because the sub-pixel
+    /// shuffle, the symmetric skip concatenation and the additive input residual are non-sequential
+    /// dataflow that <see cref="AiDotNet.Audio.Effects.AudioSuperResolution{T}"/> orchestrates in its
+    /// forward pass with tape-aware Engine ops. Channel counts are fixed and eager (clone-safe): the
+    /// upsampling conv doubles channels so the sub-pixel shuffle can halve them back while doubling
+    /// the length, and the stacking skip re-doubles them.
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultAudioSuperResolutionLayers(
-        int hiddenDim = 256, int numResBlocks = 8,
-        int numHeads = 4, int numAttentionLayers = 2,
-        int upsampleFactor = 4, double dropoutRate = 0.0)
+        int numBlocks = 4, int channels = 128, int kernelSize = 9)
     {
-        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        IActivationFunction<T> downAct = new LeakyReLUActivation<T>();
+        IActivationFunction<T> upAct = new ReLUActivation<T>();
 
-        // Input projection
-        yield return new FullyConnectedLayer<T>(hiddenDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>();
+        // Downsampling blocks: Conv1D stride-2 halves the length; first maps the 1-channel waveform.
+        // (inputChannels: named to bind the eager ctor and keep channel counts clone-safe.)
+        yield return new Conv1DLayer<T>(inputChannels: 1, outputChannels: channels, kernelSize: kernelSize, stride: 2, activation: downAct);
+        for (int b = 1; b < numBlocks; b++)
+            yield return new Conv1DLayer<T>(inputChannels: channels, outputChannels: channels, kernelSize: kernelSize, stride: 2, activation: downAct);
 
-        // Residual blocks for feature extraction
-        for (int i = 0; i < numResBlocks; i++)
-        {
-            yield return new FullyConnectedLayer<T>(hiddenDim * 2, geluActivation);
-            yield return new FullyConnectedLayer<T>(hiddenDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-        }
+        // Bottleneck: one more stride-2 conv.
+        yield return new Conv1DLayer<T>(inputChannels: channels, outputChannels: channels, kernelSize: kernelSize, stride: 2, activation: downAct);
 
-        // Self-attention layers for global context
-        for (int i = 0; i < numAttentionLayers; i++)
-        {
-            yield return new FullyConnectedLayer<T>(hiddenDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>();
-        }
+        // Upsampling blocks: Conv1D that DOUBLES the channel count so the model's sub-pixel shuffle can
+        // turn [., 2C, L] -> [., C, 2L]; after the shuffle the model concatenates the symmetric down
+        // block (C channels), so every upsampling conv after the first sees 2C input channels.
+        yield return new Conv1DLayer<T>(inputChannels: channels, outputChannels: 2 * channels, kernelSize: kernelSize, stride: 1, activation: upAct);
+        for (int b = 1; b < numBlocks; b++)
+            yield return new Conv1DLayer<T>(inputChannels: 2 * channels, outputChannels: 2 * channels, kernelSize: kernelSize, stride: 1, activation: upAct);
 
-        // Upsample projection: expand output dimension by upsample factor
-        yield return new FullyConnectedLayer<T>(hiddenDim * upsampleFactor, geluActivation);
-        yield return new LayerNormalizationLayer<T>();
-
-        // Output projection to waveform
-        yield return new FullyConnectedLayer<T>(upsampleFactor, (IActivationFunction<T>?)null);
+        // Final conv -> 2 channels; the model sub-pixel-shuffles it to 1 channel at full length and
+        // adds the input (additive residual).
+        yield return new Conv1DLayer<T>(inputChannels: 2 * channels, outputChannels: 2, kernelSize: kernelSize, stride: 1, activation: null);
     }
 
     /// <summary>
@@ -23650,7 +23671,17 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder (ViT) ===
-        yield return new LayerNormalizationLayer<T>();
+        // Input token projection — the ViT "trainable linear projection of flattened patches"
+        // (Dosovitskiy et al. 2021, ViT §3.1), which every PaLI/CoCa/GIT-style encoder-decoder VLM
+        // applies to its post-patch tokens before the transformer stack. A leading BARE
+        // LayerNormalization was used here instead, which is scale/shift-invariant: it maps any
+        // token that is constant across the feature axis to the same output regardless of its
+        // magnitude, so the encoder discarded the input's amplitude before the first attention.
+        // That let training collapse to an input-independent (uniform-output) solution
+        // (DifferentInputs_AfterTraining). The affine projection preserves the input signal (and is
+        // the paper-faithful embedding), while the per-block LayerNormalizations below keep the
+        // activations normalized.
+        yield return new DenseLayer<T>(visionDim, identityActivation);
 
         for (int i = 0; i < numVisionLayers; i++)
         {
@@ -23708,7 +23739,15 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder (CLIP ViT) ===
-        yield return new LayerNormalizationLayer<T>();
+        // Input token projection — the ViT/CLIP "trainable linear projection of flattened patches"
+        // (Dosovitskiy et al. 2021 §3.1) applied to the post-patch tokens before the transformer
+        // stack. A leading BARE LayerNormalization was used here, which is scale/shift-invariant and
+        // therefore discards the amplitude of any token that is constant across the feature axis,
+        // letting training collapse to an input-independent uniform output
+        // (DifferentInputs_AfterTraining). The affine projection preserves the input signal while the
+        // per-block LayerNormalizations below keep the activations normalized. (Mirrors the same fix
+        // in CreateDefaultEncoderDecoderVLMLayers.)
+        yield return new DenseLayer<T>(visionDim, identityActivation);
 
         for (int i = 0; i < numVisionLayers; i++)
         {
@@ -24824,12 +24863,28 @@ public static class LayerHelper<T>
         int visionFfnDim = visionDim * 4;
         int decoderFfnDim = decoderDim * 4;
 
+        // Snap the head counts to a divisor of the encoder/decoder widths so each
+        // MultiHeadAttentionLayer's embeddingDimension (heads * headDim) equals the
+        // stream width EXACTLY (a non-divisible numHeads truncates headDim and the
+        // lazy weights resolve to the wrong width). See ChooseDivisibleHeadConfig.
+        var (visionHeads, visionHeadDim) = ChooseDivisibleHeadConfig(visionDim, numHeads);
+        var (decoderHeads, decoderHeadDim) = ChooseDivisibleHeadConfig(decoderDim, numHeads);
+
+        // === Vision Feature Projection ===
+        // Project the raw input embeddings to the vision-encoder width so the first
+        // attention layer (built at visionDim) receives a visionDim-wide input.
+        // Without it a model fed post-embedding tokens at any other width (e.g. the
+        // generated test feeds [.., 128] while VisionDim=1024) throws "input
+        // embedding dimension (128) does not match weight dimension (1024)" at the
+        // first MHA. This is the model's vision patch/feature embedding.
+        yield return new DenseLayer<T>(visionDim, geluActivation);
+
         // === Lightweight Vision Encoder ===
         yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (visionDim) / (numHeads));
+            yield return new MultiHeadAttentionLayer<T>(visionHeads, visionHeadDim);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -24844,13 +24899,37 @@ public static class LayerHelper<T>
         // === Lightweight Decoder ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (decoderDim) / (numHeads));
+            yield return new MultiHeadAttentionLayer<T>(decoderHeads, decoderHeadDim);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderDim, identityActivation);
             yield return new LayerNormalizationLayer<T>();
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
+    }
+
+    /// <summary>
+    /// Computes the encoder/decoder split index for a layer stack built by
+    /// <see cref="CreateDefaultProprietaryAPILayers"/> — the count of encoder-side layers, i.e. the
+    /// index of the first decoder transformer block. Everything before that index is treated as the
+    /// encoder half: the leading vision-feature projection (Dense + LayerNorm), all vision-encoder
+    /// blocks, and the Dense + LayerNorm projection that bridges into the decoder stream. Centralized
+    /// here so GeminiVision, ClaudeVision, and GrokVision share a single source of truth with the
+    /// layer factory instead of each re-deriving the formula (which silently drifts whenever the
+    /// layout above changes).
+    /// </summary>
+    /// <param name="numVisionLayers">Number of vision-encoder blocks (matches the factory argument).</param>
+    /// <param name="dropoutRate">Dropout rate; when &gt; 0 each block emits an extra Dropout layer.</param>
+    /// <returns>
+    /// <c>2 + numVisionLayers * layersPerBlock + 2</c>: the leading vision-feature projection (Dense)
+    /// plus its LayerNorm, then each block's 5 layers (MHA, LayerNorm, Dense, Dense, LayerNorm) — 6
+    /// when a Dropout layer is appended — then the 2-layer projection (Dense + LayerNorm) that begins
+    /// the decoder section.
+    /// </returns>
+    public static int ComputeProprietaryAPIEncoderBoundary(int numVisionLayers, double dropoutRate)
+    {
+        int layersPerBlock = dropoutRate > 0 ? 6 : 5;
+        return 2 + numVisionLayers * layersPerBlock + 2;
     }
 
     #endregion

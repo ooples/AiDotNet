@@ -298,6 +298,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // lane. (A separate fidelity follow-up tracks wiring the paper's masked inter/intra-frame
         // attention, which the default factory does not yet build.)
         "MIAVSR",
+        // ParaformerLarge: foundation-scale CIF ASR (Alibaba 2023). Its default
+        // ParaformerLargeOptions build a genuinely huge stack — a warm-up forward reports
+        // ~661M trainable parameters (GetParameters().Length = 661,219,029; ~2.6 GB as float),
+        // with a large-vocab CTC/CIF head. A 100-iteration LossStrictlyDecreasesOnMemorizationTask
+        // (and the 10-iter DifferentInputs/Clone/Training/MoreData tests) cannot complete inside the
+        // 120-180s per-test budget on a CPU runner — verified locally: every training test times out
+        // at 120000/180000 ms before finishing. At that scale the auto-selected BF16 8-bit optimizer
+        // path also surfaces a separate "Source array was not long enough" error in CI (tracked as a
+        // follow-up issue; not reproducible locally because training times out first). Runs in the
+        // nightly heavy lane, matching the other foundation-scale models here.
+        "ParaformerLarge",
     };
 
     private static readonly System.Collections.Generic.HashSet<string> Fp32TestClassNames =
@@ -1906,7 +1917,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// shape-mismatch this contract prevents.
     /// </summary>
     private static bool IsTokenConsumingVisionLanguageModel(string className)
-        => className is "GPT4Point" or "Helix" or "Octo" or "SigLIP2" or "ViLT" or "Florence2" or "KOSMOS1" or "KOSMOS2";
+        => className is "GPT4Point" or "Helix" or "Octo" or "SigLIP2" or "ViLT" or "Florence2" or "KOSMOS1" or "KOSMOS2"
+            // Encoder-decoder VLM family (AiDotNet.VisionLanguage.Generative.*) built from
+            // CreateDefaultEncoderDecoderVLMLayers: a ViT encoder (LayerNormalization + vision
+            // MultiHeadAttention(VisionDim) blocks) -> projection -> autoregressive decoder. Like
+            // the models above, this stack begins with a vision attention over VisionDim and so
+            // consumes post-patch-embedding token tensors [batch, num_tokens, VisionDim] — never
+            // raw [3, spatial, spatial] pixels. See the matching constructor branch in
+            // EmitGeneratedTestClass (built at CI-smoke VisionDim=128) and GetTokenConsumingVlmVisionDim.
+            or "PaLIX" or "PaLI" or "PaLI3" or "CoCa" or "GIT"
+            // Perceiver-resampler VLM family (AiDotNet.VisionLanguage.Generative.*) built from
+            // CreateDefaultPerceiverResamplerLayers: a CLIP-ViT encoder (LayerNormalization + vision
+            // MultiHeadAttention(VisionDim) blocks) -> perceiver resampler -> gated cross-attention
+            // decoder. Same leading vision-attention-over-VisionDim contract, so also token-consuming.
+            or "OpenFlamingo" or "IDEFICS" or "IDEFICS2" or "IDEFICS3"
+            // Instruction-tuned perceiver/abstractor VLMs (AiDotNet.VisionLanguage.InstructionTuned.*)
+            // built from the same CreateDefaultPerceiverResamplerLayers stack (mPLUG-Owl's visual
+            // abstractor / Qwen-VL's resampler). Same token-consuming contract.
+            or "MPLUGOwl" or "MPLUGOwl2" or "MPLUGOwl3"
+            or "QwenVL" or "Qwen2VL" or "Qwen25VL" or "Qwen3VL"
+            // MedFlamingo (Moor et al. 2023, AiDotNet.VisionLanguage.Medical) — same perceiver stack.
+            or "MedFlamingo";
 
     /// <summary>
     /// The post-patch-embedding vision_dim for a <see cref="IsTokenConsumingVisionLanguageModel"/>
@@ -1920,6 +1951,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "Helix" => 1024,
             "Octo" => 384,
             "KOSMOS1" or "KOSMOS2" => 1024, // KOSMOS1Options / KOSMOS2Options VisionDim
+            // Encoder-decoder VLMs (PaLI/PaLI-X/PaLI-3/CoCa/GIT) are built at CI-smoke width
+            // VisionDim=128 (their paper defaults are 768-4096, PaLI-X = 55B params, OOM on
+            // construction). Keep the [1,4,128] token InputShape in lockstep with that config.
+            "PaLIX" or "PaLI" or "PaLI3" or "CoCa" or "GIT" => 128,
+            // Perceiver-resampler VLMs built at CI-smoke VisionDim=128 (see the perceiver constructor
+            // branch in EmitGeneratedTestClass); their [1,4,128] token InputShape matches that width.
+            "OpenFlamingo" or "IDEFICS" or "IDEFICS2" or "IDEFICS3" => 128,
+            "MPLUGOwl" or "MPLUGOwl2" or "MPLUGOwl3"
+                or "QwenVL" or "Qwen2VL" or "Qwen25VL" or "Qwen3VL" => 128,
+            "MedFlamingo" => 128,
             _ => 768, // SigLIP2, ViLT, Florence2
         };
 
@@ -2019,6 +2060,259 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "CodecFrameRate = 75, TextEncoderDim = 32, LLMDim = 32, NumEncoderLayers = 1, " +
                     "NumLLMLayers = 1, NumHeads = 4, VocabSize = 64, MaxTextLength = 8, " +
                     "DropoutRate = 0.0, LearningRate = 1e-3, WeightDecay = 0.0 })";
+            }
+            else if (model.ClassName == "CSM" && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
+            {
+                // CSM (Sesame Conversational Speech Model) is a neural codec language model: text/codec
+                // tokens -> transformer LM -> codec logits whose width is NumCodebooks x CodebookSize.
+                // Its paper defaults (LLMDim=2048, 24 LLM layers, 32 codebooks x 2048 = a 65536-way
+                // output head) allocate multiple GB and threw OutOfMemoryException on construction for
+                // every generated invariant. Build the identical codec-LM architecture (text encoder ->
+                // LLM transformer stack -> per-codebook logits) at CI-smoke scale, mirroring the VALL-E
+                // codec-LM reduction above (1 codebook x 16 = 16-way head, 32-wide, 1 encoder + 1 LLM
+                // layer, 4 heads).
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
+                    "inputSize: 4, outputSize: 16), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.CSMOptions { SampleRate = 24000, NumCodebooks = 1, " +
+                    "CodebookSize = 16, TextEncoderDim = 32, LLMDim = 32, NumEncoderLayers = 1, " +
+                    "NumLLMLayers = 1, NumHeads = 4, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "TimeMoE" && model.TypeParameterCount == 1)
+            {
+                // Time-MoE (Shi et al. 2024, ICLR 2025) defaults to a 113M-param
+                // foundation config (ContextLength=2048, HiddenDimension=1024,
+                // NumLayers=24, IntermediateSize=4096, NumExperts=8). At that
+                // scale the model crosses the weight-streaming threshold, and the
+                // per-Predict TensorArena reclaims the lazily-materialized Dense
+                // weight backing between calls: the SECOND Predict re-enters the
+                // lazy resize with an evicted [0, *] weight and throws
+                // ArgumentOutOfRange ('index') inside EnsureWeightShapeForInput.
+                // Every training/forward invariant also ran 15-35 s each. Build the
+                // SAME MoE architecture (patch embed -> N MoE transformer blocks ->
+                // flatten -> forecast head) at CI-smoke scale so the FULL invariants
+                // run without streaming, mirroring the TimeSformer / DualXVSR /
+                // Griffin paper-scale-to-smoke reductions. ContextLength=64 and
+                // ForecastHorizon=16 stay in lockstep with the InputShape (64) and
+                // OutputShape (16) emitted for TimeMoE by the forecasting family.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 64, outputSize: 16), " +
+                    "new AiDotNet.Models.Options.TimeMoEOptions<double> { " +
+                    "ContextLength = 64, ForecastHorizon = 16, PatchLength = 16, " +
+                    "HiddenDimension = 32, NumLayers = 2, NumHeads = 2, IntermediateSize = 64, " +
+                    "NumExperts = 2, NumActiveExperts = 1, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "VideoMAE" && model.TypeParameterCount == 1)
+            {
+                // VideoMAE (Tong et al. 2022) defaults to ViT-Base scale
+                // (numFeatures=768, 12 encoder blocks, numClasses=400) ≈ 65M
+                // params. On the tiny 4-frame 32x32 smoke clip that both crosses
+                // the weight-streaming threshold and buries the input signal under
+                // a 768-wide, 12-deep conv stack, so the network trains slowly and
+                // its output barely moves with the input. Build the SAME
+                // tubelet-embed -> residual encoder -> pooled classification head
+                // at CI-smoke width/depth (mirrors the TimeSformer special-case),
+                // keeping numFrames in lockstep with the temporal-video InputShape
+                // ([4, 3, 32, 32]) and numClasses with OutputShape ([4]).
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputFrames: 4, inputDepth: 3, inputHeight: 32, inputWidth: 32, outputSize: 4), " +
+                    "numClasses: 4, numFrames: 4, numFeatures: 32)";
+            }
+            else if (model.ClassName == "WorldModelsAgent" && model.TypeParameterCount == 1)
+            {
+                // WorldModels (Ha & Schmidhuber 2018) defaults to a 64x64x3 =
+                // 12,288-wide image observation (VAE -> MDN-RNN -> controller).
+                // The generic RL invariant base (ReinforcementLearningTestBase)
+                // feeds StateDim (=4) observations plus a StateDim-wide supervised
+                // target, and its Train(state,target) helper decodes that target
+                // into a one-hot action of length StateDim. So the parameterless
+                // agent (obs=12,288, ActionSize=2) rejects every transition at the
+                // StoreExperience input guard ("Observation length must be 12288,
+                // got 4" / "Action length must be 2, got 4"). Instantiate the agent
+                // with a flattened observation whose size equals StateDim and an
+                // ActionSize equal to StateDim so the transition is accepted. The
+                // dense VAE (flattened observation -> DenseLayer stack) imposes no
+                // spatial minimum, so a 4x1x1 observation is legal. BatchSize=1 lets
+                // the single stored transition trigger a real VAE+RNN update, so
+                // Training_ShouldChangeParameters observes moved weights.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.Models.Options.WorldModelsOptions<double> {{ " +
+                    "ObservationWidth = 4, ObservationHeight = 1, ObservationChannels = 1, " +
+                    "ActionSize = 4, LatentSize = 4, RNNHiddenSize = 8, BatchSize = 1, " +
+                    "VAEEncoderChannels = new System.Collections.Generic.List<int> { 8 }, " +
+                    "ControllerLayers = new System.Collections.Generic.List<int> { 8 } })";
+            }
+            else if ((model.ClassName is "PaLIX" or "PaLI" or "PaLI3" or "CoCa" or "GIT")
+                     && model.TypeParameterCount == 1
+                     // typeName is already global::-stripped (StripGenericSuffix); FullyQualifiedName
+                     // is emitted with the global:: prefix, so match on typeName here.
+                     && typeName.StartsWith(
+                         "AiDotNet.VisionLanguage.Generative.", System.StringComparison.Ordinal))
+            {
+                // PaLI (Chen et al. 2022), PaLI-X (Chen et al. 2023), PaLI-3 (Chen et al. 2023),
+                // CoCa (Yu et al. 2022) and GIT (Wang et al. 2022) build their native layer stack
+                // from CreateDefaultEncoderDecoderVLMLayers: a ViT encoder (LayerNormalization +
+                // vision MultiHeadAttention(VisionDim) blocks) -> linear projection -> an
+                // autoregressive decoder (causal self-attention + cross-attention + FFN blocks).
+                // Their production defaults are paper-scale — PaLI-X is 4096-wide with 48 vision +
+                // 32 decoder layers (55B params) and OOMs the CI runner on construction alone. Build
+                // the identical encoder-decoder architecture family at CI-smoke width and depth:
+                // VisionDim == DecoderDim == 128 so the helper's vision->decoder projection collapses
+                // to identity and the first vision attention matches the [1, 4, 128] post-patch token
+                // InputShape (IsTokenConsumingVisionLanguageModel / GetTokenConsumingVlmVisionDim);
+                // 2 vision + 2 decoder blocks; 4 heads -> 32-d head; dropout 0 for a deterministic
+                // Clone. The paper architecture PATTERN is preserved — only width/depth are reduced.
+                string vlmOptionsType = $"AiDotNet.VisionLanguage.Generative.{model.ClassName}Options";
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 128, outputSize: 4), " +
+                    $"new {vlmOptionsType} {{ VisionDim = 128, DecoderDim = 128, " +
+                    // Plain (non-interpolated) string: a single literal '}' closes the object
+                    // initializer, then ')' closes the model constructor. (Only the interpolated
+                    // fragment above needs the doubled '{{' to emit one literal '{'.)
+                    "NumVisionLayers = 2, NumDecoderLayers = 2, NumHeads = 4, DropoutRate = 0.0 })";
+            }
+            else if ((model.ClassName is "OpenFlamingo" or "IDEFICS" or "IDEFICS2" or "IDEFICS3")
+                     && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.VisionLanguage.Generative.", System.StringComparison.Ordinal))
+            {
+                // OpenFlamingo (Awadalla et al. 2023), IDEFICS / IDEFICS2 / IDEFICS3 (Laurençon et al.
+                // 2023-2024) build their native stack from CreateDefaultPerceiverResamplerLayers: a
+                // CLIP-ViT encoder (LayerNormalization + vision MultiHeadAttention(VisionDim) blocks) ->
+                // perceiver resampler (NumLatents latent queries cross-attending to vision tokens) ->
+                // gated cross-attention LLM decoder. Their production defaults are paper-scale
+                // (VisionDim 1024, DecoderDim 4096, 24 vision + 32 decoder layers) and OOM the CI runner
+                // on construction. Build the identical perceiver architecture family at CI-smoke width
+                // and depth: VisionDim == PerceiverDim == DecoderDim == 128 so the helper's projections
+                // collapse to identity and the first vision attention matches the [1, 4, 128] token
+                // InputShape; NumLatents == 4 so the resampler emits the [1, 4, 128] the token-consuming
+                // OutputShape expects; 2 vision + 1 perceiver + 2 decoder blocks; 4 heads -> 32-d head;
+                // dropout 0 for a deterministic Clone. Paper architecture PATTERN preserved.
+                string vlmOptionsType = $"AiDotNet.VisionLanguage.Generative.{model.ClassName}Options";
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 128, outputSize: 4), " +
+                    $"new {vlmOptionsType} {{ VisionDim = 128, PerceiverDim = 128, DecoderDim = 128, " +
+                    // Plain string: single literal '}' closes the initializer, ')' closes the ctor.
+                    "NumVisionLayers = 2, NumPerceiverLayers = 1, NumDecoderLayers = 2, " +
+                    "NumLatents = 4, NumHeads = 4, NumPerceiverHeads = 4, DropoutRate = 0.0 })";
+            }
+            else if ((model.ClassName is "MPLUGOwl" or "MPLUGOwl2" or "MPLUGOwl3")
+                     && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.VisionLanguage.InstructionTuned.", System.StringComparison.Ordinal))
+            {
+                // mPLUG-Owl / mPLUG-Owl2 / mPLUG-Owl3 (Ye et al. 2023-2024) build the same
+                // CreateDefaultPerceiverResamplerLayers stack, but their visual "abstractor" params use
+                // Abstractor-named option fields. Same CI-smoke reduction as the perceiver family above
+                // (all dims 128 so projections collapse to identity and the first vision attention
+                // matches the [1,4,128] tokens; MaxVisualTokens=4 so the abstractor emits 4 tokens).
+                string vlmOptionsType = $"AiDotNet.VisionLanguage.InstructionTuned.{model.ClassName}Options";
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 128, outputSize: 4), " +
+                    $"new {vlmOptionsType} {{ VisionDim = 128, AbstractorDim = 128, DecoderDim = 128, " +
+                    "NumVisionLayers = 2, NumAbstractorLayers = 1, NumDecoderLayers = 2, " +
+                    "MaxVisualTokens = 4, NumHeads = 4, NumAbstractorHeads = 4, DropoutRate = 0.0 })";
+            }
+            else if ((model.ClassName is "QwenVL" or "Qwen2VL" or "Qwen25VL" or "Qwen3VL")
+                     && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.VisionLanguage.InstructionTuned.", System.StringComparison.Ordinal))
+            {
+                // Qwen-VL / Qwen2-VL / Qwen2.5-VL / Qwen3-VL (Bai et al. 2023-2024) build the same
+                // stack with Resampler-named option fields. Same CI-smoke reduction (all dims 128;
+                // MaxVisualTokens=4 so the resampler emits the [1,4,128] the OutputShape expects).
+                string vlmOptionsType = $"AiDotNet.VisionLanguage.InstructionTuned.{model.ClassName}Options";
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 128, outputSize: 4), " +
+                    $"new {vlmOptionsType} {{ VisionDim = 128, ResamplerDim = 128, DecoderDim = 128, " +
+                    "NumVisionLayers = 2, NumResamplerLayers = 1, NumDecoderLayers = 2, " +
+                    "MaxVisualTokens = 4, NumHeads = 4, NumResamplerHeads = 4, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "MedFlamingo"
+                     && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.VisionLanguage.Medical.", System.StringComparison.Ordinal))
+            {
+                // MedFlamingo (Moor et al. 2023) wraps the same CreateDefaultPerceiverResamplerLayers
+                // stack but hardcodes the resampler depth/latents/heads (6 / 64 / 16) — only VisionDim,
+                // DecoderDim, layer counts, head count and dropout come from options. numLatents is a
+                // dead helper parameter (the flat forward self-attends, so the token count follows the
+                // input), so the [1,4,128] token contract holds. Build at CI-smoke width: VisionDim ==
+                // DecoderDim == 128 (the hardcoded 16 resampler heads divide 128), 2 vision + 2 decoder
+                // blocks, 4 heads, no dropout.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 128, outputSize: 4), " +
+                    "new AiDotNet.VisionLanguage.Medical.MedFlamingoOptions { VisionDim = 128, DecoderDim = 128, " +
+                    "NumVisionLayers = 2, NumDecoderLayers = 2, NumHeads = 4, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "AudioMAE"
+                     && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.Audio.Classification.", System.StringComparison.Ordinal))
+            {
+                // AudioMAE (Huang et al. 2022, "Masked Autoencoders that Listen") defaults to ViT-Base
+                // scale: 768-dim, 12 residual transformer encoder layers, 527 AudioSet classes. A single
+                // forward is cheap (~2 s), but the invariant training loops (forward+backward through 12
+                // residual ViT blocks x many iterations) overflow the CI timeout. Build the identical MAE
+                // architecture (patch embed -> N residual encoder blocks -> classifier head) at CI-smoke
+                // width/depth (64-dim, 2 layers, 4 heads). Keep the same 2D audio architecture the generic
+                // audio path emits so the InputShape override stays consistent; CustomLabels/NumClasses
+                // stay at their defaults so the output contract is unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.Audio.Classification.AudioMAEOptions { EncoderEmbeddingDim = 64, " +
+                    "NumEncoderLayers = 2, NumEncoderHeads = 4, " +
+                    "CustomLabels = new[] { \"a\", \"b\", \"c\", \"d\" } })";
+            }
+            else if (model.ClassName == "AudioSuperResolution" && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.Audio.Effects.", System.StringComparison.Ordinal))
+            {
+                // AudioSuperResolution (Kuleshov et al. 2017) is a 1-D conv U-Net. Its paper default is
+                // a deep, wide net; build the same U-Net architecture (downsampling conv blocks ->
+                // bottleneck -> upsampling blocks with sub-pixel shuffle + symmetric skips -> additive
+                // input residual) at CI-smoke scale: 2 blocks, 16 channels. The InputShape length (64)
+                // must be divisible by 2^(numBlocks+1) = 8 so the symmetric down/up path realigns.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 64, outputSize: 64), " +
+                    "new AiDotNet.Audio.Effects.AudioSuperResolutionOptions { HiddenDim = 16, NumResBlocks = 2 })";
+            }
+            else if (model.ClassName == "DocBank" && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.Document.Analysis.PageSegmentation.", System.StringComparison.Ordinal))
+            {
+                // DocBank (Li et al. 2020) is a page-layout SEGMENTER: its native stack
+                // (CreateDefaultDocBankLayers) is a ResNet-style convolutional backbone over an RGB
+                // page image [3, H, W] with five stride-2 stages (/32 total). Its paper default
+                // imageSize is 1024, so a [3, 1024, 1024] forward through the 64->256->512->1024-channel
+                // backbone allocates gigabytes. Build the identical conv-backbone architecture at
+                // CI-smoke resolution (64x64 -> 2x2 feature map, 4 classes) so the image code path runs
+                // cheaply. Matches the [3, 64, 64] InputShape emitted for DocBank below.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 4), " +
+                    "imageSize: 64, backboneChannels: 32, numClasses: 4, hiddenDim: 16)";
             }
             else if (model.HasParameterlessConstructor)
             {
@@ -2339,9 +2633,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
         sb.AppendLine();
-        // Foundation-scale models whose correct training is too slow for the 120s default gate run in the
-        // nightly heavy-timeout lane instead of the default PR shard (which filters Category!=HeavyTimeout).
-        if (HeavyTimeoutTestClassNames.Contains(model.ClassName))
+        // Foundation-scale generated models that are CORRECT but too slow for the
+        // default per-test gate (a single forward at their paper-scale width exceeds
+        // the 120 s [Fact(Timeout)] envelope). Tag them HeavyTimeout so the default
+        // sharded run (which filters Category!=HeavyTimeout) skips them and they run
+        // in the nightly lane. Two disjoint sources feed this: the canonical
+        // HeavyTimeoutTestClassNames set (foundation A-M / diffusion / TTS models) and
+        // the proprietary-VLM helper (ClaudeVision/GeminiVision/GrokVision, a1f1da95a),
+        // which ADDITIONALLY serializes those onto dedicated cores via the
+        // FoundationScaleSerial collection. Emit the trait once regardless of source.
+        bool heavyTimeout = HeavyTimeoutTestClassNames.Contains(model.ClassName);
+        if (IsHeavyTimeoutGeneratedModel(model.ClassName))
+        {
+            sb.AppendLine("[Xunit.Collection(\"FoundationScaleSerial\")]");
+            heavyTimeout = true;
+        }
+        if (heavyTimeout)
             sb.AppendLine("[Xunit.Trait(\"Category\", \"HeavyTimeout\")]");
         sb.AppendLine($"public class {testClassName} : {baseClassName}");
         sb.AppendLine("{");
@@ -2432,23 +2739,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    }");
             }
         }
-        else if (model.ClassName == "VFIT")
+        else if (IsFrameInterpolationModel(model))
         {
-            // VFIT (Shi et al. 2022) uses the shared FrameInterpolationBase.Predict,
-            // whose disambiguation treats ANY rank-4 input as a frame *sequence*
-            // [N, C, H, W] and explicitly rejects a batched pair-concat
-            // [1, 2C, H, W] (leading dim 1). The two-frame branch below emits
-            // exactly that rejected shape. A rank-3 [2C, H, W] is the
-            // base's pair-concat contract (even leading channel dim → split
-            // into two frames), so emit [6, 64, 64] = two RGB frames stacked.
+            // Frame-interpolation models (VFIformer, RIFE, FILM, IFRNet, VFIT, ...)
+            // use the shared FrameInterpolationBase.Predict, whose disambiguation
+            // treats ANY rank-4 input as a frame *sequence* [N, C, H, W] and
+            // explicitly rejects a batched pair-concat [1, 2C, H, W] (leading dim 1).
+            // The optical-flow two-frame branch below emits exactly that rejected
+            // shape. A rank-3 [2C, H, W] is the base's pair-concat contract (even
+            // leading channel dim → split into two frames), so emit [6, 64, 64] =
+            // two RGB frames stacked. (Previously only VFIT was special-cased here;
+            // every other frame-interp model fell through to the rank-4 branch and
+            // its whole test class failed at Predict with the rejection error.)
             sb.AppendLine("    protected override int[] InputShape => new[] { 6, 64, 64 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 3, 64, 64 };");
         }
         else if (isTwoFrameModel)
         {
-            // Two-frame models (frame-interpolation + optical-flow) take a
-            // pair of RGB frames concatenated channel-wise. The
-            // OpticalFlowBase.Predict contract is rank-4
+            // Optical-flow two-frame models take a pair of RGB frames concatenated
+            // channel-wise. The OpticalFlowBase.Predict contract is rank-4
             // [batch, 2*channels, height, width] — the rank check fires
             // before the channel-parity check, so a rank-3 [6, 64, 64]
             // would crash with "Input must be rank 4" instead of running
@@ -2543,12 +2852,31 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] InputShape => new[] { 4, 6 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 4 };");
         }
+        else if (model.ClassName == "DocBank")
+        {
+            // DocBank (Li et al. 2020) is a page-layout SEGMENTER over an RGB page image, not a
+            // token-ID document model: its native ResNet backbone (CreateDefaultDocBankLayers) takes
+            // [3, H, W] pixels through the stem (/2 conv, /2 maxpool: 64->32->15), residual blocks
+            // (stride 1), and a stride-2 transition (/2), giving per-pixel class logits [numClasses, 8, 8].
+            sb.AppendLine("    protected override int[] InputShape => new[] { 3, 64, 64 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 8, 8 };");
+        }
+        else if (model.ClassName == "AudioSuperResolution")
+        {
+            // 1-channel waveform of length 64 (divisible by 2^(numBlocks+1)=8 so the conv U-Net's
+            // symmetric down/up path realigns). The net learns an additive residual, so the output is
+            // the same 1×64 waveform.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 64 };");
+        }
         else if (isVisionModel &&
                  (model.ClassName.StartsWith("LayoutLM", System.StringComparison.Ordinal)
                   || model.ClassName.StartsWith("LayoutXLM", System.StringComparison.Ordinal)
                   || model.ClassName.StartsWith("LiLT", System.StringComparison.Ordinal)
                   || model.ClassName.StartsWith("DocFormer", System.StringComparison.Ordinal)
-                  || model.ClassName.StartsWith("DocBank", System.StringComparison.Ordinal)
+                  // NOTE: DocBank is NOT here — it is a page-IMAGE layout segmenter (ResNet-style
+                  // conv backbone over [3, H, W] pixels, CreateDefaultDocBankLayers), not a token-ID
+                  // LayoutLM model. It has its own image-input branch below.
                   || model.ClassName.StartsWith("DocGCN", System.StringComparison.Ordinal)
                   || model.ClassName.StartsWith("PICK", System.StringComparison.Ordinal)
                   || model.ClassName.StartsWith("TRIE", System.StringComparison.Ordinal)
@@ -2883,6 +3211,37 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine();
                 sb.AppendLine("    protected override int MoreDataShortIterations => 3;");
                 sb.AppendLine("    protected override int MoreDataLongIterations => 10;");
+                sb.AppendLine();
+                // The base ScaledInput_ShouldChangeOutput multiplies the input by 10 — meaningless for
+                // DISCRETE token IDs and it drives the indices past the embedding vocabulary
+                // (ArgumentOutOfRange in the embedding lookup). Perturb with a legal in-vocab token
+                // SHIFT instead (same invariant: a different token sequence must change the output),
+                // mirroring the text-to-mel TTS branch below.
+                sb.AppendLine("    [Xunit.Fact(Timeout = 120000)]");
+                sb.AppendLine("    public override async System.Threading.Tasks.Task ScaledInput_ShouldChangeOutput()");
+                sb.AppendLine("    {");
+                sb.AppendLine("        await System.Threading.Tasks.Task.Yield();");
+                sb.AppendLine("        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Create();");
+                sb.AppendLine("        var rng = AiDotNet.Tests.ModelFamilyTests.Base.ModelTestHelpers.CreateSeededRandom();");
+                sb.AppendLine("        using var network = CreateNetwork();");
+                sb.AppendLine("        var input = CreateRandomTensor(InputShape, rng);");
+                sb.AppendLine("        var shiftedInput = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(InputShape);");
+                sb.AppendLine("        for (int i = 0; i < input.Length; i++)");
+                sb.AppendLine($"            shiftedInput[i] = ((int)input[i] + 17) % {tokenVocab};");
+                sb.AppendLine("        var output1 = network.Predict(input);");
+                sb.AppendLine("        var output2 = network.Predict(shiftedInput);");
+                sb.AppendLine("        double sumSquared = 0;");
+                sb.AppendLine("        int minLen = System.Math.Min(output1.Length, output2.Length);");
+                sb.AppendLine("        for (int i = 0; i < minLen; i++)");
+                sb.AppendLine("        {");
+                sb.AppendLine("            double d = output1[i] - output2[i];");
+                sb.AppendLine("            sumSquared += d * d;");
+                sb.AppendLine("        }");
+                sb.AppendLine("        double l2 = System.Math.Sqrt(sumSquared);");
+                sb.AppendLine("        Xunit.Assert.True(l2 > 1e-9,");
+                sb.AppendLine("            $\"Codec-LM produced identical output for distinct legal token IDs: L2 distance = {l2:E3}. \" +");
+                sb.AppendLine("            \"Token embedding lookup or downstream conditioning may be broken.\");");
+                sb.AppendLine("    }");
                 // Deep embedding-first AR codec LM: pin a deterministic init so the
                 // training invariants are order-independent across xUnit workers.
                 pinInitSeed = true;
@@ -3546,6 +3905,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             //   input is a structured joint observation (NumAgents x StateSize +
             //   GlobalStateSize), not a single agent's state vector, so the
             //   single-agent state-conditionality probe does not apply.
+            // - WatkinsQLambda: Watkins 1989 — tabular Q(λ). Its Q-table is
+            //   keyed by the discretized state string; EnsureStateExists
+            //   zero-initializes the Q-row of any unseen state, so the greedy
+            //   policy (GetGreedyAction → ArgMax over an all-zero row) returns
+            //   action 0 for every state not visited during training. The two
+            //   states the invariant probes are never visited by the single
+            //   preceding train step, so identical greedy actions are the
+            //   correct tabular behavior, not a degenerate policy.
             if (model.ClassName == "UCBBanditAgent"
                 || model.ClassName == "GradientBanditAgent"
                 || model.ClassName == "ThompsonSamplingAgent"
@@ -3555,7 +3922,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 || model.ClassName == "PPOAgent"
                 || model.ClassName == "TRPOAgent"
                 || model.ClassName == "SARSALambdaAgent"
-                || model.ClassName == "QMIXAgent")
+                || model.ClassName == "QMIXAgent"
+                || model.ClassName == "WatkinsQLambdaAgent")
             {
                 sb.AppendLine("    protected override bool IsStateConditional => false;");
             }
@@ -5694,7 +6062,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         int tickIdx = className.IndexOf('`');
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
-        return className is "GPTSoVITS" || IsValleCodecLMModel(className);
+        return className is "GPTSoVITS" or "CSM" || IsValleCodecLMModel(className);
     }
 
     /// <summary>
@@ -5826,6 +6194,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// whose <c>Training_*</c> invariants exceed the 120 s timeout because
     /// the encoder is wide / deep enough to make a full step take ≳ 1 s.
     /// </remarks>
+    // Generated models whose tests are CORRECT but foundation-scale: a single
+    // forward at their paper-scale width (e.g. the proprietary VLMs at
+    // VisionDim=1024) exceeds the 120 s per-test gate. Tagged HeavyTimeout so the
+    // default sharded run skips them (it filters Category!=HeavyTimeout) and they
+    // run in the nightly lane. Drop a model from here once it fits the budget.
+    private static bool IsHeavyTimeoutGeneratedModel(string className)
+    {
+        int tickIdx = className.IndexOf('`');
+        if (tickIdx > 0) className = className.Substring(0, tickIdx);
+        return className is "ClaudeVision" or "GeminiVision" or "GrokVision";
+    }
+
     private static bool IsPaperScaleVisionLanguageModel(string className)
     {
         int tickIdx = className.IndexOf('`');
@@ -5888,7 +6268,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         return className switch
         {
-            "TimeMoE" => 2048,
+            // TimeMoE's paper context is 2048, but the generated test builds it
+            // at CI-smoke scale (see the TimeMoE constructor special-case in
+            // EmitGeneratedTestClass): the 113M-param foundation default triggers
+            // weight-streaming, whose per-Predict arena reclaims the lazy Dense
+            // weights between calls and throws ArgumentOutOfRange in the second
+            // Predict's EnsureWeightShapeForInput. Keep the InputShape context in
+            // lockstep with the reduced ContextLength=64 the ctor uses.
+            "TimeMoE" => 64,
             "Sundial" => 2048,
             "Kairos" => 1024,
             "LagLlama" => 96,   // LagLlama paper default
@@ -5957,6 +6344,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // forecastHorizon via the chained head. Default forecastHorizon.
             "TimeMAE" => "96",
             "SimMTM" => "96",
+
+            // TimeMoE forecast head outputs [B, ForecastHorizon]. The generated
+            // test builds it at CI-smoke scale (ForecastHorizon=16) to avoid the
+            // 113M-param foundation default's weight-streaming; keep OutputShape
+            // in lockstep with that reduced horizon.
+            "TimeMoE" => "16",
             "TFC" => "96",
 
             // TimeGrad: forecast horizon (diffusion output is denoised target).

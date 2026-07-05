@@ -4,10 +4,9 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-// Compute-bound foundation-scale model: Clone_ShouldProduceIdenticalOutput exceeds the 120s
-// [Fact(Timeout)] gate in ISOLATION (verified solo, fresh process), so it belongs in the HeavyTimeout
-// nightly lane rather than the default PR gate (#1706/#1305) - the Clone logic is correct; the model is
-// simply too large to run a forward within the envelope.
+// HeavyTimeout: foundation-scale diffusion (video / paper-scale). Correct, but a single forward x
+// N-step Generate (and/or the full-scale Training peak: weights + grads + Adam + activations) exceeds
+// the 120 s / 16 GB PR-gate envelope, so it runs in the HeavyTimeout nightly lane (#1706/#1305/#1622).
 [Xunit.Trait("Category", "HeavyTimeout")]
 [Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4)
 public class Sora2ModelTests : DiffusionModelTestBase<float>

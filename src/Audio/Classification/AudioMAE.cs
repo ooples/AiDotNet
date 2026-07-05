@@ -182,7 +182,38 @@ public class AudioMAE<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         else Layers.AddRange(LayerHelper<T>.CreateDefaultAudioMAELayers(patchFeatureSize: _options.PatchSize * _options.PatchSize, embeddingDim: _options.EncoderEmbeddingDim, numEncoderLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumEncoderHeads, feedForwardDim: (int)(_options.EncoderEmbeddingDim * _options.FeedForwardRatio), numClasses: ClassLabels.Count, dropoutRate: _options.DropoutRate));
     }
 
-    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
+        return EncodePoolClassify(input);
+    }
+
+    /// <summary>
+    /// AudioMAE classification forward (Huang et al. 2022 §3): the ViT encoder processes the patch
+    /// tokens, then an AVERAGE POOLING over the tokens is followed by a single linear classifier.
+    /// The pooling is a tape-aware mean over the token axis — it cannot be expressed as a flat layer,
+    /// so the encoder (all layers except the final linear head) runs first, then pool, then the head.
+    /// </summary>
+    private Tensor<T> EncodePoolClassify(Tensor<T> input)
+    {
+        int n = Layers.Count;
+        if (n < 2)
+        {
+            var seq = input;
+            foreach (var l in Layers) seq = l.Forward(seq);
+            return seq;
+        }
+        var h = input;
+        for (int i = 0; i < n - 1; i++) h = Layers[i].Forward(h);   // ViT encoder + final LayerNorm
+        // Average-pool over the patch-token axis (second-to-last), keeping the embedding dimension.
+        if (h.Shape.Length >= 2)
+            h = Engine.ReduceMean(h, new[] { h.Shape.Length - 2 }, keepDims: false);
+        return Layers[n - 1].Forward(h);                            // single linear head -> sigmoid
+    }
+
+    /// <summary>Training forward — the same encoder → average-pool → linear path as inference.</summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => EncodePoolClassify(input);
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {

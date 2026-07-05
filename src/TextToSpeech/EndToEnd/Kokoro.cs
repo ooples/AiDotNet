@@ -67,7 +67,9 @@ public class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
     public Kokoro(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        KokoroOptions? options = null) : base(architecture)
+        KokoroOptions? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new KokoroOptions();
         _useNativeMode = false;
@@ -93,7 +95,9 @@ public class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
     public Kokoro(
         NeuralNetworkArchitecture<T> architecture,
         KokoroOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new KokoroOptions();
         _useNativeMode = true;
@@ -150,12 +154,12 @@ public class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
         // (1) Phoneme encoder
         double[] textHidden = new double[textLen * hiddenDim];
         for (int t = 0; t < textLen; t++)
-            for (int d = 0; d < hiddenDim; d++)
-            {
-                double charEmb = (text[t] % 128) / 128.0 - 0.5;
-                double posEnc = Math.Sin((t + 1.0) / Math.Pow(10000, 2.0 * d / hiddenDim));
-                textHidden[t * hiddenDim + d] = charEmb * 0.5 + posEnc * 0.3;
-            }
+        for (int d = 0; d < hiddenDim; d++)
+        {
+            double charEmb = (text[t] % 128) / 128.0 - 0.5;
+            double posEnc = Math.Sin((t + 1.0) / Math.Pow(10000, 2.0 * d / hiddenDim));
+            textHidden[t * hiddenDim + d] = charEmb * 0.5 + posEnc * 0.3;
+        }
 
         // (2) Style encoder: text -> style token (no reference audio needed)
         double[] styleToken = new double[styleDim];
@@ -189,20 +193,19 @@ public class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
         double[] phase = new double[stftFrames];
         int fi = 0;
         for (int t = 0; t < textLen; t++)
-            for (int r = 0; r < durations[t]; r++)
-            {
-                if (fi >= stftFrames) break;
-                double h = 0;
-                for (int d = 0; d < hiddenDim; d++)
-                    h += textHidden[t * hiddenDim + d];
-                h /= hiddenDim;
-                double styleMod = styleToken[fi % styleDim] * 0.4;
-                magnitude[fi] = Math.Exp(h * 0.5 + styleMod + 0.5);
-                phase[fi] = Math.Atan2(
-                    Math.Sin(fi * 0.3 + h),
-                    Math.Cos(fi * 0.3 + styleMod));
-                fi++;
-            }
+        for (int r = 0; r < durations[t]; r++)
+        {
+            if (fi >= stftFrames)
+                break;
+            double h = 0;
+            for (int d = 0; d < hiddenDim; d++)
+                h += textHidden[t * hiddenDim + d];
+            h /= hiddenDim;
+            double styleMod = styleToken[fi % styleDim] * 0.4;
+            magnitude[fi] = Math.Exp(h * 0.5 + styleMod + 0.5);
+            phase[fi] = Math.Atan2(Math.Sin(fi * 0.3 + h), Math.Cos(fi * 0.3 + styleMod));
+            fi++;
+        }
 
         // (5) ISTFTNet: inverse STFT -> waveform
         int waveLen = totalFrames * _options.HopSize;
@@ -216,7 +219,8 @@ public class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
                 int idx = center + n;
                 if (idx >= 0 && idx < waveLen)
                 {
-                    double window = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * (n + hopOut) / (2 * hopOut)));
+                    double window =
+                        0.5 * (1.0 - Math.Cos(2.0 * Math.PI * (n + hopOut) / (2 * hopOut)));
                     double sample = magnitude[f] * Math.Cos(phase[f] + n * 0.1) * window * 0.3;
                     waveform[idx] = NumOps.FromDouble(NumOps.ToDouble(waveform[idx]) + sample);
                 }
@@ -250,15 +254,24 @@ public class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// <inheritdoc />
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
             Layers.AddRange(Architecture.Layers);
         else
-            Layers.AddRange(LayerHelper<T>.CreateDefaultVITSLayers(
-                _options.HiddenDim, _options.InterChannels, _options.FilterChannels,
-                _options.NumEncoderLayers, _options.NumFlowSteps,
-                _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate,
-                inputFeatures: _options.MelChannels));
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultVITSLayers(
+                    _options.HiddenDim,
+                    _options.InterChannels,
+                    _options.FilterChannels,
+                    _options.NumEncoderLayers,
+                    _options.NumFlowSteps,
+                    _options.NumDecoderLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate,
+                    inputFeatures: _options.MelChannels
+                )
+            );
     }
 
     /// <inheritdoc />
@@ -267,7 +280,8 @@ public class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        SetTrainingMode(false); var c = input;
+        SetTrainingMode(false);
+        var c = input;
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
@@ -309,9 +323,14 @@ public class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
         return new ModelMetadata<T>
         {
             Name = _useNativeMode ? "Kokoro-Native" : "Kokoro-ONNX",
-            Description = "Kokoro: Lightweight StyleTTS2-inspired TTS with ISTFTNet (Hexgrad, 2024)",
+            Description =
+                "Kokoro: Lightweight StyleTTS2-inspired TTS with ISTFTNet (Hexgrad, 2024)",
             FeatureCount = _options.HiddenDim,
-            AdditionalInfo = new Dictionary<string, object> { ["HiddenDim"] = _options.HiddenDim, ["Mode"] = _useNativeMode ? "Native" : "ONNX" }
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                ["HiddenDim"] = _options.HiddenDim,
+                ["Mode"] = _useNativeMode ? "Native" : "ONNX",
+            },
         };
     }
 
@@ -376,7 +395,8 @@ public class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         base.Dispose(disposing);
     }

@@ -6,9 +6,9 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
-using AiDotNet.TextToSpeech.Interfaces;
 
 namespace AiDotNet.TextToSpeech.Classic;
 
@@ -44,7 +44,12 @@ namespace AiDotNet.TextToSpeech.Classic;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Natural TTS Synthesis by Conditioning WaveNet on Mel Spectrogram Predictions", "https://arxiv.org/abs/1712.05884", Year = 2018, Authors = "Shen et al.")]
+[ResearchPaper(
+    "Natural TTS Synthesis by Conditioning WaveNet on Mel Spectrogram Predictions",
+    "https://arxiv.org/abs/1712.05884",
+    Year = 2018,
+    Authors = "Shen et al."
+)]
 public class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly Tacotron2Options _options;
@@ -65,7 +70,9 @@ public class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>
     public Tacotron2(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        Tacotron2Options? options = null) : base(architecture)
+        Tacotron2Options? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new Tacotron2Options();
         _useNativeMode = false;
@@ -92,7 +99,9 @@ public class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>
     public Tacotron2(
         NeuralNetworkArchitecture<T> architecture,
         Tacotron2Options? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new Tacotron2Options();
         _useNativeMode = true;
@@ -182,7 +191,8 @@ public class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>
 
             // Stop token: sigmoid gate on decoder output
             double stopProb = 1.0 / (1.0 + Math.Exp(-(melVal * 2.0 - 1.0 + step * 0.02)));
-            if (stopProb > 0.5 && step > 10) break;
+            if (stopProb > 0.5 && step > 10)
+                break;
         }
 
         // Step 3: Post-net (5-layer 1D conv with residual)
@@ -201,7 +211,8 @@ public class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>
     /// <inheritdoc />
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
@@ -209,10 +220,17 @@ public class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>
         }
         else
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultAcousticModelLayers(
-                _options.EncoderDim, _options.DecoderDim, _options.HiddenDim,
-                _options.NumEncoderLayers, _options.NumDecoderLayers,
-                _options.NumHeads, _options.DropoutRate));
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultAcousticModelLayers(
+                    _options.EncoderDim,
+                    _options.DecoderDim,
+                    _options.HiddenDim,
+                    _options.NumEncoderLayers,
+                    _options.NumDecoderLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate
+                )
+            );
             ComputeEncoderDecoderBoundary();
         }
     }
@@ -245,7 +263,8 @@ public class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        SetTrainingMode(false); var c = input;
+        SetTrainingMode(false);
+        var c = input;
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
@@ -259,7 +278,7 @@ public class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>
         SetTrainingMode(true);
         try
         {
-        TrainWithTape(input, expected);
+            TrainWithTape(input, expected);
         }
         finally
         {
@@ -287,9 +306,10 @@ public class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>
         var m = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "Tacotron2-Native" : "Tacotron2-ONNX",
-            Description = "Natural TTS Synthesis by Conditioning WaveNet on Mel Spectrogram Predictions (Shen et al., 2018)",
+            Description =
+                "Natural TTS Synthesis by Conditioning WaveNet on Mel Spectrogram Predictions (Shen et al., 2018)",
             FeatureCount = _options.HiddenDim,
-            Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers
+            Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers,
         };
         m.AdditionalInfo["Architecture"] = "Tacotron2";
         m.AdditionalInfo["SampleRate"] = _options.SampleRate.ToString();
@@ -363,7 +383,8 @@ public class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         base.Dispose(disposing);
     }

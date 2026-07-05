@@ -6,9 +6,9 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
-using AiDotNet.TextToSpeech.Interfaces;
 
 namespace AiDotNet.TextToSpeech.Classic;
 
@@ -44,7 +44,12 @@ namespace AiDotNet.TextToSpeech.Classic;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Tacotron: Towards End-to-End Speech Synthesis", "https://arxiv.org/abs/1703.10135", Year = 2017, Authors = "Wang et al.")]
+[ResearchPaper(
+    "Tacotron: Towards End-to-End Speech Synthesis",
+    "https://arxiv.org/abs/1703.10135",
+    Year = 2017,
+    Authors = "Wang et al."
+)]
 public class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly TacotronOptions _options;
@@ -65,7 +70,9 @@ public class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
     public Tacotron(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        TacotronOptions? options = null) : base(architecture)
+        TacotronOptions? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new TacotronOptions();
         _useNativeMode = false;
@@ -92,7 +99,9 @@ public class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
     public Tacotron(
         NeuralNetworkArchitecture<T> architecture,
         TacotronOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new TacotronOptions();
         _useNativeMode = true;
@@ -162,10 +171,13 @@ public class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
             {
                 double encVal = NumOps.ToDouble(encoded[e]);
                 double locFeat = attnWeights[e] * 0.2; // convolved cumulative attention
-                if (e > 0) locFeat += attnWeights[e - 1] * 0.1;
-                if (e < encLen - 1) locFeat += attnWeights[e + 1] * 0.1;
+                if (e > 0)
+                    locFeat += attnWeights[e - 1] * 0.1;
+                if (e < encLen - 1)
+                    locFeat += attnWeights[e + 1] * 0.1;
                 energies[e] = Math.Tanh(encVal * 0.4 + prenet2 * 0.3 + locFeat * 0.3);
-                if (energies[e] > maxEnergy) maxEnergy = energies[e];
+                if (energies[e] > maxEnergy)
+                    maxEnergy = energies[e];
             }
 
             // Softmax over encoder positions
@@ -186,7 +198,9 @@ public class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
             }
 
             // Decoder RNN: GRU-like update with context + prenet input
-            double decoderState = Math.Tanh(context * 0.5 + prenet2 * 0.3 + (step > 0 ? prevFrame[0] * 0.2 : 0));
+            double decoderState = Math.Tanh(
+                context * 0.5 + prenet2 * 0.3 + (step > 0 ? prevFrame[0] * 0.2 : 0)
+            );
 
             // Generate r mel frames per step (reduction factor)
             for (int ri = 0; ri < r && frameIdx < maxFrames; ri++)
@@ -207,7 +221,8 @@ public class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
             // Stop token: linear -> sigmoid (trained to predict end-of-utterance)
             double stopLogit = decoderState * 1.5 - 0.3 + step * 0.08;
             double stopProb = 1.0 / (1.0 + Math.Exp(-stopLogit));
-            if (stopProb > 0.5 && step > 5) break;
+            if (stopProb > 0.5 && step > 5)
+                break;
         }
 
         // Step 3: CBHG post-net refinement
@@ -226,7 +241,8 @@ public class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
     /// <inheritdoc />
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
@@ -234,10 +250,17 @@ public class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         }
         else
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultAcousticModelLayers(
-                _options.EncoderDim, _options.DecoderDim, _options.HiddenDim,
-                _options.NumEncoderLayers, _options.NumDecoderLayers,
-                _options.NumHeads, _options.DropoutRate));
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultAcousticModelLayers(
+                    _options.EncoderDim,
+                    _options.DecoderDim,
+                    _options.HiddenDim,
+                    _options.NumEncoderLayers,
+                    _options.NumDecoderLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate
+                )
+            );
             ComputeEncoderDecoderBoundary();
         }
     }
@@ -270,7 +293,8 @@ public class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        SetTrainingMode(false); var c = input;
+        SetTrainingMode(false);
+        var c = input;
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
@@ -314,7 +338,7 @@ public class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
             Name = _useNativeMode ? "Tacotron-Native" : "Tacotron-ONNX",
             Description = "Tacotron: Towards End-to-End Speech Synthesis (Wang et al., 2017)",
             FeatureCount = _options.HiddenDim,
-            Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers
+            Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers,
         };
         m.AdditionalInfo["Architecture"] = "Tacotron";
         m.AdditionalInfo["SampleRate"] = _options.SampleRate.ToString();
@@ -380,7 +404,8 @@ public class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         base.Dispose(disposing);
     }

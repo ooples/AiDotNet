@@ -6,9 +6,9 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
-using AiDotNet.TextToSpeech.Interfaces;
 
 namespace AiDotNet.TextToSpeech.Classic;
 
@@ -42,7 +42,12 @@ namespace AiDotNet.TextToSpeech.Classic;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("AdaSpeech: Adaptive Text to Speech for Custom Voice", "https://arxiv.org/abs/2103.00993", Year = 2021, Authors = "Chen et al.")]
+[ResearchPaper(
+    "AdaSpeech: Adaptive Text to Speech for Custom Voice",
+    "https://arxiv.org/abs/2103.00993",
+    Year = 2021,
+    Authors = "Chen et al."
+)]
 public class AdaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly AdaSpeechOptions _options;
@@ -57,7 +62,9 @@ public class AdaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
     public AdaSpeech(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        AdaSpeechOptions? options = null) : base(architecture)
+        AdaSpeechOptions? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new AdaSpeechOptions();
         _useNativeMode = false;
@@ -78,7 +85,9 @@ public class AdaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
     public AdaSpeech(
         NeuralNetworkArchitecture<T> architecture,
         AdaSpeechOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new AdaSpeechOptions();
         _useNativeMode = true;
@@ -127,7 +136,9 @@ public class AdaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         var durations = new int[seqLen];
         for (int i = 0; i < seqLen; i++)
         {
-            double val = Math.Abs(NumOps.ToDouble(encoded[i % encoded.Length]) + conditionEmb * 0.1);
+            double val = Math.Abs(
+                NumOps.ToDouble(encoded[i % encoded.Length]) + conditionEmb * 0.1
+            );
             int dur = Math.Max(1, (int)Math.Round(1.0 + val * 3.0));
             durations[i] = Math.Min(dur, 15);
             totalFrames += durations[i];
@@ -141,7 +152,8 @@ public class AdaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
             for (int d = 0; d < durations[i] && fi < melLen; d++)
             {
                 expanded[fi] = NumOps.FromDouble(
-                    NumOps.ToDouble(encoded[i % encoded.Length]) + conditionEmb * 0.05);
+                    NumOps.ToDouble(encoded[i % encoded.Length]) + conditionEmb * 0.05
+                );
                 fi++;
             }
         }
@@ -156,7 +168,8 @@ public class AdaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
@@ -164,10 +177,17 @@ public class AdaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         }
         else
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultAcousticModelLayers(
-                _options.EncoderDim, _options.DecoderDim, _options.HiddenDim,
-                _options.NumEncoderLayers, _options.NumDecoderLayers,
-                _options.NumHeads, _options.DropoutRate));
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultAcousticModelLayers(
+                    _options.EncoderDim,
+                    _options.DecoderDim,
+                    _options.HiddenDim,
+                    _options.NumEncoderLayers,
+                    _options.NumDecoderLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate
+                )
+            );
             ComputeEncoderDecoderBoundary();
         }
     }
@@ -197,7 +217,8 @@ public class AdaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        SetTrainingMode(false); var c = input;
+        SetTrainingMode(false);
+        var c = input;
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
@@ -210,7 +231,7 @@ public class AdaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         SetTrainingMode(true);
         try
         {
-        TrainWithTape(input, expected);
+            TrainWithTape(input, expected);
         }
         finally
         {
@@ -238,7 +259,7 @@ public class AdaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
             Name = _useNativeMode ? "AdaSpeech-Native" : "AdaSpeech-ONNX",
             Description = "AdaSpeech: Adaptive TTS for Custom Voice (Chen et al., 2021)",
             FeatureCount = _options.HiddenDim,
-            Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers
+            Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers,
         };
         m.AdditionalInfo["Architecture"] = "AdaSpeech";
         return m;
@@ -291,7 +312,8 @@ public class AdaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
 
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         base.Dispose(disposing);
     }

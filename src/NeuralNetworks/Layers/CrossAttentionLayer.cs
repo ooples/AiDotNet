@@ -140,6 +140,25 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
     }
 
+    /// <summary>
+    /// Returns layer-specific metadata required to reconstruct this layer from shapes alone during
+    /// clone / deserialize.
+    /// </summary>
+    /// <remarks>
+    /// The saved input shape is only <c>[sequenceLength, queryDim]</c>, so queryDim and sequenceLength
+    /// are recoverable from it — but the context (key/value) feature dimension and the head count are
+    /// NOT. Persist them here; without this, a rebuilt layer misreads queryDim from the sequence axis
+    /// and its projection weights mismatch the loaded parameters (see
+    /// <c>DeserializationHelper.CreateCrossAttentionLayer</c>).
+    /// </remarks>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["ContextDim"] = _contextDim.ToString();
+        metadata["HeadCount"] = _headCount.ToString();
+        return metadata;
+    }
+
     private void InitializeParameters()
     {
         // Xavier initialization for each weight matrix

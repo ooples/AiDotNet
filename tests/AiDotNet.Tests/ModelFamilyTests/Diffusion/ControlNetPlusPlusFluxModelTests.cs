@@ -4,6 +4,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
+[Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4)
 // HeavyTimeout (#1706): foundation-scale ControlNet++ over a FLUX (~12B-param) backbone. Verified genuine
 // OOM — throws System.OutOfMemoryException during CONSTRUCTION under a 16 GB DOTNET_GCHeapHardLimit
 // reproducing the CI runner ceiling (Metadata_ShouldExist alone OOMs), OS-OOM-killing the Diffusion A-C

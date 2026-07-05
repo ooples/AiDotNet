@@ -8,9 +8,8 @@ namespace AiDotNet.TextToSpeech.Latest;
 /// </remarks>
 public class MegaTTS2Options : EndToEndTtsOptions
 {
-    public MegaTTS2Options(MegaTTS2Options other) : base(other ?? throw new ArgumentNullException(nameof(other)))
-    {
-    }
+    public MegaTTS2Options(MegaTTS2Options other)
+        : base(other ?? throw new ArgumentNullException(nameof(other))) { }
 
     public MegaTTS2Options()
     {

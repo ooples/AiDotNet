@@ -42,7 +42,12 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("AudioLM: A Language Modeling Approach to Audio Generation", "https://arxiv.org/abs/2209.03143", Year = 2023, Authors = "Borsos et al.")]
+[ResearchPaper(
+    "AudioLM: A Language Modeling Approach to Audio Generation",
+    "https://arxiv.org/abs/2209.03143",
+    Year = 2023,
+    Authors = "Borsos et al."
+)]
 public class AudioLM<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly AudioLMOptions _options;
@@ -61,7 +66,9 @@ public class AudioLM<T> : TtsModelBase<T>, ICodecTts<T>
     public AudioLM(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        AudioLMOptions? options = null) : base(architecture)
+        AudioLMOptions? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new AudioLMOptions();
         _useNativeMode = false;
@@ -87,7 +94,9 @@ public class AudioLM<T> : TtsModelBase<T>, ICodecTts<T>
     public AudioLM(
         NeuralNetworkArchitecture<T> architecture,
         AudioLMOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new AudioLMOptions();
         _useNativeMode = true;
@@ -167,15 +176,22 @@ public class AudioLM<T> : TtsModelBase<T>, ICodecTts<T>
     /// <inheritdoc />
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
             Layers.AddRange(Architecture.Layers);
         else
-            Layers.AddRange(LayerHelper<T>.CreateDefaultCodecLMLayers(
-                _options.TextEncoderDim, _options.LLMDim,
-                _options.NumCodebooks * _options.CodebookSize,
-                _options.NumEncoderLayers, _options.NumLLMLayers,
-                _options.NumHeads, _options.DropoutRate));
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultCodecLMLayers(
+                    _options.TextEncoderDim,
+                    _options.LLMDim,
+                    _options.NumCodebooks * _options.CodebookSize,
+                    _options.NumEncoderLayers,
+                    _options.NumLLMLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate
+                )
+            );
     }
 
     /// <inheritdoc />
@@ -184,7 +200,8 @@ public class AudioLM<T> : TtsModelBase<T>, ICodecTts<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        SetTrainingMode(false); var c = input;
+        SetTrainingMode(false);
+        var c = input;
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
@@ -198,7 +215,7 @@ public class AudioLM<T> : TtsModelBase<T>, ICodecTts<T>
         SetTrainingMode(true);
         try
         {
-        TrainWithTape(input, expected);
+            TrainWithTape(input, expected);
         }
         finally
         {
@@ -223,12 +240,20 @@ public class AudioLM<T> : TtsModelBase<T>, ICodecTts<T>
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>
+        var m = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "AudioLM-Native" : "AudioLM-ONNX",
-            Description = "AudioLM: A Language Modeling Approach to Audio Generation (Borsos et al., 2023)",
-            FeatureCount = _options.LLMDim
+            Description =
+                "AudioLM: A Language Modeling Approach to Audio Generation (Borsos et al., 2023)",
+            FeatureCount = _options.LLMDim,
         };
+        m.AdditionalInfo["Architecture"] = "AudioLM";
+        m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
+        m.AdditionalInfo["HiddenDim"] = base.HiddenDim;
+        m.AdditionalInfo["SampleRate"] = base.SampleRate;
+        m.AdditionalInfo["MelChannels"] = base.MelChannels;
+        m.AdditionalInfo["HopSize"] = base.HopSize;
+        return m;
     }
 
     /// <inheritdoc />
@@ -296,7 +321,8 @@ public class AudioLM<T> : TtsModelBase<T>, ICodecTts<T>
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         base.Dispose(disposing);
     }

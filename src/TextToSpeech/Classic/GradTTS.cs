@@ -6,9 +6,9 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
-using AiDotNet.TextToSpeech.Interfaces;
 
 namespace AiDotNet.TextToSpeech.Classic;
 
@@ -43,18 +43,70 @@ namespace AiDotNet.TextToSpeech.Classic;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Grad-TTS: A Diffusion Probabilistic Model for Text-to-Speech", "https://arxiv.org/abs/2105.06337", Year = 2021, Authors = "Popov et al.")]
+[ResearchPaper(
+    "Grad-TTS: A Diffusion Probabilistic Model for Text-to-Speech",
+    "https://arxiv.org/abs/2105.06337",
+    Year = 2021,
+    Authors = "Popov et al."
+)]
 public class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 {
-    private readonly GradTTSOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly GradTTSOptions _options;
+
+    public override ModelOptions GetOptions() => _options;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer; private bool _useNativeMode; private bool _disposed;
+    private readonly ITokenizer? _tokenizer;
+    private bool _useNativeMode;
+    private bool _disposed;
     private int _encoderLayerEnd;
 
-    public GradTTS(NeuralNetworkArchitecture<T> architecture, string modelPath, GradTTSOptions? options = null) : base(architecture) { _options = options ?? new GradTTSOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.HiddenDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
-    public GradTTS(NeuralNetworkArchitecture<T> architecture, GradTTSOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new GradTTSOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.HiddenDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
+    public GradTTS(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        GradTTSOptions? options = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new GradTTSOptions();
+        _useNativeMode = false;
+        base.SampleRate = _options.SampleRate;
+        base.MelChannels = _options.MelChannels;
+        base.HopSize = _options.HopSize;
+        base.HiddenDim = _options.HiddenDim;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path required.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
 
-    int ITtsModel<T>.SampleRate => _options.SampleRate; public int MaxTextLength => _options.MaxTextLength; public new int MelChannels => _options.MelChannels; public new int HopSize => _options.HopSize; public int FftSize => _options.FftSize;
+    public GradTTS(
+        NeuralNetworkArchitecture<T> architecture,
+        GradTTSOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
+    {
+        _options = options ?? new GradTTSOptions();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.SampleRate = _options.SampleRate;
+        base.MelChannels = _options.MelChannels;
+        base.HopSize = _options.HopSize;
+        base.HiddenDim = _options.HiddenDim;
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    int ITtsModel<T>.SampleRate => _options.SampleRate;
+    public int MaxTextLength => _options.MaxTextLength;
+    public new int MelChannels => _options.MelChannels;
+    public new int HopSize => _options.HopSize;
+    public int FftSize => _options.FftSize;
 
     /// <summary>
     /// Synthesizes mel-spectrogram using Grad-TTS's diffusion-based pipeline.
@@ -68,7 +120,8 @@ public class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>
     {
         ThrowIfDisposed();
         var tokens = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(tokens);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(tokens);
 
         // Step 1: Encoder -> mu (mean mel prediction)
         var encoded = tokens;
@@ -91,8 +144,11 @@ public class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         var mu = new double[melLen]; // encoder mean prediction
         int fi = 0;
         for (int i = 0; i < seqLen && fi < melLen; i++)
-            for (int d = 0; d < durations[i] && fi < melLen; d++)
-            { mu[fi] = NumOps.ToDouble(encoded[i % encoded.Length]); fi++; }
+        for (int d = 0; d < durations[i] && fi < melLen; d++)
+        {
+            mu[fi] = NumOps.ToDouble(encoded[i % encoded.Length]);
+            fi++;
+        }
 
         // Step 3: Reverse diffusion (denoise x_T -> x_0)
         double[] x = new double[melLen];
@@ -126,17 +182,152 @@ public class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>
     }
 
     public Tensor<T> TextToMel(string text) => Synthesize(text);
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; } else { Layers.AddRange(LayerHelper<T>.CreateDefaultAcousticModelLayers(_options.EncoderDim, _options.DecoderDim, _options.HiddenDim, _options.NumEncoderLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate)); ComputeEncoderDecoderBoundary(); } }
-    private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; _encoderLayerEnd = 1 + _options.NumEncoderLayers * lpb; }
-    protected override Tensor<T> PreprocessText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var enc = _tokenizer.Encode(text); int sl = Math.Min(enc.TokenIds.Count, _options.MaxTextLength); var t = new Tensor<T>([sl]); for (int i = 0; i < sl; i++) t[i] = NumOps.FromDouble(enc.TokenIds[i]); return t; }
+
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode)
+            return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            _encoderLayerEnd = Layers.Count / 2;
+        }
+        else
+        {
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultAcousticModelLayers(
+                    _options.EncoderDim,
+                    _options.DecoderDim,
+                    _options.HiddenDim,
+                    _options.NumEncoderLayers,
+                    _options.NumDecoderLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate
+                )
+            );
+            ComputeEncoderDecoderBoundary();
+        }
+    }
+
+    private void ComputeEncoderDecoderBoundary()
+    {
+        int lpb = _options.DropoutRate > 0 ? 6 : 5;
+        _encoderLayerEnd = 1 + _options.NumEncoderLayers * lpb;
+    }
+
+    protected override Tensor<T> PreprocessText(string text)
+    {
+        if (_tokenizer is null)
+            throw new InvalidOperationException("Tokenizer not initialized.");
+        var enc = _tokenizer.Encode(text);
+        int sl = Math.Min(enc.TokenIds.Count, _options.MaxTextLength);
+        var t = new Tensor<T>([sl]);
+        for (int i = 0; i < sl; i++)
+            t[i] = NumOps.FromDouble(enc.TokenIds[i]);
+        return t;
+    }
+
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); SetTrainingMode(false); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "GradTTS-Native" : "GradTTS-ONNX", Description = "Grad-TTS: Diffusion Probabilistic Model for TTS (Popov et al., 2021)", FeatureCount = _options.HiddenDim, Complexity = _options.NumEncoderLayers + _options.NumDiffusionSteps }; m.AdditionalInfo["Architecture"] = "GradTTS"; return m; }
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.SampleRate); writer.Write(_options.MelChannels); writer.Write(_options.HiddenDim); writer.Write(_options.NumEncoderLayers); writer.Write(_options.NumDiffusionSteps); writer.Write(_options.BetaStart); writer.Write(_options.BetaEnd); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = reader.ReadInt32(); _options.MelChannels = reader.ReadInt32(); _options.HiddenDim = reader.ReadInt32(); _options.NumEncoderLayers = reader.ReadInt32(); _options.NumDiffusionSteps = reader.ReadInt32(); _options.BetaStart = reader.ReadDouble(); _options.BetaEnd = reader.ReadDouble();  base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.HiddenDim; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new GradTTS<T>(Architecture, mp, _options); return new GradTTS<T>(Architecture, _options); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(GradTTS<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
+
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(input);
+        SetTrainingMode(false);
+        var c = input;
+        foreach (var l in Layers)
+            c = l.Forward(c);
+        return c;
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training not supported in ONNX mode.");
+        SetTrainingMode(true);
+        TrainWithTape(input, expected);
+        SetTrainingMode(false);
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "GradTTS-Native" : "GradTTS-ONNX",
+            Description = "Grad-TTS: Diffusion Probabilistic Model for TTS (Popov et al., 2021)",
+            FeatureCount = _options.HiddenDim,
+            Complexity = _options.NumEncoderLayers + _options.NumDiffusionSteps,
+        };
+        m.AdditionalInfo["Architecture"] = "GradTTS";
+        return m;
+    }
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_useNativeMode);
+        writer.Write(_options.ModelPath ?? string.Empty);
+        writer.Write(_options.SampleRate);
+        writer.Write(_options.MelChannels);
+        writer.Write(_options.HiddenDim);
+        writer.Write(_options.NumEncoderLayers);
+        writer.Write(_options.NumDiffusionSteps);
+        writer.Write(_options.BetaStart);
+        writer.Write(_options.BetaEnd);
+    }
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _useNativeMode = reader.ReadBoolean();
+        string mp = reader.ReadString();
+        if (!string.IsNullOrEmpty(mp))
+            _options.ModelPath = mp;
+        _options.SampleRate = reader.ReadInt32();
+        _options.MelChannels = reader.ReadInt32();
+        _options.HiddenDim = reader.ReadInt32();
+        _options.NumEncoderLayers = reader.ReadInt32();
+        _options.NumDiffusionSteps = reader.ReadInt32();
+        _options.BetaStart = reader.ReadDouble();
+        _options.BetaEnd = reader.ReadDouble();
+        base.SampleRate = _options.SampleRate;
+        base.MelChannels = _options.MelChannels;
+        base.HopSize = _options.HopSize;
+        base.HiddenDim = _options.HiddenDim;
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new GradTTS<T>(Architecture, mp, _options);
+        return new GradTTS<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(GradTTS<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
 }

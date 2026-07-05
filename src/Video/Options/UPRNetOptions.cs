@@ -65,11 +65,24 @@ public class UPRNetOptions : NeuralNetworkOptions
     /// <summary>Gets or sets the number of feature channels.</summary>
     public int NumFeatures { get; set; } = 64;
 
-    /// <summary>Gets or sets the number of pyramid levels.</summary>
-    public int NumPyramidLevels { get; set; } = 5;
+    /// <summary>
+    /// Gets or sets the number of pyramid levels. Default 3 — the base UPR-Net trains with a
+    /// 3-level image pyramid (Jin et al., CVPR 2023, §4.1: "3-level image pyramids during training …
+    /// sufficient to capture the motions on Vimeo90K"; the base model is a lightweight ~1.7M params).
+    /// The "unified" design lets inference run MORE levels for high-resolution motion, but 3 is the
+    /// paper's training/base configuration.
+    /// </summary>
+    public int NumPyramidLevels { get; set; } = 3;
 
-    /// <summary>Gets or sets the number of recurrent refinement iterations per level.</summary>
-    public int NumRecurrentIters { get; set; } = 3;
+    /// <summary>
+    /// Gets or sets the number of recurrent refinement passes PER pyramid level. Default 1 to match
+    /// UPR-Net (Jin et al., CVPR 2023): each pyramid level performs a SINGLE bi-directional flow
+    /// estimation + frame synthesis, and the "recurrent"/iterative refinement happens ACROSS levels
+    /// (the coarse-to-fine pyramid traversal with weight sharing), not by repeating the module within a
+    /// level. Values &gt; 1 add extra per-level passes beyond the paper's design (more compute, not more
+    /// fidelity). Total refinement passes = NumPyramidLevels x NumRecurrentIters.
+    /// </summary>
+    public int NumRecurrentIters { get; set; } = 1;
 
     /// <summary>Gets or sets the number of residual blocks per pyramid level.</summary>
     public int NumResBlocks { get; set; } = 2;

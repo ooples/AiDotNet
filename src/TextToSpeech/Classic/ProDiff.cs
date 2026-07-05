@@ -6,9 +6,9 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
-using AiDotNet.TextToSpeech.Interfaces;
 
 namespace AiDotNet.TextToSpeech.Classic;
 
@@ -42,7 +42,12 @@ namespace AiDotNet.TextToSpeech.Classic;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("ProDiff: Progressive Fast Diffusion Model for High-Quality Text-to-Speech", "https://arxiv.org/abs/2207.06389", Year = 2022, Authors = "Huang et al.")]
+[ResearchPaper(
+    "ProDiff: Progressive Fast Diffusion Model for High-Quality Text-to-Speech",
+    "https://arxiv.org/abs/2207.06389",
+    Year = 2022,
+    Authors = "Huang et al."
+)]
 public class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly ProDiffOptions _options;
@@ -57,7 +62,9 @@ public class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
     public ProDiff(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        ProDiffOptions? options = null) : base(architecture)
+        ProDiffOptions? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new ProDiffOptions();
         ValidateOptions(_options);
@@ -79,7 +86,9 @@ public class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
     public ProDiff(
         NeuralNetworkArchitecture<T> architecture,
         ProDiffOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new ProDiffOptions();
         ValidateOptions(_options);
@@ -170,7 +179,8 @@ public class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
@@ -178,10 +188,17 @@ public class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
         }
         else
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultAcousticModelLayers(
-                _options.EncoderDim, _options.DecoderDim, _options.HiddenDim,
-                _options.NumEncoderLayers, _options.NumDecoderLayers,
-                _options.NumHeads, _options.DropoutRate));
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultAcousticModelLayers(
+                    _options.EncoderDim,
+                    _options.DecoderDim,
+                    _options.HiddenDim,
+                    _options.NumEncoderLayers,
+                    _options.NumDecoderLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate
+                )
+            );
             ComputeEncoderDecoderBoundary();
         }
     }
@@ -211,7 +228,8 @@ public class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        SetTrainingMode(false); var c = input;
+        SetTrainingMode(false);
+        var c = input;
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
@@ -225,7 +243,7 @@ public class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
         SetTrainingMode(true);
         try
         {
-        TrainWithTape(input, expected);
+            TrainWithTape(input, expected);
         }
         finally
         {
@@ -252,9 +270,10 @@ public class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
         var m = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "ProDiff-Native" : "ProDiff-ONNX",
-            Description = "ProDiff: Progressive Fast Diffusion Model for High-Quality TTS (Huang et al., 2022)",
+            Description =
+                "ProDiff: Progressive Fast Diffusion Model for High-Quality TTS (Huang et al., 2022)",
             FeatureCount = _options.HiddenDim,
-            Complexity = _options.NumEncoderLayers + _options.NumDiffusionSteps
+            Complexity = _options.NumEncoderLayers + _options.NumDiffusionSteps,
         };
         m.AdditionalInfo["Architecture"] = "ProDiff";
         return m;
@@ -312,7 +331,10 @@ public class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
         if (opts.MelChannels <= 0)
             throw new ArgumentOutOfRangeException(nameof(opts), "MelChannels must be positive.");
         if (opts.NumDiffusionSteps <= 0)
-            throw new ArgumentOutOfRangeException(nameof(opts), "NumDiffusionSteps must be positive.");
+            throw new ArgumentOutOfRangeException(
+                nameof(opts),
+                "NumDiffusionSteps must be positive."
+            );
         if (opts.MaxTextLength <= 0)
             throw new ArgumentOutOfRangeException(nameof(opts), "MaxTextLength must be positive.");
         if (opts.HiddenDim <= 0)
@@ -327,7 +349,8 @@ public class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
 
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         base.Dispose(disposing);
     }

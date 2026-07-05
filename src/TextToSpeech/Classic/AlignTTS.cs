@@ -42,7 +42,12 @@ namespace AiDotNet.TextToSpeech.Classic;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("AlignTTS: Efficient Feed-Forward Text-to-Speech Model without Explicit Alignment", "https://arxiv.org/abs/2003.01950", Year = 2020, Authors = "Zeng et al.")]
+[ResearchPaper(
+    "AlignTTS: Efficient Feed-Forward Text-to-Speech Model without Explicit Alignment",
+    "https://arxiv.org/abs/2003.01950",
+    Year = 2020,
+    Authors = "Zeng et al."
+)]
 public class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly AlignTTSOptions _options;
@@ -57,7 +62,9 @@ public class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
     public AlignTTS(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        AlignTTSOptions? options = null) : base(architecture)
+        AlignTTSOptions? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new AlignTTSOptions();
         _useNativeMode = false;
@@ -78,7 +85,9 @@ public class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
     public AlignTTS(
         NeuralNetworkArchitecture<T> architecture,
         AlignTTSOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new AlignTTSOptions();
         _useNativeMode = true;
@@ -151,7 +160,8 @@ public class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
@@ -159,10 +169,17 @@ public class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         }
         else
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultAcousticModelLayers(
-                _options.EncoderDim, _options.DecoderDim, _options.HiddenDim,
-                _options.NumEncoderLayers, _options.NumDecoderLayers,
-                _options.NumHeads, _options.DropoutRate));
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultAcousticModelLayers(
+                    _options.EncoderDim,
+                    _options.DecoderDim,
+                    _options.HiddenDim,
+                    _options.NumEncoderLayers,
+                    _options.NumDecoderLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate
+                )
+            );
             ComputeEncoderDecoderBoundary();
         }
     }
@@ -192,7 +209,8 @@ public class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        SetTrainingMode(false); var c = input;
+        SetTrainingMode(false);
+        var c = input;
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
@@ -205,7 +223,7 @@ public class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         SetTrainingMode(true);
         try
         {
-        TrainWithTape(input, expected);
+            TrainWithTape(input, expected);
         }
         finally
         {
@@ -231,9 +249,10 @@ public class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         var m = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "AlignTTS-Native" : "AlignTTS-ONNX",
-            Description = "AlignTTS: Efficient Feed-Forward TTS without Explicit Alignment (Zeng et al., 2020)",
+            Description =
+                "AlignTTS: Efficient Feed-Forward TTS without Explicit Alignment (Zeng et al., 2020)",
             FeatureCount = _options.HiddenDim,
-            Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers
+            Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers,
         };
         m.AdditionalInfo["Architecture"] = "AlignTTS";
         return m;
@@ -284,7 +303,8 @@ public class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         base.Dispose(disposing);
     }

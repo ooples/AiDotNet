@@ -6,9 +6,9 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
-using AiDotNet.TextToSpeech.Interfaces;
 
 namespace AiDotNet.TextToSpeech.Classic;
 
@@ -42,7 +42,12 @@ namespace AiDotNet.TextToSpeech.Classic;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Glow-TTS: A Generative Flow for Text-to-Speech via Monotonic Alignment Search", "https://arxiv.org/abs/2005.11129", Year = 2020, Authors = "Kim et al.")]
+[ResearchPaper(
+    "Glow-TTS: A Generative Flow for Text-to-Speech via Monotonic Alignment Search",
+    "https://arxiv.org/abs/2005.11129",
+    Year = 2020,
+    Authors = "Kim et al."
+)]
 public class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly GlowTTSOptions _options;
@@ -57,7 +62,9 @@ public class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>
     public GlowTTS(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        GlowTTSOptions? options = null) : base(architecture)
+        GlowTTSOptions? options = null
+    )
+        : base(architecture)
     {
         _options = options ?? new GlowTTSOptions();
         _useNativeMode = false;
@@ -78,7 +85,9 @@ public class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>
     public GlowTTS(
         NeuralNetworkArchitecture<T> architecture,
         GlowTTSOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
+    )
+        : base(architecture)
     {
         _options = options ?? new GlowTTSOptions();
         _useNativeMode = true;
@@ -160,7 +169,8 @@ public class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
+        if (!_useNativeMode)
+            return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
@@ -168,10 +178,17 @@ public class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         }
         else
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultAcousticModelLayers(
-                _options.EncoderDim, _options.DecoderDim, _options.HiddenDim,
-                _options.NumEncoderLayers, _options.NumFlowLayers,
-                _options.NumHeads, _options.DropoutRate));
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultAcousticModelLayers(
+                    _options.EncoderDim,
+                    _options.DecoderDim,
+                    _options.HiddenDim,
+                    _options.NumEncoderLayers,
+                    _options.NumFlowLayers,
+                    _options.NumHeads,
+                    _options.DropoutRate
+                )
+            );
             ComputeEncoderDecoderBoundary();
         }
     }
@@ -201,7 +218,8 @@ public class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        SetTrainingMode(false); var c = input;
+        SetTrainingMode(false);
+        var c = input;
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
@@ -214,7 +232,7 @@ public class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         SetTrainingMode(true);
         try
         {
-        TrainWithTape(input, expected);
+            TrainWithTape(input, expected);
         }
         finally
         {
@@ -240,9 +258,10 @@ public class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         var m = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "GlowTTS-Native" : "GlowTTS-ONNX",
-            Description = "Glow-TTS: Generative Flow for TTS via Monotonic Alignment Search (Kim et al., 2020)",
+            Description =
+                "Glow-TTS: Generative Flow for TTS via Monotonic Alignment Search (Kim et al., 2020)",
             FeatureCount = _options.HiddenDim,
-            Complexity = _options.NumEncoderLayers + _options.NumFlowLayers
+            Complexity = _options.NumEncoderLayers + _options.NumFlowLayers,
         };
         m.AdditionalInfo["Architecture"] = "GlowTTS";
         return m;
@@ -297,7 +316,8 @@ public class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 
     protected override void Dispose(bool disposing)
     {
-        if (_disposed) return;
+        if (_disposed)
+            return;
         _disposed = true;
         base.Dispose(disposing);
     }
