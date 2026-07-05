@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using AiDotNet.Data.Structures;
 using AiDotNet.Diffusion;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
@@ -201,6 +202,90 @@ public class MissingModelsIntegrationTests
         var output = model.Predict(nodeFeatures);
 
         Assert.Equal(new[] { numNodes, numClasses }, output.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task NodeClassificationModel_TrainOnTask_LearnsSeparableGraph()
+    {
+        // Regression test for the GNN training bugs (fix/gnn-node-classification-training):
+        //   1. TrainOnTask threw ("Backward pass must be called before updating parameters")
+        //      because it called layer.UpdateParameters without an autodiff backward pass.
+        //   2. Train(input, expected) was a no-op — it read stale (zero) parameter gradients,
+        //      so weights never changed and loss stayed flat.
+        // Both now route through the GradientTape path, so a GCN must actually learn a
+        // linearly/graph-separable node-classification problem.
+        await Task.Yield();
+
+        const int n = 60, F = 4, C = 2;
+        var rng = new Random(3);
+        var features = new Tensor<double>(new[] { n, F });
+        var labels = new Tensor<double>(new[] { n, C });
+        var adjacency = new Tensor<double>(new[] { n, n });
+        var yTrue = new int[n];
+
+        // Two communities (first/second half). Features clearly encode the class;
+        // edges only connect within a community.
+        var nbr = new List<int>[n];
+        for (int i = 0; i < n; i++) nbr[i] = new List<int>();
+        for (int i = 0; i < n; i++)
+        {
+            int comm = i < n / 2 ? 0 : 1;
+            yTrue[i] = comm;
+            labels[i, comm] = 1.0;
+            for (int f = 0; f < F; f++)
+                features[i, f] = rng.NextDouble() * 0.2 + (f == comm ? 1.0 : 0.0);
+        }
+        for (int i = 0; i < n; i++)
+            for (int j = i + 1; j < n; j++)
+                if ((i < n / 2) == (j < n / 2) && rng.NextDouble() < 0.3)
+                {
+                    nbr[i].Add(j);
+                    nbr[j].Add(i);
+                }
+
+        // Symmetric-normalized adjacency with self-loops (Kipf & Welling renormalization).
+        var deg = new double[n];
+        for (int i = 0; i < n; i++) deg[i] = nbr[i].Count + 1.0;
+        for (int i = 0; i < n; i++)
+        {
+            adjacency[i, i] = 1.0 / deg[i];
+            foreach (int j in nbr[i])
+                adjacency[i, j] = 1.0 / (Math.Sqrt(deg[i]) * Math.Sqrt(deg[j]));
+        }
+
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputSize: F,
+            outputSize: C);
+        var model = new NodeClassificationModel<double>(
+            architecture, hiddenDim: 16, numLayers: 2, dropoutRate: 0.0, maxGradNorm: 0.0);
+
+        var allNodes = Enumerable.Range(0, n).ToArray();
+        var task = new NodeClassificationTask<double>
+        {
+            Graph = new GraphData<double> { NodeFeatures = features, AdjacencyMatrix = adjacency, NodeLabels = labels },
+            Labels = labels,
+            NumClasses = C,
+            TrainIndices = allNodes,
+            ValIndices = allNodes,
+            TestIndices = allNodes,
+        };
+
+        // Must NOT throw (bug #1) and must actually learn (bug #2).
+        var history = model.TrainOnTask(task, epochs: 150, learningRate: 0.02);
+
+        double firstLoss = history["train_loss"][0];
+        double lastLoss = history["train_loss"][^1];
+        double finalAcc = history["train_accuracy"][^1];
+
+        Assert.True(lastLoss < firstLoss,
+            $"Training should reduce loss (first={firstLoss:F4}, last={lastLoss:F4}) — a flat loss means the no-op bug regressed.");
+        Assert.True(finalAcc >= 0.9,
+            $"GCN should learn the separable graph (final train accuracy {finalAcc:P0} < 90%).");
+
+        double testAcc = model.EvaluateOnTask(task);
+        Assert.True(testAcc >= 0.9, $"EvaluateOnTask accuracy {testAcc:P0} < 90%.");
     }
 
     [Fact(Timeout = 120000)]
