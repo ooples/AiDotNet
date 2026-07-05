@@ -1229,12 +1229,8 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         // Resolve shapes exactly as GetParameters does (shape-only, no weight materialization) so each
         // layer's chunk is sized identically to its slice of the flat vector.
         ResolveShapesViaForward();
-        foreach (var layer in EnumerateAllLayers())
-        {
-            if (layer is null) continue;
-            var p = layer.GetParameters();
-            if (p.Length > 0) yield return new Tensor<T>(new[] { p.Length }, p);
-        }
+        foreach (var (_, p) in EnumerateParameterizedLayers())
+            yield return new Tensor<T>(new[] { p.Length }, p);
     }
 
     /// <inheritdoc />
@@ -1259,20 +1255,47 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         _preserveMaterializedParameters = true;
 
         using var e = chunks.GetEnumerator();
-        foreach (var layer in EnumerateAllLayers())
+        foreach (var (layer, p) in EnumerateParameterizedLayers())
         {
-            if (layer is null || layer.ParameterCount == 0) continue; // skip symmetrically with GetParameterChunks
             if (!e.MoveNext())
                 throw new ArgumentException(
                     "SetParameterChunks received fewer chunks than the predictor has parameterized layers.",
                     nameof(chunks));
-            layer.SetParameters(e.Current.ToVector());
+            var incoming = e.Current.ToVector();
+            // The participation gate is shared with GetParameterChunks (same materialized
+            // GetParameters().Length source), so a well-formed round-trip lines up 1:1; verify the per-layer
+            // length as well so any future ILayer whose ParameterCount disagrees with GetParameters().Length
+            // fails loudly here instead of silently shifting every subsequent layer's restored weights.
+            if (incoming.Length != p.Length)
+                throw new ArgumentException(
+                    $"SetParameterChunks chunk length {incoming.Length} does not match layer parameter length {p.Length}.",
+                    nameof(chunks));
+            layer.SetParameters(incoming);
         }
         if (e.MoveNext())
             throw new ArgumentException(
                 "SetParameterChunks received more chunks than the predictor has parameterized layers.",
                 nameof(chunks));
         InvalidateCompiledPlans();
+    }
+
+    /// <summary>
+    /// Single source of truth for WHICH layers participate in the chunked parameter API and in WHAT order.
+    /// Both <see cref="GetParameterChunks"/> and <see cref="SetParameterChunks"/> iterate this, so their skip
+    /// predicate can never diverge: a layer participates iff its materialized <c>GetParameters().Length &gt; 0</c>
+    /// (the gate the flat GetParameters/SetParameters walk uses), NOT the <c>ParameterCount</c> property, which
+    /// an ill-behaved <see cref="ILayer{T}"/> could report inconsistently. Yields the layer with its
+    /// already-materialized vector so GetParameterChunks reuses it (no second GetParameters call); peak stays
+    /// one layer in flight, never a flat aggregate.
+    /// </summary>
+    private IEnumerable<(ILayer<T> Layer, Vector<T> Parameters)> EnumerateParameterizedLayers()
+    {
+        foreach (var layer in EnumerateAllLayers())
+        {
+            if (layer is null) continue;
+            var p = layer.GetParameters();
+            if (p.Length > 0) yield return (layer, p);
+        }
     }
 
     private IEnumerable<ILayer<T>?> EnumerateAllLayers()
