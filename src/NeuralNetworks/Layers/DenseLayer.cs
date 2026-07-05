@@ -1459,9 +1459,15 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (!IsShapeResolved) return new Vector<T>(0);
 
         EnsureInitialized();
+        // fp16-resident (#1764): _weights is a transient shared upcast scratch (overwritten every forward,
+        // and shared across same-shape layers), not the authoritative store. Read the resident half master
+        // — GetWeights() upcasts it — so the round-trip returns THIS layer's weights rather than whatever
+        // last occupied the scratch. Otherwise clone/serialize silently copies wrong (or another layer's)
+        // values at foundation scale.
+        var weightsView = _weightsHalf is not null ? GetWeights() : _weights;
         // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
         return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_weights.Data),
+            Vector<T>.FromMemory(weightsView.Data),
             Vector<T>.FromMemory(_biases.Data));
     }
 
@@ -1530,6 +1536,26 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         EnsureInitialized();
+
+        // fp16-resident path (#1764): when LowPrecisionResident engaged, _weightsHalf is the authoritative
+        // weight store and _weights is a transient, shared upcast scratch that every forward overwrites
+        // from _weightsHalf. Writing the incoming weights into _weights would therefore be silently
+        // discarded on the next forward (the clone/deserialize would keep whatever the resident master
+        // held — e.g. a clone's random probe-init — diverging from the source). Downcast the incoming
+        // weights straight into the resident half master instead. Biases stay full precision.
+        if (_weightsHalf is not null)
+        {
+            int wLenHalf = _weightsHalf.Length;
+            int expectedHalf = wLenHalf + _biases.Length;
+            if (parameters.Length != expectedHalf)
+            {
+                throw new ArgumentException($"Expected {expectedHalf} parameters, but got {parameters.Length}");
+            }
+            NumOps.ToHalfSpan(parameters.AsSpan().Slice(0, wLenHalf), _weightsHalf.AsWritableSpan());
+            parameters.AsSpan().Slice(wLenHalf, _biases.Length).CopyTo(_biases.Data.Span);
+            Engine.InvalidatePersistentTensor(_biases);
+            return;
+        }
 
         int expected = _weights.Length + _biases.Length;
         if (parameters.Length != expected)
