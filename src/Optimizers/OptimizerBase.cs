@@ -819,6 +819,15 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         }
 
         var predictions = PredictForEvaluation(model, X);
+
+        // First-class multi-output (n×H) regression: score by uniform-average R² instead of collapsing to a
+        // single vector (which is meaningless for an n×H target and which ConvertToVector cannot even flatten).
+        var multiOutputR2 = TryCalculateMultiOutputRegressionStats(X, y, predictions, predictionType, r2Only: true);
+        if (multiOutputR2 is not null)
+        {
+            return multiOutputR2;
+        }
+
         if (!TryGetAlignedVectorsForOptimizer(y, predictions, predictionType, out var actual, out var predicted))
         {
             return new DataSetStats<T, TInput, TOutput>
@@ -888,6 +897,13 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         var predictions = PredictForEvaluation(model, X);
         var inputSize = InputHelper<T, TInput>.GetInputSize(X);
 
+        // First-class multi-output (n×H) regression: uniform-average R² + pooled error stats (see helper).
+        var multiOutputStats = TryCalculateMultiOutputRegressionStats(X, y, predictions, predictionType, r2Only: false);
+        if (multiOutputStats is not null)
+        {
+            return multiOutputStats;
+        }
+
         if (!TryGetAlignedVectorsForOptimizer(y, predictions, predictionType, out var actual, out var predicted))
         {
             return new DataSetStats<T, TInput, TOutput>
@@ -923,6 +939,115 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 LearningCurveSteps = PredictionOptions.LearningCurveSteps,
                 PredictionType = predictionType
             }),
+            Predicted = predictions,
+            Features = X,
+            Actual = y,
+            IsDataProvided = true
+        };
+    }
+
+    /// <summary>
+    /// First-class evaluation for a multi-output (n×H) REGRESSION target. The generic single-vector path
+    /// (<see cref="TryGetAlignedVectorsForOptimizer"/>) collapses TOutput to one <see cref="Vector{T}"/>, which is
+    /// meaningless for an n×H target — and for a <see cref="Matrix{T}"/> it cannot flatten at all, so a correctly
+    /// trained multi-output model scores as garbage and loses selection to the default untrained model. This scores
+    /// by the INDUSTRY-STANDARD uniform-average R² (the mean of the per-column R², i.e. scikit-learn's
+    /// <c>multioutput='uniform_average'</c>) as the selection signal, plus pooled error stats over the flattened
+    /// residuals. Returns <c>null</c> for anything that is not a genuine (&gt;1 column) regression matrix, so every
+    /// existing single-output and classification path is left completely untouched.
+    /// </summary>
+    private DataSetStats<T, TInput, TOutput>? TryCalculateMultiOutputRegressionStats(
+        TInput X, TOutput y, TOutput predictions, PredictionType predictionType, bool r2Only)
+    {
+        if (predictionType != PredictionType.Regression
+            || y is not Matrix<T> actualMatrix
+            || predictions is not Matrix<T> predictedMatrix
+            || actualMatrix.Columns <= 1
+            || actualMatrix.Rows != predictedMatrix.Rows
+            || actualMatrix.Columns != predictedMatrix.Columns)
+        {
+            return null;
+        }
+
+        int rows = actualMatrix.Rows;
+        int cols = actualMatrix.Columns;
+
+        // Uniform-average R²: per-column R² = 1 - SS_res/SS_tot, then the mean across columns.
+        T sumR2 = NumOps.Zero;
+        for (int c = 0; c < cols; c++)
+        {
+            T mean = NumOps.Zero;
+            for (int r = 0; r < rows; r++)
+            {
+                mean = NumOps.Add(mean, actualMatrix[r, c]);
+            }
+
+            if (rows > 0)
+            {
+                mean = NumOps.Divide(mean, NumOps.FromDouble(rows));
+            }
+
+            T ssRes = NumOps.Zero;
+            T ssTot = NumOps.Zero;
+            for (int r = 0; r < rows; r++)
+            {
+                T res = NumOps.Subtract(actualMatrix[r, c], predictedMatrix[r, c]);
+                ssRes = NumOps.Add(ssRes, NumOps.Multiply(res, res));
+                T tot = NumOps.Subtract(actualMatrix[r, c], mean);
+                ssTot = NumOps.Add(ssTot, NumOps.Multiply(tot, tot));
+            }
+
+            T colR2 = NumOps.Equals(ssTot, NumOps.Zero)
+                ? NumOps.Zero
+                : NumOps.Subtract(NumOps.One, NumOps.Divide(ssRes, ssTot));
+            sumR2 = NumOps.Add(sumR2, colR2);
+        }
+
+        T meanR2 = cols > 0 ? NumOps.Divide(sumR2, NumOps.FromDouble(cols)) : NumOps.Zero;
+
+        if (r2Only)
+        {
+            return new DataSetStats<T, TInput, TOutput>
+            {
+                ErrorStats = ErrorStats<T>.Empty(),
+                ActualBasicStats = BasicStats<T>.Empty(),
+                PredictedBasicStats = BasicStats<T>.Empty(),
+                PredictionStats = PredictionStats<T>.WithR2Only(meanR2),
+                Predicted = predictions,
+                Features = X,
+                Actual = y,
+                IsDataProvided = true
+            };
+        }
+
+        // Full path: pooled error stats over the flattened (row-major) residuals, with the uniform-average R² as
+        // the authoritative selection signal (RSquaredFitnessCalculator, the default, reads PredictionStats.R2).
+        var actualFlat = new Vector<T>(rows * cols);
+        var predictedFlat = new Vector<T>(rows * cols);
+        int k = 0;
+        for (int r = 0; r < rows; r++)
+        {
+            for (int c = 0; c < cols; c++)
+            {
+                actualFlat[k] = actualMatrix[r, c];
+                predictedFlat[k] = predictedMatrix[r, c];
+                k++;
+            }
+        }
+
+        var inputSize = InputHelper<T, TInput>.GetInputSize(X);
+        return new DataSetStats<T, TInput, TOutput>
+        {
+            ErrorStats = new ErrorStats<T>(new ErrorStatsInputs<T>
+            {
+                Actual = actualFlat,
+                Predicted = predictedFlat,
+                FeatureCount = inputSize,
+                PredictionType = predictionType
+            }),
+            ActualBasicStats = new BasicStats<T>(new BasicStatsInputs<T> { Values = actualFlat }),
+            PredictedBasicStats = new BasicStats<T>(new BasicStatsInputs<T> { Values = predictedFlat }),
+            PredictionStats = PredictionStats<T>.WithR2Only(meanR2),
             Predicted = predictions,
             Features = X,
             Actual = y,

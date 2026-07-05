@@ -87,6 +87,29 @@ public static class ConversionsHelper
         {
             return vector;
         }
+        else if (output is Matrix<T> matrix)
+        {
+            // Flatten a matrix row-major. An n×1 column (e.g. a single-head multi-output regressor) becomes the
+            // obvious length-n vector; an n×H matrix flattens to n*H, matching how the actuals flatten so the
+            // aligned-length check still holds. (Uniform-average R² for genuine n×H regression is scored earlier
+            // via TryCalculateMultiOutputRegressionStats before this collapse is reached.)
+            if (matrix.Rows == 0 || matrix.Columns == 0)
+            {
+                return Vector<T>.Empty();
+            }
+
+            var flat = new Vector<T>(matrix.Rows * matrix.Columns);
+            int idx = 0;
+            for (int r = 0; r < matrix.Rows; r++)
+            {
+                for (int c = 0; c < matrix.Columns; c++)
+                {
+                    flat[idx++] = matrix[r, c];
+                }
+            }
+
+            return flat;
+        }
         else if (output is Tensor<T> tensor)
         {
             // Handle empty tensors

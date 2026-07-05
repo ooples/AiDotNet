@@ -51,6 +51,20 @@ public static class DataSplitter
                 (TOutput)(object)result.yTest
             );
         }
+        else if (X is Matrix<T> xMatrixMulti && y is Matrix<T> yMatrix)
+        {
+            // Multi-output (n×H) regression: X is n×features, y is n×H. Split by the SAME shuffled row
+            // partition so features and every horizon column stay aligned.
+            var result = SplitMatrixMatrix<T>(xMatrixMulti, yMatrix, trainRatio, validationRatio, shuffle, randomSeed);
+            return (
+                (TInput)(object)result.XTrain,
+                (TOutput)(object)result.yTrain,
+                (TInput)(object)result.XVal,
+                (TOutput)(object)result.yVal,
+                (TInput)(object)result.XTest,
+                (TOutput)(object)result.yTest
+            );
+        }
         else if (X is Tensor<T> xTensor && y is Tensor<T> yTensor)
         {
             var result = SplitTensor<T>(xTensor, yTensor, trainRatio, validationRatio, shuffle, randomSeed);
@@ -117,6 +131,55 @@ public static class DataSplitter
         {
             XTest.SetRow(i, X.GetRow(indices[i + trainSize + validationSize]));
             yTest[i] = y[indices[i + trainSize + validationSize]];
+        }
+
+        return (XTrain, yTrain, XVal, yVal, XTest, yTest);
+    }
+
+    private static (Matrix<T> XTrain, Matrix<T> yTrain, Matrix<T> XVal, Matrix<T> yVal, Matrix<T> XTest, Matrix<T> yTest)
+        SplitMatrixMatrix<T>(
+            Matrix<T> X,
+            Matrix<T> y,
+            double trainRatio,
+            double validationRatio,
+            bool shuffle,
+            int randomSeed)
+    {
+        int totalSamples = X.Rows;
+        int trainSize = (int)(totalSamples * trainRatio);
+        int validationSize = (int)(totalSamples * validationRatio);
+        int testSize = totalSamples - trainSize - validationSize;
+
+        var indices = Enumerable.Range(0, totalSamples).ToList();
+        if (shuffle)
+        {
+            var random = RandomHelper.CreateSeededRandom(randomSeed);
+            indices = [.. indices.OrderBy(_ => random.Next())];
+        }
+
+        var XTrain = new Matrix<T>(trainSize, X.Columns);
+        var yTrain = new Matrix<T>(trainSize, y.Columns);
+        var XVal = new Matrix<T>(validationSize, X.Columns);
+        var yVal = new Matrix<T>(validationSize, y.Columns);
+        var XTest = new Matrix<T>(testSize, X.Columns);
+        var yTest = new Matrix<T>(testSize, y.Columns);
+
+        for (int i = 0; i < trainSize; i++)
+        {
+            XTrain.SetRow(i, X.GetRow(indices[i]));
+            yTrain.SetRow(i, y.GetRow(indices[i]));
+        }
+
+        for (int i = 0; i < validationSize; i++)
+        {
+            XVal.SetRow(i, X.GetRow(indices[i + trainSize]));
+            yVal.SetRow(i, y.GetRow(indices[i + trainSize]));
+        }
+
+        for (int i = 0; i < testSize; i++)
+        {
+            XTest.SetRow(i, X.GetRow(indices[i + trainSize + validationSize]));
+            yTest.SetRow(i, y.GetRow(indices[i + trainSize + validationSize]));
         }
 
         return (XTrain, yTrain, XVal, yVal, XTest, yTest);
