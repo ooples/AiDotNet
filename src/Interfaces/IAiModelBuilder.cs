@@ -1734,6 +1734,46 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureTrainingMonitor(ITrainingMonitor<T> monitor);
 
     /// <summary>
+    /// Registers a per-epoch training callback using a simple delegate.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is the one-liner way to watch training as it happens. The
+    /// function you pass runs after every epoch and receives the current loss and epoch number.
+    /// Return <c>true</c> to keep training or <c>false</c> to stop early.
+    /// </para>
+    /// <para>
+    /// Call it multiple times (and mix it with the <see cref="ITrainingCallback{T}"/> overload)
+    /// to register several callbacks; training aborts if any of them returns <c>false</c>.
+    /// </para>
+    /// </remarks>
+    /// <param name="onEpochEnd">
+    /// A function called once after each epoch with a <see cref="TrainingProgress{T}"/> snapshot;
+    /// return <c>true</c> to continue or <c>false</c> to request an early stop.
+    /// </param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureTrainingCallback(Func<TrainingProgress<T>, bool> onEpochEnd);
+
+    /// <summary>
+    /// Registers a full <see cref="ITrainingCallback{T}"/> that observes training and can abort it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Use this when you want a reusable object that sets up before
+    /// training, reacts after each epoch, and cleans up at the end — for example
+    /// <see cref="AiDotNet.TrainingMonitoring.HealthMonitorCallback{T}"/>, which automatically
+    /// stops a run whose loss blows up.
+    /// </para>
+    /// <para>
+    /// Register multiple callbacks (and combine with the delegate overload) as needed; they are
+    /// all invoked each epoch and training aborts if any returns <c>false</c>.
+    /// </para>
+    /// </remarks>
+    /// <param name="callback">The callback whose lifecycle methods the training loop invokes.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureTrainingCallback(ITrainingCallback<T> callback);
+
+    /// <summary>
     /// Configures model registry for centralized model storage and versioning.
     /// </summary>
     /// <remarks>
