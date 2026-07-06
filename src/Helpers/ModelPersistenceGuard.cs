@@ -384,7 +384,7 @@ internal static class ModelPersistenceGuard
                     // Construct first so AiDotNetLicenseKey's Guard.NotNullOrWhiteSpace
                     // runs on the raw string before anything else inspects it.
                     keyConfig = new AiDotNetLicenseKey(licenseKey);
-                    if (LicenseValidator.IsSignedKeyFormat(licenseKey))
+                    if (LicenseValidator.IsOfflineVerifiableKeyFormat(licenseKey))
                     {
                         keyConfig.ServerUrl = string.Empty;
                     }

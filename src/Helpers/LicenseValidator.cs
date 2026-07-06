@@ -95,8 +95,15 @@ internal sealed class LicenseValidator
         // offline; if the caller set an explicit custom ServerUrl they want online validation (e.g. for
         // revocation), so respect it. ServerUrl == "" is the explicit offline-only opt-in handled above.
         bool serverUrlIsDefault = _licenseKey.ServerUrl is null;
+        // A key can be verified offline when this build embeds the matching verifier material:
+        //   v1 (aidn.{id}.{sig})   → the symmetric HMAC build key
+        //   v2 (aidn2.{claims}.{sig}) → an embedded PUBLIC signing key (asymmetric; strictly stronger —
+        //       the public key is worthless to a forger, so it is safe to ship). exp bounds offline use.
+        bool v1Verifiable = IsSignedKeyFormat(_licenseKey.Key) && buildKeyEmbedded;
+        bool v2Verifiable = AsymmetricLicenseVerifier.IsAsymmetricKeyFormat(_licenseKey.Key)
+            && LicensePublicKeyProvider.HasAnyKey;
         bool useOfflineValidation = explicitOfflineOnly
-            || (serverUrlIsDefault && IsSignedKeyFormat(_licenseKey.Key) && buildKeyEmbedded);
+            || (serverUrlIsDefault && (v1Verifiable || v2Verifiable));
 
         if (useOfflineValidation)
         {
@@ -115,7 +122,7 @@ internal sealed class LicenseValidator
             // Future work: add Ed25519-signed AIDN-{ENV}-{TIER}-{V}-{ID}-{SIG}
             // format that CAN be validated offline against a SDK-shipped public
             // key. Until that lands, AIDN-* keys are server-only.
-            if (!IsSignedKeyFormat(_licenseKey.Key))
+            if (!IsOfflineVerifiableKeyFormat(_licenseKey.Key))
             {
                 // Cache the rejection so the sync path matches ValidateAsync()
                 // (line ~461) and CachedResult is non-null after the first call.
@@ -127,7 +134,8 @@ internal sealed class LicenseValidator
                     if (_cached is not null) return _cached;
                     var rejected = new LicenseValidationResult(
                         LicenseKeyStatus.Invalid,
-                        message: "Offline-only mode requires a signed license key (aidn.{id}.{signature} format). " +
+                        message: "Offline-only mode requires a signed license key (aidn2.{claims}.{signature} " +
+                                 "asymmetric format, or legacy aidn.{id}.{signature}). " +
                                  "Server-validated keys (AIDN-PROD-*, AIDN-DEV-*) require online validation — set ServerUrl " +
                                  "to null (default endpoint) or to a custom URL. To enable air-gapped operation, " +
                                  "request a signed license key from support.");
@@ -243,6 +251,16 @@ internal sealed class LicenseValidator
                 message: "License key is empty or missing.");
         }
 
+        // aidn2 asymmetric tokens: verify the signature against the embedded PUBLIC key selected by the
+        // token's kid, then enforce exp. This is the industry-standard, strictly-stronger path — the
+        // verifier holds only a public key, so it CANNOT forge a token. Fails closed on any problem
+        // (bad signature, unknown kid, no embedded public key, expired).
+        if (AsymmetricLicenseVerifier.IsAsymmetricKeyFormat(_licenseKey.Key))
+        {
+            return AsymmetricLicenseVerifier.Verify(_licenseKey.Key, DateTimeOffset.UtcNow);
+        }
+
+        // Legacy v1 (aidn.{id}.{signature}) symmetric-HMAC path below (deprecated, back-compat only).
         // Validate the key format: must be aidn.{id}.{signature}
         if (!ValidateKeyFormat(_licenseKey.Key))
         {
@@ -384,11 +402,25 @@ internal sealed class LicenseValidator
     }
 
     /// <summary>
-    /// Validates key format — accepts either signed (offline) or server-validated (online) format.
+    /// Validates key format — accepts asymmetric (aidn2), legacy signed (aidn), or
+    /// server-validated (AIDN-*) formats.
     /// </summary>
     internal static bool ValidateKeyFormat(string key)
     {
-        return IsSignedKeyFormat(key) || IsServerValidatedKeyFormat(key);
+        return AsymmetricLicenseVerifier.IsAsymmetricKeyFormat(key)
+            || IsSignedKeyFormat(key)
+            || IsServerValidatedKeyFormat(key);
+    }
+
+    /// <summary>
+    /// Returns true if the key is in a format that can be verified LOCALLY (offline) against
+    /// build-embedded material: the new asymmetric <c>aidn2.</c> tokens (verified against the embedded
+    /// public key) or the legacy <c>aidn.</c> HMAC tokens (verified against the embedded build key).
+    /// Server-validated <c>AIDN-*</c> keys are excluded — they carry no signature the SDK can verify.
+    /// </summary>
+    internal static bool IsOfflineVerifiableKeyFormat(string key)
+    {
+        return AsymmetricLicenseVerifier.IsAsymmetricKeyFormat(key) || IsSignedKeyFormat(key);
     }
 
     /// <summary>
@@ -521,13 +553,17 @@ internal sealed class LicenseValidator
         bool explicitOfflineOnly = _licenseKey.ServerUrl is not null && _licenseKey.ServerUrl.Trim().Length == 0;
         bool buildKeyEmbedded = BuildKeyProvider.GetBuildKey().Length > 0;
         bool serverUrlIsDefault = _licenseKey.ServerUrl is null;
-        if (explicitOfflineOnly || (serverUrlIsDefault && IsSignedKeyFormat(_licenseKey.Key) && buildKeyEmbedded))
+        bool v1Verifiable = IsSignedKeyFormat(_licenseKey.Key) && buildKeyEmbedded;
+        bool v2Verifiable = AsymmetricLicenseVerifier.IsAsymmetricKeyFormat(_licenseKey.Key)
+            && LicensePublicKeyProvider.HasAnyKey;
+        if (explicitOfflineOnly || (serverUrlIsDefault && (v1Verifiable || v2Verifiable)))
         {
-            if (!IsSignedKeyFormat(_licenseKey.Key))
+            if (!IsOfflineVerifiableKeyFormat(_licenseKey.Key))
             {
                 var rejected = new LicenseValidationResult(
                     LicenseKeyStatus.Invalid,
-                    message: "Offline-only mode requires a signed license key (aidn.{id}.{signature} format). " +
+                    message: "Offline-only mode requires a signed license key (aidn2.{claims}.{signature} " +
+                             "asymmetric format, or legacy aidn.{id}.{signature}). " +
                              "Server-validated keys (AIDN-PROD-*) require online validation.");
                 lock (_cacheLock) { _cached = rejected; }
                 return rejected;

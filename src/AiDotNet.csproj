@@ -272,6 +272,15 @@
 	  <EmbeddedResource Include="BuildKey\BuildKey.bin" Condition="Exists('BuildKey\BuildKey.bin')">
 	    <LogicalName>AiDotNet.BuildKey</LogicalName>
 	  </EmbeddedResource>
+	  <!-- Asymmetric license PUBLIC signing key(s) used by LicensePublicKeyProvider to verify
+	       aidn2.{claims}.{signature} tokens offline. Unlike BuildKey this is a PUBLIC key and is
+	       safe to ship/extract (worthless to a forger). Injected during official CI/CD builds;
+	       CI generates the RSA keypair, keeps the PRIVATE key in a secret store (never committed),
+	       and drops the public half here as JWK-like JSON: { "keys": [ { "kid", "n", "e" } ] }.
+	       See LicensePublicKeyProvider.cs. -->
+	  <EmbeddedResource Include="BuildKey\LicensePublicKey.json" Condition="Exists('BuildKey\LicensePublicKey.json')">
+	    <LogicalName>AiDotNet.LicensePublicKey</LogicalName>
+	  </EmbeddedResource>
 	  <EmbeddedResource Include="IntegrityHash\IntegrityHash.bin" Condition="Exists('IntegrityHash\IntegrityHash.bin')">
 	    <LogicalName>AiDotNet.IntegrityHash</LogicalName>
 	  </EmbeddedResource>

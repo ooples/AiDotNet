@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
 using AiDotNet.Helpers;
@@ -37,6 +38,99 @@ internal static class LicenseTestSupport
         byte[] sig = hmac.ComputeHash(Encoding.UTF8.GetBytes(payload));
         string b64url = Convert.ToBase64String(sig).Replace('+', '-').Replace('/', '_').TrimEnd('=');
         return payload + "." + b64url;
+    }
+
+    // ───────────────────────── Asymmetric (aidn2) test support ─────────────────────────
+
+    /// <summary>
+    /// A fixed key-id for the ephemeral test signing keypair. Real builds embed CI-generated kids.
+    /// </summary>
+    internal const string TestKid = "test-kid-2026a";
+
+    /// <summary>
+    /// Ephemeral RSA-2048 test keypair (NEVER a real signing key). Its PUBLIC half is injected into
+    /// <see cref="LicensePublicKeyProvider"/> by the License collection fixture; its PRIVATE half signs
+    /// test tokens via <see cref="SignedKeyV2"/>. Regenerated per test process — nothing is committed.
+    /// </summary>
+    private static readonly RSA TestRsa = CreateTestRsa();
+
+    private static RSA CreateTestRsa()
+    {
+        var rsa = RSA.Create();
+        // Force RSA-2048 uniformly across TFMs (net471 default can be 1024; net8/net10 default is 2048).
+        if (rsa.KeySize != 2048)
+        {
+            rsa.KeySize = 2048;
+        }
+
+        // Materialize the key deterministically before first use.
+        _ = rsa.ExportParameters(false);
+        return rsa;
+    }
+
+    /// <summary>The PUBLIC parameters (modulus/exponent) of the ephemeral test signing keypair.</summary>
+    internal static RSAParameters TestPublicKeyParameters => TestRsa.ExportParameters(false);
+
+    /// <summary>The default embedded public-key set used by the License fixture: { TestKid → test public key }.</summary>
+    internal static Dictionary<string, RSAParameters> DefaultTestKeySet() =>
+        new(StringComparer.Ordinal) { [TestKid] = TestPublicKeyParameters };
+
+    /// <summary>
+    /// Produces a valid asymmetric token <c>aidn2.{base64url(claims)}.{base64url(sig)}</c> signed with the
+    /// ephemeral test PRIVATE key (RS256 = RSA PKCS#1 v1.5 + SHA-256), exactly what
+    /// <see cref="AsymmetricLicenseVerifier"/> verifies. Pass a foreign <paramref name="signingKey"/> to
+    /// forge a bad-signature token, or an <paramref name="exp"/> in the past for an expired token.
+    /// </summary>
+    internal static string SignedKeyV2(
+        string sub = "test-customer",
+        string tier = "pro",
+        int seats = 5,
+        DateTimeOffset? iat = null,
+        DateTimeOffset? exp = null,
+        string? kid = null,
+        RSA? signingKey = null)
+    {
+        var claims = new LicenseClaims
+        {
+            Sub = sub,
+            Tier = tier,
+            Seats = seats,
+            Iat = (iat ?? DateTimeOffset.UtcNow).ToUnixTimeSeconds(),
+            Exp = (exp ?? DateTimeOffset.UtcNow.AddDays(30)).ToUnixTimeSeconds(),
+            Kid = kid ?? TestKid
+        };
+
+        byte[] claimsBytes = Encoding.UTF8.GetBytes(claims.ToCanonicalJson());
+        RSA rsa = signingKey ?? TestRsa;
+        byte[] sig = rsa.SignData(claimsBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        return AsymmetricLicenseVerifier.Prefix + "." +
+               Base64UrlHelper.Encode(claimsBytes) + "." +
+               Base64UrlHelper.Encode(sig);
+    }
+
+    /// <summary>
+    /// Creates a fresh, unrelated RSA-2048 keypair — used to sign a token whose signature will NOT verify
+    /// against the embedded test public key (forged-token regression).
+    /// </summary>
+    internal static RSA CreateForeignSigningKey() => CreateTestRsa();
+
+    /// <summary>
+    /// Scopes the embedded license public-key set to <paramref name="keys"/> for the duration of a test,
+    /// restoring the previous set on dispose. Pass <see langword="null"/> to simulate a dev/fork build with
+    /// NO embedded public key and assert fail-closed behaviour.
+    /// </summary>
+    internal static IDisposable WithLicensePublicKeys(IReadOnlyDictionary<string, RSAParameters>? keys)
+    {
+        var previous = LicensePublicKeyProvider.CurrentSnapshot();
+        LicensePublicKeyProvider.OverrideForTesting(keys);
+        return new RestorePublicKeys(previous);
+    }
+
+    private sealed class RestorePublicKeys : IDisposable
+    {
+        private readonly IReadOnlyDictionary<string, RSAParameters>? _previous;
+        public RestorePublicKeys(IReadOnlyDictionary<string, RSAParameters>? previous) => _previous = previous;
+        public void Dispose() => LicensePublicKeyProvider.OverrideForTesting(_previous);
     }
 
     /// <summary>
@@ -88,9 +182,21 @@ public sealed class LicenseBuildKeyFixture : IDisposable
     // so teardown restores it rather than clearing — an official-build run keeps its embedded key afterwards.
     private readonly byte[]? _previousKey = LicenseTestSupport.CurrentBuildKeySnapshot();
 
-    public LicenseBuildKeyFixture() => BuildKeyProvider.OverrideForTesting(LicenseTestSupport.TestBuildKey);
+    // Same restore discipline for the asymmetric (aidn2) public key set.
+    private readonly IReadOnlyDictionary<string, RSAParameters>? _previousPublicKeys =
+        LicensePublicKeyProvider.CurrentSnapshot();
 
-    public void Dispose() => BuildKeyProvider.OverrideForTesting(_previousKey);
+    public LicenseBuildKeyFixture()
+    {
+        BuildKeyProvider.OverrideForTesting(LicenseTestSupport.TestBuildKey);
+        LicensePublicKeyProvider.OverrideForTesting(LicenseTestSupport.DefaultTestKeySet());
+    }
+
+    public void Dispose()
+    {
+        BuildKeyProvider.OverrideForTesting(_previousKey);
+        LicensePublicKeyProvider.OverrideForTesting(_previousPublicKeys);
+    }
 }
 
 [CollectionDefinition("License", DisableParallelization = true)]
