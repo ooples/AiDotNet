@@ -3543,6 +3543,53 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // any standard vocab size).
             if (isLang)
             {
+                // Language models are EmbeddingLayer-first: they consume INTEGER token IDs. The base
+                // CreateConstantTensor(0.1)/(0.9) feed a constant continuous tensor, which the embedding
+                // treats as continuous → projects to scalar multiples of one vector → the following
+                // (scale-invariant) LayerNorm collapses them to an identical output, defeating EVERY
+                // input-sensitivity/gradient invariant (DifferentInputs, GradientFlow, ScaledInput,
+                // MoreData, Training_ShouldChangeParameters), not just DifferentInputs_AfterTraining.
+                // Emit token-ID input tensors (legal [0,100) range, well below any standard vocab) for the
+                // INPUT shape only — targets (a different shape, via CreateRandomTargetTensor) stay
+                // continuous as their loss expects. The model is UNCHANGED (still paper-faithful token
+                // embeddings); this only feeds it the discrete token input a lookup model actually consumes.
+                sb.AppendLine();
+                sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateRandomTensor(int[] shape, System.Random rng)");
+                sb.AppendLine("    {");
+                sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
+                sb.AppendLine("        bool isInputShape = shape.Length == InputShape.Length;");
+                sb.AppendLine("        for (int d = 0; d < shape.Length && isInputShape; d++)");
+                sb.AppendLine("            isInputShape &= shape[d] == InputShape[d];");
+                sb.AppendLine("        if (isInputShape)");
+                sb.AppendLine("        {");
+                sb.AppendLine("            for (int i = 0; i < tensor.Length; i++)");
+                sb.AppendLine("                tensor[i] = rng.Next(0, 100);");
+                sb.AppendLine("            return tensor;");
+                sb.AppendLine("        }");
+                sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
+                sb.AppendLine("            tensor[i] = rng.NextDouble();");
+                sb.AppendLine("        return tensor;");
+                sb.AppendLine("    }");
+                sb.AppendLine();
+                sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateConstantTensor(int[] shape, double value)");
+                sb.AppendLine("    {");
+                sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
+                sb.AppendLine("        bool isInputShape = shape.Length == InputShape.Length;");
+                sb.AppendLine("        for (int d = 0; d < shape.Length && isInputShape; d++)");
+                sb.AppendLine("            isInputShape &= shape[d] == InputShape[d];");
+                sb.AppendLine("        if (isInputShape)");
+                sb.AppendLine("        {");
+                sb.AppendLine("            // Distinct base token per scalar so different `value`s → different token");
+                sb.AppendLine("            // sequences (0.1 and 0.9 must produce different embeddings, not the same).");
+                sb.AppendLine("            int baseTok = value < 0.5 ? 3 : 37;");
+                sb.AppendLine("            for (int i = 0; i < tensor.Length; i++)");
+                sb.AppendLine("                tensor[i] = (i + baseTok) % 100;");
+                sb.AppendLine("            return tensor;");
+                sb.AppendLine("        }");
+                sb.AppendLine("        for (int i = 0; i < tensor.Length; i++)");
+                sb.AppendLine("            tensor[i] = value;");
+                sb.AppendLine("        return tensor;");
+                sb.AppendLine("    }");
                 sb.AppendLine();
                 sb.AppendLine("    [Xunit.Fact(Timeout = 120000)]");
                 sb.AppendLine("    public override async System.Threading.Tasks.Task DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs()");

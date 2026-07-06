@@ -392,15 +392,15 @@ public static class LayerHelper<T>
         yield return new LayerNormalizationLayer<T>();
         yield return new DropoutLayer<T>(dropoutProbability);
 
+        // Residual transformer blocks (Vaswani et al. 2017 §3.1; Devlin et al. 2019). The residual
+        // skip connections are essential for gradient flow through a deep encoder; a residual-free
+        // MHA -> LN -> FFN -> LN stack collapses to a uniform, input-insensitive output after a few
+        // training steps. TransformerEncoderBlock provides the residual adds + linear FFN output.
         for (int i = 0; i < numHiddenLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenSize) / (numAttentionHeads), (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>();
-
-            yield return new DenseLayer<T>(hiddenSize * 4, new GELUActivation<T>() as IActivationFunction<T>);
-            yield return new DenseLayer<T>(hiddenSize);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DropoutLayer<T>(dropoutProbability);
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize, numAttentionHeads, hiddenSize * 4, dropoutProbability,
+                new GELUActivation<T>());
         }
 
         // Pooler
@@ -489,25 +489,32 @@ public static class LayerHelper<T>
         yield return new LayerNormalizationLayer<T>();
         yield return new DropoutLayer<T>(dropoutProbability);
 
-        // 2. Transformer Blocks
+        // 2. Transformer Blocks. Each block is a RESIDUAL self-attention sublayer + RESIDUAL
+        // position-wise FFN sublayer, each with its own LayerNorm (Vaswani et al. 2017 §3.1;
+        // Devlin et al. 2019). The residual (skip) connections are ESSENTIAL: a plain
+        // sequential MHA -> LN -> FFN -> LN stack with NO residual gives a 12-layer encoder no
+        // gradient highway, so the embedding barely trains and the model collapses to a
+        // uniform, input-insensitive output after only a few optimizer steps (the
+        // DifferentInputs_AfterTraining degenerate-solution failure). TransformerEncoderBlock
+        // wraps both sublayers in residual adds + LayerNorm and uses a GELU-then-linear FFN,
+        // matching BERT exactly.
         for (int i = 0; i < numHiddenLayers; i++)
         {
-            // Self-attention
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenSize) / (numAttentionHeads), (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>();
-
-            // Feed-forward
-            yield return new DenseLayer<T>(hiddenSize * 4, new GELUActivation<T>() as IActivationFunction<T>);
-            yield return new DenseLayer<T>(hiddenSize);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DropoutLayer<T>(dropoutProbability);
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize, numAttentionHeads, hiddenSize * 4, dropoutProbability,
+                new GELUActivation<T>());
         }
 
         // 3. Pooler
         yield return new DenseLayer<T>(hiddenSize, new TanhActivation<T>() as IActivationFunction<T>);
 
-        // 4. Task Head (default to 1 for regression or 2 for binary classification)
-        yield return new DenseLayer<T>(1);
+        // 4. Task Head. BERT's classification/regression head is a LINEAR projection over
+        // the pooled [CLS] representation (Devlin et al. 2019 §4) — it emits raw logits /
+        // scores, NOT ReLU activations. Without an explicit Identity, DenseLayer's ReLU
+        // default clamps every negative score to 0, so any input whose pooled projection
+        // is negative collapses the whole output to zeros (dead-ReLU: identical outputs +
+        // zero gradient), which is exactly the failure the model-family invariants catch.
+        yield return new DenseLayer<T>(1, new IdentityActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>
@@ -16217,31 +16224,17 @@ public static class LayerHelper<T>
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
 
         // === Transformer Layers ===
-        // Stack of transformer encoder blocks
+        // Each block is a RESIDUAL self-attention sublayer + RESIDUAL GELU-FFN sublayer with
+        // per-sublayer LayerNorm (Vaswani et al. 2017 §3.1; Devlin et al. 2019). The residual
+        // (skip) connections are ESSENTIAL — a plain sequential MHA -> LN -> FFN -> LN stack with
+        // no residual leaves a deep encoder without a gradient highway, so the embedding barely
+        // trains and the model collapses to a uniform, input-insensitive output after a few
+        // optimizer steps. TransformerEncoderBlock supplies the residual adds + linear FFN output.
         for (int i = 0; i < numLayers; i++)
         {
-            // Multi-head self-attention
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDimension) / (numAttentionHeads));
-
-            // Add & Norm after attention
-            yield return new LayerNormalizationLayer<T>(
-                );
-
-            // Feed-forward network
-            yield return new DenseLayer<T>(
-                outputSize: intermediateDimension,
-                activationFunction: new GELUActivation<T>());
-
-            yield return new DenseLayer<T>(
-                outputSize: hiddenDimension,
-                activationFunction: null);
-
-            // Dropout in feed-forward
-            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-
-            // Add & Norm after feed-forward
-            yield return new LayerNormalizationLayer<T>(
-                );
+            yield return new TransformerEncoderBlock<T>(
+                hiddenDimension, numAttentionHeads, intermediateDimension, dropoutRate,
+                new GELUActivation<T>());
         }
 
         // === Pooler ===
@@ -16254,10 +16247,13 @@ public static class LayerHelper<T>
         // Final dropout before classification
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
 
-        // Classification layer
+        // Classification layer. Emits raw class logits — a LINEAR projection (Devlin et al.
+        // 2019 §4); softmax is applied downstream. activationFunction: null would fall back to
+        // DenseLayer's ReLU default and clamp negative logits to 0 (dead-ReLU collapse), so an
+        // explicit IdentityActivation is required.
         yield return new DenseLayer<T>(
             outputSize: numSentimentClasses,
-            activationFunction: null);
+            activationFunction: new IdentityActivation<T>());
 
         // Softmax for class probabilities (applied in model's forward pass)
     }
@@ -16345,9 +16341,13 @@ public static class LayerHelper<T>
                 outputSize: intermediateDimension,
                 activationFunction: new GELUActivation<T>());
 
+            // BERT FFN output projection is LINEAR (Vaswani et al. 2017 §3.3; Devlin et al.
+            // 2019 §3.1). NOTE: passing activationFunction: null does NOT give a linear layer
+            // — DenseLayer substitutes its ReLU default for null, which would clip the
+            // residual stream. An explicit IdentityActivation is required.
             yield return new DenseLayer<T>(
                 outputSize: hiddenDimension,
-                activationFunction: null);
+                activationFunction: new IdentityActivation<T>());
 
             // Dropout in feed-forward
             yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
